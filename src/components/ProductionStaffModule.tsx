@@ -478,7 +478,6 @@ export const ProductionStaffModule: React.FC = () => {
   };
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
   const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
-  const [noteModal, setNoteModal] = useState<{ note: string } | null>(null);
 
   const toggleOrderDetails = (orderId: string) => {
     setExpandedOrderIds(prev => 
@@ -1315,8 +1314,8 @@ Thank you.`;
                         <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
                       </div>
 
-                      {/* DESKTOP & MOBILE LAYOUT (Table view) */}
-                      <div className="w-full overflow-x-auto">
+                      {/* DESKTOP LAYOUT (Table view, hidden on mobile) */}
+                      <div className="hidden md:block overflow-x-auto w-full">
                         <table className="w-full text-left border-collapse min-w-max">
                           <thead>
                             <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
@@ -1325,7 +1324,7 @@ Thank you.`;
                               <th className="px-3.5 py-2.5 font-bold">Event Name</th>
                               <th className="px-3.5 py-2.5 font-bold">Assigned Task</th>
                               <th className="px-3.5 py-2.5 font-bold">Target Delivery Date</th>
-                              <th className="px-3.5 py-2.5 font-bold">Note</th>
+                              <th className="px-3.5 py-2.5 font-bold">Raw Footage Received</th>
                               <th className="px-3.5 py-2.5 font-bold">Current Status</th>
                               <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
                               <th className="px-3.5 py-2.5 font-bold">Customer Proof</th>
@@ -1388,20 +1387,38 @@ Thank you.`;
                                     {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
                                   </td>
 
-                                  {/* 6. Note */}
+                                  {/* 6. Raw Footage Received */}
                                   <td className="px-3.5 py-3 font-mono whitespace-nowrap">
-                                    {delivItem.prodObj?.project_notes && delivItem.prodObj.project_notes.trim() !== '' ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => setNoteModal({ note: delivItem.prodObj.project_notes })}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                                    {effectiveRawFootageLink && (effectiveRawFootageLink.startsWith('http://') || effectiveRawFootageLink.startsWith('https://')) ? (
+                                      <a
+                                        href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        referrerPolicy="no-referrer"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                                        title={effectiveRawFootageLink}
                                       >
-                                        <FileText className="w-3.5 h-3.5 shrink-0" />
-                                        <span>Click to Read</span>
-                                      </button>
+                                        <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                        <span>View Raw Footage</span>
+                                        <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                      </a>
+                                    ) : effectiveRawFootageLink && effectiveRawFootageLink.trim() !== '' && effectiveRawFootageLink !== 'Pending' && effectiveRawFootageLink !== 'N/A' ? (
+                                      <a
+                                        href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        referrerPolicy="no-referrer"
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
+                                        title={effectiveRawFootageLink}
+                                      >
+                                        <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                        <span>View Raw Footage</span>
+                                        <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                      </a>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono font-bold">
-                                        <span>No Note</span>
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                        <Clock className="w-3 h-3 text-zinc-600" />
+                                        <span>Pending</span>
                                       </span>
                                     )}
                                   </td>
@@ -1694,6 +1711,401 @@ Thank you.`;
                         </table>
                       </div>
 
+                      {/* MOBILE LAYOUT (Responsive list view, hidden on desktop/medium up) */}
+                      <div className="block md:hidden space-y-4">
+                        {grp.deliverables.map((delivItem: any) => {
+                          const delivBadge = getStatusBadge(delivItem.status);
+                          const isDelivLocked = ['Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'].includes(delivItem.status) || grp.orderObj?.current_stage === 'Business Owner Review';
+
+                          const delivQty = delivItem.qty || getAssignedDeliverableQty(delivItem.assignmentObj, delivItem.targetEventObj, delivItem.leadObj, delivItem.orderObj, delivItem.prodObj, quotations);
+                          const parsedDeliv = parseQtyAndText(delivItem.deliverable);
+                          const delivName = parsedDeliv.text || delivItem.deliverable;
+                          const effectiveRawFootageLink = delivItem.rawFootageLink || grp.rawFootageLink;
+
+                          return (
+                            <div key={delivItem.assignmentId} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3.5 space-y-3">
+                              {/* Order ID & Customer */}
+                              <div className="flex items-start justify-between gap-2 pb-2 border-b border-zinc-800/60">
+                                <div>
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Order ID</div>
+                                  <span className="font-mono font-bold text-violet-400 text-xs">{delivItem.orderId}</span>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer</div>
+                                  <span className="font-bold text-white text-xs">{delivItem.customerName}</span>
+                                </div>
+                              </div>
+
+                              {/* Event Name & Qty */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="space-y-1 min-w-0 flex-1">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Name</div>
+                                  <div className="text-sm font-bold text-white break-words">
+                                    {delivItem.eventName || 'N/A'}
+                                  </div>
+                                  {delivItem.eventType && delivItem.eventType !== delivItem.eventName && delivItem.eventType !== 'N/A' && (
+                                    <span className="inline-block px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono text-[9px] font-bold">
+                                      {delivItem.eventType}
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                <div className="shrink-0 text-right">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold mb-1">Qty</div>
+                                  <span className="inline-block px-2.5 py-1 rounded bg-zinc-950 text-zinc-100 text-xs font-mono font-black border border-zinc-800">
+                                    {delivQty}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Deliverable Name (Assigned Task) & Target Delivery Date */}
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1 min-w-0">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Assigned Task</div>
+                                  <div className="text-xs font-bold text-purple-300 break-words flex items-start gap-1.5">
+                                    <span className="shrink-0 mt-0.5">🎯</span>
+                                    <span className="flex-1">{delivName}</span>
+                                  </div>
+                                  <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">{delivItem.assignmentId}</span>
+                                </div>
+
+                                <div className="space-y-1 min-w-0 text-right">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Target Delivery</div>
+                                  <span className="font-mono text-xs text-zinc-200 font-bold block pt-0.5">
+                                    {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Raw Footage Received */}
+                              <div className="space-y-1">
+                                <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Raw Footage Received</div>
+                                <div>
+                                  {effectiveRawFootageLink && (effectiveRawFootageLink.startsWith('http://') || effectiveRawFootageLink.startsWith('https://')) ? (
+                                    <a
+                                      href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      referrerPolicy="no-referrer"
+                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer w-full text-center"
+                                      title={effectiveRawFootageLink}
+                                    >
+                                      <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                      <span>View Raw Footage</span>
+                                      <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                    </a>
+                                  ) : effectiveRawFootageLink && effectiveRawFootageLink.trim() !== '' && effectiveRawFootageLink !== 'Pending' && effectiveRawFootageLink !== 'N/A' ? (
+                                    <a
+                                      href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      referrerPolicy="no-referrer"
+                                      className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer w-full text-center"
+                                      title={effectiveRawFootageLink}
+                                    >
+                                      <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                      <span>View Raw Footage</span>
+                                      <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                    </a>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-950 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                      <Clock className="w-3 h-3 text-zinc-600" />
+                                      <span>Pending</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Status & Edited Drive Link */}
+                              <div className="grid grid-cols-2 gap-3 pt-1">
+                                <div className="space-y-1">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Current Status</div>
+                                  <div className="pt-0.5">
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${delivBadge.color}`}>
+                                      {delivBadge.label}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-1 min-w-0">
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Edited Drive Link</div>
+                                  <div className="pt-0.5 min-w-0">
+                                    {delivItem.editedDriveLink && (delivItem.editedDriveLink.startsWith('http://') || delivItem.editedDriveLink.startsWith('https://')) ? (
+                                      <a
+                                        href={delivItem.editedDriveLink.startsWith('http') ? delivItem.editedDriveLink : `https://${delivItem.editedDriveLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        referrerPolicy="no-referrer"
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold transition-all cursor-pointer w-full justify-center text-center"
+                                        title={delivItem.editedDriveLink}
+                                      >
+                                        <LinkIcon className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">View Link</span>
+                                      </a>
+                                    ) : (
+                                      <span className="text-zinc-600 italic text-[10px] block py-1">Pending Upload</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Customer Confirmation Proof Row */}
+                              <div className="space-y-1 pt-1">
+                                <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Customer Proof</div>
+                                <div className="pt-0.5">
+                                  {(() => {
+                                    const proof = parseCustomerProof(delivItem.assignmentObj, delivItem.prodObj, delivItem.orderObj);
+
+                                    if (!proof.hasProof) {
+                                      return (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-zinc-900 text-zinc-500 border border-zinc-800 text-xs font-mono">
+                                          <Clock className="w-3.5 h-3.5 text-zinc-600" />
+                                          <span>Pending</span>
+                                        </span>
+                                      );
+                                    }
+
+                                    // CASE 4: Both Image & Link
+                                    if (proof.proofType === 'both' && proof.imageUrl && proof.linkUrl) {
+                                      return (
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewProofModal({
+                                              url: proof.imageUrl!,
+                                              title: `Customer Confirmation Image - ${delivItem.customerName} (${delivItem.orderId})`
+                                            })}
+                                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                          >
+                                            <Eye className="w-3.5 h-3.5" />
+                                            <span>View Image</span>
+                                          </button>
+                                          <a
+                                            href={proof.linkUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            referrerPolicy="no-referrer"
+                                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer"
+                                          >
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                            <span>Open Link</span>
+                                          </a>
+                                        </div>
+                                      );
+                                    }
+
+                                    // CASE 2: Image exists
+                                    if (proof.proofType === 'image' && proof.imageUrl) {
+                                      return (
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewProofModal({
+                                            url: proof.imageUrl!,
+                                            title: `Customer Confirmation Image - ${delivItem.customerName} (${delivItem.orderId})`
+                                          })}
+                                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer w-full text-center"
+                                        >
+                                          <Eye className="w-3.5 h-3.5" />
+                                          <span>View Image</span>
+                                        </button>
+                                      );
+                                    }
+
+                                    // CASE 1: Link exists
+                                    if (proof.proofType === 'link' && proof.linkUrl) {
+                                      return (
+                                        <a
+                                          href={proof.linkUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          referrerPolicy="no-referrer"
+                                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer w-full text-center"
+                                        >
+                                          <ExternalLink className="w-3.5 h-3.5" />
+                                          <span>View Customer Proof</span>
+                                        </a>
+                                      );
+                                    }
+
+                                    // CASE 3: Button/proof
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (proof.imageUrl) {
+                                            setPreviewProofModal({
+                                              url: proof.imageUrl,
+                                              title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                            });
+                                          } else if (proof.linkUrl) {
+                                            window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
+                                          }
+                                        }}
+                                        className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/25 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer w-full text-center"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        <span>View Proof</span>
+                                      </button>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+
+                              {/* Action Button */}
+                              <div className="pt-2 border-t border-zinc-800/80">
+                                <ActionMenuDropdown
+                                  dropdownId={`action_dropdown_menu_mobile_${delivItem.assignmentId}`}
+                                  isOpen={activeDropdownId === delivItem.assignmentId}
+                                  onToggle={() => setActiveDropdownId(activeDropdownId === delivItem.assignmentId ? null : delivItem.assignmentId)}
+                                  onClose={() => setActiveDropdownId(null)}
+                                  buttonClassName="w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
+                                  buttonContent={
+                                    <>
+                                      <span>⚡ Action Menu</span>
+                                      <ChevronDown className="w-4 h-4" />
+                                    </>
+                                  }
+                                >
+                                  {/* View Details */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveDropdownId(null);
+                                      if (!expandedOrderIds.includes(grp.orderId)) {
+                                        toggleOrderDetails(grp.orderId);
+                                      }
+                                      setSelectedProjectForDetail({ orderId: grp.orderId, eventId: grp.eventId });
+                                    }}
+                                    className="w-full text-left px-4 py-3 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                  >
+                                    <Eye className="w-4 h-4 text-purple-400" /> View Details
+                                  </button>
+
+                                  {/* View Customer Confirmation Proof */}
+                                  {(() => {
+                                    const proof = parseCustomerProof(delivItem.assignmentObj, delivItem.prodObj, delivItem.orderObj);
+                                    if (!proof.hasProof) return null;
+
+                                    return (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveDropdownId(null);
+                                          if (proof.proofType === 'link' && proof.linkUrl) {
+                                            window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
+                                          } else if (proof.imageUrl) {
+                                            setPreviewProofModal({
+                                              url: proof.imageUrl,
+                                              title: `Customer Confirmation Proof - ${delivItem.customerName} (${delivItem.orderId})`
+                                            });
+                                          }
+                                        }}
+                                        className="w-full text-left px-4 py-3 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                                      >
+                                        <CheckCircle2 className="w-4 h-4 text-indigo-400" />
+                                        <span>{proof.proofType === 'link' ? 'View Customer Proof Link' : 'View Customer Proof Image'}</span>
+                                      </button>
+                                    );
+                                  })()}
+
+                                  {/* Locked State Notification */}
+                                  {isDelivLocked ? (
+                                    <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-[11px] font-bold flex items-center gap-2 border-t border-zinc-800/80">
+                                      <Lock className="w-3.5 h-3.5" /> Editing Completed
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {/* Workflow Step 1: Editing Started */}
+                                      {(delivItem.status === 'Assigned Editor' || delivItem.status === 'Editor Assigned' || delivItem.status === 'Assigned' || delivItem.status === 'Raw Footage Received') && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveDropdownId(null);
+                                            setEditingStartedModal({ group: grp, actionItem: delivItem });
+                                            setEditingStartedForm({
+                                              expected_delivery_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                              estimated_completion_date: delivItem.targetFinishDate || new Date().toISOString().split('T')[0],
+                                              estimated_completion_time: '18:00',
+                                              selectedIds: [delivItem.assignmentId]
+                                            });
+                                          }}
+                                          className="w-full text-left px-4 py-3 text-xs text-sky-400 hover:bg-sky-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <Play className="w-4 h-4" /> Start Editing
+                                        </button>
+                                      )}
+
+                                      {/* Workflow Step 2: Customer Review */}
+                                      {delivItem.status === 'Editing Started' && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setActiveDropdownId(null);
+                                            setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                            setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                          }}
+                                          className="w-full text-left px-4 py-3 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                        >
+                                          <UserCheck className="w-4 h-4" /> Upload Review
+                                        </button>
+                                      )}
+
+                                      {/* Workflow Step 3: Re-send Customer Review & Upload Confirmation Proof */}
+                                      {delivItem.status === 'Customer Review' && (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setCustomerReviewModal({ group: grp, actionItem: delivItem });
+                                              setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                            }}
+                                            className="w-full text-left px-4 py-3 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <RefreshCw className="w-4 h-4" /> Re-send Review Link
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setEditingCompletedModal({ group: grp, actionItem: delivItem });
+                                              setEditingCompletedForm({ confirmation_proof: delivItem.confirmationProof || '', selectedIds: [delivItem.assignmentId] });
+                                            }}
+                                            className="w-full text-left px-4 py-3 text-xs text-indigo-400 hover:bg-indigo-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <CheckCircle2 className="w-4 h-4" /> Upload Confirmation Proof
+                                          </button>
+                                        </>
+                                      )}
+
+                                      {/* Workflow Step 4: Editing Completed */}
+                                      {(delivItem.status === 'Editing Completed' || delivItem.status === 'Editing Complete' || delivItem.status === 'Completed') && (
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setActiveDropdownId(null);
+                                              setEditingCompletedModal({ group: grp, actionItem: delivItem });
+                                              setEditingCompletedForm({ confirmation_proof: delivItem.confirmationProof || '', selectedIds: [delivItem.assignmentId] });
+                                            }}
+                                            className="w-full text-left px-4 py-3 text-xs text-zinc-300 hover:bg-zinc-800 font-bold flex items-center gap-2 transition-colors cursor-pointer"
+                                          >
+                                            <Upload className="w-3.5 h-3.5 text-indigo-400" /> Update Proof
+                                          </button>
+                                          <div className="px-4 py-3 bg-emerald-500/10 text-emerald-400 text-xs font-bold flex items-center gap-2 border-t border-zinc-800">
+                                            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Editing Completed
+                                          </div>
+                                        </>
+                                      )}
+                                    </>
+                                  )}
+                                </ActionMenuDropdown>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 );
@@ -2125,42 +2537,6 @@ Thank you.`;
                 type="button"
                 onClick={() => setPreviewProofModal(null)}
                 className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg font-bold cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================= */}
-      {/* NOTE MODAL POPUP */}
-      {/* ========================================================= */}
-      {noteModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/80">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-base font-bold text-white">Note</h3>
-              </div>
-              <button 
-                onClick={() => setNoteModal(null)}
-                className="text-zinc-400 hover:text-white p-1 cursor-pointer rounded-lg hover:bg-zinc-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-5 overflow-y-auto custom-scrollbar flex-1 text-sm text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed">
-              {noteModal.note}
-            </div>
-            
-            <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setNoteModal(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold rounded-xl cursor-pointer"
               >
                 Close
               </button>
