@@ -670,9 +670,6 @@ export const ProductionStaffModule: React.FC = () => {
           assignment.proof_url ||
           assignment.proof_image ||
           assignment.uploaded_proof ||
-          order?.client_communication_proof ||
-          order?.customer_communication_proof ||
-          order?.proof_url ||
           ''
         ).trim();
 
@@ -1002,18 +999,18 @@ Thank you.`;
       const proofInput = editingCompletedForm.confirmation_proof.trim();
 
       // 1. Upload proof image to Supabase Storage bucket ('img') if file/data-uri, or resolve public URL
-      const cleanId = (b.orderId || b.leadId || 'proof').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const uploadedProofUrl = await uploadProofToStorage(proofInput, `cust_confirmation_${cleanId}`);
-      if (!uploadedProofUrl || !uploadedProofUrl.trim()) {
-        throw new Error("Proof upload failed: Returned Storage URL is null or empty.");
-      }
-
-      console.log("[ProductionStaffModule] Proof Storage URL generated:", uploadedProofUrl);
-
+      
       const deliverablesToUpdate = b.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
 
       // 2. Save status and proof references to editor_assignments table
       for (const deliv of deliverablesToUpdate) {
+        const cleanId = (deliv.assignmentId || 'proof').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const uploadedProofUrl = await uploadProofToStorage(proofInput, `cust_confirmation_${cleanId}`);
+        if (!uploadedProofUrl || !uploadedProofUrl.trim()) {
+          throw new Error("Proof upload failed: Returned Storage URL is null or empty.");
+        }
+        console.log(`[ProductionStaffModule] Proof Storage URL generated for ${deliv.assignmentId}:`, uploadedProofUrl);
+
         await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Completed' as any, {
           confirmation_proof: uploadedProofUrl,
           customer_communication_proof: uploadedProofUrl,
@@ -1212,7 +1209,6 @@ Thank you.`;
           ) : (
             <div className="space-y-6">
               {activeBookings.map((grp) => {
-                const badge = getStatusBadge(grp.overallStatus);
                 const isDetailsVisible = expandedOrderIds.includes(grp.orderId);
 
                 return (
@@ -1288,12 +1284,6 @@ Thank you.`;
 
                           {/* 5. Overall Task Status */}
                           <div className="space-y-0.5 min-w-0">
-                            <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Overall Task Status</div>
-                            <div className="pt-1">
-                              <span className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-mono font-bold border ${badge.color}`}>
-                                {badge.label}
-                              </span>
-                            </div>
                           </div>
 
                         </div>

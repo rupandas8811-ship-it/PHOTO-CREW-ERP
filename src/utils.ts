@@ -904,6 +904,21 @@ export function parseCustomerProof(
     );
   };
 
+  for (const cand of assignmentCandidates) {
+    if (cand && typeof cand === 'string' && cand.trim()) {
+      if (!rawImageUrl && isImageValue(cand)) rawImageUrl = cand.trim();
+      else if (!rawLinkUrl && isLinkValue(cand)) rawLinkUrl = cand.trim();
+      
+      if (rawImageUrl && rawLinkUrl) break;
+    }
+  }
+
+  // If no proof is found in the assignment, return empty proof record (do NOT fallback to prodRec or orderRec!)
+  if (!rawImageUrl && !rawLinkUrl) {
+    return { hasProof: false, imageUrl: null, linkUrl: null, proofType: 'none' };
+  }
+
+
   const isValidValue = (val: any): val is string => {
     if (!val || typeof val !== 'string') return false;
     const trimmed = val.trim();

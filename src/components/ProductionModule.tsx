@@ -593,6 +593,15 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
       return opsLink.trim();
     }
 
+    // 2. Check Production record project_notes for a link
+    if (prodItem.project_notes && typeof prodItem.project_notes === 'string') {
+      const urlRegex = /(https?:\/\/[^\s]+)/g;
+      const match = prodItem.project_notes.match(urlRegex);
+      if (match && match.length > 0) {
+        return match[0].trim();
+      }
+    }
+
     return '';
   };
 
