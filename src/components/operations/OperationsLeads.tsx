@@ -965,7 +965,11 @@ export const OperationsLeads: React.FC = () => {
     'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
     'Footage Handover', 'Equipment Handover',
     'Verified Footage', 'Footage Handover Verified',
-    'Event Cancelled'
+    'Event Cancelled',
+    'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
+    'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review',
+    'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval',
+    'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed'
   ];
   const operationsOrders = orders.filter(o => {
     if (!allowedStages.includes(o.current_stage)) return false;
@@ -4654,7 +4658,7 @@ export const OperationsLeads: React.FC = () => {
 
                                 // 2. Equipment Status Text
                                 const hasEqAssigned = member.assigned_equipment && member.assigned_equipment.length > 0;
-                                let equipmentStatusText = hasEqAssigned ? '❌ Pending' : 'Not Assigned';
+                                let equipmentStatusText = hasEqAssigned ? 'Assigned' : 'Not Assigned';
                                 if (hasEqAssigned) {
                                   if (eqHandover && getRecordMeta(eqHandover).url) equipmentStatusText = '✅ Handed Over';
                                   else if (assetCollection && getRecordMeta(assetCollection).url) equipmentStatusText = '✅ Received';

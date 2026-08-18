@@ -214,7 +214,10 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
   const opsLink = matchedOp ? (
     matchedOp.consolidated_drive_link || 
     matchedOp.Consolidated_Drive_Link
-  ) : null;
+  ) : (
+    prod.consolidated_drive_link || 
+    prod.Consolidated_Drive_Link
+  );
 
   if (opsLink && typeof opsLink === 'string' && opsLink.trim() !== '') {
     return opsLink.trim();
@@ -1319,6 +1322,7 @@ Thank you.`;
                               <th className="px-3.5 py-2.5 font-bold">Current Status</th>
                               <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
                               <th className="px-3.5 py-2.5 font-bold">Customer Proof</th>
+                              <th className="px-3.5 py-2.5 font-bold">Row Footage</th>
                               <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
                             </tr>
                           </thead>
@@ -1523,6 +1527,24 @@ Thank you.`;
                                         </button>
                                       );
                                     })()}
+                                  </td>
+
+                                  {/* Row Footage */}
+                                  <td className="px-3.5 py-3 whitespace-nowrap">
+                                    {effectiveRawFootageLink && (
+                                      effectiveRawFootageLink.startsWith('http') || effectiveRawFootageLink.includes('drive.google.com') 
+                                    ) ? (
+                                      <a
+                                        href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1 cursor-pointer"
+                                      >
+                                        View Row Footage ↗
+                                      </a>
+                                    ) : (
+                                      <span className="text-zinc-500 italic text-[11px]">Pending</span>
+                                    )}
                                   </td>
 
                                   {/* 10. Action Dropdown */}

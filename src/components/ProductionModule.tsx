@@ -587,7 +587,10 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     const opsLink = matchedOp ? (
       matchedOp.consolidated_drive_link || 
       matchedOp.Consolidated_Drive_Link
-    ) : null;
+    ) : (
+      prodItem.consolidated_drive_link || 
+      prodItem.Consolidated_Drive_Link
+    );
 
     if (opsLink && opsLink.trim() !== '') {
       return opsLink.trim();
