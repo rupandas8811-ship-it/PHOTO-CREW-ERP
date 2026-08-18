@@ -1315,8 +1315,8 @@ Thank you.`;
                         <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
                       </div>
 
-                      {/* DESKTOP LAYOUT (Table view, hidden on mobile) */}
-                      <div className="hidden md:block overflow-x-auto w-full">
+                      {/* DESKTOP LAYOUT (Table view, visible on all screens) */}
+                      <div className="block overflow-x-auto w-full">
                         <table className="w-full text-left border-collapse min-w-max">
                           <thead>
                             <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
@@ -1693,8 +1693,8 @@ Thank you.`;
                         </table>
                       </div>
 
-                      {/* MOBILE LAYOUT (Responsive list view, hidden on desktop/medium up) */}
-                      <div className="block md:hidden space-y-4">
+                      {/* MOBILE LAYOUT (Responsive list view, hidden on all screens) */}
+                      <div className="hidden space-y-4">
                         {grp.deliverables.map((delivItem: any) => {
                           const delivBadge = getStatusBadge(delivItem.status);
                           const isDelivLocked = ['Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'].includes(delivItem.status) || grp.orderObj?.current_stage === 'Business Owner Review';
