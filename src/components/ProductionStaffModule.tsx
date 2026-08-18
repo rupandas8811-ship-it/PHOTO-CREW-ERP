@@ -471,6 +471,7 @@ export const ProductionStaffModule: React.FC = () => {
   // Local state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [selectedNote, setSelectedNote] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -1324,7 +1325,7 @@ Thank you.`;
                               <th className="px-3.5 py-2.5 font-bold">Event Name</th>
                               <th className="px-3.5 py-2.5 font-bold">Assigned Task</th>
                               <th className="px-3.5 py-2.5 font-bold">Target Delivery Date</th>
-                              <th className="px-3.5 py-2.5 font-bold">Raw Footage Received</th>
+                              <th className="px-3.5 py-2.5 font-bold">Note</th>
                               <th className="px-3.5 py-2.5 font-bold">Current Status</th>
                               <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
                               <th className="px-3.5 py-2.5 font-bold">Customer Proof</th>
@@ -1387,40 +1388,21 @@ Thank you.`;
                                     {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
                                   </td>
 
-                                  {/* 6. Raw Footage Received */}
+                                  {/* 6. Note */}
                                   <td className="px-3.5 py-3 font-mono whitespace-nowrap">
-                                    {effectiveRawFootageLink && (effectiveRawFootageLink.startsWith('http://') || effectiveRawFootageLink.startsWith('https://')) ? (
-                                      <a
-                                        href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        referrerPolicy="no-referrer"
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
-                                        title={effectiveRawFootageLink}
-                                      >
-                                        <FileVideo className="w-3.5 h-3.5 shrink-0" />
-                                        <span>View Raw Footage</span>
-                                        <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
-                                      </a>
-                                    ) : effectiveRawFootageLink && effectiveRawFootageLink.trim() !== '' && effectiveRawFootageLink !== 'Pending' && effectiveRawFootageLink !== 'N/A' ? (
-                                      <a
-                                        href={effectiveRawFootageLink.startsWith('http') ? effectiveRawFootageLink : `https://${effectiveRawFootageLink}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        referrerPolicy="no-referrer"
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm"
-                                        title={effectiveRawFootageLink}
-                                      >
-                                        <FileVideo className="w-3.5 h-3.5 shrink-0" />
-                                        <span>View Raw Footage</span>
-                                        <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
-                                      </a>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
-                                        <Clock className="w-3 h-3 text-zinc-600" />
-                                        <span>Pending</span>
-                                      </span>
-                                    )}
+                                     {delivItem.prodObj?.project_notes ? (
+                                       <button
+                                         onClick={() => setSelectedNote(delivItem.prodObj?.project_notes)}
+                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
+                                       >
+                                         <FileText className="w-3.5 h-3.5 shrink-0" />
+                                         Click to Read
+                                       </button>
+                                     ) : (
+                                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                         No Note
+                                       </span>
+                                     )}
                                   </td>
 
                                   {/* 7. Current Status */}
@@ -2555,6 +2537,22 @@ Thank you.`;
         />
       )}
 
+      {/* Note Popup Modal */}
+      {selectedNote && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-zinc-950/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="p-4 border-b border-zinc-700 flex justify-between items-center">
+              <h3 className="text-white font-bold text-sm">Note</h3>
+              <button onClick={() => setSelectedNote(null)} className="text-zinc-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto text-zinc-300 text-sm whitespace-pre-wrap">
+              {selectedNote}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
