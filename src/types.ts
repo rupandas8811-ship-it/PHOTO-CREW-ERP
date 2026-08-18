@@ -396,6 +396,7 @@ export interface Operation {
   raw_footage_drive_link?: string;
   Consolidated_Drive_Link?: string;
   consolidated_drive_link?: string;
+  event_id?: string;
 }
 
 export interface RawFootage {

@@ -573,12 +573,16 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     const orderId = prodItem.order_id || order?.order_id || prodItem.tracking_id;
     const leadId = prodItem.lead_id || lead?.lead_id || order?.lead_id;
 
-    // 1. Check Operations record matching order_id or lead_id or tracking_id
-    const matchedOp = (operations || []).find(o => 
-      (orderId && o.order_id === orderId) ||
-      (leadId && o.lead_id === leadId) ||
-      (prodItem.tracking_id && (o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id))
-    );
+    // 1. Check Operations record matching event_id (preferred) or order_id or lead_id or tracking_id
+    const matchedOp = (operations || []).find(o => {
+      if (prodItem.event_id && o.event_id === prodItem.event_id) {
+        // If event_id matches, ensure it belongs to the same order
+        return !orderId || o.order_id === orderId;
+      }
+      return (orderId && o.order_id === orderId) ||
+             (leadId && o.lead_id === leadId) ||
+             (prodItem.tracking_id && (o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id));
+    });
 
     const opsLink = matchedOp ? (
       matchedOp.consolidated_drive_link || 
