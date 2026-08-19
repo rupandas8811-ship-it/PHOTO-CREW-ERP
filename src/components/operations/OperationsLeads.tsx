@@ -835,6 +835,98 @@ export const OperationsLeads: React.FC = () => {
     const staffDetailsList: AssignedStaffDetails[] = [];
     const op = getOpDetails(ord.order_id);
 
+    // Robust helper to resolve assigned equipment for a staff member across all possible sources
+    const resolveStaffEquipment = (staffName: string, sa?: any, ev?: any, nameIdx?: number): string[] => {
+      const normName = (staffName || '').trim().toLowerCase();
+      const eqList: string[] = [];
+
+      // 1. Check direct equipment on the specific StaffAssignment
+      if (sa && sa.equipment) {
+        if (Array.isArray(sa.equipment)) {
+          sa.equipment.forEach(item => { if (item && typeof item === 'string' && item.trim()) eqList.push(item.trim()); });
+        } else if (typeof sa.equipment === 'string' && sa.equipment.trim()) {
+          try {
+            const parsed = JSON.parse(sa.equipment);
+            if (Array.isArray(parsed)) parsed.forEach(item => { if (item && typeof item === 'string' && item.trim()) eqList.push(item.trim()); });
+            else if (typeof parsed === 'string' && parsed.trim()) eqList.push(parsed.trim());
+          } catch(e) {
+            sa.equipment.split(',').forEach(s => { if (s.trim()) eqList.push(s.trim()); });
+          }
+        }
+      }
+
+      // 2. Check ev.assigned_staff_mobiles (encoded equipment JSON or comma-separated)
+      if (eqList.length === 0 && ev && ev.assigned_staff_mobiles) {
+        const mobilesRaw = ev.assigned_staff_mobiles || '';
+        if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
+          try {
+            const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
+            const staffEquipments = JSON.parse(parts[1]);
+            if (Array.isArray(staffEquipments)) {
+              if (nameIdx !== undefined && Array.isArray(staffEquipments[nameIdx]) && staffEquipments[nameIdx].length > 0) {
+                staffEquipments[nameIdx].forEach((eq: string) => { if (eq && eq.trim()) eqList.push(eq.trim()); });
+              } else {
+                staffEquipments.flat().forEach((eq: any) => { if (eq && typeof eq === 'string' && eq.trim()) eqList.push(eq.trim()); });
+              }
+            }
+          } catch (e) {}
+        } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
+          const parts = mobilesRaw.split(' || EQUIPMENT: ');
+          if (parts[1]) {
+            parts[1].split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
+          }
+        }
+      }
+
+      // 3. Check all active staffAssignments for this order and staff
+      if (eqList.length === 0 && staffAssignments) {
+        const matchingSAs = staffAssignments.filter(s => 
+          s.order_id === ord.order_id && 
+          (s.staff_name || '').trim().toLowerCase() === normName &&
+          s.assignment_status !== 'Cancelled'
+        );
+        matchingSAs.forEach(s => {
+          if (s.equipment) {
+            if (Array.isArray(s.equipment)) {
+              s.equipment.forEach(item => { if (item && typeof item === 'string' && item.trim()) eqList.push(item.trim()); });
+            } else if (typeof s.equipment === 'string' && s.equipment.trim()) {
+              try {
+                const p = JSON.parse(s.equipment);
+                if (Array.isArray(p)) p.forEach(item => { if (item && typeof item === 'string' && item.trim()) eqList.push(item.trim()); });
+                else if (typeof p === 'string' && p.trim()) eqList.push(p.trim());
+              } catch(e) {
+                s.equipment.split(',').forEach(item => { if (item.trim()) eqList.push(item.trim()); });
+              }
+            }
+          }
+        });
+      }
+
+      // 4. Check leadEquipmentHistory for this order and staff
+      if (eqList.length === 0 && leadEquipmentHistory) {
+        const hist = leadEquipmentHistory.filter(h => 
+          (h.order_id === ord.order_id || (ord.lead_id && h.lead_id === ord.lead_id))
+        );
+        hist.forEach(h => {
+          let parsed: any = {};
+          if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
+          const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+          if (staffMatch === normName || (normName && (staffMatch.includes(normName) || normName.includes(staffMatch)))) {
+            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection') {
+              eqList.push(h.equipment_name);
+            }
+          }
+        });
+      }
+
+      // 5. Check operations equipment kit fallback
+      if (eqList.length === 0 && op?.equipment_kit && op.equipment_kit.trim()) {
+        op.equipment_kit.split(',').forEach(s => { if (s.trim()) eqList.push(s.trim()); });
+      }
+
+      return Array.from(new Set(eqList));
+    };
+
     if (lead?.events && lead.events.length > 0) {
       const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === lead.lead_id) || [];
       const teamMembersConfig = extractTeamMembersConfig(lead, targetLeadPkgs);
@@ -842,14 +934,18 @@ export const OperationsLeads: React.FC = () => {
 
       lead.events.forEach((ev: any, evIdx: number) => {
         const evId = ev.id || '';
-        const evOrderAssignments = orderAssignments.filter(sa => sa.event_id === evId || (!sa.event_id && totalEvents === 1));
+        const evOrderAssignments = orderAssignments.filter(sa => 
+          sa.event_id === evId || 
+          (!sa.event_id && totalEvents === 1) ||
+          (sa.event_name && ev.event_name && sa.event_name.toLowerCase() === ev.event_name.toLowerCase()) ||
+          (sa.event_name && ev.event_type && sa.event_name.toLowerCase() === ev.event_type.toLowerCase())
+        );
 
         if (evOrderAssignments.length > 0) {
           evOrderAssignments.forEach((sa, saIdx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
             const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
-
-            const saEq = sa.equipment ? (Array.isArray(sa.equipment) ? sa.equipment : (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })()) : [];
+            const saEq = resolveStaffEquipment(sa.staff_name, sa, ev, saIdx);
 
             staffDetailsList.push({
               staff_name: sa.staff_name,
@@ -872,21 +968,7 @@ export const OperationsLeads: React.FC = () => {
         } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
           const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
           
-          let assignedEquipment: string[] = [];
-          let staffEquipments: string[][] = [];
-          let mobilesRaw = ev.assigned_staff_mobiles || '';
-          if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
-            const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
-            try {
-              staffEquipments = JSON.parse(parts[1]);
-            } catch(e) {}
-            assignedEquipment = Array.from(new Set(staffEquipments.flat()));
-          } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-            const parts = mobilesRaw.split(' || EQUIPMENT: ');
-            assignedEquipment = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-          }
-
-          const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
+          const cleanMobilesRaw = (ev.assigned_staff_mobiles || '').split(' || EQUIPMENT:')[0] || '';
           const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim()).filter(Boolean);
 
           const includedRoles = getEventRolesForEvent(ev, evIdx, teamMembersConfig, totalEvents);
@@ -908,15 +990,7 @@ export const OperationsLeads: React.FC = () => {
             const assignedTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
             const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
             const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord, saMatch?.assignment_id, assignedTask);
-
-            let memberEquipment: string[] = [];
-            if (saMatch && saMatch.equipment) {
-              memberEquipment = Array.isArray(saMatch.equipment) ? saMatch.equipment : (() => { try { const p = JSON.parse(saMatch.equipment); return Array.isArray(p) ? p : [saMatch.equipment]; } catch(e) { return saMatch.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })();
-            } else if (staffEquipments[nameIdx] && Array.isArray(staffEquipments[nameIdx])) {
-              memberEquipment = staffEquipments[nameIdx];
-            } else if (mobilesRaw.includes(' || EQUIPMENT: ') && nameIdx === 0) {
-              memberEquipment = assignedEquipment;
-            }
+            const memberEquipment = resolveStaffEquipment(name, saMatch, ev, nameIdx);
 
             staffDetailsList.push({
               staff_name: name,
@@ -942,7 +1016,7 @@ export const OperationsLeads: React.FC = () => {
       orderAssignments.forEach((sa, saIdx) => {
         const name = sa.staff_name;
         const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase() || s.staff_id === sa.staff_id);
-        const assignedEquipment = sa.equipment ? (Array.isArray(sa.equipment) ? sa.equipment : (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })()) : [];
+        const assignedEquipment = resolveStaffEquipment(name, sa, undefined, saIdx);
         const assignedTask = sa.staff_role || st?.role || 'Staff';
         const staffTaskStatus = getStaffTaskStatus(ord.order_id, undefined, saIdx, name, ord, sa.assignment_id, assignedTask);
 
@@ -3759,8 +3833,41 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
-                    const recMeta = getRecordMeta(selectedEquipmentStatus.eqReceived);
-                    const handMeta = getRecordMeta(selectedEquipmentStatus.eqHandover);
+                    const findHistoryForModal = (stages: string[]) => {
+                      const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
+                      const orderId = selectedEquipmentStatus.orderId;
+                      const eventId = selectedEquipmentStatus.eventId;
+                      
+                      if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
+                      const matches = leadEquipmentHistory.filter(h => {
+                        if (orderId && h.order_id && h.order_id !== orderId) return false;
+                        let parsed: any = {};
+                        if (h.remarks) {
+                          try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                        }
+                        const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+                        if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
+                        if (eventId && parsed.event_id && eventId !== 'gen' && parsed.event_id !== 'gen' && parsed.event_id !== eventId) return false;
+                        
+                        const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
+                        const eqName = (h.equipment_name || '').toLowerCase();
+                        return stages.some(s => {
+                          const sNorm = s.toLowerCase();
+                          return eqStatus.includes(sNorm) || eqName.includes(sNorm);
+                        });
+                      });
+                      
+                      const withPhoto = matches.find(m => {
+                        const meta = getRecordMeta(m);
+                        return !!meta.url;
+                      });
+                      return withPhoto || matches[0] || null;
+                    };
+
+                    const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received']);
+                    const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return']);
+                    const recMeta = getRecordMeta(recRecord);
+                    const handMeta = getRecordMeta(handRecord);
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
@@ -4639,46 +4746,61 @@ export const OperationsLeads: React.FC = () => {
 
                                 const getRecordForStage = (stages: string[], equipName?: string) => {
                                   if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
-                                  return leadEquipmentHistory.find(h => {
-                                    if (h.order_id && h.order_id !== ord.order_id) return false;
+                                  const matches = leadEquipmentHistory.filter(h => {
+                                    if (h.order_id && h.order_id !== ord.order_id && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
+                                    if (!h.order_id && h.lead_id && ord.lead_id && h.lead_id !== ord.lead_id) return false;
                                     
                                     let parsed: any = {};
                                     if (h.remarks) {
                                       try { parsed = JSON.parse(h.remarks); } catch(e) {}
                                     }
 
-                                    const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
-                                    if (retBy && retBy !== normStaffName) return false;
+                                    const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+                                    if (retBy && normStaffName) {
+                                      if (retBy !== normStaffName && !normStaffName.includes(retBy) && !retBy.includes(normStaffName)) {
+                                        return false;
+                                      }
+                                    }
 
                                     const hEventId = parsed.event_id;
                                     const hEventName = parsed.event_name;
-                                    const hProofType = parsed.proof_type;
-                                    const hPhotoUrl = parsed.photo_url || h.photo_url;
+                                    const hProofType = (parsed.proof_type || '').toLowerCase();
                                     
                                     // Match event Id strictly if both exist and neither is 'gen'
-                                    if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) return false;
-                                    
-                                    // If we don't have matching event IDs, we can try matching by name
-                                    if (!memberEvId || !hEventId || hEventId === 'gen' || memberEvId === 'gen') {
-                                      if (normEvName && hEventName && hEventName.trim().toLowerCase() !== normEvName && normEvName !== 'general event' && hEventName.trim().toLowerCase() !== 'general event') return false;
+                                    if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) {
+                                      if (!normEvName || !hEventName || (hEventName.trim().toLowerCase() !== normEvName && normEvName !== 'general event' && hEventName.trim().toLowerCase() !== 'general event')) {
+                                        return false;
+                                      }
                                     }
                                     
-                                    if (equipName && h.equipment_name && h.equipment_name === equipName) {
+                                    const eqName = (h.equipment_name || '').toLowerCase();
+                                    const eqStatus = (h.equipment_status || hProofType || '').toLowerCase().trim();
+
+                                    if (equipName && eqName.includes(equipName.toLowerCase())) {
                                       return true; 
                                     }
 
-                                    const eqStatus = (h.equipment_status || hProofType || '').trim();
-                                    const stageMatch = stages.some(s => s.toLowerCase() === eqStatus.toLowerCase());
-                                    if (!stageMatch) return false;
+                                    const stageMatch = stages.some(s => {
+                                      const sNorm = s.toLowerCase();
+                                      return eqStatus === sNorm || eqStatus.includes(sNorm) || eqName.includes(sNorm) || hProofType.includes(sNorm);
+                                    });
 
-                                    return true;
+                                    return stageMatch;
                                   });
+
+                                  if (matches.length === 0) return null;
+                                  // Prioritize record with uploaded photo
+                                  const withPhoto = matches.find(m => {
+                                    const meta = getRecordMeta(m);
+                                    return !!meta.url;
+                                  });
+                                  return withPhoto || matches[0];
                                 };
 
-                                const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof'], 'Asset Collection Photo Proof');
-                                const evStart = getRecordForStage(['Event Start', 'Event Started', 'Event Start Photo Proof'], 'Event Start Photo Proof');
-                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof'], 'Event Completion Photo Proof');
-                                const eqHandover = getRecordForStage(['Equipment Handover', 'Equipment Handover Photo Proof'], 'Equipment Handover Photo Proof');
+                                const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof', 'Asset Collection', 'Received', 'Equipment Received / Asset Picture'], 'Asset Collection');
+                                const evStart = getRecordForStage(['Event Start', 'Event Started', 'Event Start Photo Proof'], 'Event Start');
+                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof'], 'Event Completion');
+                                const eqHandover = getRecordForStage(['Equipment Handover', 'Equipment Handover Photo Proof', 'Equipment Handover Completed', 'Footage Handover', 'Asset Return Photo Proof', 'Handover', 'Returned'], 'Equipment Handover');
 
                                 // 1. Real-time individual staff status for this event (Event Workflow)
                                 const rawTaskStatus = getStaffTaskStatus(ord.order_id, memberEvId, evIdx, member.staff_name, ord);
@@ -4713,12 +4835,51 @@ export const OperationsLeads: React.FC = () => {
                                   );
                                 }
 
-                                // 2. Equipment Status Text
-                                const hasEqAssigned = member.assigned_equipment && member.assigned_equipment.length > 0;
+                                // 2. Equipment Status Text & Real Assignment Check
+                                let effectiveAssignedEq = member.assigned_equipment && member.assigned_equipment.length > 0 ? [...member.assigned_equipment] : [];
+                                if (effectiveAssignedEq.length === 0) {
+                                  // Fallback: check if history has assigned/received equipment for this staff
+                                  const foundInHistory = leadEquipmentHistory?.filter(h => {
+                                    if (h.order_id && h.order_id !== ord.order_id && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
+                                    let parsed: any = {};
+                                    if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
+                                    const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+                                    return retBy === normStaffName || (normStaffName && (retBy.includes(normStaffName) || normStaffName.includes(retBy)));
+                                  });
+                                  foundInHistory?.forEach(h => {
+                                    if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection') {
+                                      effectiveAssignedEq.push(h.equipment_name);
+                                    }
+                                  });
+                                  effectiveAssignedEq = Array.from(new Set(effectiveAssignedEq));
+                                }
+
+                                const hasEqAssigned = effectiveAssignedEq.length > 0 || !!assetCollection || !!eqHandover;
+
                                 let equipmentStatusText = hasEqAssigned ? 'Assigned' : 'Not Assigned';
                                 if (hasEqAssigned) {
-                                  if (eqHandover && getRecordMeta(eqHandover).url) equipmentStatusText = '✅ Handed Over';
-                                  else if (assetCollection && getRecordMeta(assetCollection).url) equipmentStatusText = '✅ Received';
+                                  const hasHandoverPhoto = eqHandover && getRecordMeta(eqHandover).url;
+                                  const isHandoverDone = eqHandover && (
+                                    hasHandoverPhoto || 
+                                    eqHandover.equipment_status?.toLowerCase().includes('handover') || 
+                                    eqHandover.equipment_status?.toLowerCase().includes('returned') ||
+                                    eqHandover.equipment_status === 'Equipment Handover Completed'
+                                  );
+
+                                  const hasReceivedPhoto = assetCollection && getRecordMeta(assetCollection).url;
+                                  const isReceivedDone = assetCollection && (
+                                    hasReceivedPhoto || 
+                                    assetCollection.equipment_status?.toLowerCase().includes('received') ||
+                                    assetCollection.equipment_status === 'Equipment Received'
+                                  );
+
+                                  if (isHandoverDone) {
+                                    equipmentStatusText = hasHandoverPhoto ? '✅ Handed Over' : 'Assigned / Handed Over';
+                                  } else if (isReceivedDone) {
+                                    equipmentStatusText = hasReceivedPhoto ? '✅ Received' : 'Assigned / Received';
+                                  } else {
+                                    equipmentStatusText = 'Assigned';
+                                  }
                                 }
 
                                 // 3. Event Image Status Text
@@ -4808,7 +4969,7 @@ export const OperationsLeads: React.FC = () => {
                                         <span 
                                           onClick={() => setSelectedEquipmentStatus({ 
                                             staffName: member.staff_name, 
-                                            assignedEquipment: member.assigned_equipment || [],
+                                            assignedEquipment: effectiveAssignedEq.length > 0 ? effectiveAssignedEq : (member.assigned_equipment || []),
                                             orderId: ord.order_id,
                                             eventId: memberEvId,
                                             eventName: member.event_name,
@@ -4816,6 +4977,7 @@ export const OperationsLeads: React.FC = () => {
                                             eqHandover 
                                           })}
                                           className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
+                                          title="Click to view equipment verification images"
                                         >
                                           {equipmentStatusText}
                                         </span>
