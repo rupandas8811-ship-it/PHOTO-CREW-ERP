@@ -839,19 +839,32 @@ export const OperationsLeads: React.FC = () => {
     // Robust helper to resolve assigned equipment for a staff member across all possible sources
     const resolveStaffEquipment = (staffName: string, sa?: any, ev?: any, nameIdx?: number): string[] => {
       const normName = (staffName || '').trim().toLowerCase();
+      if (!normName) return [];
       const eqList: string[] = [];
 
       // 1. Check direct equipment on the specific StaffAssignment
       if (sa && sa.equipment) {
         if (Array.isArray(sa.equipment)) {
-          sa.equipment.forEach(item => { if (item && typeof item === 'string' && item.trim()) eqList.push(item.trim()); });
+          sa.equipment.forEach((item: any) => {
+            if (typeof item === 'string' && item.trim()) {
+              eqList.push(item.trim());
+            } else if (item && typeof item === 'object' && (item.name || item.equipment_name)) {
+              eqList.push((item.name || item.equipment_name).trim());
+            }
+          });
         } else if (typeof sa.equipment === 'string' && sa.equipment.trim()) {
           try {
             const parsed = JSON.parse(sa.equipment);
-            if (Array.isArray(parsed)) parsed.forEach(item => { if (item && typeof item === 'string' && item.trim()) eqList.push(item.trim()); });
-            else if (typeof parsed === 'string' && parsed.trim()) eqList.push(parsed.trim());
+            if (Array.isArray(parsed)) {
+              parsed.forEach((item: any) => {
+                if (typeof item === 'string' && item.trim()) eqList.push(item.trim());
+                else if (item && typeof item === 'object' && (item.name || item.equipment_name)) eqList.push((item.name || item.equipment_name).trim());
+              });
+            } else if (typeof parsed === 'string' && parsed.trim()) {
+              eqList.push(parsed.trim());
+            }
           } catch(e) {
-            sa.equipment.split(',').forEach(s => { if (s.trim()) eqList.push(s.trim()); });
+            sa.equipment.split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
           }
         }
       }
@@ -859,22 +872,27 @@ export const OperationsLeads: React.FC = () => {
       // 2. Check ev.assigned_staff_mobiles (encoded equipment JSON or comma-separated)
       if (eqList.length === 0 && ev && ev.assigned_staff_mobiles) {
         const mobilesRaw = ev.assigned_staff_mobiles || '';
+        const assignedNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+        const resolvedIdx = nameIdx !== undefined && nameIdx >= 0 ? nameIdx : assignedNames.indexOf(normName);
+
         if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
           try {
             const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
             const staffEquipments = JSON.parse(parts[1]);
             if (Array.isArray(staffEquipments)) {
-              if (nameIdx !== undefined && Array.isArray(staffEquipments[nameIdx]) && staffEquipments[nameIdx].length > 0) {
-                staffEquipments[nameIdx].forEach((eq: string) => { if (eq && eq.trim()) eqList.push(eq.trim()); });
-              } else {
-                staffEquipments.flat().forEach((eq: any) => { if (eq && typeof eq === 'string' && eq.trim()) eqList.push(eq.trim()); });
+              if (resolvedIdx >= 0 && Array.isArray(staffEquipments[resolvedIdx]) && staffEquipments[resolvedIdx].length > 0) {
+                staffEquipments[resolvedIdx].forEach((eq: string) => { if (eq && eq.trim()) eqList.push(eq.trim()); });
+              } else if (assignedNames.length === 1 && Array.isArray(staffEquipments[0]) && staffEquipments[0].length > 0) {
+                staffEquipments[0].forEach((eq: string) => { if (eq && eq.trim()) eqList.push(eq.trim()); });
               }
             }
           } catch (e) {}
         } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-          const parts = mobilesRaw.split(' || EQUIPMENT: ');
-          if (parts[1]) {
-            parts[1].split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
+          if (resolvedIdx === 0 || assignedNames.length <= 1) {
+            const parts = mobilesRaw.split(' || EQUIPMENT: ');
+            if (parts[1]) {
+              parts[1].split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
+            }
           }
         }
       }
@@ -882,21 +900,30 @@ export const OperationsLeads: React.FC = () => {
       // 3. Check all active staffAssignments for this order and staff
       if (eqList.length === 0 && staffAssignments) {
         const matchingSAs = staffAssignments.filter(s => 
-          s.order_id === ord.order_id && 
+          (s.order_id === ord.order_id || (ord.lead_id && s.order_id === ord.lead_id)) && 
           (s.staff_name || '').trim().toLowerCase() === normName &&
           s.assignment_status !== 'Cancelled'
         );
         matchingSAs.forEach(s => {
           if (s.equipment) {
             if (Array.isArray(s.equipment)) {
-              s.equipment.forEach(item => { if (item && typeof item === 'string' && item.trim()) eqList.push(item.trim()); });
+              s.equipment.forEach((item: any) => { 
+                if (typeof item === 'string' && item.trim()) eqList.push(item.trim());
+                else if (item && typeof item === 'object' && (item.name || item.equipment_name)) eqList.push((item.name || item.equipment_name).trim());
+              });
             } else if (typeof s.equipment === 'string' && s.equipment.trim()) {
               try {
                 const p = JSON.parse(s.equipment);
-                if (Array.isArray(p)) p.forEach(item => { if (item && typeof item === 'string' && item.trim()) eqList.push(item.trim()); });
-                else if (typeof p === 'string' && p.trim()) eqList.push(p.trim());
+                if (Array.isArray(p)) {
+                  p.forEach((item: any) => {
+                    if (typeof item === 'string' && item.trim()) eqList.push(item.trim());
+                    else if (item && typeof item === 'object' && (item.name || item.equipment_name)) eqList.push((item.name || item.equipment_name).trim());
+                  });
+                } else if (typeof p === 'string' && p.trim()) {
+                  eqList.push(p.trim());
+                }
               } catch(e) {
-                s.equipment.split(',').forEach(item => { if (item.trim()) eqList.push(item.trim()); });
+                s.equipment.split(',').forEach((item: string) => { if (item.trim()) eqList.push(item.trim()); });
               }
             }
           }
@@ -913,19 +940,23 @@ export const OperationsLeads: React.FC = () => {
           if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
           const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
           if (staffMatch === normName || (normName && (staffMatch.includes(normName) || normName.includes(staffMatch)))) {
-            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection') {
+            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection' && !h.equipment_name.includes('Footage')) {
               eqList.push(h.equipment_name);
             }
           }
         });
       }
 
-      // 5. Check operations equipment kit fallback
+      // 5. Check operations equipment kit fallback if single staff member
       if (eqList.length === 0 && op?.equipment_kit && op.equipment_kit.trim()) {
-        op.equipment_kit.split(',').forEach(s => { if (s.trim()) eqList.push(s.trim()); });
+        const totalAssignedInOp = [op.photographer_assigned, op.videographer_assigned, op.drone_operator_assigned, op.assistant_assigned].filter(Boolean);
+        if (totalAssignedInOp.length <= 1) {
+          op.equipment_kit.split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
+        }
       }
 
-      return Array.from(new Set(eqList));
+      const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned');
+      return Array.from(new Set(cleanList));
     };
 
     if (lead?.events && lead.events.length > 0) {
@@ -4833,27 +4864,26 @@ export const OperationsLeads: React.FC = () => {
 
                                 // 2. Equipment Resolution & Status
                                 let effectiveAssignedEq = member.assigned_equipment && member.assigned_equipment.length > 0 ? [...member.assigned_equipment] : [];
-                                if (effectiveAssignedEq.length === 0) {
-                                  // Fallback: check if history has assigned/received equipment for this staff
-                                  const foundInHistory = leadEquipmentHistory?.filter(h => {
-                                    if (h.order_id && h.order_id !== ord.order_id && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
-                                    let parsed: any = {};
-                                    if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
-                                    const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-                                    return retBy === normStaffName || (normStaffName && (retBy.includes(normStaffName) || normStaffName.includes(retBy)));
-                                  });
-                                  foundInHistory?.forEach(h => {
-                                    if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && !h.equipment_name.includes('Photo') && h.equipment_name !== 'Asset Collection') {
-                                      effectiveAssignedEq.push(h.equipment_name);
-                                    }
-                                  });
-                                  effectiveAssignedEq = Array.from(new Set(effectiveAssignedEq));
-                                }
+                                 if (effectiveAssignedEq.length === 0) {
+                                   const foundInHistory = leadEquipmentHistory?.filter(h => {
+                                     if (h.order_id && h.order_id !== ord.order_id && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
+                                     let parsed: any = {};
+                                     if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
+                                     const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+                                     return retBy === normStaffName || (normStaffName && (retBy.includes(normStaffName) || normStaffName.includes(retBy)));
+                                   });
+                                   foundInHistory?.forEach(h => {
+                                     if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && !h.equipment_name.includes('Photo') && h.equipment_name !== 'Asset Collection') {
+                                       effectiveAssignedEq.push(h.equipment_name);
+                                     }
+                                   });
+                                   effectiveAssignedEq = Array.from(new Set(effectiveAssignedEq));
+                                 }
 
-                                // Filter out invalid/empty placeholder names
-                                effectiveAssignedEq = effectiveAssignedEq.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned');
+                                 // Filter out invalid/empty placeholder names
+                                 effectiveAssignedEq = effectiveAssignedEq.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned');
 
-                                const hasEqAssigned = effectiveAssignedEq.length > 0 || !!assetCollection || !!eqHandover;
+                                 const hasEqAssigned = effectiveAssignedEq.length > 0 || !!assetCollection || !!eqHandover;
 
                                 let equipmentStatusText = hasEqAssigned ? 'Assigned' : 'Not Assigned';
                                 if (hasEqAssigned) {
@@ -4969,64 +4999,18 @@ export const OperationsLeads: React.FC = () => {
                                       {statusBadge}
                                     </td>
 
-                                    {/* 4. Equipment Column (Dropdown showing assigned equipment) */}
+                                    {/* 4. Equipment Column (Showing assigned equipment) */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap relative">
                                       {effectiveAssignedEq.length > 0 ? (
-                                        <div className="relative inline-block text-left">
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setOpenEquipmentDropdownKey(prev => prev === rowEqKey ? null : rowEqKey);
-                                            }}
-                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all cursor-pointer select-none ${
-                                              isEqOpen 
-                                                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-sm shadow-amber-500/10' 
-                                                : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-800 hover:border-zinc-700 text-zinc-200'
-                                            }`}
-                                            title="Click to view assigned equipment"
-                                          >
-                                            <span className="font-mono text-[11px] font-bold">Equipment</span>
-                                            <span className="px-1.5 py-0.2 bg-zinc-800 text-amber-400 rounded text-[10px] font-mono font-bold border border-zinc-750">
-                                              {effectiveAssignedEq.length}
-                                            </span>
-                                            <span className={`text-[10px] text-zinc-400 transition-transform duration-200 ${isEqOpen ? 'rotate-180 text-amber-400' : ''}`}>▾</span>
-                                          </button>
-
-                                          {isEqOpen && (
-                                            <div 
-                                              onClick={(e) => e.stopPropagation()}
-                                              className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 w-64 max-w-[90vw] bg-zinc-900 border border-zinc-750 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-left"
-                                            >
-                                              <div className="p-2.5 bg-zinc-950/85 border-b border-zinc-800 flex items-center justify-between">
-                                                <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-zinc-200 uppercase tracking-wide">
-                                                  <span className="text-amber-400 text-xs">⚙️</span>
-                                                  <span>View Equipment</span>
-                                                  <span className="text-zinc-500 font-normal text-[10px]">({effectiveAssignedEq.length})</span>
-                                                </div>
-                                                <button
-                                                  type="button"
-                                                  onClick={() => setOpenEquipmentDropdownKey(null)}
-                                                  className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded transition-colors"
-                                                  title="Close"
-                                                >
-                                                  ✕
-                                                </button>
-                                              </div>
-
-                                              <div className="p-2 max-h-56 overflow-y-auto space-y-1">
-                                                {effectiveAssignedEq.map((gear, gIdx) => (
-                                                  <div
-                                                    key={gIdx}
-                                                    className="flex items-center gap-2 px-2.5 py-1.5 bg-zinc-950/70 border border-zinc-850 rounded-lg text-xs text-zinc-200 font-sans"
-                                                  >
-                                                    <span className="text-amber-400 font-mono text-[11px]">→</span>
-                                                    <span className="break-words font-medium">{gear}</span>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            </div>
-                                          )}
+                                        <div className="flex flex-col items-center justify-center gap-1">
+                                          <div className="flex flex-wrap items-center justify-center gap-1 max-w-[240px]">
+                                            {effectiveAssignedEq.map((gear, gIdx) => (
+                                              <span key={gIdx} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-xs font-bold whitespace-nowrap">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                                {gear}
+                                              </span>
+                                            ))}
+                                          </div>
                                         </div>
                                       ) : (
                                         <span className="text-zinc-500 font-semibold text-xs font-mono">
