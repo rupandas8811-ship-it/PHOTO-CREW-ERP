@@ -10,6 +10,8 @@ import { StatusText } from '../ui/StatusText';
 import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
+import { EquipmentSelectorDropdown } from './EquipmentSelectorDropdown';
+
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { 
   convertTimeToDbFormat, 
@@ -3011,169 +3013,66 @@ export const OperationsLeads: React.FC = () => {
                                           </div>
 
                                           {/* Equipment Section per Staff */}
-                                          {(() => {
-                                            const eqKey = `${evId}-${slot.id}`;
-                                            const searchQuery = equipmentSearchQueryByEvent[eqKey] || '';
-                                            const isDropdownOpen = !!isEquipmentDropdownOpenByEvent[eqKey];
-                                            const selectedEquipmentNames = slot.equipment || [];
+                                           <div className="flex flex-col sm:flex-row sm:items-start gap-2 pt-1.5 border-t border-zinc-900/50">
+                                             <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider pt-1.5 shrink-0 sm:w-28 hidden sm:block">
+                                               Equipment
+                                             </div>
 
-                                            const allOtherSelectedEquipments = allocStaff
-                                              .filter((s: any) => s.id !== slot.id && s !== slot)
-                                              .flatMap((s: any) => s.equipment || []);
+                                             <div className="flex-1 min-w-0 w-full">
+                                               <EquipmentSelectorDropdown
+                                                 equipment={equipment}
+                                                 selectedEquipmentNames={slot.equipment || []}
+                                                 otherStaffEquipments={allocStaff
+                                                   .filter((s: any) => s.id !== slot.id && s !== slot)
+                                                   .map((s: any) => ({
+                                                     staffName: s.name || s.staff_name,
+                                                     equipmentNames: s.equipment || []
+                                                   }))}
+                                                 onToggleEquipment={(eqName) => {
+                                                   setEventAllocations((prev: any) => {
+                                                     const existingAlloc = prev[evId] || { staff: [] };
+                                                     const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                       if (s.id === slot.id || s === slot) {
+                                                         const currentEq = s.equipment || [];
+                                                         const isSelected = currentEq.includes(eqName);
+                                                         return {
+                                                           ...s,
+                                                           equipment: isSelected
+                                                             ? currentEq.filter((name: string) => name !== eqName)
+                                                             : [...currentEq, eqName]
+                                                         };
+                                                       }
+                                                       return s;
+                                                     });
+                                                     return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                   });
+                                                 }}
+                                                 onRemoveEquipment={(eqName) => {
+                                                   setEventAllocations((prev: any) => {
+                                                     const existingAlloc = prev[evId] || { staff: [] };
+                                                     const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                       if (s.id === slot.id || s === slot) {
+                                                         return {
+                                                           ...s,
+                                                           equipment: (s.equipment || []).filter((name: string) => name !== eqName)
+                                                         };
+                                                       }
+                                                       return s;
+                                                     });
+                                                     return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                   });
+                                                 }}
+                                                 isEquipmentBusy={isEquipmentBusy}
+                                                 currentOrderId={assigningOrderId}
+                                                 targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date}
+                                               />
+                                             </div>
+                                           </div>
+                                         </div>
+                                       );
+                                     })}
 
-                                            const filteredEquipment = (equipment || []).filter(eq => {
-                                              if (allOtherSelectedEquipments.includes(eq.equipment_name)) {
-                                                return false;
-                                              }
-                                              const q = searchQuery.toLowerCase();
-                                              return eq.equipment_name.toLowerCase().includes(q) ||
-                                                     (eq.category || '').toLowerCase().includes(q) ||
-                                                     (eq.serial_number || '').toLowerCase().includes(q);
-                                            });
-
-                                            return (
-                                              <div className="flex flex-col sm:flex-row sm:items-start gap-2 pt-1.5 border-t border-zinc-900/50">
-                                                <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider pt-1 shrink-0 sm:w-32 hidden sm:block">
-                                                  Equipment
-                                                </div>
-
-                                                <div className="flex flex-col flex-1 gap-2 min-w-0 w-full">
-                                                  {selectedEquipmentNames.length > 0 && (
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                      {selectedEquipmentNames.map((eqName: string, eqIdx: number) => (
-                                                        <span key={eqIdx} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-mono font-medium rounded border border-amber-500/20 transition-all">
-                                                          <span className="truncate max-w-[150px] sm:max-w-[220px]">⚙️ {eqName}</span>
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                              setEventAllocations((prev: any) => {
-                                                                const existingAlloc = prev[evId] || { staff: [] };
-                                                                const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                                  if (s.id === slot.id || s === slot) {
-                                                                    return {
-                                                                      ...s,
-                                                                      equipment: (s.equipment || []).filter((name: string) => name !== eqName)
-                                                                    };
-                                                                  }
-                                                                  return s;
-                                                                });
-                                                                return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
-                                                              });
-                                                            }}
-                                                            className="text-amber-500 hover:text-amber-300 font-bold ml-1 text-xs cursor-pointer focus:outline-none"
-                                                          >
-                                                            ✕
-                                                          </button>
-                                                        </span>
-                                                      ))}
-                                                    </div>
-                                                  )}
-
-                                                  <div className="relative">
-                                                    <div className="flex gap-1.5">
-                                                      <input
-                                                        type="text"
-                                                        placeholder={selectedEquipmentNames.length === 0 ? "Search to assign equipment..." : "Search equipment..."}
-                                                        value={searchQuery}
-                                                        onFocus={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
-                                                        onChange={(e) => setEquipmentSearchQueryByEvent(prev => ({ ...prev, [eqKey]: e.target.value }))}
-                                                        className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 focus:border-amber-500 focus:outline-none rounded-lg py-1 px-2.5 text-xs text-zinc-100 placeholder-zinc-500 h-8"
-                                                      />
-                                                      {isDropdownOpen ? (
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: false }))}
-                                                          className="px-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono rounded-lg border border-zinc-700 transition-colors cursor-pointer shrink-0 h-8"
-                                                        >
-                                                          Close
-                                                        </button>
-                                                      ) : (
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
-                                                          className="px-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs font-mono rounded-lg border border-zinc-800 transition-colors cursor-pointer shrink-0 h-8"
-                                                        >
-                                                          Browse
-                                                        </button>
-                                                      )}
-                                                    </div>
-                                                    {isDropdownOpen && (
-                                                      <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl max-h-48 overflow-y-auto z-40 scrollbar-thin divide-y divide-zinc-800/60">
-                                                        {filteredEquipment.length > 0 ? (
-                                                          filteredEquipment.map((eq) => {
-                                                            const isAlreadySelected = selectedEquipmentNames.includes(eq.equipment_name);
-                                                            const evMatch = parentLeadInstance?.events?.find((e: any) => e.id === evId);
-                                                            const targetEventDate = evMatch?.event_date || assignForm.event_date;
-                                                            const isBusy = !isAlreadySelected && isEquipmentBusy(eq.equipment_name, assigningOrderId, targetEventDate);
-                                                            return (
-                                                              <div
-                                                                key={eq.equipment_id}
-                                                                onClick={() => {
-                                                                  if (isBusy) {
-                                                                    alert(`Equipment "${eq.equipment_name}" is currently assigned to another active order and cannot be assigned.`);
-                                                                    return;
-                                                                  }
-                                                                  setEventAllocations((prev: any) => {
-                                                                    const existingAlloc = prev[evId] || { staff: [] };
-                                                                    const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                                      if (s.id === slot.id || s === slot) {
-                                                                        const currentEq = s.equipment || [];
-                                                                        return {
-                                                                          ...s,
-                                                                          equipment: isAlreadySelected
-                                                                            ? currentEq.filter((name: string) => name !== eq.equipment_name)
-                                                                            : [...currentEq, eq.equipment_name]
-                                                                        };
-                                                                      }
-                                                                      return s;
-                                                                    });
-                                                                    return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
-                                                                  });
-                                                                }}
-                                                                className={`flex items-center justify-between p-2.5 cursor-pointer transition-colors text-xs text-left ${
-                                                                  isAlreadySelected ? 'bg-amber-500/10 hover:bg-amber-500/15' : isBusy ? 'opacity-60 hover:bg-zinc-850' : 'hover:bg-zinc-800/80'
-                                                                }`}
-                                                              >
-                                                                <div className="space-y-0.5">
-                                                                  <div className="font-bold text-white flex items-center gap-1.5">
-                                                                    <span>⚙️ {eq.equipment_name}</span>
-                                                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-400 uppercase font-mono">
-                                                                      {eq.category}
-                                                                    </span>
-                                                                    {isBusy && (
-                                                                      <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-rose-950/80 border border-rose-800 text-rose-300 font-mono font-semibold">
-                                                                        Busy
-                                                                      </span>
-                                                                    )}
-                                                                  </div>
-                                                                </div>
-                                                                <div className="flex items-center gap-2">
-                                                                  <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${
-                                                                    isAlreadySelected ? 'bg-amber-500 border-amber-500 text-black' : isBusy ? 'border-rose-800 text-rose-500' : 'border-zinc-700'
-                                                                  }`}>
-                                                                    {isAlreadySelected ? '✓' : ''}
-                                                                  </span>
-                                                                </div>
-                                                              </div>
-                                                            );
-                                                          })
-                                                        ) : (
-                                                          <div className="p-4 text-center text-xs text-zinc-500 italic">
-                                                            No equipment found matching "{searchQuery}"
-                                                          </div>
-                                                        )}
-                                                      </div>
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            );
-                                          })()}
-                                        </div>
-                                      );
-                                    })}
-
-                                    {/* Add Staff Button under Task */}
+                                     {/* Add Staff Button under Task */}
                                     <div className="pt-2 border-t border-zinc-900 flex items-center justify-between">
                                       <button
                                         type="button"
@@ -3445,170 +3344,66 @@ export const OperationsLeads: React.FC = () => {
                                                   </div>
                                                 </div>
                                               </div>
-                                              {/* Assigned Equipment Section for Individual Staff */}
-                                              {(() => {
-                                                const eqKey = `${evId}-${roleIdx}`;
-                                                const searchQuery = equipmentSearchQueryByEvent[eqKey] || '';
-                                                const isDropdownOpen = !!isEquipmentDropdownOpenByEvent[eqKey];
-                                                const selectedEquipmentNames = assignedStaff.equipment || [];
-                                                
-                                                const allOtherSelectedEquipments = allocStaff
-                                                  .filter((s: any, idx: number) => {
-                                                    return s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
-                                                  })
-                                                  .flatMap((s: any) => s.equipment || []);
+                                                                                            {/* Assigned Equipment Section for Individual Staff */}
+                                              <div className="flex flex-col sm:flex-row sm:items-start gap-2 mt-1 pt-2 border-t border-zinc-900/50">
+                                                <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider pt-1.5 shrink-0 sm:w-28 hidden sm:block">
+                                                  Equipment
+                                                </div>
 
-                                                const filteredEquipment = (equipment || []).filter(eq => {
-                                                  if (allOtherSelectedEquipments.includes(eq.equipment_name)) {
-                                                    return false;
-                                                  }
-                                                  const q = searchQuery.toLowerCase();
-                                                  return eq.equipment_name.toLowerCase().includes(q) ||
-                                                         (eq.category || '').toLowerCase().includes(q) ||
-                                                         (eq.serial_number || '').toLowerCase().includes(q);
-                                                });
-                      
-                                                return (
-                                                  <div className="flex flex-col sm:flex-row sm:items-start gap-2 mt-1 pt-2 border-t border-zinc-900/50">
-                                                    
-                                                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider pt-1 shrink-0 sm:w-28 hidden sm:block">Equipment</div>
-                                                    
-                                                    <div className="flex flex-col flex-1 gap-2 min-w-0 w-full">
-                                                      {/* Selected equipment tags */}
-                                                      {selectedEquipmentNames.length > 0 && (
-                                                        <div className="flex flex-wrap gap-1.5">
-                                                          {selectedEquipmentNames.map((eqName: string, idx: number) => (
-                                                            <span key={idx} className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] sm:text-[11px] font-mono font-medium rounded border border-amber-500/20 transition-all">
-                                                              <span className="truncate max-w-[120px] sm:max-w-[200px]">⚙️ {eqName}</span>
-                                                              <button
-                                                              type="button"
-                                                              onClick={() => {
-                                                                setEventAllocations((prev: any) => {
-                                                                  const existingAlloc = prev[evId] || { staff: [] };
-                                                                  const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                                    const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                                    if (isTarget) {
-                                                                      return {
-                                                                        ...s,
-                                                                        equipment: (s.equipment || []).filter((name: string) => name !== eqName)
-                                                                      };
-                                                                    }
-                                                                    return s;
-                                                                  });
-                                                                  return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
-                                                                });
-                                                              }}
-                                                              className="text-amber-500 hover:text-amber-400 font-bold ml-1 text-xs cursor-pointer focus:outline-none"
-                                                            >
-                                                              ✕
-                                                            </button>
-                                                          </span>
-                                                        ))}
-                                                        </div>
-                                                      )}
-                                                      
-                                                      {/* Search & Select input dropdown */}
-                                                      <div className="relative">
-                                                        <div className="flex gap-1.5">
-                                                          <input
-                                                            type="text"
-                                                            placeholder={selectedEquipmentNames.length === 0 ? "Search to assign equipment..." : "Search equipment..."}
-                                                            value={searchQuery}
-                                                            onFocus={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
-                                                            onChange={(e) => setEquipmentSearchQueryByEvent(prev => ({ ...prev, [eqKey]: e.target.value }))}
-                                                            className="flex-1 min-w-0 bg-zinc-900/50 border border-zinc-800 focus:border-amber-500/50 focus:outline-none rounded py-1 px-2 text-[11px] sm:text-xs text-zinc-100 placeholder-zinc-500 h-7"
-                                                          />
-                                                          {isDropdownOpen ? (
-                                                            <button
-                                                              type="button"
-                                                              onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: false }))}
-                                                              className="px-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-[11px] sm:text-xs font-mono font-bold rounded border border-zinc-750 transition-colors cursor-pointer shrink-0 h-7"
-                                                            >
-                                                              Close
-                                                            </button>
-                                                          ) : (
-                                                            <button
-                                                              type="button"
-                                                              onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
-                                                              className="px-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 text-[11px] sm:text-xs font-mono font-bold rounded border border-zinc-800 transition-colors cursor-pointer shrink-0 h-7"
-                                                            >
-                                                              Browse
-                                                            </button>
-                                                          )}
-                                                        </div>
-                                                        {isDropdownOpen && (
-                                                          <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded shadow-xl max-h-48 overflow-y-auto z-40 scrollbar-thin divide-y divide-zinc-800/60">
-                                                          {filteredEquipment.length > 0 ? (
-                                                            filteredEquipment.map((eq) => {
-                                                              const isAlreadySelected = selectedEquipmentNames.includes(eq.equipment_name);
-                                                              const evMatch = parentLeadInstance?.events?.find((e: any) => e.id === evId);
-                                                              const targetEventDate = evMatch?.event_date || assignForm.event_date || activeOrderInstance?.event_date;
-                                                              const isBusy = !isAlreadySelected && isEquipmentBusy(eq.equipment_name, assigningOrderId, targetEventDate);
-                                                              return (
-                                                                <div
-                                                                  key={eq.equipment_id}
-                                                                  onClick={() => {
-                                                                    if (isBusy) {
-                                                                      alert(`Equipment "${eq.equipment_name}" is currently assigned to another active order and cannot be assigned.`);
-                                                                      return;
-                                                                    }
-                                                                    setEventAllocations((prev: any) => {
-                                                                      const existingAlloc = prev[evId] || { staff: [] };
-                                                                      const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                                        const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                                        if (isTarget) {
-                                                                          const currentEq = s.equipment || [];
-                                                                          return {
-                                                                            ...s,
-                                                                            equipment: isAlreadySelected 
-                                                                              ? currentEq.filter((name: string) => name !== eq.equipment_name)
-                                                                              : [...currentEq, eq.equipment_name]
-                                                                          };
-                                                                        }
-                                                                        return s;
-                                                                      });
-                                                                      return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
-                                                                    });
-                                                                  }}
-                                                                  className={`flex items-center justify-between p-3 cursor-pointer transition-colors text-xs text-left ${
-                                                                    isAlreadySelected ? 'bg-amber-500/5 hover:bg-amber-500/10' : isBusy ? 'opacity-60 hover:bg-zinc-850' : 'hover:bg-zinc-855'
-                                                                  }`}
-                                                                >
-                                                                  <div className="space-y-0.5">
-                                                                    <div className="font-bold text-white flex items-center gap-1.5">
-                                                                      <span>⚙️ {eq.equipment_name}</span>
-                                                                      <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-400 uppercase font-mono">
-                                                                        {eq.category}
-                                                                      </span>
-                                                                      {isBusy && (
-                                                                        <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-rose-950/80 border border-rose-800 text-rose-300 font-mono font-semibold">
-                                                                          Busy
-                                                                        </span>
-                                                                      )}
-                                                                    </div>
-                                                                  </div>
-                                                                  <div className="flex items-center gap-2">
-                                                                    <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${
-                                                                      isAlreadySelected ? 'bg-amber-500 border-amber-500 text-black' : isBusy ? 'border-rose-800 text-rose-500' : 'border-zinc-700'
-                                                                    }`}>
-                                                                      {isAlreadySelected ? '✓' : ''}
-                                                                    </span>
-                                                                  </div>
-                                                                </div>
-                                                              );
-                                                            })
-                                                          ) : (
-                                                            <div className="p-4 text-center text-xs text-zinc-500 italic">
-                                                              No equipment found matching "{searchQuery}"
-                                                            </div>
-                                                          )}
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                  </div>
-                                                  </div>
-                                                );
-                                              })()}
+                                                <div className="flex-1 min-w-0 w-full">
+                                                  <EquipmentSelectorDropdown
+                                                    equipment={equipment}
+                                                    selectedEquipmentNames={assignedStaff.equipment || []}
+                                                    otherStaffEquipments={allocStaff
+                                                      .filter((s: any, idx: number) => {
+                                                        return s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
+                                                      })
+                                                      .map((s: any) => ({
+                                                        staffName: s.name || s.staff_name,
+                                                        equipmentNames: s.equipment || []
+                                                      }))}
+                                                    onToggleEquipment={(eqName) => {
+                                                      setEventAllocations((prev: any) => {
+                                                        const existingAlloc = prev[evId] || { staff: [] };
+                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                          if (isTarget) {
+                                                            const currentEq = s.equipment || [];
+                                                            const isSelected = currentEq.includes(eqName);
+                                                            return {
+                                                              ...s,
+                                                              equipment: isSelected 
+                                                                ? currentEq.filter((name: string) => name !== eqName)
+                                                                : [...currentEq, eqName]
+                                                            };
+                                                          }
+                                                          return s;
+                                                        });
+                                                        return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                      });
+                                                    }}
+                                                    onRemoveEquipment={(eqName) => {
+                                                      setEventAllocations((prev: any) => {
+                                                        const existingAlloc = prev[evId] || { staff: [] };
+                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                          if (isTarget) {
+                                                            return {
+                                                              ...s,
+                                                              equipment: (s.equipment || []).filter((name: string) => name !== eqName)
+                                                            };
+                                                          }
+                                                          return s;
+                                                        });
+                                                        return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                      });
+                                                    }}
+                                                    isEquipmentBusy={isEquipmentBusy}
+                                                    currentOrderId={assigningOrderId}
+                                                    targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date || activeOrderInstance?.event_date}
+                                                  />
+                                                </div>
+                                              </div>
                                             </div>
 
                                               {/* Validation message if missing */}
