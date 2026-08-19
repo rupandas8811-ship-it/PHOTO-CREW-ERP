@@ -399,6 +399,7 @@ export const OperationsLeads: React.FC = () => {
   } | null>(null);
 
   const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
+  const [openEquipmentDropdownKey, setOpenEquipmentDropdownKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (viewingStaffOrderId) {
@@ -2245,15 +2246,6 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 font-bold text-zinc-100">
                       <div>{ord.customer_name}</div>
-                      {op?.equipment_kit && (
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {op.equipment_kit.split(',').map((kit: string, idx: number) => (
-                            <span key={idx} className="bg-amber-400/10 text-amber-400 px-1.5 py-0.5 rounded text-[9.5px] font-mono border border-amber-400/10 " title="Assigned Gear">
-                              ⚙️ {kit.trim()}
-                            </span>
-                          ))}
-                        </div>
-                      )}
                     </td>
                     <td className="p-4 text-zinc-300 font-sans">
                       <UnifiedEventDropdownCell lead={lead || ord} />
@@ -4733,6 +4725,7 @@ export const OperationsLeads: React.FC = () => {
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Assigned Task</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Task Status</th>
+                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment Status</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Event Images</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Raw Footage</th>
@@ -4743,6 +4736,9 @@ export const OperationsLeads: React.FC = () => {
                                 const normStaffName = (member.staff_name || '').trim().toLowerCase();
                                 const normEvName = (evName || '').trim().toLowerCase();
                                 const memberEvId = member.event_id;
+
+                                const rowEqKey = `${ord.order_id}-${memberEvId || 'gen'}-${member.staff_name}-${mIdx}`;
+                                const isEqOpen = openEquipmentDropdownKey === rowEqKey;
 
                                 const getRecordForStage = (stages: string[], equipName?: string) => {
                                   if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
@@ -4835,7 +4831,7 @@ export const OperationsLeads: React.FC = () => {
                                   );
                                 }
 
-                                // 2. Equipment Status Text & Real Assignment Check
+                                // 2. Equipment Resolution & Status
                                 let effectiveAssignedEq = member.assigned_equipment && member.assigned_equipment.length > 0 ? [...member.assigned_equipment] : [];
                                 if (effectiveAssignedEq.length === 0) {
                                   // Fallback: check if history has assigned/received equipment for this staff
@@ -4847,12 +4843,15 @@ export const OperationsLeads: React.FC = () => {
                                     return retBy === normStaffName || (normStaffName && (retBy.includes(normStaffName) || normStaffName.includes(retBy)));
                                   });
                                   foundInHistory?.forEach(h => {
-                                    if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection') {
+                                    if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && !h.equipment_name.includes('Photo') && h.equipment_name !== 'Asset Collection') {
                                       effectiveAssignedEq.push(h.equipment_name);
                                     }
                                   });
                                   effectiveAssignedEq = Array.from(new Set(effectiveAssignedEq));
                                 }
+
+                                // Filter out invalid/empty placeholder names
+                                effectiveAssignedEq = effectiveAssignedEq.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned');
 
                                 const hasEqAssigned = effectiveAssignedEq.length > 0 || !!assetCollection || !!eqHandover;
 
@@ -4953,17 +4952,90 @@ export const OperationsLeads: React.FC = () => {
 
                                 return (
                                   <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
+                                    {/* 1. Staff Name */}
                                     <td className="py-3 px-3.5 font-bold text-white font-sans whitespace-nowrap">
                                       {member.staff_name}
                                     </td>
-                                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                                      {statusBadge}
-                                    </td>
+
+                                    {/* 2. Assigned Task */}
                                     <td className="py-3 px-3.5 font-sans whitespace-nowrap">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold text-xs">
                                         {formatQtyItem(member.assigned_task || member.staff_role)}
                                       </span>
                                     </td>
+
+                                    {/* 3. Task Status */}
+                                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                                      {statusBadge}
+                                    </td>
+
+                                    {/* 4. Equipment Column (Dropdown showing assigned equipment) */}
+                                    <td className="py-3 px-3.5 text-center whitespace-nowrap relative">
+                                      {effectiveAssignedEq.length > 0 ? (
+                                        <div className="relative inline-block text-left">
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenEquipmentDropdownKey(prev => prev === rowEqKey ? null : rowEqKey);
+                                            }}
+                                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-all cursor-pointer select-none ${
+                                              isEqOpen 
+                                                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-sm shadow-amber-500/10' 
+                                                : 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-800 hover:border-zinc-700 text-zinc-200'
+                                            }`}
+                                            title="Click to view assigned equipment"
+                                          >
+                                            <span className="font-mono text-[11px] font-bold">Equipment</span>
+                                            <span className="px-1.5 py-0.2 bg-zinc-800 text-amber-400 rounded text-[10px] font-mono font-bold border border-zinc-750">
+                                              {effectiveAssignedEq.length}
+                                            </span>
+                                            <span className={`text-[10px] text-zinc-400 transition-transform duration-200 ${isEqOpen ? 'rotate-180 text-amber-400' : ''}`}>▾</span>
+                                          </button>
+
+                                          {isEqOpen && (
+                                            <div 
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="absolute left-1/2 -translate-x-1/2 top-full mt-1.5 z-50 w-64 max-w-[90vw] bg-zinc-900 border border-zinc-750 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-left"
+                                            >
+                                              <div className="p-2.5 bg-zinc-950/85 border-b border-zinc-800 flex items-center justify-between">
+                                                <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-zinc-200 uppercase tracking-wide">
+                                                  <span className="text-amber-400 text-xs">⚙️</span>
+                                                  <span>View Equipment</span>
+                                                  <span className="text-zinc-500 font-normal text-[10px]">({effectiveAssignedEq.length})</span>
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setOpenEquipmentDropdownKey(null)}
+                                                  className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded transition-colors"
+                                                  title="Close"
+                                                >
+                                                  ✕
+                                                </button>
+                                              </div>
+
+                                              <div className="p-2 max-h-56 overflow-y-auto space-y-1">
+                                                {effectiveAssignedEq.map((gear, gIdx) => (
+                                                  <div
+                                                    key={gIdx}
+                                                    className="flex items-center gap-2 px-2.5 py-1.5 bg-zinc-950/70 border border-zinc-850 rounded-lg text-xs text-zinc-200 font-sans"
+                                                  >
+                                                    <span className="text-amber-400 font-mono text-[11px]">→</span>
+                                                    <span className="break-words font-medium">{gear}</span>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-zinc-500 font-semibold text-xs font-mono">
+                                          Not Assigned
+                                        </span>
+                                      )}
+                                    </td>
+
+                                    {/* 5. Equipment Status */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       {hasEqAssigned ? (
                                         <span 
@@ -4987,6 +5059,8 @@ export const OperationsLeads: React.FC = () => {
                                         </span>
                                       )}
                                     </td>
+
+                                    {/* 6. Event Images */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <span 
                                         onClick={() => setSelectedEventImages({ staffName: member.staff_name, assetCollection, evStart, evEnd })}
@@ -4995,6 +5069,8 @@ export const OperationsLeads: React.FC = () => {
                                         {eventImageStatusText}
                                       </span>
                                     </td>
+
+                                    {/* 7. Raw Footage */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       {rawFootageLink ? (
                                         <div className="flex flex-col items-center gap-1.5">

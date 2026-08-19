@@ -717,6 +717,27 @@ const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: nu
   });
 };
 
+const generateQuotationPdfFileName = (leadObj: any): string => {
+  const customerName = (leadObj?.customer_name || 'Customer').trim();
+  const leadId = (leadObj?.lead_id || leadObj?.id || 'QUOTE').trim();
+
+  // Sanitize customer name and lead ID for file system safety:
+  // Replace invalid filename characters (/ \ : * ? " < > |) with underscores
+  const sanitizedCustomer = customerName
+    .replace(/[/\\:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'Customer';
+
+  const sanitizedLeadId = leadId
+    .replace(/[/\\:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'QUOTE';
+
+  return `${sanitizedCustomer}_${sanitizedLeadId}_quote.pdf`;
+};
+
 const generateQuotationPDF = (
   lead: any,
   activePkgs: any[],
@@ -4485,7 +4506,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       );
       
       console.log("✔ PDF generated");
-      doc.save(`Quotation.pdf`);
+      const pdfFileName = generateQuotationPdfFileName(leadObj);
+      doc.save(pdfFileName);
       
       showToastMsg("Quotation successfully generated!", "success");
     } catch (err: any) {
@@ -4527,7 +4549,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setGeneratedPDFBlobUrl(blobUrl);
 
       // Download the PDF automatically as requested
-      doc.save(`Quotation.pdf`);
+      const pdfFileName = generateQuotationPdfFileName(leadObj);
+      doc.save(pdfFileName);
 
       console.log("✔ Opening WhatsApp...");
       const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
