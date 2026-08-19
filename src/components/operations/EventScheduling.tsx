@@ -20,8 +20,8 @@ export const EventScheduling: React.FC = () => {
 
   // Only show active orders that have been assigned crew or are in operations workflow
   const scheduledEvents = orders.filter(o => {
-    const isAvailableStage = ['Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Event Started', 'Event Ended', 'Footage Handover', 'Verified Footage', 'Event Completed'].includes(o.current_stage);
-    return isAvailableStage && o.current_stage !== 'Closed';
+    const isAvailableStage = ['Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Event Started', 'Event Ended', 'Footage Handover', 'Event Completed'].includes(o.current_stage);
+    return isAvailableStage && o.current_stage !== 'Closed' && o.current_stage !== 'Verified Footage' && o.current_stage !== 'Footage Handover Verified';
   });
 
   const handleUpdateSchedule = async (orderId: string) => {

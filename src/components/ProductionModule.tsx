@@ -1549,6 +1549,78 @@ ${coordinatorName}`;
     return results;
   };
 
+  // Helper to validate whether an editor assignment or production has a saved server upload in the database
+  const isServerUploadSaved = (a: any, prod?: any): {
+    isUploaded: boolean;
+    folderName: string;
+    eventDate: string;
+    uploadLink: string;
+    confirmedAt: string;
+    confirmedBy: string;
+  } => {
+    if (!a && !prod) {
+      return { isUploaded: false, folderName: '', eventDate: '', uploadLink: '', confirmedAt: '', confirmedBy: '' };
+    }
+
+    const uploadLink = (
+      a?.Edited_Drive_Link ||
+      a?.edited_drive_link ||
+      a?.upload_link ||
+      a?.drive_link ||
+      a?.edited_link ||
+      prod?.edited_drive_link ||
+      prod?.delivery_link ||
+      ''
+    ).trim();
+
+    const folderName = (
+      a?.server_upload_folder_name ||
+      a?.server_path ||
+      prod?.server_upload_folder_name ||
+      prod?.server_path ||
+      uploadLink ||
+      ''
+    ).trim();
+
+    const eventDate = (
+      a?.server_upload_event_date ||
+      prod?.server_upload_event_date ||
+      a?.event_date ||
+      prod?.event_date ||
+      ''
+    ).trim();
+
+    const confirmedAt = (a?.server_upload_confirmed_at || prod?.server_upload_confirmed_at || '').trim();
+    const confirmedBy = (a?.server_upload_confirmed_by || a?.staff_name || prod?.server_upload_confirmed_by || '').trim();
+
+    // Persisted validation: true if server_upload_confirmed or folder/path/proof exists
+    const isUploaded = Boolean(
+      a?.server_upload_confirmed === true ||
+      a?.edited_folder_uploaded_to_server === true ||
+      (typeof a?.server_upload_folder_name === 'string' && a.server_upload_folder_name.trim().length > 0) ||
+      (typeof a?.server_path === 'string' && a.server_path.trim().length > 0) ||
+      (typeof a?.Edited_Drive_Link === 'string' && a.Edited_Drive_Link.trim().length > 0) ||
+      (typeof a?.edited_drive_link === 'string' && a.edited_drive_link.trim().length > 0) ||
+      (typeof a?.upload_link === 'string' && a.upload_link.trim().length > 0) ||
+      (typeof a?.drive_link === 'string' && a.drive_link.trim().length > 0) ||
+      (typeof a?.customer_confirmation_proof === 'string' && a.customer_confirmation_proof.trim().length > 0) ||
+      (typeof a?.confirmation_proof === 'string' && a.confirmation_proof.trim().length > 0) ||
+      prod?.server_upload_confirmed === true ||
+      (typeof prod?.server_upload_folder_name === 'string' && prod.server_upload_folder_name.trim().length > 0) ||
+      (typeof prod?.server_path === 'string' && prod.server_path.trim().length > 0) ||
+      (typeof prod?.edited_drive_link === 'string' && prod.edited_drive_link.trim().length > 0)
+    );
+
+    return {
+      isUploaded,
+      folderName,
+      eventDate,
+      uploadLink,
+      confirmedAt,
+      confirmedBy
+    };
+  };
+
   const getClientAcceptanceDeliverables = (prod: Production) => {
     if (!prod) return [];
     const { order, lead } = resolveOrderAndLead(prod);
@@ -1579,6 +1651,12 @@ ${coordinatorName}`;
         qty: number;
         staffName: string;
         status: string;
+        isUploaded: boolean;
+        folderName: string;
+        eventDate: string;
+        uploadLink: string;
+        confirmedAt: string;
+        confirmedBy: string;
       }>;
     }>();
 
@@ -1616,6 +1694,7 @@ ${coordinatorName}`;
         const deliverableName = parsedText || rawSpec;
 
         const itemKey = a.assignment_id || `item_${groupKey}_${idx}`;
+        const uploadStatus = isServerUploadSaved(a, prod);
 
         eventGroupMap.get(groupKey)!.items.push({
           key: itemKey,
@@ -1623,7 +1702,13 @@ ${coordinatorName}`;
           deliverable: deliverableName,
           qty: qty,
           staffName: a.staff_name || 'Unassigned',
-          status: a.status || 'Assigned'
+          status: a.status || 'Assigned',
+          isUploaded: uploadStatus.isUploaded,
+          folderName: uploadStatus.folderName,
+          eventDate: uploadStatus.eventDate,
+          uploadLink: uploadStatus.uploadLink,
+          confirmedAt: uploadStatus.confirmedAt,
+          confirmedBy: uploadStatus.confirmedBy
         });
       });
     }
@@ -1787,6 +1872,15 @@ Production Team`;
     setCaCommunicationProof('');
     setCaChecklistCompleted(false);
     setCaInternalValidation(false);
+
+    const eventGroups = getClientAcceptanceDeliverables(prod);
+    const initialChecklist: Record<string, boolean> = {};
+    eventGroups.forEach(g => {
+      g.items.forEach(item => {
+        initialChecklist[item.key] = item.isUploaded;
+      });
+    });
+    setCaChecklist(initialChecklist);
   };
 
   const getAssignedEditorsText = (prod: Production): string => {
@@ -8472,9 +8566,42 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   
                   const assignedDeliverables = getAssignedDeliverablesForProd(activeWorkflowProd, true);
 
+                  // Validate real saved server upload status for each deliverable independently
+                  const deliverableUploadStatuses = assignedDeliverables.map(item => {
+                    const matchingAssign = (editorAssignments || []).find(a =>
+                      (a.production_id === activeWorkflowProd.production_id ||
+                       (order?.order_id && (a.order_id === order.order_id || a.production_id === order.order_id)) ||
+                       (activeWorkflowProd.tracking_id && (a.order_id === activeWorkflowProd.tracking_id || a.production_id === activeWorkflowProd.tracking_id))) &&
+                      (!activeWorkflowProd.event_id || !a.event_id || a.event_id === activeWorkflowProd.event_id) &&
+                      (a.speciality === item.name || a.deliverable_id === item.name || parseQtyAndText(a.speciality || '').text === item.name || parseQtyAndText(a.deliverable_id || '').text === item.name)
+                    );
+
+                    const uploadStatus = isServerUploadSaved(matchingAssign, activeWorkflowProd);
+                    return {
+                      ...item,
+                      matchingAssign,
+                      isUploaded: uploadStatus.isUploaded,
+                      folderName: uploadStatus.folderName,
+                      eventDate: uploadStatus.eventDate,
+                      uploadLink: uploadStatus.uploadLink,
+                      staffName: matchingAssign?.staff_name || 'Unassigned'
+                    };
+                  });
+
                   return (
                     <form onSubmit={async (e) => {
                       e.preventDefault();
+
+                      // Strict validation: cannot submit if any assigned deliverable lacks a real persisted server upload
+                      const pendingUploads = deliverableUploadStatuses.filter(d => !d.isUploaded);
+                      if (assignedDeliverables.length > 0 && pendingUploads.length > 0) {
+                        alert(`Cannot submit deliverables!\n\nThe following ${pendingUploads.length} deliverable(s) do not have a verified server upload saved by their assigned editor:\n\n` +
+                          pendingUploads.map(d => `• ${d.name} (${d.staffName}) - Server Upload Pending`).join('\n') +
+                          `\n\nPlease wait for the editor(s) to upload the edited folders to the server.`
+                        );
+                        return;
+                      }
+
                       try {
                         setIsSaving(true);
                         await updateProduction(activeWorkflowProd.production_id, {
@@ -8510,7 +8637,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <div className="space-y-3">
                         <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-2 flex items-center justify-between">
                           <span>Deliverables Checklist</span>
-                          <span className="text-zinc-500 font-normal">Order: {order?.order_id || activeWorkflowProd.tracking_id}</span>
+                          <span className="text-zinc-400 font-mono text-[10px]">
+                            {deliverableUploadStatuses.length > 0 
+                              ? `${deliverableUploadStatuses.filter(d => d.isUploaded).length} / ${deliverableUploadStatuses.length} Uploaded to Server`
+                              : `Order: ${order?.order_id || activeWorkflowProd.tracking_id}`
+                            }
+                          </span>
                         </h4>
                         {assignedDeliverables.length === 0 ? (
                           <div className="text-zinc-500 text-xs italic font-mono p-4 text-center bg-zinc-900/20 rounded-xl">
@@ -8521,26 +8653,68 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             </label>
                           </div>
                         ) : (
-                          <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
-                            {assignedDeliverables.map((item, idx) => (
-                              <label key={idx} className="flex items-center justify-between p-3.5 bg-zinc-900/50 border border-zinc-850 rounded-xl cursor-pointer hover:bg-zinc-900 transition-colors">
-                                <div className="flex items-center gap-3">
-                                  <input type="checkbox" required className="w-4 h-4 accent-purple-500 bg-zinc-950 border-zinc-700 rounded cursor-pointer" />
-                                  <div>
-                                    <span className="font-bold text-xs text-zinc-200 uppercase tracking-tight block">
-                                      {item.name}
-                                    </span>
-                                    <span className="text-[10px] text-zinc-500 block font-mono">
-                                      STATUS: <span className="text-emerald-400 font-bold">Ready for Delivery</span>
+                          <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                            {deliverableUploadStatuses.map((item, idx) => (
+                              <div key={idx} className={`p-3.5 border rounded-xl transition-all ${
+                                item.isUploaded
+                                  ? 'bg-emerald-950/20 border-emerald-900/50 text-emerald-200 shadow-sm'
+                                  : 'bg-zinc-900/40 border-zinc-850 text-zinc-300'
+                              }`}>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.isUploaded}
+                                      disabled
+                                      className="w-4 h-4 accent-emerald-500 bg-zinc-950 border-zinc-700 rounded cursor-not-allowed"
+                                    />
+                                    <div>
+                                      <span className="font-bold text-xs text-zinc-200 uppercase tracking-tight block">
+                                        {item.name}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500 block font-mono">
+                                        ASSIGNED TO: <span className="text-zinc-400 font-bold">{item.staffName}</span> • STATUS:{' '}
+                                        {item.isUploaded ? (
+                                          <span className="text-emerald-400 font-bold">Ready for Delivery</span>
+                                        ) : (
+                                          <span className="text-rose-400 font-bold">Pending Editor Upload</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="inline-block px-2.5 py-1 bg-purple-500/10 text-purple-300 font-mono text-xs font-bold rounded-lg border border-purple-500/20">
+                                      Qty: {item.qty}
                                     </span>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <span className="inline-block px-2.5 py-1 bg-purple-500/10 text-purple-300 font-mono text-xs font-bold rounded-lg border border-purple-500/20">
-                                    Qty: {item.qty}
-                                  </span>
+
+                                <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5">
+                                    {item.isUploaded ? (
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold">
+                                        <span>☑</span>
+                                        <span>Edited Folder is uploaded in Server</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 text-[11px] font-mono font-bold">
+                                        <span>☐</span>
+                                        <span>Edited Folder is uploaded in Server</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  {item.isUploaded ? (
+                                    <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-1.5 truncate">
+                                      {item.folderName && <span className="text-emerald-300 font-bold truncate">📁 {item.folderName}</span>}
+                                      {item.eventDate && <span className="text-zinc-500 font-bold shrink-0">({item.eventDate})</span>}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] font-mono text-rose-400/90 italic font-semibold">
+                                      Pending upload by {item.staffName}
+                                    </span>
+                                  )}
                                 </div>
-                              </label>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -9451,6 +9625,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <th className="p-3 font-bold">Event</th>
                     <th className="p-3 font-bold">Assigned Deliverable</th>
                     <th className="p-3 font-bold">Current Status</th>
+                    <th className="p-3 font-bold whitespace-nowrap">Server Upload</th>
                     <th className="p-3 font-bold">Upload Link</th>
                     <th className="p-3 font-bold whitespace-nowrap">Customer Proof</th>
                   </tr>
@@ -9500,7 +9675,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     if (rawAssignments.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={6} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
+                          <td colSpan={7} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
                             No assigned staff or deliverables found for this order.
                           </td>
                         </tr>
@@ -9580,6 +9755,32 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             }`}>
                               {statusText}
                             </span>
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            {(() => {
+                              const uploadInfo = isServerUploadSaved(assignment, prod);
+                              if (uploadInfo.isUploaded) {
+                                return (
+                                  <div className="space-y-1">
+                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold">
+                                      <span>☑</span>
+                                      <span>Uploaded in Server</span>
+                                    </span>
+                                    {uploadInfo.folderName && (
+                                      <div className="text-[10px] font-mono text-zinc-400 truncate max-w-[160px]" title={uploadInfo.folderName}>
+                                        📁 {uploadInfo.folderName}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono font-semibold">
+                                  <span>☐</span>
+                                  <span>Pending Upload</span>
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="p-3">
                             {hasLink ? (
@@ -11004,10 +11205,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   onSubmit={async (e) => {
                     e.preventDefault();
 
-                    // Verify that all assigned deliverables in the checklist are checked off
-                    const uncheckedKeys = allChecklistKeys.filter(k => !caChecklist[k]);
-                    if (allChecklistKeys.length > 0 && uncheckedKeys.length > 0) {
-                      alert(`Please verify and check off all ${allChecklistKeys.length} assigned deliverable(s) in the Deliverables Verification Checklist before completing Client Acceptance.`);
+                    // Strictly validate that all assigned deliverables have real saved server uploads in the database
+                    const unuploadedDeliverables = eventGroups.flatMap(g => g.items).filter(i => !i.isUploaded);
+                    if (eventGroups.length > 0 && unuploadedDeliverables.length > 0) {
+                      alert(`Cannot complete Client Acceptance!\n\nThe following ${unuploadedDeliverables.length} assigned deliverable(s) do not have a verified server upload saved in the database by their assigned editor:\n\n` +
+                        unuploadedDeliverables.map(i => `• ${i.deliverable} (${i.staffName}) - Server Upload Pending`).join('\n') +
+                        `\n\nPlease ensure the assigned editor(s) upload the required edited folders to the server before approving Client Acceptance.`
+                      );
                       return;
                     }
 
@@ -11081,13 +11285,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </h4>
                       <span className="text-[10px] font-mono text-zinc-400 font-bold">
                         {allChecklistKeys.length > 0 
-                          ? `${allChecklistKeys.filter(k => !!caChecklist[k]).length} / ${allChecklistKeys.length} Verified`
+                          ? `${eventGroups.flatMap(g => g.items).filter(i => i.isUploaded).length} / ${allChecklistKeys.length} Uploaded to Server`
                           : '0 Verified'
                         }
                       </span>
                     </div>
                     <p className="text-[10px] text-zinc-500 font-mono">
-                      All deliverables below must be verified as fully approved by the client before submission.
+                      System automatically validates whether the Editor has uploaded the required edited folder to the server for each deliverable.
                     </p>
 
                     {eventGroups.length === 0 ? (
@@ -11095,7 +11299,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         No production assignment records found for this project. Please assign editors first in Production → Assign Editor.
                       </div>
                     ) : (
-                      <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1">
+                      <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
                         {eventGroups.map((group, gIdx) => (
                           <div key={group.eventId || `grp_${gIdx}`} className="space-y-2">
                             {/* Event Header */}
@@ -11109,43 +11313,89 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             </div>
 
                             {/* Checklist Items for this Event */}
-                            <div className="space-y-2 pl-1">
+                            <div className="space-y-2.5 pl-1">
                               {group.items.map((item) => {
                                 const itemKey = item.key;
-                                const isChecked = !!caChecklist[itemKey];
+                                const isUploaded = item.isUploaded;
 
                                 return (
-                                  <label
+                                  <div
                                     key={itemKey}
-                                    className={`flex items-center justify-between p-3 border rounded-xl cursor-pointer transition-all ${
-                                      isChecked
+                                    className={`p-3.5 border rounded-xl transition-all ${
+                                      isUploaded
                                         ? 'bg-emerald-950/20 border-emerald-900/50 text-emerald-200 shadow-sm'
-                                        : 'bg-zinc-900/40 border-zinc-900 hover:border-zinc-850 text-zinc-300 hover:bg-zinc-900/70'
+                                        : 'bg-zinc-900/40 border-zinc-900 text-zinc-300'
                                     }`}
                                   >
-                                    <div className="flex items-center gap-3">
-                                      <input
-                                        type="checkbox"
-                                        checked={isChecked}
-                                        onChange={(e) => {
-                                          setCaChecklist(prev => ({
-                                            ...prev,
-                                            [itemKey]: e.target.checked
-                                          }));
-                                        }}
-                                        className="w-4 h-4 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                                      />
-                                      <div className="text-xs">
-                                        <span className="font-semibold text-zinc-200">{item.deliverable}</span>
-                                        <span className="text-[10px] text-zinc-500 block font-mono">
-                                          ASSIGNED TO: <span className="text-zinc-400 font-bold">{item.staffName}</span> • STATUS: <span className="text-amber-400 font-bold">{item.status}</span>
-                                        </span>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-3">
+                                        <input
+                                          type="checkbox"
+                                          checked={isUploaded}
+                                          disabled
+                                          className="w-4 h-4 accent-emerald-500 bg-zinc-950 border-zinc-800 rounded cursor-not-allowed focus:ring-0"
+                                        />
+                                        <div className="text-xs">
+                                          <span className="font-semibold text-zinc-200">{item.deliverable}</span>
+                                          <span className="text-[10px] text-zinc-500 block font-mono">
+                                            ASSIGNED TO: <span className="text-zinc-400 font-bold">{item.staffName}</span> • STATUS:{' '}
+                                            {isUploaded ? (
+                                              <span className="text-emerald-400 font-bold">Ready for Delivery</span>
+                                            ) : (
+                                              <span className="text-amber-400 font-bold">{item.status}</span>
+                                            )}
+                                          </span>
+                                        </div>
                                       </div>
+                                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-950 border border-zinc-900 text-purple-300 shrink-0">
+                                        Qty: {item.qty}
+                                      </span>
                                     </div>
-                                    <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-950 border border-zinc-900 text-purple-300">
-                                      Qty: {item.qty}
-                                    </span>
-                                  </label>
+
+                                    {/* System-Validated Server Upload Checklist Row */}
+                                    <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5">
+                                        {isUploaded ? (
+                                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold">
+                                            <span>☑</span>
+                                            <span>Edited Folder is uploaded in Server</span>
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 text-[11px] font-mono font-bold">
+                                            <span>☐</span>
+                                            <span>Edited Folder is uploaded in Server</span>
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {isUploaded ? (
+                                        <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-1.5 truncate">
+                                          {item.folderName && (
+                                            <span className="text-emerald-300 font-bold truncate">📁 {item.folderName}</span>
+                                          )}
+                                          {item.eventDate && (
+                                            <span className="text-zinc-500 font-bold shrink-0">({item.eventDate})</span>
+                                          )}
+                                          {item.uploadLink && (
+                                            <a
+                                              href={item.uploadLink.startsWith('http') ? item.uploadLink : `https://${item.uploadLink}`}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              referrerPolicy="no-referrer"
+                                              className="text-indigo-400 hover:text-indigo-300 underline font-bold shrink-0"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              🔗 Link
+                                            </a>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-[10px] font-mono text-rose-400/90 italic font-semibold">
+                                          Pending upload by {item.staffName}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </div>

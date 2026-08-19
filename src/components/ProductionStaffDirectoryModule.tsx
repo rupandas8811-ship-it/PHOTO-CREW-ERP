@@ -182,6 +182,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                  auth_id: userId, 
                  password: formPassword.trim() || undefined,
                  name: formName.trim(),
+                 mobile: formMobile.trim(),
                  role: 'production staff',
                  active: formStatus === 'Active'
               })
@@ -193,7 +194,10 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
             }
 
             // The /api/auth/update-user endpoint doesn't update public.users.password, so we must do it manually here.
-            const userUpdates: any = {};
+            const userUpdates: any = {
+              name: formName.trim(),
+              mobile: formMobile.trim()
+            };
             if (formPassword.trim()) {
               userUpdates.password = formPassword.trim();
             }
@@ -232,6 +236,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 email: computedEmail,
+                mobile: formMobile.trim(),
                 password: formPassword.trim(),
                 name: formName.trim(),
                 role: 'production staff',

@@ -1,6 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, User, Phone, MessageSquare, Mail, MapPin, Calendar, Clock, Package, ShieldCheck, Video, Camera, Award, FileText, CheckCircle2, ChevronDown, ChevronUp, Users, Check } from 'lucide-react';
+import { 
+  X, User, Phone, MessageSquare, Mail, MapPin, Calendar, Clock, 
+  Package, ShieldCheck, Video, Camera, Award, FileText, CheckCircle2, 
+  ChevronDown, ChevronUp, Users, Check, AlertCircle, RefreshCw, Box
+} from 'lucide-react';
 import { useRole } from '../RoleContext';
 import { deserializeLeadEvents, getEventTeamMemberStaffMapping, EventTeamMemberAssignmentGroup } from '../../utils';
 import { SafeProofImage } from '../ui/SafeProofImage';
@@ -11,6 +15,21 @@ interface ViewDetailsModalProps {
   orderId: string | null;
   booking?: any;
   isStaffView?: boolean;
+}
+
+export interface EquipmentItemDetail {
+  name: string;
+  assetId?: string;
+  category?: string;
+  assignedStaff?: string;
+  assignedStaffRole?: string;
+  eventId?: string;
+  eventName?: string;
+  isReturned: boolean;
+  returnStatus: 'Returned' | 'Pending / Not Returned' | 'Damaged' | 'Missing' | 'Not Returned';
+  returnedBy?: string;
+  returnDate?: string;
+  notes?: string;
 }
 
 export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
@@ -31,13 +50,19 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
     equipment, 
     leadPackages, 
     packages,
-    leadEquipmentHistory
+    leadEquipmentHistory,
+    equipmentHandovers,
+    refreshData
   } = useRole();
 
   const [isCustomerDetailsOpen, setIsCustomerDetailsOpen] = useState(true);
-  if (!isOpen || (!orderId && !booking)) return null;
 
-  const isStaff = isStaffView || currentRole === 'Staff' || currentRole === 'Operation Staff';
+  // Auto-refresh when modal is opened to ensure real-time accuracy
+  useEffect(() => {
+    if (isOpen && refreshData) {
+      refreshData();
+    }
+  }, [isOpen, refreshData]);
 
   const rawTarget = orderId || booking?.orderId || booking?.order_id || booking?.leadId || '';
   const targetOrderId = typeof rawTarget === 'string' ? rawTarget.split('_')[0] : rawTarget;
@@ -62,61 +87,329 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   const finalOrderId = order?.order_id || booking?.orderId || targetOrderId || 'N/A';
 
   // Extract Event Team Member Assignment Groups using canonical helper
-  const allAssignmentGroups = getEventTeamMemberStaffMapping({
-    lead: lead,
-    order: order,
-    leadPkgs: targetLeadPkgs,
-    staffAssignments: staffAssignments,
-    operationsRecord: operation,
-    staffList: staff,
-    targetStaffName: booking?.assignedStaff || booking?.staff_name
-  });
+  const allAssignmentGroups = useMemo(() => {
+    return getEventTeamMemberStaffMapping({
+      lead: lead,
+      order: order,
+      leadPkgs: targetLeadPkgs,
+      staffAssignments: staffAssignments,
+      operationsRecord: operation,
+      staffList: staff,
+      targetStaffName: booking?.assignedStaff || booking?.staff_name
+    });
+  }, [lead, order, targetLeadPkgs, staffAssignments, operation, staff, booking]);
 
   const targetEvId = booking?.eventId || booking?.event_id || booking?.assignment?.event_id;
   const targetEvName = booking?.eventName || booking?.event_name || booking?.assignment?.event_name || booking?.shootType;
   const targetEvType = booking?.eventType || booking?.event_type || booking?.assignment?.event_type;
 
-  let displayGroups = allAssignmentGroups;
-  if (targetEvId || targetEvName || targetEvType) {
-    const matched = allAssignmentGroups.filter(g => {
-      if (targetEvId && String(g.eventId).toLowerCase() === String(targetEvId).toLowerCase()) return true;
-      if (targetEvName && (g.eventName.toLowerCase() === String(targetEvName).toLowerCase() || g.eventType.toLowerCase() === String(targetEvName).toLowerCase())) return true;
-      if (targetEvType && g.eventType.toLowerCase() === String(targetEvType).toLowerCase()) return true;
-      return false;
-    });
-    if (matched.length > 0) {
-      displayGroups = matched;
+  const displayGroups = useMemo(() => {
+    if (targetEvId || targetEvName || targetEvType) {
+      const matched = allAssignmentGroups.filter(g => {
+        if (targetEvId && String(g.eventId).toLowerCase() === String(targetEvId).toLowerCase()) return true;
+        if (targetEvName && (g.eventName.toLowerCase() === String(targetEvName).toLowerCase() || g.eventType.toLowerCase() === String(targetEvName).toLowerCase())) return true;
+        if (targetEvType && g.eventType.toLowerCase() === String(targetEvType).toLowerCase()) return true;
+        return false;
+      });
+      if (matched.length > 0) {
+        return matched;
+      }
     }
-  }
+    return allAssignmentGroups;
+  }, [allAssignmentGroups, targetEvId, targetEvName, targetEvType]);
+
+  // Extract comprehensive Equipment Given and Equipment Returned dataset
+  const equipmentDetailsList: EquipmentItemDetail[] = useMemo(() => {
+    const map = new Map<string, EquipmentItemDetail>();
+
+    const getAssetIdAndCategory = (eqName: string) => {
+      const found = (equipment || []).find(e => e.equipment_name?.toLowerCase().trim() === eqName.toLowerCase().trim());
+      return {
+        assetId: found?.asset_id || found?.serial_number || 'EQ-' + Math.abs(eqName.split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0)).toString().slice(0, 6),
+        category: found?.category || 'Equipment'
+      };
+    };
+
+    // A. From displayGroups (mappings)
+    displayGroups.forEach(group => {
+      group.mappings.forEach(m => {
+        if (m.equipment && Array.isArray(m.equipment)) {
+          m.equipment.forEach(eqName => {
+            const cleanName = eqName.trim();
+            if (!cleanName) return;
+            const key = cleanName.toLowerCase();
+            if (!map.has(key)) {
+              const meta = getAssetIdAndCategory(cleanName);
+              map.set(key, {
+                name: cleanName,
+                assetId: meta.assetId,
+                category: meta.category,
+                assignedStaff: m.assignedStaffName !== 'Unassigned' ? m.assignedStaffName : undefined,
+                assignedStaffRole: m.assignedStaffRole || m.teamMemberRole,
+                eventId: group.eventId,
+                eventName: group.eventName,
+                isReturned: false,
+                returnStatus: 'Pending / Not Returned'
+              });
+            } else {
+              const existing = map.get(key)!;
+              if (!existing.assignedStaff && m.assignedStaffName !== 'Unassigned') {
+                existing.assignedStaff = m.assignedStaffName;
+                existing.assignedStaffRole = m.assignedStaffRole || m.teamMemberRole;
+              }
+              if (!existing.eventName) existing.eventName = group.eventName;
+            }
+          });
+        }
+      });
+    });
+
+    // B. From staffAssignments (for order / lead)
+    const matchingAssignments = (staffAssignments || []).filter(sa => 
+      sa.order_id === targetOrderId || sa.order_id === order?.order_id || (lead?.lead_id && sa.order_id === lead.lead_id)
+    );
+    matchingAssignments.forEach(sa => {
+      let eqList: string[] = [];
+      if (Array.isArray(sa.equipment)) {
+        eqList = sa.equipment;
+      } else if (typeof sa.equipment === 'string') {
+        try {
+          const parsed = JSON.parse(sa.equipment);
+          if (Array.isArray(parsed)) eqList = parsed;
+          else eqList = sa.equipment.split(',').map(s => s.trim()).filter(Boolean);
+        } catch (e) {
+          eqList = sa.equipment.split(',').map(s => s.trim()).filter(Boolean);
+        }
+      }
+
+      eqList.forEach(eqName => {
+        const cleanName = eqName.trim();
+        if (!cleanName) return;
+        const key = cleanName.toLowerCase();
+        if (!map.has(key)) {
+          const meta = getAssetIdAndCategory(cleanName);
+          map.set(key, {
+            name: cleanName,
+            assetId: meta.assetId,
+            category: meta.category,
+            assignedStaff: sa.staff_name,
+            assignedStaffRole: sa.staff_role,
+            eventId: sa.event_id,
+            eventName: sa.event_name,
+            isReturned: false,
+            returnStatus: 'Pending / Not Returned'
+          });
+        } else {
+          const existing = map.get(key)!;
+          if (!existing.assignedStaff && sa.staff_name) {
+            existing.assignedStaff = sa.staff_name;
+            existing.assignedStaffRole = sa.staff_role;
+          }
+          if (!existing.eventName && sa.event_name) existing.eventName = sa.event_name;
+        }
+      });
+    });
+
+    // C. From operation.equipment_kit
+    if (operation?.equipment_kit) {
+      const kits = operation.equipment_kit.split(',').map(s => s.trim()).filter(Boolean);
+      kits.forEach(kitName => {
+        const key = kitName.toLowerCase();
+        if (!map.has(key)) {
+          const meta = getAssetIdAndCategory(kitName);
+          map.set(key, {
+            name: kitName,
+            assetId: meta.assetId,
+            category: meta.category,
+            assignedStaff: operation.photographer_assigned || operation.videographer_assigned || undefined,
+            isReturned: false,
+            returnStatus: 'Pending / Not Returned'
+          });
+        }
+      });
+    }
+
+    // D. From booking?.equipmentItems
+    if (booking?.equipmentItems && Array.isArray(booking.equipmentItems)) {
+      booking.equipmentItems.forEach((bItem: any) => {
+        const bName = (bItem.name || bItem.equipment_name || '').trim();
+        if (!bName) return;
+        const key = bName.toLowerCase();
+        if (!map.has(key)) {
+          map.set(key, {
+            name: bName,
+            assetId: bItem.assetId || bItem.asset_id || getAssetIdAndCategory(bName).assetId,
+            category: bItem.category || getAssetIdAndCategory(bName).category,
+            assignedStaff: booking.assignedStaff || booking.staff_name,
+            isReturned: false,
+            returnStatus: 'Pending / Not Returned'
+          });
+        }
+      });
+    }
+
+    // E. From leadEquipmentHistory (Assigned records)
+    const orderHistory = (leadEquipmentHistory || []).filter(h => 
+      (h.order_id && (h.order_id === targetOrderId || h.order_id === order?.order_id)) ||
+      (h.lead_id && lead?.lead_id && h.lead_id === lead.lead_id)
+    );
+
+    const nonEquipmentKeywords = [
+      'photo proof', 'image proof', 'start image', 'verification', 'asset collection',
+      'raw footage verification', 'event start photo', 'event completion photo', 'equipment handover photo', 'asset return photo'
+    ];
+
+    orderHistory.forEach(h => {
+      const eqName = (h.equipment_name || '').trim();
+      if (!eqName) return;
+      const isMetaRecord = nonEquipmentKeywords.some(kw => eqName.toLowerCase().includes(kw));
+      if (isMetaRecord) return;
+
+      const key = eqName.toLowerCase();
+      if (!map.has(key)) {
+        const meta = getAssetIdAndCategory(eqName);
+        map.set(key, {
+          name: eqName,
+          assetId: meta.assetId,
+          category: meta.category,
+          assignedStaff: h.assigned_to,
+          isReturned: false,
+          returnStatus: 'Pending / Not Returned'
+        });
+      }
+    });
+
+    // F. From equipmentHandovers
+    const orderHandovers = (equipmentHandovers || []).filter(eh => 
+      eh.order_id === targetOrderId || eh.order_id === order?.order_id
+    );
+    orderHandovers.forEach(eh => {
+      const eqName = (eh.equipment_name || '').trim();
+      if (!eqName) return;
+      const key = eqName.toLowerCase();
+      if (!map.has(key)) {
+        const meta = getAssetIdAndCategory(eqName);
+        map.set(key, {
+          name: eqName,
+          assetId: meta.assetId,
+          category: meta.category,
+          isReturned: false,
+          returnStatus: 'Pending / Not Returned'
+        });
+      }
+    });
+
+    // CHECK RETURN STATUS FOR EACH GIVEN EQUIPMENT ITEM
+    map.forEach((item, key) => {
+      // 1. Check equipmentHandovers first
+      const matchedHandover = orderHandovers.find(eh => eh.equipment_name?.toLowerCase().trim() === key);
+      if (matchedHandover) {
+        if (matchedHandover.return_status === 'Returned') {
+          item.isReturned = true;
+          item.returnStatus = 'Returned';
+          item.returnedBy = matchedHandover.returned_by;
+          item.returnDate = matchedHandover.return_date;
+          item.notes = matchedHandover.notes;
+        } else if (matchedHandover.return_status === 'Damaged') {
+          item.isReturned = true;
+          item.returnStatus = 'Damaged';
+          item.returnedBy = matchedHandover.returned_by;
+          item.returnDate = matchedHandover.return_date;
+          item.notes = matchedHandover.notes;
+        } else if (matchedHandover.return_status === 'Missing') {
+          item.isReturned = false;
+          item.returnStatus = 'Missing';
+          item.returnedBy = matchedHandover.returned_by;
+          item.returnDate = matchedHandover.return_date;
+          item.notes = matchedHandover.notes;
+        } else if (matchedHandover.return_status === 'Not Returned') {
+          item.isReturned = false;
+          item.returnStatus = 'Not Returned';
+        }
+      }
+
+      // 2. Check leadEquipmentHistory
+      const matchedHistories = orderHistory.filter(h => h.equipment_name?.toLowerCase().trim() === key);
+      if (matchedHistories.length > 0) {
+        // Find if there's any record with status Returned or returned_at
+        const returnRecord = matchedHistories.find(h => 
+          h.equipment_status === 'Returned' || 
+          h.equipment_status === 'Equipment Handover Completed' || 
+          h.equipment_status === 'Equipment Handover' ||
+          (h.returned_at && h.equipment_status !== 'Assigned' && h.equipment_status !== 'Equipment Not Handover')
+        );
+
+        if (returnRecord) {
+          item.isReturned = true;
+          item.returnStatus = 'Returned';
+          item.returnedBy = returnRecord.returned_by || item.returnedBy || 'Operations Staff';
+          item.returnDate = returnRecord.returned_at ? new Date(returnRecord.returned_at).toLocaleDateString() : (item.returnDate || 'Returned');
+          if (returnRecord.remarks && !item.notes) {
+            try {
+              const p = JSON.parse(returnRecord.remarks);
+              if (p.notes) item.notes = p.notes;
+            } catch (e) {
+              if (typeof returnRecord.remarks === 'string' && !returnRecord.remarks.startsWith('{')) {
+                item.notes = returnRecord.remarks;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return Array.from(map.values());
+  }, [
+    displayGroups, 
+    staffAssignments, 
+    targetOrderId, 
+    order, 
+    lead, 
+    operation, 
+    booking, 
+    leadEquipmentHistory, 
+    equipmentHandovers, 
+    equipment
+  ]);
+
+  const givenEquipmentList = equipmentDetailsList;
+  const returnedEquipmentList = useMemo(() => equipmentDetailsList.filter(e => e.isReturned), [equipmentDetailsList]);
+  const pendingEquipmentList = useMemo(() => equipmentDetailsList.filter(e => !e.isReturned), [equipmentDetailsList]);
 
   // Extract Proof Records for this order
-  const proofRecords = (leadEquipmentHistory || []).filter(h => {
-    if (h.order_id && finalOrderId && h.order_id === finalOrderId) return true;
-    if (h.lead_id && lead?.lead_id && h.lead_id === lead.lead_id) return true;
-    return false;
-  }).map(h => {
-    let photoUrl = '';
-    let rawFootageLink = '';
-    let proofType = h.equipment_status || 'Proof';
-    if (h.remarks) {
-      try {
-        const parsed = JSON.parse(h.remarks);
-        photoUrl = parsed.photo_url || photoUrl;
-        rawFootageLink = parsed.raw_footage_link || rawFootageLink;
-        proofType = parsed.proof_type || proofType;
-      } catch (e) {}
-    }
-    return {
-      id: h.id,
-      equipmentName: h.equipment_name,
-      status: h.equipment_status,
-      proofType,
-      uploadedBy: h.returned_by || 'Staff',
-      uploadedAt: h.returned_at ? new Date(h.returned_at).toLocaleString() : 'N/A',
-      photoUrl,
-      rawFootageLink
-    };
-  });
+  const proofRecords = useMemo(() => {
+    return (leadEquipmentHistory || []).filter(h => {
+      if (h.order_id && finalOrderId && h.order_id === finalOrderId) return true;
+      if (h.lead_id && lead?.lead_id && h.lead_id === lead.lead_id) return true;
+      return false;
+    }).map(h => {
+      let photoUrl = '';
+      let rawFootageLink = '';
+      let proofType = h.equipment_status || 'Proof';
+      if (h.remarks) {
+        try {
+          const parsed = JSON.parse(h.remarks);
+          photoUrl = parsed.photo_url || photoUrl;
+          rawFootageLink = parsed.raw_footage_link || rawFootageLink;
+          proofType = parsed.proof_type || proofType;
+        } catch (e) {}
+      }
+      return {
+        id: h.id,
+        equipmentName: h.equipment_name,
+        status: h.equipment_status,
+        proofType,
+        uploadedBy: h.returned_by || 'Staff',
+        uploadedAt: h.returned_at ? new Date(h.returned_at).toLocaleString() : 'N/A',
+        photoUrl,
+        rawFootageLink
+      };
+    });
+  }, [leadEquipmentHistory, finalOrderId, lead]);
+
+  if (!isOpen || (!orderId && !booking)) return null;
+
+  const isStaff = isStaffView || currentRole === 'Staff' || currentRole === 'Operation Staff';
 
   return createPortal(
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -343,7 +636,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                       <thead>
                         <tr className="bg-zinc-900/90 border-b border-zinc-800 text-[10.5px] font-mono uppercase tracking-wider text-zinc-400">
                           <th className="py-2.5 px-4 font-bold">Team Member Included</th>
-                          <th className="py-2.5 px-4 font-bold">Assigned Staff</th>
+                          <th className="py-2.5 px-4 font-bold">Assigned Staff & Gear</th>
                           <th className="py-2.5 px-4 font-bold text-right">Status</th>
                         </tr>
                       </thead>
@@ -351,7 +644,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                         {group.mappings.length > 0 ? (
                           group.mappings.map((mapping, mIdx) => (
                             <tr key={mIdx} className="hover:bg-zinc-900/40 transition-colors">
-                              <td className="py-3 px-4">
+                              <td className="py-3 px-4 align-top">
                                 <div className="flex items-center gap-2">
                                   <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0"></span>
                                   <span className="font-bold text-zinc-100 font-sans">
@@ -359,7 +652,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                                   </span>
                                 </div>
                               </td>
-                              <td className="py-3 px-4">
+                              <td className="py-3 px-4 align-top">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className={`font-bold ${mapping.assignedStaffName !== 'Unassigned' ? 'text-white' : 'text-zinc-500 italic'}`}>
                                     {mapping.assignedStaffName}
@@ -375,8 +668,39 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                                     📞 {mapping.mobile}
                                   </span>
                                 )}
+
+                                {/* Per-staff assigned equipment badges */}
+                                {mapping.equipment && mapping.equipment.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 mt-2">
+                                    {mapping.equipment.map((eqName: string, eqIdx: number) => {
+                                      const eqDetail = equipmentDetailsList.find(e => e.name.toLowerCase().trim() === eqName.toLowerCase().trim());
+                                      const isRet = eqDetail?.isReturned;
+                                      return (
+                                        <span 
+                                          key={eqIdx} 
+                                          className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded border ${
+                                            isRet 
+                                              ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' 
+                                              : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                                          }`}
+                                        >
+                                          <span>⚙️ {eqName}</span>
+                                          {isRet ? (
+                                            <span className="text-emerald-400 font-bold flex items-center gap-0.5 ml-1">
+                                              <Check className="w-3 h-3" /> Returned
+                                            </span>
+                                          ) : (
+                                            <span className="text-amber-400/80 font-mono text-[9px] ml-1">
+                                              Pending
+                                            </span>
+                                          )}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </td>
-                              <td className="py-3 px-4 text-right">
+                              <td className="py-3 px-4 text-right align-top">
                                 <span className={`inline-block px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
                                   mapping.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
                                   mapping.status === 'In Progress' || mapping.status === 'Event Started' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
@@ -404,31 +728,177 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
             ))}
           </div>
 
-          {/* Section 3: Assigned Equipment (for staff member / booking) */}
-          <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-3">
-            <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2 font-mono">
-              <Package className="w-4 h-4 text-amber-400" /> Assigned Equipment
-            </h4>
-            {booking?.equipmentItems && booking.equipmentItems.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {booking.equipmentItems.map((item: any, idx: number) => (
-                  <div key={idx} className="bg-zinc-950/70 p-3 rounded-lg border border-zinc-800/60 flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold shrink-0">
-                      <ShieldCheck className="w-4 h-4" />
+          {/* Section 3: EQUIPMENT GIVEN & EQUIPMENT RETURNED */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            {/* 3A: Equipment Given */}
+            <div className="bg-zinc-900/50 border border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2 font-mono">
+                    <Package className="w-4 h-4 text-amber-400" /> Equipment Given
+                  </h4>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                    {givenEquipmentList.length} {givenEquipmentList.length === 1 ? 'Item Assigned' : 'Items Assigned'}
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-zinc-400 font-sans mt-2">
+                  All equipment kits and gear assigned to operational crew for this order.
+                </p>
+
+                <div className="space-y-2 mt-3">
+                  {givenEquipmentList.length > 0 ? (
+                    givenEquipmentList.map((item, idx) => (
+                      <div 
+                        key={idx} 
+                        className="bg-zinc-950/80 p-3 rounded-lg border border-zinc-800/70 flex items-start justify-between gap-3 hover:border-zinc-700 transition-colors"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold shrink-0 mt-0.5">
+                            <Box className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <span className="block text-xs font-bold text-white font-sans">
+                              {item.name}
+                            </span>
+                            <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-400 mt-0.5 flex-wrap">
+                              {item.assetId && (
+                                <span className="text-zinc-500">ID: {item.assetId}</span>
+                              )}
+                              {item.assignedStaff && (
+                                <span className="text-sky-400">👤 {item.assignedStaff}</span>
+                              )}
+                              {item.eventName && (
+                                <span className="text-zinc-500">📍 {item.eventName}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span className="text-[9.5px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 uppercase shrink-0">
+                          {item.category || 'Gear'}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 bg-zinc-950/50 border border-zinc-800/60 rounded-lg text-xs text-zinc-400 font-mono text-center">
+                      No equipment assigned for this order yet.
                     </div>
-                    <div className="overflow-hidden">
-                      <span className="block text-xs font-bold text-white truncate">{item.name}</span>
-                      <span className="text-[10px] font-mono text-zinc-500">Asset ID: {item.assetId}</span>
+                  )}
+                </div>
+              </div>
+
+              {givenEquipmentList.length > 0 && (
+                <div className="pt-2 text-[11px] font-mono text-zinc-500 border-t border-zinc-800/60 flex items-center justify-between">
+                  <span>Total Assigned Gear:</span>
+                  <span className="font-bold text-zinc-300">{givenEquipmentList.length} items</span>
+                </div>
+              )}
+            </div>
+
+            {/* 3B: Equipment Returned */}
+            <div className="bg-zinc-900/50 border border-zinc-800/90 rounded-xl p-4 sm:p-5 space-y-3.5 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                  <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2 font-mono">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Equipment Returned
+                  </h4>
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                    returnedEquipmentList.length === givenEquipmentList.length && givenEquipmentList.length > 0
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                      : returnedEquipmentList.length > 0
+                        ? 'bg-sky-500/15 text-sky-300 border-sky-500/30'
+                        : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                  }`}>
+                    {returnedEquipmentList.length} / {givenEquipmentList.length} Returned
+                  </span>
+                </div>
+
+                <p className="text-[11px] text-zinc-400 font-sans mt-2">
+                  Verified equipment return handover status and audit history.
+                </p>
+
+                <div className="space-y-2 mt-3">
+                  {givenEquipmentList.length > 0 ? (
+                    givenEquipmentList.map((item, idx) => (
+                      <div 
+                        key={idx} 
+                        className={`p-3 rounded-lg border flex items-start justify-between gap-3 transition-colors ${
+                          item.isReturned 
+                            ? 'bg-emerald-950/20 border-emerald-500/30 text-zinc-200' 
+                            : 'bg-zinc-950/60 border-zinc-800/70 text-zinc-400'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <div className={`w-7 h-7 rounded-lg border flex items-center justify-center font-bold shrink-0 mt-0.5 ${
+                            item.isReturned 
+                              ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' 
+                              : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+                          }`}>
+                            {item.isReturned ? <Check className="w-4 h-4" /> : <Clock className="w-3.5 h-3.5" />}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`block text-xs font-bold font-sans ${item.isReturned ? 'text-white' : 'text-zinc-400'}`}>
+                                {item.name}
+                              </span>
+                              {item.isReturned && (
+                                <span className="text-emerald-400 font-bold text-xs">✓</span>
+                              )}
+                            </div>
+                            
+                            {item.isReturned ? (
+                              <div className="text-[10px] font-mono text-emerald-400/90 mt-0.5 space-y-0.5">
+                                <div>
+                                  Returned by: <span className="text-emerald-300 font-semibold">{item.returnedBy || 'Staff'}</span>
+                                  {item.returnDate && ` • ${item.returnDate}`}
+                                </div>
+                                {item.notes && (
+                                  <div className="text-zinc-400 italic">Notes: "{item.notes}"</div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] font-mono text-amber-400/90 mt-0.5">
+                                Pending / Not Returned
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <span className={`text-[9.5px] font-mono font-bold px-2 py-0.5 rounded border uppercase shrink-0 ${
+                          item.isReturned 
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
+                            : 'bg-amber-500/10 text-amber-400/90 border-amber-500/20'
+                        }`}>
+                          {item.isReturned ? 'Returned ✓' : 'Pending'}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 bg-zinc-950/50 border border-zinc-800/60 rounded-lg text-xs text-zinc-500 font-mono text-center">
+                      Pending / Not Returned
                     </div>
-                  </div>
-                ))}
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="p-3 bg-zinc-950/40 border border-zinc-800/60 rounded-lg text-xs text-zinc-400 font-mono flex items-center gap-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700 text-[11px] font-bold">Not Assigned</span>
-                <span>No specific equipment assigned to this staff task.</span>
+
+              <div className="pt-2 text-[11px] font-mono border-t border-zinc-800/60 flex items-center justify-between">
+                <span className="text-zinc-500">Return Handover Status:</span>
+                <span className={`font-bold ${
+                  returnedEquipmentList.length === givenEquipmentList.length && givenEquipmentList.length > 0
+                    ? 'text-emerald-400'
+                    : returnedEquipmentList.length > 0
+                      ? 'text-sky-400'
+                      : 'text-amber-400'
+                }`}>
+                  {returnedEquipmentList.length === givenEquipmentList.length && givenEquipmentList.length > 0
+                    ? 'All Returned ✓'
+                    : `${pendingEquipmentList.length} Pending / Not Returned`}
+                </span>
               </div>
-            )}
+            </div>
+
           </div>
 
           {/* Section 4: Uploaded Verification Proof Images & Handover Docs */}
@@ -497,4 +967,5 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
     document.body
   );
 };
+
 

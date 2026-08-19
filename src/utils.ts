@@ -852,20 +852,6 @@ export function parseCustomerProof(
     return { hasProof: false, imageUrl: null, linkUrl: null, proofType: 'none' };
   }
 
-  // 1. Gather all candidate proof strings from the assignment record
-  const assignmentCandidates = assignment ? [
-    assignment.confirmation_proof,
-    assignment.customer_communication_proof,
-    assignment.client_communication_proof,
-    assignment.proof_image,
-    assignment.image_proof,
-    assignment.image_url,
-    assignment.uploaded_proof,
-    assignment.upload_proof,
-    assignment.proof_url,
-    assignment.proof
-  ] : [];
-
   let rawImageUrl: string | null = null;
   let rawLinkUrl: string | null = null;
 
@@ -904,21 +890,6 @@ export function parseCustomerProof(
     );
   };
 
-  for (const cand of assignmentCandidates) {
-    if (cand && typeof cand === 'string' && cand.trim()) {
-      if (!rawImageUrl && isImageValue(cand)) rawImageUrl = cand.trim();
-      else if (!rawLinkUrl && isLinkValue(cand)) rawLinkUrl = cand.trim();
-      
-      if (rawImageUrl && rawLinkUrl) break;
-    }
-  }
-
-  // If no proof is found in the assignment, return empty proof record (do NOT fallback to prodRec or orderRec!)
-  if (!rawImageUrl && !rawLinkUrl) {
-    return { hasProof: false, imageUrl: null, linkUrl: null, proofType: 'none' };
-  }
-
-
   const isValidValue = (val: any): val is string => {
     if (!val || typeof val !== 'string') return false;
     const trimmed = val.trim();
@@ -927,32 +898,57 @@ export function parseCustomerProof(
     return !['pending', 'null', 'undefined', '-', 'n/a', 'none', 'pending upload', 'not uploaded'].includes(lower);
   };
 
+  // 1. Check assignment fields
+  const assignmentCandidates = assignment ? [
+    assignment.confirmation_proof,
+    assignment.customer_communication_proof,
+    assignment.client_communication_proof,
+    assignment.customer_proof,
+    assignment.client_proof,
+    assignment.proof_image,
+    assignment.image_proof,
+    assignment.image_url,
+    assignment.uploaded_proof,
+    assignment.upload_proof,
+    assignment.proof_url,
+    assignment.proof_link,
+    assignment.confirmation_link,
+    assignment.proof,
+    assignment.proof_file,
+    assignment.raw?.confirmation_proof,
+    assignment.raw?.customer_communication_proof,
+    assignment.raw?.proof_url
+  ] : [];
+
   for (const cand of assignmentCandidates) {
     if (!isValidValue(cand)) continue;
     const trimmed = cand.trim();
 
     if (isImageValue(trimmed)) {
-      if (!rawImageUrl) {
-        rawImageUrl = trimmed;
-      }
+      if (!rawImageUrl) rawImageUrl = trimmed;
     } else if (isLinkValue(trimmed)) {
-      if (!rawLinkUrl) {
-        rawLinkUrl = trimmed;
-      }
+      if (!rawLinkUrl) rawLinkUrl = trimmed;
     }
   }
 
-  // 2. Fallback to prodRec / orderRec if no proof found on assignment and this assignment matches
+  // 2. Fallback to production and order records if not found on assignment
   if (!rawImageUrl && !rawLinkUrl) {
     const fallbackCandidates = [
       prodRec?.client_communication_proof,
       prodRec?.customer_communication_proof,
+      prodRec?.confirmation_proof,
+      prodRec?.customer_proof,
+      prodRec?.client_proof,
       prodRec?.proof_url,
-      prodRec?.communication_proof,
       prodRec?.proof_image,
+      prodRec?.image_proof,
+      prodRec?.uploaded_proof,
       orderRec?.client_communication_proof,
       orderRec?.customer_communication_proof,
-      orderRec?.proof_url
+      orderRec?.confirmation_proof,
+      orderRec?.customer_proof,
+      orderRec?.proof_url,
+      orderRec?.proof_image
     ];
 
     for (const cand of fallbackCandidates) {
@@ -967,17 +963,27 @@ export function parseCustomerProof(
     }
   }
 
-  // 3. Check if production remarks contains an uploaded proof URL
-  if (!rawImageUrl && !rawLinkUrl && prodRec?.remarks && typeof prodRec.remarks === 'string') {
-    const match = prodRec.remarks.match(/Proof \((https?:\/\/[^\s)]+)\)/i) || prodRec.remarks.match(/Confirmation Proof:?\s*(https?:\/\/[^\s)]+)/i);
-    if (match && match[1]) {
-      const pUrl = match[1].trim();
-      if (isImageValue(pUrl)) {
-        rawImageUrl = pUrl;
-      } else if (isLinkValue(pUrl)) {
-        rawLinkUrl = pUrl;
+  // 3. Check if assignment or production remarks contains an uploaded proof URL
+  if (!rawImageUrl && !rawLinkUrl) {
+    const remarksCand = [assignment?.remarks, prodRec?.remarks, orderRec?.remarks];
+    for (const rem of remarksCand) {
+      if (rem && typeof rem === 'string') {
+        const match = rem.match(/Proof \((https?:\/\/[^\s)]+)\)/i) || rem.match(/Confirmation Proof:?\s*(https?:\/\/[^\s)]+)/i) || rem.match(/(https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif|svg|bmp))/i);
+        if (match && match[1]) {
+          const pUrl = match[1].trim();
+          if (isImageValue(pUrl)) {
+            rawImageUrl = pUrl;
+          } else if (isLinkValue(pUrl)) {
+            rawLinkUrl = pUrl;
+          }
+        }
       }
     }
+  }
+
+  // If no proof is found anywhere
+  if (!rawImageUrl && !rawLinkUrl) {
+    return { hasProof: false, imageUrl: null, linkUrl: null, proofType: 'none' };
   }
 
   // Format and resolve Image URL

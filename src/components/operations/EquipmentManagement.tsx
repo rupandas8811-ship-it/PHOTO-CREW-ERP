@@ -15,6 +15,18 @@ interface EquipmentMetadata {
   notes: string;
 }
 
+export interface ActiveEquipmentTask {
+  id: string;
+  orderId: string;
+  leadId?: string;
+  eventName: string;
+  eventDate: string;
+  eventTime: string;
+  assignedStaff: string;
+  taskStatus: string;
+  source: string;
+}
+
 const parseEquipmentNotes = (rawNotes: string | undefined): EquipmentMetadata => {
   if (!rawNotes) {
     return { condition: 'Excellent', assignedStaff: '', notes: '' };
@@ -60,6 +72,9 @@ export const EquipmentManagement: React.FC = () => {
     deleteEquipment, 
     refreshData,
     leadEquipmentHistory,
+    equipmentHandovers,
+    staffAssignments,
+    operations,
     orders,
     leads
   } = useRole();
@@ -68,7 +83,7 @@ export const EquipmentManagement: React.FC = () => {
   // Core management states
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedEq, setSelectedEq] = useState<Equipment | null>(null);
-  const [busyEquipment, setBusyEquipment] = useState<Equipment | null>(null);
+  const [busyEquipment, setBusyEquipment] = useState<{ equipment: Equipment; tasks: ActiveEquipmentTask[] } | null>(null);
   
   // Search, filter, and sort states
   const [searchQuery, setSearchQuery] = useState('');
@@ -259,13 +274,219 @@ export const EquipmentManagement: React.FC = () => {
     return Array.from(new Set(equipment.map(e => e.brand).filter(Boolean)));
   }, [equipment]);
 
-  // Combined search, filtering, and sorting logic
+  // Helper to accurately resolve active tasks for a specific equipment record
+  const getActiveTasksForEquipment = (eq: Equipment): ActiveEquipmentTask[] => {
+    if (!eq) return [];
+    const eqId = (eq.equipment_id || '').trim().toLowerCase();
+    const eqName = (eq.equipment_name || '').trim().toLowerCase();
+    const brand = (eq.brand || '').trim().toLowerCase();
+    const model = (eq.model || '').trim().toLowerCase();
+    const fullName = `${brand} ${model}`.trim().toLowerCase();
+
+    // Matching helper
+    const matchesEquipment = (raw: string): boolean => {
+      if (!raw) return false;
+      const clean = raw.trim().toLowerCase();
+      if (eqId && clean === eqId) return true;
+      if (eqName && (clean === eqName || clean.includes(eqName) || eqName.includes(clean))) return true;
+      if (fullName && clean === fullName) return true;
+      if (model && model.length > 2 && clean.includes(model)) return true;
+      return false;
+    };
+
+    const completedStages = [
+      'cancelled', 'canceled', 'completed', 'event completed', 'event ended',
+      'project completed', 'closed', 'order closed', 'project closed', 'delivered', 'project delivered',
+      'footage handover', 'equipment handover completed', 'returned', 'lost lead', 'lost', 'rejected'
+    ];
+
+    // Helper to check if equipment was returned for an order / lead
+    const isReturnedForOrder = (ordId?: string, ldId?: string): boolean => {
+      if (!ordId && !ldId) return false;
+      
+      // 1. Check in leadEquipmentHistory
+      const hasHistoryReturn = (leadEquipmentHistory || []).some(h => {
+        const orderMatch = (ordId && h.order_id === ordId) || (ldId && h.lead_id === ldId);
+        if (!orderMatch) return false;
+        const nameMatch = matchesEquipment(h.equipment_name) || 
+                          h.equipment_name === 'Equipment Handover Photo Proof' ||
+                          h.equipment_name === 'Asset Return Photo Proof' ||
+                          h.equipment_status === 'Equipment Handover Completed';
+        const isRet = h.equipment_status === 'Equipment Handover Completed' || 
+                      h.equipment_status === 'Returned' || 
+                      Boolean(h.returned_at && (h.equipment_status?.toLowerCase().includes('handover') || h.equipment_status?.toLowerCase().includes('return')));
+        return nameMatch && isRet;
+      });
+      if (hasHistoryReturn) return true;
+
+      // 2. Check in equipmentHandovers
+      const hasHandoverReturn = (equipmentHandovers || []).some(eh => {
+        const orderMatch = (ordId && eh.order_id === ordId) || (ldId && eh.order_id === ldId);
+        return orderMatch && eh.return_status === 'Returned' && matchesEquipment(eh.equipment_name);
+      });
+      if (hasHandoverReturn) return true;
+
+      // 3. Check in operations
+      const matchingOp = (operations || []).find(o => (ordId && o.order_id === ordId) || (ldId && o.order_id === ldId));
+      if (matchingOp && ['equipment handover completed', 'returned', 'equipment returned'].includes((matchingOp.equipment_status || '').toLowerCase())) {
+        return true;
+      }
+
+      return false;
+    };
+
+    const tasks: ActiveEquipmentTask[] = [];
+    const seenOrderKeys = new Set<string>();
+
+    // 1. Check staffAssignments
+    (staffAssignments || []).forEach(sa => {
+      const assignStatus = (sa.assignment_status || '').toLowerCase();
+      const taskStatus = ((sa as any).task_status || '').toLowerCase();
+      if (completedStages.includes(assignStatus) || completedStages.includes(taskStatus)) return;
+
+      const relatedOrder = orders?.find(o => o.order_id === sa.order_id);
+      const relatedLead = leads?.find(l => l.lead_id === (relatedOrder?.lead_id || sa.order_id) || l.lead_id === (sa as any).lead_id);
+      
+      // If order or lead is completed / closed / cancelled / lost
+      if (relatedOrder && completedStages.includes((relatedOrder.current_stage || '').toLowerCase())) return;
+      if (relatedLead && completedStages.includes((relatedLead.status || relatedLead.current_status || '').toLowerCase())) return;
+
+      const op = operations?.find(o => o.order_id === (sa.order_id || relatedOrder?.order_id));
+      if (op && completedStages.includes((op.event_status || '').toLowerCase())) return;
+
+      // Check if equipment was returned
+      if (isReturnedForOrder(sa.order_id, relatedOrder?.lead_id || relatedLead?.lead_id)) return;
+
+      // Check if equipment is in this assignment
+      let saEqList: string[] = [];
+      if (Array.isArray(sa.equipment)) {
+        saEqList = sa.equipment;
+      } else if (typeof sa.equipment === 'string') {
+        try {
+          const parsed = JSON.parse(sa.equipment);
+          saEqList = Array.isArray(parsed) ? parsed : [sa.equipment];
+        } catch {
+          saEqList = (sa.equipment as string).split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+      }
+
+      const isAssigned = saEqList.some(item => matchesEquipment(item));
+      if (!isAssigned) return;
+
+      const taskKey = `${sa.order_id}_${sa.event_name || sa.event_id || 'ev'}_${sa.staff_name}`;
+      if (seenOrderKeys.has(taskKey)) return;
+      seenOrderKeys.add(taskKey);
+
+      tasks.push({
+        id: sa.assignment_id || taskKey,
+        orderId: sa.order_id,
+        leadId: relatedOrder?.lead_id || relatedLead?.lead_id,
+        eventName: sa.event_name || relatedOrder?.custom_event_name || relatedOrder?.event_type || relatedLead?.custom_event_name || relatedLead?.event_type || 'Event Shoot',
+        eventDate: relatedOrder?.event_date || relatedLead?.event_date || 'N/A',
+        eventTime: relatedOrder?.event_time || relatedLead?.event_time || 'N/A',
+        assignedStaff: sa.staff_name || 'Staff Member',
+        taskStatus: (sa as any).task_status || sa.assignment_status || 'In Progress',
+        source: 'Staff Assignment'
+      });
+    });
+
+    // 2. Check operations equipment_kit
+    (operations || []).forEach(op => {
+      if (!op.equipment_kit || !op.equipment_kit.trim()) return;
+      if (completedStages.includes((op.event_status || '').toLowerCase())) return;
+      if (['equipment handover completed', 'returned', 'equipment returned'].includes((op.equipment_status || '').toLowerCase())) return;
+
+      const relatedOrder = orders?.find(o => o.order_id === op.order_id);
+      const relatedLead = leads?.find(l => l.lead_id === (relatedOrder?.lead_id || op.order_id));
+
+      if (relatedOrder && completedStages.includes((relatedOrder.current_stage || '').toLowerCase())) return;
+      if (relatedLead && completedStages.includes((relatedLead.status || relatedLead.current_status || '').toLowerCase())) return;
+
+      if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id || relatedLead?.lead_id)) return;
+
+      const opKits = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
+      const match = opKits.some(item => matchesEquipment(item));
+      if (!match) return;
+
+      const taskKey = `${op.order_id}_op_${op.operations_id || 'op'}`;
+      // If we already counted staff assignments for this order, don't duplicate
+      const alreadyHasOrderTask = tasks.some(t => t.orderId === op.order_id);
+      if (alreadyHasOrderTask || seenOrderKeys.has(taskKey)) return;
+      seenOrderKeys.add(taskKey);
+
+      tasks.push({
+        id: op.operations_id || taskKey,
+        orderId: op.order_id,
+        leadId: relatedOrder?.lead_id || relatedLead?.lead_id,
+        eventName: relatedOrder?.custom_event_name || relatedOrder?.event_type || relatedLead?.custom_event_name || relatedLead?.event_type || 'Production Shoot',
+        eventDate: relatedOrder?.event_date || relatedLead?.event_date || 'N/A',
+        eventTime: relatedOrder?.event_time || relatedLead?.event_time || 'N/A',
+        assignedStaff: op.photographer_assigned || op.videographer_assigned || op.drone_operator_assigned || 'Production Crew',
+        taskStatus: op.event_status || 'Operations Assigned',
+        source: 'Operations Kit'
+      });
+    });
+
+    // 3. Check leadEquipmentHistory (for active unreturned checkouts)
+    (leadEquipmentHistory || []).forEach(h => {
+      if (h.returned_at || h.equipment_status === 'Returned' || h.equipment_status === 'Equipment Handover Completed') return;
+      if (!matchesEquipment(h.equipment_name)) return;
+
+      const relatedOrder = orders?.find(o => o.order_id === h.order_id || o.lead_id === h.lead_id);
+      const relatedLead = leads?.find(l => l.lead_id === (h.lead_id || relatedOrder?.lead_id || h.order_id));
+
+      if (relatedOrder && completedStages.includes((relatedOrder.current_stage || '').toLowerCase())) return;
+      if (relatedLead && completedStages.includes((relatedLead.status || relatedLead.current_status || '').toLowerCase())) return;
+
+      const ordId = h.order_id || relatedOrder?.order_id || h.lead_id;
+      if (!ordId) return;
+
+      const alreadyHasOrderTask = tasks.some(t => t.orderId === ordId);
+      if (alreadyHasOrderTask) return;
+
+      const taskKey = `${ordId}_hist_${h.id || h.equipment_name}`;
+      if (seenOrderKeys.has(taskKey)) return;
+      seenOrderKeys.add(taskKey);
+
+      tasks.push({
+        id: h.id || taskKey,
+        orderId: ordId,
+        leadId: h.lead_id || relatedOrder?.lead_id,
+        eventName: relatedOrder?.custom_event_name || relatedOrder?.event_type || relatedLead?.custom_event_name || relatedLead?.event_type || 'Event Assignment',
+        eventDate: relatedOrder?.event_date || relatedLead?.event_date || 'N/A',
+        eventTime: relatedOrder?.event_time || relatedLead?.event_time || 'N/A',
+        assignedStaff: h.returned_by || 'Assigned Crew',
+        taskStatus: h.equipment_status || 'In Use',
+        source: 'Equipment History'
+      });
+    });
+
+    return tasks;
+  };
+
+  // Combined search, filtering, and sorting logic with dynamic Task Count and Status
   const filteredAndSortedEquipment = useMemo(() => {
     let result = equipment.map(item => {
       const meta = parseEquipmentNotes(item.notes);
+      const activeTasks = getActiveTasksForEquipment(item);
+      const activeTaskCount = activeTasks.length;
+      
+      // Calculate dynamic status purely based on real active tasks
+      let dynamicStatus = 'Available';
+      if (['Under Maintenance', 'Maintenance', 'Damaged', 'Inactive'].includes(item.status)) {
+        dynamicStatus = item.status;
+      } else if (activeTaskCount > 0) {
+        dynamicStatus = 'Busy';
+      } else {
+        dynamicStatus = 'Available';
+      }
+
       return {
         ...item,
         parsedMeta: meta,
+        activeTasks,
+        activeTaskCount,
+        dynamicStatus,
         assigned_quantity: item.quantity - (item.available_quantity ?? item.quantity)
       };
     });
@@ -280,7 +501,8 @@ export const EquipmentManagement: React.FC = () => {
           eq.equipment_type.toLowerCase().includes(query) ||
           eq.brand.toLowerCase().includes(query) ||
           eq.model.toLowerCase().includes(query) ||
-          eq.serial_number.toLowerCase().includes(query) ||
+          (eq.serial_number && eq.serial_number.toLowerCase().includes(query)) ||
+          eq.dynamicStatus.toLowerCase().includes(query) ||
           eq.status.toLowerCase().includes(query) ||
           (eq.storage_location && eq.storage_location.toLowerCase().includes(query)) ||
           eq.parsedMeta.condition.toLowerCase().includes(query) ||
@@ -292,10 +514,16 @@ export const EquipmentManagement: React.FC = () => {
 
     // 2. Attribute filters
     if (filters.type !== 'All') {
-      result = result.filter(eq => eq.equipment_type === filters.type);
+      result = result.filter(eq => eq.equipment_type === filters.type || (eq as any).Equipment_Category === filters.type);
     }
     if (filters.status !== 'All') {
-      result = result.filter(eq => eq.status === filters.status);
+      result = result.filter(eq => {
+        if (filters.status === 'Available') return eq.dynamicStatus === 'Available';
+        if (filters.status === 'Busy' || filters.status === 'Assigned' || filters.status === 'In Use') return eq.dynamicStatus === 'Busy';
+        if (filters.status === 'Under Maintenance' || filters.status === 'Maintenance') return eq.dynamicStatus === 'Under Maintenance' || eq.dynamicStatus === 'Maintenance';
+        if (filters.status === 'Inactive') return eq.dynamicStatus === 'Inactive';
+        return eq.dynamicStatus === filters.status || eq.status === filters.status;
+      });
     }
     if (filters.brand !== 'All') {
       result = result.filter(eq => eq.brand === filters.brand);
@@ -311,16 +539,16 @@ export const EquipmentManagement: React.FC = () => {
           return a.equipment_name.localeCompare(b.equipment_name);
         case 'name-desc':
           return b.equipment_name.localeCompare(a.equipment_name);
+        case 'task-desc':
+          return b.activeTaskCount - a.activeTaskCount;
+        case 'task-asc':
+          return a.activeTaskCount - b.activeTaskCount;
         case 'qty-desc':
           return b.quantity - a.quantity;
         case 'qty-asc':
           return a.quantity - b.quantity;
         case 'avail-desc':
-          return b.available_quantity - a.available_quantity;
-        case 'avail-asc':
-          return a.available_quantity - b.available_quantity;
-        case 'assigned-desc':
-          return b.assigned_quantity - a.assigned_quantity;
+          return (a.dynamicStatus === 'Available' ? 1 : 0) - (b.dynamicStatus === 'Available' ? 1 : 0);
         case 'condition-desc':
           return a.parsedMeta.condition.localeCompare(b.parsedMeta.condition);
         default:
@@ -329,51 +557,29 @@ export const EquipmentManagement: React.FC = () => {
     });
 
     return result;
-  }, [equipment, searchQuery, filters, sortBy]);
+  }, [equipment, searchQuery, filters, sortBy, staffAssignments, operations, leadEquipmentHistory, equipmentHandovers, orders, leads]);
 
-  const assignedEventsForBusyEquipment = useMemo(() => {
-    if (!busyEquipment) return [];
-    
-    // Find all history records for this equipment that are NOT returned
-    const activeHistories = (leadEquipmentHistory || []).filter(h => 
-      h.equipment_name === busyEquipment.equipment_name && 
-      !h.returned_at && 
-      h.equipment_status !== 'Returned'
-    );
+  // Overall metrics calculated from real equipment state
+  const metrics = useMemo(() => {
+    let totalUnits = 0;
+    let availableCount = 0;
+    let busyCount = 0;
+    let maintenanceCount = 0;
 
-    const results: Array<{
-      equipment_name: string;
-      event_name: string;
-      event_date: string;
-      event_time: string;
-    }> = [];
-
-    activeHistories.forEach(h => {
-      // 1. Try to find matched order
-      let matchedOrder = (orders || []).find(o => o.order_id === h.order_id || o.lead_id === h.lead_id);
-      if (matchedOrder) {
-        results.push({
-          equipment_name: busyEquipment.equipment_name,
-          event_name: matchedOrder.custom_event_name || matchedOrder.event_type || 'Custom Event',
-          event_date: matchedOrder.event_date || 'N/A',
-          event_time: matchedOrder.event_time || 'N/A'
-        });
+    equipment.forEach(item => {
+      totalUnits += item.quantity || 1;
+      const tasks = getActiveTasksForEquipment(item);
+      if (['Under Maintenance', 'Maintenance', 'Damaged'].includes(item.status)) {
+        maintenanceCount += 1;
+      } else if (tasks.length > 0) {
+        busyCount += 1;
       } else {
-        // 2. Try to find matched lead
-        let matchedLead = (leads || []).find(l => l.lead_id === h.lead_id || l.lead_id === h.order_id);
-        if (matchedLead) {
-          results.push({
-            equipment_name: busyEquipment.equipment_name,
-            event_name: matchedLead.custom_event_name || matchedLead.event_type || 'Custom Event',
-            event_date: matchedLead.event_date || 'N/A',
-            event_time: matchedLead.event_time || 'N/A'
-          });
-        }
+        availableCount += 1;
       }
     });
 
-    return results;
-  }, [busyEquipment, leadEquipmentHistory, orders, leads]);
+    return { totalUnits, availableCount, busyCount, maintenanceCount };
+  }, [equipment, staffAssignments, operations, leadEquipmentHistory, equipmentHandovers, orders, leads]);
 
   // Reset pagination to page 1 on search or filter updates
   useEffect(() => {
@@ -411,25 +617,25 @@ export const EquipmentManagement: React.FC = () => {
         {[
           { 
             title: 'TOTAL UNITS', 
-            val: equipment.reduce((acc, curr) => acc + (curr.quantity || 0), 0), 
+            val: metrics.totalUnits, 
             color: 'text-zinc-200', 
             bg: 'bg-zinc-900/40 border-zinc-850' 
           },
           { 
             title: 'AVAILABLE NOW', 
-            val: equipment.reduce((acc, curr) => acc + (curr.available_quantity || 0), 0), 
+            val: metrics.availableCount, 
             color: 'text-emerald-400', 
             bg: 'bg-emerald-500/5 border-emerald-500/10' 
           },
           { 
-            title: 'OUT IN FIELD', 
-            val: equipment.reduce((acc, curr) => acc + ((curr.quantity - (curr.available_quantity ?? curr.quantity)) || 0), 0), 
+            title: 'BUSY / IN FIELD', 
+            val: metrics.busyCount, 
             color: 'text-sky-400', 
             bg: 'bg-sky-500/5 border-sky-500/10' 
           },
           { 
             title: 'IN MAINTENANCE', 
-            val: equipment.filter(e => e.status === 'Under Maintenance' || e.status === 'Maintenance').reduce((acc, curr) => acc + (curr.quantity || 0), 0), 
+            val: metrics.maintenanceCount, 
             color: 'text-amber-400', 
             bg: 'bg-amber-500/5 border-amber-500/10' 
           }
@@ -704,9 +910,11 @@ export const EquipmentManagement: React.FC = () => {
             <table className="w-full text-left border-collapse min-w-max">
               <thead>
                 <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/40">
-                  <th className="p-3.5">Equipment Details</th>
-                  <th className="p-3.5">Condition & Staff</th>
+                  <th className="p-3.5">Equipment</th>
+                  <th className="p-3.5">Brand</th>
+                  <th className="p-3.5">Category</th>
                   <th className="p-3.5">Status</th>
+                  <th className="p-3.5 text-center">Task</th>
                   <th className="p-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -719,53 +927,70 @@ export const EquipmentManagement: React.FC = () => {
                         onClick={() => setSelectedEq(eq)}
                         className="hover:bg-zinc-950/30 transition-all cursor-pointer group"
                       >
+                        {/* Equipment Name & Serial */}
                         <td className="p-3.5">
                           <div className="font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">{eq.equipment_name}</div>
-                          <div className="text-[10px] text-zinc-400 font-mono mt-0.5">Model: <span className="text-zinc-300">{eq.brand} {eq.model}</span></div>
-                          <div className="text-[9px] text-zinc-500 font-bold uppercase font-mono">S/N: {eq.serial_number}</div>
+                          {eq.model && <div className="text-[10px] text-zinc-400 font-mono mt-0.5">Model: <span className="text-zinc-300">{eq.model}</span></div>}
+                          {eq.serial_number && <div className="text-[9px] text-zinc-500 font-bold uppercase font-mono">S/N: {eq.serial_number}</div>}
                         </td>
-                        <td className="p-3.5 space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-zinc-400 font-mono">Cond:</span>
-                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase border ${
-                              eq.parsedMeta.condition === 'Excellent' ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/10' :
-                              eq.parsedMeta.condition === 'Good' ? 'bg-indigo-500/5 text-indigo-400 border-indigo-500/10' :
-                              eq.parsedMeta.condition === 'Fair' ? 'bg-yellow-500/5 text-yellow-400 border-yellow-500/10' :
-                              'bg-rose-500/5 text-rose-450 border-rose-500/10'
-                            }`}>
-                              {eq.parsedMeta.condition}
-                            </span>
-                          </div>
-                          {eq.parsedMeta.assignedStaff ? (
-                            <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-400">
-                              <User className="w-3 h-3 text-zinc-500" />
-                              <span className="truncate max-w-[130px]">{eq.parsedMeta.assignedStaff}</span>
-                            </div>
-                          ) : (
-                            <div className="text-[9px] text-zinc-600 font-mono italic">Unassigned</div>
-                          )}
+
+                        {/* Brand */}
+                        <td className="p-3.5 font-mono text-zinc-300 font-medium">
+                          {eq.brand || '—'}
                         </td>
+
+                        {/* Category */}
+                        <td className="p-3.5 font-mono text-zinc-400 text-[11px]">
+                          {eq.equipment_type || (eq as any).Equipment_Category || '—'}
+                        </td>
+
+                        {/* Status */}
                         <td className="p-3.5" onClick={(e) => e.stopPropagation()}>
-                          {eq.status.toLowerCase() === 'busy' || eq.status.toLowerCase() === 'assigned' || eq.status.toLowerCase() === 'in use' ? (
+                          {eq.dynamicStatus === 'Busy' ? (
                             <button
                               type="button"
-                              onClick={() => setBusyEquipment(eq)}
-                              className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border bg-sky-500/10 text-sky-400 border-sky-500/20 hover:bg-sky-500/20 hover:text-sky-300 transition-all flex items-center gap-1 cursor-pointer"
-                              title="Click to view event assignment details"
+                              onClick={() => setBusyEquipment({ equipment: eq, tasks: eq.activeTasks })}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-sky-500/10 text-sky-400 border-sky-500/20 hover:bg-sky-500/25 hover:text-sky-300 transition-all cursor-pointer"
+                              title="Click to view active task assignments"
                             >
                               <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse" />
-                              {eq.status}
+                              Busy
                             </button>
+                          ) : eq.dynamicStatus === 'Available' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                              Available
+                            </span>
+                          ) : eq.dynamicStatus === 'Under Maintenance' || eq.dynamicStatus === 'Maintenance' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                              {eq.dynamicStatus}
+                            </span>
                           ) : (
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                              eq.status === 'Available' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                              eq.status === 'Under Maintenance' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
-                              'bg-rose-500/10 text-rose-450 border-rose-500/10'
-                            }`}>
-                              {eq.status}
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-rose-500/10 text-rose-400 border-rose-500/20">
+                              <span className="w-1.5 h-1.5 bg-rose-400 rounded-full" />
+                              {eq.dynamicStatus}
                             </span>
                           )}
                         </td>
+
+                        {/* Task Count Column */}
+                        <td className="p-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => setBusyEquipment({ equipment: eq, tasks: eq.activeTasks })}
+                            className={`inline-flex items-center justify-center min-w-[28px] px-2.5 py-1 rounded-full text-[11px] font-mono font-bold border transition-all cursor-pointer ${
+                              eq.activeTaskCount > 0
+                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25 hover:scale-105 shadow-sm'
+                                : 'bg-zinc-850/60 text-zinc-400 border-zinc-750 hover:bg-zinc-800 hover:text-zinc-300'
+                            }`}
+                            title={eq.activeTaskCount > 0 ? `Click to view ${eq.activeTaskCount} active task(s)` : 'No active tasks (Click to inspect)'}
+                          >
+                            {eq.activeTaskCount}
+                          </button>
+                        </td>
+
+                        {/* Actions */}
                         <td className="p-3.5 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <button
@@ -773,7 +998,7 @@ export const EquipmentManagement: React.FC = () => {
                                 e.stopPropagation();
                                 setSelectedEq(eq);
                               }}
-                              className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800"
+                              className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800 cursor-pointer"
                               title="View Details"
                             >
                               <Eye className="w-3.5 h-3.5" />
@@ -782,14 +1007,14 @@ export const EquipmentManagement: React.FC = () => {
                               <>
                                 <button
                                   onClick={(e) => handleSelectEdit(eq, e)}
-                                  className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800"
+                                  className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800 cursor-pointer"
                                   title="Edit Item Details"
                                 >
                                   <Edit3 className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   onClick={(e) => handleDelete(eq.equipment_id, eq.equipment_name, e)}
-                                  className="p-1.5 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 rounded transition-all"
+                                  className="p-1.5 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 rounded transition-all cursor-pointer"
                                   title="De-register Equipment"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -803,7 +1028,7 @@ export const EquipmentManagement: React.FC = () => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={4} className="p-10 text-center text-zinc-500 italic font-mono">
+                    <td colSpan={6} className="p-10 text-center text-zinc-500 italic font-mono">
                       No equipment matching your search or filters.
                     </td>
                   </tr>
@@ -1049,16 +1274,33 @@ export const EquipmentManagement: React.FC = () => {
         );
       })()}
 
-      {/* Equipment Assignment Details Popup */}
+      {/* Equipment Active Task Count & Assignment Popup */}
       {busyEquipment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
             
             {/* Header block */}
             <div className="p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between">
               <div>
-                <h4 className="text-lg font-bold text-white">Equipment Assignment Details</h4>
-                <p className="text-xs text-zinc-400 mt-1 font-mono">Active tracking log for {busyEquipment.equipment_name}</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded uppercase font-extrabold tracking-widest">
+                    {busyEquipment.equipment.equipment_id}
+                  </span>
+                  <span className="text-zinc-500 font-mono text-xs">/ {busyEquipment.equipment.equipment_type || 'Gear'}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase border ${
+                    busyEquipment.tasks.length > 0
+                      ? 'bg-sky-500/10 text-sky-400 border-sky-500/20'
+                      : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  }`}>
+                    {busyEquipment.tasks.length > 0 ? `${busyEquipment.tasks.length} ACTIVE TASK${busyEquipment.tasks.length > 1 ? 'S' : ''}` : '0 ACTIVE TASKS'}
+                  </span>
+                </div>
+                <h4 className="text-lg font-bold text-white mt-1.5">{busyEquipment.equipment.equipment_name}</h4>
+                <p className="text-xs text-zinc-400 mt-0.5 font-mono">
+                  Brand: <span className="text-zinc-300 font-medium">{busyEquipment.equipment.brand || '—'}</span>
+                  {busyEquipment.equipment.model && <span> | Model: <span className="text-zinc-300 font-medium">{busyEquipment.equipment.model}</span></span>}
+                  {busyEquipment.equipment.serial_number && <span> | S/N: <span className="text-zinc-300 font-mono font-medium">{busyEquipment.equipment.serial_number}</span></span>}
+                </p>
               </div>
               <button 
                 onClick={() => setBusyEquipment(null)} 
@@ -1070,41 +1312,66 @@ export const EquipmentManagement: React.FC = () => {
 
             {/* Body content */}
             <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
-              {assignedEventsForBusyEquipment.length > 0 ? (
-                <div className="overflow-x-auto border border-zinc-850 rounded-2xl bg-zinc-950/20">
+              {busyEquipment.tasks.length > 0 ? (
+                <div className="overflow-x-auto border border-zinc-850 rounded-2xl bg-zinc-950/40">
                   <table className="w-full text-left border-collapse min-w-max">
                     <thead>
-                      <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/50">
-                        <th className="p-3.5">Equipment Name</th>
+                      <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/80">
                         <th className="p-3.5">Event Name</th>
                         <th className="p-3.5">Event Date</th>
                         <th className="p-3.5">Event Time</th>
+                        <th className="p-3.5">Assigned Staff</th>
+                        <th className="p-3.5">Order / Lead ID</th>
+                        <th className="p-3.5 text-right">Task Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-zinc-850/45 text-xs text-zinc-300">
-                      {assignedEventsForBusyEquipment.map((ev, idx) => (
-                        <tr key={idx} className="hover:bg-zinc-950/35 transition-all">
-                          <td className="p-3.5 font-bold text-zinc-100">{ev.equipment_name}</td>
-                          <td className="p-3.5 text-amber-400 font-medium">{ev.event_name}</td>
-                          <td className="p-3.5 font-mono text-zinc-300">{ev.event_date}</td>
-                          <td className="p-3.5 font-mono text-zinc-400">{ev.event_time}</td>
+                    <tbody className="divide-y divide-zinc-850/50 text-xs text-zinc-300">
+                      {busyEquipment.tasks.map((task, idx) => (
+                        <tr key={task.id || idx} className="hover:bg-zinc-900/40 transition-all">
+                          <td className="p-3.5 font-bold text-zinc-100 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                            <span>{task.eventName}</span>
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-300 font-medium">{task.eventDate}</td>
+                          <td className="p-3.5 font-mono text-zinc-400">{task.eventTime}</td>
+                          <td className="p-3.5">
+                            <div className="flex items-center gap-1.5 font-medium text-zinc-200">
+                              <User className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                              <span>{task.assignedStaff}</span>
+                            </div>
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-zinc-400">
+                            {task.orderId || task.leadId || '—'}
+                          </td>
+                          <td className="p-3.5 text-right">
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                              {task.taskStatus}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="p-10 text-center border border-zinc-850 rounded-2xl bg-zinc-950/25">
-                  <p className="text-zinc-500 italic font-mono text-xs">No active event assignment found.</p>
+                <div className="p-10 text-center border border-zinc-850 rounded-2xl bg-zinc-950/25 space-y-2">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+                  <p className="text-zinc-200 font-bold text-sm">No Active Tasks Assigned</p>
+                  <p className="text-zinc-500 font-mono text-xs">
+                    This equipment is not currently engaged in any active event assignments or shoots. It is fully Available in inventory.
+                  </p>
                 </div>
               )}
             </div>
 
             {/* Footer block */}
-            <div className="p-4 border-t border-zinc-850 bg-zinc-950/40 flex justify-end">
+            <div className="p-4 border-t border-zinc-850 bg-zinc-950/60 flex items-center justify-between">
+              <span className="text-[11px] font-mono text-zinc-500">
+                {busyEquipment.tasks.length} active assignment{busyEquipment.tasks.length === 1 ? '' : 's'} resolved
+              </span>
               <button
                 onClick={() => setBusyEquipment(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-350 hover:text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer"
               >
                 Close
               </button>

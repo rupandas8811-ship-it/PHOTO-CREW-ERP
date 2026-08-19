@@ -79,14 +79,47 @@ export interface CalendarEvent {
   raw: any;
 }
 
+export const normalizeToYYYYMMDD = (dateStr: string | null | undefined): string => {
+  if (!dateStr || dateStr === '—' || dateStr === 'N/A' || dateStr === 'undefined' || dateStr === 'null') return '';
+  const clean = String(dateStr).includes('T') ? String(dateStr).split('T')[0] : String(dateStr).trim();
+  if (!clean) return '';
+  const parts = clean.split(/[-/]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) {
+      // YYYY-MM-DD or YYYY/MM/DD
+      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+    } else if (parts[2].length === 4) {
+      // DD-MM-YYYY or DD/MM/YYYY
+      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  try {
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+  } catch (e) {}
+  return clean;
+};
+
 const parseLocalDate = (dateStr: string | Date | null | undefined): Date => {
   if (!dateStr) return new Date();
-  if (dateStr instanceof Date) return dateStr;
-  const parts = dateStr.split('T')[0].split('-');
-  if (parts.length === 3) {
-    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? new Date() : dateStr;
+  const ymd = normalizeToYYYYMMDD(String(dateStr));
+  if (ymd) {
+    const parts = ymd.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      return new Date(y, m, d);
+    }
   }
-  return new Date(dateStr);
+  const fallback = new Date(dateStr);
+  return isNaN(fallback.getTime()) ? new Date() : fallback;
 };
 
 const parseEventTimes = (timeStr: string) => {
@@ -107,14 +140,15 @@ const parseEventTimes = (timeStr: string) => {
 };
 
 const formatDateDMY = (dateStr: string | null | undefined): string => {
-  if (!dateStr || dateStr === '—') return '—';
-  const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.trim();
-  if (!cleanDate) return '—';
-  const parts = cleanDate.split('-');
-  if (parts.length === 3 && parts[0].length === 4) {
-    return `${parts[2]}-${parts[1]}-${parts[0]}`;
+  if (!dateStr || dateStr === '—' || dateStr === 'N/A') return '—';
+  const ymd = normalizeToYYYYMMDD(dateStr);
+  if (ymd) {
+    const parts = ymd.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
   }
-  return cleanDate;
+  return dateStr;
 };
 
 const getProductionAssignedDate = (
@@ -1210,12 +1244,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
                     return (
                       <div
-                        key={idx}
+                        key={cell.dateString || idx}
                         id={`cell_day_${cell.dateString || idx}`}
                         onClick={() => {
                           if (cell.dateString) {
                             setSelectedDate(cell.dateString);
-                            if (evs.length > 0) setShowSelectedDateModal(true);
+                            setShowSelectedDateModal(true);
                           }
                         }}
                         className={`flex flex-col items-start justify-start p-1 sm:p-1.5 rounded-xl aspect-square border transition-all duration-150 cursor-pointer select-none touch-manipulation relative overflow-hidden ${
@@ -1224,12 +1258,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                             : isTodayStr
                             ? "bg-[#0d0d0e] border-emerald-500/40"
                             : cell.isCurrentMonth
-                            ? "bg-[#0d0d0e] border-zinc-900/80 hover:border-zinc-800 hover:bg-zinc-900/30"
-                            : "bg-[#040405] border-transparent opacity-15 pointer-events-none text-zinc-900"
+                            ? "bg-[#0d0d0e] border-zinc-900/80 hover:border-zinc-700 hover:bg-zinc-900/50"
+                            : "bg-[#040405] border-transparent opacity-25 text-zinc-700 hover:border-zinc-800"
                         }`}
                       >
                         {/* Date Number Display */}
-                        <div className="w-full flex items-center justify-between shrink-0">
+                        <div className="w-full flex items-center justify-between shrink-0 pointer-events-none">
                           <span
                             className={`text-xs sm:text-sm font-mono font-extrabold ${
                               isSelected
@@ -1238,22 +1272,22 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 ? "text-emerald-400 font-bold"
                                 : cell.isCurrentMonth
                                 ? "text-zinc-200"
-                                : "text-zinc-800"
+                                : "text-zinc-700"
                             }`}
                           >
                             {cell.dayNumber}
                           </span>
-                          {cell.isCurrentMonth && evs.length > 1 && (
-                            <span className="text-[8px] font-mono px-1 rounded bg-zinc-800 text-zinc-400 font-bold hidden sm:inline-block">
+                          {evs.length > 0 && (
+                            <span className="text-[8px] font-mono px-1.5 py-0.2 rounded-full bg-yellow-500/20 text-yellow-400 font-bold border border-yellow-500/30">
                               {evs.length}
                             </span>
                           )}
                         </div>
 
                         {/* Event names list inside the existing date box */}
-                        {cell.isCurrentMonth && evs.length > 0 && (
-                          <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0">
-                            {evs.map((ev, eIdx) => {
+                        {evs.length > 0 && (
+                          <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0 pointer-events-none">
+                            {evs.slice(0, 3).map((ev, eIdx) => {
                               const displayName = ev.eventName || ev.raw?.event_name || ev.eventType || ev.customerName || 'Event';
                               return (
                                 <div
@@ -1265,6 +1299,11 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 </div>
                               );
                             })}
+                            {evs.length > 3 && (
+                              <div className="text-[8px] font-mono text-zinc-400 px-1 font-bold">
+                                +{evs.length - 3} more
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1287,21 +1326,17 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
                   return (
                     <div
-                      key={dIdx}
+                      key={day.dateStr || dIdx}
                       onClick={() => {
                         if (day.dateStr) {
-                          const evsForDate = filteredEvents.filter(e => e.date === day.dateStr);
-                          if (evsForDate.length > 0) {
-                            setPopupDate(day.dateStr);
-                          } else {
-                            setSelectedDate(day.dateStr);
-                          }
+                          setSelectedDate(day.dateStr);
+                          setShowSelectedDateModal(true);
                         }
                       }}
                       className={`min-h-[250px] bg-zinc-950/20 border rounded-2xl p-3 flex flex-col transition-all cursor-pointer ${
                         isSelected 
                           ? 'border-yellow-500 bg-zinc-900/40 ring-1 ring-yellow-500/10' 
-                          : 'border-zinc-900 hover:border-zinc-805 hover:bg-zinc-900/10'
+                          : 'border-zinc-900 hover:border-zinc-700 hover:bg-zinc-900/20'
                       }`}
                     >
                       <div className="flex justify-between items-center border-b border-zinc-900 pb-1.5">
@@ -1999,50 +2034,83 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
 
                 return (
                   <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
-                    <table className="w-full text-left border-collapse min-w-[700px]">
+                    <table className="w-full text-left border-collapse min-w-[850px]">
                       <thead>
                         <tr className="border-b border-zinc-850 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
-                          <th className="p-3.5 pl-4">Event Name</th>
+                          <th className="p-3.5 pl-4">Order ID</th>
+                          <th className="p-3.5">Event Name</th>
+                          <th className="p-3.5">Customer</th>
                           <th className="p-3.5">Event Date</th>
                           <th className="p-3.5">Event Time</th>
-                          <th className="p-3.5">Customer</th>
+                          <th className="p-3.5">Location</th>
                           <th className="p-3.5">Status</th>
-                          <th className="p-3.5 pr-4">Target Delivery Date</th>
+                          <th className="p-3.5">Target Delivery Date</th>
+                          <th className="p-3.5 pr-4 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
                         {selectedEvs.map((ev, idx) => {
+                          const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.tracking_id || ev.raw?.lead_id || '—';
                           const evName = ev.eventName || ev.raw?.event_name || ev.eventType || 'Event';
                           const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
                           const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
                           const custName = ev.customerName || ev.raw?.customer_name || '—';
+                          const location = ev.eventLocation || ev.raw?.event_location || '—';
                           const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
                           const targetDelDate = formatDateDMY(ev.targetDeliveryDate || ev.raw?.targetDeliveryDate || ev.raw?.delivery_target_date || ev.raw?.expected_delivery_date || '—');
 
                           return (
                             <tr 
                               key={ev.id || idx}
-                              className="bg-zinc-950/30 select-text"
+                              className="bg-zinc-950/30 hover:bg-zinc-900/40 transition-colors select-text"
                             >
-                              <td className="p-3.5 pl-4 font-bold text-zinc-100">
+                              <td className="p-3.5 pl-4 font-mono font-bold text-yellow-400">
+                                {orderDisplayId}
+                              </td>
+                              <td className="p-3.5 font-bold text-zinc-100">
                                 {evName}
                               </td>
-                              <td className="p-3.5 font-mono text-zinc-300">
+                              <td className="p-3.5 text-zinc-200 font-medium">
+                                <div>{custName}</div>
+                                {ev.mobile && (
+                                  <div className="text-[10px] font-mono text-zinc-500">{ev.mobile}</div>
+                                )}
+                              </td>
+                              <td className="p-3.5 font-mono text-zinc-300 whitespace-nowrap">
                                 {evDate}
                               </td>
-                              <td className="p-3.5 font-mono text-zinc-300">
+                              <td className="p-3.5 font-mono text-zinc-300 whitespace-nowrap">
                                 {evTime}
                               </td>
-                              <td className="p-3.5 text-zinc-200 font-medium">
-                                {custName}
+                              <td className="p-3.5 text-zinc-300 max-w-[150px] truncate" title={location}>
+                                {location}
                               </td>
-                              <td className="p-3.5">
+                              <td className="p-3.5 whitespace-nowrap">
                                 <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
                                   {status}
                                 </span>
                               </td>
-                              <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
+                              <td className="p-3.5 font-mono font-bold text-pink-400 whitespace-nowrap">
                                 {targetDelDate}
+                              </td>
+                              <td className="p-3.5 pr-4 text-right whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowSelectedDateModal(false);
+                                    if (ev.sourceType === 'memo') {
+                                      setNewMemoTitle(ev.customerName);
+                                      setNewMemoMessage(ev.notes || '');
+                                      setEditingMemoId(ev.id);
+                                      setShowAddMemo(true);
+                                    } else {
+                                      setPopupLeadId(ev.raw?.lead_id || ev.orderId || orderDisplayId);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
+                                >
+                                  Details
+                                </button>
                               </td>
                             </tr>
                           );

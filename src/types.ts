@@ -440,6 +440,10 @@ export interface Production {
   custom_event_name?: string;
   event_date?: string;
   event_time?: string;
+  server_upload_confirmed?: boolean;
+  server_upload_event_date?: string;
+  server_upload_folder_name?: string;
+  server_path?: string;
 }
 
 export interface Payment {
@@ -535,6 +539,12 @@ export interface EditorAssignment {
   proof_url?: string;
   proof_image?: string;
   uploaded_proof?: string;
+  server_upload_confirmed?: boolean;
+  server_upload_event_date?: string;
+  server_upload_folder_name?: string;
+  server_upload_confirmed_at?: string;
+  server_upload_confirmed_by?: string;
+  edited_folder_uploaded_to_server?: boolean;
 }
 
 export interface StaffAssignment {

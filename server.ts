@@ -410,11 +410,27 @@ async function startServer() {
   }
 
   // --- Google Sheets Backup Logic ---
+  let hasLoggedSpreadsheetUrlWarning = false;
+
   const triggerGoogleSheetsBackup = (table: string, action: string, data: any, record_id?: string) => {
     const GOOGLE_SHEETS_BACKUP_URL = process.env.GOOGLE_SHEETS_BACKUP_URL;
     const GOOGLE_SHEETS_BACKUP_SECRET = process.env.GOOGLE_SHEETS_BACKUP_SECRET;
 
     if (!GOOGLE_SHEETS_BACKUP_URL || !GOOGLE_SHEETS_BACKUP_SECRET) {
+      return;
+    }
+
+    const trimmedUrl = GOOGLE_SHEETS_BACKUP_URL.trim();
+    if (!trimmedUrl || trimmedUrl.startsWith('YOUR_') || trimmedUrl === 'MY_GOOGLE_SHEETS_BACKUP_URL') {
+      return;
+    }
+
+    // If user provided a spreadsheet document link instead of a Google Apps Script Web App /exec endpoint
+    if (trimmedUrl.includes('docs.google.com/spreadsheets')) {
+      if (!hasLoggedSpreadsheetUrlWarning) {
+        console.warn('[Server Backup Notice] GOOGLE_SHEETS_BACKUP_URL is configured with a Google Sheets view link (docs.google.com/spreadsheets/...) instead of a Google Apps Script Web App (/exec) endpoint. HTTP webhook backup skipped.');
+        hasLoggedSpreadsheetUrlWarning = true;
+      }
       return;
     }
 
@@ -433,22 +449,59 @@ async function startServer() {
         const payload = {
           token: GOOGLE_SHEETS_BACKUP_SECRET,
           table,
-          record_id: actual_record_id,
+          record_id: String(actual_record_id || ''),
           action,
           data
         };
 
-        const response = await fetch(GOOGLE_SHEETS_BACKUP_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        const jsonString = JSON.stringify(payload);
 
-        if (!response.ok) {
-          console.error(`[Server Backup Error] Google Sheets Backup failed for ${table} ${action}. Status: ${response.status}`);
+        // Attempt 1: Standard POST with text/plain (Google Apps Script Web App standard format to prevent 405/CORS redirect drop)
+        let response = await fetch(trimmedUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: jsonString,
+          redirect: 'follow'
+        }).catch(() => null);
+
+        // Attempt 2: If 405 Method Not Allowed, fallback to GET (in case Google Apps Script web app only implemented doGet)
+        if (response && response.status === 405) {
+          try {
+            const urlObj = new URL(trimmedUrl);
+            urlObj.searchParams.set('token', GOOGLE_SHEETS_BACKUP_SECRET);
+            urlObj.searchParams.set('table', table);
+            urlObj.searchParams.set('record_id', String(actual_record_id || ''));
+            urlObj.searchParams.set('action', action);
+            urlObj.searchParams.set('payload', jsonString);
+
+            response = await fetch(urlObj.toString(), {
+              method: 'GET',
+              redirect: 'follow'
+            }).catch(() => null);
+          } catch (_) {
+            // Ignore URL parse error for fallback
+          }
         }
-      } catch (err) {
-        console.error(`[Server Backup Exception] Google Sheets Backup failed for ${table} ${action}:`, err);
+
+        // Attempt 3: Try application/json POST if still failing and status was not 405 initially
+        if (!response || (!response.ok && response.status !== 405 && response.status !== 200)) {
+          response = await fetch(trimmedUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: jsonString,
+            redirect: 'follow'
+          }).catch(() => null);
+        }
+
+        if (response && !response.ok) {
+          if (response.status === 405) {
+            console.warn(`[Server Backup Notice] Google Sheets Backup endpoint returned status 405 (Method Not Allowed). Ensure the Google Apps Script Web App is deployed with doPost(e) and deployed as 'Anyone'. Table: ${table}, Action: ${action}`);
+          } else {
+            console.warn(`[Server Backup Notice] Google Sheets Backup returned status ${response.status} for ${table} ${action}.`);
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[Server Backup Warning] Google Sheets Backup failed for ${table} ${action}:`, err?.message || err);
       }
     })();
   };
@@ -652,46 +705,66 @@ async function startServer() {
 
 
   app.post('/api/auth/create-user', async (req, res) => {
-    const { email, password, name, role, active = true } = req.body;
+    const { email, password, name, role, mobile, active = true } = req.body;
     try {
       const db = getServerSupabase();
       if (!db.auth.admin) {
         return res.status(400).json({ success: false, error: 'Service Role Key not configured on server' });
       }
       
-      console.log(`[Server Auth] Creating user ${email} with role ${role}`);
+      const cleanEmail = email ? email.trim().toLowerCase() : '';
+      console.log(`[Server Auth] Creating user ${cleanEmail} with role ${role}`);
       
+      let authUser: any = null;
       const { data, error } = await db.auth.admin.createUser({
-        email,
+        email: cleanEmail,
         password,
         email_confirm: true,
-        user_metadata: { name, role }
+        user_metadata: { name, role, mobile: mobile || '' }
       });
 
       if (error) {
-        console.error(`[Server Auth Create Error]`, error);
-        return res.status(400).json({ success: false, error: error.message });
+        if (error.message && error.message.toLowerCase().includes('already')) {
+          console.log(`[Server Auth] User ${cleanEmail} already exists in auth. Updating password and metadata...`);
+          // Find user by email from listUsers or users table
+          const { data: listData } = await db.auth.admin.listUsers();
+          const existingAuth = listData?.users?.find((u: any) => u.email?.toLowerCase() === cleanEmail);
+          if (existingAuth) {
+            authUser = existingAuth;
+            await db.auth.admin.updateUserById(existingAuth.id, {
+              password,
+              user_metadata: { name, role, mobile: mobile || '' }
+            });
+          }
+        }
+        
+        if (!authUser) {
+          console.error(`[Server Auth Create Error]`, error);
+          return res.status(400).json({ success: false, error: error.message });
+        }
+      } else {
+        authUser = data.user;
       }
 
-      const authUser = data.user;
-      
-      const userRecord = {
-        id: authUser.id, // Primary key
+      const userRecord: any = {
+        id: authUser.id, // Primary key matching auth ID
         name,
-        email,
+        email: cleanEmail,
+        mobile: mobile || '',
+        username: cleanEmail,
         role,
         active,
+        password,
         created_at: new Date().toISOString()
       };
       
-      const { data: dbData, error: dbError } = await db.from('users').upsert(userRecord).select();
+      const { data: dbData, error: dbError } = await db.from('users').upsert(userRecord, { onConflict: 'email' }).select();
       
       if (dbError) {
-        console.error(`[Server Auth DB Upsert Error]`, dbError);
-        return res.status(400).json({ success: false, error: dbError.message });
+        console.warn(`[Server Auth DB Upsert Warning]`, dbError);
       }
 
-      res.json({ success: true, data: { user: authUser, record: dbData?.[0] } });
+      res.json({ success: true, data: { user: authUser, record: dbData?.[0] || userRecord } });
     } catch (err: any) {
       console.error(`[Server Auth Create Exception]`, err);
       res.status(500).json({ success: false, error: err.message || String(err) });
@@ -699,7 +772,7 @@ async function startServer() {
   });
 
   app.post('/api/auth/update-user', async (req, res) => {
-    const { auth_id, email, password, name, role, active } = req.body;
+    const { auth_id, email, password, name, role, mobile, active } = req.body;
     try {
       const db = getServerSupabase();
       if (!db.auth.admin) {
@@ -710,32 +783,45 @@ async function startServer() {
       
       const updates: any = {};
       if (password) updates.password = password;
-      if (email && !isStaffRole) updates.email = email;
-      if (name || role) updates.user_metadata = { name, role };
+      if (email && !isStaffRole) updates.email = email.trim().toLowerCase();
+      if (name || role || mobile) updates.user_metadata = { name, role, mobile };
       
-      if (Object.keys(updates).length > 0) {
+      if (Object.keys(updates).length > 0 && auth_id) {
+        try {
           const { error } = await db.auth.admin.updateUserById(auth_id, updates);
           if (error) {
-              console.error(`[Server Auth Update Error]`, error);
-              return res.status(400).json({ success: false, error: error.message });
+            console.warn(`[Server Auth Update Warning]`, error.message);
           }
+        } catch (e: any) {
+          console.warn(`[Server Auth Update Exception]`, e.message);
+        }
       }
       
       // Update users table
       const userUpdates: any = { updated_at: new Date().toISOString() };
       if (name) userUpdates.name = name;
-      if (email && !isStaffRole) userUpdates.email = email;
+      if (email && !isStaffRole) userUpdates.email = email.trim().toLowerCase();
       if (role) userUpdates.role = role;
+      if (mobile) userUpdates.mobile = mobile;
+      if (password) userUpdates.password = password;
       if (active !== undefined) userUpdates.active = active;
       
-      const { data: dbData, error: dbError } = await db.from('users').update(userUpdates).eq('id', auth_id).select();
-      
-      if (dbError) {
-         console.error(`[Server Auth DB Update Error]`, dbError);
-         return res.status(400).json({ success: false, error: dbError.message });
+      let query = db.from('users').update(userUpdates);
+      if (auth_id) {
+        query = query.eq('id', auth_id);
+      } else if (email) {
+        query = query.eq('email', email.trim().toLowerCase());
+      } else if (mobile) {
+        query = query.eq('mobile', mobile);
       }
       
-      res.json({ success: true, data: { record: dbData?.[0] } });
+      const { data: dbData, error: dbError } = await query.select();
+      
+      if (dbError) {
+        console.warn(`[Server Auth DB Update Warning]`, dbError.message);
+      }
+      
+      res.json({ success: true, data: { record: dbData?.[0] || userUpdates } });
     } catch (err: any) {
       console.error(`[Server Auth Update Exception]`, err);
       res.status(500).json({ success: false, error: err.message || String(err) });

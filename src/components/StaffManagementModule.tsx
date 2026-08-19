@@ -4,13 +4,15 @@ import { Staff } from '../types';
 import { triggerAutoScrollAndFocus } from '../utils';
 import { 
   Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, Trash2, ShieldAlert,
-  Search, Filter, Calendar, FolderOpen, Heart, CheckCircle2, ChevronRight, X, Sparkles, Image
+  Search, Filter, Calendar, FolderOpen, Heart, CheckCircle2, ChevronRight, X, Sparkles, Image,
+  Key, Eye, EyeOff, Lock
 } from 'lucide-react';
 
 export const StaffManagementModule: React.FC = () => {
   const { 
     staff, addStaff, updateStaff, deleteStaff, production, currentRole,
-    specialities = [], addSpeciality, updateSpeciality, deactivateSpeciality
+    specialities = [], addSpeciality, updateSpeciality, deactivateSpeciality,
+    addUser, resetUserPassword, users
   } = useRole();
   
   // Tabs: 'dashboard' | 'list' | 'add' | 'specialities'
@@ -33,6 +35,17 @@ export const StaffManagementModule: React.FC = () => {
   const [profilePhoto, setProfilePhoto] = useState('');
   const [notes, setNotes] = useState('');
   const [showPhotoTip, setShowPhotoTip] = useState(false);
+
+  // Password & credentials states
+  const [staffPassword, setStaffPassword] = useState('');
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
+
+  // Password reset modal states
+  const [resetModalStaff, setResetModalStaff] = useState<Staff | null>(null);
+  const [newStaffPassword, setNewStaffPassword] = useState('');
+  const [showNewStaffPassword, setShowNewStaffPassword] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState('');
 
   // Specialties & experience fields
   const [prodSpeciality, setProdSpeciality] = useState('');
@@ -94,10 +107,15 @@ export const StaffManagementModule: React.FC = () => {
     };
   }, { totalAssigned: 0, totalCompleted: 0, totalPending: 0 });
 
-  const handleAddStaffSubmit = (e: React.FormEvent) => {
+  const handleAddStaffSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !email || !mobile) {
       alert('Please fill out all required fields (Name, Email, Mobile).');
+      return;
+    }
+
+    if (!editingStaffId && (!staffPassword || staffPassword.length < 6)) {
+      alert('Please provide a password of at least 6 characters for the staff account.');
       return;
     }
 
@@ -120,11 +138,34 @@ export const StaffManagementModule: React.FC = () => {
     if (editingStaffId) {
       const { mobile: _m, email: _e, ...safePayload } = payload;
       updateStaff(editingStaffId, safePayload);
+
+      // If a new password was provided during edit, update the user credentials
+      if (staffPassword && staffPassword.length >= 6) {
+        try {
+          const userRec = users.find(u => u.email?.toLowerCase() === email.toLowerCase() || u.mobile === mobile);
+          if (userRec) {
+            await resetUserPassword(userRec.id, staffPassword);
+          } else {
+            await addUser(name, email, mobile, 'Operation Staff', status === 'Active', staffPassword);
+          }
+        } catch (pwErr) {
+          console.warn("Could not update staff login password:", pwErr);
+        }
+      }
+
       alert('Staff member updated successfully!');
       setEditingStaffId(null);
     } else {
       addStaff(payload);
-      alert('Staff member registered successfully in ERP system!');
+
+      // Also create login user with the specified password for authentication
+      try {
+        await addUser(name, email, mobile, 'Operation Staff', status === 'Active', staffPassword);
+      } catch (authErr) {
+        console.warn("Auto-create login user warning:", authErr);
+      }
+
+      alert('Staff member registered and login password configured successfully!');
     }
 
     // Reset Form
@@ -132,6 +173,7 @@ export const StaffManagementModule: React.FC = () => {
     setMobile('');
     setWhatsappNumber('');
     setEmail('');
+    setStaffPassword('');
     setRole('Editor');
     setDepartment('Editing');
     setStatus('Active');
@@ -143,6 +185,50 @@ export const StaffManagementModule: React.FC = () => {
     setExperience('Junior Editor (1-2 Years)');
 
     setActiveSubTab('list');
+  };
+
+  const handleResetStaffPasswordModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetModalStaff || !newStaffPassword || newStaffPassword.length < 6) {
+      alert('Password must be at least 6 characters long.');
+      return;
+    }
+
+    setIsResetting(true);
+    setResetSuccessMessage('');
+
+    try {
+      // Find matching user record
+      const targetUser = users.find(u => 
+        (u.email && u.email.toLowerCase() === resetModalStaff.email?.toLowerCase()) ||
+        (u.mobile && u.mobile === resetModalStaff.mobile)
+      );
+
+      if (targetUser) {
+        await resetUserPassword(targetUser.id, newStaffPassword);
+      } else {
+        // Create user if missing
+        await addUser(
+          resetModalStaff.name,
+          resetModalStaff.email,
+          resetModalStaff.mobile,
+          'Operation Staff',
+          resetModalStaff.status === 'Active',
+          newStaffPassword
+        );
+      }
+
+      setResetSuccessMessage(`Password for ${resetModalStaff.name} has been updated successfully. They can now log in with their email/mobile and this new password.`);
+      setTimeout(() => {
+        setResetModalStaff(null);
+        setNewStaffPassword('');
+        setResetSuccessMessage('');
+      }, 2000);
+    } catch (err: any) {
+      alert('Failed to reset password: ' + (err?.message || 'Unknown error'));
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   const handleEditStaffClick = (member: Staff) => {
@@ -531,6 +617,18 @@ export const StaffManagementModule: React.FC = () => {
 
                     <div className="flex items-center gap-2">
                       <button
+                        onClick={() => {
+                          setResetModalStaff(member);
+                          setNewStaffPassword('');
+                          setResetSuccessMessage('');
+                        }}
+                        title="Reset Staff Login Password"
+                        className="p-1 px-2.5 text-[9px] font-mono font-bold border border-violet-800/40 hover:border-violet-600 bg-violet-950/30 text-violet-300 rounded-lg cursor-pointer select-none transition-colors flex items-center gap-1"
+                      >
+                        <Key className="w-3 h-3 text-violet-400" />
+                        <span>Reset PW</span>
+                      </button>
+                      <button
                         onClick={() => handleEditStaffClick(member)}
                         className="p-1 px-2.5 text-[9px] font-mono font-bold border border-zinc-800 hover:border-zinc-650 bg-zinc-900 text-zinc-300 rounded-lg cursor-pointer select-none transition-colors"
                       >
@@ -653,6 +751,38 @@ export const StaffManagementModule: React.FC = () => {
                   editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
                 }`}
               />
+            </div>
+
+            {/* Account Login Password */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center gap-1">
+                  <Key className="w-3 h-3 text-violet-400" />
+                  <span>{editingStaffId ? 'Change Login Password (Optional)' : 'Account Login Password'}</span>
+                  {!editingStaffId && <span className="text-rose-500">*</span>}
+                </label>
+                {editingStaffId && (
+                  <span className="text-[9px] text-zinc-500 font-mono">Leave blank to keep existing</span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type={showStaffPassword ? "text" : "password"}
+                  required={!editingStaffId}
+                  minLength={6}
+                  placeholder={editingStaffId ? "Enter new password (optional)" : "Set initial password (min 6 chars)"}
+                  value={staffPassword}
+                  onChange={(e) => setStaffPassword(e.target.value)}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 pr-10 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowStaffPassword(!showStaffPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  {showStaffPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             {/* WhatsApp */}
@@ -953,6 +1083,112 @@ export const StaffManagementModule: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* STAFF PASSWORD RESET MODAL DIALOG */}
+      {resetModalStaff && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
+            <div className="flex items-center justify-between border-b border-zinc-900 pb-4 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center">
+                  <Key className="w-4 h-4 text-violet-400" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Reset Staff Password</h3>
+                  <p className="text-[10px] text-zinc-400 font-mono">Staff Account: {resetModalStaff.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setResetModalStaff(null);
+                  setNewStaffPassword('');
+                  setResetSuccessMessage('');
+                }}
+                className="text-zinc-500 hover:text-zinc-300 p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {resetSuccessMessage ? (
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl space-y-2 text-center">
+                <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto" />
+                <p className="text-xs text-emerald-300 font-medium">{resetSuccessMessage}</p>
+              </div>
+            ) : (
+              <form onSubmit={handleResetStaffPasswordModal} className="space-y-4">
+                <div className="bg-zinc-900/60 border border-zinc-850 p-3 rounded-xl space-y-1.5 text-xs font-mono">
+                  <div className="text-zinc-400 flex justify-between">
+                    <span>Email ID:</span>
+                    <span className="text-white font-bold">{resetModalStaff.email}</span>
+                  </div>
+                  <div className="text-zinc-400 flex justify-between">
+                    <span>Mobile Number:</span>
+                    <span className="text-white font-bold">{resetModalStaff.mobile}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center justify-between">
+                    <span>New Password</span>
+                    <span className="text-zinc-500 font-normal">Min 6 characters</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showNewStaffPassword ? "text" : "password"}
+                      required
+                      minLength={6}
+                      placeholder="Enter new password"
+                      value={newStaffPassword}
+                      onChange={(e) => setNewStaffPassword(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 pr-10 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewStaffPassword(!showNewStaffPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                    >
+                      {showNewStaffPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-violet-950/20 border border-violet-900/30 rounded-xl text-[11px] text-zinc-400 leading-relaxed">
+                  <strong className="text-violet-300">Note:</strong> The staff member will be able to log into their dashboard using either their Email or Mobile Number with this password. It will not expire or ask for setup again.
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetModalStaff(null);
+                      setNewStaffPassword('');
+                    }}
+                    className="w-1/2 py-2.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 font-bold text-xs rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isResetting || !newStaffPassword || newStaffPassword.length < 6}
+                    className="w-1/2 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    {isResetting ? (
+                      <span>Saving...</span>
+                    ) : (
+                      <>
+                        <Key className="w-3.5 h-3.5" />
+                        <span>Update Password</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

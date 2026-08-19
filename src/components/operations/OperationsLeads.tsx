@@ -698,8 +698,34 @@ export const OperationsLeads: React.FC = () => {
 
     const completedStages = [
       'cancelled', 'canceled', 'completed', 'event completed', 
-      'project completed', 'closed', 'order closed', 'project closed', 'delivered', 'project delivered'
+      'project completed', 'closed', 'order closed', 'project closed', 'delivered', 'project delivered',
+      'footage handover', 'equipment handover completed', 'returned'
     ];
+
+    // Helper to check if equipment was returned for an order
+    const isReturnedForOrder = (ordId?: string, ldId?: string) => {
+      if (!ordId && !ldId) return false;
+      const hasHistoryReturn = (leadEquipmentHistory || []).some(h => {
+        const orderMatch = (ordId && h.order_id === ordId) || (ldId && h.lead_id === ldId);
+        if (!orderMatch) return false;
+        const nameMatch = h.equipment_name?.toLowerCase() === cleanEqName || 
+                           h.equipment_name?.toLowerCase().includes(cleanEqName) ||
+                           h.equipment_name === 'Equipment Handover Photo Proof' ||
+                           h.equipment_name === 'Asset Return Photo Proof';
+        const isRet = h.equipment_status === 'Equipment Handover Completed' || 
+                      h.equipment_status === 'Returned' || 
+                      Boolean(h.returned_at && h.equipment_status?.toLowerCase().includes('handover'));
+        return nameMatch && isRet;
+      });
+      if (hasHistoryReturn) return true;
+
+      const hasHandoverReturn = (equipmentHandovers || []).some(eh => {
+        const orderMatch = (ordId && eh.order_id === ordId) || (ldId && eh.order_id === ldId);
+        return orderMatch && eh.return_status === 'Returned' && 
+          (eh.equipment_name?.toLowerCase() === cleanEqName || eh.equipment_name?.toLowerCase().includes(cleanEqName));
+      });
+      return hasHandoverReturn;
+    };
 
     // 1. Check staff assignments across all other active orders
     const hasConflictingStaffAssignment = (staffAssignments || []).some(sa => {
@@ -717,6 +743,9 @@ export const OperationsLeads: React.FC = () => {
 
       const relatedLead = leads.find(l => l.lead_id === relatedOrder.lead_id);
       if (!relatedLead || relatedLead.status === 'Lost Lead') return false;
+
+      // Check if equipment was returned
+      if (isReturnedForOrder(sa.order_id, relatedOrder.lead_id)) return false;
 
       let saEqList: string[] = [];
       if (Array.isArray(sa.equipment)) {
@@ -751,12 +780,15 @@ export const OperationsLeads: React.FC = () => {
       if (!op.equipment_kit || !op.equipment_kit.trim()) return false;
 
       if (['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return false;
+      if (['equipment handover completed', 'returned', 'equipment returned'].includes((op.equipment_status || '').toLowerCase())) return false;
 
       const relatedOrder = orders.find(o => o.order_id === op.order_id);
       if (!relatedOrder || isCompletedEvent(relatedOrder)) return false;
 
       const relatedLead = leads.find(l => l.lead_id === relatedOrder.lead_id);
       if (!relatedLead || relatedLead.status === 'Lost Lead') return false;
+
+      if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id)) return false;
 
       const opKits = op.equipment_kit.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
       const match = opKits.includes(cleanEqName);
@@ -777,7 +809,7 @@ export const OperationsLeads: React.FC = () => {
     const hasConflictingHistory = (leadEquipmentHistory || []).some(h => {
       // Exclude the current order being edited
       if (currentOrderId && (h.order_id === currentOrderId || (h.lead_id && orders.find(o => o.order_id === currentOrderId)?.lead_id === h.lead_id))) return false;
-      if (h.returned_at || h.equipment_status === 'Returned') return false;
+      if (h.returned_at || h.equipment_status === 'Returned' || h.equipment_status === 'Equipment Handover Completed') return false;
       if (h.equipment_name.trim().toLowerCase() !== cleanEqName) return false;
 
       const relatedOrder = orders.find(o => o.order_id === h.order_id || o.lead_id === h.lead_id);
@@ -957,21 +989,46 @@ export const OperationsLeads: React.FC = () => {
     });
   };
 
-  // Filter orders to show confirmed ones for Operations
+  // Helper to check if an order/lead has reached Verified Footage
+  const isVerifiedFootageOrder = (o: Order) => {
+    const stage = (o.current_stage || '').trim();
+    if (stage === 'Verified Footage' || stage === 'Footage Handover Verified') {
+      return true;
+    }
+    const lead = leads?.find(l => l.lead_id === o.lead_id || l.lead_id === o.order_id);
+    if (lead) {
+      const leadStatus = (lead.current_status || lead.status || '').trim();
+      if (leadStatus === 'Verified Footage' || leadStatus === 'Footage Handover Verified') {
+        return true;
+      }
+    }
+    const op = operations?.find(op => op.order_id === o.order_id);
+    if (op) {
+      const opStatus = (op.event_status || '').trim();
+      if (opStatus === 'Verified Footage' || opStatus === 'Footage Handover Verified') {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Filter orders to show confirmed ones for Operations (excluding Verified Footage from active view)
   const allowedStages = [
     'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned',
     'Assigned Crew', 'Staff Assigned', 'Event Scheduled',
     'Event Started', 'Event Start',
     'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
     'Footage Handover', 'Equipment Handover',
-    'Verified Footage', 'Footage Handover Verified',
     'Event Cancelled',
     'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
     'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review',
     'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval',
-    'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed'
+    'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed', 'Order Closed'
   ];
   const operationsOrders = orders.filter(o => {
+    // Exclude records whose current status is Verified Footage from Operations active list/view
+    if (isVerifiedFootageOrder(o)) return false;
+
     if (!allowedStages.includes(o.current_stage)) return false;
     if (currentRole === 'Operation Staff') {
       const staffName = currentUserName || '';
@@ -1814,7 +1871,7 @@ export const OperationsLeads: React.FC = () => {
     let footageHandover = 0;
     let verifiedFootage = 0;
 
-    operationsOrders.forEach(o => {
+    orders.forEach(o => {
       const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
       const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
       const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
@@ -1829,7 +1886,7 @@ export const OperationsLeads: React.FC = () => {
         eventEnded++;
       } else if (['Footage Handover', 'Equipment Handover'].includes(calculatedStage)) {
         footageHandover++;
-      } else if (['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(calculatedStage)) {
+      } else if (['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(calculatedStage) || isVerifiedFootageOrder(o)) {
         verifiedFootage++;
       }
     });
@@ -1842,7 +1899,7 @@ export const OperationsLeads: React.FC = () => {
       footageHandover,
       verifiedFootage
     };
-  }, [operationsOrders, staffAssignments, leads]);
+  }, [orders, operations, staffAssignments, leads]);
 
   const availableGearOptions = useMemo(() => {
     if (!equipment) return [];
