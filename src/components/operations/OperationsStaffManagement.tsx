@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole } from '../RoleContext';
 import { 
-  Users, UserCheck, ShieldAlert, PlusCircle, Edit, Trash2, Mail, Phone, Calendar, Briefcase, Search, X
+  Users, UserCheck, ShieldAlert, PlusCircle, Edit, Trash2, Mail, Phone, Calendar, Briefcase, Search, X,
+  ChevronDown, Sparkles
 } from 'lucide-react';
 import { Staff } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -19,6 +20,52 @@ export const OperationsStaffManagement: React.FC = () => {
   const [skills, setSkills] = useState<string[]>([]);
   const [newSkill, setNewSkill] = useState('');
   const [showStaffModal, setShowStaffModal] = useState(false);
+  const [openSkillsStaffId, setOpenSkillsStaffId] = useState<string | null>(null);
+
+  // Close skills dropdown on outside click or Escape
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && !target.closest('.skills-dropdown-container')) {
+        setOpenSkillsStaffId(null);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenSkillsStaffId(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // Helper to extract staff-specific skills list
+  const getStaffSkillsList = (st: Staff): string[] => {
+    if (!st) return [];
+    const rawSkill = st.Skill ?? (st as any).skills ?? (st as any).skill;
+    if (Array.isArray(rawSkill)) {
+      return rawSkill.map(s => String(s).trim()).filter(Boolean);
+    }
+    if (typeof rawSkill === 'string' && rawSkill.trim().length > 0) {
+      const trimmed = rawSkill.trim();
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            return parsed.map(s => String(s).trim()).filter(Boolean);
+          }
+        } catch (e) {}
+      }
+      return trimmed.split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
   const [form, setForm] = useState({
     name: '',
     role: 'Lead Photographer',
@@ -718,7 +765,7 @@ export const OperationsStaffManagement: React.FC = () => {
               <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/30">
                 <th className="p-3.5">Code / Roster</th>
                 <th className="p-3.5 font-bold">Contact Node</th>
-                <th className="p-3.5 font-bold">Specialty & Rating</th>
+                <th className="p-3.5 font-bold">Skills</th>
                 <th className="p-3.5 font-bold">Roster Status</th>
                 <th className="p-3.5 font-bold">Active Shoots</th>
                 <th className="p-3.5 text-right">Actions</th>
@@ -728,6 +775,9 @@ export const OperationsStaffManagement: React.FC = () => {
               {operationsCrew.length > 0 ? (
                 operationsCrew.map((st) => {
                   const activeAssignmentsCount = getStaffActiveAssignmentsCount(st.name);
+                  const staffSkills = getStaffSkillsList(st);
+                  const isSkillsOpen = openSkillsStaffId === st.staff_id;
+
                   return (
                     <tr key={st.staff_id} className="hover:bg-zinc-900/10 transition-all">
                       <td className="p-3.5">
@@ -752,9 +802,75 @@ export const OperationsStaffManagement: React.FC = () => {
                           <span>Type: {st.staff_type || 'In-House'}</span>
                         </div>
                       </td>
-                      <td className="p-3.5">
-                        <div className="font-semibold text-zinc-200">{st.role}</div>
-                        <div className="text-[10px] text-zinc-500 mt-0.5">Joined: {st.joining_date}</div>
+                      <td className="p-3.5 relative skills-dropdown-container">
+                        <div className="relative inline-block text-left">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenSkillsStaffId(prev => prev === st.staff_id ? null : st.staff_id);
+                            }}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all cursor-pointer select-none ${
+                              isSkillsOpen 
+                                ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 shadow-sm shadow-amber-500/10' 
+                                : staffSkills.length > 0
+                                  ? 'bg-zinc-900/90 hover:bg-zinc-850 border-zinc-800 hover:border-zinc-700 text-zinc-200'
+                                  : 'bg-zinc-900/40 hover:bg-zinc-900/70 border-zinc-850 text-zinc-400'
+                            }`}
+                            title={staffSkills.length > 0 ? `${staffSkills.length} skills recorded - click to view` : 'No skills recorded - click to view'}
+                          >
+                            <span className="font-mono text-[11px] font-bold">Skills</span>
+                            {staffSkills.length > 0 && (
+                              <span className="px-1.5 py-0.2 bg-zinc-800 text-amber-400 rounded text-[10px] font-mono font-bold border border-zinc-750">
+                                {staffSkills.length}
+                              </span>
+                            )}
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isSkillsOpen ? 'rotate-180 text-amber-400' : 'text-zinc-500'}`} />
+                          </button>
+
+                          {isSkillsOpen && (
+                            <div 
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute left-0 top-full mt-1.5 z-40 w-64 max-w-[90vw] bg-zinc-900 border border-zinc-750 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+                            >
+                              <div className="p-2.5 bg-zinc-950/85 border-b border-zinc-800 flex items-center justify-between">
+                                <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-zinc-200 uppercase tracking-wide">
+                                  <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                                  <span>Skills</span>
+                                  {staffSkills.length > 0 && (
+                                    <span className="text-zinc-500 font-normal text-[10px]">({staffSkills.length})</span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenSkillsStaffId(null)}
+                                  className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded transition-colors"
+                                  title="Close"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="p-2 max-h-56 overflow-y-auto custom-scrollbar space-y-1">
+                                {staffSkills.length > 0 ? (
+                                  staffSkills.map((skill, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex items-center gap-2 px-2.5 py-1.5 bg-zinc-950/70 border border-zinc-850 rounded-lg text-xs text-zinc-200 font-sans"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                                      <span className="break-words font-medium">{skill}</span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div className="py-4 px-2 text-center text-zinc-500 font-mono text-[11px] italic">
+                                    No skills added
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </td>
                       <td className="p-3.5">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
