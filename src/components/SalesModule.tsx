@@ -985,9 +985,9 @@ const generateQuotationPDF = (
   const defaultTerms = [
     'Payments are non-refundable.',
     'Crew food arrangements from client side.',
-    '50% advance and remaining 50% before collecting the raw data.',
-    'If the duration extends, Rs. 3,000 per service per hour additional charges are applicable.',
-    'We expect 90% of the payment once the event is completed and the remaining 10% before the final deliverables are ready.',
+    '50% advance payment before the event.',
+    'If duration exceeds 1 hour, additional charges of ₹1,500 per hour will be applicable.',
+    '50% full payment on event day.',
     'Pendrive and Hard Disk are not included.',
     'Edited data will be shared via Google Drive link.'
   ];
@@ -3112,9 +3112,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [quotationTerms, setQuotationTerms] = useState(
     "1. Payments are non-refundable.\n" +
     "2. Crew food arrangements from client side.\n" +
-    "3. 50% advance and remaining 50% before collecting the raw data.\n" +
-    "4. If the duration extends, ₹3,000 per service per hour additional charges are applicable.\n" +
-    "5. We expect 90% of the payment once the event is completed and the remaining 10% before the final deliverables are ready.\n" +
+    "3. 50% advance payment before the event.\n" +
+    "4. If duration exceeds 1 hour, additional charges of ₹1,500 per hour will be applicable.\n" +
+    "5. 50% full payment on event day.\n" +
     "6. Pendrive and Hard Disk are not included.\n" +
     "7. Edited data will be shared via Google Drive link."
   );
