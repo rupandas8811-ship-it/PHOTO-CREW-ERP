@@ -2551,14 +2551,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
        })) && selectedLead.quotation_locked !== true
     : false;
 
-  const isCrmLocked = isLeadConfirmed && !isApprovedUnlocked;
-  const isLeadLocked = isCrmLocked;
+  const isCrmLocked = false;
+  const isLeadLocked = false;
 
-  // When Business Owner approves Unlock Request, ALL steps (Step 1, Step 2, Step 3) become editable.
-  // When locked, ALL steps remain locked in Read Only mode.
-  const isStep1Locked = isCrmLocked;
-  const isStep2Locked = isCrmLocked;
-  const isStep3Locked = isCrmLocked;
+  // No longer locking steps so Sales can update/add required services
+  const isStep1Locked = false;
+  const isStep2Locked = false;
+  const isStep3Locked = false;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
@@ -11738,8 +11737,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <td className="p-3.5 text-right pr-5 w-[160px] min-w-max overflow-visible relative">
                             {(() => {
                               const isManageCrmOnlyStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Contacted', 'Create Quote', 'Created Quotation'].includes(leadStatus);
-                              const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation'].includes(leadStatus);
-                              const isConfirmOrderStatus = ['Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
+                              const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
+                              const isConfirmOrderStatus = false; // Disabled lock requirement for confirmed orders
                               const isLeadLostStatus = ['Lead Lost', 'Lost Lead'].includes(leadStatus);
 
                               const latestUnlockRequest = unlockRequests
@@ -13876,7 +13875,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
                               <div className="border-b border-emerald-500/20 pb-1.5">
                                 <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
-                                <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order locks the CRM profile and creates a real-time production entry. Only payment configurations remain editable.</p>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order creates a real-time production entry. The CRM profile remains editable if the client requests changes.</p>
                               </div>
 
                               {/* Display each event separately */}
