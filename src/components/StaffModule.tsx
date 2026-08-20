@@ -2416,78 +2416,92 @@ export const StaffModule: React.FC = () => {
             })}
           </div>
 
-          {/* Selected Date Events Section below Calendar Grid */}
-          <div className="mt-6 pt-5 border-t border-zinc-800 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-              <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
-                  EVENT DETAILS
-                </span>
-                <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
-                  {calendarModalDate || 'Select a date'}
-                </h4>
-              </div>
-              {calendarModalDate && (
-                <span className="text-xs font-mono text-zinc-400">
-                  {calendarModalEvents.length} Event(s) Scheduled
-                </span>
-              )}
-            </div>
-
-            {!calendarModalDate ? (
-              <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
-                Click or tap any date on the calendar above to view scheduled events.
-              </div>
-            ) : calendarModalEvents.length === 0 ? (
-              <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
-                No events assigned on {calendarModalDate}.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Responsive Read-Only Table */}
-                <div className="overflow-x-auto w-full border border-zinc-800 rounded-2xl bg-zinc-950/60 shadow-inner">
-                  <table className="w-full text-left border-collapse min-w-[700px]">
-                    <thead>
-                      <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
-                        <th className="p-3.5 pl-4">Event Name</th>
-                        <th className="p-3.5">Event Date</th>
-                        <th className="p-3.5">Event Time</th>
-                        <th className="p-3.5">Customer</th>
-                        <th className="p-3.5">Status</th>
-                        <th className="p-3.5 pr-4">Target Delivery Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
-                      {calendarModalEvents.map((ev, idx) => (
-                        <tr key={ev.key || idx} className="bg-zinc-950/30 select-text">
-                          <td className="p-3.5 pl-4 font-bold text-zinc-100">
-                            {ev.eventName || 'Photography Event'}
-                          </td>
-                          <td className="p-3.5 font-mono text-zinc-300">
-                            {formatDateDMY(ev.eventDate || calendarModalDate)}
-                          </td>
-                          <td className="p-3.5 font-mono text-zinc-300">
-                            {formatTime12Hour(ev.eventStartTime || '10:00 AM')}
-                          </td>
-                          <td className="p-3.5 text-zinc-200 font-medium">
-                            {ev.customerName || '—'}
-                          </td>
-                          <td className="p-3.5">
-                            <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
-                              {ev.status || 'Active'}
-                            </span>
-                          </td>
-                          <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
-                            {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          {/* Selected Date Events Popup (Rendered as Modal via createPortal) */}
+          {calendarModalDate && createPortal(
+            <div 
+              className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200"
+              onClick={() => setCalendarModalDate(null)}
+            >
+              <div 
+                className="bg-zinc-900 border border-zinc-800 w-full max-w-4xl rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between p-4 md:p-6 border-b border-zinc-800/80 shrink-0">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
+                      EVENT DETAILS
+                    </span>
+                    <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
+                      {calendarModalDate}
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono text-zinc-400">
+                      {calendarModalEvents.length} Event(s) Scheduled
+                    </span>
+                    <button
+                      onClick={() => setCalendarModalDate(null)}
+                      className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="p-4 md:p-6 overflow-y-auto">
+                  {calendarModalEvents.length === 0 ? (
+                    <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
+                      No events assigned on {calendarModalDate}.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
+                        <table className="w-full text-left border-collapse min-w-[700px]">
+                          <thead>
+                            <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+                              <th className="p-3.5 pl-4">Event Name</th>
+                              <th className="p-3.5">Event Date</th>
+                              <th className="p-3.5">Event Time</th>
+                              <th className="p-3.5">Customer</th>
+                              <th className="p-3.5">Status</th>
+                              <th className="p-3.5 pr-4">Target Delivery Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
+                            {calendarModalEvents.map((ev, idx) => (
+                              <tr key={ev.key || idx} className="bg-zinc-950/30 select-text hover:bg-zinc-900/40 transition-colors">
+                                <td className="p-3.5 pl-4 font-bold text-zinc-100">
+                                  {ev.eventName || 'Photography Event'}
+                                </td>
+                                <td className="p-3.5 font-mono text-zinc-300">
+                                  {formatDateDMY(ev.eventDate || calendarModalDate)}
+                                </td>
+                                <td className="p-3.5 font-mono text-zinc-300">
+                                  {formatTime12Hour(ev.eventStartTime || '10:00 AM')}
+                                </td>
+                                <td className="p-3.5 text-zinc-200 font-medium">
+                                  {ev.customerName || '—'}
+                                </td>
+                                <td className="p-3.5">
+                                  <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
+                                    {ev.status || 'Active'}
+                                  </span>
+                                </td>
+                                <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
+                                  {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
+            </div>,
+            document.body
+          )}
         </div>
       )}
 

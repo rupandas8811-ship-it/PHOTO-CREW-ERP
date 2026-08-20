@@ -1750,23 +1750,7 @@ export const OperationsLeads: React.FC = () => {
             }
 
             if (isMissingStaff) {
-                setValidationAttempted(true);
-                setAssignValidationError(`Please complete all Staff Assignments before saving.\nAt least one Staff is required for every Team Member Included task.`);
-                
-                // Open the collapsed event and focus
-                setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
-                
-                // Scroll to error
-                setTimeout(() => {
-                  const el = document.getElementById(`assign-event-${evId}`);
-                  if (el) {
-                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                     el.classList.add('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950');
-                     setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950'), 3000);
-                  }
-                }, 100);
-                
-                return; // Stop saving
+                overallMissingStaff = true;
             }
           }
 
@@ -1842,7 +1826,9 @@ export const OperationsLeads: React.FC = () => {
       // Gather all selected equipment across all events
       const allAssignedEquipment = Array.from(
         new Set(
-          Object.values(eventAllocations).flatMap((alloc: any) => alloc.equipment || [])
+          Object.values(eventAllocations).flatMap((alloc: any) => 
+            alloc.staff?.flatMap((st: any) => st.equipment || []) || []
+          )
         )
       ) as string[];
       const consolidatedEquipKit = allAssignedEquipment.join(', ');

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
 import { 
   Calendar as CalendarIcon, 
@@ -1673,7 +1674,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
       </div>
 
       {/* 5. ADD memo DIALOG POPUP PORTAL OVERLAY */}
-      {showAddMemo && selectedDate && (
+      {showAddMemo && selectedDate && createPortal(
         <div 
           id="dialog_add_memo"
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
@@ -1753,13 +1754,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-
-
       
       {/* EVENTS SCHEDULED MODAL FOR A SPECIFIC DATE OR LEAD */}
-      {(popupDate || popupLeadId) && (
+      {(popupDate || popupLeadId) && createPortal(
         <div 
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
         >
@@ -1937,11 +1937,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               </table>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* TEAM POPUP */}
-      {teamPopupEvent && (
+      {teamPopupEvent && createPortal(
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/90 backdrop-blur-md animate-in zoom-in duration-200">
           <div className="bg-zinc-900 border border-zinc-800 w-full w-full max-w-5xl p-6 rounded-2xl shadow-2xl relative">
             <button
@@ -1971,11 +1972,12 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               </table>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     
       {/* RESPONSIVE SELECTED DATE EVENT POPUP (READ-ONLY TABLE) */}
-      {showSelectedDateModal && selectedDate && (
+      {showSelectedDateModal && selectedDate && createPortal(
         <div 
           className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
           onClick={(e) => { e.stopPropagation(); setShowSelectedDateModal(false); }}
@@ -2115,7 +2117,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
               })()}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
