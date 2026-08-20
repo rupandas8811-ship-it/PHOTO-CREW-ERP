@@ -253,7 +253,7 @@ export function formatIndianPhoneNumber(phone: string): string {
  * Strict display format only. Does not alter underlying values.
  */
 export function formatDateDDMMYY(dateInput?: string | null | Date): string {
-  if (!dateInput && dateInput !== 0) return '';
+  if (!dateInput && (dateInput as any) !== 0) return '';
   if (typeof dateInput === 'string') {
     const trimmed = dateInput.trim();
     if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
@@ -311,7 +311,7 @@ export function formatDateDDMMYY(dateInput?: string | null | Date): string {
  * Example: "14:30:00" -> "02:30 PM", "9:05" -> "09:05 AM", "21:15" -> "09:15 PM"
  */
 export function formatTime12Hour(timeStr?: string | null | Date): string {
-  if (!timeStr && timeStr !== 0) return '';
+  if (!timeStr && (timeStr as any) !== 0) return '';
 
   if (timeStr instanceof Date) {
     if (isNaN(timeStr.getTime())) return '';
@@ -376,7 +376,7 @@ export function formatTime12Hour(timeStr?: string | null | Date): string {
  * Formats a date and optional time into "DD-MM-YY hh:mm AM/PM" (or "DD-MM-YY" if time is absent).
  */
 export function formatDateTime(dateTimeInput?: string | null | Date, timeInput?: string | null): string {
-  if (!dateTimeInput && dateTimeInput !== 0) return '';
+  if (!dateTimeInput && (dateTimeInput as any) !== 0) return '';
   const dateFormatted = formatDateDDMMYY(dateTimeInput);
   if (!dateFormatted) return '';
 

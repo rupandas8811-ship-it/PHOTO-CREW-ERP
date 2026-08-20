@@ -4,7 +4,8 @@ import {
   Calendar, Clock, User, Compass, Server, MapPin, AlertCircle, RefreshCw, CheckCircle2
 } from 'lucide-react';
 import { CurrentStage } from '../../types';
-import { formatDateDDMMYY, formatTime12Hour } from '../../utils';
+import { formatDateDDMMYY, formatTime12Hour, convertTimeToDbFormat } from '../../utils';
+import { ReportingTimeSelector } from './ReportingTimeSelector';
 
 export const EventScheduling: React.FC = () => {
   const { currentRole, orders, operations, assignOperations } = useRole();
@@ -37,7 +38,7 @@ export const EventScheduling: React.FC = () => {
         drone_operator_assigned: op?.drone_operator_assigned || 'None',
         assistant_assigned: op?.assistant_assigned || 'None',
         equipment_kit: op?.equipment_kit || 'Standard Kit',
-        reporting_time: reportingTime,
+        reporting_time: convertTimeToDbFormat(reportingTime),
         remarks: remarks || op?.remarks || '',
         current_stage: 'Assigned Crew' as CurrentStage
       });
@@ -66,7 +67,7 @@ export const EventScheduling: React.FC = () => {
       setRemarks('');
     } else {
       // Edit Schedule: loads existing!
-      setReportingTime(time || '');
+      setReportingTime(time ? formatTime12Hour(time) : '');
       setRemarks(rem || '');
     }
   };
@@ -74,10 +75,10 @@ export const EventScheduling: React.FC = () => {
   useEffect(() => {
     if (schedulingId) {
       setTimeout(() => {
-        const formEl = document.querySelector('input[type="time"]');
+        const formEl = document.querySelector('.reporting-time-select');
         if (formEl) {
           formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          (formEl as HTMLInputElement).focus();
+          (formEl as HTMLSelectElement).focus();
         }
       }, 150);
     }
@@ -183,11 +184,10 @@ export const EventScheduling: React.FC = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div className="space-y-1">
                             <label className="text-[9px] uppercase font-mono text-zinc-450 block">Reporting lock</label>
-                            <input
-                              type="time"
+                            <ReportingTimeSelector
                               value={reportingTime}
-                              onChange={(e) => setReportingTime(e.target.value)}
-                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-white"
+                              onChange={(val) => setReportingTime(val)}
+                              className="w-full"
                             />
                           </div>
                           <div className="space-y-1">

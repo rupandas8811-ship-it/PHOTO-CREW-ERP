@@ -2296,7 +2296,7 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
-                      {op?.reporting_time || <span className="text-zinc-600 italic">—</span>}
+                      {op?.reporting_time ? formatTime12Hour(op.reporting_time) : <span className="text-zinc-600 italic">—</span>}
                     </td>
                     <td className="p-4 text-xs font-mono text-zinc-300">
                       {(() => {
@@ -4995,7 +4995,7 @@ export const OperationsLeads: React.FC = () => {
                         <div className="w-px h-6 bg-zinc-800" />
                         <div className="flex flex-col">
                            <span className="text-[9px] text-zinc-500 font-mono">TIME</span>
-                           <span className="text-[11px] text-zinc-300 font-mono font-bold">{r.time}</span>
+                           <span className="text-[11px] text-zinc-300 font-mono font-bold">{r.time !== 'N/A' ? formatTime12Hour(r.time) : 'N/A'}</span>
                         </div>
                       </div>
                     </div>
