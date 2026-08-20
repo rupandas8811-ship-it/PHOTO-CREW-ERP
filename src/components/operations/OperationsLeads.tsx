@@ -6,6 +6,7 @@ import {
   X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
+import { AddNoteModal } from '../AddNoteModal';
 import { StatusText } from '../ui/StatusText';
 import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
@@ -266,6 +267,10 @@ export const OperationsLeads: React.FC = () => {
   // Inline edit state for assignment
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteModalLeadId, setNoteModalLeadId] = useState("");
+  const [noteModalOrderId, setNoteModalOrderId] = useState("");
+  const [noteModalCustomerName, setNoteModalCustomerName] = useState("");
   const [eventAllocations, setEventAllocations] = useState<Record<string, {
     reporting_date: string;
     reporting_time: string;
@@ -1103,23 +1108,27 @@ export const OperationsLeads: React.FC = () => {
 
   // Helper to check if an order/lead has reached Verified Footage
   const isVerifiedFootageOrder = (o: Order) => {
+    const postOpStages = [
+      'Verified Footage', 'Footage Handover Verified',
+      'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
+      'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review',
+      'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval',
+      'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed', 'Order Closed'
+    ];
+    
     const stage = (o.current_stage || '').trim();
-    if (stage === 'Verified Footage' || stage === 'Footage Handover Verified') {
-      return true;
-    }
+    if (postOpStages.includes(stage)) return true;
+
     const lead = leads?.find(l => l.lead_id === o.lead_id || l.lead_id === o.order_id);
     if (lead) {
       const leadStatus = (lead.current_status || lead.status || '').trim();
-      if (leadStatus === 'Verified Footage' || leadStatus === 'Footage Handover Verified') {
-        return true;
-      }
+      if (postOpStages.includes(leadStatus)) return true;
     }
+
     const op = operations?.find(op => op.order_id === o.order_id);
     if (op) {
       const opStatus = (op.event_status || '').trim();
-      if (opStatus === 'Verified Footage' || opStatus === 'Footage Handover Verified') {
-        return true;
-      }
+      if (postOpStages.includes(opStatus)) return true;
     }
     return false;
   };
@@ -1138,8 +1147,7 @@ export const OperationsLeads: React.FC = () => {
     'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed', 'Order Closed'
   ];
   const operationsOrders = orders.filter(o => {
-    // Exclude records whose current status is Verified Footage from Operations active list/view
-    if (isVerifiedFootageOrder(o)) return false;
+    // Moved isVerifiedFootageOrder exclusion to filteredOrders for active view only
 
     if (!allowedStages.includes(o.current_stage)) return false;
     if (currentRole === 'Operation Staff') {
@@ -1237,7 +1245,10 @@ export const OperationsLeads: React.FC = () => {
       }
 
       // 1. Status Dropdown filter
-      if (statusFilter !== 'All') {
+      if (statusFilter === 'All') {
+        // Exclude records whose current status is Verified Footage (or beyond) from Operations active list/view
+        if (isVerifiedFootageOrder(o)) return false;
+      } else {
         const isStaffAssigned = staffAssignments ? staffAssignments.some(x => x.order_id === o.order_id) : false;
         const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
         const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
@@ -1253,7 +1264,7 @@ export const OperationsLeads: React.FC = () => {
         if (statusFilter === 'Event Started' && !['Event Started', 'Event Start'].includes(stageNorm)) return false;
         if (statusFilter === 'Event Ended' && !['Event Ended', 'Event End', 'Event Completed', 'Event Complete'].includes(stageNorm)) return false;
         if (statusFilter === 'Footage Handover' && !['Footage Handover', 'Equipment Handover'].includes(stageNorm)) return false;
-        if (statusFilter === 'Verified Footage' && !['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(stageNorm)) return false;
+        if (statusFilter === 'Verified Footage' && !isVerifiedFootageOrder(o)) return false;
         if (statusFilter === 'Event Completed' && !['Event Completed', 'Event Complete', 'Event Ended', 'Event End'].includes(stageNorm)) return false;
         if (statusFilter === 'Raw Footage Received' && !['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified'].includes(stageNorm)) return false;
 
@@ -2042,6 +2053,14 @@ export const OperationsLeads: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      <AddNoteModal
+        isOpen={noteModalOpen}
+        onClose={() => setNoteModalOpen(false)}
+        leadId={noteModalLeadId}
+        orderId={noteModalOrderId}
+        customerName={noteModalCustomerName}
+      />
+
       {/* 1. Results Summary Row - 6 Operations Statuses */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         {[
@@ -2509,6 +2528,20 @@ export const OperationsLeads: React.FC = () => {
                           }
 
                           // 2. When Current Status = Footage Handover or Event Completed
+                          // 3. Add Note
+                          if (!actionItems.some(i => i.label === 'Add Note')) {
+                            actionItems.push({
+                              label: 'Add Note',
+                              onClick: () => {
+                                setNoteModalLeadId(ord.lead_id);
+                                setNoteModalOrderId(ord.order_id);
+                                setNoteModalCustomerName(ord.customer_name || '');
+                                setNoteModalOpen(true);
+                                setActiveMenuOrderId(null);
+                              }
+                            });
+                          }
+                          
                           if (isFootageHandover || currentStage === 'Event Completed') {
                             actionItems.push({
                               label: 'Upload Final Footage',

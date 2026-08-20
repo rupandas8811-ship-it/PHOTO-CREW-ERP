@@ -17,6 +17,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY } from '../utils';
 import { AppLogo } from './AppLogo';
+import { AddNoteModal } from './AddNoteModal';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
 import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
@@ -1265,7 +1266,12 @@ ${coordinatorName}`;
   const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
 
   // Action Dropdown state for Production Leads table
-  const [openActionDropdown, setOpenActionDropdown] = useState<{
+  const [openActionDropdown, setOpenActionDropdown] = useState<any>(null);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteModalLeadId, setNoteModalLeadId] = useState('');
+  const [noteModalOrderId, setNoteModalOrderId] = useState('');
+  const [noteModalCustomerName, setNoteModalCustomerName] = useState('');
+  const [dummyVar, setDummyVar] = useState<{
     id: string;
     buttonEl: HTMLElement | null;
     rect: DOMRect;
@@ -4188,6 +4194,22 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         }
                       })()}
 
+                      {/* Add Note */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenActionDropdown(null);
+                          setNoteModalLeadId(order?.lead_id || '');
+                          setNoteModalOrderId(order?.order_id || '');
+                          setNoteModalCustomerName(order?.customer_name || '');
+                          setNoteModalOpen(true);
+                        }}
+                        className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-blue-300 hover:text-white hover:bg-blue-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Add Note</span>
+                      </button>
+                      
                       {/* Send Review Link */}
                       {(displayStatus === "Customer Review" || displayStatus === "Editing Completed") && (
                         <button

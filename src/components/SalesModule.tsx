@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { AddNoteModal } from "./AddNoteModal";
 import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
-  Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw
+  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
@@ -2393,6 +2394,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [statusError, setStatusError] = useState<{ title: string; reason: string; suggestedFix: string } | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteModalLeadId, setNoteModalLeadId] = useState("");
+  const [noteModalOrderId, setNoteModalOrderId] = useState("");
+  const [noteModalCustomerName, setNoteModalCustomerName] = useState("");
 
   const [unlockingRecordId, setUnlockingRecordId] = useState<string | null>(null);
   const [unlockReason, setUnlockReason] = useState('Data Correction');
@@ -11917,6 +11922,23 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                         className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
                                         style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
                                       >
+                                        {/* Add Note Option */}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            setNoteModalLeadId(lead.lead_id);
+                                            setNoteModalOrderId(''); // sales leads typically don't have an orderId until confirmed
+                                            setNoteModalCustomerName(lead.customer_name);
+                                            setNoteModalOpen(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 hover:text-white rounded-lg border border-blue-900/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <FileText className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Add Note</span>
+                                        </button>
+                                        
                                         {/* View CRM Option */}
                                         <button
                                           type="button"
@@ -12060,6 +12082,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       </div>
 
       {/* Confirmation Modal to Officially Log and Book Contract */}
+      <AddNoteModal
+        isOpen={noteModalOpen}
+        onClose={() => setNoteModalOpen(false)}
+        leadId={noteModalLeadId}
+        orderId={noteModalOrderId}
+        customerName={noteModalCustomerName}
+      />
+
       {showConfirmModal && selectedLead && (
         <div 
           className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden transition-opacity duration-200"
