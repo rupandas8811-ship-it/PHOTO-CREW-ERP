@@ -44,8 +44,13 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, lea
         .select('*')
         .eq('new_status', 'NOTE');
 
-      // Fetch all notes for this project's entire lifecycle
+      // Filter notes strictly to this specific order (or the lead generally if no order exists)
       query = query.eq('lead_id', leadId);
+      if (orderId) {
+        query = query.or(`order_id.eq.${orderId},order_id.is.null`);
+      } else {
+        query = query.is('order_id', null);
+      }
 
       const { data, error } = await query.order('created_at', { ascending: false });
       
@@ -114,7 +119,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, lea
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Enter your note here..."
+              placeholder="Enter note..."
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500/50 min-h-[100px] resize-y"
             />
             <div className="flex justify-end pt-1">
@@ -131,7 +136,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, lea
                 ) : (
                   <>
                     <Save className="w-3.5 h-3.5" />
-                    Save Note
+                    Add Note
                   </>
                 )}
               </button>
@@ -140,7 +145,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, lea
 
           {/* History Section */}
           <div className="mt-2 space-y-3">
-            <h4 className="text-[11px] font-mono text-zinc-450 uppercase tracking-wider border-b border-zinc-800/50 pb-2">Note History</h4>
+            <h4 className="text-[11px] font-mono text-zinc-450 uppercase tracking-wider border-b border-zinc-800/50 pb-2">NOTE HISTORY</h4>
             
             {isLoading ? (
               <div className="text-center py-6 text-zinc-500 text-xs flex items-center justify-center gap-2">
@@ -159,19 +164,15 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, lea
                   const displayTime = formatTime12Hour(dateObj);
 
                   return (
-                    <div key={h.id} className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3">
-                      <div className="flex justify-between items-start mb-2 border-b border-zinc-800/50 pb-2">
-                        <div className="flex items-center gap-1.5 text-[10px] text-amber-500/80 font-mono">
-                          <Clock className="w-3 h-3" />
-                          {displayDate} | {displayTime}
-                        </div>
-                        <div className="flex items-center gap-1 text-[10px] text-zinc-500 font-mono">
-                          <User className="w-3 h-3" />
-                          {h.changed_by}
-                        </div>
-                      </div>
-                      <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                    <div key={h.id} className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3 flex flex-col gap-1">
+                      <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed mb-1">
                         {h.remarks}
+                      </div>
+                      <div className="text-xs text-zinc-400">
+                        Date: {displayDate}
+                      </div>
+                      <div className="text-xs text-zinc-400">
+                        Time: {displayTime}
                       </div>
                     </div>
                   );

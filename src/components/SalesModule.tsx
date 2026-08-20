@@ -913,6 +913,8 @@ const generateQuotationPDF = (
     eventName: string;
     eventDate: string;
     eventTime: string;
+    eventEndDate: string;
+    eventEndTime: string;
     eventLocation: string;
     guestPax: string;
     members: string[];
@@ -944,6 +946,8 @@ const generateQuotationPDF = (
         eventName,
         eventDate: event.event_start_date || event.event_date || "",
         eventTime: event.event_time || event.event_start_time || "",
+        eventEndDate: event.event_end_date || "",
+        eventEndTime: event.event_end_time || "",
         eventLocation: event.event_location || "N/A",
         guestPax: event.guest_pax !== undefined && event.guest_pax !== null && event.guest_pax !== '' ? String(event.guest_pax) : (lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A')),
         members: (eventInclusions || []).filter(Boolean),
@@ -965,6 +969,8 @@ const generateQuotationPDF = (
       eventName: displayEventType,
       eventDate: lead.event_date || "",
       eventTime: lead.event_time || "",
+      eventEndDate: lead.event_end_date || "",
+      eventEndTime: lead.event_end_time || "",
       eventLocation: lead.event_location || "N/A",
       guestPax: lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A'),
       members: (inclusionsList || []).filter(Boolean),
@@ -1516,9 +1522,19 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(slateGray[0], slateGray[1], slateGray[2]);
+    
     const formattedEvDate = formatDate(evObj.eventDate);
-    const metaDetailsStr = `Event Date: ${formattedEvDate}   |   Event Time: ${evObj.eventTime ? formatTime12Hour(evObj.eventTime) : 'N/A'}   |   Event Location: ${evObj.eventLocation || 'N/A'}`;
-    doc.text(metaDetailsStr, 15, currentY);
+    const formattedEvTime = evObj.eventTime ? formatTime12Hour(evObj.eventTime) : 'N/A';
+    const formattedEndDate = formatDate(evObj.eventEndDate);
+    const formattedEndTime = evObj.eventEndTime ? formatTime12Hour(evObj.eventEndTime) : 'N/A';
+    
+    const startStr = `Start: ${formattedEvDate} | ${formattedEvTime}`;
+    const endStr = `End: ${formattedEndDate} | ${formattedEndTime}`;
+    const locStr = `Location: ${evObj.eventLocation || 'N/A'}`;
+    
+    doc.text(`${startStr}`, 15, currentY);
+    doc.text(`${endStr}`, 70, currentY);
+    doc.text(`${locStr}`, 125, currentY);
     currentY += 6;
 
     // 2. CUSTOMER DETAILS CARD
