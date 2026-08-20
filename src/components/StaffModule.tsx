@@ -1235,12 +1235,8 @@ export const StaffModule: React.FC = () => {
 
     // Enforce Event Start ordering rule ONLY if staff has equipment assigned: Must have Asset Collection image before Event Start image
     if (hasEquipment && photoModalData?.stage === 'Event Start' && (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image')) {
-      const isMultiEq = photoModalData.booking.equipmentItems.length > 1;
-      const assetKeys = photoModalData.booking.equipmentItems.map((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof');
-
       const hasAssetColl = !!modalPhotos['Asset Collection Photo Proof'] || 
-        !!modalPhotos['Equipment Received / Asset Picture'] ||
-        assetKeys.some((k: string) => !!modalPhotos[k]);
+        !!modalPhotos['Equipment Received / Asset Picture'];
 
       if (!hasAssetColl) {
         e.target.value = '';
@@ -1279,12 +1275,9 @@ export const StaffModule: React.FC = () => {
     if (stage === 'Event Start') {
       const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
       const isMultiEq = hasEquipment && booking.equipmentItems.length > 1;
-      const assetKeys = hasEquipment
-        ? booking.equipmentItems.map((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof')
-        : [];
-
+      const assetKeys = hasEquipment ? booking.equipmentItems.map((eq: any) => eq.name) : [];
       const hasAssetColl = hasEquipment
-        ? assetKeys.every((k: string) => !!modalPhotos[k] || !!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture'])
+        ? (!!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture'])
         : true;
       const hasEventStart = !!modalPhotos['Event Start Photo Proof'] || !!modalPhotos['Event Start Image'];
 
@@ -1324,7 +1317,7 @@ export const StaffModule: React.FC = () => {
             const finalUrl = await safeUploadImage(rawUrl, fileName);
 
             const eqName = itemKey;
-            const assetId = booking.equipmentItems?.find((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` === itemKey : true)?.assetId || 'Asset Collection';
+            const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
 
             assetProofsToSave.push({
               equipmentName: eqName,
@@ -1402,7 +1395,7 @@ export const StaffModule: React.FC = () => {
             const finalUrl = await safeUploadImage(rawUrl, fileName);
 
             const eqName = itemKey;
-            const assetId = booking.equipmentItems?.find((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` === itemKey : true)?.assetId || 'Asset Collection';
+            const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
 
             allProofsToSave.push({
               equipmentName: eqName,
@@ -1585,25 +1578,13 @@ export const StaffModule: React.FC = () => {
       reqItems = [{ name: 'Event Completion Photo Proof', assetId: 'Event Completion' }];
     } else if (stage === 'Equipment Handover') {
       if (hasEquipment) {
-        reqItems = booking.equipmentItems.length > 1
-          ? booking.equipmentItems.map((eq: any) => ({
-              name: `Equipment Handover: ${eq.name}`,
-              assetId: eq.assetId || eq.name,
-              optional: true
-            }))
-          : [{ name: 'Equipment Handover Photo Proof', assetId: booking.equipmentItems[0]?.assetId || 'Equipment Handover', optional: true }];
+        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: true }));
       } else {
         reqItems = [];
       }
     } else if (stage === 'Equipment Received') {
       if (hasEquipment) {
-        reqItems = booking.equipmentItems.length > 1
-          ? booking.equipmentItems.map((eq: any) => ({
-              name: `Asset Collection: ${eq.name}`,
-              assetId: eq.assetId || eq.name,
-              optional: false
-            }))
-          : [{ name: 'Asset Collection Photo Proof', assetId: booking.equipmentItems[0]?.assetId || 'Asset Collection', optional: false }];
+        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: false }));
       } else {
         reqItems = [];
       }
@@ -1611,9 +1592,12 @@ export const StaffModule: React.FC = () => {
 
     // Validate mandatory photo proofs
     for (const item of reqItems) {
-      if (!item.optional && !modalPhotos[item.name]) {
-        showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
-        return;
+      if (!item.optional) {
+        const hasPhoto = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
+        if (!hasPhoto) {
+          showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
+          return;
+        }
       }
     }
 
@@ -1635,7 +1619,7 @@ export const StaffModule: React.FC = () => {
       );
 
       for (const item of reqItems) {
-        const rawUrl = modalPhotos[item.name] || (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
+        const rawUrl = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
         if (rawUrl) {
           const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
           const finalUrl = await safeUploadImage(rawUrl, fileName);
@@ -2425,40 +2409,22 @@ export const StaffModule: React.FC = () => {
               <div className="space-y-4">
                 {(photoModalData.stage === 'Event Start'
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
-                      ? (photoModalData.booking.equipmentItems.length > 1
-                          ? [
-                              ...photoModalData.booking.equipmentItems.map((eq: any, eqIdx: number) => ({
-                                name: `Asset Collection: ${eq.name}`,
-                                displayName: `1.${eqIdx + 1} Equipment Received / Asset Picture (${eq.name})`,
-                                assetId: eq.assetId || eq.name,
-                                optional: false,
-                                isAsset: true
-                              })),
-                              { 
-                                name: 'Event Start Photo Proof', 
-                                displayName: '2. Event Start Image', 
-                                assetId: 'Event Start', 
-                                optional: false,
-                                isEventStart: true 
-                              }
-                            ]
-                          : [
-                              { 
-                                name: 'Asset Collection Photo Proof', 
-                                displayName: '1. Equipment Received / Asset Picture', 
-                                assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection', 
-                                optional: false,
-                                isAsset: true 
-                              },
-                              { 
-                                name: 'Event Start Photo Proof', 
-                                displayName: '2. Event Start Image', 
-                                assetId: 'Event Start', 
-                                optional: false,
-                                isEventStart: true 
-                              }
-                            ]
-                        )
+                      ? [
+                          {
+                            name: 'Asset Collection Photo Proof',
+                            displayName: '1. Equipment Received / Asset Picture',
+                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
+                            optional: false,
+                            isAsset: true
+                          },
+                          {
+                            name: 'Event Start Photo Proof',
+                            displayName: '2. Event Start Image',
+                            assetId: 'Event Start',
+                            optional: false,
+                            isEventStart: true
+                          }
+                        ]
                       : [
                           { 
                             name: 'Event Start Photo Proof', 
@@ -2474,21 +2440,26 @@ export const StaffModule: React.FC = () => {
                     ]
                   : photoModalData.stage === 'Equipment Handover'
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
-                      ? photoModalData.booking.equipmentItems.map((eq: any) => ({
-                          name: photoModalData.booking.equipmentItems.length > 1 ? `Equipment Handover: ${eq.name}` : 'Equipment Handover Photo Proof',
-                          displayName: photoModalData.booking.equipmentItems.length > 1 ? `Equipment Handover: ${eq.name}` : 'Equipment Handover Photo Proof',
-                          assetId: eq.assetId || eq.name,
-                          optional: true
-                        }))
+                      ? [
+                          {
+                            name: 'Asset Return Photo Proof',
+                            displayName: 'Equipment Handover Photo Proof',
+                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Equipment Handover',
+                            optional: true
+                          }
+                        ]
                       : []
                     )
                   : (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
-                      ? photoModalData.booking.equipmentItems.map((eq: any) => ({
-                          name: photoModalData.booking.equipmentItems.length > 1 ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof',
-                          displayName: `Asset Collection: ${eq.name}`,
-                          assetId: eq.assetId || eq.name,
-                          optional: false
-                        }))
+                      ? [
+                          {
+                            name: 'Asset Collection Photo Proof',
+                            displayName: 'Equipment Received / Asset Picture',
+                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
+                            optional: false,
+                            isAsset: true
+                          }
+                        ]
                       : []
                     )
                 ).map((item: any, idx: number) => {
