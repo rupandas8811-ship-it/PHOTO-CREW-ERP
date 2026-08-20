@@ -4,6 +4,7 @@ import {
   Calendar, Clock, User, Compass, Server, MapPin, AlertCircle, RefreshCw, CheckCircle2
 } from 'lucide-react';
 import { CurrentStage } from '../../types';
+import { formatDateDDMMYY, formatTime12Hour } from '../../utils';
 
 export const EventScheduling: React.FC = () => {
   const { currentRole, orders, operations, assignOperations } = useRole();
@@ -122,7 +123,7 @@ export const EventScheduling: React.FC = () => {
                         <Calendar className="w-3.5 h-3.5 text-zinc-550" />
                         <span>Date Lock</span>
                       </div>
-                      <div className="font-semibold text-zinc-200">{ord.event_date}</div>
+                      <div className="font-semibold text-zinc-200">{formatDateDDMMYY(ord.event_date)}</div>
                     </div>
                     <div className="space-y-1">
                       <div className="text-[9px] uppercase tracking-wider text-zinc-455 flex items-center gap-1">
@@ -130,7 +131,7 @@ export const EventScheduling: React.FC = () => {
                         <span>Reporting</span>
                       </div>
                       <div className="font-semibold text-zinc-200">
-                        {op?.reporting_time ? `${op.reporting_time} AM` : 'Unassigned'}
+                        {op?.reporting_time ? formatTime12Hour(op.reporting_time) : 'Unassigned'}
                       </div>
                     </div>
                   </div>

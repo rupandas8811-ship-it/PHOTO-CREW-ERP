@@ -3,6 +3,7 @@ import { useRole } from '../RoleContext';
 import { 
   Users, Shield, Calendar, AlertTriangle, CheckCircle, RefreshCw, Briefcase, Sparkles, Phone, Clock
 } from 'lucide-react';
+import { formatDateDDMMYY, formatTime12Hour } from '../../utils';
 
 export const TeamAssignments: React.FC = () => {
   const { currentRole, orders, operations, staff, staffAssignments } = useRole();
@@ -155,7 +156,7 @@ export const TeamAssignments: React.FC = () => {
                       <span className="text-[10px] bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded font-mono font-bold text-indigo-400">
                         {op.order_id}
                       </span>
-                      <span className="text-[10px] text-zinc-400 font-mono">{order.event_date}</span>
+                      <span className="text-[10px] text-zinc-400 font-mono">{formatDateDDMMYY(order.event_date)}</span>
                     </div>
 
                     <div>
@@ -297,20 +298,20 @@ export const TeamAssignments: React.FC = () => {
                     </td>
                     {/* Assignment Date */}
                     <td className="py-3 px-4 text-zinc-450">
-                      {item.assignDate}
+                      {formatDateDDMMYY(item.assignDate)}
                     </td>
                     {/* Reporting Time */}
                     <td className="py-3 px-4 font-bold text-amber-500">
                       <div className="flex items-center gap-1">
                         <Clock className="w-3.5 h-3.5 text-zinc-550 flex-shrink-0" />
-                        <span>{item.reportingTime}</span>
+                        <span>{formatTime12Hour(item.reportingTime)}</span>
                       </div>
                     </td>
                     {/* Event Date */}
                     <td className="py-3 px-4 text-indigo-300 font-bold">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-zinc-550 flex-shrink-0" />
-                        <span>{item.eventDate}</span>
+                        <span>{formatDateDDMMYY(item.eventDate)}</span>
                       </div>
                     </td>
                     {/* Status */}

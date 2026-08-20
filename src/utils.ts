@@ -249,52 +249,160 @@ export function formatIndianPhoneNumber(phone: string): string {
 }
 
 /**
- * Converts any 24-hour HH:mm time string to a 12-hour AM/PM format.
- * Automatically handles full datetime strings or already formatted strings.
- * Example: "14:30" -> "02:30 PM"
+ * Formats any date into DD-MM-YY (e.g. "20-08-26").
+ * Strict display format only. Does not alter underlying values.
  */
-export function formatTime12Hour(timeStr?: string): string {
-  if (!timeStr) return '';
-  
-  // If it already has AM/PM, just return it
-  if (/am|pm/i.test(timeStr)) {
-    return timeStr.trim();
-  }
-
-  // Check if it is a full datetime ISO string (e.g. 2026-06-11T14:30:00Z)
-  if (timeStr.includes('T')) {
-    try {
-      const date = new Date(timeStr);
-      if (!isNaN(date.getTime())) {
-        let hours = date.getHours();
-        const minutes = date.getMinutes();
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12;
-        hours = hours ? hours : 12; // convert 0 to 12
-        const strHours = hours < 10 ? `0${hours}` : `${hours}`;
-        const strMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
-        return `${strHours}:${strMinutes} ${ampm}`;
-      }
-    } catch (e) {
-      // Fall through to standard parsing
+export function formatDateDDMMYY(dateInput?: string | null | Date): string {
+  if (!dateInput && dateInput !== 0) return '';
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
+      return trimmed;
     }
+    
+    // If it's already in DD-MM-YY format (e.g. "20-08-26")
+    if (/^\d{2}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    // If it's in DD-MM-YYYY format (e.g. "20-08-2026")
+    const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (ddmmyyyyMatch) {
+      const day = ddmmyyyyMatch[1].padStart(2, '0');
+      const month = ddmmyyyyMatch[2].padStart(2, '0');
+      const year = ddmmyyyyMatch[3].slice(-2);
+      return `${day}-${month}-${year}`;
+    }
+
+    // If it starts with YYYY-MM-DD (e.g. "2026-08-20" or "2026-08-20T14:30:00" or "2026/08/20")
+    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (yyyymmddMatch) {
+      const year = yyyymmddMatch[1].slice(-2);
+      const month = yyyymmddMatch[2].padStart(2, '0');
+      const day = yyyymmddMatch[3].padStart(2, '0');
+      return `${day}-${month}-${year}`;
+    }
+
+    // Attempt Date object parse for any other string formats
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = String(d.getFullYear()).slice(-2);
+      return `${day}-${month}-${year}`;
+    }
+
+    return trimmed;
   }
 
-  const parts = timeStr.split(':');
-  if (parts.length >= 2) {
-    let hours = parseInt(parts[0], 10);
-    const minutes = parts[1].slice(0, 2);
-    if (!isNaN(hours)) {
+  if (dateInput instanceof Date) {
+    if (isNaN(dateInput.getTime())) return '';
+    const day = String(dateInput.getDate()).padStart(2, '0');
+    const month = String(dateInput.getMonth() + 1).padStart(2, '0');
+    const year = String(dateInput.getFullYear()).slice(-2);
+    return `${day}-${month}-${year}`;
+  }
+
+  return '';
+}
+
+/**
+ * Converts any 24-hour or 12-hour time string or ISO datetime to 12-hour "hh:mm AM/PM" format.
+ * Example: "14:30:00" -> "02:30 PM", "9:05" -> "09:05 AM", "21:15" -> "09:15 PM"
+ */
+export function formatTime12Hour(timeStr?: string | null | Date): string {
+  if (!timeStr && timeStr !== 0) return '';
+
+  if (timeStr instanceof Date) {
+    if (isNaN(timeStr.getTime())) return '';
+    let hours = timeStr.getHours();
+    const minutes = String(timeStr.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${strHours}:${minutes} ${ampm}`;
+  }
+
+  const trimmed = String(timeStr).trim();
+  if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
+    return trimmed;
+  }
+
+  // If it's an ISO datetime string with T (e.g. 2026-08-20T14:30:00Z)
+  if (trimmed.includes('T')) {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
       const ampm = hours >= 12 ? 'PM' : 'AM';
       hours = hours % 12;
-      hours = hours ? hours : 12; // convert 0 to 12
-      const strHours = hours < 10 ? `0${hours}` : `${hours}`;
+      hours = hours ? hours : 12;
+      const strHours = String(hours).padStart(2, '0');
       return `${strHours}:${minutes} ${ampm}`;
     }
   }
 
-  return timeStr;
+  // If it already has AM/PM in it, e.g. "9:30 am", "02:45 PM", "2pm", "11:15 PM"
+  const ampmMatch = trimmed.match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?\s*(am|pm)$/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = ampmMatch[2] ? ampmMatch[2].padStart(2, '0') : '00';
+    const ampm = ampmMatch[4].toUpperCase();
+    if (hours > 12) {
+      hours = hours % 12;
+    }
+    if (hours === 0) hours = 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${strHours}:${minutes} ${ampm}`;
+  }
+
+  // Match standard 24h or 12h time like "14:30", "14:30:00", "09:15", "9:05"
+  const timeMatch = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?/);
+  if (timeMatch) {
+    let hours = parseInt(timeMatch[1], 10);
+    const minutes = timeMatch[2].padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${strHours}:${minutes} ${ampm}`;
+  }
+
+  return trimmed;
 }
+
+/**
+ * Formats a date and optional time into "DD-MM-YY hh:mm AM/PM" (or "DD-MM-YY" if time is absent).
+ */
+export function formatDateTime(dateTimeInput?: string | null | Date, timeInput?: string | null): string {
+  if (!dateTimeInput && dateTimeInput !== 0) return '';
+  const dateFormatted = formatDateDDMMYY(dateTimeInput);
+  if (!dateFormatted) return '';
+
+  let timeFormatted = '';
+  if (timeInput) {
+    timeFormatted = formatTime12Hour(timeInput);
+  } else if (typeof dateTimeInput === 'string' && (dateTimeInput.includes('T') || dateTimeInput.includes(' '))) {
+    const timePart = dateTimeInput.includes('T') ? dateTimeInput.split('T')[1] : dateTimeInput.split(' ')[1];
+    if (timePart) {
+      timeFormatted = formatTime12Hour(timePart);
+    }
+  } else if (dateTimeInput instanceof Date) {
+    timeFormatted = formatTime12Hour(dateTimeInput);
+  }
+
+  if (timeFormatted && timeFormatted !== '12:00 AM') {
+    return `${dateFormatted} ${timeFormatted}`;
+  }
+
+  return dateFormatted;
+}
+
+// Aliases for universal compatibility across codebase
+export const formatDate = formatDateDDMMYY;
+export const formatDateDMY = formatDateDDMMYY;
+export const formatDateDDMMYYYY = formatDateDDMMYY;
 
 export function cleanPhone(phone: string | undefined): string {
   if (!phone) return '';

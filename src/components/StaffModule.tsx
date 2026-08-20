@@ -6,29 +6,12 @@ import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../t
 import { supabaseClient } from '../supabaseClient';
 import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } from '../utils/orderStageCalculator';
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
+import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
+import { formatDateDDMMYY, formatTime12Hour } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
   if (!dateStr || dateStr === '—') return '—';
-  try {
-    const raw = dateStr.split('T')[0];
-    const parts = raw.split('-');
-    if (parts.length === 3) {
-      const year = parts[0];
-      const month = parts[1];
-      const day = parts[2];
-      return `${day}/${month}/${year}`;
-    }
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
-  } catch (e) {
-    // fallback
-  }
-  return dateStr;
+  return formatDateDDMMYY(dateStr) || '—';
 };
 
 const StaffActionDropdown: React.FC<{
@@ -361,6 +344,24 @@ const sortBookingsLatestFirst = (a: any, b: any): number => {
   return String(b.orderId || b.key || '').localeCompare(String(a.orderId || a.key || ''));
 };
 
+// Sort comparator to strictly sort Oldest -> Latest
+const sortBookingsOldestFirst = (a: any, b: any): number => {
+  const timeA = getBookingTimestamp(a);
+  const timeB = getBookingTimestamp(b);
+
+  if (timeA !== timeB) {
+    return timeA - timeB; // Oldest (lower timestamp) on top
+  }
+
+  const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  if (createdA !== createdB) {
+    return createdA - createdB;
+  }
+
+  return String(a.orderId || a.key || '').localeCompare(String(b.orderId || b.key || ''));
+};
+
 // Utility for image compression before storage
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -511,6 +512,7 @@ export const StaffModule: React.FC = () => {
 
   // Local state for assignments
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
   // Local storage cache for individual staff task statuses & photo proofs
   const [staffStatuses, setStaffStatuses] = useState<Record<string, string>>(() => {
@@ -2203,7 +2205,7 @@ export const StaffModule: React.FC = () => {
                             {formatDateDMY(ev.eventDate || calendarModalDate)}
                           </td>
                           <td className="p-3.5 font-mono text-zinc-300">
-                            {ev.eventStartTime || '10:00 AM'}
+                            {formatTime12Hour(ev.eventStartTime || '10:00 AM')}
                           </td>
                           <td className="p-3.5 text-zinc-200 font-medium">
                             {ev.customerName || '—'}
@@ -2230,14 +2232,15 @@ export const StaffModule: React.FC = () => {
       {/* Assigned Orders & Tasks Table/Cards */}
       {activeTab === 'tasks' && (
         <div className="bg-zinc-900/80 border border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
-          <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+          <div className="p-4 sm:p-6 border-b border-zinc-800 flex flex-wrap justify-between items-center gap-3">
             <div>
-              <h3 className="text-lg font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
                 <Briefcase className="w-5 h-5 text-amber-500" />
                 Assigned Orders & Tasks
               </h3>
               <p className="text-zinc-400 text-xs mt-0.5">Showing orders & equipment assigned specifically to you</p>
             </div>
+            <ListSortFilter value={sortOrder} onChange={setSortOrder} />
           </div>
 
           {activeBookings.length === 0 ? (
@@ -2265,7 +2268,7 @@ export const StaffModule: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-sm">
-                  {[...activeBookings].sort(sortBookingsLatestFirst).map((b) => {
+                  {[...activeBookings].sort(sortOrder === 'latest' ? sortBookingsLatestFirst : sortBookingsOldestFirst).map((b) => {
                     const proofStatus = getBookingProofStatus(b, leadEquipmentHistory, staffProofs, staffName, staffMember?.id || currentUser?.id);
                     const isStarted = (b.taskStatus === 'Event Started' || b.taskStatus === 'Event Start') && proofStatus.isEventStartComplete;
                     const isCompleted = b.taskStatus === 'Event Completed' || b.taskStatus === 'Event Complete' || proofStatus.isEventComplete;
@@ -2281,9 +2284,9 @@ export const StaffModule: React.FC = () => {
                         <td className="py-4 px-6">
                           <div className="font-bold text-zinc-100">{b.eventName}</div>
                           <div className="text-xs text-zinc-400 font-mono mt-0.5 flex items-center gap-1 flex-wrap">
-                            <span>{b.eventDate}</span>
+                            <span>{formatDateDDMMYY(b.eventDate)}</span>
                             {b.eventStartTime && b.eventStartTime !== 'N/A' && (
-                              <span className="text-zinc-500">• {b.eventStartTime}</span>
+                              <span className="text-zinc-500">• {formatTime12Hour(b.eventStartTime)}</span>
                             )}
                           </div>
                           {b.shootType && b.shootType !== 'N/A' && (

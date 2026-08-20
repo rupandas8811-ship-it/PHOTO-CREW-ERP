@@ -8,6 +8,7 @@ import {
 import { Equipment } from '../../types';
 import { supabaseClient } from '../../supabaseClient';
 
+import { formatTime12Hour } from "../../utils";
 // Helper to parse equipment notes containing structured metadata
 interface EquipmentMetadata {
   condition: string;
@@ -1333,7 +1334,7 @@ export const EquipmentManagement: React.FC = () => {
                             <span>{task.eventName}</span>
                           </td>
                           <td className="p-3.5 font-mono text-zinc-300 font-medium">{task.eventDate}</td>
-                          <td className="p-3.5 font-mono text-zinc-400">{task.eventTime}</td>
+                          <td className="p-3.5 font-mono text-zinc-400">{formatTime12Hour(task.eventTime)}</td>
                           <td className="p-3.5">
                             <div className="flex items-center gap-1.5 font-medium text-zinc-200">
                               <User className="w-3.5 h-3.5 text-zinc-500 shrink-0" />

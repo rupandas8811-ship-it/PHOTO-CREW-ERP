@@ -15,7 +15,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY } from '../utils';
 import { AppLogo } from './AppLogo';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
@@ -27,6 +27,7 @@ import { Bell } from 'lucide-react';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { ProductionStaffDirectoryModule } from './ProductionStaffDirectoryModule';
 import { ProductionRoleSpecialitiesModule } from './ProductionRoleSpecialitiesModule';
+import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
 
 function getIndividualDeliverables(description: string): string[] {
   if (!description) return [];
@@ -1242,6 +1243,7 @@ ${coordinatorName}`;
   const [leadSearch, setLeadSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
   // Dedicated filter states for customer name, order ID search and date ranges
   const [searchCustName, setSearchCustName] = useState('');
@@ -3310,7 +3312,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           </div>
 
           {/* Advanced Search & Filter Center Toggle */}
-          <div className="flex justify-start">
+          <div className="flex flex-wrap items-center gap-3 justify-start">
             <button
               type="button"
               onClick={() => setShowSmartFilter(!showSmartFilter)}
@@ -3318,6 +3320,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             >
               <span>[ FILTER ]</span>
             </button>
+            <ListSortFilter value={sortOrder} onChange={setSortOrder} />
           </div>
 
           {/* Advanced Search & Filter Center */}
@@ -3774,7 +3777,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       );
                     }
 
-                    return (filteredLeads || []).map((prod, idx) => {
+                    return [...(filteredLeads || [])].sort((a, b) => compareRecordsByDate(a, b, sortOrder)).map((prod, idx) => {
                       const { order: foundOrder, lead: foundLead } = resolveOrderAndLead(prod);
                       const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
                         order_id: prod.order_id || prod.tracking_id || prod.production_id,
@@ -7386,11 +7389,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         
         const formatDate = (dateStr: string) => {
           if (!dateStr) return 'Pending';
-          try {
-            return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          } catch(e) {
-            return dateStr;
-          }
+          return formatDateDDMMYY(dateStr) || dateStr;
         };
         const formattedFootageReceived = selectedLeadProd.raw_footage_received_date ? formatDate(selectedLeadProd.raw_footage_received_date) : 'Pending';
         const formattedEditingStarted = selectedLeadProd.editing_started_date ? formatDate(selectedLeadProd.editing_started_date) : 'Pending';

@@ -11,6 +11,7 @@ import { EventDropdownCell } from './EventDropdownCell';
 import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
+import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
 
 export const SHOOT_TYPES = [
   "CANDID PHOTOGRAPHY",
@@ -24,7 +25,7 @@ export const SHOOT_TYPES = [
   "STANDARD PHOTOGRAPHY",
   "STANDARD VIDEOGRAPHY"
 ];
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList } from '../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
 import { CustomPackageMaster } from './CustomPackageMaster';
 import { AddressAutocomplete } from './AddressAutocomplete';
@@ -766,16 +767,7 @@ const generateQuotationPDF = (
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
-    try {
-      const parts = dateStr.split('-');
-      if (parts.length === 3) {
-        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-      }
-      return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    } catch {
-      return dateStr;
-    }
+    return formatDateDDMMYY(dateStr) || dateStr;
   };
 
   // Dynamic layout configuration options (Default vs Compact to optimize page count and avoid sparse pages)
@@ -1524,7 +1516,7 @@ const generateQuotationPDF = (
     doc.setFontSize(7.5);
     doc.setTextColor(slateGray[0], slateGray[1], slateGray[2]);
     const formattedEvDate = formatDate(evObj.eventDate);
-    const metaDetailsStr = `Event Date: ${formattedEvDate}   |   Event Time: ${evObj.eventTime || 'N/A'}   |   Event Location: ${evObj.eventLocation || 'N/A'}`;
+    const metaDetailsStr = `Event Date: ${formattedEvDate}   |   Event Time: ${evObj.eventTime ? formatTime12Hour(evObj.eventTime) : 'N/A'}   |   Event Location: ${evObj.eventLocation || 'N/A'}`;
     doc.text(metaDetailsStr, 15, currentY);
     currentY += 6;
 
@@ -2608,6 +2600,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Filter & Collapse States
   const [filterQuery, setFilterQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
   const [isDownloadReportsExpanded, setIsDownloadReportsExpanded] = useState(false);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [filterSource, setFilterSource] = useState('');
@@ -9454,7 +9447,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }).sort((a, b) => {
     const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
     const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
-    return timeB - timeA;
+    return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
   });
 
   return (
@@ -11454,7 +11447,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       </div>
                     </div>
                     
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                      {/* Sort Order Filter Button */}
+                      <ListSortFilter value={sortOrder} onChange={setSortOrder} />
+
                       {/* Download Reports Button */}
                       <button
                         type="button"

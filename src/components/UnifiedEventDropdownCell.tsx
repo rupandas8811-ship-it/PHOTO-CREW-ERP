@@ -1,54 +1,10 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar } from 'lucide-react';
+import { formatDateDDMMYY, formatTime12Hour } from '../utils';
 
 interface UnifiedEventDropdownCellProps {
   lead: any;
-}
-
-// Helper to convert date to DD-MM-YYYY
-function formatDateDDMMYYYY(dateStr?: string): string {
-  if (!dateStr || dateStr === '—' || dateStr === 'N/A' || dateStr === 'null') return '—';
-  // Handle ISO string or YYYY-MM-DD
-  const clean = dateStr.split('T')[0].trim();
-  const parts = clean.split('-');
-  if (parts.length === 3 && parts[0].length === 4) {
-    const [yyyy, mm, dd] = parts;
-    return `${dd.padStart(2, '0')}-${mm.padStart(2, '0')}-${yyyy}`;
-  }
-  // Handle DD/MM/YYYY or DD-MM-YYYY
-  if (clean.includes('/')) {
-    const slashParts = clean.split('/');
-    if (slashParts.length === 3) {
-      if (slashParts[2].length === 4) {
-        return `${slashParts[0].padStart(2, '0')}-${slashParts[1].padStart(2, '0')}-${slashParts[2]}`;
-      }
-      if (slashParts[0].length === 4) {
-        return `${slashParts[2].padStart(2, '0')}-${slashParts[1].padStart(2, '0')}-${slashParts[0]}`;
-      }
-    }
-  }
-  return clean;
-}
-
-// Helper to format time to 12-hour format: 08:31 PM
-function formatTime12H(timeStr?: string): string {
-  if (!timeStr || timeStr === '—' || timeStr === 'N/A' || timeStr === 'null') return '';
-  const trimmed = timeStr.trim();
-  if (trimmed.toUpperCase().includes('AM') || trimmed.toUpperCase().includes('PM')) {
-    return trimmed;
-  }
-  const parts = trimmed.split(':');
-  if (parts.length >= 2) {
-    const h = parseInt(parts[0], 10);
-    const m = parts[1].slice(0, 2);
-    if (!isNaN(h)) {
-      const ampm = h >= 12 ? 'PM' : 'AM';
-      const h12 = h % 12 || 12;
-      return `${h12.toString().padStart(2, '0')}:${m} ${ampm}`;
-    }
-  }
-  return trimmed;
 }
 
 export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> = ({ lead }) => {
@@ -241,8 +197,8 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
               // Single Event Display
               (() => {
                 const ev = eventsList[0];
-                const evFormattedDate = formatDateDDMMYYYY(ev.event_date);
-                const evFormattedTime = formatTime12H(ev.event_start_time) || '—';
+                const evFormattedDate = formatDateDDMMYY(ev.event_date);
+                const evFormattedTime = formatTime12Hour(ev.event_start_time) || '—';
                 return (
                   <div className="p-3.5 space-y-3 font-sans">
                     <div>
@@ -296,8 +252,8 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
                 </div>
                 <div className="space-y-1.5">
                   {eventsList.map((ev, idx) => {
-                    const evFormattedDate = formatDateDDMMYYYY(ev.event_date);
-                    const evFormattedTime = formatTime12H(ev.event_start_time);
+                    const evFormattedDate = formatDateDDMMYY(ev.event_date);
+                    const evFormattedTime = formatTime12Hour(ev.event_start_time);
                     return (
                       <div
                         key={idx}

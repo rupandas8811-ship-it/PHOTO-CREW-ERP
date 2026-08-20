@@ -9,6 +9,7 @@ import {
   CartesianGrid, Legend, BarChart, Bar, Cell, PieChart, Pie, LineChart, Line
 } from 'recharts';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
+import { formatDateDDMMYY } from '../../../utils';
 
 export const OwnerProductionDetailed: React.FC = () => {
   const { production } = useRole();
@@ -237,7 +238,7 @@ export const OwnerProductionDetailed: React.FC = () => {
             <tbody className="divide-y divide-zinc-900">
               {production.slice(0, 10).map((p, idx) => (
                 <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
-                  <td className="p-4 text-zinc-400 font-mono">{p.expected_delivery_date ? new Date(p.expected_delivery_date).toLocaleDateString() : 'TBD'}</td>
+                  <td className="p-4 text-zinc-400 font-mono">{p.expected_delivery_date ? formatDateDDMMYY(p.expected_delivery_date) : 'TBD'}</td>
                   <td className="p-4 font-bold text-zinc-100">{p.customer_name}</td>
                   <td className="p-4 text-zinc-300 italic">{p.editor_assigned || 'Awaiting Assignment'}</td>
                   <td className="p-4">

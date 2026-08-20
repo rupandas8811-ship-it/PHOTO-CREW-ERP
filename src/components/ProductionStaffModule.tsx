@@ -9,6 +9,7 @@ import {
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
+import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
 import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof } from '../utils';
 
 // Floating Action Menu Dropdown using React Portal
@@ -537,6 +538,7 @@ export const ProductionStaffModule: React.FC = () => {
     server_upload_folder_name: ''
   });
   const [previewProofModal, setPreviewProofModal] = useState<{ url: string; title: string } | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
   const openEditingCompletedModal = (grp: any, delivItem: any) => {
     const existingConfirmed = Boolean(
@@ -1298,11 +1300,12 @@ Thank you.`;
 
         {/* TASKS TABLE */}
         <div className="space-y-4">
-          <div className="flex items-center justify-between pl-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 pl-1">
             <h2 className="text-xs font-mono font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
               <span>🎬 My Assigned Deliverables</span>
               <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px]">{activeBookings.length}</span>
             </h2>
+            <ListSortFilter value={sortOrder} onChange={setSortOrder} />
           </div>
 
           {activeBookings.length === 0 ? (
@@ -1313,7 +1316,7 @@ Thank you.`;
             </div>
           ) : (
             <div className="space-y-6">
-              {activeBookings.map((grp) => {
+              {[...activeBookings].sort((a, b) => compareRecordsByDate(a, b, sortOrder)).map((grp) => {
                 const isDetailsVisible = expandedOrderIds.includes(grp.orderId);
 
                 return (

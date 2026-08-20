@@ -11,12 +11,15 @@ import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
 import { EquipmentSelectorDropdown } from './EquipmentSelectorDropdown';
+import { ListSortFilter, SortOrder, compareRecordsByDate } from '../ui/ListSortFilter';
 
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { 
   convertTimeToDbFormat, 
   triggerAutoScrollAndFocus, 
   convertTo12Hour, 
+  formatDateDDMMYY,
+  formatTime12Hour,
   formatQtyItem, 
   parseQtyAndText, 
   generateWhatsAppAssignmentMessage,
@@ -232,6 +235,7 @@ export const OperationsLeads: React.FC = () => {
   // Sorting state
   const [sortBy, setSortBy] = useState<'event_date' | 'customer_name' | 'status' | 'assignment_date' | 'created_at'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortDateOrder, setSortDateOrder] = useState<SortOrder>('latest');
 
   // Dual Dropdown and Multi-Staff Assign State
   const [activeAssignments, setActiveAssignments] = useState<{ staff_role: string; staff_id: string; staff_name: string }[]>([]);
@@ -1309,6 +1313,9 @@ export const OperationsLeads: React.FC = () => {
   const sortedOrders = useMemo(() => {
     const list = [...filteredOrders];
     list.sort((a, b) => {
+      if (sortBy === 'created_at') {
+        return compareRecordsByDate(a, b, sortDateOrder);
+      }
       let valA: any = '';
       let valB: any = '';
 
@@ -1326,19 +1333,14 @@ export const OperationsLeads: React.FC = () => {
         const assignsB = staffAssignments ? staffAssignments.filter(x => x.order_id === b.order_id) : [];
         valA = assignsA.length > 0 ? assignsA[0].assignment_date : 'ZZZZ-ZZ-ZZ'; // place unassigned last
         valB = assignsB.length > 0 ? assignsB[0].assignment_date : 'ZZZZ-ZZ-ZZ';
-      } else if (sortBy === 'created_at') {
-        const leadA = leads ? leads.find(l => l.lead_id === a.lead_id) : null;
-        const leadB = leads ? leads.find(l => l.lead_id === b.lead_id) : null;
-        valA = leadA ? (leadA.created_at ? new Date(leadA.created_at).getTime() : new Date(leadA.created_date).getTime()) : (a.created_at ? new Date(a.created_at).getTime() : 0);
-        valB = leadB ? (leadB.created_at ? new Date(leadB.created_at).getTime() : new Date(leadB.created_date).getTime()) : (b.created_at ? new Date(b.created_at).getTime() : 0);
       }
 
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return 0;
+      return compareRecordsByDate(a, b, sortDateOrder);
     });
     return list;
-  }, [filteredOrders, sortBy, sortOrder, staffAssignments, leads]);
+  }, [filteredOrders, sortBy, sortOrder, sortDateOrder, staffAssignments, leads]);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -2091,52 +2093,57 @@ export const OperationsLeads: React.FC = () => {
           <div className="overflow-hidden">
             <div className="p-4 pt-0 md:pt-4 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-          {/* Search Box */}
-          <div className="relative md:col-span-6 w-full">
-            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
-            <input
-              type="text"
-              placeholder="Search by Customer Name, Order ID, Mobile Number..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-550 focus:outline-none focus:border-amber-500/50"
-            />
-          </div>
+                {/* Search Box */}
+                <div className="relative md:col-span-4 w-full">
+                  <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
+                  <input
+                    type="text"
+                    placeholder="Search by Customer Name, Order ID, Mobile Number..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-550 focus:outline-none focus:border-amber-500/50"
+                  />
+                </div>
 
-          {/* Date Filter Dropdown */}
-          <div className="md:col-span-3 w-full">
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
-            >
-              <option value="All">All Dates (Event Date)</option>
-              <option value="Today">Today</option>
-              <option value="Tomorrow">Tomorrow</option>
-              <option value="This Week">This Week</option>
-              <option value="This Month">This Month</option>
-              <option value="Custom">Custom Date Range</option>
-            </select>
-          </div>
+                {/* Date Filter Dropdown */}
+                <div className="md:col-span-3 w-full">
+                  <select
+                    value={dateFilter}
+                    onChange={(e) => setDateFilter(e.target.value)}
+                    className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
+                  >
+                    <option value="All">All Dates (Event Date)</option>
+                    <option value="Today">Today</option>
+                    <option value="Tomorrow">Tomorrow</option>
+                    <option value="This Week">This Week</option>
+                    <option value="This Month">This Month</option>
+                    <option value="Custom">Custom Date Range</option>
+                  </select>
+                </div>
 
-          {/* Status Dropdown */}
-          <div className="md:col-span-3 w-full">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
-            >
-              <option value="All">All Statuses</option>
-              <option value="Order Confirmed">Order Confirmed</option>
-              <option value="Assigned Crew">Assigned Crew</option>
-              <option value="Event Started">Event Started</option>
-              <option value="Event Ended">Event Ended</option>
-              <option value="Footage Handover">Footage Handover</option>
-              <option value="Verified Footage">Verified Footage</option>
-              <option value="Event Cancelled">Event Cancelled</option>
-            </select>
-          </div>
-        </div>
+                {/* Status Dropdown */}
+                <div className="md:col-span-3 w-full">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
+                  >
+                    <option value="All">All Statuses</option>
+                    <option value="Order Confirmed">Order Confirmed</option>
+                    <option value="Assigned Crew">Assigned Crew</option>
+                    <option value="Event Started">Event Started</option>
+                    <option value="Event Ended">Event Ended</option>
+                    <option value="Footage Handover">Footage Handover</option>
+                    <option value="Verified Footage">Verified Footage</option>
+                    <option value="Event Cancelled">Event Cancelled</option>
+                  </select>
+                </div>
+
+                {/* Sort Filter Button */}
+                <div className="md:col-span-2 flex items-center justify-start md:justify-end">
+                  <ListSortFilter value={sortDateOrder} onChange={setSortDateOrder} />
+                </div>
+              </div>
 
         {/* Custom Date Range pickers if custom is selected */}
         {dateFilter === 'Custom' && (
@@ -2728,13 +2735,13 @@ export const OperationsLeads: React.FC = () => {
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Date</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">
-                              {ev.event_date || 'N/A'}
+                              {formatDateDDMMYY(ev.event_date) || 'N/A'}
                             </span>
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Time</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">
-                              {ev.event_start_time || 'N/A'} {ev.event_end_time ? `- ${ev.event_end_time}` : ''}
+                              {formatTime12Hour(ev.event_start_time) || 'N/A'} {ev.event_end_time ? `- ${formatTime12Hour(ev.event_end_time)}` : ''}
                             </span>
                           </div>
                           {/* Shoot Type Hidden as requested */}
@@ -2748,11 +2755,11 @@ export const OperationsLeads: React.FC = () => {
                           )}
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Date</span>
-                            <span className="text-zinc-200 text-[11px] font-mono block">{allocation.reporting_date || ev.reporting_date || ev.event_date || 'N/A'}</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">{formatDateDDMMYY(allocation.reporting_date || ev.reporting_date || ev.event_date) || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Time</span>
-                            <span className="text-zinc-200 text-[11px] font-mono block">{allocation.reporting_time || ev.reporting_time || 'N/A'}</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">{formatTime12Hour(allocation.reporting_time || ev.reporting_time) || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Guest Pax</span>
@@ -4539,7 +4546,7 @@ export const OperationsLeads: React.FC = () => {
                           </h4>
                           {members[0] && (
                             <span className="text-[10px] font-mono text-zinc-500">
-                              {members[0].event_date}
+                              {formatDateDDMMYY(members[0].event_date)}
                             </span>
                           )}
                         </div>
