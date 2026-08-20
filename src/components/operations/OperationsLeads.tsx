@@ -1221,7 +1221,7 @@ export const OperationsLeads: React.FC = () => {
 
   // Filter orders to show confirmed ones for Operations (excluding Verified Footage from active view)
   const allowedStages = [
-    'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned',
+    'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 'Pending / Partially Assigned',
     'Assigned Crew', 'Staff Assigned', 'Event Scheduled',
     'Event Started', 'Event Start',
     'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
@@ -1341,7 +1341,7 @@ export const OperationsLeads: React.FC = () => {
         const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
         const stageNorm = (calculatedStage || o.current_stage || '').trim();
         
-        if (statusFilter === 'Order Confirmed' && !['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(stageNorm)) return false;
+        if (statusFilter === 'Order Confirmed' && !['Order Confirmed', 'Confirm Order', 'New Order Received', 'Pending / Partially Assigned'].includes(stageNorm)) return false;
         if (statusFilter === 'Operations Assigned' && stageNorm !== 'Operations Assigned') return false;
         if (statusFilter === 'Assigned Crew' && !['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(stageNorm) && !isStaffAssigned) return false;
         if (statusFilter === 'Staff Assigned' && !isStaffAssigned) return false;
@@ -1743,7 +1743,8 @@ export const OperationsLeads: React.FC = () => {
 
             let isMissingStaff = false;
             for (const task of Array.from(tasksMap.values())) {
-              if (!validAllocStaff.some((s: any) => s.staff_role === task.roleName)) {
+              const assignedCount = validAllocStaff.filter((s: any) => s.staff_role === task.roleName).length;
+              if (assignedCount < task.targetQty) {
                 isMissingStaff = true;
                 break;
               }
@@ -1943,7 +1944,7 @@ export const OperationsLeads: React.FC = () => {
       // Set status to Assigned Crew as requested for Status 1 workflow
       const currentOrderStage = matchedOrder?.current_stage || 'Operations Assigned';
       const isStaffAssigned = finalAssignments.length > 0;
-      const targetStage: CurrentStage = (isStaffAssigned && !overallMissingStaff) ? 'Assigned Crew' : (currentOrderStage as CurrentStage);
+      const targetStage: CurrentStage = (isStaffAssigned && !overallMissingStaff) ? 'Assigned Crew' : (isStaffAssigned ? 'Pending / Partially Assigned' : (currentOrderStage as CurrentStage));
 
       console.log("Saving assignment for order:", assigningOrderId, {
         photographer,
@@ -2069,7 +2070,7 @@ export const OperationsLeads: React.FC = () => {
       const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
       const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
 
-      if (['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(calculatedStage)) {
+      if (['Order Confirmed', 'Confirm Order', 'New Order Received', 'Pending / Partially Assigned'].includes(calculatedStage)) {
         newProjectArrived++;
       } else if (['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(calculatedStage)) {
         assignedCrew++;
@@ -2787,10 +2788,38 @@ export const OperationsLeads: React.FC = () => {
                     
                     const evName = ev.event_name || ev.event_type || 'Unnamed Event';
                     const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
-                    
                     let loadError = null;
                     if (includedRoles.length === 0) {
                       loadError = `No Team Members specified for event "${evName}". You can manually add staff roles below.`;
+                    }
+
+                    let evTotalRequired = 0;
+                    let evTotalAssigned = 0;
+                    let isEvFullyAssigned = true;
+                    
+                    if (includedRoles.length > 0) {
+                      const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
+                      includedRoles.forEach((roleStr: string) => {
+                        const { qty, text } = parseQtyAndText(roleStr);
+                        const roleName = (text || roleStr).trim();
+                        if (!roleName) return;
+                        if (tasksMap.has(roleName)) {
+                          tasksMap.get(roleName)!.targetQty += (qty || 1);
+                        } else {
+                          tasksMap.set(roleName, { roleName, targetQty: qty || 1 });
+                        }
+                      });
+                      const validEvAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
+                      for (const task of Array.from(tasksMap.values())) {
+                        evTotalRequired += task.targetQty;
+                        const assignedCount = validEvAllocStaff.filter((s: any) => s.staff_role === task.roleName).length;
+                        evTotalAssigned += Math.min(assignedCount, task.targetQty);
+                        if (assignedCount < task.targetQty) {
+                          isEvFullyAssigned = false;
+                        }
+                      }
+                    } else {
+                       evTotalAssigned = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
                     }
 
                     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
@@ -2803,7 +2832,7 @@ export const OperationsLeads: React.FC = () => {
                         <div 
                           className="p-4 flex items-center justify-between cursor-pointer hover:bg-zinc-900/40 transition-colors"
                           onClick={() => setCollapsedAssignEvents(prev => ({ ...prev, [evId]: !isCollapsed }))}
-                        >
+                        > 
                            <div className="flex items-center gap-3">
                               <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 select-none uppercase font-bold font-mono">
                                 🎥 EVENT {index + 1}
@@ -2813,11 +2842,15 @@ export const OperationsLeads: React.FC = () => {
                               </h4>
                            </div>
                            <div className="flex items-center gap-4">
-                              {allocStaff.length > 0 && (
+                              {includedRoles.length > 0 ? (
+                                <span className={`text-[10px] font-mono px-2 py-1 border rounded-md ${isEvFullyAssigned ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                                  {evTotalAssigned} / {evTotalRequired} Assigned → {isEvFullyAssigned ? 'Assigned' : 'Pending'}
+                                </span>
+                              ) : allocStaff.length > 0 ? (
                                 <span className="text-[10px] font-mono px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md">
                                   {allocStaff.length} Staff Assigned
                                 </span>
-                              )}
+                              ) : null}
                               <span className={`text-zinc-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}>▼</span>
                            </div>
                         </div>

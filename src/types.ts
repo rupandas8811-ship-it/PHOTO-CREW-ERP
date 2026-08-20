@@ -125,6 +125,7 @@ export type CurrentStage =
   | 'Lost Lead'
   | 'New Order Received'
   | 'Operations Assigned'
+  | 'Pending / Partially Assigned'
   | 'Assigned Crew'
   | 'Event Scheduled'
   | 'Staff Assigned'

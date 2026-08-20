@@ -14,6 +14,7 @@ export const getStatusColorClass = (status: string) => {
   if (s === 'negotiation') return 'text-purple-500';
   if (s === 'order confirmed') return 'text-green-500';
   if (s === 'operations' || s === 'operations assigned') return 'text-cyan-500';
+  if (s === 'pending / partially assigned') return 'text-amber-500 font-semibold';
   if (s === 'assigned crew' || s === 'staff assigned') return 'text-indigo-400 font-semibold';
   if (s === 'event scheduled') return 'text-orange-500';
   if (s === 'event started') return 'text-amber-400 font-semibold';
