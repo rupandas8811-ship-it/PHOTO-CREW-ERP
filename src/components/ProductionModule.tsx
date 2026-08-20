@@ -1878,6 +1878,7 @@ Production Team`;
     if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     setClientAcceptanceProd(prod);
     setCaCommunicationProof('');
+    setCaUploadConfirmations({});
     setCaChecklistCompleted(false);
     setCaInternalValidation(false);
 
@@ -2512,6 +2513,7 @@ Production Team`;
   const [caChecklistCompleted, setCaChecklistCompleted] = useState<boolean>(false);
   const [caUploadingProof, setCaUploadingProof] = useState<boolean>(false);
   const [caChecklist, setCaChecklist] = useState<Record<string, boolean>>({});
+  const [caUploadConfirmations, setCaUploadConfirmations] = useState<Record<string, { confirmed: boolean; eventDate: string; folderName: string }>>({});
   const [caValidation, setCaValidation] = useState<Record<string, boolean>>({});
   const [caProofs, setCaProofs] = useState<Record<string, string>>({});
 
@@ -11214,7 +11216,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </div>
                   <button
                     type="button"
-                    onClick={() => setClientAcceptanceProd(null)}
+                    onClick={() => {
+                      setClientAcceptanceProd(null);
+                      setCaUploadConfirmations({});
+                    }}
                     className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
                   >
                     ✕ Close
@@ -11271,11 +11276,31 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       if (targetId) {
                         await updateOrderStage(targetId, 'Client Acceptance' as any);
                       }
-                      
+
+                      // Update assignments with manual upload confirmations
+                      for (const group of eventGroups) {
+                        const conf = caUploadConfirmations[group.eventId];
+                        if (conf?.confirmed) {
+                          for (const item of group.items) {
+                            if (item.assignmentId) {
+                              await updateEditorAssignmentStatus(item.assignmentId, item.status as any, {
+                                server_upload_confirmed: true,
+                                server_upload_event_date: conf.eventDate,
+                                server_upload_folder_name: conf.folderName,
+                                server_upload_confirmed_at: new Date().toISOString(),
+                                server_upload_confirmed_by: currentUserName || 'Production Staff',
+                                edited_folder_uploaded_to_server: true,
+                              });
+                            }
+                          }
+                        }
+                      }
+
                       if (refreshData) {
                         refreshData();
                       }
                       setClientAcceptanceProd(null);
+                      setCaUploadConfirmations({});
                     } catch (err: any) {
                       alert("Error finalizing Client Acceptance: " + (err.message || err));
                     } finally {
@@ -11535,11 +11560,92 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
                   </div>
 
+                  {/* Edited Folder Upload Confirmations */}
+                  {caCommunicationProof && eventGroups.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] text-emerald-400 uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5">
+                        📤 Edited Folder Upload Confirmation
+                      </h4>
+                      <div className="space-y-3">
+                        {eventGroups.map((group) => {
+                          const conf = caUploadConfirmations[group.eventId] || { confirmed: false, eventDate: '', folderName: '' };
+                          return (
+                            <div key={`manual_conf_${group.eventId}`} className="p-3 bg-zinc-900/30 border border-zinc-850 rounded-xl space-y-3">
+                              <label className="flex items-start gap-3 cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={conf.confirmed}
+                                  onChange={(e) => {
+                                    setCaUploadConfirmations(prev => ({
+                                      ...prev,
+                                      [group.eventId]: {
+                                        ...conf,
+                                        confirmed: e.target.checked
+                                      }
+                                    }));
+                                  }}
+                                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900 transition-colors cursor-pointer"
+                                />
+                                <div>
+                                  <span className="text-xs font-semibold text-zinc-200 group-hover:text-emerald-300 transition-colors block">
+                                    Edited Folder Uploaded to Server
+                                  </span>
+                                  <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
+                                    Confirm upload for: <span className="font-bold text-zinc-400">{group.eventName}</span>
+                                  </span>
+                                </div>
+                              </label>
+
+                              {conf.confirmed && (
+                                <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                  <div className="space-y-1">
+                                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                                      Event Date <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                      type="date"
+                                      required={conf.confirmed}
+                                      value={conf.eventDate}
+                                      onChange={(e) => setCaUploadConfirmations(prev => ({
+                                        ...prev,
+                                        [group.eventId]: { ...conf, eventDate: e.target.value }
+                                      }))}
+                                      className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                                      Folder Name <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      required={conf.confirmed}
+                                      placeholder="e.g. 2024-05-12_Wedding_Videos"
+                                      value={conf.folderName}
+                                      onChange={(e) => setCaUploadConfirmations(prev => ({
+                                        ...prev,
+                                        [group.eventId]: { ...conf, folderName: e.target.value }
+                                      }))}
+                                      className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Buttons */}
                   <div className="flex gap-3 pt-2">
                     <button
                       type="button"
-                      onClick={() => setClientAcceptanceProd(null)}
+                      onClick={() => {
+                        setClientAcceptanceProd(null);
+                        setCaUploadConfirmations({});
+                      }}
                       className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
                     >
                       Cancel
