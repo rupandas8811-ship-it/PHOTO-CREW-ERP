@@ -509,14 +509,14 @@ const StaffEventDetailsCell = ({ b }: { b: any }) => {
     e.stopPropagation();
     if (!isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      const popupWidth = 260;
+      const popupWidth = 320;
       const left = Math.min(
         Math.max(12, rect.left + rect.width / 2 - popupWidth / 2),
         window.innerWidth - popupWidth - 12
       );
       const spaceBelow = window.innerHeight - rect.bottom;
       const spaceAbove = rect.top;
-      const openUpward = spaceBelow < 300 && spaceAbove > spaceBelow;
+      const openUpward = spaceBelow < 280 && spaceAbove > spaceBelow;
       
       setCoords({
         left,
@@ -587,7 +587,7 @@ const StaffEventDetailsCell = ({ b }: { b: any }) => {
 
       {isOpen && createPortal(
         <div 
-          className={`staff-event-details-popup-${b.orderId || b.key} fixed z-[110] w-[260px] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/80 overflow-hidden transform origin-${coords.openUpward ? 'bottom' : 'top'} animate-in fade-in zoom-in-95 duration-200`}
+          className={`staff-event-details-popup-${b.orderId || b.key} fixed z-[110] w-[320px] max-w-[95vw] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/80 overflow-hidden transform origin-${coords.openUpward ? 'bottom' : 'top'} animate-in fade-in zoom-in-95 duration-200`}
           style={{ 
             left: coords.left, 
             ...(coords.openUpward ? { bottom: window.innerHeight - coords.top } : { top: coords.top }) 
@@ -599,56 +599,35 @@ const StaffEventDetailsCell = ({ b }: { b: any }) => {
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="p-4 space-y-4 text-xs">
-            <div>
-              <span className="block text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1">Event Name</span>
-              <div className="font-semibold text-white text-sm">{b.eventName}</div>
-              {b.shootType && b.shootType !== 'N/A' && (
-                <div className="text-[10px] font-mono uppercase text-zinc-400 mt-1 inline-flex bg-zinc-800/50 px-2 py-0.5 rounded-md border border-zinc-700/50">{b.shootType}</div>
-              )}
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-zinc-950 border border-zinc-800/60">
-              <div>
-                <span className="block text-[9px] text-zinc-500 uppercase tracking-wider font-bold mb-1">Event Start</span>
-                <div className="font-mono font-semibold text-amber-400 flex flex-col gap-0.5">
-                  <span>{formatDateDDMMYY(b.eventDate)}</span>
-                  {b.eventStartTime && b.eventStartTime !== 'N/A' && (
-                    <span className="text-zinc-400 text-[10px] flex items-center gap-1 mt-0.5">
-                      <span className="text-zinc-600">•</span>
-                      {formatTime12Hour(b.eventStartTime)}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <div>
-                <span className="block text-[9px] text-zinc-500 uppercase tracking-wider font-bold mb-1">Event End</span>
-                <div className="font-mono font-semibold text-zinc-300 flex flex-col gap-0.5">
-                  <span>{formatDateDDMMYY(endDate)}</span>
-                  {hasEndTime ? (
-                    <span className="text-zinc-500 text-[10px] flex items-center gap-1 mt-0.5">
-                      <span className="text-zinc-600">•</span>
-                      {formatTime12Hour(b.eventEndTime)}
-                    </span>
-                  ) : (
-                    <span className="text-zinc-500 text-[10px] mt-0.5">Not set</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {(b.venue && b.venue !== 'N/A') && (
-              <div>
-                <span className="block text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1.5">Venue & Location</span>
-                <div className="text-zinc-300 leading-relaxed bg-zinc-800/30 p-2.5 rounded-lg border border-zinc-800/50">{b.venue}</div>
-                {b.googleMapsLink && b.googleMapsLink !== 'N/A' && (
-                  <a href={b.googleMapsLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-[10px] text-indigo-400 hover:text-indigo-300 mt-2 font-semibold">
-                    <MapPin className="w-3 h-3" />
-                    Open in Google Maps
-                  </a>
-                )}
-              </div>
-            )}
+          <div className="p-0 text-sm">
+            <table className="w-full text-left">
+              <tbody className="divide-y divide-zinc-800/60">
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="py-2.5 px-4 text-zinc-400 w-1/3">Event Name</td>
+                  <td className="py-2.5 px-4 font-medium text-white">{b.eventName}</td>
+                </tr>
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="py-2.5 px-4 text-zinc-400">Start Date</td>
+                  <td className="py-2.5 px-4 font-mono font-medium text-amber-400">{formatDateDDMMYY(b.eventDate)}</td>
+                </tr>
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="py-2.5 px-4 text-zinc-400">Start Time</td>
+                  <td className="py-2.5 px-4 font-mono font-medium text-amber-400">{b.eventStartTime && b.eventStartTime !== 'N/A' ? formatTime12Hour(b.eventStartTime) : 'Not set'}</td>
+                </tr>
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="py-2.5 px-4 text-zinc-400">End Date</td>
+                  <td className="py-2.5 px-4 font-mono font-medium text-zinc-300">{formatDateDDMMYY(endDate)}</td>
+                </tr>
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="py-2.5 px-4 text-zinc-400">End Time</td>
+                  <td className="py-2.5 px-4 font-mono font-medium text-zinc-300">{hasEndTime ? formatTime12Hour(b.eventEndTime) : 'Not set'}</td>
+                </tr>
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="py-2.5 px-4 text-zinc-400">Shoot Type</td>
+                  <td className="py-2.5 px-4 font-medium text-white">{b.shootType && b.shootType !== 'N/A' ? b.shootType : 'Not set'}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>,
         document.body
@@ -669,7 +648,7 @@ const StaffReportingDetailsCell = ({ b }: { b: any }) => {
     e.stopPropagation();
     if (!isOpen && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      const popupWidth = 240;
+      const popupWidth = 320;
       const left = Math.min(
         Math.max(12, rect.left + rect.width / 2 - popupWidth / 2),
         window.innerWidth - popupWidth - 12
@@ -752,7 +731,7 @@ const StaffReportingDetailsCell = ({ b }: { b: any }) => {
 
       {isOpen && createPortal(
         <div 
-          className={`staff-reporting-details-popup-${b.orderId || b.key} fixed z-[110] w-[240px] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/80 overflow-hidden transform origin-${coords.openUpward ? 'bottom' : 'top'} animate-in fade-in zoom-in-95 duration-200`}
+          className={`staff-reporting-details-popup-${b.orderId || b.key} fixed z-[110] w-[320px] max-w-[95vw] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/80 overflow-hidden transform origin-${coords.openUpward ? 'bottom' : 'top'} animate-in fade-in zoom-in-95 duration-200`}
           style={{ 
             left: coords.left, 
             ...(coords.openUpward ? { bottom: window.innerHeight - coords.top } : { top: coords.top }) 
@@ -764,24 +743,25 @@ const StaffReportingDetailsCell = ({ b }: { b: any }) => {
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
-          <div className="p-4 space-y-4 text-xs">
-            <div className="p-3 rounded-lg bg-zinc-950 border border-zinc-800/60 space-y-3">
-              <div>
-                <span className="block text-[9px] text-zinc-500 uppercase tracking-wider font-bold mb-1">Reporting Date</span>
-                <div className="font-mono font-bold text-amber-400 text-sm">{formatDateDDMMYY(repDate)}</div>
-              </div>
-              <div className="pt-2 border-t border-zinc-800/60">
-                <span className="block text-[9px] text-zinc-500 uppercase tracking-wider font-bold mb-1">Reporting Time</span>
-                <div className="font-mono font-bold text-amber-400 text-sm">{repTime !== 'N/A' ? formatTime12Hour(repTime) : 'N/A'}</div>
-              </div>
-            </div>
-            
-            {b.coordinator && (
-              <div className="pt-1">
-                <span className="block text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1.5">Assigned Coordinator</span>
-                <div className="font-medium text-white bg-zinc-800/30 p-2 rounded-md border border-zinc-800/50">{b.coordinator}</div>
-              </div>
-            )}
+          <div className="p-0 text-sm">
+            <table className="w-full text-left">
+              <tbody className="divide-y divide-zinc-800/60">
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="py-2.5 px-4 text-zinc-400 w-1/3">Reporting Date</td>
+                  <td className="py-2.5 px-4 font-mono font-medium text-amber-400">{formatDateDDMMYY(repDate)}</td>
+                </tr>
+                <tr className="hover:bg-zinc-800/30">
+                  <td className="py-2.5 px-4 text-zinc-400">Reporting Time</td>
+                  <td className="py-2.5 px-4 font-mono font-medium text-amber-400">{repTime !== 'N/A' ? formatTime12Hour(repTime) : 'Not set'}</td>
+                </tr>
+                {b.coordinator && (
+                  <tr className="hover:bg-zinc-800/30">
+                    <td className="py-2.5 px-4 text-zinc-400">Assigned Coordinator</td>
+                    <td className="py-2.5 px-4 font-medium text-white">{b.coordinator}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>,
         document.body
@@ -1217,6 +1197,7 @@ export const StaffModule: React.FC = () => {
                 assignedRole: assignedRole,
                 eventDate: ev.event_date || lead.event_date || 'N/A',
                 eventStartTime: ev.event_start_time || lead.event_time || 'N/A',
+                eventEndDate: ev.event_end_date || ev.event_date || lead.event_date || 'N/A',
                 eventEndTime: ev.event_end_time || 'N/A',
                 reportingDate: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || 'N/A',
                 reportingTime: ev.reporting_time || lead.reporting_time || 'N/A',
@@ -1289,7 +1270,8 @@ export const StaffModule: React.FC = () => {
               assignedRole: assignedRole,
               eventDate: lead.event_date || 'N/A',
               eventStartTime: lead.event_time || 'N/A',
-              eventEndTime: 'N/A',
+              eventEndDate: lead.event_end_date || lead.event_date || 'N/A',
+              eventEndTime: lead.event_end_time || 'N/A',
               reportingDate: lead.Reporting_date || lead.event_date || 'N/A',
               reportingTime: lead.reporting_time || 'N/A',
               venue: lead.event_location || 'N/A',
