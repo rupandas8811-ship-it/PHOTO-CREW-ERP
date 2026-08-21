@@ -93,7 +93,7 @@ export function getCalculatedOrderStage(
   let calculatedStage: string;
   if (minStaffRank === 0) {
     const bsLower = baseStage.toLowerCase().trim();
-    if (bsLower === 'operations assigned' || bsLower === 'event scheduled' || bsLower === 'pending / partially assigned') {
+    if (bsLower === 'operations assigned' || bsLower === 'event scheduled') {
       calculatedStage = baseStage;
     } else {
       calculatedStage = 'Assigned Crew';

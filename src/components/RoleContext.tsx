@@ -4025,7 +4025,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Step 2 & 4: Only allow exact workflow statuses, throw custom error on spelling variations
     const allowedWorkflowStatuses = [
+      'Confirm Order',
       'Order Confirmed',
+      'New Order Received',
       'Operations Assigned',
       'Assigned Crew',
       'Staff Assigned',

@@ -1221,7 +1221,7 @@ export const OperationsLeads: React.FC = () => {
 
   // Filter orders to show confirmed ones for Operations (excluding Verified Footage from active view)
   const allowedStages = [
-    'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 'Pending / Partially Assigned',
+    'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned',
     'Assigned Crew', 'Staff Assigned', 'Event Scheduled',
     'Event Started', 'Event Start',
     'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
@@ -1341,7 +1341,7 @@ export const OperationsLeads: React.FC = () => {
         const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
         const stageNorm = (calculatedStage || o.current_stage || '').trim();
         
-        if (statusFilter === 'Order Confirmed' && !['Order Confirmed', 'Confirm Order', 'New Order Received', 'Pending / Partially Assigned'].includes(stageNorm)) return false;
+        if (statusFilter === 'Order Confirmed' && !['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(stageNorm)) return false;
         if (statusFilter === 'Operations Assigned' && stageNorm !== 'Operations Assigned') return false;
         if (statusFilter === 'Assigned Crew' && !['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(stageNorm) && !isStaffAssigned) return false;
         if (statusFilter === 'Staff Assigned' && !isStaffAssigned) return false;
@@ -1944,7 +1944,7 @@ export const OperationsLeads: React.FC = () => {
       // Set status to Assigned Crew as requested for Status 1 workflow
       const currentOrderStage = matchedOrder?.current_stage || 'Operations Assigned';
       const isStaffAssigned = finalAssignments.length > 0;
-      const targetStage: CurrentStage = (isStaffAssigned && !overallMissingStaff) ? 'Assigned Crew' : (isStaffAssigned ? 'Pending / Partially Assigned' : (currentOrderStage as CurrentStage));
+      const targetStage: CurrentStage = (isStaffAssigned && !overallMissingStaff) ? 'Assigned Crew' : (currentOrderStage as CurrentStage);
 
       console.log("Saving assignment for order:", assigningOrderId, {
         photographer,
@@ -2070,7 +2070,7 @@ export const OperationsLeads: React.FC = () => {
       const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
       const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
 
-      if (['Order Confirmed', 'Confirm Order', 'New Order Received', 'Pending / Partially Assigned'].includes(calculatedStage)) {
+      if (['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(calculatedStage)) {
         newProjectArrived++;
       } else if (['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(calculatedStage)) {
         assignedCrew++;

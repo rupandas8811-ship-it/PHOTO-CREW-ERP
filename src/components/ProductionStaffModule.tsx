@@ -530,46 +530,75 @@ export const ProductionStaffModule: React.FC = () => {
     server_upload_confirmed: boolean;
     server_upload_event_date: string;
     server_upload_folder_name: string;
+    event_configs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean }>;
   }>({ 
     confirmation_proof: '', 
     selectedIds: [],
     server_upload_confirmed: false,
     server_upload_event_date: '',
-    server_upload_folder_name: ''
+    server_upload_folder_name: '',
+    event_configs: {}
   });
   const [previewProofModal, setPreviewProofModal] = useState<{ url: string; title: string } | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
   const openEditingCompletedModal = (grp: any, delivItem: any) => {
-    const existingConfirmed = Boolean(
-      delivItem.serverUploadConfirmed ||
-      delivItem.assignmentObj?.server_upload_confirmed ||
-      delivItem.assignmentObj?.edited_folder_uploaded_to_server ||
-      delivItem.prodObj?.server_upload_confirmed
-    );
-    const existingEventDate = (
-      delivItem.serverUploadEventDate ||
-      delivItem.assignmentObj?.server_upload_event_date ||
-      delivItem.prodObj?.server_upload_event_date ||
-      delivItem.eventDate ||
-      grp.eventDate ||
-      ''
-    ).trim();
-    const existingFolderName = (
-      delivItem.serverUploadFolderName ||
-      delivItem.assignmentObj?.server_upload_folder_name ||
-      delivItem.prodObj?.server_upload_folder_name ||
-      delivItem.prodObj?.server_path ||
-      ''
-    ).trim();
+    const eventConfigs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean }> = {};
+
+    (grp.deliverables || []).forEach((item: any) => {
+      const evtKey = (item.eventId || item.eventName || 'default').trim();
+      if (!eventConfigs[evtKey]) {
+        const existingConfirmed = Boolean(
+          item.serverUploadConfirmed ||
+          item.assignmentObj?.server_upload_confirmed ||
+          item.assignmentObj?.edited_folder_uploaded_to_server ||
+          item.prodObj?.server_upload_confirmed
+        );
+        const existingEventDate = (
+          item.serverUploadEventDate ||
+          item.assignmentObj?.server_upload_event_date ||
+          item.prodObj?.server_upload_event_date ||
+          item.eventDate ||
+          grp.eventDate ||
+          ''
+        ).trim();
+        const existingFolderName = (
+          item.serverUploadFolderName ||
+          item.assignmentObj?.server_upload_folder_name ||
+          item.prodObj?.server_upload_folder_name ||
+          item.prodObj?.server_path ||
+          `${grp.customerName || 'Client'} ${item.eventName || grp.eventName || 'Event'} Edited`
+        ).trim();
+
+        eventConfigs[evtKey] = {
+          eventKey: evtKey,
+          eventId: item.eventId || '',
+          eventName: item.eventName || grp.eventName || 'Event',
+          eventDate: existingEventDate,
+          folderName: existingFolderName,
+          confirmed: existingConfirmed
+        };
+      }
+    });
+
+    const currentEvtKey = (delivItem.eventId || delivItem.eventName || 'default').trim();
+    const currentCfg = eventConfigs[currentEvtKey] || {
+      eventKey: currentEvtKey,
+      eventId: delivItem.eventId || '',
+      eventName: delivItem.eventName || grp.eventName || 'Event',
+      eventDate: delivItem.eventDate || grp.eventDate || '',
+      folderName: `${grp.customerName || 'Client'} ${delivItem.eventName || grp.eventName || 'Event'} Edited`,
+      confirmed: false
+    };
 
     setEditingCompletedModal({ group: grp, actionItem: delivItem });
     setEditingCompletedForm({
       confirmation_proof: delivItem.confirmationProof || '',
       selectedIds: [delivItem.assignmentId],
-      server_upload_confirmed: existingConfirmed,
-      server_upload_event_date: existingEventDate,
-      server_upload_folder_name: existingFolderName
+      server_upload_confirmed: currentCfg.confirmed,
+      server_upload_event_date: currentCfg.eventDate,
+      server_upload_folder_name: currentCfg.folderName,
+      event_configs: eventConfigs
     });
   };
 
@@ -1068,12 +1097,7 @@ Thank you.`;
     if (!editingCompletedModal) return;
 
     if (!editingCompletedForm.confirmation_proof.trim()) {
-      alert("Validation Failed: Please upload or provide Customer Confirmation Proof or Image.");
-      return;
-    }
-
-    if (!editingCompletedForm.server_upload_confirmed || !editingCompletedForm.server_upload_event_date?.trim() || !editingCompletedForm.server_upload_folder_name?.trim()) {
-      alert("Please confirm that the edited folder is uploaded and enter the Event Date and Folder Name.");
+      alert("Validation Failed: Please upload or provide Customer Review Image / Confirmation Proof.");
       return;
     }
 
@@ -1082,16 +1106,35 @@ Thank you.`;
       return;
     }
 
+    const b = editingCompletedModal.group;
+    const deliverablesToUpdate = b.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
+    if (deliverablesToUpdate.length === 0) {
+      alert("Please select at least one deliverable to update.");
+      return;
+    }
+
+    // Validate that every selected event has confirmed checklist with Event Date and Folder Name
+    const uniqueEventKeys = Array.from(new Set(deliverablesToUpdate.map((d: any) => (d.eventId || d.eventName || 'default').trim())));
+    for (const evtKey of uniqueEventKeys as string[]) {
+      const cfg = editingCompletedForm.event_configs[evtKey] || {
+        confirmed: editingCompletedForm.server_upload_confirmed,
+        eventDate: editingCompletedForm.server_upload_event_date,
+        folderName: editingCompletedForm.server_upload_folder_name,
+        eventName: 'Event'
+      };
+      if (!cfg.confirmed || !cfg.eventDate?.trim() || !cfg.folderName?.trim()) {
+        const evtName = cfg.eventName || 'the event';
+        alert(`Please tick "Edited Folder Uploaded in Server" and enter both Event Date and Folder Name for ${evtName}.`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     try {
       const timestamp = new Date().toISOString();
-      const b = editingCompletedModal.group;
       const proofInput = editingCompletedForm.confirmation_proof.trim();
-      const serverEventDate = editingCompletedForm.server_upload_event_date.trim();
-      const serverFolderName = editingCompletedForm.server_upload_folder_name.trim();
 
       // 1. Upload proof image to Supabase Storage bucket ('img') if file/data-uri, or resolve public URL
-      const deliverablesToUpdate = b.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
       let mainProofUrl = '';
 
       // 2. Save status and proof references to editor_assignments table
@@ -1104,9 +1147,19 @@ Thank you.`;
         mainProofUrl = uploadedProofUrl;
         console.log(`[ProductionStaffModule] Proof Storage URL generated for ${deliv.assignmentId}:`, uploadedProofUrl);
 
+        const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+        const cfg = editingCompletedForm.event_configs[evtKey] || {
+          confirmed: true,
+          eventDate: editingCompletedForm.server_upload_event_date,
+          folderName: editingCompletedForm.server_upload_folder_name
+        };
+        const serverEventDate = (cfg.eventDate || deliv.eventDate || '').trim();
+        const serverFolderName = (cfg.folderName || `${b.customerName || 'Client'} ${deliv.eventName || 'Event'} Edited`).trim();
+
         const assignPayload = {
           confirmation_proof: uploadedProofUrl,
           customer_communication_proof: uploadedProofUrl,
+          client_communication_proof: uploadedProofUrl,
           proof_url: uploadedProofUrl,
           proof_image: uploadedProofUrl,
           uploaded_proof: uploadedProofUrl,
@@ -1133,6 +1186,15 @@ Thank you.`;
       // 3. Save status and proof URL in remarks to production table
       const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
       for (const prodId of uniqueProdIds as string[]) {
+        const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
+        const evtKey = (matchingDeliv?.eventId || matchingDeliv?.eventName || 'default').trim();
+        const cfg = editingCompletedForm.event_configs[evtKey] || {
+          eventDate: editingCompletedForm.server_upload_event_date,
+          folderName: editingCompletedForm.server_upload_folder_name
+        };
+        const serverEventDate = (cfg.eventDate || matchingDeliv?.eventDate || '').trim();
+        const serverFolderName = (cfg.folderName || `${b.customerName || 'Client'} ${matchingDeliv?.eventName || 'Event'} Edited`).trim();
+
         await updateProduction(prodId, {
           editing_status: 'Editing Completed' as any,
           production_status: 'Editing Completed' as any,
@@ -1140,7 +1202,10 @@ Thank you.`;
           server_upload_event_date: serverEventDate,
           server_upload_folder_name: serverFolderName,
           server_path: serverFolderName,
-          remarks: `Editing Completed & Customer Confirmation Proof (${mainProofUrl || proofInput}) uploaded. Server Folder: "${serverFolderName}" (Event Date: ${serverEventDate}) by ${staffName} on ${new Date().toLocaleDateString()}`
+          client_communication_proof: mainProofUrl || proofInput,
+          customer_communication_proof: mainProofUrl || proofInput,
+          proof_url: mainProofUrl || proofInput,
+          remarks: `Editing Completed & Customer Review Proof (${mainProofUrl || proofInput}) uploaded. Server Folder: "${serverFolderName}" (Event Date: ${serverEventDate}) by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }
 
@@ -1166,14 +1231,15 @@ Thank you.`;
         selectedIds: [],
         server_upload_confirmed: false,
         server_upload_event_date: '',
-        server_upload_folder_name: ''
+        server_upload_folder_name: '',
+        event_configs: {}
       });
       await refreshData();
-      showToast("✅ Customer Confirmation Proof & Server Upload confirmed!");
-      alert("✅ Customer Confirmation Proof and Server Upload confirmed successfully!");
+      showToast("✅ Customer Review Proof & Server Upload confirmed!");
+      alert("✅ Customer Review Proof and Server Upload confirmed successfully!");
     } catch (err: any) {
       console.error("[ProductionStaffModule] Error saving confirmation proof:", err);
-      alert("❌ Failed to save Customer Confirmation Proof: " + (err.message || String(err)));
+      alert("❌ Failed to save Customer Review Proof: " + (err.message || String(err)));
     } finally {
       setIsSubmitting(false);
     }
@@ -2479,205 +2545,293 @@ Thank you.`;
       {/* ========================================================= */}
       {/* 3. EDITING COMPLETED MODAL POPUP */}
       {/* ========================================================= */}
-      {editingCompletedModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="editing_completed_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-indigo-400" />
-                <h3 className="text-base font-bold text-white">Upload Customer Confirmation Proof</h3>
-              </div>
-              <button 
-                onClick={() => setEditingCompletedModal(null)}
-                className="text-zinc-400 hover:text-white p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {editingCompletedModal && (() => {
+        const selectedDeliverables = editingCompletedModal.group.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
+        const uniqueEventKeys = Array.from(new Set(selectedDeliverables.map((d: any) => (d.eventId || d.eventName || 'default').trim())));
 
-            <div className="overflow-y-auto pr-2 custom-scrollbar">
-              {renderOrderHeader(editingCompletedModal.group)}
+        const isChecklistValid = uniqueEventKeys.length > 0 && uniqueEventKeys.every((evtKey: string) => {
+          const cfg = editingCompletedForm.event_configs[evtKey] || {
+            confirmed: editingCompletedForm.server_upload_confirmed,
+            eventDate: editingCompletedForm.server_upload_event_date,
+            folderName: editingCompletedForm.server_upload_folder_name
+          };
+          return cfg.confirmed && cfg.eventDate?.trim() && cfg.folderName?.trim();
+        });
 
-              <p className="text-xs text-zinc-400 mb-4">
-                Upload customer confirmation image or proof confirming edits/revisions are completed. This will update status to <strong className="text-indigo-400">Editing Completed</strong>.
-              </p>
-
-              <form id="editing-completed-form" onSubmit={handleEditingCompletedSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                    Customer Confirmation Image / Proof <span className="text-rose-400">*</span>
-                  </label>
-
-                  {/* File Upload Field */}
-                  <div className="bg-zinc-950 border border-dashed border-indigo-500/30 hover:border-indigo-500/60 rounded-xl p-3 text-center transition-colors">
-                    <input
-                      type="file"
-                      id="customer_confirmation_file_input"
-                      accept="image/*"
-                      onChange={async (e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          const compressed = await compressImage(e.target.files[0]);
-                          setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: compressed });
-                        }
-                      }}
-                      className="hidden"
-                    />
-                    <label
-                      htmlFor="customer_confirmation_file_input"
-                      className="cursor-pointer flex flex-col items-center justify-center gap-1.5 py-1"
-                    >
-                      <Upload className="w-5 h-5 text-indigo-400" />
-                      <span className="text-xs font-bold text-indigo-300">
-                        {editingCompletedForm.confirmation_proof ? 'Change Customer Proof Image' : 'Select Customer Proof Image'}
-                      </span>
-                      <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP (auto-compressed & uploaded to Supabase)</span>
-                    </label>
-                  </div>
-
-                  <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-2">- OR ENTER DIRECT IMAGE URL / DRIVE LINK -</div>
-
-                  <input
-                    type="text"
-                    placeholder="https://..."
-                    value={editingCompletedForm.confirmation_proof.startsWith('data:') ? 'Image attached from file upload' : editingCompletedForm.confirmation_proof}
-                    onChange={(e) => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-                  />
-                  
-                  {/* Selected Image Thumbnail Preview */}
-                  {editingCompletedForm.confirmation_proof && (
-                    <div className="mt-3 p-3 bg-zinc-950 border border-indigo-500/20 rounded-xl space-y-2">
-                      <div className="flex items-center justify-between text-xs text-indigo-400 font-mono font-bold">
-                        <span className="flex items-center gap-1.5">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Proof Attached
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: '' })}
-                          className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </div>
-
-                      <div className="relative rounded-lg overflow-hidden border border-zinc-800 max-h-48 bg-zinc-900 flex items-center justify-center">
-                        <img
-                          src={resolveStorageUrl(editingCompletedForm.confirmation_proof) || editingCompletedForm.confirmation_proof}
-                          alt="Customer Confirmation Proof Preview"
-                          referrerPolicy="no-referrer"
-                          className="max-h-48 max-w-full object-contain rounded-lg"
-                        />
-                      </div>
-                    </div>
-                  )}
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div id="editing_completed_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-5 h-5 text-indigo-400" />
+                  <h3 className="text-base font-bold text-white">Customer Review Image & Server Checklist</h3>
                 </div>
+                <button 
+                  onClick={() => setEditingCompletedModal(null)}
+                  className="text-zinc-400 hover:text-white p-1 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-                {/* Server Upload Confirmation Section */}
-                {Boolean(editingCompletedForm.confirmation_proof) && (
-                  <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl space-y-3">
-                    <div className="text-[11px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
-                      <span>Server Upload Confirmation</span>
-                      <span className="text-[10px] text-rose-400 font-normal">* Required</span>
-                    </div>
+              <div className="overflow-y-auto pr-2 custom-scrollbar">
+                {renderOrderHeader(editingCompletedModal.group)}
 
-                    <label className="flex items-start gap-3 cursor-pointer select-none bg-zinc-900/60 p-3 rounded-lg border border-zinc-800 hover:border-zinc-700 transition-colors">
-                      <input
-                        type="checkbox"
-                        id="server_upload_confirmed_checkbox"
-                        checked={Boolean(editingCompletedForm.server_upload_confirmed)}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setEditingCompletedForm(prev => ({
-                            ...prev,
-                            server_upload_confirmed: checked,
-                            server_upload_event_date: prev.server_upload_event_date || (checked ? (editingCompletedModal.actionItem?.eventDate || editingCompletedModal.group?.eventDate || '') : prev.server_upload_event_date),
-                            server_upload_folder_name: prev.server_upload_folder_name || (checked ? (editingCompletedModal.actionItem?.serverUploadFolderName || `${editingCompletedModal.group?.customerName || 'Client'} ${editingCompletedModal.group?.eventName || 'Event'} Edited`) : prev.server_upload_folder_name)
-                          }));
-                        }}
-                        className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-bold text-white block">
-                          Edited Folder is uploaded in Server
-                        </span>
-                        <span className="text-[10px] text-zinc-400 block mt-0.5">
-                          Must manually tick to confirm that the edited folder has been uploaded to the server.
-                        </span>
-                      </div>
+                <p className="text-xs text-zinc-400 mb-4">
+                  Upload customer review image / confirmation proof. After attaching the image, complete the mandatory checklist below confirming that the edited folder has been uploaded to the server.
+                </p>
+
+                <form id="editing-completed-form" onSubmit={handleEditingCompletedSubmit} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
+                      Customer Review Image / Proof <span className="text-rose-400">*</span>
                     </label>
 
-                    {editingCompletedForm.server_upload_confirmed && (
-                      <div className="pt-2 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-200">
-                        <div>
-                          <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
-                            Event Date <span className="text-rose-400">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            id="server_upload_event_date_input"
-                            placeholder="e.g., 21 Aug 2026"
-                            value={editingCompletedForm.server_upload_event_date || ''}
-                            onChange={(e) => setEditingCompletedForm(prev => ({ ...prev, server_upload_event_date: e.target.value }))}
-                            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-                            required
-                          />
+                    {/* File Upload Field */}
+                    <div className="bg-zinc-950 border border-dashed border-indigo-500/30 hover:border-indigo-500/60 rounded-xl p-3 text-center transition-colors">
+                      <input
+                        type="file"
+                        id="customer_confirmation_file_input"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const compressed = await compressImage(e.target.files[0]);
+                            setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: compressed });
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="customer_confirmation_file_input"
+                        className="cursor-pointer flex flex-col items-center justify-center gap-1.5 py-1"
+                      >
+                        <Upload className="w-5 h-5 text-indigo-400" />
+                        <span className="text-xs font-bold text-indigo-300">
+                          {editingCompletedForm.confirmation_proof ? 'Change Customer Review Image' : 'Select Customer Review Image'}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP (auto-compressed & uploaded to Supabase)</span>
+                      </label>
+                    </div>
+
+                    <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-2">- OR ENTER DIRECT IMAGE URL / DRIVE LINK -</div>
+
+                    <input
+                      type="text"
+                      placeholder="https://..."
+                      value={editingCompletedForm.confirmation_proof.startsWith('data:') ? 'Image attached from file upload' : editingCompletedForm.confirmation_proof}
+                      onChange={(e) => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: e.target.value })}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                    />
+                    
+                    {/* Selected Image Thumbnail Preview */}
+                    {editingCompletedForm.confirmation_proof && (
+                      <div className="mt-3 p-3 bg-zinc-950 border border-indigo-500/20 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between text-xs text-indigo-400 font-mono font-bold">
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Image Attached
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: '' })}
+                            className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
+                          >
+                            Remove
+                          </button>
                         </div>
 
-                        <div>
-                          <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
-                            Folder Name <span className="text-rose-400">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            id="server_upload_folder_name_input"
-                            placeholder="e.g., Rahul Wedding Edited"
-                            value={editingCompletedForm.server_upload_folder_name || ''}
-                            onChange={(e) => setEditingCompletedForm(prev => ({ ...prev, server_upload_folder_name: e.target.value }))}
-                            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-                            required
+                        <div className="relative rounded-lg overflow-hidden border border-zinc-800 max-h-48 bg-zinc-900 flex items-center justify-center">
+                          <img
+                            src={resolveStorageUrl(editingCompletedForm.confirmation_proof) || editingCompletedForm.confirmation_proof}
+                            alt="Customer Review Image Preview"
+                            referrerPolicy="no-referrer"
+                            className="max-h-48 max-w-full object-contain rounded-lg"
                           />
                         </div>
                       </div>
                     )}
                   </div>
-                )}
 
-                {renderDeliverableChecklist(
-                  editingCompletedModal.group,
-                  editingCompletedForm.selectedIds,
-                  (ids) => setEditingCompletedForm({ ...editingCompletedForm, selectedIds: ids }),
-                  ['Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress']
-                )}
-              </form>
-            </div>
+                  {/* Server Upload Confirmation Section - ONLY AFTER CUSTOMER REVIEW IMAGE UPLOAD */}
+                  {Boolean(editingCompletedForm.confirmation_proof) ? (
+                    <div className="p-4 bg-zinc-950 border border-indigo-500/30 rounded-xl space-y-4 animate-in fade-in duration-200">
+                      <div className="text-[11px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-emerald-400">📁</span>
+                          <span>Server Upload Confirmation</span>
+                        </span>
+                        <span className="text-[10px] text-rose-400 font-normal">* Mandatory Checklist</span>
+                      </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
-              <button
-                type="button"
-                onClick={() => setEditingCompletedModal(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                form="editing-completed-form"
-                type="submit"
-                disabled={
-                  isSubmitting ||
-                  !editingCompletedForm.confirmation_proof.trim() ||
-                  !editingCompletedForm.server_upload_confirmed ||
-                  !editingCompletedForm.server_upload_event_date?.trim() ||
-                  !editingCompletedForm.server_upload_folder_name?.trim() ||
-                  editingCompletedForm.selectedIds.length === 0
-                }
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-indigo-600/20"
-              >
-                {isSubmitting ? 'Uploading Proof & Saving...' : 'Submit & Mark Editing Completed 🎯'}
-              </button>
+                      {uniqueEventKeys.length > 0 ? (
+                        uniqueEventKeys.map((evtKey: string) => {
+                          const evtCfg = editingCompletedForm.event_configs[evtKey] || {
+                            eventKey: evtKey,
+                            eventId: '',
+                            eventName: 'Event',
+                            eventDate: editingCompletedForm.server_upload_event_date || '',
+                            folderName: editingCompletedForm.server_upload_folder_name || '',
+                            confirmed: editingCompletedForm.server_upload_confirmed
+                          };
+
+                          const matchingDeliv = selectedDeliverables.find((d: any) => (d.eventId || d.eventName || 'default').trim() === evtKey);
+                          const eventDisplayName = evtCfg.eventName || matchingDeliv?.eventName || 'Event';
+                          const defaultEvtDate = evtCfg.eventDate || matchingDeliv?.eventDate || editingCompletedModal.group?.eventDate || '';
+                          const defaultFolderName = evtCfg.folderName || `${editingCompletedModal.group?.customerName || 'Client'} ${eventDisplayName} Edited`;
+
+                          return (
+                            <div key={evtKey} className="space-y-3 bg-zinc-900/80 p-3.5 rounded-xl border border-zinc-800">
+                              {uniqueEventKeys.length > 1 && (
+                                <div className="text-xs font-bold text-indigo-300 pb-2 border-b border-zinc-800/80 flex items-center justify-between">
+                                  <span>Event: <strong className="text-white">{eventDisplayName}</strong></span>
+                                  {defaultEvtDate && <span className="text-[10px] text-zinc-400 font-mono">({defaultEvtDate})</span>}
+                                </div>
+                              )}
+
+                              <label className="flex items-start gap-3 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  id={`server_upload_confirmed_checkbox_${evtKey}`}
+                                  checked={Boolean(evtCfg.confirmed)}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked;
+                                    setEditingCompletedForm(prev => {
+                                      const updatedConfigs = {
+                                        ...prev.event_configs,
+                                        [evtKey]: {
+                                          ...evtCfg,
+                                          confirmed: checked,
+                                          eventDate: evtCfg.eventDate || defaultEvtDate,
+                                          folderName: evtCfg.folderName || defaultFolderName
+                                        }
+                                      };
+                                      return {
+                                        ...prev,
+                                        server_upload_confirmed: checked,
+                                        server_upload_event_date: updatedConfigs[evtKey].eventDate,
+                                        server_upload_folder_name: updatedConfigs[evtKey].folderName,
+                                        event_configs: updatedConfigs
+                                      };
+                                    });
+                                  }}
+                                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <span className="text-xs font-bold text-white block">
+                                    Edited Folder Uploaded in Server
+                                  </span>
+                                  <span className="text-[10px] text-zinc-400 block mt-0.5">
+                                    Mark this checkbox only after the edited folder has been uploaded to the server.
+                                  </span>
+                                </div>
+                              </label>
+
+                              {evtCfg.confirmed && (
+                                <div className="pt-3 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-200">
+                                  <div>
+                                    <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
+                                      Event Date <span className="text-rose-400">*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      id={`server_upload_event_date_input_${evtKey}`}
+                                      placeholder="e.g., 21 Aug 2026"
+                                      value={evtCfg.eventDate || defaultEvtDate}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setEditingCompletedForm(prev => ({
+                                          ...prev,
+                                          server_upload_event_date: val,
+                                          event_configs: {
+                                            ...prev.event_configs,
+                                            [evtKey]: {
+                                              ...evtCfg,
+                                              eventDate: val
+                                            }
+                                          }
+                                        }));
+                                      }}
+                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                                      required
+                                    />
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
+                                      Folder Name <span className="text-rose-400">*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      id={`server_upload_folder_name_input_${evtKey}`}
+                                      placeholder="e.g., Rahul Wedding Edited"
+                                      value={evtCfg.folderName || defaultFolderName}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setEditingCompletedForm(prev => ({
+                                          ...prev,
+                                          server_upload_folder_name: val,
+                                          event_configs: {
+                                            ...prev.event_configs,
+                                            [evtKey]: {
+                                              ...evtCfg,
+                                              folderName: val
+                                            }
+                                          }
+                                        }));
+                                      }}
+                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                                      required
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl text-center">
+                      <span className="text-[11px] text-zinc-500 font-mono">
+                        Upload customer review image above to unlock the server upload checklist.
+                      </span>
+                    </div>
+                  )}
+
+                  {renderDeliverableChecklist(
+                    editingCompletedModal.group,
+                    editingCompletedForm.selectedIds,
+                    (ids) => setEditingCompletedForm({ ...editingCompletedForm, selectedIds: ids }),
+                    ['Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress']
+                  )}
+                </form>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setEditingCompletedModal(null)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  form="editing-completed-form"
+                  type="submit"
+                  disabled={
+                    isSubmitting ||
+                    !editingCompletedForm.confirmation_proof.trim() ||
+                    !isChecklistValid ||
+                    editingCompletedForm.selectedIds.length === 0
+                  }
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-indigo-600/20"
+                >
+                  {isSubmitting ? 'Uploading Proof & Saving...' : 'Submit & Confirm Server Upload 🎯'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================= */}
       {/* 4. CUSTOMER PROOF IMAGE ZOOM MODAL */}
