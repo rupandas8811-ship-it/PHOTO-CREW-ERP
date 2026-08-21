@@ -4352,7 +4352,8 @@ export const OperationsLeads: React.FC = () => {
                     // Save Consolidated Link & update operation status
                     await pushUpdate('operations', 'order_id', receivingFootageOrderId, {
                       consolidated_drive_link: consolidatedDriveLink,
-                      raw_footage_drive_link: rawFootageLink || consolidatedDriveLink,
+                      Consolidated_Drive_Link: consolidatedDriveLink,
+                      raw_footage_drive_link: consolidatedDriveLink,
                       event_status: 'Verified Footage',
                       remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${new Date().toLocaleDateString()}`,
                       updated_by: currentUserName || 'Operations Manager'
@@ -4361,7 +4362,7 @@ export const OperationsLeads: React.FC = () => {
                     // Call confirmRawFootageReceived to move to Verified Footage and Production
                     await confirmRawFootageReceived(
                       receivingFootageOrderId,
-                      rawFootageLink || consolidatedDriveLink,
+                      consolidatedDriveLink,
                       'Google Drive',
                       `Verified Footage with Consolidated Link: ${consolidatedDriveLink}`,
                       undefined,

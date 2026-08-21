@@ -567,7 +567,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     return { order, lead };
   };
 
-  // Robustly extract Raw Footage Drive Link from Operations / Raw Footage / Production / Staff Assignment sources
+  // Robustly extract Raw Footage Drive Link matching the exact Final Consolidated link from Assign Editor notes / Operations verification
   const getRawFootageDriveLink = (prodItem: any): string => {
     if (!prodItem) return '';
 
@@ -576,7 +576,40 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     const leadId = prodItem.lead_id || lead?.lead_id || order?.lead_id;
     const eventId = prodItem.event_id;
 
-    // 1. Check all Operations records prioritizing exact event match and order/lead matches
+    // Helper to extract URL from notes string, prioritizing "Verified Footage with Consolidated Link:"
+    const extractFromNotes = (text?: string | null): string => {
+      if (!text || typeof text !== 'string') return '';
+      const vMatch = text.match(/Verified\s+Footage\s+with\s+Consolidated\s+Link:\s*(https?:\/\/[^\s\n\r"']+)/i);
+      if (vMatch && vMatch[1]) return vMatch[1].trim();
+
+      const cMatch = text.match(/Consolidated\s+(?:Drive\s+)?Link:\s*(https?:\/\/[^\s\n\r"']+)/i);
+      if (cMatch && cMatch[1]) return cMatch[1].trim();
+
+      return '';
+    };
+
+    // Helper to extract any valid http link from notes
+    const extractAnyUrl = (text?: string | null): string => {
+      if (!text || typeof text !== 'string') return '';
+      const m = text.match(/(https?:\/\/[^\s\n\r"']+)/i);
+      return m ? m[1].trim() : '';
+    };
+
+    // 1. Check Notes & Remarks first for the Verified Consolidated Link (SAME AS ASSIGN EDITOR POPUP NOTES)
+    const noteCandidates = [
+      prodItem.project_notes,
+      prodItem.remarks,
+      prodItem.upload_notes,
+      order?.notes,
+      lead?.notes
+    ];
+
+    for (const n of noteCandidates) {
+      const verified = extractFromNotes(n);
+      if (verified) return verified;
+    }
+
+    // Match candidate operations records (scoped to exact event_id if present to prevent multi-event mixing)
     const candidateOps = (operations || []).filter(o => {
       if (eventId && eventId !== 'MULTIPLE' && o.event_id && o.event_id === eventId) {
         return !orderId || o.order_id === orderId;
@@ -587,51 +620,70 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     });
 
     for (const op of candidateOps) {
-      const link = op.consolidated_drive_link || op.Consolidated_Drive_Link || op.raw_footage_drive_link || op.Raw_Footage_Drive_Link;
-      if (link && typeof link === 'string' && link.trim() !== '') {
-        return link.trim();
-      }
+      const fromOpNotes = extractFromNotes(op.remarks) || extractFromNotes(op.upload_notes_remarks) || extractFromNotes((op as any).Upload_Notes_Remarks);
+      if (fromOpNotes) return fromOpNotes;
     }
 
-    // 2. Check Production record properties
-    const prodLink = (prodItem as any).final_consolidated_drive_link || 
-                     prodItem.consolidated_drive_link || 
-                     prodItem.Consolidated_Drive_Link || 
-                     prodItem.raw_footage_location ||
-                     (prodItem as any).delivery_link;
-    if (prodLink && typeof prodLink === 'string' && prodLink.trim() !== '') {
-      return prodLink.trim();
-    }
-
-    // 3. Check Raw Footage table
+    // Check Raw Footage table upload notes
     const rf = (rawFootage || []).find(f => 
       (orderId && (f.order_id === orderId || f.tracking_id === orderId)) ||
       (prodItem.tracking_id && (f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id))
     );
+    if (rf?.upload_notes) {
+      const fromRfNotes = extractFromNotes(rf.upload_notes);
+      if (fromRfNotes) return fromRfNotes;
+    }
+
+    // 2. Check explicit final consolidated link columns (Operations & Production)
+    for (const op of candidateOps) {
+      const consLink = op.consolidated_drive_link || op.Consolidated_Drive_Link;
+      if (consLink && typeof consLink === 'string' && consLink.trim() !== '') {
+        return consLink.trim();
+      }
+    }
+
+    const prodConsLink = (prodItem as any).final_consolidated_drive_link || 
+                         prodItem.consolidated_drive_link || 
+                         prodItem.Consolidated_Drive_Link;
+    if (prodConsLink && typeof prodConsLink === 'string' && prodConsLink.trim() !== '') {
+      return prodConsLink.trim();
+    }
+
+    if (order?.consolidated_drive_link && typeof order.consolidated_drive_link === 'string' && order.consolidated_drive_link.trim() !== '') {
+      return order.consolidated_drive_link.trim();
+    }
+    if (lead?.consolidated_drive_link && typeof lead.consolidated_drive_link === 'string' && lead.consolidated_drive_link.trim() !== '') {
+      return lead.consolidated_drive_link.trim();
+    }
+
+    // 3. Check general URLs from notes / remarks
+    for (const n of noteCandidates) {
+      const anyUrl = extractAnyUrl(n);
+      if (anyUrl) return anyUrl;
+    }
+    for (const op of candidateOps) {
+      const anyUrl = extractAnyUrl(op.remarks) || extractAnyUrl(op.upload_notes_remarks) || extractAnyUrl((op as any).Upload_Notes_Remarks);
+      if (anyUrl) return anyUrl;
+    }
+
+    // 4. Fallback only if no consolidated link exists anywhere
+    if (prodItem.raw_footage_location && typeof prodItem.raw_footage_location === 'string' && prodItem.raw_footage_location.trim() !== '') {
+      return prodItem.raw_footage_location.trim();
+    }
+    for (const op of candidateOps) {
+      const rawLink = op.raw_footage_drive_link || op.Raw_Footage_Drive_Link;
+      if (rawLink && typeof rawLink === 'string' && rawLink.trim() !== '') {
+        return rawLink.trim();
+      }
+    }
     if (rf?.server_path && typeof rf.server_path === 'string' && rf.server_path.trim() !== '') {
       return rf.server_path.trim();
     }
-
-    // 4. Check Order or Lead records
-    const orderLink = order?.consolidated_drive_link || order?.raw_footage_link || lead?.consolidated_drive_link || lead?.raw_footage_link;
-    if (orderLink && typeof orderLink === 'string' && orderLink.trim() !== '') {
-      return orderLink.trim();
+    if (order?.raw_footage_link && typeof order.raw_footage_link === 'string' && order.raw_footage_link.trim() !== '') {
+      return order.raw_footage_link.trim();
     }
-
-    // 5. Check Production record project_notes / remarks for a link
-    if (prodItem.project_notes && typeof prodItem.project_notes === 'string') {
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
-      const match = prodItem.project_notes.match(urlRegex);
-      if (match && match.length > 0) {
-        return match[0].trim();
-      }
-    }
-    if (prodItem.remarks && typeof prodItem.remarks === 'string') {
-      const urlRegex = /(https?:\/\/[^\s]+)/g;
-      const match = prodItem.remarks.match(urlRegex);
-      if (match && match.length > 0) {
-        return match[0].trim();
-      }
+    if (lead?.raw_footage_link && typeof lead.raw_footage_link === 'string' && lead.raw_footage_link.trim() !== '') {
+      return lead.raw_footage_link.trim();
     }
 
     return '';

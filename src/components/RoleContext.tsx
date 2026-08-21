@@ -1088,7 +1088,25 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const defaultTargetDate = parentLeadForO?.delivery_target_date || '';
         const opForO = operations.find(op => op.order_id === o.order_id);
         const rfForO = rawFootage.find(rf => rf.order_id === o.order_id || rf.tracking_id === o.order_id);
-        const link = opForO?.consolidated_drive_link || opForO?.Consolidated_Drive_Link || opForO?.raw_footage_drive_link || rfForO?.server_path || (o as any).consolidated_drive_link || o.raw_footage_link || '';
+        
+        // Helper to extract verified link from notes
+        const extractVerifiedFromText = (text?: string | null): string => {
+          if (!text || typeof text !== 'string') return '';
+          const m = text.match(/Verified\s+Footage\s+with\s+Consolidated\s+Link:\s*(https?:\/\/[^\s\n\r"']+)/i) ||
+                    text.match(/Consolidated\s+(?:Drive\s+)?Link:\s*(https?:\/\/[^\s\n\r"']+)/i);
+          return m ? m[1].trim() : '';
+        };
+
+        const link = opForO?.consolidated_drive_link || 
+                     opForO?.Consolidated_Drive_Link || 
+                     extractVerifiedFromText(opForO?.remarks) || 
+                     extractVerifiedFromText(opForO?.upload_notes_remarks) || 
+                     extractVerifiedFromText(rfForO?.upload_notes) || 
+                     (o as any).consolidated_drive_link || 
+                     opForO?.raw_footage_drive_link || 
+                     rfForO?.server_path || 
+                     o.raw_footage_link || '';
+
         list.push({
           production_id: `PRD-${o.lead_id}`,
           tracking_id: o.order_id,
@@ -1119,13 +1137,34 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       let updatedP = { ...p };
 
-      const resolvedLink = op?.consolidated_drive_link || op?.Consolidated_Drive_Link || (p as any).final_consolidated_drive_link || (p as any).consolidated_drive_link || p.raw_footage_location || rf?.server_path || (ord as any)?.consolidated_drive_link || ord?.raw_footage_link || '';
+      const extractVerifiedFromText = (text?: string | null): string => {
+        if (!text || typeof text !== 'string') return '';
+        const m = text.match(/Verified\s+Footage\s+with\s+Consolidated\s+Link:\s*(https?:\/\/[^\s\n\r"']+)/i) ||
+                  text.match(/Consolidated\s+(?:Drive\s+)?Link:\s*(https?:\/\/[^\s\n\r"']+)/i);
+        return m ? m[1].trim() : '';
+      };
+
+      const verifiedFromNotes = extractVerifiedFromText(p.project_notes) || 
+                                extractVerifiedFromText(p.remarks) || 
+                                extractVerifiedFromText(op?.remarks) || 
+                                extractVerifiedFromText(op?.upload_notes_remarks) || 
+                                extractVerifiedFromText(rf?.upload_notes);
+
+      const resolvedLink = verifiedFromNotes ||
+                           op?.consolidated_drive_link || 
+                           op?.Consolidated_Drive_Link || 
+                           (p as any).final_consolidated_drive_link || 
+                           (p as any).consolidated_drive_link || 
+                           (ord as any)?.consolidated_drive_link ||
+                           p.raw_footage_location || 
+                           op?.raw_footage_drive_link || 
+                           rf?.server_path || 
+                           ord?.raw_footage_link || '';
+
       if (resolvedLink) {
-        (updatedP as any).final_consolidated_drive_link = (updatedP as any).final_consolidated_drive_link || resolvedLink;
-        (updatedP as any).consolidated_drive_link = (updatedP as any).consolidated_drive_link || resolvedLink;
-        if (!updatedP.raw_footage_location) {
-          updatedP.raw_footage_location = resolvedLink;
-        }
+        (updatedP as any).final_consolidated_drive_link = resolvedLink;
+        (updatedP as any).consolidated_drive_link = resolvedLink;
+        updatedP.raw_footage_location = resolvedLink;
       }
 
       if (!p.editing_status || p.editing_status === 'Pending') {
