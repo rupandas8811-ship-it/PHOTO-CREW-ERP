@@ -508,9 +508,116 @@ export const ProductionStaffModule: React.FC = () => {
     selectedIds: []
   });
 
+  // Helper to format any date to DD-MM-YY (e.g. 21-08-26)
+  const formatDateToDDMMYY = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const trimmed = dateStr.trim();
+    if (/^\d{2}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+      const parts = trimmed.split('-');
+      return `${parts[0]}-${parts[1]}-${parts[2].slice(-2)}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [yyyy, mm, dd] = trimmed.split('-');
+      return `${dd}-${mm}-${yyyy.slice(-2)}`;
+    }
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = String(d.getFullYear()).slice(-2);
+      return `${day}-${month}-${year}`;
+    }
+    return trimmed;
+  };
+
   // 2. Customer Review Modal
   const [customerReviewModal, setCustomerReviewModal] = useState<{group: any, actionItem: any} | null>(null);
-  const [customerReviewForm, setCustomerReviewForm] = useState<{edited_drive_link: string, selectedIds: string[]}>({ edited_drive_link: '', selectedIds: [] });
+  const [customerReviewForm, setCustomerReviewForm] = useState<{
+    edited_drive_link: string;
+    customer_review_image: string;
+    selectedIds: string[];
+    server_upload_confirmed: boolean;
+    server_upload_event_date: string;
+    server_upload_folder_name: string;
+    event_configs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean; isSaved: boolean; confirmedAt?: string }>;
+  }>({ 
+    edited_drive_link: '', 
+    customer_review_image: '',
+    selectedIds: [],
+    server_upload_confirmed: false,
+    server_upload_event_date: '',
+    server_upload_folder_name: '',
+    event_configs: {}
+  });
+
+  const openCustomerReviewModal = (grp: any, delivItem: any) => {
+    const eventConfigs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean; isSaved: boolean; confirmedAt?: string }> = {};
+
+    (grp.deliverables || []).forEach((item: any) => {
+      const evtKey = (item.eventId || item.eventName || 'default').trim();
+      if (!eventConfigs[evtKey]) {
+        const existingConfirmed = Boolean(
+          item.serverUploadConfirmed ||
+          item.assignmentObj?.server_upload_confirmed ||
+          item.assignmentObj?.edited_folder_uploaded_to_server ||
+          item.prodObj?.server_upload_confirmed
+        );
+        const rawDate = (
+          item.serverUploadEventDate ||
+          item.assignmentObj?.server_upload_event_date ||
+          item.prodObj?.server_upload_event_date ||
+          item.eventDate ||
+          grp.eventDate ||
+          ''
+        ).trim();
+        const existingEventDate = formatDateToDDMMYY(rawDate) || rawDate;
+        const existingFolderName = (
+          item.serverUploadFolderName ||
+          item.assignmentObj?.server_upload_folder_name ||
+          item.prodObj?.server_upload_folder_name ||
+          item.prodObj?.server_path ||
+          `${grp.customerName || 'Client'} ${item.eventName || grp.eventName || 'Event'} Edited`
+        ).trim();
+
+        eventConfigs[evtKey] = {
+          eventKey: evtKey,
+          eventId: item.eventId || '',
+          eventName: item.eventName || grp.eventName || 'Event',
+          eventDate: existingEventDate,
+          folderName: existingFolderName,
+          confirmed: existingConfirmed,
+          isSaved: existingConfirmed,
+          confirmedAt: item.serverUploadConfirmedAt || item.assignmentObj?.server_upload_confirmed_at || ''
+        };
+      }
+    });
+
+    const currentEvtKey = (delivItem.eventId || delivItem.eventName || 'default').trim();
+    const currentCfg = eventConfigs[currentEvtKey] || {
+      eventKey: currentEvtKey,
+      eventId: delivItem.eventId || '',
+      eventName: delivItem.eventName || grp.eventName || 'Event',
+      eventDate: formatDateToDDMMYY(delivItem.eventDate || grp.eventDate || '') || (delivItem.eventDate || grp.eventDate || ''),
+      folderName: `${grp.customerName || 'Client'} ${delivItem.eventName || grp.eventName || 'Event'} Edited`,
+      confirmed: false,
+      isSaved: false,
+      confirmedAt: ''
+    };
+
+    const existingImage = (delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
+
+    setCustomerReviewModal({ group: grp, actionItem: delivItem });
+    setCustomerReviewForm({
+      edited_drive_link: delivItem.editedDriveLink || '',
+      customer_review_image: existingImage,
+      selectedIds: [delivItem.assignmentId],
+      server_upload_confirmed: currentCfg.confirmed,
+      server_upload_event_date: currentCfg.eventDate,
+      server_upload_folder_name: currentCfg.folderName,
+      event_configs: eventConfigs
+    });
+  };
 
   // WhatsApp Popup Modal (2nd Popup immediately after Customer Review save)
   const [whatsappModal, setWhatsappModal] = useState<{
@@ -994,12 +1101,139 @@ export const ProductionStaffModule: React.FC = () => {
     }
   };
 
-  // 2. Submit Customer Review Modal
+  // 2A. Save Server Upload Confirmation directly inside Customer Review Modal
+  const handleSaveCustomerReviewServerConfirmation = async (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    if (!customerReviewModal) return;
+
+    const b = customerReviewModal.group;
+    const deliverablesToUpdate = b.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
+    if (deliverablesToUpdate.length === 0) {
+      alert("Please select at least one deliverable to update.");
+      return;
+    }
+
+    const uniqueEventKeys: string[] = Array.from(new Set(deliverablesToUpdate.map((d: any) => ((d.eventId || d.eventName || 'default') as string).trim())));
+    for (const evtKey of uniqueEventKeys) {
+      const cfg = customerReviewForm.event_configs[evtKey] || {
+        confirmed: customerReviewForm.server_upload_confirmed,
+        eventDate: customerReviewForm.server_upload_event_date,
+        folderName: customerReviewForm.server_upload_folder_name,
+        eventName: 'Event'
+      };
+      if (!cfg.confirmed || !cfg.eventDate?.trim() || !cfg.folderName?.trim()) {
+        const evtName = cfg.eventName || 'the event';
+        alert(`Please tick "Edited Folder Uploaded in Server" and enter both Event Date and Folder Name for ${evtName}.`);
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
+    try {
+      const timestamp = new Date().toISOString();
+      let imgUrl = customerReviewForm.customer_review_image?.trim() || '';
+      if (imgUrl.startsWith('data:')) {
+        imgUrl = await uploadProofToStorage(imgUrl, `customer_review_${Date.now()}.webp`);
+      }
+
+      for (const deliv of deliverablesToUpdate) {
+        const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+        const cfg = customerReviewForm.event_configs[evtKey] || {
+          confirmed: true,
+          eventDate: customerReviewForm.server_upload_event_date,
+          folderName: customerReviewForm.server_upload_folder_name
+        };
+        const serverEventDate = (cfg.eventDate || deliv.eventDate || '').trim();
+        const serverFolderName = (cfg.folderName || `${b.customerName || 'Client'} ${deliv.eventName || 'Event'} Edited`).trim();
+
+        const assignPayload: any = {
+          server_upload_confirmed: true,
+          edited_folder_uploaded_to_server: true,
+          server_upload_event_date: serverEventDate,
+          server_upload_folder_name: serverFolderName,
+          server_upload_confirmed_at: timestamp,
+          server_upload_confirmed_by: staffName || 'Production Staff'
+        };
+
+        if (imgUrl) {
+          assignPayload.customer_review_image = imgUrl;
+          assignPayload.customer_communication_proof = imgUrl;
+          assignPayload.confirmation_proof = imgUrl;
+          assignPayload.proof_url = imgUrl;
+        }
+        if (customerReviewForm.edited_drive_link?.trim()) {
+          assignPayload.Edited_Drive_Link = customerReviewForm.edited_drive_link.trim();
+          assignPayload.edited_drive_link = customerReviewForm.edited_drive_link.trim();
+        }
+
+        await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, assignPayload);
+      }
+
+      const uniqueProdIds: string[] = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean))) as string[];
+      for (const prodId of uniqueProdIds) {
+        const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
+        const evtKey = (matchingDeliv?.eventId || matchingDeliv?.eventName || 'default').trim();
+        const cfg = customerReviewForm.event_configs[evtKey] || {
+          eventDate: customerReviewForm.server_upload_event_date,
+          folderName: customerReviewForm.server_upload_folder_name
+        };
+        const serverEventDate = (cfg.eventDate || matchingDeliv?.eventDate || '').trim();
+        const serverFolderName = (cfg.folderName || `${b.customerName || 'Client'} ${matchingDeliv?.eventName || 'Event'} Edited`).trim();
+
+        const prodUpdate: any = {
+          server_upload_confirmed: true,
+          server_upload_event_date: serverEventDate,
+          server_upload_folder_name: serverFolderName,
+          server_path: serverFolderName
+        };
+        if (customerReviewForm.edited_drive_link?.trim()) {
+          prodUpdate.edited_drive_link = customerReviewForm.edited_drive_link.trim();
+        }
+        if (imgUrl) {
+          prodUpdate.client_communication_proof = imgUrl;
+          prodUpdate.customer_communication_proof = imgUrl;
+        }
+        await updateProduction(prodId, prodUpdate);
+      }
+
+      // Update local state to mark as saved
+      setCustomerReviewForm(prev => {
+        const updatedConfigs = { ...prev.event_configs };
+        uniqueEventKeys.forEach((k: string) => {
+          if (updatedConfigs[k]) {
+            updatedConfigs[k] = {
+              ...updatedConfigs[k],
+              confirmed: true,
+              isSaved: true,
+              confirmedAt: timestamp
+            };
+          }
+        });
+        return {
+          ...prev,
+          customer_review_image: imgUrl || prev.customer_review_image,
+          server_upload_confirmed: true,
+          event_configs: updatedConfigs
+        };
+      });
+
+      await refreshData();
+      showToast("✅ Edited Folder Server Upload Confirmed & Saved!");
+    } catch (err: any) {
+      console.error("Error saving server upload confirmation:", err);
+      alert("❌ Failed to save confirmation: " + (err.message || String(err)));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 2B. Submit Customer Review Modal
   const handleCustomerReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerReviewModal) return;
-    if (!customerReviewForm.edited_drive_link.trim()) {
-      alert("Please provide the Edited Drive Link.");
+    const reviewImageOrLink = customerReviewForm.customer_review_image?.trim() || customerReviewForm.edited_drive_link?.trim();
+    if (!reviewImageOrLink) {
+      alert("Please provide the Customer Review Image or Edited Drive Link.");
       return;
     }
     if (customerReviewForm.selectedIds.length === 0) {
@@ -1011,32 +1245,83 @@ export const ProductionStaffModule: React.FC = () => {
     try {
       const timestamp = new Date().toISOString();
       const b = customerReviewModal.group;
-      const editedLink = customerReviewForm.edited_drive_link.trim();
+      const editedLink = (customerReviewForm.edited_drive_link || customerReviewForm.customer_review_image || '').trim();
+      let imgUrl = customerReviewForm.customer_review_image?.trim() || '';
+      if (imgUrl.startsWith('data:')) {
+        imgUrl = await uploadProofToStorage(imgUrl, `customer_review_${Date.now()}.webp`);
+      }
+
       const deliverablesToUpdate = b.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
 
       for (const deliv of deliverablesToUpdate) {
         await updateEditorAssignmentStatus(deliv.assignmentId, 'Customer Review' as any);
 
-        // Save Edited Drive Link directly into editor_assignments.Edited_Drive_Link
-        const saveRes = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
+        const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+        const cfg = customerReviewForm.event_configs[evtKey] || {
+          confirmed: customerReviewForm.server_upload_confirmed,
+          eventDate: customerReviewForm.server_upload_event_date,
+          folderName: customerReviewForm.server_upload_folder_name
+        };
+
+        const assignPayload: any = {
           Edited_Drive_Link: editedLink,
           edited_drive_link: editedLink,
           status: 'Customer Review'
-        });
+        };
+
+        if (imgUrl) {
+          assignPayload.customer_review_image = imgUrl;
+          assignPayload.customer_communication_proof = imgUrl;
+          assignPayload.confirmation_proof = imgUrl;
+          assignPayload.proof_url = imgUrl;
+        }
+
+        if (cfg.confirmed && cfg.eventDate && cfg.folderName) {
+          assignPayload.server_upload_confirmed = true;
+          assignPayload.edited_folder_uploaded_to_server = true;
+          assignPayload.server_upload_event_date = cfg.eventDate.trim();
+          assignPayload.server_upload_folder_name = cfg.folderName.trim();
+          assignPayload.server_upload_confirmed_at = timestamp;
+          assignPayload.server_upload_confirmed_by = staffName || 'Production Staff';
+        }
+
+        const saveRes = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, assignPayload);
 
         if (saveRes && saveRes.success === false) {
-          throw new Error(saveRes.error || 'Failed to save Edited Drive Link to editor_assignments table');
+          throw new Error(saveRes.error || 'Failed to save Customer Review updates to editor_assignments table');
         }
       }
 
       const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
       for (const prodId of uniqueProdIds as string[]) {
-        await updateProduction(prodId, {
+        const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
+        const evtKey = (matchingDeliv?.eventId || matchingDeliv?.eventName || 'default').trim();
+        const cfg = customerReviewForm.event_configs[evtKey] || {
+          confirmed: customerReviewForm.server_upload_confirmed,
+          eventDate: customerReviewForm.server_upload_event_date,
+          folderName: customerReviewForm.server_upload_folder_name
+        };
+
+        const prodPayload: any = {
           editing_status: 'Customer Review',
           production_status: 'Customer Review',
           edited_drive_link: editedLink,
-          remarks: `Edited Drive Link uploaded by ${staffName} on ${new Date().toLocaleDateString()}: ${editedLink}`
-        });
+          remarks: `Customer Review updated by ${staffName} on ${new Date().toLocaleDateString()}`
+        };
+
+        if (imgUrl) {
+          prodPayload.client_communication_proof = imgUrl;
+          prodPayload.customer_communication_proof = imgUrl;
+        }
+
+        if (cfg.confirmed && cfg.eventDate && cfg.folderName) {
+          prodPayload.server_upload_confirmed = true;
+          prodPayload.server_upload_event_date = cfg.eventDate.trim();
+          prodPayload.server_upload_folder_name = cfg.folderName.trim();
+          prodPayload.server_path = cfg.folderName.trim();
+        }
+
+        await updateProduction(prodId, prodPayload);
       }
 
       const uniqueOrderIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.orderId).filter(Boolean)));
@@ -1071,9 +1356,17 @@ Kindly let us know if any changes are required.
 Thank you.`;
 
       setCustomerReviewModal(null);
-      setCustomerReviewForm({ edited_drive_link: '', selectedIds: [] });
+      setCustomerReviewForm({ 
+        edited_drive_link: '', 
+        customer_review_image: '',
+        selectedIds: [], 
+        server_upload_confirmed: false,
+        server_upload_event_date: '',
+        server_upload_folder_name: '',
+        event_configs: {} 
+      });
       await refreshData();
-      showToast('📁 Edited Drive Link saved & moved to Customer Review!');
+      showToast('📁 Customer Review saved & moved to Customer Review!');
 
       // Automatically open 2nd popup: WhatsApp review message
       setWhatsappModal({
@@ -1814,8 +2107,7 @@ Thank you.`;
                                               type="button"
                                               onClick={() => {
                                                 setActiveDropdownId(null);
-                                                setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                                setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                                openCustomerReviewModal(grp, delivItem);
                                               }}
                                               className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                             >
@@ -1830,8 +2122,7 @@ Thank you.`;
                                                 type="button"
                                                 onClick={() => {
                                                   setActiveDropdownId(null);
-                                                  setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                                  setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                                  openCustomerReviewModal(grp, delivItem);
                                                 }}
                                                 className="w-full text-left px-4 py-2.5 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                               >
@@ -2221,8 +2512,7 @@ Thank you.`;
                                           type="button"
                                           onClick={() => {
                                             setActiveDropdownId(null);
-                                            setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                            setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                            openCustomerReviewModal(grp, delivItem);
                                           }}
                                           className="w-full text-left px-4 py-3 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                         >
@@ -2237,8 +2527,7 @@ Thank you.`;
                                             type="button"
                                             onClick={() => {
                                               setActiveDropdownId(null);
-                                              setCustomerReviewModal({ group: grp, actionItem: delivItem });
-                                              setCustomerReviewForm({ edited_drive_link: delivItem.editedDriveLink || '', selectedIds: [delivItem.assignmentId] });
+                                              openCustomerReviewModal(grp, delivItem);
                                             }}
                                             className="w-full text-left px-4 py-3 text-xs text-amber-400 hover:bg-amber-500/20 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                           >
@@ -2392,73 +2681,349 @@ Thank you.`;
       {/* ========================================================= */}
       {/* 2. CUSTOMER REVIEW MODAL POPUP */}
       {/* ========================================================= */}
-      {customerReviewModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="customer_review_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
-              <div className="flex items-center gap-2">
-                <UserCheck className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold text-white">Customer Review</h3>
-              </div>
-              <button 
-                onClick={() => setCustomerReviewModal(null)}
-                className="text-zinc-400 hover:text-white p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {customerReviewModal && (() => {
+        const selectedDeliverables = customerReviewModal.group.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
+        const uniqueEventKeys = Array.from(new Set(selectedDeliverables.map((d: any) => (d.eventId || d.eventName || 'default').trim())));
 
-            <div className="overflow-y-auto pr-2 custom-scrollbar">
-              {renderOrderHeader(customerReviewModal.group)}
+        const hasImageOrLink = Boolean(
+          customerReviewForm.customer_review_image?.trim() || 
+          customerReviewForm.edited_drive_link?.trim()
+        );
 
-              <p className="text-xs text-zinc-400 mb-4">
-                Provide the Edited Drive Link containing the preview videos/photos for customer review.
-              </p>
-
-              <form id="customer-review-form" onSubmit={handleCustomerReviewSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                    Edited Drive Link <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="url"
-                    required
-                    placeholder="https://drive.google.com/drive/folders/..."
-                    value={customerReviewForm.edited_drive_link}
-                    onChange={(e) => setCustomerReviewForm({ ...customerReviewForm, edited_drive_link: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500"
-                  />
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div id="customer_review_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
+                <div className="flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-bold text-white">Customer Review</h3>
                 </div>
+                <button 
+                  onClick={() => setCustomerReviewModal(null)}
+                  className="text-zinc-400 hover:text-white p-1 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-                {renderDeliverableChecklist(
-                  customerReviewModal.group,
-                  customerReviewForm.selectedIds,
-                  (ids) => setCustomerReviewForm({ ...customerReviewForm, selectedIds: ids }),
-                  ['Editing Started', 'Customer Review']
-                )}
-              </form>
-            </div>
+              <div className="overflow-y-auto pr-2 custom-scrollbar">
+                {renderOrderHeader(customerReviewModal.group)}
 
-            <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
-              <button
-                type="button"
-                onClick={() => setCustomerReviewModal(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                form="customer-review-form"
-                type="submit"
-                disabled={isSubmitting || customerReviewForm.selectedIds.length === 0}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-amber-600/20"
-              >
-                {isSubmitting ? 'Submitting...' : 'Submit & Generate WhatsApp Message'}
-              </button>
+                <p className="text-xs text-zinc-400 mb-4">
+                  Upload customer review image or provide the edited preview link for customer review. After uploading the image, confirm the server checklist below.
+                </p>
+
+                <form id="customer-review-form" onSubmit={handleCustomerReviewSubmit} className="space-y-5">
+                  {/* Customer Review Image / Drive Link */}
+                  <div className="space-y-2">
+                    <label className="block text-xs font-mono font-bold text-zinc-300 uppercase">
+                      Customer Review Image / Drive Link <span className="text-rose-400">*</span>
+                    </label>
+
+                    {/* File Upload Field */}
+                    <div className="bg-zinc-950 border border-dashed border-amber-500/30 hover:border-amber-500/60 rounded-xl p-3 text-center transition-colors">
+                      <input
+                        type="file"
+                        id="customer_review_file_input"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            const compressed = await compressImage(e.target.files[0]);
+                            setCustomerReviewForm(prev => ({ ...prev, customer_review_image: compressed }));
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      <label
+                        htmlFor="customer_review_file_input"
+                        className="cursor-pointer flex flex-col items-center justify-center gap-1.5 py-1"
+                      >
+                        <Upload className="w-5 h-5 text-amber-400" />
+                        <span className="text-xs font-bold text-amber-300">
+                          {customerReviewForm.customer_review_image ? 'Change Customer Review Image' : 'Select Customer Review Image'}
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP (auto-compressed & uploaded)</span>
+                      </label>
+                    </div>
+
+                    <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-1.5">- OR ENTER EDITED DRIVE LINK / IMAGE URL -</div>
+
+                    <input
+                      type="url"
+                      placeholder="https://drive.google.com/drive/folders/..."
+                      value={customerReviewForm.customer_review_image.startsWith('data:') ? 'Image attached from file upload' : customerReviewForm.edited_drive_link || customerReviewForm.customer_review_image}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setCustomerReviewForm(prev => ({ 
+                          ...prev, 
+                          edited_drive_link: val,
+                          customer_review_image: prev.customer_review_image.startsWith('data:') ? prev.customer_review_image : val 
+                        }));
+                      }}
+                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                    
+                    {/* Selected Image Thumbnail Preview */}
+                    {customerReviewForm.customer_review_image && (
+                      <div className="mt-2 p-3 bg-zinc-950 border border-amber-500/20 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between text-xs text-amber-400 font-mono font-bold">
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Image Attached
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCustomerReviewForm(prev => ({ ...prev, customer_review_image: '', edited_drive_link: prev.edited_drive_link.startsWith('data:') ? '' : prev.edited_drive_link }))}
+                            className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        <div className="relative rounded-lg overflow-hidden border border-zinc-800 max-h-40 bg-zinc-900 flex items-center justify-center">
+                          <img
+                            src={resolveStorageUrl(customerReviewForm.customer_review_image) || customerReviewForm.customer_review_image}
+                            alt="Customer Review Image Preview"
+                            referrerPolicy="no-referrer"
+                            className="max-h-40 max-w-full object-contain rounded-lg"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ========================================================= */}
+                  {/* EDITED FOLDER CONFIRMATION CHECKLIST */}
+                  {/* ========================================================= */}
+                  <div className="space-y-3 pt-2 border-t border-zinc-800">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-mono font-bold text-zinc-200 uppercase">
+                        Edited Folder Confirmation
+                      </label>
+                      <span className="text-[10px] text-zinc-500 font-mono">Server Checklist</span>
+                    </div>
+
+                    {!hasImageOrLink ? (
+                      <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl text-zinc-400 text-xs flex items-center gap-2">
+                        <span className="text-amber-400 font-bold">ℹ️</span>
+                        <span>Upload or attach Customer Review Image above to unlock Edited Folder Confirmation.</span>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 animate-in fade-in duration-200">
+                        {uniqueEventKeys.length === 0 ? (
+                          <p className="text-xs text-zinc-500 italic">Select at least one deliverable below to configure server checklist.</p>
+                        ) : (
+                          uniqueEventKeys.map((evtKey: string) => {
+                            const sampleDeliv = selectedDeliverables.find((d: any) => (d.eventId || d.eventName || 'default').trim() === evtKey);
+                            const rawDate = sampleDeliv?.eventDate || customerReviewModal.group?.eventDate || '';
+                            const defaultEvtDate = formatDateToDDMMYY(rawDate) || rawDate;
+                            const defaultFolderName = `${customerReviewModal.group.customerName || 'Client'} ${sampleDeliv?.eventName || customerReviewModal.group.eventName || 'Event'} Edited`;
+
+                            const evtCfg = customerReviewForm.event_configs[evtKey] || {
+                              eventKey: evtKey,
+                              eventId: sampleDeliv?.eventId || '',
+                              eventName: sampleDeliv?.eventName || customerReviewModal.group.eventName || 'Event',
+                              eventDate: customerReviewForm.server_upload_event_date || defaultEvtDate,
+                              folderName: customerReviewForm.server_upload_folder_name || defaultFolderName,
+                              confirmed: customerReviewForm.server_upload_confirmed,
+                              isSaved: false
+                            };
+
+                            // If already saved and confirmed, display formatted confirmation state
+                            if (evtCfg.isSaved && evtCfg.confirmed) {
+                              return (
+                                <div key={evtKey} className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm">
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                                      <span>✓ Edited Folder Uploaded in Server</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCustomerReviewForm(prev => ({
+                                          ...prev,
+                                          event_configs: {
+                                            ...prev.event_configs,
+                                            [evtKey]: {
+                                              ...evtCfg,
+                                              isSaved: false
+                                            }
+                                          }
+                                        }));
+                                      }}
+                                      className="text-[11px] text-zinc-400 hover:text-white underline cursor-pointer"
+                                    >
+                                      Edit
+                                    </button>
+                                  </div>
+
+                                  {uniqueEventKeys.length > 1 && (
+                                    <div className="text-[11px] font-bold text-emerald-300">
+                                      Event: {evtCfg.eventName}
+                                    </div>
+                                  )}
+
+                                  <div className="text-xs text-zinc-300 font-mono space-y-1 pl-6 pt-1 border-t border-emerald-900/50">
+                                    <div><span className="text-zinc-500">Event Date:</span> <strong className="text-white">{evtCfg.eventDate}</strong></div>
+                                    <div><span className="text-zinc-500">Folder Name:</span> <strong className="text-white">{evtCfg.folderName}</strong></div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Interactive Checklist Card
+                            return (
+                              <div key={evtKey} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
+                                {uniqueEventKeys.length > 1 && (
+                                  <div className="text-xs font-bold text-amber-300 pb-1 border-b border-zinc-800">
+                                    Event: {evtCfg.eventName}
+                                  </div>
+                                )}
+
+                                <label className="flex items-start gap-3 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(evtCfg.confirmed)}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      setCustomerReviewForm(prev => {
+                                        const updatedConfigs = {
+                                          ...prev.event_configs,
+                                          [evtKey]: {
+                                            ...evtCfg,
+                                            confirmed: checked,
+                                            eventDate: evtCfg.eventDate || defaultEvtDate,
+                                            folderName: evtCfg.folderName || defaultFolderName
+                                          }
+                                        };
+                                        return {
+                                          ...prev,
+                                          server_upload_confirmed: checked,
+                                          server_upload_event_date: updatedConfigs[evtKey].eventDate,
+                                          server_upload_folder_name: updatedConfigs[evtKey].folderName,
+                                          event_configs: updatedConfigs
+                                        };
+                                      });
+                                    }}
+                                    className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-amber-500 focus:ring-amber-500 cursor-pointer shrink-0"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <span className="text-xs font-bold text-white block">
+                                      Edited Folder Uploaded in Server
+                                    </span>
+                                    <span className="text-[10px] text-zinc-400 block mt-0.5">
+                                      Tick checkbox to confirm that the Edited Folder has been uploaded to the Server.
+                                    </span>
+                                  </div>
+                                </label>
+
+                                {evtCfg.confirmed && (
+                                  <div className="pt-3 border-t border-zinc-800/80 space-y-3 animate-in fade-in duration-200">
+                                    <div>
+                                      <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
+                                        Event Date <span className="text-rose-400">*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        placeholder="DD-MM-YY (e.g. 21-08-26)"
+                                        value={evtCfg.eventDate}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setCustomerReviewForm(prev => ({
+                                            ...prev,
+                                            server_upload_event_date: val,
+                                            event_configs: {
+                                              ...prev.event_configs,
+                                              [evtKey]: {
+                                                ...evtCfg,
+                                                eventDate: val
+                                              }
+                                            }
+                                          }));
+                                        }}
+                                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
+                                        required
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
+                                        Folder Name <span className="text-rose-400">*</span>
+                                      </label>
+                                      <input
+                                        type="text"
+                                        placeholder="e.g. Wedding_Edit_01"
+                                        value={evtCfg.folderName}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setCustomerReviewForm(prev => ({
+                                            ...prev,
+                                            server_upload_folder_name: val,
+                                            event_configs: {
+                                              ...prev.event_configs,
+                                              [evtKey]: {
+                                                ...evtCfg,
+                                                folderName: val
+                                              }
+                                            }
+                                          }));
+                                        }}
+                                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
+                                        required
+                                      />
+                                    </div>
+
+                                    <div className="pt-1 flex justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={handleSaveCustomerReviewServerConfirmation}
+                                        disabled={isSubmitting || !evtCfg.eventDate?.trim() || !evtCfg.folderName?.trim()}
+                                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 transition-colors shadow-sm"
+                                      >
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                        <span>Save Confirmation</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {renderDeliverableChecklist(
+                    customerReviewModal.group,
+                    customerReviewForm.selectedIds,
+                    (ids) => setCustomerReviewForm(prev => ({ ...prev, selectedIds: ids })),
+                    ['Editing Started', 'Customer Review']
+                  )}
+                </form>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setCustomerReviewModal(null)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  form="customer-review-form"
+                  type="submit"
+                  disabled={isSubmitting || customerReviewForm.selectedIds.length === 0}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-amber-600/20"
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit & Generate WhatsApp Message'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================= */}
       {/* 2B. WHATSAPP REVIEW MESSAGE POPUP (AUTOMATIC SECOND POPUP) */}
