@@ -234,7 +234,8 @@ interface RoleContextType {
       event_name?: string;
       task_status?: string;
       assignment_status?: string;
-    }[]
+    }[],
+    targetStage?: CurrentStage
   ) => Promise<void>;
 
   specialities: ProductionSpeciality[];
@@ -4182,7 +4183,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       event_name?: string;
       task_status?: string;
       assignment_status?: string;
-    }[]
+    }[],
+    targetStage?: CurrentStage
   ) => {
     if (!orderId) {
       throw new Error("Missing Required Field: order_id is null or empty.");
@@ -4368,7 +4370,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (!resOp.success) throw new Error(`Error updating operations record:\n\n${resOp.error}`);
       }
 
-      if (assignments.length > 0) { // STEP 5: UPDATE LEAD STATUS
+      if (assignments.length > 0 && targetStage && targetStage !== 'Order Confirmed') { // STEP 5: UPDATE LEAD STATUS (Only if targetStage is not 'Order Confirmed')
         const currentStage = targetLead.current_status || targetLead.status || 'Order Confirmed';
         const preventDowngradeStages = [
           'Event Started', 'Event Completed', 'Raw Footage Received',
@@ -4380,11 +4382,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         ];
 
         if (!preventDowngradeStages.includes(currentStage)) {
+          const finalStage = targetStage || 'Assigned Crew';
           const statusHist = {
             lead_id: leadId,
             order_id: orderId,
             old_status: currentStage,
-            new_status: 'Event Scheduled',
+            new_status: finalStage,
             changed_by: changedBy,
             changed_by_role: changedByRole,
             remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
@@ -4393,14 +4396,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           await pushInsert('lead_status_history', statusHist);
 
           const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
-            current_status: 'Event Scheduled', 
-            status: 'Event Scheduled',
+            current_status: finalStage, 
+            status: finalStage,
             updated_by: changedBy
           });
           if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
 
           const resOrder = await pushUpdate('orders', 'order_id', orderId, { 
-            current_stage: 'Event Scheduled', 
+            current_stage: finalStage, 
             updated_by: changedBy
           });
           if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);

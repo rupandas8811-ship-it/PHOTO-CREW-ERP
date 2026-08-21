@@ -1391,6 +1391,127 @@ export const getEventRolesForEvent = (ev: any, index: number, configList: EventT
   return [];
 };
 
+export const isRoleMatch = (roleA: string, roleB: string): boolean => {
+  const a = (roleA || '').toLowerCase().trim();
+  const b = (roleB || '').toLowerCase().trim();
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if ((a.includes('drone') || a.includes('aerial')) && (b.includes('drone') || b.includes('aerial'))) return true;
+  if ((a.includes('photo') || a.includes('photographer')) && (b.includes('photo') || b.includes('photographer'))) return true;
+  if ((a.includes('video') || a.includes('cinema') || a.includes('videographer')) && (b.includes('video') || b.includes('cinema') || b.includes('videographer'))) return true;
+  if ((a.includes('assist') || a.includes('helper')) && (b.includes('assist') || b.includes('helper'))) return true;
+  if (a.includes('editor') && b.includes('editor')) return true;
+  return false;
+};
+
+export interface OrderAssignmentStats {
+  totalRequired: number;
+  totalAssigned: number;
+  totalPending: number;
+  isFullyAssigned: boolean;
+}
+
+export function calculateOrderAssignmentStats(params: {
+  lead?: any;
+  order?: any;
+  leadPkgs?: any[];
+  eventAllocations?: Record<string, { staff?: any[] }>;
+  staffAssignments?: any[];
+  staffList?: any[];
+}): OrderAssignmentStats {
+  const { lead, order, leadPkgs = [], eventAllocations, staffAssignments } = params;
+
+  // 1. Resolve raw events list
+  const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0
+    ? lead.events
+    : [{ id: 'default', event_name: order?.event_name || order?.event_type || lead?.event_type || 'Main Event' }];
+
+  const totalEvents = rawEvents.length;
+  const targetLeadPkgs = leadPkgs.length > 0 ? leadPkgs : (lead?.lead_id ? leadPkgs.filter((lp: any) => lp.lead_id === lead.lead_id) : []);
+  const teamMembersConfig = extractTeamMembersConfig(lead, targetLeadPkgs);
+
+  let totalRequired = 0;
+  let totalAssigned = 0;
+  let hasPending = false;
+
+  rawEvents.forEach((ev: any, index: number) => {
+    const evId = ev.id || `EV-N/A-${index}`;
+    const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
+
+    // Group required roles into task slots
+    const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
+    includedRoles.forEach((roleStr: any) => {
+      const { qty, text } = parseQtyAndText(roleStr);
+      const roleName = (text || (typeof roleStr === 'string' ? roleStr : '')).trim();
+      if (!roleName) return;
+      if (tasksMap.has(roleName)) {
+        tasksMap.get(roleName)!.targetQty += (qty || 1);
+      } else {
+        tasksMap.set(roleName, { roleName, targetQty: qty || 1 });
+      }
+    });
+
+    // Resolve assigned staff list for this event
+    let validStaffForEvent: { staff_name: string; staff_role: string }[] = [];
+
+    if (eventAllocations) {
+      const alloc = eventAllocations[evId] || (totalEvents === 1 ? (eventAllocations['default'] || Object.values(eventAllocations)[0]) : null);
+      if (alloc?.staff && Array.isArray(alloc.staff)) {
+        validStaffForEvent = alloc.staff
+          .filter((s: any) => s.staff_name && s.staff_name.trim() !== '' && s.staff_name.toLowerCase() !== 'unassigned' && s.staff_name.toLowerCase() !== 'none' && s.staff_name.toLowerCase() !== 'pending')
+          .map((s: any) => ({ staff_name: s.staff_name.trim(), staff_role: (s.staff_role || '').trim() }));
+      }
+    } else if (staffAssignments) {
+      const isMultiEv = totalEvents > 1;
+      const orderIdToMatch = order?.order_id || lead?.lead_id;
+      validStaffForEvent = staffAssignments
+        .filter((sa: any) =>
+          sa.order_id === orderIdToMatch &&
+          sa.assignment_status !== 'Cancelled' &&
+          (sa.event_id ? sa.event_id === evId : (!isMultiEv || (sa.event_name && (sa.event_name.toLowerCase() === (ev.event_name || '').toLowerCase() || sa.event_name.toLowerCase() === (ev.event_type || '').toLowerCase())))) &&
+          sa.staff_name && sa.staff_name.trim() !== '' && sa.staff_name.toLowerCase() !== 'unassigned' && sa.staff_name.toLowerCase() !== 'none' && sa.staff_name.toLowerCase() !== 'pending'
+        )
+        .map((sa: any) => ({ staff_name: sa.staff_name.trim(), staff_role: (sa.staff_role || '').trim() }));
+    } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
+      const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter((n: string) => n && n.toLowerCase() !== 'unassigned' && n.toLowerCase() !== 'none' && n.toLowerCase() !== 'pending');
+      validStaffForEvent = names.map((name: string) => ({ staff_name: name, staff_role: '' }));
+    }
+
+    if (tasksMap.size > 0) {
+      // Required slots exist
+      for (const task of Array.from(tasksMap.values())) {
+        totalRequired += task.targetQty;
+        const matchingStaff = validStaffForEvent.filter(s => !s.staff_role || s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
+        const assignedCount = matchingStaff.length;
+        const validCount = Math.min(assignedCount, task.targetQty);
+        totalAssigned += validCount;
+        if (assignedCount < task.targetQty) {
+          hasPending = true;
+        }
+      }
+    } else {
+      // No tasks configured in package for this event
+      const directCount = validStaffForEvent.length;
+      totalAssigned += directCount;
+      if (directCount === 0) {
+        hasPending = true;
+      }
+    }
+  });
+
+  const totalPending = Math.max(0, totalRequired - totalAssigned);
+  const isFullyAssigned = totalRequired > 0
+    ? (totalAssigned >= totalRequired && !hasPending)
+    : totalAssigned > 0;
+
+  return {
+    totalRequired,
+    totalAssigned,
+    totalPending,
+    isFullyAssigned
+  };
+}
+
 export function getEventTeamMemberStaffMapping(params: {
   lead?: any;
   order?: any;

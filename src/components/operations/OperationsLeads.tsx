@@ -27,6 +27,8 @@ import {
   extractTeamMembersConfig,
   getEventRolesForEvent,
   getEventTeamMemberStaffMapping,
+  calculateOrderAssignmentStats,
+  isRoleMatch,
   EventTeamMemberConfig
 } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
@@ -1343,7 +1345,7 @@ export const OperationsLeads: React.FC = () => {
         
         if (statusFilter === 'Order Confirmed' && !['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(stageNorm)) return false;
         if (statusFilter === 'Operations Assigned' && stageNorm !== 'Operations Assigned') return false;
-        if (statusFilter === 'Assigned Crew' && !['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(stageNorm) && !isStaffAssigned) return false;
+        if (statusFilter === 'Assigned Crew' && !['Assigned Crew', 'Staff Assigned', 'Event Scheduled'].includes(stageNorm)) return false;
         if (statusFilter === 'Staff Assigned' && !isStaffAssigned) return false;
         if (statusFilter === 'Event Scheduled' && stageNorm !== 'Event Scheduled') return false;
         if (statusFilter === 'Event Cancelled' && stageNorm !== 'Event Cancelled') return false;
@@ -1861,7 +1863,46 @@ export const OperationsLeads: React.FC = () => {
       }
 
       // Save the multi-staff role assignments to Supabase & Context state!
-      await saveStaffAssignments(assigningOrderId, allAssignedStaff.length > 0 ? allAssignedStaff : activeAssignments);
+      // Map some main ones to assignForm variables for legacy column compatibility
+      const finalAssignments = allAssignedStaff.length > 0 ? allAssignedStaff : activeAssignments;
+      const photographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('photographer'))?.staff_name || '';
+      const videographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('videographer'))?.staff_name || '';
+      const droneOp = finalAssignments.find(a => a.staff_role.toLowerCase().includes('drone') || a.staff_role.toLowerCase().includes('aerial'))?.staff_name || '';
+      const assistant = finalAssignments.find(a => a.staff_role.toLowerCase().includes('assistant'))?.staff_name || '';
+      
+      const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
+      const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === parentLeadInstance?.lead_id) || [];
+
+      // Calculate assignment completion using strict requirements logic:
+      // Status changes to "Assigned Crew" ONLY when ALL required tasks/slots are assigned.
+      const assignmentStats = calculateOrderAssignmentStats({
+        lead: parentLeadInstance,
+        order: matchedOrder,
+        leadPkgs: targetLeadPkgs,
+        eventAllocations: eventAllocations
+      });
+
+      const currentOrderStage = matchedOrder?.current_stage || 'Order Confirmed';
+      const advancedStages = [
+        'Event Started', 'Event Completed', 'Event Ended', 'Footage Handover',
+        'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received',
+        'Editor Assigned', 'Editing Started', 'Editing In Progress',
+        'Internal QC Review', 'Client Review Sent', 'Internal Review',
+        'Client Review', 'Revision Required', 'Revision In Progress',
+        'Revision', 'Final Approval', 'Ready for Delivery',
+        'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
+      ];
+
+      let targetStage: CurrentStage;
+      if (advancedStages.includes(currentOrderStage)) {
+        targetStage = currentOrderStage as CurrentStage;
+      } else if (assignmentStats.isFullyAssigned) {
+        targetStage = 'Assigned Crew';
+      } else {
+        targetStage = 'Order Confirmed';
+      }
+
+      await saveStaffAssignments(assigningOrderId, finalAssignments, targetStage);
       
       // Update data so that UI reflects new crew directly from lead_staff_assignment_history
       refreshData();
@@ -1932,20 +1973,6 @@ export const OperationsLeads: React.FC = () => {
         }
       }
 
-      // Map some main ones to assignForm variables for legacy column compatibility
-      const finalAssignments = allAssignedStaff.length > 0 ? allAssignedStaff : activeAssignments;
-      const photographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('photographer'))?.staff_name || '';
-      const videographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('videographer'))?.staff_name || '';
-      const droneOp = finalAssignments.find(a => a.staff_role.toLowerCase().includes('drone') || a.staff_role.toLowerCase().includes('aerial'))?.staff_name || '';
-      const assistant = finalAssignments.find(a => a.staff_role.toLowerCase().includes('assistant'))?.staff_name || '';
-      
-      const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
-      
-      // Set status to Assigned Crew as requested for Status 1 workflow
-      const currentOrderStage = matchedOrder?.current_stage || 'Operations Assigned';
-      const isStaffAssigned = finalAssignments.length > 0;
-      const targetStage: CurrentStage = (isStaffAssigned && !overallMissingStaff) ? 'Assigned Crew' : (currentOrderStage as CurrentStage);
-
       console.log("Saving assignment for order:", assigningOrderId, {
         photographer,
         videographer,
@@ -1953,6 +1980,7 @@ export const OperationsLeads: React.FC = () => {
         assistant,
         equipment: consolidatedEquipKit,
         reporting_time: convertTimeToDbFormat(assignForm.reporting_time),
+        assignmentStats,
         targetStage
       });
 
