@@ -572,13 +572,13 @@ export const ProductionStaffModule: React.FC = () => {
           ''
         ).trim();
         const existingEventDate = formatDateToDDMMYY(rawDate) || rawDate;
-        const existingFolderName = (
+        const existingFolderName = existingConfirmed ? (
           item.serverUploadFolderName ||
           item.assignmentObj?.server_upload_folder_name ||
           item.prodObj?.server_upload_folder_name ||
           item.prodObj?.server_path ||
-          `${grp.customerName || 'Client'} ${item.eventName || grp.eventName || 'Event'} Edited`
-        ).trim();
+          ''
+        ).trim() : '';
 
         eventConfigs[evtKey] = {
           eventKey: evtKey,
@@ -599,7 +599,7 @@ export const ProductionStaffModule: React.FC = () => {
       eventId: delivItem.eventId || '',
       eventName: delivItem.eventName || grp.eventName || 'Event',
       eventDate: formatDateToDDMMYY(delivItem.eventDate || grp.eventDate || '') || (delivItem.eventDate || grp.eventDate || ''),
-      folderName: `${grp.customerName || 'Client'} ${delivItem.eventName || grp.eventName || 'Event'} Edited`,
+      folderName: '',
       confirmed: false,
       isSaved: false,
       confirmedAt: ''
@@ -614,7 +614,7 @@ export const ProductionStaffModule: React.FC = () => {
       selectedIds: [delivItem.assignmentId],
       server_upload_confirmed: currentCfg.confirmed,
       server_upload_event_date: currentCfg.eventDate,
-      server_upload_folder_name: currentCfg.folderName,
+      server_upload_folder_name: currentCfg.isSaved ? currentCfg.folderName : '',
       event_configs: eventConfigs
     });
   };
@@ -674,7 +674,7 @@ export const ProductionStaffModule: React.FC = () => {
           item.assignmentObj?.server_upload_folder_name ||
           item.prodObj?.server_upload_folder_name ||
           item.prodObj?.server_path ||
-          `${grp.customerName || 'Client'} ${item.eventName || grp.eventName || 'Event'} Edited`
+          ''
         ).trim();
 
         eventConfigs[evtKey] = {
@@ -694,7 +694,7 @@ export const ProductionStaffModule: React.FC = () => {
       eventId: delivItem.eventId || '',
       eventName: delivItem.eventName || grp.eventName || 'Event',
       eventDate: delivItem.eventDate || grp.eventDate || '',
-      folderName: `${grp.customerName || 'Client'} ${delivItem.eventName || grp.eventName || 'Event'} Edited`,
+      folderName: '',
       confirmed: false
     };
 
@@ -1144,7 +1144,7 @@ export const ProductionStaffModule: React.FC = () => {
           folderName: customerReviewForm.server_upload_folder_name
         };
         const serverEventDate = (cfg.eventDate || deliv.eventDate || '').trim();
-        const serverFolderName = (cfg.folderName || `${b.customerName || 'Client'} ${deliv.eventName || 'Event'} Edited`).trim();
+        const serverFolderName = (cfg.folderName || '').trim();
 
         const assignPayload: any = {
           server_upload_confirmed: true,
@@ -1178,7 +1178,7 @@ export const ProductionStaffModule: React.FC = () => {
           folderName: customerReviewForm.server_upload_folder_name
         };
         const serverEventDate = (cfg.eventDate || matchingDeliv?.eventDate || '').trim();
-        const serverFolderName = (cfg.folderName || `${b.customerName || 'Client'} ${matchingDeliv?.eventName || 'Event'} Edited`).trim();
+        const serverFolderName = (cfg.folderName || '').trim();
 
         const prodUpdate: any = {
           server_upload_confirmed: true,
@@ -1231,9 +1231,9 @@ export const ProductionStaffModule: React.FC = () => {
   const handleCustomerReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerReviewModal) return;
-    const reviewImageOrLink = customerReviewForm.customer_review_image?.trim() || customerReviewForm.edited_drive_link?.trim();
-    if (!reviewImageOrLink) {
-      alert("Please provide the Customer Review Image or Edited Drive Link.");
+    const reviewImage = customerReviewForm.customer_review_image?.trim();
+    if (!reviewImage) {
+      alert("Please upload the Customer Review Image.");
       return;
     }
     if (customerReviewForm.selectedIds.length === 0) {
@@ -2685,10 +2685,7 @@ Thank you.`;
         const selectedDeliverables = customerReviewModal.group.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
         const uniqueEventKeys = Array.from(new Set(selectedDeliverables.map((d: any) => (d.eventId || d.eventName || 'default').trim())));
 
-        const hasImageOrLink = Boolean(
-          customerReviewForm.customer_review_image?.trim() || 
-          customerReviewForm.edited_drive_link?.trim()
-        );
+        const hasImage = Boolean(customerReviewForm.customer_review_image?.trim());
 
         return (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -2710,14 +2707,14 @@ Thank you.`;
                 {renderOrderHeader(customerReviewModal.group)}
 
                 <p className="text-xs text-zinc-400 mb-4">
-                  Upload customer review image or provide the edited preview link for customer review. After uploading the image, confirm the server checklist below.
+                  Upload customer review image for customer review. After uploading the image, confirm the server checklist below.
                 </p>
 
                 <form id="customer-review-form" onSubmit={handleCustomerReviewSubmit} className="space-y-5">
-                  {/* Customer Review Image / Drive Link */}
+                  {/* Customer Review Image */}
                   <div className="space-y-2">
                     <label className="block text-xs font-mono font-bold text-zinc-300 uppercase">
-                      Customer Review Image / Drive Link <span className="text-rose-400">*</span>
+                      Customer Review Image <span className="text-rose-400">*</span>
                     </label>
 
                     {/* File Upload Field */}
@@ -2746,23 +2743,6 @@ Thank you.`;
                       </label>
                     </div>
 
-                    <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-1.5">- OR ENTER EDITED DRIVE LINK / IMAGE URL -</div>
-
-                    <input
-                      type="url"
-                      placeholder="https://drive.google.com/drive/folders/..."
-                      value={customerReviewForm.customer_review_image.startsWith('data:') ? 'Image attached from file upload' : customerReviewForm.edited_drive_link || customerReviewForm.customer_review_image}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setCustomerReviewForm(prev => ({ 
-                          ...prev, 
-                          edited_drive_link: val,
-                          customer_review_image: prev.customer_review_image.startsWith('data:') ? prev.customer_review_image : val 
-                        }));
-                      }}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
-                    />
-                    
                     {/* Selected Image Thumbnail Preview */}
                     {customerReviewForm.customer_review_image && (
                       <div className="mt-2 p-3 bg-zinc-950 border border-amber-500/20 rounded-xl space-y-2">
@@ -2772,7 +2752,7 @@ Thank you.`;
                           </span>
                           <button
                             type="button"
-                            onClick={() => setCustomerReviewForm(prev => ({ ...prev, customer_review_image: '', edited_drive_link: prev.edited_drive_link.startsWith('data:') ? '' : prev.edited_drive_link }))}
+                            onClick={() => setCustomerReviewForm(prev => ({ ...prev, customer_review_image: '' }))}
                             className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
                           >
                             Remove
@@ -2802,10 +2782,10 @@ Thank you.`;
                       <span className="text-[10px] text-zinc-500 font-mono">Server Checklist</span>
                     </div>
 
-                    {!hasImageOrLink ? (
+                    {!hasImage ? (
                       <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl text-zinc-400 text-xs flex items-center gap-2">
                         <span className="text-amber-400 font-bold">ℹ️</span>
-                        <span>Upload or attach Customer Review Image above to unlock Edited Folder Confirmation.</span>
+                        <span>Upload Customer Review Image above to unlock Edited Folder Confirmation.</span>
                       </div>
                     ) : (
                       <div className="space-y-3 animate-in fade-in duration-200">
@@ -2816,14 +2796,13 @@ Thank you.`;
                             const sampleDeliv = selectedDeliverables.find((d: any) => (d.eventId || d.eventName || 'default').trim() === evtKey);
                             const rawDate = sampleDeliv?.eventDate || customerReviewModal.group?.eventDate || '';
                             const defaultEvtDate = formatDateToDDMMYY(rawDate) || rawDate;
-                            const defaultFolderName = `${customerReviewModal.group.customerName || 'Client'} ${sampleDeliv?.eventName || customerReviewModal.group.eventName || 'Event'} Edited`;
 
                             const evtCfg = customerReviewForm.event_configs[evtKey] || {
                               eventKey: evtKey,
                               eventId: sampleDeliv?.eventId || '',
                               eventName: sampleDeliv?.eventName || customerReviewModal.group.eventName || 'Event',
                               eventDate: customerReviewForm.server_upload_event_date || defaultEvtDate,
-                              folderName: customerReviewForm.server_upload_folder_name || defaultFolderName,
+                              folderName: customerReviewForm.server_upload_folder_name || '',
                               confirmed: customerReviewForm.server_upload_confirmed,
                               isSaved: false
                             };
@@ -2893,14 +2872,14 @@ Thank you.`;
                                             ...evtCfg,
                                             confirmed: checked,
                                             eventDate: evtCfg.eventDate || defaultEvtDate,
-                                            folderName: evtCfg.folderName || defaultFolderName
+                                            folderName: evtCfg.folderName || ''
                                           }
                                         };
                                         return {
                                           ...prev,
                                           server_upload_confirmed: checked,
                                           server_upload_event_date: updatedConfigs[evtKey].eventDate,
-                                          server_upload_folder_name: updatedConfigs[evtKey].folderName,
+                                          server_upload_folder_name: updatedConfigs[evtKey].folderName || '',
                                           event_configs: updatedConfigs
                                         };
                                       });
@@ -2919,6 +2898,10 @@ Thank you.`;
 
                                 {evtCfg.confirmed && (
                                   <div className="pt-3 border-t border-zinc-800/80 space-y-3 animate-in fade-in duration-200">
+                                    <div className="text-xs font-mono font-bold text-zinc-300 uppercase">
+                                      Server Upload Confirmation
+                                    </div>
+
                                     <div>
                                       <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
                                         Event Date <span className="text-rose-400">*</span>
@@ -2952,8 +2935,8 @@ Thank you.`;
                                       </label>
                                       <input
                                         type="text"
-                                        placeholder="e.g. Wedding_Edit_01"
-                                        value={evtCfg.folderName}
+                                        placeholder="Enter folder name"
+                                        value={evtCfg.folderName || ''}
                                         onChange={(e) => {
                                           const val = e.target.value;
                                           setCustomerReviewForm(prev => ({
@@ -3177,16 +3160,6 @@ Thank you.`;
                         <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP (auto-compressed & uploaded to Supabase)</span>
                       </label>
                     </div>
-
-                    <div className="text-[10px] text-zinc-500 text-center uppercase font-mono my-2">- OR ENTER DIRECT IMAGE URL / DRIVE LINK -</div>
-
-                    <input
-                      type="text"
-                      placeholder="https://..."
-                      value={editingCompletedForm.confirmation_proof.startsWith('data:') ? 'Image attached from file upload' : editingCompletedForm.confirmation_proof}
-                      onChange={(e) => setEditingCompletedForm({ ...editingCompletedForm, confirmation_proof: e.target.value })}
-                      className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-                    />
                     
                     {/* Selected Image Thumbnail Preview */}
                     {editingCompletedForm.confirmation_proof && (

@@ -1565,9 +1565,10 @@ ${coordinatorName}`;
     uploadLink: string;
     confirmedAt: string;
     confirmedBy: string;
+    isValidated: boolean;
   } => {
     if (!a && !prod) {
-      return { isUploaded: false, folderName: '', eventDate: '', uploadLink: '', confirmedAt: '', confirmedBy: '' };
+      return { isUploaded: false, folderName: '', eventDate: '', uploadLink: '', confirmedAt: '', confirmedBy: '', isValidated: false };
     }
 
     const uploadLink = (
@@ -1586,7 +1587,6 @@ ${coordinatorName}`;
       a?.server_path ||
       prod?.server_upload_folder_name ||
       prod?.server_path ||
-      uploadLink ||
       ''
     ).trim();
 
@@ -1601,7 +1601,7 @@ ${coordinatorName}`;
     const confirmedAt = (a?.server_upload_confirmed_at || prod?.server_upload_confirmed_at || '').trim();
     const confirmedBy = (a?.server_upload_confirmed_by || a?.staff_name || prod?.server_upload_confirmed_by || '').trim();
 
-    // Persisted validation: true if server_upload_confirmed or folder/path/proof exists
+    // Persisted validation: true if server_upload_confirmed, folder name, server path, or edited drive link exists
     const isUploaded = Boolean(
       a?.server_upload_confirmed === true ||
       a?.edited_folder_uploaded_to_server === true ||
@@ -1609,14 +1609,18 @@ ${coordinatorName}`;
       (typeof a?.server_path === 'string' && a.server_path.trim().length > 0) ||
       (typeof a?.Edited_Drive_Link === 'string' && a.Edited_Drive_Link.trim().length > 0) ||
       (typeof a?.edited_drive_link === 'string' && a.edited_drive_link.trim().length > 0) ||
-      (typeof a?.upload_link === 'string' && a.upload_link.trim().length > 0) ||
-      (typeof a?.drive_link === 'string' && a.drive_link.trim().length > 0) ||
-      (typeof a?.customer_confirmation_proof === 'string' && a.customer_confirmation_proof.trim().length > 0) ||
-      (typeof a?.confirmation_proof === 'string' && a.confirmation_proof.trim().length > 0) ||
       prod?.server_upload_confirmed === true ||
       (typeof prod?.server_upload_folder_name === 'string' && prod.server_upload_folder_name.trim().length > 0) ||
       (typeof prod?.server_path === 'string' && prod.server_path.trim().length > 0) ||
       (typeof prod?.edited_drive_link === 'string' && prod.edited_drive_link.trim().length > 0)
+    );
+
+    const isValidated = Boolean(
+      a?.server_upload_validated === true ||
+      prod?.checklist_edited_files_uploaded === true ||
+      prod?.server_upload_validated === true ||
+      (a?.event_id && prod?.validated_server_uploads?.[a.event_id]) ||
+      (a?.assignment_id && prod?.validated_server_uploads?.[a.assignment_id])
     );
 
     return {
@@ -1625,7 +1629,8 @@ ${coordinatorName}`;
       eventDate,
       uploadLink,
       confirmedAt,
-      confirmedBy
+      confirmedBy,
+      isValidated
     };
   };
 
@@ -1660,6 +1665,7 @@ ${coordinatorName}`;
         staffName: string;
         status: string;
         isUploaded: boolean;
+        isValidated: boolean;
         folderName: string;
         eventDate: string;
         uploadLink: string;
@@ -1712,6 +1718,7 @@ ${coordinatorName}`;
           staffName: a.staff_name || 'Unassigned',
           status: a.status || 'Assigned',
           isUploaded: uploadStatus.isUploaded,
+          isValidated: uploadStatus.isValidated,
           folderName: uploadStatus.folderName,
           eventDate: uploadStatus.eventDate,
           uploadLink: uploadStatus.uploadLink,
@@ -1877,19 +1884,55 @@ Production Team`;
   const handleOpenClientAcceptance = (prod: Production) => {
     if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     setClientAcceptanceProd(prod);
-    setCaCommunicationProof('');
+    setCaCommunicationProof(prod.client_communication_proof || (prod as any).customer_communication_proof || (prod as any).proof_url || '');
     setCaUploadConfirmations({});
-    setCaChecklistCompleted(false);
-    setCaInternalValidation(false);
+    setCaChecklistCompleted(Boolean(prod.checklist_customer_acceptance ?? true));
+    setCaInternalValidation(Boolean(prod.server_upload_validated || prod.checklist_edited_files_uploaded));
+
+    // Load persisted 5-item checklist states
+    setCaVerifyCustomerAcceptance(prod.checklist_customer_acceptance ?? true);
+    setCaContentUsageConfirmation(prod.checklist_content_usage ?? false);
+    setCaFootageDeleted7Days(prod.checklist_footage_deleted_7_days ?? false);
+    setCaVerifyPaymentSales(prod.checklist_payment_from_sales ?? false);
 
     const eventGroups = getClientAcceptanceDeliverables(prod);
     const initialChecklist: Record<string, boolean> = {};
+    const initialValidationMap: Record<string, boolean> = {};
+    const savedValidations = prod.validated_server_uploads || {};
+
     eventGroups.forEach(g => {
+      let groupValidated = false;
+      if (savedValidations[g.eventId] !== undefined) {
+        groupValidated = Boolean(savedValidations[g.eventId]);
+      } else if (prod.checklist_edited_files_uploaded) {
+        groupValidated = true;
+      }
+
       g.items.forEach(item => {
         initialChecklist[item.key] = item.isUploaded;
+        const itemVal = Boolean(
+          savedValidations[item.key] ||
+          (item.assignmentId && savedValidations[item.assignmentId]) ||
+          item.isValidated ||
+          groupValidated
+        );
+        initialValidationMap[item.key] = itemVal;
+        if (item.assignmentId) {
+          initialValidationMap[item.assignmentId] = itemVal;
+        }
       });
+      initialValidationMap[g.eventId] = groupValidated || g.items.every(i => initialValidationMap[i.key]);
     });
+
     setCaChecklist(initialChecklist);
+    setCaValidatedServerUploads(initialValidationMap);
+
+    const overallValidated = Boolean(
+      prod.checklist_edited_files_uploaded ||
+      prod.server_upload_validated ||
+      (eventGroups.length > 0 && eventGroups.every(g => initialValidationMap[g.eventId]))
+    );
+    setCaValidateEditedFiles(overallValidated);
   };
 
   const getAssignedEditorsText = (prod: Production): string => {
@@ -2511,6 +2554,12 @@ Production Team`;
   const [caCommunicationProof, setCaCommunicationProof] = useState<string>('');
   const [caInternalValidation, setCaInternalValidation] = useState<boolean>(false);
   const [caChecklistCompleted, setCaChecklistCompleted] = useState<boolean>(false);
+  const [caVerifyCustomerAcceptance, setCaVerifyCustomerAcceptance] = useState<boolean>(true);
+  const [caContentUsageConfirmation, setCaContentUsageConfirmation] = useState<boolean>(false);
+  const [caFootageDeleted7Days, setCaFootageDeleted7Days] = useState<boolean>(false);
+  const [caVerifyPaymentSales, setCaVerifyPaymentSales] = useState<boolean>(false);
+  const [caValidateEditedFiles, setCaValidateEditedFiles] = useState<boolean>(false);
+  const [caValidatedServerUploads, setCaValidatedServerUploads] = useState<Record<string, boolean>>({});
   const [caUploadingProof, setCaUploadingProof] = useState<boolean>(false);
   const [caChecklist, setCaChecklist] = useState<Record<string, boolean>>({});
   const [caUploadConfirmations, setCaUploadConfirmations] = useState<Record<string, { confirmed: boolean; eventDate: string; folderName: string }>>({});
@@ -11231,24 +11280,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   onSubmit={async (e) => {
                     e.preventDefault();
 
-                    // Strictly validate that all assigned deliverables have real saved server uploads in the database
-                    const unuploadedDeliverables = eventGroups.flatMap(g => g.items).filter(i => !i.isUploaded);
-                    if (eventGroups.length > 0 && unuploadedDeliverables.length > 0) {
-                      alert(`Cannot complete Client Acceptance!\n\nThe following ${unuploadedDeliverables.length} assigned deliverable(s) do not have a verified server upload saved in the database by their assigned editor:\n\n` +
-                        unuploadedDeliverables.map(i => `• ${i.deliverable} (${i.staffName}) - Server Upload Pending`).join('\n') +
-                        `\n\nPlease ensure the assigned editor(s) upload the required edited folders to the server before approving Client Acceptance.`
-                      );
-                      return;
-                    }
-
-                    if (!caInternalValidation) {
-                      alert("Please confirm the internal peer review & quality validation.");
-                      return;
-                    }
-                    if (!caChecklistCompleted) {
-                      alert("Please confirm that all deliverables match client specifications.");
-                      return;
-                    }
                     try {
                       setIsSaving(true);
                       
@@ -11267,7 +11298,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         editing_status: 'Client Acceptance',
                         client_communication_proof: uploadedProofUrl,
                         customer_communication_proof: uploadedProofUrl,
-                        proof_url: uploadedProofUrl
+                        proof_url: uploadedProofUrl,
+                        checklist_customer_acceptance: caVerifyCustomerAcceptance,
+                        checklist_content_usage: caContentUsageConfirmation,
+                        checklist_footage_deleted_7_days: caFootageDeleted7Days,
+                        checklist_payment_from_sales: caVerifyPaymentSales,
+                        checklist_edited_files_uploaded: caValidateEditedFiles,
+                        server_upload_validated: caValidateEditedFiles,
+                        validated_server_uploads: caValidatedServerUploads
                       };
                       
                       await updateProduction(clientAcceptanceProd.production_id, updates);
@@ -11277,20 +11315,33 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         await updateOrderStage(targetId, 'Client Acceptance' as any);
                       }
 
-                      // Update assignments with manual upload confirmations
+                      // Update assignments with manual upload confirmations and server upload validation
                       for (const group of eventGroups) {
                         const conf = caUploadConfirmations[group.eventId];
-                        if (conf?.confirmed) {
-                          for (const item of group.items) {
-                            if (item.assignmentId) {
-                              await updateEditorAssignmentStatus(item.assignmentId, item.status as any, {
-                                server_upload_confirmed: true,
-                                server_upload_event_date: conf.eventDate,
-                                server_upload_folder_name: conf.folderName,
-                                server_upload_confirmed_at: new Date().toISOString(),
-                                server_upload_confirmed_by: currentUserName || 'Production Staff',
-                                edited_folder_uploaded_to_server: true,
-                              });
+                        const isGroupValidated = Boolean(caValidatedServerUploads[group.eventId] || caValidateEditedFiles);
+
+                        for (const item of group.items) {
+                          if (item.assignmentId) {
+                            const isItemValidated = Boolean(caValidatedServerUploads[item.key] || caValidatedServerUploads[item.assignmentId] || isGroupValidated);
+                            const assignmentUpdate: any = {};
+
+                            if (conf?.confirmed) {
+                              assignmentUpdate.server_upload_confirmed = true;
+                              assignmentUpdate.server_upload_event_date = conf.eventDate;
+                              assignmentUpdate.server_upload_folder_name = conf.folderName;
+                              assignmentUpdate.server_upload_confirmed_at = new Date().toISOString();
+                              assignmentUpdate.server_upload_confirmed_by = currentUserName || 'Production Staff';
+                              assignmentUpdate.edited_folder_uploaded_to_server = true;
+                            }
+
+                            if (isItemValidated) {
+                              assignmentUpdate.server_upload_validated = true;
+                              assignmentUpdate.server_upload_validated_at = new Date().toISOString();
+                              assignmentUpdate.server_upload_validated_by = currentUserName || 'Production Staff';
+                            }
+
+                            if (Object.keys(assignmentUpdate).length > 0) {
+                              await updateEditorAssignmentStatus(item.assignmentId, item.status as any, assignmentUpdate);
                             }
                           }
                         }
@@ -11323,166 +11374,213 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
                   </div>
 
-                  {/* Rigorous Deliverables Verification Checklist */}
+                  {/* 5-Item Production Validation Checklist */}
                   <div className="space-y-3">
                     <div className="border-b border-zinc-900 pb-1.5 flex items-center justify-between">
-                      <h4 className="text-[10px] text-amber-400 uppercase font-black tracking-widest font-mono flex items-center gap-1.5">
-                        <span>📋</span> Deliverables Verification Checklist
+                      <h4 className="text-[10px] text-indigo-400 uppercase font-black tracking-widest font-mono flex items-center gap-1.5">
+                        <span>☑</span> Production Verification Checklist
                       </h4>
                       <span className="text-[10px] font-mono text-zinc-400 font-bold">
-                        {allChecklistKeys.length > 0 
-                          ? `${eventGroups.flatMap(g => g.items).filter(i => i.isUploaded).length} / ${allChecklistKeys.length} Uploaded to Server`
-                          : '0 Verified'
-                        }
+                        5 Verification Steps
                       </span>
                     </div>
-                    <p className="text-[10px] text-zinc-500 font-mono">
-                      System automatically validates whether the Editor has uploaded the required edited folder to the server for each deliverable.
-                    </p>
 
-                    {eventGroups.length === 0 ? (
-                      <div className="p-4 bg-zinc-900/20 border border-zinc-900 rounded-xl text-center text-zinc-500 font-mono text-xs italic">
-                        No production assignment records found for this project. Please assign editors first in Production → Assign Editor.
-                      </div>
-                    ) : (
-                      <div className="space-y-4 max-h-[260px] overflow-y-auto pr-1">
-                        {eventGroups.map((group, gIdx) => (
-                          <div key={group.eventId || `grp_${gIdx}`} className="space-y-2">
-                            {/* Event Header */}
-                            <div className="flex items-center justify-between px-3 py-1.5 bg-purple-950/30 border border-purple-900/40 rounded-xl">
-                              <span className="text-xs font-black font-mono text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-                                <span>📅</span> {group.eventName}
+                    <div className="space-y-2.5">
+                      {/* 1. Verify Customer Acceptance */}
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={caVerifyCustomerAcceptance}
+                          onChange={(e) => setCaVerifyCustomerAcceptance(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-zinc-200 block">
+                            1. Verify Customer Acceptance
+                          </span>
+                          <span className="text-[11px] text-zinc-400 leading-normal block">
+                            Confirm that the customer has reviewed and approved the delivered output.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* 2. Content Usage Confirmation */}
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={caContentUsageConfirmation}
+                          onChange={(e) => setCaContentUsageConfirmation(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-zinc-200 block">
+                            2. Content Usage Confirmation
+                          </span>
+                          <span className="text-[11px] text-zinc-400 leading-normal block">
+                            Confirm client permission for social media, marketing, or portfolio showcase.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* 3. Footage Deleted in 7 Days */}
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={caFootageDeleted7Days}
+                          onChange={(e) => setCaFootageDeleted7Days(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-zinc-200 block">
+                            3. Footage Deleted in 7 Days
+                          </span>
+                          <span className="text-[11px] text-zinc-400 leading-normal block">
+                            Acknowledge standard 7-day raw footage retention window before local clean-up.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* 4. Verify Payment from Sales */}
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={caVerifyPaymentSales}
+                          onChange={(e) => setCaVerifyPaymentSales(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-zinc-200 block">
+                            4. Verify Payment from Sales
+                          </span>
+                          <span className="text-[11px] text-zinc-400 leading-normal block">
+                            Cross-check billing records and verify complete payment collection with Sales.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* 5. Validate Edited Files Uploaded */}
+                      <div className="p-3.5 bg-zinc-900/50 border border-zinc-850 rounded-xl space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <label className="flex items-start gap-3 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={caValidateEditedFiles}
+                              onChange={(e) => {
+                                const newVal = e.target.checked;
+                                setCaValidateEditedFiles(newVal);
+                                const nextMap = { ...caValidatedServerUploads };
+                                eventGroups.forEach(g => {
+                                  nextMap[g.eventId] = newVal;
+                                  g.items.forEach(i => {
+                                    nextMap[i.key] = newVal;
+                                    if (i.assignmentId) nextMap[i.assignmentId] = newVal;
+                                  });
+                                });
+                                setCaValidatedServerUploads(nextMap);
+                              }}
+                              className="w-4 h-4 mt-0.5 accent-emerald-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                            />
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors block">
+                                5. Validate Edited Files Uploaded
                               </span>
-                              <span className="text-[10px] font-mono text-purple-400 font-bold px-2 py-0.5 rounded bg-purple-900/30 border border-purple-800/40">
-                                {group.items.length} {group.items.length === 1 ? 'Deliverable' : 'Deliverables'}
+                              <span className="text-[11px] text-zinc-400 leading-normal block">
+                                Validate and verify that the Editor has uploaded all edited files/folders to the server for each event.
                               </span>
                             </div>
+                          </label>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold shrink-0 ${
+                            caValidateEditedFiles ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'
+                          }`}>
+                            {caValidateEditedFiles ? 'Validated' : 'Pending Validation'}
+                          </span>
+                        </div>
 
-                            {/* Checklist Items for this Event */}
-                            <div className="space-y-2.5 pl-1">
-                              {group.items.map((item) => {
-                                const itemKey = item.key;
-                                const isUploaded = item.isUploaded;
+                        {/* Upload Details per Event */}
+                        {eventGroups.length > 0 ? (
+                          <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
+                            {eventGroups.map((group) => {
+                              const groupKey = group.eventId;
+                              const isGroupValidated = Boolean(caValidatedServerUploads[groupKey] ?? caValidateEditedFiles);
+                              const groupUploadItems = group.items;
+                              const hasUploadedItem = groupUploadItems.some(i => i.isUploaded);
+                              const matchedDate = groupUploadItems.find(i => i.eventDate)?.eventDate || clientAcceptanceProd.event_date || 'N/A';
+                              const matchedFolder = groupUploadItems.find(i => i.folderName)?.folderName || clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '';
+                              const matchedLink = groupUploadItems.find(i => i.uploadLink)?.uploadLink || clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '';
 
-                                return (
-                                  <div
-                                    key={itemKey}
-                                    className={`p-3.5 border rounded-xl transition-all ${
-                                      isUploaded
-                                        ? 'bg-emerald-950/20 border-emerald-900/50 text-emerald-200 shadow-sm'
-                                        : 'bg-zinc-900/40 border-zinc-900 text-zinc-300'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="flex items-center gap-3">
-                                        <input
-                                          type="checkbox"
-                                          checked={isUploaded}
-                                          disabled
-                                          className="w-4 h-4 accent-emerald-500 bg-zinc-950 border-zinc-800 rounded cursor-not-allowed focus:ring-0"
-                                        />
-                                        <div className="text-xs">
-                                          <span className="font-semibold text-zinc-200">{item.deliverable}</span>
-                                          <span className="text-[10px] text-zinc-500 block font-mono">
-                                            ASSIGNED TO: <span className="text-zinc-400 font-bold">{item.staffName}</span> • STATUS:{' '}
-                                            {isUploaded ? (
-                                              <span className="text-emerald-400 font-bold">Ready for Delivery</span>
-                                            ) : (
-                                              <span className="text-amber-400 font-bold">{item.status}</span>
-                                            )}
-                                          </span>
-                                        </div>
-                                      </div>
-                                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-950 border border-zinc-900 text-purple-300 shrink-0">
-                                        Qty: {item.qty}
+                              return (
+                                <div key={`event_val_${groupKey}`} className="p-3 bg-zinc-950/60 border border-zinc-850/80 rounded-lg space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-purple-300 font-mono flex items-center gap-1.5">
+                                      <span>📅</span> {group.eventName}
+                                    </span>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={isGroupValidated}
+                                        onChange={(e) => {
+                                          const checked = e.target.checked;
+                                          const nextMap = { ...caValidatedServerUploads, [groupKey]: checked };
+                                          groupUploadItems.forEach(i => {
+                                            nextMap[i.key] = checked;
+                                            if (i.assignmentId) nextMap[i.assignmentId] = checked;
+                                          });
+                                          setCaValidatedServerUploads(nextMap);
+                                          const allVal = eventGroups.every(g => (g.eventId === groupKey ? checked : nextMap[g.eventId]));
+                                          setCaValidateEditedFiles(allVal);
+                                        }}
+                                        className="w-3.5 h-3.5 accent-emerald-500 bg-zinc-900 border-zinc-700 rounded cursor-pointer"
+                                      />
+                                      <span className="text-[11px] font-mono text-zinc-300 font-semibold">
+                                        Validate Event Upload
+                                      </span>
+                                    </label>
+                                  </div>
+
+                                  {/* Upload Info Box */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono bg-zinc-900/40 p-2.5 rounded-md border border-zinc-850">
+                                    <div>
+                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Event Date:</span>
+                                      <span className="text-zinc-300 font-semibold">{matchedDate}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Folder Name:</span>
+                                      <span className={matchedFolder ? 'text-emerald-300 font-semibold truncate block' : 'text-zinc-500 italic block'}>
+                                        {matchedFolder || 'Not provided yet'}
                                       </span>
                                     </div>
-
-                                    {/* System-Validated Server Upload Checklist Row */}
-                                    <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                      <div className="flex items-center gap-1.5">
-                                        {isUploaded ? (
-                                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold">
-                                            <span>☑</span>
-                                            <span>Edited Folder is uploaded in Server</span>
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 text-[11px] font-mono font-bold">
-                                            <span>☐</span>
-                                            <span>Edited Folder is uploaded in Server</span>
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {isUploaded ? (
-                                        <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-1.5 truncate">
-                                          {item.folderName && (
-                                            <span className="text-emerald-300 font-bold truncate">📁 {item.folderName}</span>
-                                          )}
-                                          {item.eventDate && (
-                                            <span className="text-zinc-500 font-bold shrink-0">({item.eventDate})</span>
-                                          )}
-                                          {item.uploadLink && (
-                                            <a
-                                              href={item.uploadLink.startsWith('http') ? item.uploadLink : `https://${item.uploadLink}`}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              referrerPolicy="no-referrer"
-                                              className="text-indigo-400 hover:text-indigo-300 underline font-bold shrink-0"
-                                              onClick={(e) => e.stopPropagation()}
-                                            >
-                                              🔗 Link
-                                            </a>
-                                          )}
-                                        </div>
+                                    <div>
+                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Server Upload Status:</span>
+                                      <span className={hasUploadedItem ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                                        {hasUploadedItem ? '✓ Uploaded by Editor' : '⏳ Pending Editor Upload'}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Upload Link / Path:</span>
+                                      {matchedLink ? (
+                                        <a
+                                          href={matchedLink.startsWith('http') ? matchedLink : `https://${matchedLink}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-indigo-400 hover:text-indigo-300 underline font-bold truncate block"
+                                        >
+                                          🔗 {matchedLink}
+                                        </a>
                                       ) : (
-                                        <span className="text-[10px] font-mono text-rose-400/90 italic font-semibold">
-                                          Pending upload by {item.staffName}
-                                        </span>
+                                        <span className="text-zinc-500 italic">No direct link stored</span>
                                       )}
                                     </div>
                                   </div>
-                                );
-                              })}
-                            </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
+                        ) : (
+                          <div className="text-[11px] font-mono text-zinc-400 bg-zinc-950 p-2.5 rounded-lg border border-zinc-850">
+                            Single Event / Production Server Path: <span className="text-emerald-400 font-semibold">{clientAcceptanceProd.server_path || clientAcceptanceProd.server_upload_folder_name || 'Ready for Validation'}</span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-
-                  {/* Quality Control Peer Review & Internal Validation */}
-                  <div className="space-y-3">
-                    <h4 className="text-[10px] text-indigo-400 uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5">
-                      🔬 Quality Assurance & Peer Verification
-                    </h4>
-                    
-                    <div className="space-y-2">
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          required
-                          checked={caInternalValidation}
-                          onChange={(e) => setCaInternalValidation(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <span className="text-xs text-zinc-300 leading-normal">
-                          <strong>Peer QC Check:</strong> I confirm that a secondary peer editor or production lead has validated video aspect ratios, frame-rates, resolution matching, audio balance, and transitions.
-                        </span>
-                      </label>
-
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          required
-                          checked={caChecklistCompleted}
-                          onChange={(e) => setCaChecklistCompleted(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <span className="text-xs text-zinc-300 leading-normal">
-                          <strong>Customer Acceptance Verified:</strong> I verify that the client has explicitly approved all deliverables on WhatsApp, email, or other channels.
-                        </span>
-                      </label>
                     </div>
                   </div>
 
