@@ -203,25 +203,66 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
   const orderId = order?.order_id || prod?.order_id || assignment?.order_id || prod?.tracking_id;
   const leadId = lead?.lead_id || order?.lead_id || prod?.lead_id || assignment?.production_id;
   const trackingId = prod?.tracking_id || assignment?.production_id;
+  const eventId = assignment?.event_id || prod?.event_id;
 
-  // 1. Check Operations table matching order_id, lead_id, or tracking_id
-  const matchedOp = (operations || []).find(o => 
-    (orderId && (o.order_id === orderId || o.lead_id === orderId)) ||
-    (leadId && (o.lead_id === leadId || o.order_id === leadId)) ||
-    (trackingId && (o.order_id === trackingId || o.lead_id === trackingId)) ||
-    (assignment?.production_id && (o.order_id === assignment.production_id || o.lead_id === assignment.production_id))
+  // 1. Check all Operations records prioritizing exact event match and order/lead matches
+  const candidateOps = (operations || []).filter(o => {
+    if (eventId && eventId !== 'MULTIPLE' && o.event_id && o.event_id === eventId) {
+      return !orderId || o.order_id === orderId;
+    }
+    return (orderId && (o.order_id === orderId || o.lead_id === orderId)) ||
+           (leadId && (o.lead_id === leadId || o.order_id === leadId)) ||
+           (trackingId && (o.order_id === trackingId || o.lead_id === trackingId)) ||
+           (assignment?.production_id && (o.order_id === assignment.production_id || o.lead_id === assignment.production_id));
+  });
+
+  for (const op of candidateOps) {
+    const link = op.consolidated_drive_link || op.Consolidated_Drive_Link || op.raw_footage_drive_link || op.Raw_Footage_Drive_Link;
+    if (link && typeof link === 'string' && link.trim() !== '') {
+      return link.trim();
+    }
+  }
+
+  // 2. Check Production record properties
+  const prodLink = (prod as any)?.final_consolidated_drive_link || 
+                   prod?.consolidated_drive_link || 
+                   prod?.Consolidated_Drive_Link || 
+                   prod?.raw_footage_location ||
+                   (assignment as any)?.drive_link ||
+                   (assignment as any)?.Drive_Link;
+  if (prodLink && typeof prodLink === 'string' && prodLink.trim() !== '') {
+    return prodLink.trim();
+  }
+
+  // 3. Check Raw Footage table
+  const rf = (rawFootage || []).find(f => 
+    (orderId && (f.order_id === orderId || f.tracking_id === orderId)) ||
+    (trackingId && (f.tracking_id === trackingId || f.order_id === trackingId))
   );
+  if (rf?.server_path && typeof rf.server_path === 'string' && rf.server_path.trim() !== '') {
+    return rf.server_path.trim();
+  }
 
-  const opsLink = matchedOp ? (
-    matchedOp.consolidated_drive_link || 
-    matchedOp.Consolidated_Drive_Link
-  ) : (
-    prod.consolidated_drive_link || 
-    prod.Consolidated_Drive_Link
-  );
+  // 4. Check Order or Lead records
+  const orderLink = order?.consolidated_drive_link || order?.raw_footage_link || lead?.consolidated_drive_link || lead?.raw_footage_link;
+  if (orderLink && typeof orderLink === 'string' && orderLink.trim() !== '') {
+    return orderLink.trim();
+  }
 
-  if (opsLink && typeof opsLink === 'string' && opsLink.trim() !== '') {
-    return opsLink.trim();
+  // 5. Check Assignment / Prod project_notes / remarks
+  if (prod?.project_notes && typeof prod.project_notes === 'string') {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const match = prod.project_notes.match(urlRegex);
+    if (match && match.length > 0) {
+      return match[0].trim();
+    }
+  }
+  if (prod?.remarks && typeof prod.remarks === 'string') {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const match = prod.remarks.match(urlRegex);
+    if (match && match.length > 0) {
+      return match[0].trim();
+    }
   }
 
   return '';

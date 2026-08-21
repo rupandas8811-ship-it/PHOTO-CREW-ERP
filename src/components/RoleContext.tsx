@@ -1045,22 +1045,34 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           equipment_kit: '',
           reporting_time: o.reporting_time || '08:00',
           event_status: o.current_stage,
-          updated_by: 'System'
+          updated_by: 'System',
+          consolidated_drive_link: (o as any).consolidated_drive_link || o.raw_footage_link || '',
+          Consolidated_Drive_Link: (o as any).consolidated_drive_link || o.raw_footage_link || '',
+          raw_footage_drive_link: o.raw_footage_link || ''
         });
       }
     });
     return list.map(op => {
       const ord = augmentedOrders.find(o => o.order_id === op.order_id);
+      const rf = rawFootage.find(f => f.order_id === op.order_id || f.tracking_id === op.order_id);
+      const linkFallback = (ord as any)?.consolidated_drive_link || ord?.raw_footage_link || rf?.server_path || '';
+      const finalConsolidatedLink = op.consolidated_drive_link || op.Consolidated_Drive_Link || linkFallback || '';
       if (ord) {
         return {
           ...op,
           event_status: ord.current_stage,
-          reporting_time: ord.reporting_time || op.reporting_time
+          reporting_time: ord.reporting_time || op.reporting_time,
+          consolidated_drive_link: finalConsolidatedLink,
+          Consolidated_Drive_Link: finalConsolidatedLink
         };
       }
-      return op;
+      return {
+        ...op,
+        consolidated_drive_link: finalConsolidatedLink,
+        Consolidated_Drive_Link: finalConsolidatedLink
+      };
     });
-  }, [operations, augmentedOrders]);
+  }, [operations, augmentedOrders, rawFootage]);
 
   const augmentedProduction = useMemo(() => {
     const list = [...production];
@@ -1074,24 +1086,31 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!prodExists) {
         const parentLeadForO = leads.find(l => l.lead_id === o.lead_id);
         const defaultTargetDate = parentLeadForO?.delivery_target_date || '';
+        const opForO = operations.find(op => op.order_id === o.order_id);
+        const rfForO = rawFootage.find(rf => rf.order_id === o.order_id || rf.tracking_id === o.order_id);
+        const link = opForO?.consolidated_drive_link || opForO?.Consolidated_Drive_Link || opForO?.raw_footage_drive_link || rfForO?.server_path || (o as any).consolidated_drive_link || o.raw_footage_link || '';
         list.push({
           production_id: `PRD-${o.lead_id}`,
           tracking_id: o.order_id,
           order_id: o.order_id,
           lead_id: o.lead_id,
           editor_assigned: parentLeadForO?.assigned_editor || 'Unassigned',
-          raw_footage_location: '',
+          raw_footage_location: link,
+          final_consolidated_drive_link: link,
+          consolidated_drive_link: link,
           editing_status: (parentLeadForO?.current_status || parentLeadForO?.status || o.current_stage) as any,
           remarks: '',
           project_priority: 'Medium',
           target_delivery_date: defaultTargetDate,
           expected_delivery_date: defaultTargetDate
-        });
+        } as any);
       }
     });
     return list.map(p => {
       const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id || o.order_id === (p as any).order_id || o.lead_id === (p as any).lead_id);
       const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id) || l.lead_id === (p as any).lead_id);
+      const op = operations.find(o => (ord && o.order_id === ord.order_id) || o.order_id === p.tracking_id || (p as any).order_id === o.order_id);
+      const rf = rawFootage.find(f => (ord && f.order_id === ord.order_id) || f.order_id === p.tracking_id || f.tracking_id === p.tracking_id);
       
       const leadStatus = parentLead?.current_status || parentLead?.status;
       const leadEditor = parentLead?.assigned_editor;
@@ -1099,6 +1118,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const leadTargetDate = parentLead?.delivery_target_date;
 
       let updatedP = { ...p };
+
+      const resolvedLink = op?.consolidated_drive_link || op?.Consolidated_Drive_Link || (p as any).final_consolidated_drive_link || (p as any).consolidated_drive_link || p.raw_footage_location || rf?.server_path || (ord as any)?.consolidated_drive_link || ord?.raw_footage_link || '';
+      if (resolvedLink) {
+        (updatedP as any).final_consolidated_drive_link = (updatedP as any).final_consolidated_drive_link || resolvedLink;
+        (updatedP as any).consolidated_drive_link = (updatedP as any).consolidated_drive_link || resolvedLink;
+        if (!updatedP.raw_footage_location) {
+          updatedP.raw_footage_location = resolvedLink;
+        }
+      }
 
       if (!p.editing_status || p.editing_status === 'Pending') {
         if (leadStatus) {
@@ -1121,7 +1149,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return updatedP;
     });
-  }, [production, augmentedOrders, leads]);
+  }, [production, augmentedOrders, leads, operations, rawFootage]);
 
   const augmentedPayments = useMemo(() => {
     const list = [...payments];
@@ -1720,6 +1748,34 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           if (resJson && resJson.success) {
             console.log(`[pushUpdate Proxy SUCCESS] for ${table}:`, resJson.data);
             updateDiagnosticMetric('update', 'ok');
+            if (table === 'operations') {
+              setOperations(prev => {
+                let found = false;
+                const updated = prev.map(op => {
+                  if (op.order_id === finalMatchValue || op.operation_id === finalMatchValue) {
+                    found = true;
+                    return { ...op, ...sanitized };
+                  }
+                  return op;
+                });
+                if (!found && matchColumn === 'order_id') {
+                  return [...updated, {
+                    operation_id: `OP-${finalMatchValue}`,
+                    order_id: finalMatchValue,
+                    photographer_assigned: 'Unassigned',
+                    videographer_assigned: 'Unassigned',
+                    drone_operator_assigned: 'Unassigned',
+                    assistant_assigned: 'Unassigned',
+                    equipment_kit: '',
+                    reporting_time: '08:00',
+                    event_status: 'Completed',
+                    updated_by: currentUserName || 'System',
+                    ...sanitized
+                  }];
+                }
+                return updated;
+              });
+            }
             if (table === 'editor_assignments') {
               const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link;
               setEditorAssignments(prev => {
@@ -5065,29 +5121,58 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       throw new Error("Failed to update lead status: " + rLead?.error);
     }
 
-    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists, and store raw footage upload notes/remarks.
+    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists, and store raw footage upload notes/remarks and final consolidated link.
     await pushUpdate('operations', 'order_id', orderId, { 
       event_status: 'Completed',
       Upload_Notes_Remarks: uploadNotes || '',
       upload_notes_remarks: uploadNotes || '',
       Raw_Footage_Drive_Link: footageLink || '',
-      raw_footage_drive_link: footageLink || ''
+      raw_footage_drive_link: footageLink || '',
+      Consolidated_Drive_Link: footageLink || '',
+      consolidated_drive_link: footageLink || ''
     });
 
     // Directly update local state for operations
-    setOperations(prev => prev.map(op => {
-      if (op.order_id === orderId) {
-        return {
-          ...op,
+    setOperations(prev => {
+      let found = false;
+      const updated = prev.map(op => {
+        if (op.order_id === orderId) {
+          found = true;
+          return {
+            ...op,
+            event_status: 'Completed',
+            Upload_Notes_Remarks: uploadNotes || '',
+            upload_notes_remarks: uploadNotes || '',
+            Raw_Footage_Drive_Link: footageLink || op.raw_footage_drive_link || '',
+            raw_footage_drive_link: footageLink || op.raw_footage_drive_link || '',
+            Consolidated_Drive_Link: footageLink || (op as any).Consolidated_Drive_Link || '',
+            consolidated_drive_link: footageLink || op.consolidated_drive_link || ''
+          };
+        }
+        return op;
+      });
+      if (!found) {
+        return [...updated, {
+          operation_id: `OP-${orderId}`,
+          order_id: orderId,
+          photographer_assigned: 'Unassigned',
+          videographer_assigned: 'Unassigned',
+          drone_operator_assigned: 'Unassigned',
+          assistant_assigned: 'Unassigned',
+          equipment_kit: '',
+          reporting_time: '08:00',
           event_status: 'Completed',
+          updated_by: currentUserName || 'Operations Team',
           Upload_Notes_Remarks: uploadNotes || '',
           upload_notes_remarks: uploadNotes || '',
           Raw_Footage_Drive_Link: footageLink || '',
-          raw_footage_drive_link: footageLink || ''
-        };
+          raw_footage_drive_link: footageLink || '',
+          Consolidated_Drive_Link: footageLink || '',
+          consolidated_drive_link: footageLink || ''
+        }];
       }
-      return op;
-    }));
+      return updated;
+    });
 
     let existingRf = rawFootage.find(f => f.order_id === orderId);
     let trackingId = existingRf?.tracking_id || `TRK-${Math.floor(2012 + Math.random() * 850)}`;
