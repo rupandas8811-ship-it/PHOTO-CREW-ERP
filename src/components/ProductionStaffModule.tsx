@@ -668,13 +668,12 @@ export const ProductionStaffModule: React.FC = () => {
           ''
         ).trim();
         const existingEventDate = formatDateToDDMMYY(rawDate) || rawDate;
-        const existingFolderName = existingConfirmed ? (
+        const existingFolderName = (
           item.serverUploadFolderName ||
           item.assignmentObj?.server_upload_folder_name ||
           item.prodObj?.server_upload_folder_name ||
-          item.prodObj?.server_path ||
           ''
-        ).trim() : '';
+        ).trim();
 
         eventConfigs[evtKey] = {
           eventKey: evtKey,
@@ -683,7 +682,7 @@ export const ProductionStaffModule: React.FC = () => {
           eventDate: existingEventDate,
           folderName: existingFolderName,
           confirmed: existingConfirmed,
-          isSaved: existingConfirmed,
+          isSaved: existingConfirmed && Boolean(existingFolderName),
           confirmedAt: item.serverUploadConfirmedAt || item.assignmentObj?.server_upload_confirmed_at || ''
         };
       }
@@ -695,9 +694,9 @@ export const ProductionStaffModule: React.FC = () => {
       eventId: delivItem.eventId || '',
       eventName: delivItem.eventName || grp.eventName || 'Event',
       eventDate: formatDateToDDMMYY(delivItem.eventDate || grp.eventDate || '') || (delivItem.eventDate || grp.eventDate || ''),
-      folderName: '',
-      confirmed: false,
-      isSaved: false,
+      folderName: (delivItem.serverUploadFolderName || delivItem.assignmentObj?.server_upload_folder_name || delivItem.prodObj?.server_upload_folder_name || '').trim(),
+      confirmed: Boolean(delivItem.serverUploadConfirmed || delivItem.assignmentObj?.server_upload_confirmed),
+      isSaved: Boolean(delivItem.serverUploadConfirmed && (delivItem.serverUploadFolderName || delivItem.assignmentObj?.server_upload_folder_name)),
       confirmedAt: ''
     };
 
@@ -717,7 +716,7 @@ export const ProductionStaffModule: React.FC = () => {
       selectedIds: [delivItem.assignmentId],
       server_upload_confirmed: currentCfg.confirmed,
       server_upload_event_date: currentCfg.eventDate,
-      server_upload_folder_name: currentCfg.isSaved ? currentCfg.folderName : '',
+      server_upload_folder_name: currentCfg.folderName || '',
       event_configs: eventConfigs
     });
   };
@@ -776,7 +775,6 @@ export const ProductionStaffModule: React.FC = () => {
           item.serverUploadFolderName ||
           item.assignmentObj?.server_upload_folder_name ||
           item.prodObj?.server_upload_folder_name ||
-          item.prodObj?.server_path ||
           ''
         ).trim();
 
@@ -977,7 +975,6 @@ export const ProductionStaffModule: React.FC = () => {
         const serverUploadFolderName = (
           assignment.server_upload_folder_name ||
           prod?.server_upload_folder_name ||
-          prod?.server_path ||
           ''
         ).trim();
         const serverUploadConfirmedAt = (assignment.server_upload_confirmed_at || '').trim();
@@ -1286,8 +1283,7 @@ export const ProductionStaffModule: React.FC = () => {
         const prodUpdate: any = {
           server_upload_confirmed: true,
           server_upload_event_date: serverEventDate,
-          server_upload_folder_name: serverFolderName,
-          server_path: serverFolderName
+          server_upload_folder_name: serverFolderName
         };
         if (customerReviewForm.edited_drive_link?.trim()) {
           prodUpdate.edited_drive_link = customerReviewForm.edited_drive_link.trim();
@@ -1421,7 +1417,6 @@ export const ProductionStaffModule: React.FC = () => {
           prodPayload.server_upload_confirmed = true;
           prodPayload.server_upload_event_date = cfg.eventDate.trim();
           prodPayload.server_upload_folder_name = cfg.folderName.trim();
-          prodPayload.server_path = cfg.folderName.trim();
         }
 
         await updateProduction(prodId, prodPayload);
@@ -1550,7 +1545,7 @@ Thank you.`;
           folderName: editingCompletedForm.server_upload_folder_name
         };
         const serverEventDate = (cfg.eventDate || deliv.eventDate || '').trim();
-        const serverFolderName = (cfg.folderName || `${b.customerName || 'Client'} ${deliv.eventName || 'Event'} Edited`).trim();
+        const serverFolderName = (cfg.folderName || '').trim();
 
         const assignPayload = {
           confirmation_proof: uploadedProofUrl,
@@ -1589,7 +1584,7 @@ Thank you.`;
           folderName: editingCompletedForm.server_upload_folder_name
         };
         const serverEventDate = (cfg.eventDate || matchingDeliv?.eventDate || '').trim();
-        const serverFolderName = (cfg.folderName || `${b.customerName || 'Client'} ${matchingDeliv?.eventName || 'Event'} Edited`).trim();
+        const serverFolderName = (cfg.folderName || '').trim();
 
         await updateProduction(prodId, {
           editing_status: 'Editing Completed' as any,
@@ -1597,7 +1592,6 @@ Thank you.`;
           server_upload_confirmed: true,
           server_upload_event_date: serverEventDate,
           server_upload_folder_name: serverFolderName,
-          server_path: serverFolderName,
           client_communication_proof: mainProofUrl || proofInput,
           customer_communication_proof: mainProofUrl || proofInput,
           proof_url: mainProofUrl || proofInput,
@@ -3337,7 +3331,6 @@ Thank you.`;
                           const matchingDeliv = selectedDeliverables.find((d: any) => (d.eventId || d.eventName || 'default').trim() === evtKey);
                           const eventDisplayName = evtCfg.eventName || matchingDeliv?.eventName || 'Event';
                           const defaultEvtDate = evtCfg.eventDate || matchingDeliv?.eventDate || editingCompletedModal.group?.eventDate || '';
-                          const defaultFolderName = evtCfg.folderName || `${editingCompletedModal.group?.customerName || 'Client'} ${eventDisplayName} Edited`;
 
                           return (
                             <div key={evtKey} className="space-y-3 bg-zinc-900/80 p-3.5 rounded-xl border border-zinc-800">
@@ -3356,20 +3349,21 @@ Thank you.`;
                                   onChange={(e) => {
                                     const checked = e.target.checked;
                                     setEditingCompletedForm(prev => {
+                                      const curCfg = prev.event_configs[evtKey] || evtCfg;
                                       const updatedConfigs = {
                                         ...prev.event_configs,
                                         [evtKey]: {
-                                          ...evtCfg,
+                                          ...curCfg,
                                           confirmed: checked,
-                                          eventDate: evtCfg.eventDate || defaultEvtDate,
-                                          folderName: evtCfg.folderName || defaultFolderName
+                                          eventDate: curCfg.eventDate || defaultEvtDate,
+                                          folderName: curCfg.folderName || ''
                                         }
                                       };
                                       return {
                                         ...prev,
                                         server_upload_confirmed: checked,
                                         server_upload_event_date: updatedConfigs[evtKey].eventDate,
-                                        server_upload_folder_name: updatedConfigs[evtKey].folderName,
+                                        server_upload_folder_name: updatedConfigs[evtKey].folderName || '',
                                         event_configs: updatedConfigs
                                       };
                                     });
@@ -3423,8 +3417,8 @@ Thank you.`;
                                     <input
                                       type="text"
                                       id={`server_upload_folder_name_input_${evtKey}`}
-                                      placeholder="e.g., Rahul Wedding Edited"
-                                      value={evtCfg.folderName || defaultFolderName}
+                                      placeholder="Enter folder name (e.g., Final_22Aug_Event2_Edited)"
+                                      value={evtCfg.folderName || ''}
                                       onChange={(e) => {
                                         const val = e.target.value;
                                         setEditingCompletedForm(prev => ({
@@ -3439,7 +3433,7 @@ Thank you.`;
                                           }
                                         }));
                                       }}
-                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+                                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
                                       required
                                     />
                                   </div>
