@@ -702,10 +702,17 @@ export const ProductionStaffModule: React.FC = () => {
     };
 
     const existingImage = (delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
+    const existingEditedLink = (
+      delivItem.editedDriveLink || 
+      delivItem.assignmentObj?.edited_drive_link || 
+      delivItem.assignmentObj?.Edited_Drive_Link || 
+      delivItem.prodObj?.edited_drive_link || 
+      ''
+    ).trim();
 
     setCustomerReviewModal({ group: grp, actionItem: delivItem });
     setCustomerReviewForm({
-      edited_drive_link: delivItem.editedDriveLink || '',
+      edited_drive_link: existingEditedLink,
       customer_review_image: existingImage,
       selectedIds: [delivItem.assignmentId],
       server_upload_confirmed: currentCfg.confirmed,
@@ -2807,6 +2814,26 @@ Thank you.`;
                 </p>
 
                 <form id="customer-review-form" onSubmit={handleCustomerReviewSubmit} className="space-y-5">
+                  {/* Upload Link to Send Customer Editing Link */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-mono font-bold text-zinc-300 uppercase">
+                      Upload Link to Send Customer Editing Link
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="url"
+                        id="customer_editing_link_input"
+                        placeholder="https://drive.google.com/... or cloud review link"
+                        value={customerReviewForm.edited_drive_link}
+                        onChange={(e) => setCustomerReviewForm(prev => ({ ...prev, edited_drive_link: e.target.value }))}
+                        className="w-full bg-zinc-950 border border-zinc-700 hover:border-zinc-600 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none transition-colors font-mono"
+                      />
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Enter or paste the client review link to be sent to the customer for reviewing the edited work.
+                    </p>
+                  </div>
+
                   {/* Customer Review Image */}
                   <div className="space-y-2">
                     <label className="block text-xs font-mono font-bold text-zinc-300 uppercase">
