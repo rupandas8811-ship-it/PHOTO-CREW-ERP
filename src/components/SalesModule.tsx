@@ -2614,6 +2614,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const isCrmLocked = false;
   const isLeadLocked = false;
+  const isLeadLost = Boolean(
+    selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(
+      selectedLead.status || (selectedLead as any).current_status || wizardLeadData.status || ''
+    )
+  );
 
   // No longer locking steps so Sales can update/add required services
   const isStep1Locked = false;
@@ -13075,7 +13080,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         >
             {/* Header: Sticky */}
             {!['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) && (
-              <div className="py-2.5 px-4 sm:px-5 border-b border-slate-850 flex items-center justify-between bg-slate-950/40 sticky top-0 z-10 backdrop-blur-sm shrink-0">
+              <div className={`py-2.5 px-4 sm:px-5 border-b flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm shrink-0 ${
+                isLeadLost && crmWizardStep === 3 ? 'bg-rose-950/40 border-rose-500/30' : 'bg-slate-950/40 border-slate-850'
+              }`}>
                 {crmWizardStep !== 3 ? (
                   <div className="flex items-center gap-2 text-left flex-wrap">
                     <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
@@ -13083,20 +13090,30 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     </h3>
                     <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                      isLeadLost ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
                       getLeadCurrentStage(selectedLead) === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
                       getLeadCurrentStage(selectedLead) === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
                       getLeadCurrentStage(selectedLead) === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
                       'bg-zinc-800 text-zinc-400 border border-zinc-700'
                     }`}>
-                      Stage: {getLeadCurrentStage(selectedLead)}
+                      Stage: {isLeadLost ? 'Lost Lead' : getLeadCurrentStage(selectedLead)}
                     </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-zinc-300 border border-zinc-700">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                      isLeadLost ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+                    }`}>
                       Status: {getLeadCurrentStatus(selectedLead)}
                     </span>
                   </div>
                 ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-slate-200 font-mono uppercase tracking-wider">Step 3: Package Configuration</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-bold font-mono uppercase tracking-wider ${isLeadLost ? 'text-rose-300' : 'text-slate-200'}`}>
+                      Step 3: Package Configuration
+                    </span>
+                    {isLeadLost && (
+                      <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-mono font-bold uppercase flex items-center gap-1">
+                        <span>💔</span> [ LOST LEAD ]
+                      </span>
+                    )}
                   </div>
                 )}
                 <button 
@@ -13121,20 +13138,29 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             )}
 
             {/* Progress Bar & Indicators */}
-            <div className={`w-full bg-slate-950/20 border-b border-slate-850 py-1.5 px-4 sm:px-5 shrink-0 justify-start text-left ${['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) ? 'sticky top-0 z-10 backdrop-blur-sm' : ''}`}>
+            <div className={`w-full ${isLeadLost && crmWizardStep === 3 ? 'bg-rose-950/20 border-b border-rose-500/30' : 'bg-slate-950/20 border-b border-slate-850'} py-1.5 px-4 sm:px-5 shrink-0 justify-start text-left ${['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) ? 'sticky top-0 z-10 backdrop-blur-sm' : ''}`}>
               <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
                 <div className="flex flex-1 items-center gap-2">
-                  <span className="text-[10px] sm:text-xs font-mono font-bold text-indigo-400 uppercase tracking-widest text-left shrink-0">
+                  <span className={`text-[10px] sm:text-xs font-mono font-bold uppercase tracking-widest text-left shrink-0 ${isLeadLost && crmWizardStep === 3 ? 'text-rose-400' : 'text-indigo-400'}`}>
                     Step {crmWizardStep} of 3:
                   </span>
-                  <span className="text-[10px] sm:text-xs font-semibold text-slate-300 bg-slate-800 py-0.5 px-2 rounded border border-slate-750 shrink-0">
+                  <span className={`text-[10px] sm:text-xs font-semibold py-0.5 px-2 rounded border shrink-0 flex items-center gap-1.5 ${
+                    isLeadLost && crmWizardStep === 3
+                      ? 'text-rose-300 bg-rose-950/40 border-rose-500/30 font-mono font-bold'
+                      : 'text-slate-300 bg-slate-800 border-slate-750'
+                  }`}>
                     {crmWizardStep === 1 ? 'Customer Details' :
                      crmWizardStep === 2 ? 'Event Details' :
                      'Quotation Workspace'}
+                    {isLeadLost && crmWizardStep === 3 && (
+                      <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1 py-0.2 rounded uppercase">
+                        [ LOST LEAD ]
+                      </span>
+                    )}
                   </span>
                   <div className="flex-1 max-w-xs h-1 bg-slate-950 rounded-full overflow-hidden hidden sm:block ml-4">
                     <div 
-                      className="h-full bg-indigo-500 transition-all duration-300"
+                      className={`h-full transition-all duration-300 ${isLeadLost && crmWizardStep === 3 ? 'bg-rose-500' : 'bg-indigo-500'}`}
                       style={{ width: `${(crmWizardStep / 3) * 100}%` }}
                     />
                   </div>
@@ -13149,35 +13175,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 )}
               </div>
             </div>
-
-            {/* If Lost Lead, display Lost Details */}
-            {selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(selectedLead.status || (selectedLead as any).current_status || '') && (() => {
-              const { reason: lostReasonText, notes: lostNotesText } = getStrictLostReasonAndNotes(selectedLead);
-              return (
-                <div className="mx-4 sm:mx-5 mt-2 bg-rose-950/25 border border-rose-500/20 p-2.5 rounded-xl flex items-start gap-3 text-left shadow-lg flex-col">
-                  <div className="flex items-start gap-3 w-full">
-                    <span className="text-rose-500 text-base mt-0.5">❌</span>
-                    <div className="w-full">
-                      <h4 className="text-xs font-bold text-rose-400 uppercase tracking-wide">LOST REASON</h4>
-                      <div className="text-[11px] text-zinc-300 leading-relaxed mt-0.5">
-                        <span className="text-rose-300 font-semibold">{lostReasonText}</span>
-                      </div>
-                    </div>
-                  </div>
-                  {lostNotesText && (
-                    <div className="flex items-start gap-3 w-full border-t border-rose-500/20 pt-2 mt-1">
-                      <span className="text-rose-500/0 text-base mt-0.5 w-[20px]"></span> {/* spacer */}
-                      <div className="w-full">
-                        <h4 className="text-xs font-bold text-rose-400/80 uppercase tracking-wide">LOST NOTES</h4>
-                        <div className="text-[11px] text-zinc-300 leading-relaxed mt-0.5 whitespace-pre-wrap">
-                          {lostNotesText}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
 
             {/* Content container with horizontal padding */}
             <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
@@ -13282,14 +13279,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                    )}
 
                    {crmWizardStep === 3 && (
-                     <div className="space-y-4 animate-fade-in text-left">
-                       <div className="border-b border-slate-800 pb-1.5">
-                         <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                           <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">3</span>
+                     <div className={`space-y-4 animate-fade-in text-left ${isLeadLost ? 'bg-rose-950/10 border border-rose-500/30 rounded-2xl p-3.5 sm:p-4' : ''}`}>
+                       <div className={`border-b pb-1.5 flex items-center justify-between ${isLeadLost ? 'border-rose-500/30' : 'border-slate-800'}`}>
+                         <h3 className={`text-xs sm:text-sm font-bold flex items-center gap-2 ${isLeadLost ? 'text-rose-400' : 'text-white'}`}>
+                           <span className={`p-0.5 px-1.5 rounded text-[10px] font-mono ${isLeadLost ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-indigo-500/10 text-indigo-400'}`}>3</span>
                            <span>Quotation Workspace</span>
-                          </h3>
-                        </div>
-                        {renderStep3Workspace(true)}
+                         </h3>
+                         {isLeadLost && (
+                           <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2.5 py-0.5 rounded font-mono font-bold uppercase flex items-center gap-1">
+                             <span>💔</span> [ LOST LEAD ]
+                           </span>
+                         )}
+                       </div>
+                       {renderStep3Workspace(true)}
                         <div className="hidden">
                         <div className="space-y-3.5 text-left">
                          <div>
