@@ -5523,16 +5523,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Handle lead select
   useEffect(() => {
     const handler = (e: any) => {
-      if (e.detail.role === 'sales' || e.detail.role === 'owner') {
-        const targetLead = leads.find(l => l.lead_id === e.detail.leadId || l.order_id === e.detail.orderId);
+      if (e.detail?.role === 'sales' || e.detail?.role === 'owner' || !e.detail?.role) {
+        const leadId = e.detail?.leadId || e.detail?.lead_id;
+        const orderId = e.detail?.orderId || e.detail?.order_id;
+        const targetLead = leads.find(
+          l => (leadId && (l.lead_id === leadId || l.order_id === leadId)) ||
+               (orderId && (l.lead_id === orderId || l.order_id === orderId)) ||
+               (l.events && l.events.some(ev => ev.id === leadId || ev.id === orderId))
+        );
         if (targetLead) {
-          if (externalSetActiveTab) externalSetActiveTab('list'); else setInternalTab('list');
           handleSelectLead(targetLead);
         }
       }
     };
     window.addEventListener('calendar-action-click-deferred', handler);
-    return () => window.removeEventListener('calendar-action-click-deferred', handler);
+    window.addEventListener('calendar-action-click', handler);
+    return () => {
+      window.removeEventListener('calendar-action-click-deferred', handler);
+      window.removeEventListener('calendar-action-click', handler);
+    };
   }, [leads]);
   
   const handleSelectLead = async (lead: Lead, targetStep?: number) => {
@@ -10019,7 +10028,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       {/* Main Sandbox Area & Mobile Base view */}
       <div className="space-y-6">
         {selectedLead ? null : activeTab === 'calendar' ? (
-          <SalesCalendar />
+          <SalesCalendar onSelectLead={(lead) => handleSelectLead(lead)} />
         ) : activeTab === 'profiles' ? (
           /* NEW SCREEN: Customer Profiles & History Timeline sub-tab */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

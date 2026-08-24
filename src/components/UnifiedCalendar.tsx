@@ -32,6 +32,7 @@ import { EVENT_TYPES, ACTIVE_STAGE_GROUPS } from '../types';
 
 interface UnifiedCalendarProps {
   role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
+  onSelectLead?: (lead: any) => void;
 }
 
 export interface CalendarEvent {
@@ -169,7 +170,7 @@ const getProductionAssignedDate = (
   return '—';
 };
 
-export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
+export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelectLead }) => {
   const { 
     currentUser,
     currentUserName,
@@ -229,6 +230,75 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const [popupLeadId, setPopupLeadId] = useState<string | null>(null);
   const [showSelectedDateModal, setShowSelectedDateModal] = useState<boolean>(false);
   const [expandedLeads, setExpandedLeads] = useState<Set<string>>(new Set());
+
+  const handleEventAction = (ev: CalendarEvent | any) => {
+    if (ev?.sourceType === 'memo') {
+      setNewMemoTitle(ev.customerName || '');
+      setNewMemoMessage(ev.notes || '');
+      setEditingMemoId(ev.id);
+      setSelectedDate(ev.date);
+      setShowAddMemo(true);
+      return;
+    }
+
+    const targetLeadId = ev?.raw?.lead_id || ev?.orderId || ev?.lead_id || ev?.id;
+    const orderDisplayId = ev?.orderId || ev?.raw?.order_id || ev?.raw?.tracking_id || ev?.raw?.lead_id;
+
+    const targetLead = leads.find(
+      (l) =>
+        (targetLeadId && (l.lead_id === targetLeadId || l.order_id === targetLeadId)) ||
+        (orderDisplayId && (l.lead_id === orderDisplayId || l.order_id === orderDisplayId)) ||
+        (ev?.customerName && l.customer_name && l.customer_name.trim().toLowerCase() === ev.customerName.trim().toLowerCase()) ||
+        (l.events && l.events.some((e) => e.id === ev?.id || (ev?.raw && e.id === ev.raw.id)))
+    ) || (ev?.raw?.lead_id ? ev.raw : (targetLeadId ? { lead_id: targetLeadId, customer_name: ev?.customerName, mobile: ev?.mobile } : null));
+
+    setShowSelectedDateModal(false);
+    setPopupDate(null);
+    setPopupLeadId(null);
+
+    if (role === 'sales' || role === 'owner' || onSelectLead) {
+      if (onSelectLead && targetLead) {
+        onSelectLead(targetLead);
+      }
+      window.dispatchEvent(
+        new CustomEvent("calendar-action-click", {
+          detail: {
+            leadId: targetLead?.lead_id || targetLeadId,
+            role,
+            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
+          }
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent("calendar-action-click-deferred", {
+          detail: {
+            leadId: targetLead?.lead_id || targetLeadId,
+            role,
+            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
+          }
+        })
+      );
+    } else {
+      window.dispatchEvent(
+        new CustomEvent("calendar-action-click", {
+          detail: {
+            leadId: targetLead?.lead_id || targetLeadId,
+            role,
+            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
+          }
+        })
+      );
+      window.dispatchEvent(
+        new CustomEvent("calendar-action-click-deferred", {
+          detail: {
+            leadId: targetLead?.lead_id || targetLeadId,
+            role,
+            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
+          }
+        })
+      );
+    }
+  };
 
   const toggleLeadExpand = (leadId: string) => {
     const newSet = new Set(expandedLeads);
@@ -1112,7 +1182,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                         </td>
                         <td className="p-3 text-right whitespace-nowrap min-w-[100px]">
                           <button
-                            onClick={() => setPopupLeadId(ev.raw?.lead_id || ev.orderId)}
+                            onClick={() => handleEventAction(ev)}
                             className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
                             style={{ whiteSpace: 'nowrap' }}
                           >
@@ -1356,17 +1426,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 key={ev.id}
                                 id={`week_card_${ev.id}`}
                                 onClick={(e) => {
-  e.stopPropagation();
-  if (ev.sourceType === 'memo') {
-    setNewMemoTitle(ev.customerName);
-    setNewMemoMessage(ev.notes || '');
-    setEditingMemoId(ev.id);
-    setSelectedDate(ev.date);
-    setShowAddMemo(true);
-  } else {
-    setPopupLeadId(ev.raw?.lead_id || ev.orderId);
-  }
-}}
+                                  e.stopPropagation();
+                                  handleEventAction(ev);
+                                }}
                                 className={`p-2 rounded-xl text-xs flex flex-col gap-1 transition cursor-pointer w-full hover:brightness-110 active:scale-95 ${col.card}`}
                               >
                                 <span className="font-bold text-zinc-100 line-clamp-1">{ev.customerName}</span>
@@ -1439,17 +1501,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                         key={ev.id}
                         id={`day_card_${ev.id}`}
                         onClick={(e) => {
-  e.stopPropagation();
-  if (ev.sourceType === 'memo') {
-    setNewMemoTitle(ev.customerName);
-    setNewMemoMessage(ev.notes || '');
-    setEditingMemoId(ev.id);
-    setSelectedDate(ev.date);
-    setShowAddMemo(true);
-  } else {
-    setPopupLeadId(ev.raw?.lead_id || ev.orderId);
-  }
-}}
+                          e.stopPropagation();
+                          handleEventAction(ev);
+                        }}
                         className={`p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all cursor-pointer w-full hover:brightness-110 active:scale-[0.99] ${col.card}`}
                       >
                         <div className="space-y-1.5">
@@ -1535,17 +1589,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                           key={ev.id}
                           id={`agenda_row_${ev.id}`}
                           onClick={(e) => {
-  e.stopPropagation();
-  if (ev.sourceType === 'memo') {
-    setNewMemoTitle(ev.customerName);
-    setNewMemoMessage(ev.notes || '');
-    setEditingMemoId(ev.id);
-    setSelectedDate(ev.date);
-    setShowAddMemo(true);
-  } else {
-    setPopupLeadId(ev.raw?.lead_id || ev.orderId);
-  }
-}}
+                            e.stopPropagation();
+                            handleEventAction(ev);
+                          }}
                           className={`p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition cursor-pointer w-full hover:brightness-110 active:scale-[0.99] ${col.card}`}
                         >
                           <div className="flex items-start gap-3 w-full sm:w-auto">
@@ -1918,10 +1964,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                           <td className="p-3.5 text-right pr-5 whitespace-nowrap min-w-[100px]">
                             <button 
                               onClick={() => {
-                                window.dispatchEvent(new CustomEvent("calendar-action-click", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
-                                window.dispatchEvent(new CustomEvent("calendar-action-click-deferred", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
-                                setPopupDate(null);
-                                setPopupLeadId(null);
+                                handleEventAction({ raw: lead, lead_id: lead.lead_id, orderId: orderIdDisplay });
                               }}
                               className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
                               style={{ whiteSpace: 'nowrap' }}
@@ -2092,15 +2135,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setShowSelectedDateModal(false);
-                                    if (ev.sourceType === 'memo') {
-                                      setNewMemoTitle(ev.customerName);
-                                      setNewMemoMessage(ev.notes || '');
-                                      setEditingMemoId(ev.id);
-                                      setShowAddMemo(true);
-                                    } else {
-                                      setPopupLeadId(ev.raw?.lead_id || ev.orderId || orderDisplayId);
-                                    }
+                                    handleEventAction(ev);
                                   }}
                                   className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
                                 >
