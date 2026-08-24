@@ -552,7 +552,9 @@ export const ProductionStaffModule: React.FC = () => {
     updateOrderStage,
     updateLead,
     pushUpdate,
-    refreshData 
+    refreshData,
+    clientAcceptanceVerifications = [],
+    saveClientAcceptanceVerification
   } = useRole();
 
   // Resolve production staff member
@@ -649,11 +651,26 @@ export const ProductionStaffModule: React.FC = () => {
 
   const openCustomerReviewModal = (grp: any, delivItem: any) => {
     const eventConfigs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean; isSaved: boolean; confirmedAt?: string }> = {};
+    const orderId = grp.orderId || (delivItem as any).orderId || grp.leadId || '';
+    const cleanOrdId = String(orderId).trim().toLowerCase();
 
     (grp.deliverables || []).forEach((item: any) => {
       const evtKey = (item.eventId || item.eventName || 'default').trim();
       if (!eventConfigs[evtKey]) {
+        const cleanEvtId = String(evtKey).trim().toLowerCase();
+        const savedVerif = (clientAcceptanceVerifications || []).find(v => {
+          const vOrd = String(v.order_id || '').trim().toLowerCase();
+          const vEvt = String(v.event_id || 'default').trim().toLowerCase();
+          if (cleanOrdId && vOrd === cleanOrdId) {
+            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase())) {
+              return true;
+            }
+          }
+          return false;
+        });
+
         const existingConfirmed = Boolean(
+          savedVerif?.consent_proof_verified ||
           item.serverUploadConfirmed ||
           item.assignmentObj?.server_upload_confirmed ||
           item.assignmentObj?.edited_folder_uploaded_to_server ||
@@ -669,6 +686,7 @@ export const ProductionStaffModule: React.FC = () => {
         ).trim();
         const existingEventDate = formatDateToDDMMYY(rawDate) || rawDate;
         const existingFolderName = (
+          savedVerif?.folder_name ||
           item.serverUploadFolderName ||
           item.assignmentObj?.server_upload_folder_name ||
           item.prodObj?.server_upload_folder_name ||
@@ -683,7 +701,7 @@ export const ProductionStaffModule: React.FC = () => {
           folderName: existingFolderName,
           confirmed: existingConfirmed,
           isSaved: existingConfirmed && Boolean(existingFolderName),
-          confirmedAt: item.serverUploadConfirmedAt || item.assignmentObj?.server_upload_confirmed_at || ''
+          confirmedAt: savedVerif?.updated_at || item.serverUploadConfirmedAt || item.assignmentObj?.server_upload_confirmed_at || ''
         };
       }
     });
@@ -700,8 +718,15 @@ export const ProductionStaffModule: React.FC = () => {
       confirmedAt: ''
     };
 
-    const existingImage = (delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
+    const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
+      const vOrd = String(v.order_id || '').trim().toLowerCase();
+      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
+      return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
+    });
+
+    const existingImage = (savedTargetVerif?.client_communication_consent_proof || delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
     const existingEditedLink = (
+      savedTargetVerif?.upload_link_path ||
       delivItem.editedDriveLink || 
       delivItem.assignmentObj?.edited_drive_link || 
       delivItem.assignmentObj?.Edited_Drive_Link || 
@@ -753,11 +778,26 @@ export const ProductionStaffModule: React.FC = () => {
 
   const openEditingCompletedModal = (grp: any, delivItem: any) => {
     const eventConfigs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean }> = {};
+    const orderId = grp.orderId || (delivItem as any).orderId || grp.leadId || '';
+    const cleanOrdId = String(orderId).trim().toLowerCase();
 
     (grp.deliverables || []).forEach((item: any) => {
       const evtKey = (item.eventId || item.eventName || 'default').trim();
       if (!eventConfigs[evtKey]) {
+        const cleanEvtId = String(evtKey).trim().toLowerCase();
+        const savedVerif = (clientAcceptanceVerifications || []).find(v => {
+          const vOrd = String(v.order_id || '').trim().toLowerCase();
+          const vEvt = String(v.event_id || 'default').trim().toLowerCase();
+          if (cleanOrdId && vOrd === cleanOrdId) {
+            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase())) {
+              return true;
+            }
+          }
+          return false;
+        });
+
         const existingConfirmed = Boolean(
+          savedVerif?.consent_proof_verified ||
           item.serverUploadConfirmed ||
           item.assignmentObj?.server_upload_confirmed ||
           item.assignmentObj?.edited_folder_uploaded_to_server ||
@@ -772,6 +812,7 @@ export const ProductionStaffModule: React.FC = () => {
           ''
         ).trim();
         const existingFolderName = (
+          savedVerif?.folder_name ||
           item.serverUploadFolderName ||
           item.assignmentObj?.server_upload_folder_name ||
           item.prodObj?.server_upload_folder_name ||
@@ -799,9 +840,17 @@ export const ProductionStaffModule: React.FC = () => {
       confirmed: false
     };
 
+    const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
+      const vOrd = String(v.order_id || '').trim().toLowerCase();
+      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
+      return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
+    });
+
+    const existingProof = (savedTargetVerif?.client_communication_consent_proof || delivItem.confirmationProof || '').trim();
+
     setEditingCompletedModal({ group: grp, actionItem: delivItem });
     setEditingCompletedForm({
-      confirmation_proof: delivItem.confirmationProof || '',
+      confirmation_proof: existingProof,
       selectedIds: [delivItem.assignmentId],
       server_upload_confirmed: currentCfg.confirmed,
       server_upload_event_date: currentCfg.eventDate,
@@ -1424,6 +1473,33 @@ export const ProductionStaffModule: React.FC = () => {
         }
       }
 
+      // Persist unified Client Acceptance Verification records
+      if (saveClientAcceptanceVerification) {
+        for (const deliv of deliverablesToUpdate) {
+          const orderId = deliv.orderId || b.orderId || b.leadId || '';
+          const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+          const cfg = customerReviewForm.event_configs[evtKey] || {
+            confirmed: customerReviewForm.server_upload_confirmed,
+            eventDate: customerReviewForm.server_upload_event_date,
+            folderName: customerReviewForm.server_upload_folder_name
+          };
+          const fName = (cfg.folderName || '').trim();
+          const lPath = (editedLink || '').trim();
+          
+          if (orderId) {
+            await saveClientAcceptanceVerification({
+              order_id: orderId,
+              event_id: deliv.eventId || evtKey || 'default',
+              folder_name: fName,
+              upload_link_path: lPath,
+              client_communication_consent_proof: imgUrl || '',
+              proof_file_name: imgUrl ? (imgUrl.split('/').pop()?.split('?')[0] || `Proof_${orderId}`) : '',
+              consent_proof_verified: Boolean(cfg.confirmed)
+            });
+          }
+        }
+      }
+
       const uniqueLeadIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.leadId).filter(Boolean)));
       for (const leadId of uniqueLeadIds as string[]) {
         await updateLead(leadId, {
@@ -1599,6 +1675,33 @@ Thank you.`;
       for (const orderId of uniqueOrderIds as string[]) {
         if (orderId !== 'ORD-ASSIGNED') {
           await updateOrderStage(orderId, 'Editing Completed' as any);
+        }
+      }
+
+      // Persist unified Client Acceptance Verification records
+      if (saveClientAcceptanceVerification) {
+        for (const deliv of deliverablesToUpdate) {
+          const orderId = deliv.orderId || b.orderId || b.leadId || '';
+          const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+          const cfg = editingCompletedForm.event_configs[evtKey] || {
+            confirmed: true,
+            eventDate: editingCompletedForm.server_upload_event_date,
+            folderName: editingCompletedForm.server_upload_folder_name
+          };
+          const fName = (cfg.folderName || editingCompletedForm.server_upload_folder_name || '').trim();
+          const lPath = (deliv.editedDriveLink || deliv.assignmentObj?.edited_drive_link || deliv.assignmentObj?.Edited_Drive_Link || '').trim();
+          
+          if (orderId) {
+            await saveClientAcceptanceVerification({
+              order_id: orderId,
+              event_id: deliv.eventId || evtKey || 'default',
+              folder_name: fName,
+              upload_link_path: lPath,
+              client_communication_consent_proof: mainProofUrl || proofInput,
+              proof_file_name: mainProofUrl ? (mainProofUrl.split('/').pop()?.split('?')[0] || `Proof_${orderId}`) : '',
+              consent_proof_verified: true
+            });
+          }
         }
       }
 

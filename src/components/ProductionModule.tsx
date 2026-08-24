@@ -528,7 +528,9 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     isDepartmentAllowedToEdit,
     deleteRawFootage,
     deleteProduction,
-    pushUpdate
+    pushUpdate,
+    clientAcceptanceVerifications = [],
+    saveClientAcceptanceVerification
   } = useRole();
 
   // Role permissions gate
@@ -1650,7 +1652,24 @@ ${coordinatorName}`;
       return { isUploaded: false, folderName: '', eventDate: '', uploadLink: '', confirmedAt: '', confirmedBy: '', isValidated: false };
     }
 
+    const orderId = a?.order_id || prod?.order_id || prod?.tracking_id || '';
+    const eventId = a?.event_id || prod?.event_id || '';
+    const cleanOrd = String(orderId || '').trim().toLowerCase();
+    const cleanEvt = String(eventId || 'default').trim().toLowerCase();
+
+    const savedVerif = (clientAcceptanceVerifications || []).find(v => {
+      const vOrd = String(v.order_id || '').trim().toLowerCase();
+      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
+      if (cleanOrd && vOrd === cleanOrd) {
+        if (!eventId || cleanEvt === 'default' || vEvt === 'default' || vEvt === cleanEvt) {
+          return true;
+        }
+      }
+      return false;
+    });
+
     const uploadLink = (
+      savedVerif?.upload_link_path ||
       a?.Edited_Drive_Link ||
       a?.edited_drive_link ||
       a?.upload_link ||
@@ -1662,6 +1681,7 @@ ${coordinatorName}`;
     ).trim();
 
     const folderName = (
+      savedVerif?.folder_name ||
       a?.server_upload_folder_name ||
       a?.server_path ||
       prod?.server_upload_folder_name ||
@@ -1677,11 +1697,13 @@ ${coordinatorName}`;
       ''
     ).trim();
 
-    const confirmedAt = (a?.server_upload_confirmed_at || prod?.server_upload_confirmed_at || '').trim();
+    const confirmedAt = (savedVerif?.updated_at || a?.server_upload_confirmed_at || prod?.server_upload_confirmed_at || '').trim();
     const confirmedBy = (a?.server_upload_confirmed_by || a?.staff_name || prod?.server_upload_confirmed_by || '').trim();
 
     // Persisted validation: true if server_upload_confirmed, folder name, server path, or edited drive link exists
     const isUploaded = Boolean(
+      savedVerif?.consent_proof_verified === true ||
+      (typeof savedVerif?.folder_name === 'string' && savedVerif.folder_name.trim().length > 0) ||
       a?.server_upload_confirmed === true ||
       a?.edited_folder_uploaded_to_server === true ||
       (typeof a?.server_upload_folder_name === 'string' && a.server_upload_folder_name.trim().length > 0) ||
@@ -1963,10 +1985,27 @@ Production Team`;
   const handleOpenClientAcceptance = (prod: Production) => {
     if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     setClientAcceptanceProd(prod);
-    const existingProof = prod.client_communication_proof || (prod as any).customer_communication_proof || (prod as any).proof_url || '';
+
+    const orderId = prod.tracking_id || (prod as any).order_id || prod.production_id;
+    const cleanOrd = String(orderId || '').trim().toLowerCase();
+    const matchingVerifs = (clientAcceptanceVerifications || []).filter(
+      v => String(v.order_id || '').trim().toLowerCase() === cleanOrd
+    );
+    const primaryVerif = matchingVerifs[0];
+
+    const existingProof = prod.client_communication_proof || 
+      (prod as any).customer_communication_proof || 
+      (prod as any).proof_url || 
+      primaryVerif?.client_communication_consent_proof || 
+      '';
     setCaCommunicationProof(existingProof);
     
-    const existingUploadName = prod.upload_name || prod.proof_name || (prod as any).client_communication_proof_name || (existingProof && !existingProof.startsWith('data:') ? existingProof.split('/').pop()?.split('?')[0] : '') || '';
+    const existingUploadName = prod.upload_name || 
+      prod.proof_name || 
+      (prod as any).client_communication_proof_name || 
+      primaryVerif?.proof_file_name || 
+      (existingProof && !existingProof.startsWith('data:') ? existingProof.split('/').pop()?.split('?')[0] : '') || 
+      '';
     setCaUploadName(existingUploadName);
 
     setCaConsentProofChecked(Boolean((prod as any).checklist_client_communication_proof ?? (existingProof ? true : false)));
@@ -11418,9 +11457,40 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       
                       await updateProduction(clientAcceptanceProd.production_id, updates);
                       
-                      const targetId = order?.order_id || trackingId;
+                      const targetId = order?.order_id || trackingId || clientAcceptanceProd.production_id;
                       if (targetId) {
                         await updateOrderStage(targetId, 'Client Acceptance' as any);
+                      }
+
+                      // Persist unified Client Acceptance Verification records per event
+                      if (saveClientAcceptanceVerification) {
+                        if (eventGroups.length > 0) {
+                          for (const group of eventGroups) {
+                            const conf = caUploadConfirmations[group.eventId];
+                            const matchedFolder = (conf?.folderName || group.items.find(i => i.folderName)?.folderName || clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '').trim();
+                            const matchedLink = (group.items.find(i => i.uploadLink)?.uploadLink || clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '').trim();
+                            
+                            await saveClientAcceptanceVerification({
+                              order_id: targetId,
+                              event_id: group.eventId || 'default',
+                              folder_name: matchedFolder,
+                              upload_link_path: matchedLink,
+                              client_communication_consent_proof: uploadedProofUrl,
+                              proof_file_name: caUploadName.trim(),
+                              consent_proof_verified: true
+                            });
+                          }
+                        } else {
+                          await saveClientAcceptanceVerification({
+                            order_id: targetId,
+                            event_id: 'default',
+                            folder_name: (clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '').trim(),
+                            upload_link_path: (clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '').trim(),
+                            client_communication_consent_proof: uploadedProofUrl,
+                            proof_file_name: caUploadName.trim(),
+                            consent_proof_verified: true
+                          });
+                        }
                       }
 
                       // Update assignments with manual upload confirmations and server upload validation
@@ -11456,7 +11526,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       }
 
                       if (refreshData) {
-                        refreshData();
+                        await refreshData();
                       }
                       setClientAcceptanceProd(null);
                       setCaUploadConfirmations({});

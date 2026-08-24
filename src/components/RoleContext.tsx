@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent, CalendarMemo } from '../types';
+import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent, CalendarMemo, ClientAcceptanceVerification } from '../types';
 import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITIAL_RAW_FOOTAGE, INITIAL_PRODUCTION, INITIAL_PAYMENTS, INITIAL_LOGS, INITIAL_EQUIPMENT } from '../data';
 import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
@@ -276,6 +276,9 @@ interface RoleContextType {
   addCalendarMemo: (memo: Omit<CalendarMemo, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   updateCalendarMemo: (id: string, updates: Partial<CalendarMemo>) => Promise<void>;
   deleteCalendarMemo: (id: string) => Promise<void>;
+
+  clientAcceptanceVerifications: ClientAcceptanceVerification[];
+  saveClientAcceptanceVerification: (verification: ClientAcceptanceVerification) => Promise<ClientAcceptanceVerification>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -930,6 +933,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [editorAssignments, setEditorAssignments] = useState<EditorAssignment[]>([]);
 
   const [equipmentHandovers, setEquipmentHandovers] = useState<EquipmentHandover[]>([]);
+
+  const [clientAcceptanceVerifications, setClientAcceptanceVerifications] = useState<ClientAcceptanceVerification[]>([]);
 
 
 
@@ -2483,6 +2488,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbStatusHistory) setStatusHistory(dbStatusHistory);
         if (dbLeadStaffAssignmentHistory) setLeadStaffAssignmentHistory(dbLeadStaffAssignmentHistory);
         if (dbLeadEquipmentHistory) setLeadEquipmentHistory(dbLeadEquipmentHistory);
+
+        // Fetch unified Client Acceptance Verifications
+        try {
+          const caRes = await fetch('/api/client-acceptance/list');
+          const parsedCa = await safeParseResponse(caRes);
+          if (parsedCa.ok && parsedCa.isJson && parsedCa.data?.success && Array.isArray(parsedCa.data?.data)) {
+            setClientAcceptanceVerifications(parsedCa.data.data);
+          }
+        } catch (caErr) {
+          console.warn('[RoleContext] Error loading client acceptance verifications:', caErr);
+        }
         
         updateDiagnosticMetric('read', 'ok');
         updateDiagnosticMetric('connection', 'connected');
@@ -6582,6 +6598,64 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     logActivity(`Removed Editor Task Assignment: ${assignmentId}`, 'Production', assignmentId);
   };
 
+  const saveClientAcceptanceVerification = async (verification: ClientAcceptanceVerification): Promise<ClientAcceptanceVerification> => {
+    const cleanOrderId = String(verification.order_id || '').trim();
+    const cleanEventId = String(verification.event_id || 'default').trim();
+    const preparedVerification: ClientAcceptanceVerification = {
+      ...verification,
+      order_id: cleanOrderId,
+      event_id: cleanEventId,
+      consent_proof_verified: verification.consent_proof_verified !== undefined ? Boolean(verification.consent_proof_verified) : true,
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      const res = await fetch('/api/client-acceptance/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(preparedVerification)
+      });
+      const parsed = await safeParseResponse(res);
+      const saved: ClientAcceptanceVerification = (parsed.ok && parsed.isJson && parsed.data?.success && parsed.data?.data)
+        ? parsed.data.data
+        : preparedVerification;
+
+      setClientAcceptanceVerifications(prev => {
+        const oId = String(saved.order_id || '').trim().toLowerCase();
+        const eId = String(saved.event_id || 'default').trim().toLowerCase();
+        const existingIdx = prev.findIndex(
+          r => String(r.order_id || '').trim().toLowerCase() === oId &&
+               String(r.event_id || 'default').trim().toLowerCase() === eId
+        );
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = { ...next[existingIdx], ...saved };
+          return next;
+        }
+        return [...prev, saved];
+      });
+
+      return saved;
+    } catch (err) {
+      console.warn('[RoleContext] Network save for CA verification failed, updating local state:', err);
+      setClientAcceptanceVerifications(prev => {
+        const oId = String(preparedVerification.order_id || '').trim().toLowerCase();
+        const eId = String(preparedVerification.event_id || 'default').trim().toLowerCase();
+        const existingIdx = prev.findIndex(
+          r => String(r.order_id || '').trim().toLowerCase() === oId &&
+               String(r.event_id || 'default').trim().toLowerCase() === eId
+        );
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = { ...next[existingIdx], ...preparedVerification };
+          return next;
+        }
+        return [...prev, preparedVerification];
+      });
+      return preparedVerification;
+    }
+  };
+
   const addQuotation = async (newQuote: any): Promise<string> => {
     if (!supabaseClient) {
       setQuotations((prev) => {
@@ -7954,6 +8028,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         deleteProduction,
         deleteStaffAssignment,
         deleteRawFootage,
+        clientAcceptanceVerifications,
+        saveClientAcceptanceVerification,
       }}
     >
       {children}

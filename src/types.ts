@@ -565,6 +565,20 @@ export interface EditorAssignment {
   server_upload_validated_by?: string;
 }
 
+export interface ClientAcceptanceVerification {
+  id?: string;
+  order_id: string;
+  event_id: string;
+  client_communication_consent_proof?: string;
+  folder_name?: string;
+  upload_link_path?: string;
+  proof_file_name?: string;
+  proof_storage_path?: string;
+  consent_proof_verified?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface StaffAssignment {
   assignment_id: string;
   order_id: string;
