@@ -1066,14 +1066,14 @@ const generateQuotationPDF = (
       }
       simY += 26 + cfg.secSpacing;
 
-      // Team members table (hide header)
+      // Team members table (with header)
       if (evObj.members.length > 0) {
-        simTable(evObj.members.length, true);
+        simTable(evObj.members.length, false);
       }
 
-      // Deliverables table (show header)
+      // Deliverables table (with header)
       if (evObj.deliverables.length > 0) {
-        simTable(evObj.deliverables.length, true);
+        simTable(evObj.deliverables.length, false);
       }
     });
 
@@ -1312,15 +1312,50 @@ const generateQuotationPDF = (
 
   let currentY = 49;
 
-  const drawTeamMembersTable = (title: string, members: string[]) => {
-    if (members.length === 0) return;
+  const parsePdfItem = (raw: any): { name: string; qty: number } => {
+    if (raw === null || raw === undefined) return { name: '', qty: 1 };
+    if (typeof raw === 'object') {
+      const rawName = String(raw.name || raw.role || raw.member_name || raw.text || raw.deliverable || raw.title || '').trim();
+      const parsed = parseQtyAndText(rawName);
+      const q = Number(raw.qty || raw.quantity || raw.count || parsed.qty || 1);
+      const qty = isNaN(q) || q < 1 ? 1 : q;
+      let name = parsed.text || rawName;
+      name = cleanText(name);
+      name = name.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
+      name = name.replace(/^TEAM MEMBERS?\s*(?:INCLUDED)?\s*[:-]?\s*/i, '');
+      name = name.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, '').trim();
+      return { name, qty };
+    }
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed) return { name: '', qty: 1 };
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          const parsedObj = JSON.parse(trimmed);
+          return parsePdfItem(parsedObj);
+        } catch (e) {}
+      }
+      const parsed = parseQtyAndText(trimmed);
+      let name = parsed.text || trimmed;
+      name = cleanText(name);
+      name = name.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
+      name = name.replace(/^TEAM MEMBERS?\s*(?:INCLUDED)?\s*[:-]?\s*/i, '');
+      name = name.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, '').trim();
+      const qty = parsed.qty >= 1 ? parsed.qty : 1;
+      return { name, qty };
+    }
+    return { name: cleanText(String(raw)), qty: 1 };
+  };
 
-    let tableH = 4; // Title spacing
-    const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
+  const drawTeamMembersTable = (title: string, members: any[]) => {
+    if (!members || members.length === 0) return;
 
+    const mapped = members.map(m => parsePdfItem(m)).filter(m => m.name.length > 0);
+    if (mapped.length === 0) return;
+
+    let tableH = 4 + 7.5; // Title spacing + Header row
     mapped.forEach((item) => {
-      const cleanedItemName = cleanText(item.name || '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const wrappedName = doc.splitTextToSize(item.name, 154);
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
 
@@ -1337,21 +1372,43 @@ const generateQuotationPDF = (
     doc.text(title, 15, currentY);
     currentY += 4;
 
+    if (currentY + 7.5 > 250) {
+      currentY = createNewPage();
+    }
+
+    // Header Row (Slate-800)
+    doc.setFillColor(30, 41, 59);
+    doc.rect(15, currentY, 180, 7.5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    // Narrow QTY column: from 15 to 35 (width 20mm), centered at 25
+    doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
+    // Main column: from 35 to 195 (width 160mm), text start at 38
+    doc.text('TEAM MEMBER', 38, currentY + 4.8);
+
+    currentY += 7.5;
+
     doc.setDrawColor(203, 213, 225); 
     doc.setLineWidth(0.2);
 
-    // Draw top border line since we removed the header row
-    doc.line(15, currentY, 195, currentY);
-
     mapped.forEach((item, index) => {
-      const cleanedItemName = cleanText(item.name || '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const wrappedName = doc.splitTextToSize(item.name, 154);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
       if (currentY + rowHeight > 250) {
         doc.line(15, currentY, 195, currentY);
         currentY = createNewPage();
-        doc.line(15, currentY, 195, currentY);
+
+        doc.setFillColor(30, 41, 59);
+        doc.rect(15, currentY, 180, 7.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
+        doc.text('TEAM MEMBER (CONTINUED)', 38, currentY + 4.8);
+        currentY += 7.5;
       }
 
       if (index % 2 === 1) {
@@ -1359,20 +1416,26 @@ const generateQuotationPDF = (
         doc.rect(15, currentY, 180, rowHeight, 'F');
       }
 
+      // Vertical table border lines
       doc.line(15, currentY, 15, currentY + rowHeight);
+      doc.line(35, currentY, 35, currentY + rowHeight);
       doc.line(195, currentY, 195, currentY + rowHeight);
 
+      // Qty value (centered in 15..35)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(String(item.qty || 1), 25, currentY + 4.3, { align: 'center' });
+
+      // Member Name in main column (at 38)
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
-
-      doc.setFillColor(51, 65, 85);
-      doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
-
       wrappedName.forEach((line: string, i: number) => {
-        doc.text(line, 23, currentY + 4.3 + (i * cfg.rowTextHeight));
+        doc.text(line, 38, currentY + 4.3 + (i * cfg.rowTextHeight));
       });
 
+      // Horizontal row bottom line
       doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
       currentY += rowHeight;
     });
@@ -1380,16 +1443,15 @@ const generateQuotationPDF = (
     currentY += cfg.tableSpacing; 
   };
 
-  const drawEventDeliverablesTable = (title: string, deliverables: string[]) => {
-    if (deliverables.length === 0) return;
+  const drawEventDeliverablesTable = (title: string, deliverables: any[]) => {
+    if (!deliverables || deliverables.length === 0) return;
 
-    let tableH = 4; // Title spacing
-    const mapped = deliverables.map((d, i) => ({ id: String(i), name: d }));
+    const mapped = deliverables.map(d => parsePdfItem(d)).filter(d => d.name.length > 0);
+    if (mapped.length === 0) return;
 
+    let tableH = 4 + 7.5; // Title spacing + Header row
     mapped.forEach((item) => {
-      let cleanedItemName = cleanText(item.name || '');
-      cleanedItemName = cleanedItemName.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const wrappedName = doc.splitTextToSize(item.name, 154);
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
 
@@ -1406,22 +1468,43 @@ const generateQuotationPDF = (
     doc.text(title, 15, currentY);
     currentY += 4;
 
+    if (currentY + 7.5 > 250) {
+      currentY = createNewPage();
+    }
+
+    // Header Row (Slate-800)
+    doc.setFillColor(30, 41, 59);
+    doc.rect(15, currentY, 180, 7.5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    // Narrow QTY column: from 15 to 35 (width 20mm), centered at 25
+    doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
+    // Main column: from 35 to 195 (width 160mm), text start at 38
+    doc.text('DELIVERABLE', 38, currentY + 4.8);
+
+    currentY += 7.5;
+
     doc.setDrawColor(203, 213, 225); 
     doc.setLineWidth(0.2);
 
-    // Draw top border line since we removed the header row
-    doc.line(15, currentY, 195, currentY);
-
     mapped.forEach((item, index) => {
-      let cleanedItemName = cleanText(item.name || '');
-      cleanedItemName = cleanedItemName.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const wrappedName = doc.splitTextToSize(item.name, 154);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
       if (currentY + rowHeight > 250) {
         doc.line(15, currentY, 195, currentY);
         currentY = createNewPage();
-        doc.line(15, currentY, 195, currentY);
+
+        doc.setFillColor(30, 41, 59);
+        doc.rect(15, currentY, 180, 7.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
+        doc.text('DELIVERABLE (CONTINUED)', 38, currentY + 4.8);
+        currentY += 7.5;
       }
 
       if (index % 2 === 1) {
@@ -1429,20 +1512,26 @@ const generateQuotationPDF = (
         doc.rect(15, currentY, 180, rowHeight, 'F');
       }
 
+      // Vertical table border lines
       doc.line(15, currentY, 15, currentY + rowHeight);
+      doc.line(35, currentY, 35, currentY + rowHeight);
       doc.line(195, currentY, 195, currentY + rowHeight);
 
+      // Qty value (centered in 15..35)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(String(item.qty || 1), 25, currentY + 4.3, { align: 'center' });
+
+      // Deliverable Name in main column (at 38)
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
-
-      doc.setFillColor(51, 65, 85);
-      doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
-
       wrappedName.forEach((line: string, i: number) => {
-        doc.text(line, 23, currentY + 4.3 + (i * cfg.rowTextHeight));
+        doc.text(line, 38, currentY + 4.3 + (i * cfg.rowTextHeight));
       });
 
+      // Horizontal row bottom line
       doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
       currentY += rowHeight;
     });
