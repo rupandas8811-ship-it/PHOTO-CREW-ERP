@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole } from '../RoleContext';
 import { 
@@ -21,6 +21,62 @@ export const OperationsStaffManagement: React.FC = () => {
   const [newSkill, setNewSkill] = useState('');
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [openSkillsStaffId, setOpenSkillsStaffId] = useState<string | null>(null);
+  const [selectedStaffBookings, setSelectedStaffBookings] = useState<{ staffName: string; bookings: any[] } | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [operatingId, setOperatingId] = useState<string | null>(null);
+
+  const [form, setForm] = useState({
+    name: '',
+    role: 'Lead Photographer',
+    email: '',
+    mobile: '',
+    whatsapp_number: '',
+    department: 'Operations',
+    status: 'Active' as Staff['status'],
+    staff_type: 'In-House' as 'In-House' | 'Freelancer',
+    joining_date: new Date().toISOString().split('T')[0],
+    profile_photo: '',
+    notes: '',
+    password: ''
+  });
+
+  // Auto-scroll refs
+  const staffModalBodyRef = useRef<HTMLDivElement | null>(null);
+  const rosterModalBodyRef = useRef<HTMLDivElement | null>(null);
+  const skillsContainerRef = useRef<HTMLDivElement | null>(null);
+  const submitBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // Body scroll locking when modals are open
+  useEffect(() => {
+    if (showStaffModal || selectedStaffBookings) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [showStaffModal, selectedStaffBookings]);
+
+  // Auto-scroll to top when modals open
+  useEffect(() => {
+    if (showStaffModal) {
+      setTimeout(() => {
+        if (staffModalBodyRef.current) {
+          staffModalBodyRef.current.scrollTop = 0;
+        }
+      }, 50);
+    }
+  }, [showStaffModal]);
+
+  useEffect(() => {
+    if (selectedStaffBookings) {
+      setTimeout(() => {
+        if (rosterModalBodyRef.current) {
+          rosterModalBodyRef.current.scrollTop = 0;
+        }
+      }, 50);
+    }
+  }, [selectedStaffBookings]);
 
   // Close skills dropdown on outside click or Escape
   useEffect(() => {
@@ -66,24 +122,6 @@ export const OperationsStaffManagement: React.FC = () => {
     }
     return [];
   };
-  const [form, setForm] = useState({
-    name: '',
-    role: 'Lead Photographer',
-    email: '',
-    mobile: '',
-    whatsapp_number: '',
-    department: 'Operations',
-    status: 'Active' as Staff['status'],
-    staff_type: 'In-House' as 'In-House' | 'Freelancer',
-    joining_date: new Date().toISOString().split('T')[0],
-    profile_photo: '',
-    notes: '',
-    password: ''
-  });
-
-  const [selectedStaffBookings, setSelectedStaffBookings] = useState<{ staffName: string; bookings: any[] } | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [operatingId, setOperatingId] = useState<string | null>(null);
 
   const handleSelectEdit = (st: any) => {
     setEditingId(st.staff_id);
@@ -135,6 +173,13 @@ export const OperationsStaffManagement: React.FC = () => {
       setSkills(newSkills);
       setNewSkill('');
       
+      // Auto-scroll skills container to bottom
+      setTimeout(() => {
+        if (skillsContainerRef.current) {
+          skillsContainerRef.current.scrollTop = skillsContainerRef.current.scrollHeight;
+        }
+      }, 50);
+
       if (editingId) {
         try {
           await updateStaff(editingId, { Skill: newSkills.join(', ') });
@@ -568,190 +613,192 @@ export const OperationsStaffManagement: React.FC = () => {
       {/* Roster form - Modal */}
       {showStaffModal && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-black/80 backdrop-blur-md overflow-y-auto"
           onClick={(e) => { if (e.target === e.currentTarget) handleCancel(); }}
         >
-          <div className="w-full max-w-md flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl relative max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-5 border-b border-zinc-800 shrink-0 bg-zinc-900 z-10">
-              <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5">
-                <PlusCircle className="w-4 h-4 text-amber-500" />
+          <div className="w-full max-w-lg flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl shadow-2xl relative max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] overflow-hidden my-auto">
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800 shrink-0 bg-zinc-950/70 z-10">
+              <h3 className="text-xs sm:text-sm font-mono font-black uppercase text-zinc-200 flex items-center gap-2">
+                <PlusCircle className="w-4 h-4 text-amber-500 shrink-0" />
                 <span>{editingId ? 'Edit Operative Profile' : 'Onboard Operation Staff'}</span>
               </h3>
               <button 
                 type="button"
                 onClick={handleCancel}
-                className="text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ml-4"
+                className="text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer shrink-0 ml-4"
+                title="Close"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
             </div>
 
-            <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
+            <div ref={staffModalBodyRef} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0">
               <form onSubmit={handleSubmit} className="space-y-4 text-xs flex flex-col">
                 <fieldset disabled={!canEdit} className="space-y-4 flex-1">
                   <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Staff Full Name *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Jack Richards"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
-              />
-            </div>
+                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400 mb-1.5">
+                      Staff Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Jack Richards"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500/60 placeholder-zinc-600 text-xs"
+                    />
+                  </div>
 
-            <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1 flex items-center justify-between">
-                <span>Mobile Number *</span>
-                {editingId && <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>}
-              </label>
-              <input
-                type="text"
-                required
-                disabled={Boolean(editingId)}
-                readOnly={Boolean(editingId)}
-                placeholder="e.g. +91 9876543210"
-                value={form.mobile}
-                onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                className={`w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
-              />
-            </div>
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400 mb-1.5 flex items-center justify-between">
+                      <span>Mobile Number *</span>
+                      {editingId && <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>}
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      disabled={Boolean(editingId)}
+                      readOnly={Boolean(editingId)}
+                      placeholder="e.g. +91 9876543210"
+                      value={form.mobile}
+                      onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+                      className={`w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500/60 text-xs ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
+                    />
+                  </div>
 
-            <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1 flex items-center justify-between">
-                <span>Email Address</span>
-                {editingId && <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>}
-              </label>
-              <input
-                type="email"
-                disabled={Boolean(editingId)}
-                readOnly={Boolean(editingId)}
-                placeholder="e.g. staff@photocrew.pro"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className={`w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
-              />
-            </div>
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400 mb-1.5 flex items-center justify-between">
+                      <span>Email Address</span>
+                      {editingId && <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>}
+                    </label>
+                    <input
+                      type="email"
+                      disabled={Boolean(editingId)}
+                      readOnly={Boolean(editingId)}
+                      placeholder="e.g. staff@photocrew.pro"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      className={`w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500/60 text-xs ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
+                    />
+                  </div>
 
-            <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Password {editingId ? '(Leave blank to keep current)' : '*'}
-              </label>
-              <input
-                type="text"
-                required={!editingId}
-                placeholder="e.g. Staff@123"
-                value={form.password}
-                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
-              />
-            </div>
-            <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                WhatsApp Number
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. +91 9876543210"
-                value={form.whatsapp_number}
-                onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
-                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
-              />
-            </div>
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400 mb-1.5">
+                      Password {editingId ? '(Leave blank to keep current)' : '*'}
+                    </label>
+                    <input
+                      type="text"
+                      required={!editingId}
+                      placeholder="e.g. Staff@123"
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500/60 text-xs"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400 mb-1.5">
+                      WhatsApp Number
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. +91 9876543210"
+                      value={form.whatsapp_number}
+                      onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
+                      className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500/60 text-xs"
+                    />
+                  </div>
 
-            <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Staff Type *
-              </label>
-              <select
-                required
-                value={form.staff_type}
-                onChange={(e) => setForm({ ...form, staff_type: e.target.value as 'In-House' | 'Freelancer' })}
-                className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
-              >
-                <option value="In-House">In-House</option>
-                <option value="Freelancer">Freelancer</option>
-              </select>
-            </div>
-
-            <div className="min-w-0">
-              <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Skills
-              </label>
-              <div className="flex flex-wrap gap-2 mb-2 min-h-[40px] p-2 bg-zinc-950 border border-zinc-850 rounded-xl items-center w-full">
-                {skills.length === 0 ? (
-                  <span className="text-zinc-550 italic font-mono text-[10px] pl-1">No skills added yet</span>
-                ) : (
-                  skills.map((skill) => (
-                    <div 
-                      key={skill} 
-                      className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-lg break-all"
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400 mb-1.5">
+                      Staff Type *
+                    </label>
+                    <select
+                      required
+                      value={form.staff_type}
+                      onChange={(e) => setForm({ ...form, staff_type: e.target.value as 'In-House' | 'Freelancer' })}
+                      className="w-full min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:border-amber-500/60 text-xs"
                     >
-                      <span>{skill}</span>
+                      <option value="In-House">In-House</option>
+                      <option value="Freelancer">Freelancer</option>
+                    </select>
+                  </div>
+
+                  <div className="min-w-0">
+                    <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-400 mb-1.5">
+                      Skills
+                    </label>
+                    <div ref={skillsContainerRef} className="flex flex-wrap gap-2 mb-2 max-h-32 overflow-y-auto custom-scrollbar p-2 bg-zinc-950 border border-zinc-800 rounded-xl items-center w-full">
+                      {skills.length === 0 ? (
+                        <span className="text-zinc-550 italic font-mono text-[10px] pl-1">No skills added yet</span>
+                      ) : (
+                        skills.map((skill) => (
+                          <div 
+                            key={skill} 
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-900 border border-zinc-800 text-zinc-300 font-mono text-[10px] rounded-lg break-all"
+                          >
+                            <span>{skill}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSkill(skill)}
+                              className="text-zinc-500 hover:text-rose-400 focus:outline-none transition-colors ml-1 font-bold cursor-pointer shrink-0"
+                              title={`Remove ${skill}`}
+                            >
+                              ✖
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <div className="flex gap-2 w-full">
+                      <input
+                        type="text"
+                        placeholder="Type a skill..."
+                        value={newSkill}
+                        onChange={(e) => setNewSkill(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddSkill();
+                          }
+                        }}
+                        className="flex-1 min-w-0 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/60 text-xs"
+                      />
                       <button
                         type="button"
-                        onClick={() => handleRemoveSkill(skill)}
-                        className="text-zinc-500 hover:text-rose-400 focus:outline-none transition-colors ml-1 font-bold cursor-pointer shrink-0"
-                        title={`Remove ${skill}`}
+                        onClick={handleAddSkill}
+                        className="px-3.5 py-2 shrink-0 bg-zinc-800 border border-zinc-700 hover:border-amber-500/50 text-zinc-200 hover:text-white rounded-xl text-xs transition-all font-mono font-bold cursor-pointer"
                       >
-                        ✖
+                        + Add Skill
                       </button>
                     </div>
-                  ))
-                )}
-              </div>
-              <div className="flex gap-2 w-full">
-                <input
-                  type="text"
-                  placeholder="Type a skill..."
-                  value={newSkill}
-                  onChange={(e) => setNewSkill(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddSkill();
-                    }
-                  }}
-                  className="flex-1 min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-white focus:outline-none focus:border-amber-500/50 text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddSkill}
-                  className="px-3 py-1.5 shrink-0 bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white rounded-xl text-xs transition-all font-mono font-bold cursor-pointer"
-                >
-                  + Add Skill
-                </button>
-              </div>
-            </div>
-          </fieldset>
+                  </div>
+                </fieldset>
 
-          {canEdit ? (
-            <div className="flex gap-2 justify-end pt-2 border-t border-zinc-850">
-              {editingId && (
-                <button
-                  type="button"
-                  onClick={handleCancel}
-                  className="px-3 py-2 bg-zinc-800 text-zinc-305 text-xs rounded-xl cursor-pointer"
-                >
-                  Cancel
-                </button>
-              )}
-              <button
-                type="submit"
-                disabled={isSaving}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-semibold text-xs rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSaving ? 'Processing...' : (editingId ? 'Save Changes' : 'Confirm Onboarding')}
-              </button>
-            </div>
-          ) : (
-            <div className="bg-zinc-950/40 p-3 rounded-xl border border-zinc-850 text-[10px] text-zinc-450 font-mono">
-              🔒 Operations permissions required for editing.
-            </div>
-          )}
+                {canEdit ? (
+                  <div className="flex gap-2 justify-end pt-3 border-t border-zinc-800 shrink-0">
+                    {editingId && (
+                      <button
+                        type="button"
+                        onClick={handleCancel}
+                        className="px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                    <button
+                      ref={submitBtnRef}
+                      type="submit"
+                      disabled={isSaving}
+                      className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs rounded-xl cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-amber-500/20 transition-all"
+                    >
+                      {isSaving ? 'Processing...' : (editingId ? 'Save Changes' : 'Confirm Onboarding')}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="bg-zinc-950/40 p-3 rounded-xl border border-zinc-800 text-[10px] text-zinc-400 font-mono">
+                    🔒 Operations permissions required for editing.
+                  </div>
+                )}
               </form>
             </div>
           </div>
@@ -997,41 +1044,44 @@ export const OperationsStaffManagement: React.FC = () => {
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {selectedStaffBookings && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+            <div 
+              className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto"
+              onClick={(e) => { if (e.target === e.currentTarget) setSelectedStaffBookings(null); }}
+            >
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-7xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-7xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] my-auto"
             >
               {/* Modal Header */}
-              <div className="p-6 border-b border-zinc-850 flex items-center justify-between bg-zinc-950/40">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-mono font-bold uppercase text-amber-500 flex items-center gap-2">
-                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                    Active Roster Summary — {selectedStaffBookings.staffName}
+              <div className="p-4 sm:p-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/60 shrink-0">
+                <div className="space-y-1 min-w-0 pr-2">
+                  <h3 className="text-xs sm:text-sm font-mono font-bold uppercase text-amber-500 flex items-center gap-2 truncate">
+                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                    <span className="truncate">Active Roster Summary — {selectedStaffBookings.staffName}</span>
                   </h3>
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
                     Currently allocated events and operations on call.
                   </p>
                 </div>
                 <button
                   onClick={() => setSelectedStaffBookings(null)}
-                  className="text-zinc-400 hover:text-white bg-zinc-850 hover:bg-zinc-855 p-2 rounded-full cursor-pointer transition-colors"
+                  className="text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 p-1.5 sm:p-2 rounded-full cursor-pointer transition-colors shrink-0"
                   type="button"
                   title="Close"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               </div>
 
               {/* Modal Content */}
-              <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              <div ref={rosterModalBodyRef} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-4 flex-1 min-h-0">
                 {/* Search Bar */}
                 {selectedStaffBookings.bookings.length > 0 && (
                   <div className="relative max-w-md w-full">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-zinc-550">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-zinc-500">
                       <Search className="w-4 h-4" />
                     </span>
                     <input
@@ -1081,10 +1131,10 @@ export const OperationsStaffManagement: React.FC = () => {
                   }
 
                   return (
-                    <div className="overflow-x-auto rounded-2xl border border-zinc-850 bg-zinc-950/20">
+                    <div className="overflow-x-auto rounded-2xl border border-zinc-800 bg-zinc-950/40 custom-scrollbar">
                       <table className="w-full text-left border-collapse min-w-max text-xs">
                         <thead>
-                          <tr className="border-b border-zinc-850 bg-zinc-950/60 font-mono text-[10px] uppercase text-zinc-400">
+                          <tr className="border-b border-zinc-800 bg-zinc-950/80 font-mono text-[10px] uppercase text-zinc-400">
                             <th className="p-3.5 font-bold">Event Name</th>
                             <th className="p-3.5 font-bold">Client Name</th>
                             <th className="p-3.5 font-bold">Shoot Type</th>
@@ -1103,9 +1153,9 @@ export const OperationsStaffManagement: React.FC = () => {
                             <th className="p-3.5 font-bold">Booking Status</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-zinc-850/60 text-zinc-300">
+                        <tbody className="divide-y divide-zinc-800/60 text-zinc-300">
                           {filtered.map((b) => (
-                            <tr key={b.id} className="hover:bg-zinc-900/20 transition-all">
+                            <tr key={b.id} className="hover:bg-zinc-800/30 transition-all">
                               <td className="p-3.5 font-bold text-zinc-100">{b.eventName}</td>
                               <td className="p-3.5 text-zinc-300">{b.clientName}</td>
                               <td className="p-3.5 text-zinc-300 font-mono text-[11px]">{b.shootType}</td>
@@ -1164,11 +1214,11 @@ export const OperationsStaffManagement: React.FC = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-6 border-t border-zinc-850 flex justify-end bg-zinc-950/40">
+              <div className="p-4 sm:p-6 border-t border-zinc-800 flex justify-end bg-zinc-950/60 shrink-0">
                 <button
                   type="button"
                   onClick={() => setSelectedStaffBookings(null)}
-                  className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
+                  className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer"
                 >
                   Close
                 </button>

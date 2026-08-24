@@ -500,9 +500,55 @@ export const OperationsLeads: React.FC = () => {
   const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
   const [openEquipmentDropdownKey, setOpenEquipmentDropdownKey] = useState<string | null>(null);
 
+  const assignModalBodyRef = React.useRef<HTMLDivElement>(null);
+  const footageModalBodyRef = React.useRef<HTMLDivElement>(null);
+  const viewingStaffModalBodyRef = React.useRef<HTMLDivElement>(null);
+  const whatsappModalBodyRef = React.useRef<HTMLDivElement>(null);
+
+  const isAnyModalOpen = Boolean(
+    assigningOrderId ||
+    selectedEquipmentStatus ||
+    selectedEventImages ||
+    receivingFootageOrderId ||
+    successModalData ||
+    whatsappShareModalData ||
+    viewingStaffOrderId ||
+    busyRosterStaff ||
+    imagePreviewModal ||
+    projectDossierId ||
+    closingOrderId ||
+    schedulingOrderId
+  );
+
+  // Lock background scroll when any modal is open
+  useEffect(() => {
+    if (isAnyModalOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isAnyModalOpen]);
+
+  useEffect(() => {
+    if (assigningOrderId && assignModalBodyRef.current) {
+      assignModalBodyRef.current.scrollTop = 0;
+    }
+  }, [assigningOrderId]);
+
+  useEffect(() => {
+    if (receivingFootageOrderId && footageModalBodyRef.current) {
+      footageModalBodyRef.current.scrollTop = 0;
+    }
+  }, [receivingFootageOrderId]);
+
   useEffect(() => {
     if (viewingStaffOrderId) {
       refreshData();
+      if (viewingStaffModalBodyRef.current) {
+        viewingStaffModalBodyRef.current.scrollTop = 0;
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingStaffOrderId]);
@@ -2713,26 +2759,29 @@ export const OperationsLeads: React.FC = () => {
       </div>    </div>
 
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
-      {assigningOrderId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-[96vw] sm:w-full sm:max-w-4xl h-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
-                <h3 className="text-sm font-sans font-black text-white">
+      {assigningOrderId && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto"
+          onClick={(e) => { if (e.target === e.currentTarget) setAssigningOrderId(null); }}
+        >
+          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto animate-in zoom-in duration-200 overflow-hidden">
+            <div className="p-3.5 sm:p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40 shrink-0">
+              <div className="flex items-center gap-2 min-w-0 pr-2">
+                <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono shrink-0">Operations</span>
+                <h3 className="text-xs sm:text-sm font-sans font-black text-white truncate">
                   Project Staffing & Handover Dossier ~ {assigningOrderId}
                 </h3>
               </div>
               <button 
                 onClick={() => setAssigningOrderId(null)}
-                className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+                className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1 shrink-0"
                 type="button"
               >
                 ✕
               </button>
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-6">
+              <div ref={assignModalBodyRef} className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-6">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -3771,236 +3820,249 @@ export const OperationsLeads: React.FC = () => {
                     </div>
                  </div>
               )}
-                            <div className="sticky bottom-0 z-50 p-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/90 backdrop-blur-md">
+              <div className="sticky bottom-0 z-50 p-3 sm:p-4 border-t border-zinc-800 flex flex-col-reverse sm:flex-row justify-end gap-2.5 sm:gap-3 bg-zinc-950/95 backdrop-blur-md shrink-0">
                 <button
                   type="button"
                   onClick={() => setAssigningOrderId(null)}
-                  className="px-4 py-3 sm:py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto bg-zinc-900 sm:bg-transparent rounded-xl sm:rounded-none border border-zinc-800 sm:border-none"
+                  className="px-4 py-2.5 sm:py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto bg-zinc-900 sm:bg-transparent rounded-xl sm:rounded-lg border border-zinc-800 sm:border-none"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-3 sm:py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl sm:rounded-lg transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                  className="px-6 py-2.5 sm:py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl sm:rounded-lg transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]"
                 >
                   {isSaving ? 'Saving Assignments...' : 'Save All Assignments'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
 
       {/* Equipment Status Modal */}
-      {selectedEquipmentStatus && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
-            <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
-              <div>
-                <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
+      {selectedEquipmentStatus && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget) setSelectedEquipmentStatus(null); }}
+        >
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/50 shrink-0">
+              <div className="min-w-0 pr-2">
+                <h3 className="text-xs sm:text-sm font-bold text-indigo-400 font-mono uppercase truncate">
                   Equipment Verification • {selectedEquipmentStatus.staffName}
                 </h3>
                 {selectedEquipmentStatus.assignedEquipment && selectedEquipmentStatus.assignedEquipment.length > 0 && (
-                  <div className="text-[11px] text-zinc-400 mt-0.5">
+                  <div className="text-[11px] text-zinc-400 mt-0.5 truncate">
                     Assigned: <span className="text-zinc-200 font-medium">{selectedEquipmentStatus.assignedEquipment.join(', ')}</span>
                   </div>
                 )}
               </div>
               <button
                 onClick={() => setSelectedEquipmentStatus(null)}
-                className="text-zinc-400 hover:text-white font-bold cursor-pointer"
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer p-1 shrink-0"
               >
                 ✕
               </button>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
-                    <th className="py-2.5 px-3 font-bold">Verification Stage</th>
-                    <th className="py-2.5 px-3 font-bold text-center">Image</th>
-                    <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
-                    <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/60">
-                  {(() => {
-                    const findHistoryForModal = (stages: string[]) => {
-                      const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
-                      const orderId = selectedEquipmentStatus.orderId;
-                      const eventId = selectedEquipmentStatus.eventId;
-                      
-                      if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
-                      const matches = leadEquipmentHistory.filter(h => {
-                        if (orderId && h.order_id && h.order_id !== orderId) return false;
-                        let parsed: any = {};
-                        if (h.remarks) {
-                          try { parsed = JSON.parse(h.remarks); } catch(e) {}
-                        }
-                        const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-                        if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
-                        if (eventId && parsed.event_id && eventId !== 'gen' && parsed.event_id !== 'gen' && parsed.event_id !== eventId) return false;
+            <div className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-4">
+              <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-1">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
+                      <th className="py-2.5 px-3 font-bold">Verification Stage</th>
+                      <th className="py-2.5 px-3 font-bold text-center">Image</th>
+                      <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
+                      <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/60">
+                    {(() => {
+                      const findHistoryForModal = (stages: string[]) => {
+                        const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
+                        const orderId = selectedEquipmentStatus.orderId;
+                        const eventId = selectedEquipmentStatus.eventId;
                         
-                        const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
-                        const eqName = (h.equipment_name || '').toLowerCase();
-                        return stages.some(s => {
-                          const sNorm = s.toLowerCase();
-                          return eqStatus.includes(sNorm) || eqName.includes(sNorm);
+                        if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
+                        const matches = leadEquipmentHistory.filter(h => {
+                          if (orderId && h.order_id && h.order_id !== orderId) return false;
+                          let parsed: any = {};
+                          if (h.remarks) {
+                            try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                          }
+                          const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+                          if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
+                          if (eventId && parsed.event_id && eventId !== 'gen' && parsed.event_id !== 'gen' && parsed.event_id !== eventId) return false;
+                          
+                          const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
+                          const eqName = (h.equipment_name || '').toLowerCase();
+                          return stages.some(s => {
+                            const sNorm = s.toLowerCase();
+                            return eqStatus.includes(sNorm) || eqName.includes(sNorm);
+                          });
                         });
-                      });
-                      
-                      const withPhoto = matches.find(m => {
-                        const meta = getRecordMeta(m);
-                        return !!meta.url;
-                      });
-                      return withPhoto || matches[0] || null;
-                    };
+                        
+                        const withPhoto = matches.find(m => {
+                          const meta = getRecordMeta(m);
+                          return !!meta.url;
+                        });
+                        return withPhoto || matches[0] || null;
+                      };
 
-                    const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received']);
-                    const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return']);
-                    const recMeta = getRecordMeta(recRecord);
-                    const handMeta = getRecordMeta(handRecord);
-                    return (
-                      <>
-                        <tr className="hover:bg-zinc-800/20">
-                          <td className="py-3 px-3 text-white font-bold">Equipment Received</td>
-                          <td className="py-3 px-3 text-center">
-                            {recMeta.url ? (
-                              <button
-                                onClick={() => setImagePreviewModal({ url: recMeta.url, date: recMeta.date, time: recMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
-                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                              >
-                                View Image
-                              </button>
-                            ) : (
-                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recMeta.time}</td>
-                        </tr>
-                        <tr className="hover:bg-zinc-800/20">
-                          <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
-                          <td className="py-3 px-3 text-center">
-                            {handMeta.url ? (
-                              <button
-                                onClick={() => setImagePreviewModal({ url: handMeta.url, date: handMeta.date, time: handMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
-                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                              >
-                                View Image
-                              </button>
-                            ) : (
-                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handMeta.time}</td>
-                        </tr>
-                      </>
-                    );
-                  })()}
-                </tbody>
-              </table>
+                      const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received']);
+                      const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return']);
+                      const recMeta = getRecordMeta(recRecord);
+                      const handMeta = getRecordMeta(handRecord);
+                      return (
+                        <>
+                          <tr className="hover:bg-zinc-800/20">
+                            <td className="py-3 px-3 text-white font-bold">Equipment Received</td>
+                            <td className="py-3 px-3 text-center">
+                              {recMeta.url ? (
+                                <button
+                                  onClick={() => setImagePreviewModal({ url: recMeta.url, date: recMeta.date, time: recMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
+                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  View Image
+                                </button>
+                              ) : (
+                                <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono text-zinc-300">{recMeta.date}</td>
+                            <td className="py-3 px-3 text-right font-mono text-zinc-300">{recMeta.time}</td>
+                          </tr>
+                          <tr className="hover:bg-zinc-800/20">
+                            <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
+                            <td className="py-3 px-3 text-center">
+                              {handMeta.url ? (
+                                <button
+                                  onClick={() => setImagePreviewModal({ url: handMeta.url, date: handMeta.date, time: handMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
+                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  View Image
+                                </button>
+                              ) : (
+                                <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono text-zinc-300">{handMeta.date}</td>
+                            <td className="py-3 px-3 text-right font-mono text-zinc-300">{handMeta.time}</td>
+                          </tr>
+                        </>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-zinc-800">
+            <div className="flex justify-end p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/50 shrink-0">
               <button
                 onClick={() => setSelectedEquipmentStatus(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer w-full sm:w-auto"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Event Images Modal */}
-      {selectedEventImages && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl relative p-5">
-            <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
-              <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
+      {selectedEventImages && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget) setSelectedEventImages(null); }}
+        >
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/50 shrink-0">
+              <h3 className="text-xs sm:text-sm font-bold text-indigo-400 font-mono uppercase truncate pr-2">
                 Event Images • {selectedEventImages.staffName}
               </h3>
               <button
                 onClick={() => setSelectedEventImages(null)}
-                className="text-zinc-400 hover:text-white font-bold cursor-pointer"
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer p-1 shrink-0"
               >
                 ✕
               </button>
             </div>
 
-            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
-                    <th className="py-2.5 px-3 font-bold">Event Stage</th>
-                    <th className="py-2.5 px-3 font-bold text-center">Image</th>
-                    <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
-                    <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-800/60">
-                  {(() => {
-                    const startMeta = getRecordMeta(selectedEventImages.evStart);
-                    const endMeta = getRecordMeta(selectedEventImages.evEnd);
-                    return (
-                      <>
-                        <tr className="hover:bg-zinc-800/20">
-                          <td className="py-3 px-3 text-white font-bold">Event Start</td>
-                          <td className="py-3 px-3 text-center">
-                            {startMeta.url ? (
-                              <button
-                                onClick={() => setImagePreviewModal({ url: startMeta.url, date: startMeta.date, time: startMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Start' })}
-                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                              >
-                                View Image
-                              </button>
-                            ) : (
-                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{startMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{startMeta.time}</td>
-                        </tr>
-                        <tr className="hover:bg-zinc-800/20">
-                          <td className="py-3 px-3 text-white font-bold">Event Complete</td>
-                          <td className="py-3 px-3 text-center">
-                            {endMeta.url ? (
-                              <button
-                                onClick={() => setImagePreviewModal({ url: endMeta.url, date: endMeta.date, time: endMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Complete' })}
-                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                              >
-                                View Image
-                              </button>
-                            ) : (
-                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{endMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{endMeta.time}</td>
-                        </tr>
-                      </>
-                    );
-                  })()}
-                </tbody>
-              </table>
+            <div className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-4">
+              <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-1">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
+                      <th className="py-2.5 px-3 font-bold">Event Stage</th>
+                      <th className="py-2.5 px-3 font-bold text-center">Image</th>
+                      <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
+                      <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/60">
+                    {(() => {
+                      const startMeta = getRecordMeta(selectedEventImages.evStart);
+                      const endMeta = getRecordMeta(selectedEventImages.evEnd);
+                      return (
+                        <>
+                          <tr className="hover:bg-zinc-800/20">
+                            <td className="py-3 px-3 text-white font-bold">Event Start</td>
+                            <td className="py-3 px-3 text-center">
+                              {startMeta.url ? (
+                                <button
+                                  onClick={() => setImagePreviewModal({ url: startMeta.url, date: startMeta.date, time: startMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Start' })}
+                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  View Image
+                                </button>
+                              ) : (
+                                <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono text-zinc-300">{startMeta.date}</td>
+                            <td className="py-3 px-3 text-right font-mono text-zinc-300">{startMeta.time}</td>
+                          </tr>
+                          <tr className="hover:bg-zinc-800/20">
+                            <td className="py-3 px-3 text-white font-bold">Event Complete</td>
+                            <td className="py-3 px-3 text-center">
+                              {endMeta.url ? (
+                                <button
+                                  onClick={() => setImagePreviewModal({ url: endMeta.url, date: endMeta.date, time: endMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Complete' })}
+                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                  View Image
+                                </button>
+                              ) : (
+                                <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3 text-center font-mono text-zinc-300">{endMeta.date}</td>
+                            <td className="py-3 px-3 text-right font-mono text-zinc-300">{endMeta.time}</td>
+                          </tr>
+                        </>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-zinc-800">
+            <div className="flex justify-end p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/50 shrink-0">
               <button
                 onClick={() => setSelectedEventImages(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer w-full sm:w-auto"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Verify Raw Footage Modal */}
@@ -4141,17 +4203,25 @@ export const OperationsLeads: React.FC = () => {
           ? assignedCrewList.every(c => !!(c.raw_footage_link && c.raw_footage_link.trim())) 
           : true;
 
-        return (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-2xl shadow-2xl relative p-6 max-h-[90vh] overflow-y-auto space-y-5 scrollbar-thin">
+        return createPortal(
+          <div 
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setReceivingFootageOrderId(null);
+                setConsolidatedDriveLink('');
+              }
+            }}
+          >
+            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto overflow-hidden animate-in zoom-in-95 duration-200">
               
               {/* Header */}
-              <div className="border-b border-zinc-800 pb-3 flex justify-between items-start">
-                <div>
-                  <h3 className="text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2">
+              <div className="border-b border-zinc-800 p-4 bg-zinc-950/40 flex justify-between items-start shrink-0">
+                <div className="min-w-0 pr-2">
+                  <h3 className="text-sm sm:text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2 truncate">
                     <span>🎬</span> Final Consolidated Raw Footage
                   </h3>
-                  <p className="text-xs text-zinc-400 mt-1">
+                  <p className="text-xs text-zinc-400 mt-1 truncate">
                     Order ID: <strong className="text-zinc-200">{receivingFootageOrderId}</strong> | Customer: <strong className="text-zinc-200">{currentOrder?.customer_name || currentLead?.customer_name || 'N/A'}</strong>
                   </p>
                 </div>
@@ -4160,11 +4230,13 @@ export const OperationsLeads: React.FC = () => {
                     setReceivingFootageOrderId(null);
                     setConsolidatedDriveLink('');
                   }}
-                  className="text-zinc-400 hover:text-white p-1 rounded-lg bg-zinc-800 text-xs cursor-pointer"
+                  className="text-zinc-400 hover:text-white p-1.5 rounded-lg bg-zinc-800 text-xs cursor-pointer shrink-0"
                 >
                   ✕
                 </button>
               </div>
+
+              <div ref={footageModalBodyRef} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-5">
 
               {/* Review description banner - Hidden per UI requirement */}
               {false && (
@@ -4441,8 +4513,10 @@ export const OperationsLeads: React.FC = () => {
 
             </div>
           </div>
-        );
-      })()}
+        </div>,
+        document.body
+      );
+    })()}
 
       {/* Staff Assignment Success Modal */}
       {successModalData && (
