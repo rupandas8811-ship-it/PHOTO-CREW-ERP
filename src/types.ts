@@ -455,6 +455,10 @@ export interface Production {
   checklist_edited_files_uploaded?: boolean;
   server_upload_validated?: boolean;
   validated_server_uploads?: Record<string, boolean>;
+  checklist_client_communication_proof?: boolean;
+  upload_name?: string;
+  proof_name?: string;
+  client_communication_proof_name?: string;
 }
 
 export interface Payment {

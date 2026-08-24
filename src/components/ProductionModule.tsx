@@ -7,7 +7,7 @@ import {
   Play, CheckCircle2, UserCheck, Eye, EyeOff, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
   PlusSquare, ArrowRight, CheckSquare, AlertTriangle, Truck, Users, BarChart3, TrendingUp, Sparkles, UserPlus, ChevronRight,
   Aperture, Camera, Sliders, ShieldCheck, Image, Download, Printer, FileSpreadsheet, FileText, Search,
-  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink, FileVideo
+  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink, FileVideo, Upload
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -1963,7 +1963,13 @@ Production Team`;
   const handleOpenClientAcceptance = (prod: Production) => {
     if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     setClientAcceptanceProd(prod);
-    setCaCommunicationProof(prod.client_communication_proof || (prod as any).customer_communication_proof || (prod as any).proof_url || '');
+    const existingProof = prod.client_communication_proof || (prod as any).customer_communication_proof || (prod as any).proof_url || '';
+    setCaCommunicationProof(existingProof);
+    
+    const existingUploadName = prod.upload_name || prod.proof_name || (prod as any).client_communication_proof_name || (existingProof && !existingProof.startsWith('data:') ? existingProof.split('/').pop()?.split('?')[0] : '') || '';
+    setCaUploadName(existingUploadName);
+
+    setCaConsentProofChecked(Boolean((prod as any).checklist_client_communication_proof ?? (existingProof ? true : false)));
     setCaUploadConfirmations({});
     setCaChecklistCompleted(Boolean(prod.checklist_customer_acceptance ?? true));
     setCaInternalValidation(Boolean(prod.server_upload_validated || prod.checklist_edited_files_uploaded));
@@ -2631,6 +2637,8 @@ Production Team`;
   // Client Acceptance states
   const [clientAcceptanceProd, setClientAcceptanceProd] = useState<Production | null>(null);
   const [caCommunicationProof, setCaCommunicationProof] = useState<string>('');
+  const [caUploadName, setCaUploadName] = useState<string>('');
+  const [caConsentProofChecked, setCaConsentProofChecked] = useState<boolean>(false);
   const [caInternalValidation, setCaInternalValidation] = useState<boolean>(false);
   const [caChecklistCompleted, setCaChecklistCompleted] = useState<boolean>(false);
   const [caVerifyCustomerAcceptance, setCaVerifyCustomerAcceptance] = useState<boolean>(true);
@@ -11312,6 +11320,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             const file = e.target.files?.[0];
             if (!file) return;
             setCaUploadingProof(true);
+            setCaUploadName(file.name);
+            setCaConsentProofChecked(true);
             const reader = new FileReader();
             reader.onloadend = () => {
               setCaCommunicationProof(reader.result as string);
@@ -11330,7 +11340,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh]"
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh]"
               >
                 {/* Header */}
                 <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
@@ -11359,6 +11369,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   onSubmit={async (e) => {
                     e.preventDefault();
 
+                    if (!caConsentProofChecked) {
+                      alert("Please check and confirm 'Client Communication & Consent Proof'.");
+                      return;
+                    }
+
+                    if (!caCommunicationProof || !caCommunicationProof.trim()) {
+                      alert("Client Communication & Consent Proof is required. Please upload or select a proof file.");
+                      return;
+                    }
+
+                    if (!caUploadName || !caUploadName.trim()) {
+                      alert("Upload Name is required. Please provide a valid file name.");
+                      return;
+                    }
+
                     try {
                       setIsSaving(true);
                       
@@ -11378,6 +11403,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         client_communication_proof: uploadedProofUrl,
                         customer_communication_proof: uploadedProofUrl,
                         proof_url: uploadedProofUrl,
+                        upload_name: caUploadName.trim(),
+                        proof_name: caUploadName.trim(),
+                        client_communication_proof_name: caUploadName.trim(),
+                        checklist_client_communication_proof: caConsentProofChecked,
                         checklist_customer_acceptance: caVerifyCustomerAcceptance,
                         checklist_content_usage: caContentUsageConfirmation,
                         checklist_footage_deleted_7_days: caFootageDeleted7Days,
@@ -11453,18 +11482,124 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
                   </div>
 
-                  {/* 5-Item Production Validation Checklist */}
+                  {/* Production Verification Checklist */}
                   <div className="space-y-3">
                     <div className="border-b border-zinc-900 pb-1.5 flex items-center justify-between">
                       <h4 className="text-[10px] text-indigo-400 uppercase font-black tracking-widest font-mono flex items-center gap-1.5">
                         <span>☑</span> Production Verification Checklist
                       </h4>
                       <span className="text-[10px] font-mono text-zinc-400 font-bold">
-                        5 Verification Steps
+                        Verification Steps
                       </span>
                     </div>
 
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
+                      {/* MANDATORY: Client Communication & Consent Proof */}
+                      <div className="p-4 bg-zinc-900/60 border border-pink-500/30 rounded-xl space-y-3 shadow-inner">
+                        <label className="flex items-start gap-3 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={caConsentProofChecked}
+                            onChange={(e) => setCaConsentProofChecked(e.target.checked)}
+                            className="w-4 h-4 mt-0.5 accent-pink-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                          />
+                          <div className="space-y-0.5 flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-zinc-100 group-hover:text-pink-300 transition-colors flex items-center gap-1.5">
+                                <span>💬</span> Client Communication & Consent Proof <span className="text-rose-400 font-black text-sm">*</span>
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
+                                caConsentProofChecked && caCommunicationProof ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                              }`}>
+                                {caConsentProofChecked && caCommunicationProof ? 'Confirmed' : 'Mandatory'}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-zinc-400 leading-normal block">
+                              Confirm client communication and consent proof has been acquired and uploaded.
+                            </span>
+                          </div>
+                        </label>
+
+                        {/* Upload Name Field */}
+                        <div className="space-y-1.5 pt-1">
+                          <label className="block text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                            Upload Name <span className="text-rose-400">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Client_Consent_Proof_24Aug2026.jpg"
+                            value={caUploadName}
+                            onChange={(e) => setCaUploadName(e.target.value)}
+                            className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-pink-500 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none transition-colors"
+                          />
+                        </div>
+
+                        {/* Upload / Select Proof Button */}
+                        <div className="space-y-2">
+                          <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 hover:border-pink-500/50 bg-zinc-950/80 hover:bg-zinc-900/60 rounded-xl py-3 px-4 cursor-pointer transition-all">
+                            <span className="text-xs text-zinc-300 font-bold mb-0.5 flex items-center gap-1.5">
+                              <Upload className="w-4 h-4 text-pink-400" />
+                              {caUploadingProof ? 'Processing proof...' : caCommunicationProof ? 'Change / Select Different Proof' : 'Upload / Select Proof'}
+                            </span>
+                            <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP, PDF formats supported</span>
+                            <input
+                              type="file"
+                              accept="image/*,application/pdf"
+                              onChange={handleFileChange}
+                              disabled={caUploadingProof}
+                              className="hidden"
+                            />
+                          </label>
+
+                          {/* Attached proof preview */}
+                          {caCommunicationProof && (
+                            <div className="p-3 bg-zinc-950 border border-pink-500/20 rounded-xl space-y-2 animate-in fade-in duration-200">
+                              <div className="flex items-center justify-between text-xs text-pink-400 font-mono font-bold">
+                                <span className="flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Proof Attached: {caUploadName || 'File'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCaCommunicationProof('');
+                                    setCaUploadName('');
+                                    setCaConsentProofChecked(false);
+                                  }}
+                                  className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
+                                >
+                                  Remove Proof
+                                </button>
+                              </div>
+
+                              {caCommunicationProof.startsWith('data:') || caCommunicationProof.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ? (
+                                <div className="relative rounded-lg overflow-hidden border border-zinc-850 max-h-40 bg-zinc-900 flex items-center justify-center">
+                                  <img
+                                    src={resolveStorageUrl(caCommunicationProof) || caCommunicationProof}
+                                    alt="Client Communication Proof"
+                                    referrerPolicy="no-referrer"
+                                    className="max-h-40 max-w-full object-contain rounded-lg"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-300">
+                                  <span className="text-pink-400">📄</span>
+                                  <span className="truncate flex-1">{caUploadName || 'Uploaded Proof Document'}</span>
+                                  <a
+                                    href={resolveStorageUrl(caCommunicationProof) || caCommunicationProof}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-pink-400 hover:underline text-[11px] font-bold"
+                                  >
+                                    View Proof ↗
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
                       {/* 1. Verify Customer Acceptance */}
                       <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
                         <input
@@ -11580,7 +11715,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
                             {eventGroups.map((group) => {
                               const groupKey = group.eventId;
-                              const isGroupValidated = Boolean(caValidatedServerUploads[groupKey] ?? caValidateEditedFiles);
                               const groupUploadItems = group.items;
                               const hasUploadedItem = groupUploadItems.some(i => i.isUploaded);
                               const matchedDate = groupUploadItems.find(i => i.eventDate)?.eventDate || clientAcceptanceProd.event_date || 'N/A';
@@ -11593,27 +11727,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     <span className="text-xs font-bold text-purple-300 font-mono flex items-center gap-1.5">
                                       <span>📅</span> {group.eventName}
                                     </span>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        checked={isGroupValidated}
-                                        onChange={(e) => {
-                                          const checked = e.target.checked;
-                                          const nextMap = { ...caValidatedServerUploads, [groupKey]: checked };
-                                          groupUploadItems.forEach(i => {
-                                            nextMap[i.key] = checked;
-                                            if (i.assignmentId) nextMap[i.assignmentId] = checked;
-                                          });
-                                          setCaValidatedServerUploads(nextMap);
-                                          const allVal = eventGroups.every(g => (g.eventId === groupKey ? checked : nextMap[g.eventId]));
-                                          setCaValidateEditedFiles(allVal);
-                                        }}
-                                        className="w-3.5 h-3.5 accent-emerald-500 bg-zinc-900 border-zinc-700 rounded cursor-pointer"
-                                      />
-                                      <span className="text-[11px] font-mono text-zinc-300 font-semibold">
-                                        Validate Event Upload
-                                      </span>
-                                    </label>
                                   </div>
 
                                   {/* Upload Info Box */}
@@ -11660,80 +11773,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           </div>
                         )}
                       </div>
-                    </div>
-                  </div>
-
-                  {/* Customer Communication Proof Upload */}
-                  <div className="space-y-3">
-                    <h4 className="text-[10px] text-[#f472b6] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5">
-                      💬 Client Communication & Consent Proof
-                    </h4>
-                    
-                    <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="block text-[10px] text-zinc-500 font-mono">
-                          Upload Screenshot OR Provide Link (Google Drive, Docs, etc.)
-                        </label>
-                        <div className="flex flex-col gap-3">
-                          <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 hover:border-zinc-700 bg-zinc-900/20 hover:bg-zinc-900/40 rounded-xl py-4 px-4 cursor-pointer transition-all">
-                            <span className="text-xs text-zinc-400 font-semibold mb-1">
-                              {caUploadingProof ? 'Processing image...' : 'Click to upload proof screenshot'}
-                            </span>
-                            <span className="text-[10px] text-zinc-600 font-mono">PNG, JPG formats supported</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleFileChange}
-                              disabled={caUploadingProof}
-                              className="hidden"
-                            />
-                          </label>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-zinc-500 font-bold uppercase">OR</span>
-                            <input
-                              type="url"
-                              placeholder="Paste proof link here..."
-                              value={!caCommunicationProof.startsWith('data:') && !caCommunicationProof.match(/\.(jpeg|jpg|gif|png|webp)$/i) ? caCommunicationProof : ''}
-                              onChange={(e) => setCaCommunicationProof(e.target.value)}
-                              className="flex-1 bg-zinc-950 border border-zinc-850 rounded-lg p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {caCommunicationProof ? (
-                        <div className="p-3 bg-zinc-900 border border-zinc-850 rounded-xl space-y-2">
-                          <div className="text-[10px] text-zinc-500 font-mono uppercase flex justify-between items-center">
-                            <span>Proof Provided:</span>
-                            <button
-                              type="button"
-                              onClick={() => setCaCommunicationProof('')}
-                              className="text-rose-400 hover:text-rose-300 font-bold underline"
-                            >
-                              Remove Proof
-                            </button>
-                          </div>
-                          {caCommunicationProof.startsWith('data:') || caCommunicationProof.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ? (
-                            <img
-                              src={caCommunicationProof}
-                              alt="Communication Proof"
-                              referrerPolicy="no-referrer"
-                              className="max-h-[140px] rounded-lg object-contain mx-auto border border-zinc-800 bg-black/40"
-                            />
-                          ) : (
-                            <div className="flex flex-col items-center justify-center p-4 bg-zinc-950 border border-zinc-850 rounded-lg">
-                              <ExternalLink className="w-6 h-6 text-blue-400 mb-2" />
-                              <a href={caCommunicationProof} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-blue-400 hover:underline break-all text-center">
-                                {caCommunicationProof}
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-zinc-500 font-mono italic text-center p-3 border border-zinc-900 bg-zinc-900/10 rounded-xl">
-                          No screenshot or link provided yet. A backup receipt image or screenshot of chat is recommended.
-                        </div>
-                      )}
                     </div>
                   </div>
 
