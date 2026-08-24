@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
-  X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
+  X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';
@@ -269,6 +269,18 @@ export const OperationsLeads: React.FC = () => {
   const [imagePreviewModal, setImagePreviewModal] = useState<{ url: string, date: string, time: string, staffName: string, stage: string } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ left: number, top: number, width: number, maxHeight: number, openUpward: boolean }>({ left: 0, top: 0, width: 220, maxHeight: 280, openUpward: false });
+
+  // Escape key handler for Image Preview Modal
+  useEffect(() => {
+    if (!imagePreviewModal) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setImagePreviewModal(null);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [imagePreviewModal]);
 
   useEffect(() => {
     const handleStaffUpdate = () => {
@@ -5276,44 +5288,115 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Image Preview Modal */}
       {imagePreviewModal && createPortal(
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
-              <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{imagePreviewModal.stage}</h3>
-                <p className="text-xs text-zinc-400 mt-0.5">
+        <div 
+          className="fixed inset-0 bg-black/90 backdrop-blur-md z-[1000000] flex flex-col items-center justify-center p-3 sm:p-5 md:p-6 overflow-y-auto animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setImagePreviewModal(null);
+            }
+          }}
+        >
+          <div 
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[92vh] max-h-[92dvh] sm:max-h-[88vh] overflow-hidden flex flex-col shadow-2xl relative my-auto animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-zinc-800 bg-zinc-950/70 shrink-0">
+              <div className="min-w-0 pr-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    {imagePreviewModal.stage}
+                  </span>
+                  <h3 className="text-xs sm:text-sm font-bold text-white font-mono truncate">
+                    Equipment Proof Image
+                  </h3>
+                </div>
+                <p className="text-[11px] text-zinc-400 mt-1 truncate">
                   Uploaded by <strong className="text-indigo-400">{imagePreviewModal.staffName}</strong> • {imagePreviewModal.date} {imagePreviewModal.time}
                 </p>
               </div>
-              <button 
-                onClick={() => setImagePreviewModal(null)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-white transition-colors cursor-pointer"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                {imagePreviewModal.url && (
+                  <a
+                    href={imagePreviewModal.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    referrerPolicy="no-referrer"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-mono font-semibold transition-colors cursor-pointer border border-zinc-700/50"
+                    title="Open full resolution in new tab"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Full Image</span>
+                  </a>
+                )}
+                <button 
+                  type="button"
+                  onClick={() => setImagePreviewModal(null)}
+                  className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
+                  title="Close image viewer (Esc)"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-            <div className="flex-1 bg-zinc-950 overflow-hidden relative min-h-[300px] flex items-center justify-center">
+
+            {/* Image Viewport */}
+            <div className="flex-1 bg-zinc-950/90 relative min-h-[260px] sm:min-h-[380px] flex items-center justify-center p-3 sm:p-5 overflow-hidden">
               {imagePreviewModal.url ? (
-                <img 
-                  src={imagePreviewModal.url} 
-                  alt={imagePreviewModal.stage} 
-                  className="max-w-full max-h-full object-contain"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                    target.parentElement?.classList.add('flex', 'items-center', 'justify-center');
-                    const errDiv = document.createElement('div');
-                    errDiv.className = 'text-center p-8';
-                    errDiv.innerHTML = '<span class="text-3xl mb-2 block">⚠️</span><p class="text-zinc-400 font-mono text-sm">Image not found. Please verify the uploaded image URL.</p>';
-                    target.parentElement?.appendChild(errDiv);
-                  }}
-                />
+                <>
+                  <img 
+                    src={imagePreviewModal.url} 
+                    alt={imagePreviewModal.stage} 
+                    referrerPolicy="no-referrer"
+                    className="max-w-full max-h-[66vh] max-h-[66dvh] sm:max-h-[70vh] w-auto h-auto object-contain rounded-xl shadow-2xl select-none"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const fallback = target.parentElement?.querySelector('.img-error-fallback');
+                      if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                    }}
+                  />
+                  <div className="img-error-fallback hidden flex-col items-center justify-center p-8 text-center space-y-2">
+                    <span className="text-3xl">⚠️</span>
+                    <p className="text-zinc-300 font-mono text-xs sm:text-sm font-semibold">Image could not be loaded</p>
+                    <p className="text-zinc-500 font-mono text-[11px]">Please verify the uploaded image URL or file status.</p>
+                  </div>
+                </>
               ) : (
-                <div className="text-center p-8">
-                  <span className="text-3xl mb-2 block">⚠️</span>
-                  <p className="text-zinc-400 font-mono text-sm">Image not found. Please verify the uploaded image URL.</p>
+                <div className="flex flex-col items-center justify-center p-8 text-center space-y-2">
+                  <span className="text-3xl">⚠️</span>
+                  <p className="text-zinc-300 font-mono text-xs sm:text-sm font-semibold">No image URL provided</p>
+                  <p className="text-zinc-500 font-mono text-[11px]">Verification image has not been uploaded yet.</p>
                 </div>
               )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/70 shrink-0">
+              <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline">
+                Press <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 text-[10px]">Esc</kbd> or click backdrop to exit
+              </span>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                {imagePreviewModal.url && (
+                  <a
+                    href={imagePreviewModal.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    referrerPolicy="no-referrer"
+                    className="sm:hidden inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-mono font-semibold transition-colors cursor-pointer border border-zinc-700/50 flex-1"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Full Image</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setImagePreviewModal(null)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-indigo-600/20 w-full sm:w-auto"
+                >
+                  Close Image Viewer
+                </button>
+              </div>
             </div>
           </div>
         </div>
