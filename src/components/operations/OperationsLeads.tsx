@@ -1014,7 +1014,12 @@ export const OperationsLeads: React.FC = () => {
           (s.order_id === ord.order_id || (ord.lead_id && s.order_id === ord.lead_id)) && 
           (s.staff_name || '').trim().toLowerCase() === normName &&
           s.assignment_status !== 'Cancelled' &&
-          (!ev?.id || !s.event_id || s.event_id === ev.id)
+          (
+            (ev?.id && s.event_id === ev.id) ||
+            (!ev?.id && !s.event_id) ||
+            (s.event_name && ev?.event_name && s.event_name.trim().toLowerCase() === ev.event_name.trim().toLowerCase()) ||
+            (s.event_name && ev?.event_type && s.event_name.trim().toLowerCase() === ev.event_type.trim().toLowerCase())
+          )
         );
         matchingSAs.forEach(s => {
           const sEq = s.equipment || s.assigned_equipment;
@@ -1038,23 +1043,6 @@ export const OperationsLeads: React.FC = () => {
               } catch(e) {
                 sEq.split(',').forEach((item: string) => { if (item.trim()) eqList.push(item.trim()); });
               }
-            }
-          }
-        });
-      }
-
-      // 4. Check leadEquipmentHistory ONLY if strictly linked to this specific staff member
-      if (eqList.length === 0 && leadEquipmentHistory) {
-        const hist = leadEquipmentHistory.filter(h => 
-          (h.order_id === ord.order_id || (ord.lead_id && h.lead_id === ord.lead_id))
-        );
-        hist.forEach(h => {
-          let parsed: any = {};
-          if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
-          const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-          if (staffMatch && (staffMatch === normName || staffMatch.includes(normName) || normName.includes(staffMatch))) {
-            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection' && !h.equipment_name.includes('Footage')) {
-              eqList.push(h.equipment_name);
             }
           }
         });
@@ -1121,7 +1109,17 @@ export const OperationsLeads: React.FC = () => {
 
           names.forEach((name, nameIdx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
-            const saMatch = staffAssignments?.find(sa => sa.order_id === ord.order_id && sa.staff_name?.toLowerCase() === name.toLowerCase());
+            const saMatch = staffAssignments?.find(sa => 
+              sa.order_id === ord.order_id && 
+              sa.staff_name?.toLowerCase() === name.toLowerCase() &&
+              (
+                (ev?.id && sa.event_id === ev.id) ||
+                (!ev?.id && !sa.event_id) ||
+                (!sa.event_id && totalEvents === 1) ||
+                (sa.event_name && ev?.event_name && sa.event_name.trim().toLowerCase() === ev.event_name.trim().toLowerCase()) ||
+                (sa.event_name && ev?.event_type && sa.event_name.trim().toLowerCase() === ev.event_type.trim().toLowerCase())
+              )
+            );
             const historyMatch = leadStaffAssignmentHistory?.find(h => (h.order_id === ord.order_id || h.lead_id === ord.lead_id) && h.assigned_staff?.toLowerCase().includes(name.toLowerCase()));
 
             const assignedTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';

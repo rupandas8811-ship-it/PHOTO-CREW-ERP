@@ -440,16 +440,38 @@ export const OperationsStaffManagement: React.FC = () => {
             } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
               const parts = mobilesRaw.split(' || EQUIPMENT: ');
               equipmentAssigned = parts[1] || 'None';
-            } else if (op?.equipment_kit) {
-              equipmentAssigned = op.equipment_kit;
+            }
+
+            // Also check staffAssignments for specific event + staff equipment
+            const sa = staffAssignments?.find(s => 
+              s.order_id === order?.order_id && 
+              s.staff_name?.toLowerCase() === staffName.toLowerCase() &&
+              (
+                (ev.id && s.event_id === ev.id) ||
+                (!ev.id && !s.event_id) ||
+                (s.event_name && ev.event_name && s.event_name.trim().toLowerCase() === ev.event_name.trim().toLowerCase()) ||
+                (s.event_name && ev.event_type && s.event_name.trim().toLowerCase() === ev.event_type.trim().toLowerCase())
+              )
+            );
+            if (sa) {
+              const saEq = sa.equipment || sa.assigned_equipment;
+              if (Array.isArray(saEq) && saEq.length > 0) {
+                equipmentAssigned = saEq.map((e: any) => typeof e === 'string' ? e : (e.equipment_name || e.name || '')).filter(Boolean).join(', ');
+              } else if (typeof saEq === 'string' && saEq.trim() && saEq.trim().toLowerCase() !== 'none') {
+                equipmentAssigned = saEq.trim();
+              }
             }
 
             // Resolve role assigned
             const staffObj = staff?.find(s => s.name.toLowerCase() === staffName.toLowerCase());
             let assignedRole = staffObj ? staffObj.role : 'Crew';
-            const sa = staffAssignments?.find(s => s.order_id === order?.order_id && s.staff_name.toLowerCase() === staffName.toLowerCase());
             if (sa?.staff_role) {
               assignedRole = sa.staff_role;
+            } else {
+              const generalSa = staffAssignments?.find(s => s.order_id === order?.order_id && s.staff_name.toLowerCase() === staffName.toLowerCase());
+              if (generalSa?.staff_role) {
+                assignedRole = generalSa.staff_role;
+              }
             }
 
             activeBookings.push({
