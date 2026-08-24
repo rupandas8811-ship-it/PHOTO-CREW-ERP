@@ -270,6 +270,8 @@ export interface Lead {
   next_follow_up_date?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
+  lost_reason?: string;
+  lost_notes?: string;
   lead_score?: number;
   booking_status?: string;
   google_maps_link?: string;
@@ -357,6 +359,8 @@ export interface Order {
   next_follow_up_date?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
+  lost_reason?: string;
+  lost_notes?: string;
   lead_score?: number;
   booking_status?: string;
 }

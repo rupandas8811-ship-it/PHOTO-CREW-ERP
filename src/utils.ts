@@ -740,14 +740,15 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
     const q = Number(raw.qty || raw.quantity || raw.count || 1);
     qty = isNaN(q) || q < 1 ? 1 : q;
     text = String(raw.name || raw.text || raw.deliverable || raw.title || raw.role || raw.member_name || "").trim();
+    return { qty, text };
   } else {
     text = String(raw).trim();
   }
 
   if (!text) return { qty: 1, text: "" };
 
+  // 1. Check for explicit (Qty: X), (quantity: X), (count: X), (Qty X) anywhere in the string
   let foundQtyFromPattern: number | null = null;
-  // 1. Extract any (Qty X), (quantity X), (Qty: X) occurrences anywhere in text
   const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
   let match;
   while ((match = qtyPatterns.exec(text)) !== null) {
@@ -761,32 +762,68 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
     }
   }
 
-  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns completely from text
-  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+  if (foundQtyFromPattern !== null) {
+    text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+    return { qty: foundQtyFromPattern, text };
+  }
 
-  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 × Traditional Photos"
-  const leadingMatch = text.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
-  if (leadingMatch) {
-    const parsedQty = parseInt(leadingMatch[1], 10);
+  // 2. Check for dimension / size specifications at the start of the string:
+  // e.g. "16×6", "16x6", "12×8 Album", "16×6 Frame", "16 × 6", "12 x 18", "8x24", "8*12", "12×36"
+  // If the string starts with a dimension (digits x/× digits), it is deliverable text, NOT a leading quantity!
+  const isLeadingDimension = /^\d+\s*[\*xX×]\s*\d+/.test(text);
+  if (isLeadingDimension) {
+    return { qty: 1, text };
+  }
+
+  // 3. Check for technical specifications / units starting with numbers:
+  // e.g. "4K Cinematic Video", "8K Video", "20 Pages × 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
+  const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
+  if (isUnitOrSpec) {
+    return { qty: 1, text };
+  }
+
+  // 4. Check for leading quantity with explicit multiplier:
+  // e.g. "2 x Traditional Photos", "2 × Cinematic Video", "2 * Album", "2 x 16×6 Frame", "2 × 16×6"
+  const multiplierMatch = text.match(/^(\d+)\s*[xX×\*]\s+(.+)$/);
+  if (multiplierMatch) {
+    const parsedQty = parseInt(multiplierMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
-      if (typeof raw !== "object" && foundQtyFromPattern === null) {
-        qty = parsedQty;
-      }
+      return { qty: parsedQty, text: multiplierMatch[2].trim() };
     }
-    text = leadingMatch[2] ? leadingMatch[2].trim() : "";
-    text = text.replace(/^[xX×\*\-–—]\s*/, "").trim();
   }
 
-  if (typeof raw !== "object" && foundQtyFromPattern !== null) {
-    qty = foundQtyFromPattern;
+  // 5. Check for leading quantity followed by dimension:
+  // e.g. "2 16×6", "3 12×8 Album", "2 16×6 Frame"
+  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX×]\s*\d+.*)$/);
+  if (qtyDimensionMatch) {
+    const parsedQty = parseInt(qtyDimensionMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      return { qty: parsedQty, text: qtyDimensionMatch[2].trim() };
+    }
   }
 
-  // Clean any leftover (Qty X) or trailing/leading punctuation
-  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
-  text = text.replace(/^[\*\-•xX×]\s*/, "").trim();
-  text = text.replace(/[\(\[\-–—:]+$/, "").trim();
+  // 6. Check for leading quantity with space followed by item name:
+  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12×18)"
+  const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
+  if (wordMatch) {
+    const parsedQty = parseInt(wordMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      return { qty: parsedQty, text: wordMatch[2].trim() };
+    }
+  }
 
-  return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
+  return { qty: 1, text };
+}
+
+export function combineQtyAndText(qty: number | string, text: string): string {
+  const qNum = parseInt(String(qty), 10);
+  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : 1;
+  const cleanText = (text || "").trim();
+  if (!cleanText) return validQty > 1 ? `${validQty}` : "";
+  if (validQty <= 1) {
+    return cleanText;
+  }
+  return `${validQty} ${cleanText}`.trim();
 }
 
 export function parseDeliverablesWithQty(

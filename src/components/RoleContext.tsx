@@ -2341,8 +2341,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             const teamData = l.Team_member || l.Team_Members || l.team_members || l.Team_members || l.team_member || '';
             const finalQuoteAmt = l.Final_Quotation_Amount ?? l.final_quotation_amount ?? l.final_amount ?? null;
             const finalPkgAmt = l.Final_Package_Amount ?? l.final_package_amount ?? finalQuoteAmt;
+            const cleanLostReason = l.Lost_Reason || l.lost_reason || l.LostReason || l.lostReason || '';
+            const cleanLostNotes = l.Lost_Notes || l.lost_notes || l.LostNotes || l.lostNotes || '';
             return { 
               ...l, 
+              Lost_Reason: cleanLostReason,
+              lost_reason: cleanLostReason,
+              Lost_Notes: cleanLostNotes,
+              lost_notes: cleanLostNotes,
               Final_Quotation_Amount: finalQuoteAmt !== null && finalQuoteAmt !== undefined && !isNaN(Number(finalQuoteAmt)) ? Number(finalQuoteAmt) : null,
               Final_Package_Amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : null,
               final_package_amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : undefined,
@@ -3644,8 +3650,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
     
     if (normalizedStatus === 'Lost Lead') {
-      updatesPayload["Lost_Reason"] = callNotes; // Lost Reason is usually passed via callNotes or negotiationNotes
-      updatesPayload["Lost_Notes"] = negotiationNotes || callNotes;
+      const reasonVal = callNotes || '';
+      const notesVal = negotiationNotes || '';
+      updatesPayload["Lost_Reason"] = reasonVal;
+      updatesPayload["lost_reason"] = reasonVal;
+      updatesPayload["Lost_Notes"] = notesVal;
+      updatesPayload["lost_notes"] = notesVal;
     }
 
     const res = await pushUpdate('leads', 'lead_id', leadId, updatesPayload);
@@ -3701,8 +3711,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updated_at: timestamp
           };
           if (normalizedStatus === 'Lost Lead') {
-             (updatedLd as any).Lost_Reason = callNotes;
-             (updatedLd as any).Lost_Notes = negotiationNotes || callNotes;
+             const reasonVal = callNotes || '';
+             const notesVal = negotiationNotes || '';
+             (updatedLd as any).Lost_Reason = reasonVal;
+             (updatedLd as any).lost_reason = reasonVal;
+             (updatedLd as any).Lost_Notes = notesVal;
+             (updatedLd as any).lost_notes = notesVal;
           }
           return updatedLd;
         }

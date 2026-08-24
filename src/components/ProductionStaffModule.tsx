@@ -2789,8 +2789,8 @@ Thank you.`;
             <div id="customer_review_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
                 <div className="flex items-center gap-2">
-                  <UserCheck className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-base font-bold text-white">Customer Review</h3>
+                  <CheckCircle2 className="w-5 h-5 text-amber-400" />
+                  <h3 className="text-base font-bold text-white">Customer Review Image & Server Checklist</h3>
                 </div>
                 <button 
                   onClick={() => setCustomerReviewModal(null)}
@@ -2804,7 +2804,7 @@ Thank you.`;
                 {renderOrderHeader(customerReviewModal.group)}
 
                 <p className="text-xs text-zinc-400 mb-4">
-                  Upload customer review image for customer review. After uploading the image, confirm the server checklist below.
+                  Upload customer review image / proof for customer review. After uploading the image, confirm the server checklist below.
                 </p>
 
                 <form id="customer-review-form" onSubmit={handleCustomerReviewSubmit} className="space-y-5">
@@ -2828,10 +2828,10 @@ Thank you.`;
                     </p>
                   </div>
 
-                  {/* Customer Review Image */}
+                  {/* Customer Review Image / Proof */}
                   <div className="space-y-2">
                     <label className="block text-xs font-mono font-bold text-zinc-300 uppercase">
-                      Customer Review Image <span className="text-rose-400">*</span>
+                      Customer Review Image / Proof <span className="text-rose-400">*</span>
                     </label>
 
                     {/* File Upload Field */}
@@ -2854,7 +2854,7 @@ Thank you.`;
                       >
                         <Upload className="w-5 h-5 text-amber-400" />
                         <span className="text-xs font-bold text-amber-300">
-                          {customerReviewForm.customer_review_image ? 'Change Customer Review Image' : 'Select Customer Review Image'}
+                          {customerReviewForm.customer_review_image ? 'Change Customer Review Image' : 'Select Customer Review Image / Proof'}
                         </span>
                         <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP (auto-compressed & uploaded)</span>
                       </label>
@@ -2889,12 +2889,13 @@ Thank you.`;
                   </div>
 
                   {/* ========================================================= */}
-                  {/* EDITED FOLDER CONFIRMATION CHECKLIST */}
+                  {/* SERVER UPLOAD CONFIRMATION CHECKLIST */}
                   {/* ========================================================= */}
                   <div className="space-y-3 pt-2 border-t border-zinc-800">
                     <div className="flex items-center justify-between">
-                      <label className="block text-xs font-mono font-bold text-zinc-200 uppercase">
-                        Edited Folder Confirmation
+                      <label className="block text-xs font-mono font-bold text-zinc-200 uppercase flex items-center gap-1.5">
+                        <span>📁</span>
+                        <span>Server Upload Confirmation</span>
                       </label>
                       <span className="text-[10px] text-zinc-500 font-mono">Server Checklist</span>
                     </div>
@@ -2902,7 +2903,7 @@ Thank you.`;
                     {!hasImage ? (
                       <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl text-zinc-400 text-xs flex items-center gap-2">
                         <span className="text-amber-400 font-bold">ℹ️</span>
-                        <span>Upload Customer Review Image above to unlock Edited Folder Confirmation.</span>
+                        <span>Upload Customer Review Image above to unlock Server Upload Confirmation.</span>
                       </div>
                     ) : (
                       <div className="space-y-3 animate-in fade-in duration-200">

@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import cors from 'cors';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import dotenv from 'dotenv';
@@ -26,6 +27,15 @@ if (!SUPABASE_SERVICE_ROLE_KEY) {
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  // Health check endpoint for Cloud Run and load balancers
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  app.get('/healthz', (req, res) => {
+    res.status(200).send('OK');
+  });
 
   app.use(cors());
 
@@ -830,6 +840,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
+    console.log('[Server] Mounting Vite development middleware...');
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -837,6 +848,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
+    console.log('[Server] Serving production static assets from dist...');
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {

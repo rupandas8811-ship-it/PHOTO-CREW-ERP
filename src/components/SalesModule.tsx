@@ -125,14 +125,15 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
     const q = Number(raw.qty || raw.quantity || raw.count || 1);
     qty = isNaN(q) || q < 1 ? 1 : q;
     text = String(raw.name || raw.text || raw.deliverable || raw.title || raw.role || raw.member_name || "").trim();
+    return { qty, text };
   } else {
     text = String(raw).trim();
   }
 
   if (!text) return { qty: 1, text: "" };
 
+  // 1. Check for explicit (Qty: X), (quantity: X), (count: X), (Qty X) anywhere in the string
   let foundQtyFromPattern: number | null = null;
-  // 1. Extract any (Qty X), (quantity X), (Qty: X) occurrences anywhere in text
   const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
   let match;
   while ((match = qtyPatterns.exec(text)) !== null) {
@@ -146,40 +147,67 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
     }
   }
 
-  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns completely from text
-  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+  if (foundQtyFromPattern !== null) {
+    text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+    return { qty: foundQtyFromPattern, text };
+  }
 
-  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 × Traditional Photos"
-  const leadingMatch = text.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
-  if (leadingMatch) {
-    const parsedQty = parseInt(leadingMatch[1], 10);
+  // 2. Check for dimension / size specifications at the start of the string:
+  // e.g. "16×6", "16x6", "12×8 Album", "16×6 Frame", "16 × 6", "12 x 18", "8x24", "8*12", "12×36"
+  // If the string starts with a dimension (digits x/× digits), it is deliverable text, NOT a leading quantity!
+  const isLeadingDimension = /^\d+\s*[\*xX×]\s*\d+/.test(text);
+  if (isLeadingDimension) {
+    return { qty: 1, text };
+  }
+
+  // 3. Check for technical specifications / units starting with numbers:
+  // e.g. "4K Cinematic Video", "8K Video", "20 Pages × 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
+  const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
+  if (isUnitOrSpec) {
+    return { qty: 1, text };
+  }
+
+  // 4. Check for leading quantity with explicit multiplier:
+  // e.g. "2 x Traditional Photos", "2 × Cinematic Video", "2 * Album", "2 x 16×6 Frame", "2 × 16×6"
+  const multiplierMatch = text.match(/^(\d+)\s*[xX×\*]\s+(.+)$/);
+  if (multiplierMatch) {
+    const parsedQty = parseInt(multiplierMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
-      if (typeof raw !== "object" && foundQtyFromPattern === null) {
-        qty = parsedQty;
-      }
+      return { qty: parsedQty, text: multiplierMatch[2].trim() };
     }
-    text = leadingMatch[2] ? leadingMatch[2].trim() : "";
-    text = text.replace(/^[xX×\*\-–—]\s*/, "").trim();
   }
 
-  if (typeof raw !== "object" && foundQtyFromPattern !== null) {
-    qty = foundQtyFromPattern;
+  // 5. Check for leading quantity followed by dimension:
+  // e.g. "2 16×6", "3 12×8 Album", "2 16×6 Frame"
+  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX×]\s*\d+.*)$/);
+  if (qtyDimensionMatch) {
+    const parsedQty = parseInt(qtyDimensionMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      return { qty: parsedQty, text: qtyDimensionMatch[2].trim() };
+    }
   }
 
-  // Clean any leftover (Qty X) or trailing/leading punctuation
-  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
-  text = text.replace(/^[\*\-•xX×]\s*/, "").trim();
-  text = text.replace(/[\(\[\-–—:]+$/, "").trim();
+  // 6. Check for leading quantity with space followed by item name:
+  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12×18)"
+  const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
+  if (wordMatch) {
+    const parsedQty = parseInt(wordMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      return { qty: parsedQty, text: wordMatch[2].trim() };
+    }
+  }
 
-  return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
+  return { qty: 1, text };
 }
 
 function combineQtyAndText(qty: number | string, text: string): string {
-  const parsed = parseQtyAndText(text);
   const qNum = parseInt(String(qty), 10);
-  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : parsed.qty;
-  const cleanText = parsed.text;
+  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : 1;
+  const cleanText = (text || "").trim();
   if (!cleanText) return validQty > 1 ? `${validQty}` : "";
+  if (validQty <= 1) {
+    return cleanText;
+  }
   return `${validQty} ${cleanText}`.trim();
 }
 
@@ -2439,91 +2467,103 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [unlockRequestCustomReason, setUnlockRequestCustomReason] = useState('');
   const [selectedUnlockLead, setSelectedUnlockLead] = useState<Lead | null>(null);
 
-  // Helper function to resolve Lost Reason and Notes strictly from fields
+  // Helper function to resolve Lost Reason and Notes strictly and cleanly from fields
   const getStrictLostReasonAndNotes = (lead: Lead | null) => {
     if (!lead) return { reason: '', notes: '' };
+
+    let rawReason = (lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason || '').trim();
+    let rawNotes = (lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes || '').trim();
+
+    // Check if string contains internal generated activity/update text or metadata
+    const isDirty = (str: string) => {
+      if (!str) return false;
+      return /\[Update|\bNeg Notes:|\bNext follow-up:|\bWhatsApp:|^Lost Reason:/i.test(str);
+    };
+
+    let cleanReason = rawReason;
+    let cleanNotes = rawNotes;
+
+    const parseComposite = (text: string) => {
+      let r = '';
+      let n = '';
+      if (!text) return { r, n };
+
+      // Pattern 1: "Lost Reason: <reason>. Notes: <notes>"
+      const explicitMatch = text.match(/Lost Reason:\s*([^.\n]+?)(?:\.\s*Notes:\s*([\s\S]*?))?(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
+      if (explicitMatch) {
+        if (explicitMatch[1]) r = explicitMatch[1].trim();
+        if (explicitMatch[2]) n = explicitMatch[2].trim();
+      }
+
+      // Pattern 2: "[Update YYYY-MM-DD]: <reason>. Neg Notes: <notes>. Next follow-up:"
+      if (!r) {
+        const updateMatch = text.match(/\[Update[^\]]*\]:\s*([^.]+?)(?:\.\s*(?:Neg Notes|Notes):\s*([\s\S]*?))?(?:\.\s*Next follow-up:|$|\n)/i);
+        if (updateMatch) {
+          if (updateMatch[1]) r = updateMatch[1].trim();
+          if (updateMatch[2]) n = updateMatch[2].trim();
+        }
+      }
+
+      // Standalone notes match
+      if (!n) {
+        const negMatch = text.match(/(?:Neg Notes|Notes):\s*([^.\n]+?)(?:\.\s*Next follow-up:|$|\n)/i);
+        if (negMatch && negMatch[1]) {
+          n = negMatch[1].trim();
+        }
+      }
+      return { r, n };
+    };
+
+    if (isDirty(cleanReason)) {
+      const parsed = parseComposite(cleanReason);
+      if (parsed.r) cleanReason = parsed.r;
+      if (parsed.n && !cleanNotes) cleanNotes = parsed.n;
+    }
+
+    if (isDirty(cleanNotes)) {
+      const parsed = parseComposite(cleanNotes);
+      if (parsed.n) cleanNotes = parsed.n;
+      else {
+        cleanNotes = cleanNotes
+          .replace(/^Neg Notes:\s*/i, '')
+          .replace(/\.?\s*Next follow-up:.*$/i, '')
+          .replace(/^Notes:\s*/i, '')
+          .trim();
+      }
+    }
+
+    // If reason is still empty or dirty, check remarks field
+    if ((!cleanReason || cleanReason === 'N/A' || cleanReason === 'NULL' || isDirty(cleanReason)) && lead.remarks) {
+      const parsed = parseComposite(lead.remarks);
+      if (parsed.r) cleanReason = parsed.r;
+      if (parsed.n && !cleanNotes) cleanNotes = parsed.n;
+    }
+
+    // Final clean-up of any stray prefix/suffix
+    cleanReason = cleanReason
+      .replace(/^WhatsApp:\s*\d+\s*/i, '')
+      .replace(/^\[Update[^\]]*\]:\s*/i, '')
+      .replace(/\.?\s*Neg Notes:.*$/i, '')
+      .replace(/\.?\s*Next follow-up:.*$/i, '')
+      .replace(/[,;]+$/, '')
+      .trim();
+
+    cleanNotes = cleanNotes
+      .replace(/\.?\s*Next follow-up:.*$/i, '')
+      .replace(/^Neg Notes:\s*/i, '')
+      .replace(/^Notes:\s*/i, '')
+      .replace(/[,;]+$/, '')
+      .trim();
+
     return {
-      reason: lead.Lost_Reason || '',
-      notes: lead.Lost_Notes || ''
+      reason: cleanReason || 'No reason provided.',
+      notes: cleanNotes || ''
     };
   };
 
-  // Helper function to resolve Lost Reason and Notes from all possible sources
-  const getLostReasonAndNotes = (lead: Lead | null, historyList?: any[]) => {
-    if (!lead) return { reason: '', notes: '' };
-
-    // 1. Direct fields on lead (check casing variations)
-    let reason = lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason;
-    let notes = lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes;
-
-    // 2. Extract from remarks field if missing
-    if (lead.remarks) {
-      if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
-        const matchReason = lead.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
-        if (matchReason && matchReason[1] && matchReason[1].trim()) {
-          reason = matchReason[1].trim();
-        }
-      }
-      if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
-        const matchNotes = lead.remarks.match(/Notes:\s*([\s\S]*?)(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
-        if (matchNotes && matchNotes[1] && matchNotes[1].trim()) {
-          notes = matchNotes[1].trim();
-        }
-      }
-    }
-
-    // 3. Check statusHistory array (ONLY specific regex)
-    if (((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') || (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null')) && historyList && historyList.length > 0) {
-      const lostHistItems = [...historyList]
-        .filter(h => String(h.lead_id) === String(lead.lead_id) && ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''))
-        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      
-      const lostHist = lostHistItems[0];
-      if (lostHist) {
-        if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
-          if (lostHist.remarks) {
-            const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
-            if (matchR && matchR[1] && matchR[1].trim()) {
-              reason = matchR[1].trim();
-            }
-          }
-        }
-        if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
-          if (lostHist.remarks) {
-            const matchN = lostHist.remarks.match(/Notes:\s*([\s\S]*?)(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
-            if (matchN && matchN[1] && matchN[1].trim()) {
-              notes = matchN[1].trim();
-            }
-          }
-        }
-      }
-    }
-
-    // Sanitize reason
-    if (reason && typeof reason === 'string') {
-      if (reason.includes('---EVENTS_JSON---')) reason = reason.split('---EVENTS_JSON---')[0].trim();
-      if (reason.includes('Notes:')) reason = reason.split('Notes:')[0].trim();
-      if (reason.includes('[{')) reason = reason.split('[{')[0].trim();
-    }
-    // Sanitize notes
-    if (notes && typeof notes === 'string') {
-      if (notes.includes('---EVENTS_JSON---')) notes = notes.split('---EVENTS_JSON---')[0].trim();
-      if (notes.includes('[{')) notes = notes.split('[{')[0].trim();
-    }
-
-    if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
-      reason = 'No reason provided.';
-    } else {
-      reason = reason.replace(/[,;]+$/, '').trim();
-    }
-
-    if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null' || notes.trim() === '') {
-      notes = '';
-    } else {
-      notes = notes.replace(/[,;]+$/, '').trim();
-    }
-
-    return { reason, notes };
+  // Helper function to resolve Lost Reason and Notes
+  const getLostReasonAndNotes = (lead: Lead | null, _historyList?: any[]) => {
+    return getStrictLostReasonAndNotes(lead);
   };
 
   const [showCancelConfirmPopup, setShowCancelConfirmPopup] = useState(false);
@@ -5501,11 +5541,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           .maybeSingle();
         
         if (!dbLeadErr && dbLead) {
+          const directLostReason = dbLead.Lost_Reason || dbLead.lost_reason || lead.Lost_Reason || (lead as any).lost_reason || '';
+          const directLostNotes = dbLead.Lost_Notes || dbLead.lost_notes || lead.Lost_Notes || (lead as any).lost_notes || '';
           fullLead = {
             ...lead,
             ...dbLead,
-            Lost_Reason: dbLead.Lost_Reason || dbLead.lost_reason || lead.Lost_Reason || (lead as any).lost_reason,
-            Lost_Notes: dbLead.Lost_Notes || dbLead.lost_notes || lead.Lost_Notes || (lead as any).lost_notes
+            Lost_Reason: directLostReason,
+            lost_reason: directLostReason,
+            Lost_Notes: directLostNotes,
+            lost_notes: directLostNotes
           };
         }
       } catch (err) {
@@ -5513,35 +5557,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    // If lost lead and reason is missing, attempt to fetch from lead_status_history
+    // If lost lead, ensure clean reason and notes without dirty metadata
     if (['Lost Lead', 'Lead Lost', 'Lost'].includes(fullLead.status || (fullLead as any).current_status || '')) {
-      const currentR = fullLead.Lost_Reason || (fullLead as any).lost_reason;
-      if (!currentR || currentR === 'N/A' || currentR === 'NULL') {
-        if (supabaseClient && fullLead.lead_id) {
-          try {
-            const { data: histData } = await supabaseClient
-              .from('lead_status_history')
-              .select('*')
-              .eq('lead_id', fullLead.lead_id)
-              .order('created_at', { ascending: false });
-            if (histData && histData.length > 0) {
-              const lostHist = histData.find((h: any) => ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''));
-              if (lostHist) {
-                if (lostHist.remarks) {
-                  const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
-                  fullLead.Lost_Reason = matchR && matchR[1] ? matchR[1].trim() : lostHist.remarks.trim();
-                  const matchN = lostHist.remarks.match(/Notes:\s*(.*)/i);
-                  if (matchN && matchN[1]) fullLead.Lost_Notes = matchN[1].trim();
-                } else if (lostHist.call_notes) {
-                  fullLead.Lost_Reason = lostHist.call_notes.trim();
-                }
-              }
-            }
-          } catch (e) {
-            console.warn("Failed to load status history for lost lead reason", e);
-          }
-        }
-      }
+      const { reason: cleanR, notes: cleanN } = getStrictLostReasonAndNotes(fullLead);
+      fullLead.Lost_Reason = cleanR;
+      fullLead.lost_reason = cleanR;
+      fullLead.Lost_Notes = cleanN;
+      fullLead.lost_notes = cleanN;
     }
 
     setSelectedLead(fullLead);
@@ -7391,6 +7413,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         remarks: `Lost Reason: ${finalReason}. Notes: ${cancellationNotes}`,
         "Lost_Reason": finalReason,
         "Lost_Notes": cancellationNotes,
+        lost_reason: finalReason,
+        lost_notes: cancellationNotes,
         
         client_residence_address: createForm.client_residence_address || existingLead?.client_residence_address || '',
         city: createForm.city || existingLead?.city || '',
@@ -13801,7 +13825,37 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </h3>
                         </div>
                         <div className="space-y-4 text-left">
-                          {(['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Raw Footage Received', 'Editing Started', 'Client Review', 'Editing Complete', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
+                          {['Lost Lead', 'Lead Lost', 'Lost'].includes(wizardLeadData.status || selectedLead?.status || (selectedLead as any)?.current_status || '') ? (() => {
+                            const { reason: lostReasonText, notes: lostNotesText } = getStrictLostReasonAndNotes(selectedLead);
+                            return (
+                              <div id="lost_lead_status_update_section" className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="border-b border-rose-500/20 pb-1.5 flex items-center justify-between">
+                                  <h4 className="text-[11px] font-black text-rose-400 uppercase tracking-widest font-mono flex items-center gap-1.5">
+                                    <span>💔</span> Lost Lead Information
+                                  </h4>
+                                  <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-mono font-bold uppercase">
+                                    Status: Lost Lead
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3.5 text-left text-xs">
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-400 uppercase font-mono font-bold mb-1">Lost Reason</span>
+                                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-rose-300 font-semibold font-mono text-xs">
+                                      {lostReasonText}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-400 uppercase font-mono font-bold mb-1">Lost Note</span>
+                                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 text-xs whitespace-pre-wrap font-sans">
+                                      {lostNotesText || 'No additional notes provided.'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })() : (['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Raw Footage Received', 'Editing Started', 'Client Review', 'Editing Complete', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
                             (selectedLead?.status === 'Order Confirmed' || selectedLead?.status === 'Event Scheduled' || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
                               <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
                                 <div className="border-b border-emerald-500/20 pb-1.5">
