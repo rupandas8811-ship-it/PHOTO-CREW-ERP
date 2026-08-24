@@ -1330,11 +1330,6 @@ export const ProductionStaffModule: React.FC = () => {
   const handleCustomerReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerReviewModal) return;
-    const reviewImage = customerReviewForm.customer_review_image?.trim();
-    if (!reviewImage) {
-      alert("Please upload the Customer Review Image.");
-      return;
-    }
     if (customerReviewForm.selectedIds.length === 0) {
       alert("Please select at least one deliverable to update.");
       return;
@@ -2782,15 +2777,13 @@ Thank you.`;
         const selectedDeliverables = customerReviewModal.group.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
         const uniqueEventKeys = Array.from(new Set(selectedDeliverables.map((d: any) => (d.eventId || d.eventName || 'default').trim())));
 
-        const hasImage = Boolean(customerReviewForm.customer_review_image?.trim());
-
         return (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div id="customer_review_modal_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 flex flex-col max-h-[90vh]">
               <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-amber-400" />
-                  <h3 className="text-base font-bold text-white">Customer Review Image & Server Checklist</h3>
+                  <h3 className="text-base font-bold text-white">Customer Review & Server Checklist</h3>
                 </div>
                 <button 
                   onClick={() => setCustomerReviewModal(null)}
@@ -2804,7 +2797,7 @@ Thank you.`;
                 {renderOrderHeader(customerReviewModal.group)}
 
                 <p className="text-xs text-zinc-400 mb-4">
-                  Upload customer review image / proof for customer review. After uploading the image, confirm the server checklist below.
+                  Enter client review link and complete the server checklist below for customer review.
                 </p>
 
                 <form id="customer-review-form" onSubmit={handleCustomerReviewSubmit} className="space-y-5">
@@ -2828,66 +2821,6 @@ Thank you.`;
                     </p>
                   </div>
 
-                  {/* Customer Review Image / Proof */}
-                  <div className="space-y-2">
-                    <label className="block text-xs font-mono font-bold text-zinc-300 uppercase">
-                      Customer Review Image / Proof <span className="text-rose-400">*</span>
-                    </label>
-
-                    {/* File Upload Field */}
-                    <div className="bg-zinc-950 border border-dashed border-amber-500/30 hover:border-amber-500/60 rounded-xl p-3 text-center transition-colors">
-                      <input
-                        type="file"
-                        id="customer_review_file_input"
-                        accept="image/*"
-                        onChange={async (e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            const compressed = await compressImage(e.target.files[0]);
-                            setCustomerReviewForm(prev => ({ ...prev, customer_review_image: compressed }));
-                          }
-                        }}
-                        className="hidden"
-                      />
-                      <label
-                        htmlFor="customer_review_file_input"
-                        className="cursor-pointer flex flex-col items-center justify-center gap-1.5 py-1"
-                      >
-                        <Upload className="w-5 h-5 text-amber-400" />
-                        <span className="text-xs font-bold text-amber-300">
-                          {customerReviewForm.customer_review_image ? 'Change Customer Review Image' : 'Select Customer Review Image / Proof'}
-                        </span>
-                        <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP (auto-compressed & uploaded)</span>
-                      </label>
-                    </div>
-
-                    {/* Selected Image Thumbnail Preview */}
-                    {customerReviewForm.customer_review_image && (
-                      <div className="mt-2 p-3 bg-zinc-950 border border-amber-500/20 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between text-xs text-amber-400 font-mono font-bold">
-                          <span className="flex items-center gap-1.5">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Image Attached
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setCustomerReviewForm(prev => ({ ...prev, customer_review_image: '' }))}
-                            className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        </div>
-
-                        <div className="relative rounded-lg overflow-hidden border border-zinc-800 max-h-40 bg-zinc-900 flex items-center justify-center">
-                          <img
-                            src={resolveStorageUrl(customerReviewForm.customer_review_image) || customerReviewForm.customer_review_image}
-                            alt="Customer Review Image Preview"
-                            referrerPolicy="no-referrer"
-                            className="max-h-40 max-w-full object-contain rounded-lg"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
                   {/* ========================================================= */}
                   {/* SERVER UPLOAD CONFIRMATION CHECKLIST */}
                   {/* ========================================================= */}
@@ -2900,16 +2833,10 @@ Thank you.`;
                       <span className="text-[10px] text-zinc-500 font-mono">Server Checklist</span>
                     </div>
 
-                    {!hasImage ? (
-                      <div className="p-3 bg-zinc-950/80 border border-zinc-800/80 rounded-xl text-zinc-400 text-xs flex items-center gap-2">
-                        <span className="text-amber-400 font-bold">ℹ️</span>
-                        <span>Upload Customer Review Image above to unlock Server Upload Confirmation.</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 animate-in fade-in duration-200">
-                        {uniqueEventKeys.length === 0 ? (
-                          <p className="text-xs text-zinc-500 italic">Select at least one deliverable below to configure server checklist.</p>
-                        ) : (
+                    <div className="space-y-3 animate-in fade-in duration-200">
+                      {uniqueEventKeys.length === 0 ? (
+                        <p className="text-xs text-zinc-500 italic">Select at least one deliverable below to configure server checklist.</p>
+                      ) : (
                           uniqueEventKeys.map((evtKey: string) => {
                             const sampleDeliv = selectedDeliverables.find((d: any) => (d.eventId || d.eventName || 'default').trim() === evtKey);
                             const rawDate = sampleDeliv?.eventDate || customerReviewModal.group?.eventDate || '';
@@ -3092,8 +3019,7 @@ Thank you.`;
                           })
                         )}
                       </div>
-                    )}
-                  </div>
+                    </div>
 
                   {renderDeliverableChecklist(
                     customerReviewModal.group,
@@ -3230,7 +3156,7 @@ Thank you.`;
               <div className="flex items-center justify-between border-b border-zinc-800 pb-3 shrink-0">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-indigo-400" />
-                  <h3 className="text-base font-bold text-white">Customer Review Image & Server Checklist</h3>
+                  <h3 className="text-base font-bold text-white">Upload Confirmation / Proof</h3>
                 </div>
                 <button 
                   onClick={() => setEditingCompletedModal(null)}
