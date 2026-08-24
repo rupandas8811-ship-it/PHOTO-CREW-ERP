@@ -95,7 +95,7 @@ export function compareRecordsByDate(a: any, b: any, order: SortOrder = 'latest'
 export const ListSortFilter: React.FC<ListSortFilterProps> = ({
   value,
   onChange,
-  label = 'Filter',
+  label = 'Event Date',
   className = '',
   buttonClassName = '',
   align = 'right',
