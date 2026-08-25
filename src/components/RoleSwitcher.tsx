@@ -61,6 +61,13 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
           <span className={`text-[10px] sm:text-xs px-2.5 py-1 rounded font-mono font-bold tracking-wider uppercase border ${getRoleBadgeStyle(currentRole)}`}>
             {currentRole}
           </span>
+
+          {currentUser && (currentUser.full_name || currentUser.name) && (
+            <div id="header_user_fullname_badge" className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 shadow-sm">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span className="font-semibold text-white tracking-wide">{currentUser.full_name || currentUser.name}</span>
+            </div>
+          )}
         </div>
 
         {/* Right Side: Refresh & Logout Buttons (Always visible on all screen sizes) */}
