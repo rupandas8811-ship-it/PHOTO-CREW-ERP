@@ -15,23 +15,6 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
-    build: {
-      rollupOptions: {
-        output: {
-          manualChunks(id) {
-            if (id.includes('node_modules')) {
-              if (id.includes('lucide-react')) return 'lucide-vendor';
-              if (id.includes('recharts')) return 'recharts-vendor';
-              if (id.includes('@supabase')) return 'supabase-vendor';
-              if (id.includes('firebase')) return 'firebase-vendor';
-              if (id.includes('@vis.gl') || id.includes('google.maps')) return 'maps-vendor';
-              return 'vendor';
-            }
-          }
-        }
-      },
-      chunkSizeWarningLimit: 1500
-    },
     define: {
       'process.env.VITE_SUPABASE_URL': JSON.stringify(process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || ''),
       'process.env.VITE_SUPABASE_ANON_KEY': JSON.stringify(process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ''),
@@ -41,7 +24,7 @@ export default defineConfig(() => {
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
+      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
       // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
       watch: process.env.DISABLE_HMR === 'true' ? null : {},

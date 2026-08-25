@@ -9,8 +9,7 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
-    "prebuild": "rm -rf node_modules/.vite node_modules/.cache"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -42,18 +41,11 @@
     "@types/google.maps": "^3.65.2",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
-    "esbuild": "^0.28.2",
+    "esbuild": "^0.25.12",
     "sharp": "^0.35.2",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.22.4",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
-  },
-  "allowScripts": {
-    "@firebase/util": true,
-    "@google/genai": true,
-    "core-js": true,
-    "esbuild": true,
-    "protobufjs": true
   }
 }
