@@ -11,35 +11,109 @@ import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 export const getStatusRank = (status: string | undefined | null): number => {
   if (!status) return 0;
   const s = status.trim();
-  if (['Lost Lead', 'Lead Lost'].includes(s)) return 99;
+
+  // Terminal states (do not downgrade from Lost Lead on general edits)
+  if (['Lost Lead', 'Lead Lost', 'Lost'].includes(s)) return 999;
+  if (['Event Cancelled', 'Project Cancelled', 'Cancelled'].includes(s)) return 998;
+
+  // Rank 120: Completed / Closed / Delivered / Payment Pending
   if ([
-    'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 
-    'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Start', 
-    'Event Ended', 'Event End', 'Event Completed', 'Event Complete', 'Footage Handover', 
-    'Equipment Handover', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 
-    'Event Cancelled', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 
-    'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 
-    'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 
-    'Revision', 'Client Acceptance', 'Final Approval', 'Approved', 'Ready for Delivery', 
-    'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
+    'Delivered', 'Project Delivered', 'Payment Pending', 'Paid', 
+    'Business Owner Review', 'Order Closed', 'Project Closed', 'Closed', 
+    'Completed', 'Project Completed'
   ].includes(s)) {
-    return 4;
+    return 120;
   }
-  if (['Quote Follow-up', 'Follow Up', 'Follow-up', 'Negotiation'].includes(s)) {
-    return 3;
+
+  // Rank 110: Review, Revision, QC & Editing Completed/Approved
+  if ([
+    'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Internal Review', 
+    'Client Review', 'Review Pending', 'Revision Required', 'Revision In Progress', 
+    'Revision', 'Feedback Given', 'Client Acceptance', 'Final Approval', 'Approved', 
+    'Editing Complete', 'Editing Completed', 'Ready for Delivery'
+  ].includes(s)) {
+    return 110;
   }
-  if (['Quote Sent', 'Quotation Sent'].includes(s)) {
-    return 2;
+
+  // Rank 100: Editor Assigned & Editing In Progress
+  if ([
+    'Assigned Editor', 'Editor Assigned', 'Editing Started', 
+    'Editing In Progress', 'In Progress'
+  ].includes(s)) {
+    return 100;
   }
-  if (['Create Quote', 'Created Quotation', 'New Lead', 'Contacted'].includes(s)) {
-    return 1;
+
+  // Rank 90: Footage & Handover
+  if ([
+    'Footage Handover', 'Equipment Handover', 'Verified Footage', 
+    'Footage Handover Verified', 'Raw Footage Received', 'Footage Received', 'Received'
+  ].includes(s)) {
+    return 90;
   }
+
+  // Rank 80: Event Completed
+  if ([
+    'Event Ended', 'Event End', 'Event Completed', 'Event Complete'
+  ].includes(s)) {
+    return 80;
+  }
+
+  // Rank 70: Event Started
+  if ([
+    'Event Started', 'Event Start'
+  ].includes(s)) {
+    return 70;
+  }
+
+  // Rank 60: Operations / Staffing / Scheduling
+  if ([
+    'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled'
+  ].includes(s)) {
+    return 60;
+  }
+
+  // Rank 50: Order / Booking Confirmed
+  if ([
+    'Confirm Order', 'Order Confirmed', 'Booking Confirm', 'Booking Confirmed', 
+    'New Order Received', 'Confirmed'
+  ].includes(s)) {
+    return 50;
+  }
+
+  // Rank 40: Follow Up & Negotiation
+  if ([
+    'Quote Follow-up', 'Follow Up', 'Follow-up', 'Follow-Up', 'Negotiation'
+  ].includes(s)) {
+    return 40;
+  }
+
+  // Rank 30: Quote Sent
+  if ([
+    'Quote Sent', 'Quotation Sent'
+  ].includes(s)) {
+    return 30;
+  }
+
+  // Rank 20: Contacted / Quoting
+  if ([
+    'Create Quote', 'Created Quotation', 'Contacted'
+  ].includes(s)) {
+    return 20;
+  }
+
+  // Rank 10: New Lead
+  if ([
+    'New Lead'
+  ].includes(s)) {
+    return 10;
+  }
+
   return 0;
 };
 
 export const isFollowUpDateTimeReached = (lead: Lead): boolean => {
   const rawStatus = lead.current_status || lead.status || '';
-  if (['Confirm Order', 'Order Confirmed', 'Lost Lead', 'Lead Lost'].includes(rawStatus)) {
+  if (getStatusRank(rawStatus) >= 50 || ['Confirm Order', 'Order Confirmed', 'Lost Lead', 'Lead Lost'].includes(rawStatus)) {
     return false;
   }
 
@@ -3642,14 +3716,28 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     const previousStage = targetLead ? (targetLead.current_status || targetLead.status || 'New Lead') : 'New Lead';
+    const prevRank = getStatusRank(previousStage);
     const timestamp = new Date().toISOString();
 
     // Normalize different spellings of Follow Up to prevent fragmented sources of truth
     const normalizedStatus = (status as string === 'Follow-up' || status as string === 'Follow-Up' || status === 'Follow Up') ? 'Follow Up' : status;
+    const newRank = getStatusRank(normalizedStatus);
+
+    // Forward-only rule:
+    // If previousStage is already Lost Lead, and normalizedStatus is not Lost Lead, preserve Lost Lead
+    // If prevRank > newRank (e.g. lead is already Order Confirmed, Editing Completed, etc.), preserve previousStage!
+    let effectiveStatus = normalizedStatus;
+    if (prevRank === 999 && newRank !== 999) {
+      console.warn(`[FORWARD-ONLY STATUS] Preserving terminal "Lost Lead" status for lead ${leadId}`);
+      effectiveStatus = previousStage as CurrentStage;
+    } else if (prevRank > newRank) {
+      console.warn(`[FORWARD-ONLY STATUS] Prevented status downgrade in follow-up for lead ${leadId} from "${previousStage}" (rank ${prevRank}) to "${normalizedStatus}" (rank ${newRank}). Retaining "${previousStage}".`);
+      effectiveStatus = previousStage as CurrentStage;
+    }
 
     const updatesPayload: any = {
-      status: normalizedStatus,
-      current_status: normalizedStatus,
+      status: effectiveStatus,
+      current_status: effectiveStatus,
       budget: quotationAmount !== undefined ? quotationAmount : targetLead?.budget,
       remarks: `${targetLead?.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
       updated_by: currentUserName,
@@ -3717,8 +3805,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (ld.lead_id === leadId) {
           const updatedLd = {
             ...ld,
-            status: normalizedStatus,
-            current_status: normalizedStatus,
+            status: effectiveStatus,
+            current_status: effectiveStatus,
             budget: quotationAmount !== undefined ? quotationAmount : ld.budget,
             remarks: `${ld.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
             follow_up_notes: callNotes || undefined,
@@ -3726,7 +3814,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updated_by: currentUserName,
             updated_at: timestamp
           };
-          if (normalizedStatus === 'Lost Lead') {
+          if (effectiveStatus === 'Lost Lead') {
              const reasonVal = callNotes || '';
              const notesVal = negotiationNotes || '';
              (updatedLd as any).Lost_Reason = reasonVal;
@@ -7130,11 +7218,26 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
     
     const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
+    const oldRank = getStatusRank(oldStatus);
     
     const anyStatus = finalUpdates.status || finalUpdates.current_status;
     if (anyStatus) {
-      finalUpdates.status = anyStatus as CurrentStage;
-      finalUpdates.current_status = anyStatus;
+      const newRank = getStatusRank(anyStatus);
+      // Forward-only rule:
+      // If the lead is already Lost Lead, keep Lost Lead unless explicitly set to Lost Lead.
+      // If oldRank > newRank (i.e. would move status backward), preserve the existing status!
+      if (oldRank === 999 && newRank !== 999) {
+        console.warn(`[FORWARD-ONLY STATUS] Preserving terminal "Lost Lead" status for lead ${leadId}`);
+        finalUpdates.status = oldStatus as CurrentStage;
+        finalUpdates.current_status = oldStatus;
+      } else if (oldRank > newRank) {
+        console.warn(`[FORWARD-ONLY STATUS] Prevented status downgrade for lead ${leadId} from "${oldStatus}" (rank ${oldRank}) to "${anyStatus}" (rank ${newRank}). Retaining "${oldStatus}".`);
+        finalUpdates.status = oldStatus as CurrentStage;
+        finalUpdates.current_status = oldStatus;
+      } else {
+        finalUpdates.status = anyStatus as CurrentStage;
+        finalUpdates.current_status = anyStatus;
+      }
     }
     const res = await pushUpdate('leads', 'lead_id', leadId, { ...finalUpdates, updated_at: timestamp });
     if (!res?.success) {
