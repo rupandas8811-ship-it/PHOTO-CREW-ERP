@@ -1,9 +1,16 @@
-with open('src/components/SalesModule.tsx', 'r', errors='ignore') as f:
-    lines = f.readlines()
+import re
 
-new_lines = lines[:11617]
-new_lines.append("""
-          </div>
+with open('src/components/SalesModule.tsx', 'r', errors='ignore') as f:
+    content = f.read()
+
+# Find the exact string where corruption or my bad edits started
+# Let's truncate right after the closing of the `grid` div.
+# We'll search for `          </div>` that comes after `<CameraLensStatsCard`
+
+match = re.search(r'lensLabel=\{card\.label\.slice\(0, 10\)\.toUpperCase\(\)\}\s*/>\s*\)\)}\s*</div>', content)
+if match:
+    trunc_idx = match.end()
+    content = content[:trunc_idx] + """
           
           {/* Leads Directory Header Bar & Collapsible Utilities */}
           <div className="bg-slate-850 p-4 rounded-xl border border-slate-800 text-slate-300">
@@ -59,7 +66,8 @@ new_lines.append("""
     </div>
   );
 }
-""")
-
-with open('src/components/SalesModule.tsx', 'w', encoding='utf-8') as f:
-    f.writelines(new_lines)
+"""
+    with open('src/components/SalesModule.tsx', 'w', encoding='utf-8') as f:
+        f.write(content)
+else:
+    print("Match not found!")

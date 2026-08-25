@@ -1,8 +1,10 @@
 with open('src/components/SalesModule.tsx', 'r', errors='ignore') as f:
     lines = f.readlines()
 
+# find where "Leads Directory Header Bar & Collapsible Utilities" is in the file
+# and replace everything from line 11617
 new_lines = lines[:11617]
-new_lines.append("""
+new_lines.append("""            ))}
           </div>
           
           {/* Leads Directory Header Bar & Collapsible Utilities */}

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && node -e \"require('esbuild').buildSync({entryPoints:['server.ts'],bundle:true,platform:'node',format:'cjs',packages:'external',sourcemap:true,outfile:'dist/server.cjs'})\"",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -47,14 +47,5 @@
     "tsx": "^4.22.4",
     "typescript": "~5.8.2",
     "vite": "^6.2.3"
-  },
-  "config": {
-    "allowScripts": {
-      "@firebase/util": true,
-      "@google/genai": true,
-      "core-js": true,
-      "esbuild": true,
-      "protobufjs": true
-    }
   }
 }
