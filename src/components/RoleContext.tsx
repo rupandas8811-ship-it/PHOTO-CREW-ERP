@@ -5751,7 +5751,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }));
     }
 
-    logActivity(`Recorded payment of ₹${actualAmountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, currentStage, currentStage);
+    logActivity(`Recorded payment of Rs. ${actualAmountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, currentStage, currentStage);
   };
 
   // User Management Admin features

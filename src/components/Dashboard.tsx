@@ -378,7 +378,7 @@ export const Dashboard: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-3.5 text-right font-mono font-bold text-xs text-zinc-100">
-                        ₹{Number(balanceDue).toLocaleString("en-IN")}
+                        Rs. {Number(balanceDue).toLocaleString("en-IN")}
                       </td>
                       <td className="p-3.5 text-right pr-5">
                         <button
@@ -1028,7 +1028,7 @@ export const Dashboard: React.FC = () => {
                 <th className="p-3">Ops / Crew Assignments</th>
                 <th className="p-3">Post-production edits</th>
                 <th className="p-3">billings status</th>
-                <th className="p-3">Revenue (₹)</th>
+                <th className="p-3">Revenue (Rs. )</th>
                 <th className="p-3 text-right pr-5">action</th>
               </tr>
             </thead>

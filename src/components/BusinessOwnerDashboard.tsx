@@ -2208,9 +2208,9 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       'Customer Name': r.customerName,
       'Event Name': r.eventName,
       'Event Date': r.eventDate,
-      'Total Revenue (₹)': r.totalRevenue,
-      'Payment Received (₹)': r.paymentReceived,
-      'Outstanding Balance (₹)': r.outstanding,
+      'Total Revenue (Rs. )': r.totalRevenue,
+      'Payment Received (Rs. )': r.paymentReceived,
+      'Outstanding Balance (Rs. )': r.outstanding,
       'Payment Status': r.paymentStatus,
       'Current Status': r.currentStage
     }));

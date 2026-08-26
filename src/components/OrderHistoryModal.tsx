@@ -179,7 +179,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         statusColor: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
         staffName: matchedLead?.assigned_sales_agent || matchedOrder?.sales_agent || 'Sales Team',
         staffRole: 'Sales Specialist',
-        description: `Customer ${matchedOrder?.customer_name || matchedLead?.customer_name || 'Client'} confirmed project order for ₹${Number(matchedOrder?.total_amount || matchedLead?.quotation_amount || 0).toLocaleString('en-IN')}.`,
+        description: `Customer ${matchedOrder?.customer_name || matchedLead?.customer_name || 'Client'} confirmed project order for Rs. ${Number(matchedOrder?.total_amount || matchedLead?.quotation_amount || 0).toLocaleString('en-IN')}.`,
         proofs: []
       });
     }
@@ -418,7 +418,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         timestamp: ts.iso,
         formattedDate: ts.date,
         formattedTime: ts.time,
-        activity: `Payment Received: ₹${amount.toLocaleString('en-IN')}`,
+        activity: `Payment Received: Rs. ${amount.toLocaleString('en-IN')}`,
         category: 'Payment',
         status: p.payment_status || 'Received',
         statusColor: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',

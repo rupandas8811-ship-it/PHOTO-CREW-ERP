@@ -414,7 +414,7 @@ export const OperationsLeads: React.FC = () => {
 
   const packageDetailsString = useMemo(() => {
     return selectedLeadPkgs.length > 0 
-      ? selectedLeadPkgs.map((lp) => `${lp.package_name || 'Generic Package'} (Qty: ${lp.quantity || 1}, Cost: ₹${(lp.final_amount ?? lp.total_amount ?? 0).toLocaleString('en-IN')})`).join('\n')
+      ? selectedLeadPkgs.map((lp) => `${lp.package_name || 'Generic Package'} (Qty: ${lp.quantity || 1}, Cost: Rs. ${(lp.final_amount ?? lp.total_amount ?? 0).toLocaleString('en-IN')})`).join('\n')
       : 'No packages listed';
   }, [selectedLeadPkgs]);
 

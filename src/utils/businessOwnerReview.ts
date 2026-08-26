@@ -65,7 +65,7 @@ export function performBusinessOwnerReview(
   const outstandingBalanceConfirmed = balanceDue <= 0 || paymentStatus === 'Fully Paid' || order?.order_status === 'Paid';
 
   if (!outstandingBalanceConfirmed) {
-    pendingItems.push(`Outstanding Balance: ₹${balanceDue > 0 ? balanceDue.toLocaleString() : 'Pending'} balance remains unpaid.`);
+    pendingItems.push(`Outstanding Balance: Rs. ${balanceDue > 0 ? balanceDue.toLocaleString() : 'Pending'} balance remains unpaid.`);
   }
 
   // 4. Overall Workflow Completion
@@ -94,7 +94,7 @@ export function performBusinessOwnerReview(
   const isValid = pendingItems.length === 0;
   const message = isValid
     ? "Business Owner Review Passed: All validation criteria met."
-    : `Business Owner Review Pending: Cannot close order until the following items are verified:\n\n${pendingItems.map((item, idx) => `• ${item}`).join('\n')}`;
+    : `Business Owner Review Pending: Cannot close order until the following items are verified:\n\n${pendingItems.map((item, idx) => `* ${item}`).join('\n')}`;
 
   return {
     isValid,

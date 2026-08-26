@@ -574,8 +574,8 @@ export const OperationsAnalytics: React.FC = () => {
             Zero matches found. Verify that your filter inputs are accurate or try searching for another term.
           </div>
         ) : activeDetail.type === 'events' ? (
-          /* EVENT DRILLDOWN TABLE */
           <div className="overflow-x-auto relative z-10">
+            {/* EVENT DRILLDOWN TABLE */}
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-zinc-900 text-[10px] text-zinc-450 uppercase font-mono bg-zinc-900/30">
@@ -608,8 +608,8 @@ export const OperationsAnalytics: React.FC = () => {
             </table>
           </div>
         ) : (
-          /* STAFF DRILLDOWN ROSTER */
           <div className="overflow-x-auto relative z-10">
+            {/* STAFF DRILLDOWN ROSTER */}
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-zinc-900 text-[10px] text-zinc-450 uppercase font-mono bg-zinc-900/30">
