@@ -376,16 +376,54 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
       return !sLower || sLower === 'pending' || sLower === 'assigned' || sLower === 'new order received' || sLower === 'operations assigned';
     });
-    const opsCompleted = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
+    const opsCompletedOrders = filteredOrders.filter(o => {
+      const stage = (o.current_stage || '').toLowerCase();
+      return stage === 'order closed' || stage === 'closed';
     });
-    const opsUpcoming = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      const o = orders.find(ord => ord.order_id === op.order_id || ord.lead_id === op.tracking_id);
-      if (!o || !o.event_date) return false;
-      const isComplete = sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
-      return !isComplete && new Date(o.event_date) >= new Date();
+    const opsCompleted = opsCompletedOrders.map(o => {
+      const op = filteredOperations.find(op => op.order_id === o.order_id || (op as any).tracking_id === o.lead_id);
+      return op || {
+        operation_id: `dummy-${o.order_id}`,
+        order_id: o.order_id,
+        tracking_id: o.lead_id,
+        event_status: o.current_stage,
+        photographer_assigned: '',
+        videographer_assigned: '',
+        drone_operator_assigned: '',
+        assistant_assigned: '',
+        equipment_kit: '',
+        reporting_time: o.event_time
+      } as any;
+    });
+
+    const opsUpcomingOrders = filteredOrders.filter(o => {
+      const stage = (o.current_stage || '').toLowerCase();
+      const isLost = stage === 'lead lost' || stage === 'lost lead' || stage === 'event cancelled';
+      const isPastEventEnd = [
+        'event completed', 'event ended', 'footage handover', 'verified footage',
+        'footage handover verified', 'raw footage received', 'assigned editor',
+        'editor assigned', 'editing started', 'editing in progress', 'internal qc review',
+        'customer review', 'client review sent', 'revision required', 'revision in progress',
+        'client acceptance', 'final approval', 'project delivered', 'project closed',
+        'approved', 'delivered', 'payment pending', 'completed', 'business owner review',
+        'order closed', 'closed'
+      ].includes(stage);
+      return !isLost && !isPastEventEnd;
+    });
+    const opsUpcoming = opsUpcomingOrders.map(o => {
+      const op = filteredOperations.find(op => op.order_id === o.order_id || (op as any).tracking_id === o.lead_id);
+      return op || {
+        operation_id: `dummy-${o.order_id}`,
+        order_id: o.order_id,
+        tracking_id: o.lead_id,
+        event_status: o.current_stage,
+        photographer_assigned: '',
+        videographer_assigned: '',
+        drone_operator_assigned: '',
+        assistant_assigned: '',
+        equipment_kit: '',
+        reporting_time: o.event_time
+      } as any;
     });
     const opsScheduled = filteredOperations.filter(op => {
       const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
@@ -678,7 +716,41 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     if (selectedCard === 'overview_outstanding') return [...baseOrderCols, { key: 'totalRevenue', label: 'Total Revenue', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.totalRevenue || 0)}</span> }, { key: 'paymentReceived', label: 'Received', render: (item: any) => <span className="font-mono text-emerald-400">{formatINR(item.paymentReceived || 0)}</span> }, { key: 'outstandingAmount', label: 'Outstanding Balance', render: (item: any) => <span className="font-mono text-rose-400 font-bold">{formatINR(item.outstandingAmount || 0)}</span> }, actionCol];
 
     if (selectedCard && (selectedCard.startsWith('sales_') || selectedCard === 'overview_sales')) return [...baseLeadCols, actionCol];
-    if (selectedCard && (selectedCard.startsWith('ops_') || selectedCard === 'overview_ops')) return [...baseOpsCols, actionCol];
+    if (selectedCard && (selectedCard.startsWith('ops_') || selectedCard === 'overview_ops')) {
+      if (selectedCard === 'ops_completed') {
+        return [
+          { key: 'customer_name', label: 'Customer', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+          { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.rawOrder?.lead_id || item.rawLead?.lead_id || 'N/A'}</span> },
+          { key: 'custom_event_name', label: 'Event', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
+          { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
+          { key: 'assigned_crew', label: 'Assigned Staff', render: (item: any) => <span className="text-blue-400 font-mono text-xs">{item.assigned_crew}</span> },
+          { key: 'event_status', label: 'Event Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">{item.status || 'Completed'}</span> },
+          { key: 'order_status', label: 'Order Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">{item.rawOrder?.current_stage || 'Closed'}</span> },
+          { key: 'completed_date', label: 'Completion Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.rawOrder?.updated_at ? item.rawOrder.updated_at.replace('T', ' ').substring(0, 16) : 'N/A'}</span> },
+          actionCol
+        ];
+      }
+      if (selectedCard === 'ops_upcoming') {
+        return [
+          { key: 'customer_name', label: 'Customer', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+          { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.rawOrder?.lead_id || item.rawLead?.lead_id || 'N/A'}</span> },
+          { key: 'custom_event_name', label: 'Event', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
+          { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
+          { key: 'event_start', label: 'Start Time', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.rawLead?.event_start_time || item.rawOrder?.event_time || 'N/A'}</span> },
+          { key: 'event_end', label: 'Expected End', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.rawLead?.event_end_time || item.rawLead?.Event_End_Date || 'N/A'}</span> },
+          { key: 'order_status', label: 'Order Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 font-bold font-mono text-[10px]">{item.rawOrder?.current_stage || 'Active'}</span> },
+          { key: 'event_status', label: 'Event Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold font-mono text-[10px]">{item.status || 'Scheduled'}</span> },
+          { key: 'assigned_ops', label: 'Assigned Ops Staff', render: (item: any) => <span className="text-blue-400 font-mono text-xs">{item.assigned_crew}</span> },
+          { key: 'assigned_prod', label: 'Assigned Prod Staff', render: (item: any) => {
+             const prod = filteredProduction.find((p: any) => p.tracking_id === item.rawOrder?.lead_id || p.tracking_id === item.rawOrder?.order_id);
+             const editor = prod?.editor_assigned || (prod as any)?.assigned_staff || 'N/A';
+             return <span className="text-purple-400 font-mono text-xs">{editor}</span>; 
+          } },
+          actionCol
+        ];
+      }
+      return [...baseOpsCols, actionCol];
+    }
     if (selectedCard && (selectedCard.startsWith('prod_') || selectedCard === 'overview_prod' || selectedCard === 'overview_acceptance')) return [...baseProdCols, actionCol];
     if (selectedCard === 'overview_closed') return [...baseOrderCols, { key: 'current_stage', label: 'Status', render: () => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">Closed & Completed</span> }, actionCol];
 
