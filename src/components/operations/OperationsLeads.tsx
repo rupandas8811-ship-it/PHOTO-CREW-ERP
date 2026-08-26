@@ -2752,10 +2752,10 @@ export const OperationsLeads: React.FC = () => {
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && createPortal(
         <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden"
           onClick={(e) => { if (e.target === e.currentTarget) setAssigningOrderId(null); }}
         >
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto animate-in zoom-in duration-200 overflow-hidden">
+          <div id="assign_staff_modal" className="bg-zinc-900 border-x-0 border-y-0 sm:border border-zinc-800 rounded-none sm:rounded-3xl w-full h-[100dvh] sm:h-[96vh] sm:max-h-[96vh] max-w-full sm:max-w-[96vw] xl:max-w-[98vw] flex flex-col shadow-2xl relative my-auto animate-in zoom-in duration-200 overflow-hidden">
             <div className="p-3.5 sm:p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40 shrink-0">
               <div className="flex items-center gap-2 min-w-0 pr-2">
                 <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono shrink-0">Operations</span>
