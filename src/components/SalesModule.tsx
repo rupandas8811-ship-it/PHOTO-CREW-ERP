@@ -2335,29 +2335,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     return `${cleanRemarks}\n[CRM_COMPLETED_STEP: ${step}]`.trim();
   };
 
-  const isLeadRecordConfirmed = (lead?: Lead | null): boolean => {
-    if (!lead) return false;
-    const rawStatus = String(lead.status || lead.current_status || '').trim();
-    const cStage = String(lead.current_stage || '').trim();
-    const hasLinkedOrder = (orders || []).some(o => o.lead_id === lead.lead_id && o.status !== 'Cancelled');
-    return (
-      rawStatus === 'Order Confirmed' ||
-      rawStatus === 'Confirmed' ||
-      rawStatus === 'Confirm Order' ||
-      rawStatus === 'Event Scheduled' ||
-      rawStatus === 'Event Started' ||
-      rawStatus === 'Event Completed' ||
-      rawStatus === 'Order Close' ||
-      rawStatus === 'Order Closed' ||
-      rawStatus === 'Closed' ||
-      cStage === 'Operations' ||
-      cStage === 'Production' ||
-      cStage === 'Order Confirmed' ||
-      (lead as any).booking_status === 'Confirmed' ||
-      hasLinkedOrder
-    );
-  };
-
   const [wizardLeadData, setWizardLeadData] = useState({
     customer_name: '',
     mobile: '',
@@ -2704,7 +2681,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
   };
 
-  const isLeadConfirmed = isLeadRecordConfirmed(selectedLead);
+  const isLeadConfirmed = selectedLead
+    ? (['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(selectedLead.status || '') ||
+       (selectedLead as any).current_status === 'Order Confirmed' ||
+       (selectedLead as any).booking_status === 'Confirmed' ||
+       getLeadCurrentStatus(selectedLead) === 'Order Confirmed' ||
+       ['Operations', 'Production', 'Post-Production', 'Completed'].includes(getLeadCurrentStage(selectedLead)) ||
+       (orders && orders.some(o => o.lead_id === selectedLead.lead_id && o.status !== 'Cancelled')))
+    : false;
 
   const isApprovedUnlocked = selectedLead
     ? (selectedLead.quotation_locked === false ||
@@ -4505,15 +4489,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           await saveLeadPackages(selectedLead.lead_id, payloadToSave);
         }
 
-        const isConfirmedLeadObj = isLeadRecordConfirmed(selectedLead || leadObj);
-        const targetQuotationStatus = isConfirmedLeadObj ? ((leadObj.status || selectedLead?.status || 'Order Confirmed') as CurrentStage) : ('Quotation Sent' as CurrentStage);
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
 
         setWizardLeadData(prev => ({
           ...prev,
           budget: finalAmt,
           final_quoted_amount: finalAmt,
-          status: targetQuotationStatus,
+          status: 'Quotation Sent' as CurrentStage,
           remarks: updatedRemarks,
           deliverables: activeDeliverablesText,
           deliverables_description: activeDeliverablesText,
@@ -4523,7 +4505,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }));
         await updateLead(leadObj.lead_id, {
           budget: finalAmt,
-          status: targetQuotationStatus,
+          status: 'Quotation Sent' as CurrentStage,
           package_price: finalBasePkgSum,
           deliverables_description: activeDeliverablesText,
           Team_member: activeTeamMembersText,
@@ -4547,7 +4529,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
-            status: targetQuotationStatus,
+            status: 'Quotation Sent' as CurrentStage,
             remarks: updatedRemarks
           };
         });
@@ -6444,12 +6426,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
           remarks: updatedRemarks,
-          status: isLeadRecordConfirmed(selectedLead)
-            ? (selectedLead.status || 'Order Confirmed')
-            : (getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.status || 'Create Quote')),
-          current_status: isLeadRecordConfirmed(selectedLead)
-            ? (selectedLead.current_status || selectedLead.status || 'Order Confirmed')
-            : (getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.current_status || selectedLead.status || 'Create Quote'))
+          status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.status || 'Create Quote'),
+          current_status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.current_status || selectedLead.status || 'Create Quote')
         });
 
         const newCompleted = Math.max(crmHighestStep, 1);
@@ -6722,29 +6700,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             final_package_amount: cleanFinalAmt
           };
         });
-
-        const isAlreadyConfirmed = isLeadRecordConfirmed(selectedLead);
-        if (isAlreadyConfirmed) {
-          const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
-          if (linkedOrder && supabaseClient) {
-            try {
-              await supabaseClient
-                .from('orders')
-                .update({
-                  package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
-                  quotation_amount: cleanFinalAmt,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('order_id', linkedOrder.order_id);
-            } catch (ordErr) {
-              console.warn("Could not update linked order quotation amount:", ordErr);
-            }
-          }
-          await completeApprovedUnlockRequest(selectedLead.lead_id);
-          showToastMsg("Changes saved successfully.", "success");
-          setIsSaving(false);
-          return;
-        }
 
         if (wizardLeadData.status === 'Order Confirmed') {
           if (!wizardLeadData.confirmed_event_date) {
@@ -9857,7 +9812,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {/* Action Area: Convert Lead */}
-            {canEdit && !isLeadRecordConfirmed(selectedLead) && (
+            {canEdit && (
               <div className="border-t border-slate-800 pt-4">
                 <button
                   id="btn_confirm_order"
@@ -11627,107 +11582,3765 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             ].filter(Boolean).length;
 
             return (
-   xœì}ÛrIvØ»¾"»èFã6ÃÁ`€ 8‹¹ 8£š] ÄîªŞªj\‹ˆµÂ~qX¡ğîZ
-)ÖRØ~Ôƒ¤Íü€ô	>çd]2«2³²º ÈAI;D×%¯ç~KÆòë±ëŸ³^ß‰ã=gà­ÏÄC§çµ¯ÚË3ÂJ×õÂÏØsÏqc¶íG^/	£+vè'}}Á¶Â ‰Â>{:J’0ˆÙS'b?[¸©´Qîïø´ıƒôÚ_w»_vÙ°½Â¢p¸Û^ºì³ã0r½(ı‡¿ùhµËâ3Ç/Úğ‚i¼ÕŞNúŞ%Ãÿ´{0Öx°FGáşí'Ş n÷¼ ÿb'şÉUûØK.</`§ÎPÓ‡¦©5üzIó5|“Äï2ÉÍlüÛÿŸ/àcí·Ğ·î<=[®´Ø	lVû¸ïôŞ3ºuq£e£áĞ‹zNì±$‚G~pÚ¾ğqõéõA„3¥í¼p¶lè}XéüÍbwxù–÷J»¹ÒíÎlì\Ã(aN/ñÏ=6ô‡^ß<y§~Ë³Q£aqâà[Ë<øß‰ßÇg†ÚµYĞ.áÑ$[Ì.Ú'£>AÖEÛ%!¶‹Èjw±ê §ÿ’@ıM+Å#%
-¥#zkƒß¥œ;ı‘·~Ãjè†…ÁÖ™œâMŞLï/lü‰a(ÛáEĞ—í{¸)±ÅHé-$WCDtziFû–ïÂ;Ip”„§§}ïÈM‡qñaè?„iöıŞûõëÖ[ß`0×İ8›D:€/IJë3_÷hN7;&lûõ;ÚÎÅœr!€i2â!Æğ²½ÜYeÃ+ø›#xœ"bØws¢WĞ<@Â ö?Ú€ToÁŞ¶‡¡Om¦ùókíÈaUuó5|ÃØ6tÙÍ]Â¼Ôå#æw–»İŒ ¯¬äD¹¸·Ø5v³FİpòDı,<÷¢5!dBè“3nş¾p÷«®¡Ç›wº-6P0"½@…ÿ·™
-go–‘§î«kíşÀ´‹÷xëÌ;ÂàµDb/ÂÎè¿Â†eƒ~»wã³ÈŞ·»3HtÏÁÎØtC7vŸQøf½kéÌ§!FòÅ©aÌ‰Œ| â•²¦f4+¹H«J·>YUš'ûÍoRY€?Ø‚~¶ÁºDËx‘Ów%²•İˆˆøZAºÄ»Ÿ ñJ%†f3F$µÂNNçe²WySî"ûâ3y)‹Ãò¶
-‹/Š•‚\¼È!¹ÛYÊ!—„3Aœ5îpuôzüCêd^ò^W1`*Ô_ÜÜOŠş«Ÿj$úôâ	ò‹­°ßw†±Ì¢"ú¾"i‹Ù+'ğú&BšrD"M>|·L-İQäĞ¤è]m?h‡£DO-õÒ‚v5*bß¨ãÆ€&'Ñ[‚Êì'WíEèv˜´—3Ú””‰(ä³ú–×¤–»bËĞ.gmïØKL<HMÜÔ„ÍNÏFzÒº}æ»®èõk­ 3•Ë²h uBƒ­Ø  ©¹}ïàGÂ÷ÖDkJs‹Ùuv¯cöÌ­.5fš*“CÖ—ãş©Y~0­[‚f§õZ/Ö÷ g¹È@å:CÓÇ&¢ŸÉûóşõŸÿ:¥èŒwÂwEFâ„×4™¡)
-~H`ÊÉ
-Jşíg0‰hà$“ÁÓïÿsLy'ĞôGLÙÀw.{^ÿ# §\øY½WEËÇâa„†Ô3Ï›°şkX¼áVç²_ÎY@Ö‡ƒ ­ƒï>øñ×?ïA‚µCÃ·7!Ôü}5ĞŞØThóºæNF/Kè¿<å6½X®Ê§-’W7ÍZÕˆáƒ«ö²VÔ† ­³mfv"¶É©·ÒmæĞ‹¼¾Ãİ@í£Ïd+Œ´n8}ÿ˜ïà@ÇÀ‰ŞÇ&‹_i°ÎqöG‰¢#Šş}ï$!GÎ"é²øß²~ÔW[‘ZmMŸ‘zV×i4½NC@ëq®Ç·0×¼[Ãtm¦kÙ1!8aN/ìÇÀGîšğs‰ûtS^â®Aá#çD½3öë‘]À«:èzl#ÁÕºÓ/ûÎ1P4“úaæ¤Mm\…—6·c	Œ­dv96ª±x¥³B¿.[`[ÀJCXp†½]4Rã\J«áuÍx§’ÌJ+ $+²X·Ú]e9d/2-mKÔƒGzE_\ÄÁM|¯aßéyg°ö^´>³»=Ïô<#6<bÜétêZH=·ÜiğK/“x„WáÙmy™áYñyËë$Ntê%jÚ`yä—´Öd"å#ÅœÃ~ûk6ŒÊâV‹ÈâNÂŞ(^^Š®ıT”£[,Š?Dc/vLÚ¼ŠÆ=7*Âc3ò‡£¨çöúØúr:h‚y¶xOÏg5!Ç^ßë™ñI‚pŞ©&õ Î¿náJøæ«õuE¼ç÷¿Z•$y€ë\¥À›¿ğ½ğu×¡5$)$CsºN33›0F>ÓøñXã«x¾³¹}tğòõşÖÎAgà[1‡XX;“)_ìı½w…ñ#´;E8	ıÜÈş°ÍœqC@÷ ™#'Å¬ÿŒ|:˜¹É£ h^wš´¦c£&}}/Q³`#eµ–-UÅÏiã7n°-zonî~·stp¸ùÍÎÑ7û/_¿âXŞ:…¥Î3ß½œ³Åuú„c;|vÃÖ¯év‡~ÜHŠr±#°òŸ§ï…Ñ¾uS@û»ó4h*ü{>ë˜&ÛŒ]\I=üÍ,'WÂrä!q¤¡hÑíÏlĞë|ÂvÛ€—™¶Ñ²E¾T2JØ6ìŞ'D!…Iµ¶"şuõO;JY¯pÀ…ÎÌ’h
-‰øâ>ÒIls’º-}ÿˆª´•ejZ!Sl‰@ïî§Îù”î?0ÃP' eøúñB@F1cKÆ…ãE¦Of€÷òû©;Äõµ.{§O%¸Ñú‡@ÈæpØ÷=—HBKK¦s¿°n@Ln nÔ|~Óí<PLˆZû²+¸™DëF
-Õ¶œ’p±%…èñ=J¹O	×éŠ“.µ/ÕRSFRUçÅşğ'ZÍfgm M2C4ú„«G>qú^üÊƒM}G(`÷AIÎhøRt»O*(Şè³­k?ºdÆØÅœó<‘¹`:JfT xªN‚Z.üÆ5!ÕNà°å:æ”ãû¾«È°¥Ú ô:|§¦&Âw£!vúîäÚ›0İÌµ@n —>tĞí|î{%Fmry.Y¹<K®ÕÌº„yÒ(µ>ÙKJ1«pöÇ	º
-ëpè+ÉE¡tL=îb÷ØÀÚís©'gã*w!‰”K±Ú]øª+¹¤VÅŒ’Ç/_˜:Y[ÎNÔ¹¤É‡4äyıö*Ïad»Û’3ûog6xz^óï$ŸZÓ_„Ç>ìåŞC-›~¼ƒ1Í‡EğYj_mü5×`HÀhömˆ®aô%­²€/	¨äR³®e¸©¨r'Ç¡{%0`ª}ÅÒ?„Ôd%œ¥vSÏ¥¼ØNßNaj˜ã à—? †¯å•è	<Ê55z¯3Ğ °…t³RÑ‚ÒñGŞH/ÿàÔS5sêÙ´âÇÜH½„Éí®¯³Yz2knô¬÷Ëkˆ;'>­V$ìàh|—ÚÄ¿³ÚF^2Šƒ1©•‹‘eQìéÆô¶ ;•8²…årÌÛÇŒáJ\5a)$§ ‹
-}¢k«Ë~‘ÖÀÈö%W0X=VúûÜû^BÆ“|ìµc é‰V* 56»·°9{;3)ékVKÛKùÂpœÙQn`¯¢0z½dãÆfaèÕn{GŠä|óTxtô.@•¼Â€ÎªˆŠtÄ½jÌÜcŒUÆª"D Æó:ğOP™@¶¸…CÌ1ßò@0ÂÁr¤¿©‹$h>ÚÚ€"Ş‡0%,p ò‘¤¾¸égÜæ0ÈùûÚWÓÊ÷:1èk FÎÎ½é¾½5¤³
-ùúÜçÁ£–H×-;ëAÆ
-_80½­hğ2è_åúÍìèÈ\gçÙì3°a$£añƒ½¦X7ÅéÁòÑZIöËQ˜xÅo—nP„ãìÛìVäzœÛóîji‘kÃŸìƒ¥.Ù ö›÷'İñ˜4=ï4L|>,>‘?ğ*xƒSãô6ÌO=tÌõ•„‡Ïê…‡ò´Ò>¨Ã|N'N?ö~ÁØ¶£Bä2²äGŞ¯G~äPÆâ…ğ¦ò‡eŸ¸³ÏÃ8Öô
-¼‡³Çùöë¶Ìª#4#ÄÉë ‡¾#‡Ğ×Hü]7bÆ:\èlµ¢5æWİ‘V²Âi‰õ‹/˜ÀGéuƒ¥äÂ,ªc?ÅGÕ&Ô/Î™\éd°ÂI«åĞTæÙq1¥ ¬DÇ9IrÕq'âK•ß™™™ë€ì{è<@övñ©SúÔ1ŠDÎJ_yÀ$ƒS¾—°‰Š­}Ò‰SpB$H?˜Å^•/§C;R}d;ª}ï/<$?öÃÊ¾h6®ü+kZ5F@Â…!Œş:£LGx×ã°D¨NàW=êFæ$ÑÈ£ÌôÚÈFÖlò¯ê@¼40ÿ„µÊ c©,İ+í0İ«RÌ¹Z~g¡Z—.ú—Û[3«9èZjÏÂOP\öƒâò]uI‚#‡3É£”1}.kBÚBå«pFxVòDq•„CP†Î)Ái«–Ãó Ø‡^1yäA»
-ı¹ÁxÈÿ²Òf+õûFvÃ<ÄÓ&ırb€ÅÆ€ xTP8ädøßST— `¥=Luí%M–*kŸjÈ=õP([g !‡À³/úÖ#³M#èğü…1›ß<¼„æ©%ØİæÍ€Ä2J´Î¾î6i Á« zcıHc¿¥ƒ²³¡óE`?g+M€­ò/UÏ¢»–1Œ9!Äaƒ‹ëä^Øœš¡Ã%k",]#àaãÜ–HáÕŒäŠsB[ÜºÆ©Ïó”5ißûnr–MÏg“½i„¤jâce¬^¶SãH,.1Rò¢½ü%;k?ÒàšÖOò
-DÑ»(³â”ÃËö•WAR^eÅ\uI¾ÊÒDƒí)‹[¬T‡È-£RE¹J	¹eSµ‘êµV•w!^µ^Ôb9u\¶!Œ^¼»\S1J5’pÖèûl
-T8A^I!|şJ1òüVÓag¥¯Š8¬’7üQ–BÍ.ço-e7¹ílÅ/;©2Ëˆ¶ÿuO`şíü‡4škV”ü•”^)m;½ò‡ÿ+¼‚¿—ı¶%Eu%¨S×hô1lñÇ¿ùMÚ´(. ^×b*²h®‘¿µßéÛè4mU&Õ%–ğ/A!¼h¯<’Èu]Øá£nWpà³Úo¾†ë-ã¥²"ÅøwÁá ·ºôïa8ÀDó¯W‹ôÅ‰È_Ÿê$m7]­6
-1¶špĞäªüéšKv®ÄÁ;"ÿ.=’¸våiÆÌmÁ³ša|¤ë²=4:ò"\Æ8ÉòÕL[Äk¯ñ•<¼&RôğšŠ^†—Şû„;dÃ1İ±ÚqãŞ¾]§?™<WnÍSyRX¹ınüÖ³X¤­ªSn’qÃ6¶ĞÕ¨kÜÃ«„¢ª-UH9î(çK8ä,ßäÅÚé+º±¢âñB¶L2ó6VÊ.ñJv–¦Ì6'µöˆjOzxÙLÜqšÒ†VUí#ÍÈZ3^İ˜·Ò'T°aC¼NÑå]a+æXÕu«i_Ï³¨»{Š‹;WŞ­ áwÑ¹µÿâĞP¡3ØJ±Ôcc,sS_i3á¡!s8M9‹¹ÈV´°š~ÇÕX8¦P„	qxİ´ZÒWÆŞòÕ¨°&.ím¬VgÛz3øıŞ<NÉƒÍõM§ß–í24äkN­áŞ_€Œ5M9M‘=iÔ<[nØP#.Õ¿3£˜Äªò›•ø•ĞÅWŞ	ËjLv\Úâc†ùÔt sW8ÿ€à†kŠ'õvgÄu<14mJ
-KØ÷Ê#ËóòÈæ¸.áÓG ‡¥îë³³êúãıd½ÕŞÁYx!µIªrs5ùÖ)^.Ñ”}Éæ…¼s)İSG{À„„..î–ÔÙ›Ú1™lŞòm7ì0à°ƒù&VßX¤¦®YŞVªÜÔ)3<ŞHyœvÀP¦ÑœYäÁ='Á:Õ3.³™€ÉLb“°¤z2ş.ì2™¢aŸÛ—R—İB•¥ï¥·Œô®’Yjg2ßx©tÉ7n6–N/EyM¬)â¸Æ
-{Ê7-â -ÿâ‹J®:ôœ ¥Ø»
-9LAE(ä¢ö©õ0ŞÔ¥”V:¼õ˜Ä‡ÂÒõB8½ÂÅå‡BËë!†°îjFbå«C¨“Àn3~py²èAÙ"Ü`c”§6*ƒî–vCeø&álv§8”÷’íÃÆ±]«‚Ï~ü»?02oƒÁRtÙ›…¬Å³7acÅPÂÆ„ë!l¬îú©LL7ëƒĞšÅ5¶`?Ä=Äİ§¸1Û/‘ÛÌ4u¿Éí´Ì¿üúTˆ÷C´Û}£ ŸB´Ì&”‡2\Æ½M\cÉKˆ¤•Òj/Máî‰L–8Î¥×GãÅÁaz‚3†˜€ìsâa^¸c’İƒ—d„_R¢{-†Šİ½r®¨0Tb”ø!¿Ÿ`ˆÚÔdASi¿?Î€zN¿·é;"TŞ,ô"Şé8üÍ#€uÏ?÷HbîÎ±Ÿ³Ò{0|§”N§ô6ÅÉóêú€ÄšcÙ[XÓ”âhæÒÖÂ@}Jx…Ñ Õ4¬¨ÓéôŠÏm²ÿ÷Î©GÊÁZö+ÛıÖ¨@
-êÃNö2î7BBú€Vƒ#ÛÑ«ôN‹çætÄ¨‰öm®ü4AQcÅ`<Ñ7éAÖÏ&½Aû”¾$WÊ€†¿íTŞšÌ£E,-³î}á-IÓ¥…ÓÈ-¤mOò'O²ö.üœˆÅrJ®!(# 6]è2V¬‰˜Û´1:E–
-¹¥5‹88¢ºãµ™ø¹M¼ÁA«Y WCêê~Bÿâ}:D9ÃŒæ<ƒÑRŠ0fÚ­ŠËŸ\Ğm#1wëÌë½?øõÈ‰nG‚–DÚÛ×Áçj£.Š%î¼ÚÜG¢‡÷a¼GD Äc±¡ƒŒI¦ÆºÅ©$g^4aø9Úª¬»¨|t[¸D–ŠfH–ßéª+oØĞÖ¬{JXÿüVÈiN¯n›”şãtUi?d >şÀÜ<@“ãß½	½›ÉøñMfİ#t…ö¹½˜QĞ%5ß_Uâ‡é<Œ¿›E‹-ÜBØ°ĞXÓ¤)g‡q’Ê±¾©•·=½C´›š„øĞo*Rá„áÒà¤’àøRàdà8të–6å!“ø$‚•Ël«Ör_…dImL…f‘â€WzPØ'zÆ®\4›2Ñ+	’+°ä+Í©]zugb—µldO?›ÒÎéˆ+ãÑÊ±éäø"Šš?¤5).+Ä¹½”¦ñüÑ¶X_w8$ğgêÆt‰úp1cÇ7ªZïútúÇúè”° Ëµ~½¸(o
-Û)pÅ7Wçº<æÇ…j™aà \ûtTí€Ÿ6ˆZ/7[ œá\éÜß´ê$½3ÌäˆÈå"0?şÂèŠF¾Ûa‡ğW„çPòê'üHËôÛªÛR”À«h¨*I‡-–l,3ÒÒÏ¼7ùØh!’‚ŸÅBâƒ-xyrâ÷| WÀ­OPQö4ßãÛx6b"Xoºn+˜÷èÇ(›®_ba1gd dÇèVÂé¼aú$Ü
-ÍqiWhWŠò;Å+=!BRxOœÌ^^(–(.ùd(G˜åX‘rtw%~Û`®@Û(^Ñé½_x´J1Ù«oëÏ‰òÌƒµ!È5şù’CıŒ‘‹Q{àVÎü˜AZ¤¨å^êJä<
-ût@¡ÓOÅûNä;€U0yÀ4•+Ïè¼ø¾ç_­Ïd¡)Ç .€@GôİI€ÅwäVâ#ïdı:mç)o†–~ß;‘±Du3rƒòÉ¡i\¼î@İUùhÕòzœËöÚXaøßğRjÙâìå“ÓñÅ3ØåîùÙ[6¸âdÎ6Ş”+%LK&ˆÊß8ÂtÚìš“°ÃpXñÓØÛÎ²Üò1ªEbÁğ%l ÈËö*C¼L?®d6..yõ$Ù³ı6¦`#V>7œ§$Ä ş¥]5öìü<·ô0/S3j6ë  ‹6şí¿û+—¨¶‚ƒÇø¥ .Óá/
-B‹±êf/œ­Tîq)¦ak–öK§š«\ÑeŠœ]åâ;R_ùÍ%„’)W…ª²wA² yÂ(.‹°9hú )TçÊÕMâ0Õ§ÅJ_aÊ- Y—¿Vì¬JéT/jùRfÇüBL~¹·Ãv÷¾yÿlí¿|ş|ó)ü¹õrïpswogŸ={¹Ï¿İa;{‡»û;ìÕËW¯_Ñc¸Q‹ğ9EKépØsJãĞ;•rDld5—Àk ±WR.Ú{À-úÇ÷aJVyÂxl# ÖÁèxà'ë×\“N¢'’œ™¥#­dZ”/+7¸CÇKÓ!|yõ¡İ€‰Û¹åD.PÆK@$ıôio.üäŒí½d”ÊŠi©ÜÛ¦sûÒ¶ppÚ•{èÆÖYK”xTJ\ ÒÛÂÉ¾êã›¨¾ÒŠÈtî¯w£õÎÓx˜,+¿DAVTv¦ ˆ_áÅ¿ ¼lá‘t_T&uD‘8'£ÇYS­ÿ’N·"c¡>’çIés§GòÌõoä#äİè'kf1AM( ÑŠ£8î=Ïì[øºkğLä„³$«hÕ²:#‘i¨Ê4vã÷õ8®ynë3_yß (Wæ)I„2p½ÌR=ˆó|oà—¥‡%åù”ETËˆÚA(¿h±jie1;Œ´-Ws=×X!IÌ*’h°B˜M&¶ãf%y rbM:ƒB„2N²ìc$aò·¾ëQâ1J.6Çú¶ÌVV;ÂàõPgÀ’ç]c¶ª/}˜u¸^h¡5ëRxufšdİšó)Ê„/CõcşOBÒº¤Bôòl?¥° ï=dñAÔZAÚ)~.£vƒÿ^e®æü¸™º—KéµŒÒwJ£@!	ñt¢ÂC3¼ÀÃOíìã ëTÓãb~òµD5–Gó¾}f´™kWÍÎG–HÇ3Ãx¨«šu«÷§| ¥}AçŒ§qÖS]\2Wš–ÙÁ˜y‘ù©çw°º€€mœ.àÀ­õ¦ëF^0æ"ŒÅÉ“îr•‘â™éİí*1“mB‘@i³	¢ò4­Å®yÁøXÃ'µß(\4Ü¤TY_E¡;ê%Yê#zÙfû m«Sj 5]?&ƒ†¤>µèLÂ/68F«¦l˜i&1ö3ÕhÊÑùÁp”(›çªH-@€¸¸Ê‡Æ£ÎşÈËíÈhF«d$—õ$Ñ
-ëì§ú¯ˆĞpñ‰e19Ù²khS-Õ„YxToæîŸ
-ñÈ…–!;Õ8•8	¿¯…£„|È¨÷äG<ZUŒ hH™yœ,-ªİV­*^ˆ@¤jSj&û‚å©7lÛK¿Ãö´y
-SD£‚Äq4²ĞMÉbv9C®'ik<ÿöÇßÿ>ÓX9ËŸ™´±’Š¨‚´qàa=Ã¬/Ê£Âc z‘w¡ïÏD ¶­5C0xSÏ7K¦FÂeÍÂ]ËIr¶V7ƒâ§úík-ï|ù5q,Ü0øŞÃ\bï¼ÃK½¼óÎ>¿öoŞéÃ	²ª’CLå£o¥³7Ğâ[lÊA“ïašpıË·(ËĞ;ÏS÷+OscaåFœ8Qq[Z£j3ÕÌ»«F!ˆeÌ¢ES<Pšj–	(µ^}lH¼1äö¦4q9›€íâv–íí/~WK³jÒêbK„.a°¼‹R›4‹'øê¹¯…‹Kß†£¨Ü3¾5§³bª[Ğ¼‰­Ì>İ6…^òq{«5Ü­söõe(Y™öƒß`OÛ~<ìSö¾Ğõöîókq	oØ¿ı=ûüºxçæô#¾bØu‹<"{€§ë×ğŸ5\í.|¥¥È½E.d0¥~KZ‰Mê}:^T:†&)QèÕ›£â›…3=è‰k_ø®Ù É/…Ú&PôEÜñïĞ%¤–ıœ-ÒöÎò[Û;‡›»ÏjO¾µU€œ¶¤æ§¢%0¯ÚİÂ*Wó+Ié:6™€ÓÈ„7‹«Ø©Íê”á,†´¨ò#4®†ÉTÖL'ÙI#Ì¥<\Ôy’õæ¢&óƒ“°6µ™Ío9Äg|r9dh8pµÈú¥dã®Ç”1-Yõz½ ´¦ 8½¨G!0ÎlKk%ièx©¢åËÚ½Ù)8Ï,«…ZÅ^ß“5FÀ½5ºº%OpïoË2ÄôÒ–â	J^Y·%Ò7]ªÇ=KÜÓÒµağV)FMZÍi+Šı/
-j×V©›¥åS™ªJCÕë­¥õf,ùâF-ém+ğ,?²:3µi¥J¡B}š­åÍx…ÁÖ™œz³0b¯RçdñëâEN¿±M—&-w­AF´Oƒ*ÔãŠf8;ËnæìKÌTtèNÂOv Í°lÆ.gìfî–RS”¦AK»àRæ^^ÈE‘·bä·ĞZ
-äFøÁ…şÕ®EIm®‡5ëú8ˆ'íŒX!jÜ±*Ì-ÄJO¬8µ›X¥V°bõ±«I]™ÚİP¦ˆ™ôöúÛ1Wİ½©ê®ÌT’±É¸¹uZÆÇfbºÌT…X£M¡&u ›Ô÷RÒnÅèşZ‹ÆSÀ?ˆ•h‘Eø÷´Ã¼ëÂ¹¿ñ¬KÈÒ°nc@=ÿğ›ikßŠRò~i¼zŸÊzÚZ¦&0íMÍY7ù’ÛPŞB¯ÙE5$"ámd°ª×ÿ>Œî×ÈHe¥óYé{ö†)K=/ÕñÊ±	³®wâŒúÉìÛ'u>ş[
-¨Ó:ÆĞ*'Õ(h“éòÙê’¹Y¬ûÄ¦¯‰Í^õzŸ…Y«=~Ìš£Qk´â{÷›´Y˜´¦MÚlÌX·AÚ¬ŒèÒ„V®‰-\té6é’ñ±á¡2Ö^û>§)Î§É®ª€ïŠTĞ4Æ8‹zïaÉ:¬‚“… *n*ÇªƒXõ´ıöı£ó-ò)óÓ-XëÇ¿ü—97Ro#Õæ;ÇÏØÖc6f(ÃÿË'qqÈ!Ãµg‡¨$Ô'µ‡ˆ¨:Q&Ò²9Îƒ‡,Ûü¡£WS£SRú@^… RAŸ2â•'tÉjÀPR'½NúaP);Öh+;"ˆãÑÀ"”ÏsÑÁFE)XT>‚HqRL
-Ÿ2—{Ï RÍ0…S¿sLc°ÔÜÖp~ Ö‹ĞÅØŸìçaês`»ÛX¸ÎÁuÃ0ˆa•Ù2”Ñ `}ç
-¦õIò&qYÆÀ"NzíQ$;>l İM=ÄVË’ëÇ‚52¤Vôy_ë™×¯vg6à?¬õììÂ«3èò•7÷x¿fÙÊ–ŸÍlàÙ· œa†-<u‚÷ˆ[A|$tƒ~î=;\Ø?üæ`a÷Å«ƒÆ#Š\H-~²°íû	UjÚÊˆ>´Cÿ²mPyb?17òxÃøÇÀ+Dmí{')¯¸%YSŸbZ+iûNÏ;ƒizÑúŒ×9í°Ã?ß[\Z^Yıò«Gø.•“q(+1?ñ{zÄEnıc%/€ã>uú$«¹°J¨TØ²Po8–F¼°X^*ñá’”ÒXˆ¤LP`¿ô#é§1öüjŞ¬‹j(W/Ù÷ êe³ßyk†ÜNM‚¿xØ›Ê”¨ªÊ¨KÛä>Ãİ½ıÖ'9ëœËVw¸63Éµs£‚®°€HÂó²7yNñS*ƒ£öj)cYšmtvhÍ’©ğº¿0vè€ÁPå«¾Â×%!ñª˜ø/8HUC±’“Ê>–jp}µZ‰OĞ§TˆK•«^­Ş%T°VMZ—[S}% éK†×¯}LÕÕkQÅcMïf5Ö¯ıøÀ9”pCN#ÇÅ2Bí$lGì$
-9–‰4=l'Ó§¿ùI¯¬…?ÓñN6ÈµLßÏöV0f½v¸iúJP*6@%Zé/áôJ$Å9e”‹å"yq2¾XìUö¼8†_À§©.ÙæpÁÂ€N'UÒ6;äñ˜ò´Ñ/¾`7£(¼Ø÷OÏt‡û`å/5ÑÓÁª’a>^@b,ßmTr¼(z‚Ä“«Å^…Ã‘X ˜ŠmÓËù»¶5·-
-mw±ĞöW]«BÛ¼ª±±¾6¯*Q^	"/·¿®Š´(õ¸ôu¨—”Å§³ ËnÓZÓK•ÊfB]é[.$Ö—-•½TŒ¶®m*¥:òN¬/â'É¦»zĞ•RÆ0t?pıÓ0“ié­•Ê>ï.åõ«g6~üë2–‘ŞĞ`Ó]‰V¹ S)AÂ©° ò«• Òœ`¥p¹U6£®õ¢²Ô§¸‡µ%?ÓÍ#ÂB/uÙ:¢bSˆz0^Íi¤ı«MkN‹·*â4°)·Z„J]ÖYŞpEag$¥Uú2+‡ÿÕ*–Ã/—£.˜® âõ˜U••^Ì¥]ÜËšzÏŞyZåDZ\¿7TìEëğWç¨ğ£¾j0•˜ îôE&(4yÕ¦Šp^„[k¿©«»`.÷y¶j àµÌ$4!E¼…SŸğˆ²¬j[ÔŸåáz€Aõ$êƒÔÏVuOµöİ¢cXexÁ×„š¬õyÿ÷¾›œÍ‚,Ë¼ºö(ÔÛ4ÿáULÁ°x5±AµqAõ–?¼jÉxå±@µ%Œ>*KÛb·,òÔŠƒ’µ­bÜĞBQ­jŠÓ/6ÄœêÒš\¢ÿ8À"u‰ìãx«ôäª>Vî¶¡‰+aŠˆ³ˆ‡³ˆ†³óµ€ü*ìÛÆØ~dÀn{ªzº'à%âÖY}ÀåX@&T4“È¬eåOöì(ñòZ)á`^ø½¸•{S%Ï<Sn…êXÍÈÜÈå[n¯A«iwM¹-b˜s¤R1ãÊûø¬¢á´®u²jvu:ªb4_÷Uª9­1rròáÏ×$$°s«z÷'¿,(†ÖÊQ½bÕÑú8…W,(\(^6W´ìlLÌèÕ=ÂÅ1¶Š€ÿ>‚©m«² ”_(Y;²*·O2-SfËGF•Ú@‹ÃÜ7•ßkĞ¿w’İL›ÿ˜™*ûä	•¯	åÚF”Ç/”n©‹ËLËp:¶ı®‘íî6UÍ›İíFèÙ${*9ÔœQ”VÕ4ÿ1À†ÙÚê¦i§3±ŞÛ5 XØæjkSµ‘$k¥H=Œ[æÕ›Ä¼ÂµLÅÄ3>0lYæ¦af‘m›Bzó'aõvš&¸©›ßn=i<–&·» È5ÚMŠ.
-Ï¿¹ü‰	K¦¡ó4×wòñ¦ÚqJ“XâL
-Ğ§¥üÜ;5&ÖXÛî©\T5§ıdYÓ}¬.M™ºÛÈ@uojâz î5ò¡ÕmÅ"–nP>Ev®±-
-e
-R•ñÙ¥Hw)$ÄÃÁ³”5õ™.uy.v™+òÁà$NiQù6‰(Rü5ÃTÈsO¸ùU}"Š˜Ÿ'Ç%ÌT2JŠP ·œHR
-¶ÍfáÕ+ÎeuÅ”FE1ç„ÿ•å›À/¯%® NºÜtVóBì“@oÈ–Ù³Y^{4L³?x‚G)ß]æÏ1–TÊı Ë·öĞ9æ¥a{ #$ŞìÜxi!«ì‡öª)<TH
-)gƒ¨³?bıÑ	Mt44%<Z­Ï­Õæ~\Eêšªs;ôøiSÍí8VT’h”Æ4I‹b‡.gƒÎPM#uğã–Ng0üÉ"à×æMTzi”6‘¦H®M£T×‰ìdiÌ.O¡yvÁ
-pê•¦ÙF`ªäÉ˜òb0ËZÌÏxúf|{Õ÷0b<îyî¨ï±äÓ³½'U<	yÔ¾ÿƒÇòÌb*ò{DAxd2ŠñÍ4zë5yì V2Ï#î4^€üÛrm7!C[ÁÌ{e®ğ¸˜Wx,£Æ×+
-ë+<–ğFh…15=³ñ3ÖÚO%ì9m6“NÈ×Š÷f}Ñ Òg:""ŸÉk<”Dé€V	éåËj$—”N7®©€)¹ªÂ
+              <div className="space-y-3">
+                {/* Leads Directory Title & Control Buttons Bar */}
+                <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">ğŸ“</span>
+                      <div>
+                        <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
+                        <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                      {/* Sort Order Filter Button */}
+                      <ListSortFilter value={sortOrder} onChange={setSortOrder} />
 
-*‘œ$­¬« Àr•eóş@#©‘¦ºÚX©f£ÅOXwúSF–©‚¸CMÈC-Äá‡wO n@|» ‡m·vTD.¼ˆ×¯—U»/•©9N„¬Oïõ1£Ÿ#ï”Å çÅóÌ»òÊt®×ócd}Ë¸½ó,ŒX€Ó]Â¸iYÆ‚núòcï‰€Z«¡çE@jJ€¨ÄŞ\_÷claµ¬¨¯Šº¾ÄGõe)ˆŒŒä2­,ëÚ©Êš:†Ê“¯"ÏEM\‚xÕòU­!¨éúñV4x$Í#Å÷3+	¦Q ¾Å^(ª{v¸	š­W.î!€|^ÛƒŞûàµ=Ê1Õ„T‰h9¡;“ZJÆ®–±E@³ûˆ‡³§c[<Ş Õ³¬„Qoô°«k¢9¹Rll°µ*ÛF‘D¾zolÕx&³m—!Oo†yjÊSh­?şıËŒ,t?éWèA£úUê¿#tÀ3ØÚ)Jõ81¨TW¨7Güøwÿ£‰áAº¥S»s«RÒ=ÜÈôş}Ï‰Ã`-WúKkÑã›ÇÃJµé½8E=
-ßÚ> ›Ú¶ù7ÔvyñåOà¿ûlğ"er'Ïè!Ëj{“±èÔq‡ê¬Èım§·µeßYt¶˜]·Ôƒw·µíó,ZG§§0V÷™©.]P9b
-%iù?âƒ'¼\¦wü‰Lğ2–EÏT Gİep‘ŒÁÈôà!_Å²l\L×C^®ªãç½—Û;G;{ß±ÏĞ¸OÜÁÂ,.Üu¬¡ù’å±Õâ²ä|€Š€ğ
-!+†#	•g˜”•0ï¯Î`¼U³ 8äP+õU*3%³rCZm%˜s²òüj&C–!mó¦¢{õjßŒGãí…ªçx€‘ƒÛ	_šbÁ±é{–`¥’#$lN¥ïTúİ29ì…½gÙYDÓÂDĞœŠ»hµâ.Ê6•L:mê9‹PbVzŠ²5n"|Íä#"Dg`@ BI]1.Î‘/¨r[z!Ü ûì’ˆ´,¦kD4¹äËDNS¦¶ğ~½·‰ïÜÖ¬ø<ÿâÎÌ‰H,&4(*ê+¥C¹VüÌF»Íxı¼l«ÚmS©ørü‘Ë„åHv 3•[šÛ:ÃBv[á`è>FXÄ^¾Ó 1<Áw¨¼, ó“!,¦›½ª|Ø ‹½VNÒğ …o`¬	6®¼İ Ùm/FàæÎÒ×sBZÉf6tO4NgÏlĞ?¬u0ôzÀ3à_xa8AAw@€Ú4-`Ÿtş²VØW{Š´ˆ±l¢[”½gOœŒá¤†PÒº¬Dc©äŒÙ!Ë³.lÊ`4î•œ†¸æÏdPM_ÊÚPÃ{H)L1`ıInòÍBÈ_»ÆÉ…còM“Pw¶ŞA®%RPŒwéô2xÌü„è„-e~ì™ı€ÑÜÏ³>J6ı“qûÕëe¯J¯·SØßJ?¹?\DTí}~Ÿ	¬Áè9ñg%1—®EG•—VãDµéËUr
-R`ş-8é±èä/MÛ#x.Àj±~ÒèSe^™ĞñxëÌë½?øõˆ´¡¿5ÔM×…ø: Ö…ŒÇ‹µ±‹¿“¾R±zñ§“Ù¾nİÇø`éºeK×S9Æ)µïğVµà<µü<Ó§o	«ÂíOĞ$–/~Õ(V<ª1‹ñ—Ô™=‡g~L’&nê…RZÊ@8LB’Ÿ€^Ñd//ªÅF'œ8ı|-†TGtØTÌú<e$ {ò—=×ÂT¦,9ÏIÀp£2¨­äâÚİÛÏ>˜él$.K3Úëê§¥”>–1m+-”A¾‡~»>äD¹¦‡ÇÍlØ½×ÄlVm0=G…ğOü¡’²gÕ‹“uME?X`#Vö)½1Yg‰çØÀ££M]*Ş›¬c×ëûÀPT5v¬x¯AÇ¯"¿‡bf/Œ"¯—ÒC¿3†‡cÚ§fÿSûbäæ´Ğôggõ“VÃcSûßk]–@ùµ)XbTõÌ¦m‰i óş4M2ÓÍ2×ŒÃ ”d^²RÇ5+§2ä±íÍ’ª³ohNRWxğ<ÄóŞ–4f6ˆ·³í‡~ 4uğK
-¯VDùí\‰)—.wì hYz*Wm”–şbú^‘Å>–eÜø!•íBk°(â‹0´¨GÃÏ½­H£xğ`±Š4úñoÿç¿şó_ßa¬Q~ju|8ç	<nß;I*¶yì*±x”şqáp{É ÷,A‹J_Ø¸'‡5GÑ4ËŒ*·} t^°Ê¦öB+à™xõ¸ñŠ/›Ú-d#°èÖ2wÁäKIwÆMÓÛçR]ßË¯0#Õèt™nDpMp¯Ğ`Î]YüğØï{[Ş”9ä›?í.ãÿ½µ:İ·Ê	‹cã{a•…F4ãŸ{9	ÍøcN„ÃmeTì•¼”ÅI¿kì `­şyıÙ›Ù-*¶Cv~ov¥¿İÂğ7÷¼âQ³o;~Ğë\/nÒ‰·¶FÖ!9  J©²ÏÜœÊ¨P¢×ïÒ8t‚{<¤cÓsî]Ïèc>µD%<Íç’èT?>íó=<ş¼zğ§ãP)¾Û‹ßû?8‘KÅĞ<²Œğá¦…ä99*.,w	æ¥*óÅk¹h5[êüæİ¯ä!|–A%ò×Eœ „àg¨è÷øl¹Â5±PÖ`MJ qV"6fiˆR9t§~j‹æaÙ•‰JÛş©Ÿ€xÎ¥÷ıìû0zOÒ%ûñ·`[<Øåi‹§QLÎ–5Wfÿ§é(à¼ÈµÏn‘l!,KN§g6¶B×[+ÅJ”Êw“–(u‰iñr—•bŠ]Iè8zªğK@3ÄC¯éÆr5]TBMë¢rêÉ4…Û,œ¾Ï¦|g²+ÓàJ›x/aåˆ@æ‰ß_IÃÀßUøÈŞšÂ^	¹\|ÃQ4ì{Ò(Ò[ÕïšÆ‚Íş T¿HÓ¢_ÕöèöWİ
-ã—’Úñ‹æ·†"…Zy†×ÚQ>?9´ÑíFõ»Iv89lG=ƒoºèš²™êC\ì\-[«ì´¤]ĞÖ3*Ø[y¥]£½³%¸e\d,¸Æ^¥¾>Ò¸NSHcP¾–¥İYİu\nd*œQp7±8ZX0$YIĞzÃ¿<8dÏw6·Ù[İl¦„\t*¬”:û‹R­0F—Æ©1X/ÖÕ[©jÔÕıÔkÎ;úJªÕ¢Å1‹¢Ò§Ú½û)‰˜!1€x3qÙI„jQšqp:€0›}/JªªÈáü¹N‡AE^j'ø(u¨“È³¡ V3H¸Hÿœj…ş­£l
-ƒiÜ÷é6m¢Ú³$YNÚN6©£D2D<ê¡î>«fÎ©¼:}—¼eĞÉˆ4#»·‚4QÑ&gaT;¤Òÿ'–Ö°Rœ8‘¸6Í¦óãßşQjnƒÕÊÕFR©¢oBÑôaä¥Ü¨Í  t^ÓŸ%Ø‚¸waˆÖS'b_°]P4z˜ßW ·¢d§öˆÏ¯ë»KİB·Q|ïğàH.´ıb3İN‹ôÖÏ¯oÙNs®·#Ğ\UL½Rü!«@iı©üA½Cw’–RJ«@Y™ÑŠ?)0gÊ½XÕ¯ÄâöÇ
-¼¤Ú¢…àThÔzÉ‰’m$7,<QJÉĞµ‚h£%ÉÍÏ©œC2O&ì¤,_½-D£Ô.™F¾)K ¬ÖJ¥Ú`µzÀJÒlÚ|!ˆ”İƒªf´›x]$m;›ÇjeµÍu:iõû%ü>=÷­æãÙ"¤9·iÎx° çæâö×µÒö0-ñÖí`–ã¡AN¾%©X‹D
-ÒçÔpç~(«Ã+*[ÀÓ ÷x(Ù o<YPwj…ˆÓg¼§’ÌšK¸Ôâj7çx…™©•f4qrÕ‡‘\³<t½ûüº%w±À–çØÏØb·{óïŞ±uC¦C -oß6ÕàAS_WªhK$ULGSª²€¡ÿ@ZSÎ`T1Qj41«P¦è¬Êªë³™ªº,Åg
-À~r«ù?à­>bhupªZ3­ê‚P¤÷¢°ßWkWÁÉ)É¶†äOBáRå,¯“ÕT2X)a!Ëô: é#ËÙæ‡í´æ”	ªÌNlÓ÷ú.ÖıÃyqPuKEP
-©ü/¢®Œ¥a´Z¥+a²¢wJê7åS8ùÄM[§T­còI©%ä¼«2ÇfòŞ¢tDÆ¤µS¥ìEï°Q–ƒê¾ÓûµèéP§ÇÊÆüA‚“Ùxáh‘LSÇ	óz	à%üò“«y†É?}á5\,?=Ÿ–ÖáÉ
-€átkw‹a›2ã$bÔ)ñß¼"¤DõÑíùss5ò®±9Æ»+K’—İŸùncL,3n<3h>7¯ú£¸ù•Æªs²‹ë=*Ö6œ††—*xı{©ÍY&÷3Ï¤ªg”"ÃËß®	i|Ô­;‡LŠh7…ÂgùwDwL«¬©­Á…û©/(R†í(gçg÷@yğÎX©óÔeWË%a·l½xJ æ„´ŞüÇÿà¾]8¹yv®ƒ0ëµºó ÌÏı¢¦qK´àÓ[£QÜÔ4ªÑòé˜pdõNqÄt|„xÕéøñ£Ô÷gNo‡)Rİ”ºÀ!9ÃáQÀñü©~©«™îÛÁôÇ®;$ûİŒBrå8 ËÒ[Sê`ºÀy	îdÀ)iƒ5ËÛ¨µÔi\w¶»Á1.U80@Ÿ¼J»£Mİ/.5lRü^Z$ş!Tèæ£&¢å uZö6üw 8êP¾,„ÓW’°g6~üÃoáÿ^B,xI°“ÂbÊè.®k4Ç¼|½¿µsĞ8ÃV
-°»:ÏAyHï½«õëôØ€ü°&şsã:?NÀf4sF`Ğ¥”Kó1@xm>¹ÔY‰h”ŒLm7¼Ğ(a& Ô’Í¡ç%¿f)NtPg…Ê®rÑJ*H×€µÚĞkõ\/[I/á—”ïîuN;ì©ßïcXõ<ã>¶gı+UâjùRÓÄt	øáı#¾„G{–f¼Æ¥•5İ7¦Ÿx5âõE²ñ0³JYŸ1‹Z€]€®A€iœˆV_›êŸU‹ Ğ¥0}/hÒ4mßÓ4~ß¥õû–ÍßKõæïÔş-ùñk¿2[¿ÕæïE¥ù{s0x®—VÄÀ \"“„n«ìâxHjv;µ§Vpd	aäŸúÑü]ƒºû×‘«ípÇ-Ñ/5ÓJ"m© )Ú¡qfA•ˆj1‚¥z8€È"¦Ú)Z–Ü}+Ú-ı8sää¸hªUµ&*®„ìÆa•½QWbº.^T¢.EZ¨2AB¤Ft×níxFÂCY¶¦.ŠğŸIiŒeü½rU§„o•d6Q¾°†McñÓE¬Ye½è`&•)I¤#9ó=5RCVeÒ<ş¨Æ[h<á£ÆÛXkÂ»#cHz¶D–yÂmyVf+;Epğ÷ÒJvG\3­‘=ÕÊBf”·åÓÁ©e•‚÷—Îé(“"QÑ"xBÚÒvQåïØÛÊ/EüµJ+hn0)YI´9gùõYËv½ìV_Œız¢nLU»­t)XçJÉ®”W;((á’.¥MºüWk±X¢¹a}œ]u”Ól_ê‰`yÈ&–&vİjYy6S×fÇó½zºë²uË­·G¼:h:ŠüÀGÃh¥ıÑY¸Ùß¾œ&glƒu1X?eíîíîn>?zµ¹õg›ßìØöÚÃji—Ò:'~°ª5$İgÃNz4Ì)û»“„ÏÃ/ÚBÛJSqyƒ³y ŞvŠ¥›ã‡/¦V£t¹fÍ/ó˜ˆlıÕ/c¸„ºíZ4óOXK‚¬@_,L'_åqÚé±•¹¹¹z Ì¶ôÔ¦{¸ãt];g>ë´[«2V:£ >óO’¼‹şn˜×ô·'«ï+VgMÂëùfŸóè›w™lğùµØÖk=÷NŞÕÜ;Ûf#%š‘uÖCq¹ÂMùÓ?Ê…ô£Í–ŞÅ÷º–½Æióì&ÇI›¯n°N\Yíhİ+µ/D^2Š‚Zó?\Ú¢~Òu- zZÃ÷§s6†¬ÑÏ ß
-È–ûJ·­ÆEc?Dø0úñ/ÿåš<´è)‚ÉQÕÓ÷RÌõ‚öîŞìÜ…(A“°c’ü2ûAŠ6UE‡3›…îe¿@]"Qa$ŞÌµÌs°qæ°ëŠh8ß×fˆ£ªšã¸}bµ[Öm@ÒE£œ Êd–¤á¨¯×`mÜ8<ı³r`d&u{'aD"Yâ#,kUg×[ùğ²±‰¬6bİİS·,DşÂ°"Œõ½$çĞ÷ôc¯(;|&v‹Câ÷ìÚø=+ùZÏ·K,YÔÖUâ!¬kõ¥²PX¤ÙB¨Ã·äåİy±¼z\y_|ˆïÏÌÌçüz†óë™œ›7ÃHü8p
-«MĞ)ü~Ò‘AÒ¬¯ğæ(!*ÆŠ?Ï}ø¹Î<×Op*»ùƒ7R—o±å7oë[—¥Ôö¶ğHÓº¡y+IÃÚùUKX1ˆj3±K¯7¢Šv©“¢’îS?4%P¬U¾ HYEãh8i/ç•g)ˆ[ˆÈTÔ99¥ÑÈ%aEÏQ‰Q	>0M
-˜h‹Õæ›İ„#.¬³ÿıeÖYÍnÔÏ^Qv¶~Çl²4–­â,,Ì¥Å›¶vÓ<‘Ûşl‚êÅWô qNNìB>ÒAÚ~¤/Û…ğ®ôşQŒC;ŠqhÄ7ê#4øÕ$Œ„_ÖÁ$üÊb–p|´r¸pV8SzH-54Ìæ—|²Cç´3Ïş½ ’„ÖK7åè9›P¹±^«
-µD…‡ğ«^ya6‘"Ù‹—2_î%Âó\‘û‹ò|§ƒô¼­)¢ı×¾úrueyiQ™_­º>bÄÏÜ‚ñ­^SŸeT¾Hê„¹†fŠÌSÁğ4&¬Msì¦[³Ö·\¤<÷ãÌúŠ‹“¡æÆ–PgŠ:®t]­±YÜ”Yvca(«!k*‰“‡÷M(p6’(÷O™D©]âz²hM­É!'c<}È†ÕNfI‹Eg
-ââ	 ùDê^Æ: W›^^Ö=iÙHí´¢Z“ù¥Oa´0sçßÃê~GMPChUÀRj]˜TjÃ…û6vs¦J{Ä
-d©¶tt`D/~cé`â6PeÓS»_ÛG.,uÓ¯NÈõçlzî‘C~¬	«n¬`pÅÎ¹GÑ2¸ûÓÇğÅVÕš1¯´BÌOÑÊ7ŸÎÏjà5®üRœÖ–›u‘bÑ~jl“¯iğxñÌ³±2cxË]eù.›YXnµìİSxjû{?.•¶ea”±jù¾ï­ç¶JÇi9'şC°ykĞ’¯âSò¨Q8ğ<
-Şu/aúğÏ¼+ £ï>¿–ìx7GŸ_ÓãïŞ¼kD™4ëÚ¤ÿæõÄ{T!yĞë »|ÓfqM'VµU4›ı[™»ZÒÅ'Æ&-¬h%]ÁÒ¸Ô=æï¢9¾XY»’x½y‹T¹é‚ŠôVgÖ¢ªm¾¬R;µ«~Û´´#ù‹KQüÀĞÉëŠ…œd{ûÅ‹_ÁÕ±ƒŞ<r±bZ	oğ%£Mw4@èí;¸•BKğ ïw…!th	và…íô‹ˆªjŸ|šÂ Tæœ?£úö6õCËtâCÚSeQ´€^ámØ»ä0\\ú6EŠ¥ÆÇÌ@= \^‹î³×ÆêüUÇWÎ%—y³t„¡K˜E‘[ª'¤8hI(SzÓjœöÁ&t‘ŠK OÊáøT—LrÌ,iSÚ¾ìÒ‘†BòÂÃ„Î´Ëéj=ª.0¾ÛÙÿ;x±ùü9ÛzùâÕæÖ!Ûùngï¼~ñbÕ¥9+'¶J£×Mì«®TlNçJç6ñ(ë™êşbiiUîG#ãfÚ‰2Á˜^&Ú ôš/¥dòg}¥b€û9[¬‰¸­N¨>	Ä<’‰ê£Xª×duÊA©
-¥õù@ºú“WŸ±7•)ßØ²û|¾c,´µ}–w`íH?Pù(fúkzÅ‘-u˜Å7ˆ×•ëZZÍ„a5_':‚%Õ_TeL}3×¢pss-qfbDÈ4€¼c¿4ß¼ãysãìêX('HÄ]
-Ô&˜¬:˜æÈ`ZäUD¯ûãÌ1o»ùgŒÜ×|û‘OÜnáö“ADµî9€'Z†±¾³ˆ‘”®Fäåöö}¬=ÿe;bdó]Ğ;Âß†¤ÙÎh$\(ŞzÎ€½ğĞô³]^ˆÚm$Ó5ğ+H¥-j”ÛhîË)ÜÓ6Ù{Ê…iäjÎFÚ”Á¦‚Raõs[«š8 “Ğ½¢ºu™(kgG«šR¶›ËHŠ0åÌKĞ‹gQú½™=Ø%Ü•Aº+‹°zå%ÆìmÏšóˆk/óÅµW©»­;Fº¤à4ñM§Ó)1 RßxÑlg8ŠÏZ33–Vå(GC—ªß¯7UrD)<&ãµU˜İÖÄyÛZfN“§­›±8ö’ÊÊ´ÒoÏÔ«´Iµ›jœ¬<L¥Ë¤s‘¡ÂqéİÜ¥S:€°Rï ?Ë r´lšõ¿˜SÃAYO”?1DĞ˜hŒ!ÙşœmºnÊ¿SFíy5Ÿ5etºó(½hb¨mã,ä«ÂjÉ…,nù©÷©éi”[á –ü2¹Ú…ÆöÃ‹±(™ac`Ëc0p6ã5ÀÓ¬âõ4íí…ôî‡€óãµ'¹ŒÑfµ6ËDyÔÒw\½œJ'[a?Œ0~ñr¼†„hÀ»@ïùØ›Ù2íÿ  ÿÿì}ÛrÜF–à{EZÛã*¶ÅâİvÓºER6£%QMRölx4X YUÊ JÍæÃÌëìvGOOìFLÄ†÷eæivŸ¦çwüãOØsòd™‰
-ERËV± $2OsòÜOÃC›(çö·€3ßÁğlÖlçü&íá¤íSœ´y“¦g9™ËqN®íD'Íu‚TïÒ`&‰˜\+}õ’	­AdvŸ¬4Şš;kô¹#°:ŸšÖ=ü8&m+­M˜‚±O&im·¹©¢NfÖÕI;ê:¹^æ4“ÒNîØÒ[ª÷ixî¸ú<i¤Ò“Ù´zÒX±'MtûFÕ9wêŞ%Úo'HúqÈê,ñ,À¬ÜwçyÔn×é+‘ß{ç-É¼%Jˆ;o‰Vö’Qç½ó—(Ù$wEÔ’a3Ÿ‰.Ëg†×´í1	F°ö¡_±ÄÏKÜR²äß]¥¬Â3·Äm"¡ÆïÄøÑ½wŞé£õÈàjß‰"Ş÷„Óç­wŸÌ~Š“wÅÒÂ™N>SJ{ç;¹¦#ÜnJÛ4v›(wDfù|DvçF¹õn”ÖÔ­t¤Ü±&ËçƒdM¼¢Ofó§Ì î“Û©RëvG’p(Cïjû0Ûò¯1Z*š6c²M-ßÒ¬~¥w#Á¦¾^ªECfğİZ/ÑÍäÓ4’-g*g•&Mb¤ŠõeÈV„Ç¤Æ¶ân
-uĞgíêËt-ÇÅ\C@L]ñíÃ©)ò4zi ˜Õ;Nêº`Ús¿²ü.-ø\šû[fòµ´™¥r*­d§´çZ™×QHZö§´cKi1 µÍ³‘44y´9z=Q£Ìm¸8®×[ğkÜ!»æóÁ {İz,u²ÌÅÅĞÔ½0›k¡·Â51…Y|	wì@óù`ØÁ‡ª&’&Vı2$šòë×Ï«§cºÚ†ë’LÒÆÈşÔ*}™5ÖÅrÌwfë¶Ş³uCŞÃõŒq·ÆtİNÂÜÚ4]¿ç!ì×ƒŞg#vé`»3c·›.0ÏTvÒæoÇıl$·İ’={Dà-Óç[İ»°½[fËnßo£5ûácŞF„¿³g;æhÏn1Ü*‹öK0yYÂ­?’æ†íæ¡êïƒu»Å[+ßìfP/Ù³ÓÅuR>€Ü¬ÜîGNİC&;V@Ùò‡Á!°nÈŞ/\6ÁD:´ÛÇg.OI’[½W%‚ütYO¥Œœ@—–­õR³§œZsÇr›°dàùÑ¹LÄ}T]C×îÕlÁ›ÑÄë‡éL*ÿÿ8J‘Dçƒêë‚¾pÉcÒaßàŒë`WÜ3á}èTÃŞ•Ü;ÍÂA ıı4JiÙ­±GÊú!˜ğg7§AEUÒ¥åØ¹ZèZF·l_u„í¾$dïÅÑî—[G»;¤»}ğ|a›C¥Ó„¼¢§"Y"ûôp İt±±#:…v‚Ô‡	ñRòdÿèhÿ9‰N	B†¬Yh&Ú:ñÆá}.§,†c©¹0–O-,¤äØaGØI¹g2ğ¢*SİƒÁZ½^uœLõ”TÁøJmx&´Ao×VrT}Ş¢‘[‰3°F€ë.]wX'!e»«{°4X³ì‡ÛÍí¸l—ßva»{ìùİ¹O:ø/Á_èøïw,~Åá±ØDœ­ó BàÅK¥ß»òÑ(õqËÃÇùÎú]t&ğ_’8ğ’h¼I†0ÉúıV|Ÿ +öóüŠ¿’+ĞÎ‚ô0Ã~ú,{¸½G™g…ÔêØœ“nLè?¼‡9Æşu|¹ÇL8>NÇ»Wğ¢ÆQÂœ¨«E'*½‚È»¶,ûO'‹kØÎ’ï;~´d/ÈÿÇ(Á¿00ñyÿîÅU§N„Uü ›Õªà-ytÖM¢=cCO¸ëéT¿¼r~'RKOsqw:0ÿå§úgNÚ$# ²7f­zC'Ùİ	úN•¿å*åÈÁªPmqé`™Ô8Œõmæ qƒ[;3×À”"ÆÅ¡Oğ(¨% §á~#äg"?˜ÜğÒ](î›a²œ)©4.ÁV’ïëK!Ë¸W>p¶xS°†,õ²¦¹*z)}íŠ²µ#4ñs©²p7MÎY‘sgº;‹ÇÑí+»¾*4&Ó¨4ÆN–I°f«õ{_ªG1ö/"Œµ¡Ú“7d'6™ÄÑàÕ~ÏA'¡+¯‰ ­Üæp“U|@ıİäßv  ²k§|Øşt¨ü„-@åĞ5núvd}>u cèá~+@éiĞİññƒàMœË÷ˆéMÙà³ˆ~(Ñ•.ŸDÊBğÃ¸³N¼ÿ£(²&{§ ›w#”£Ÿ€‹ãêˆüÊÂBeøZW;S:…â^×Eï.nÓíZ¦$yöñ•gÓ88î‹—Ó×šdOa5ÑŠŸ²óVI E‹lµZšì.bÊ†d)ó
-ˆÿİ¢è;Ë~åpFíZ=ít}4`^^sÀaáÎçö´áãYÃõ0!l‡OãhDïÅÄ;…¹Å?:2ÖÚ<}ßUIÇ“iÊ­˜‘{"tFO‘Ô S¢WÖU]\+°ºœvÔÛ:+9è„i®WWn>JeŞã)Æ˜fN·ğxÂÌuÇŞÈ.-¯à)½+³ªoe÷VÃ†Ë‡Y¾–ExşoÜG>4d?kf&î‰ù6ÛìZS’ÑfşçêíÔ6\$LÊCbZZ-13Iãä„"/’Ø¢<;è`|úP‹2š3)o)ìÜ"®”mfö×jvb­’É—ıxD%€»İgˆPúGµéóÇiÀbğf-d4fq“0Šª»HOãƒ7½Ğ¿2-ÚPñA0iÔ`‚ÿC@ÒïqtN‰aÛRh›z¼*›VjÅJh£/²÷@v8_yokÆ_Œ'	yfJCÒ¡oô	JbR Fw’OÈJ³>îÚ©Ş¥Í;¡Âî*;†°H²ÈìdÃL¹ZÚê4˜O}­n¿(JÔİ¢&ÅËlüñ·5Ùã½GO˜|@vœ,öú	é9$Û¼5I«–„Ä|;3©Bì3ë”¦P¿
-Ü-ıQ8ºĞSÎuŒ±,À¹AÚ{ÄéQ´²úU4»š»P¿Ömšk)½êyô¶±ıõpjN‚LĞäãFÈeG+ÆíZÃb¸‹cÜ÷^J~­Ü¢Üqõ=¢[}\«N±37nFuß{ªeù•LjCØe‚Âºùùşãò•Ôº×«¸-ôÒèYÔ÷†z5ÇgİN0^Ü{ÑY¨…*îVÔ›ŞÕ-¦Â¾^Œ‚v6T6ê¸lic5öCÛ+¾Gäyä×ófÔf¹ö¦ã¼©™üôî@õCÎ<j¹%{;-ÃÕÕ™ÓµÀŸº½d ±‰—oÜOALã>è¦¡„¡>’æëE«8Éfó	êÆ“³is»y·™aıq>Jiê™ñ]7%:wÇèÓ¹¡¥‹¹£NxÃüä1ê¬…ºex.×k”%=ªğ 1S7#w?Â8±Ç<È.œ²ıë9+ïs°$ÁïMªSÓØáÌãºñƒ“™dFgqôØĞõÃÓI yI6êšåSZ-ë™Ívf·¯gváf6¶Gr¯gƒi`‰úå§?şRaªm…ª«éÖn‘;æÆlmGÕÖ‹¹ŒŞQP“(Ng0ÕÕw,Ş˜ünÄìıkFû`ìËû@)ï¦q¼Ãì–RúVğ(Uå‚Â£•ËÅ«›BÎû 7¹¡avB£–±ë¢«:†²:–²ÊÁ®ê{§•è>Ñbc¹:;³£Ø8o7¶-76Šh©Æ”Ş{´íûÓ!Mò}	L ³ËD-q %Œ‰ÜJ"ºÆ¥Ğ€Ô½£ Y$-›®Ì¶«›Óyß#èÖŠ¨Ê|%»I t! P²—‹i t(L{œİ©Ïİ…T±ÊBf¶¢‘–W«É×®¹â§Óáğ‚¼ôB¿Æb]ò*[Š7¦pµŞò~E„Î+tîÑ ÛúyŒı˜ûØ6·V¹Å‡ÖåïÅIáŸı8ğĞ4æaNİp‘J_“8ò§ÌÔÔ_ôÈÑ æ}ğ¯œ†Ã îyá8ÉŠ“ğ”ÆöYŒyü0 $¤OÃ÷—RÇâ¥ß0™½xı¡š0ù‰X ­VWœmËöfJ¿\uoìVQˆV·›'0¾]Š/Ò}V$ífx ø—›.êŸm5Y;ÀZò‚7m™ğÊ¦¹Õü¨€k©B­5Èm¾6»ê˜6›ÕËèş4
-2Ó-¿”Œ¹†«n¡%·¡ë—tQbŒ7T‰j³iD“ş+…7*Z´šgµÖUlZv«öí·c?fŠ8›ÿŞÍ3Şì¦¬-N·U›dfNp@v”o¾¢)0„'XD tI¿	ÈÉ4	ÇA’atöAÇLÜ‚â<^9£"Ø«=§¢û³äİ4ZVªBAub	ùM¹„Ì	»P¢wë|Üªp±Ì÷ûynŒc‚Q×%Ó ûùÛåïdn¿)0;é´RM@½¦I~£L´{‰eòÔÉß'ºÙo’ Ìë,H{tÉäÊÑX$áÓùâ)èİ¤:ŸyCÍgfu¡@Í_ËìšºP.ÖršÑÒU*	‹Œä¯îÏÿğó'/ÙŠV‡¬xBÙ„UÎu›+%È¯Û$Ï½t 
-ÌÛîò}ŠiìÓ®JÜ¨x¨CÚ*!ÓìPáãÀ¥â‡;aUŞv£tUIÍ²ï¯‹´Š&åë%/}Âæ\I¬øÊwÌ´Çï¡İ`4›1óİs“¢Yfxcf2×âÇ¬†ZLvÇ>²’[aÑq®ìXƒ-ÿ4í[»¾Ğ>gÔ\ŸsÄ^£dĞšV•ùœÉj€X­3XÓ¼kš‰ğh¾ü^;ş5G¹ïkW¶–ÔËÚ3áG¶cüZçªöJGxƒÂëÅÚí–†mwpdú¥ÇÃ÷)0—Pù€^¹OÔ%–µO`.ôÎ&UÏA2ÙÓj^=ıª>€o—.¬|„RsMµº7¼(¼9$ó›åC¹¨QŸb°¸xİç”U/–¶j£¹—>5!v¹t¡CÓ IApåóÁQúunöœGÍÌô…ƒ´sÎgá³ïÍ±+º;Ö?Àc½^-·ıs³İl÷¹z;Ö\t2[ºÆw—Òæß=kt7Û.V:Õoª9ííjGƒ–çk¹Zvl¦=fç©ª¢Lã]y¿Ç²gúíÊ£V4õŠ^D¶¶![oàÚÕ©MEe•Ùz¤Ô¼¦}Ûƒ¥Ó0úpN—ŸkQ<*ş®yùbx–KP>¡mlĞö_—ãF‹˜A»|ÑöCÉhşİH‘6áÆŠ2±¾L6‰“&5Z\&?.¹&à¯á¯¯ÿÚ£ÉâÉp
-ï•pÌ-ŞJW MÉÌûBÎ<"+†„[[©êFR…„LËßÛUg±HVX¨¶‚Zİ×2p~.7‚b?}¶±\Ô¸¤npLn*Ñœ¶/TÖ%ÆÖÃMË2>[ÎĞeY =Ù<m×R‡©)“‰ßµ½w‡’-¿;9ön·šìVhjDåhµì[±–/78ÚZGAt¾rÏ¿ûe4™Nl-¼äŞo@ü ½ü*¼¹ü^Fœ™6õnC!ú×&½VšV¦Qğ´pJ—M5DjñÆß5Æm»&:µ(}êDOY+`'G<»´²ÑÑNıª€Çté-iMz¶5n©Æz­ÇüN[K49¬ Öá?
-œöAĞ‡åg´ 6vša`<ÆI:>N°5*O§Ê¢âœhÉˆ‹§¤û‘ºæù4)ºôØòÌ8ÆåCÑÒAÇ‚Å¸M‚qq”ç‘ï•!î“{/‡\Ÿ¿xcŸ™§¨%ÿ69	@tDÔ X¥@ëÙ Û×mW™%*…y_‡dœSs|³½Ã}®•-ĞÆäi·sÔYøvÙØÌ˜5i,ğÇ}HêÔšÊÊH¹¼@(S•>v)€%=]@¡ Ïhû«ASí‹¦‡…‰`s6åƒÎK>!…ûDR.+ÿUÌ~İ·‹ÊšŞiÒpËY¸4ò‡ßY¡±ó !ãæ~F!–¡òSĞHºfzêõDœ/Şhî+-’—Ñ;¿)şÛİPvÁñvÒ7ããÖóÅ^-FÇùíÅ¤è“æyÍÌãı	™XğL&©¹ñØÌ>m†ÃYz¶¨Ôí8Kå#3{‘¼éÚşƒÚ4qªÈ ù6ÍLŠIå®s‘_6Ã¤ı&Q¬ù19.[™³@¹dÕ(Ì¯%÷9˜X´‘´„$ÉÈƒ2T†Ô?`è^n+ŒÓ‘¥9]úÈ«ïê©ºŒì:¦Zv½=	vä›ûfz‹“kÜğ…_Ã;æ¶M×d²¬»¯Õøf¦ ÔéU­WÔ„|ƒ&PCŞ°=ú¯˜bË Å7…× ÿÏäáa0÷vvÈöş‹§{Ïw-eIkiÁf‘¼J â8è	Ç(ˆR¹\wcAÏš—­QZúvã8uen¸¯ê-eDÕlhŞLèºw§Ù2çÆ—WâM°?İ˜’øÍÆ“t£êxÈıéõî™’DbI«â^^¡dQLXøh¨£]Ô I&áøŞ#3£Ú’Ö-A’gßaß@ÀG3‹‚=C­BZö€×·¾Ş%“§ûÏí³øê%µ áCğãØæCÔÎßÄfÍîãy>ì%rÒİ8bjãS)YyÊn¼ëx‚·)ÕdNÃ·€ŸáÄ=tgÈÎÏ7
-îà*?.~ûÙòw7
-ÿsbkv¯Øl~>ƒ'Tªj³úvHxÀÆÈ{»x.dNa«Ôø©ìÌÒŠ5@Š“8_\Yœ†ÿYÜ´
-WBdôvÑ›¦¢ïPï­- ÇÏÿë¿Ù1Ã\ê¤\§áÁ`­ìÛ#ÓkR˜çZÂÆ^¦Ã l‚¬•fV®—#‚ghœ‚¦¦ô0M78µ8z€ÅSI'@yR“
-4‰>ó»òF½¦m4Áâ4×TStPAK-mZÕ2BvşgÂ‚*‡Á¸=Œ’  23+€Lù9Ö¯~….Şçû;[Ï6ÉîÛ0anH"ÑÉj]€Û"ğ²Üë{™€š]Ï8O	ül=÷¡æzğ÷ùİÇ¾Ğ™½½Œ~:wvxšcrR-Ğ® ‡„ßLaj\X¨â˜€ ÇDZJC8Ñu
-fR,‚;¹5:¡¥†áÙ %háªtÔ{'I4œ¢›@¸LpíÈbÏ×?fÿË%œô·Ë½åµïT6K0Ç.ï,RSGB%*ªYç mëWòÿÒÅrñor‚_> õökÎşœ×œÇV¯RKIN›0÷®_qñŸÖKç­tïê²ÜIL(Rj\açÕËg{Û[G{û/È7[/ö^|iQ?é…İ¿İ;<‚ûÈö«Ã£ıç ¹îìín™Wİ9b¨¼–—ƒáZËj¯UôMÇâj“àp ÅË«	äd@è. ¼!Ã_ =M,€Çf€$^¿&Äfú¥²kÚH~ê”İE_•°×©|²{ê“`á¼ºSà—ìhúBg¹Ó‡@­k<şE^³%«wëHêã…^@Öy,M"ÏºJœÅ`œù)¨c‹L+Ó.«—W>›3F-è=°Õy¸ƒ­æƒt È¡Eı46
-¾°|F…ÙYolƒ7«`U¯²bbvˆâ½–ÒÁìC¾¤„ÃÌìíŒHMôÛ´,¢ÈàicØíiÓŞñ¼ÿ®~Lø=Ö±!Ãö>HO"ÿ¢Ö¶³x3k[ë;.ONÎ¸,ŠL½LBGè®©Që¿—/½o„Ãö_d°£”ßC¢Ù9-Şb­Î<ÖY™ƒ^¯g‘¶=æ]O²g‡=Và3Oë^^è)æÍt¬Şp›A›V$Ó·°ÏØXDì92íL¢8ív=Ş­ùDô+ĞÉb~§gßØ³?£Ñ&ù‹ÀÏxX¹…Õn1½Š¯I¥”nn,-Då`ì³@ B…J}°-“±ÖÉDW¾ŞäG°{âs¬Rş~ƒ\¤¿y‹ÊuGŞI·3RWÁ.O	;ÿj&<Øc.7ŠåBõa‘J*RÁGUPÿuMÊØÇÂ‚Ú{°©6KVÇc¦ËfùHüõY¶ò=ËBˆòç6dPÚÉÜÓŞÂ­áxwUıµÈRªÌ<ì›dêy"J#îŸaâ¯Æ4÷ç ğ´õ d&©lë™Òëpä1cıo5ë$Ş0H0òn=fÎhİ»­öV¬ÊœË¨2çTY¿]ì4ùdššiä\ŸÉÆ¢ñß~ãMt¡ŞæâL¸RÇr³ÿÍ‹İ²ÿõîÁÁŞÎn•ÑæÕ‹gûÛ¿#»[‡û/àŸß¿Ú;hÙ`“kÀNö`'o òÄã(öY>VÆX}ıI±ÓPşAÿ¸&#Í«"ƒëb…¥ü
-ãŒİº®YƒØKÏ<åvª‰;;ï¤sÅ @‡Ó“Q˜óÚƒŞ$¦Œc'8õ¦Ã´[:ÃY,Øã‡ÊC¾ÙâÏ¼«-èÓ A\—ï/Oƒ·¥áyè€.J	Î¦ÿ‡¾@¹˜½%L²LîNlÔ‡R·UÌQ§[:+ï£70ºs_HéeF,4İWÂ7Ófä-<ÁAÅŞÎW…ô8í÷AV8¥½]NÑÜê‡è¶ù¨8ÂÕ•‹°6¯·×Äš*y‰ò½RÃ,f´Sœ¨ZÖÅÂqÉ>PfŒ,Œãæo4LÉPQãgĞŒÍ«QÈX®ÓMuå•m-p´‡4¹×QX.ÖQX5eY]Æ# ?M6£iŠ>`*NğŸŠ*QY×Ğe‹|f@ºWÀ\Ú/@şáÁ»ßa¨Ì¦zÀš®HVVşKÁ¶üÈ˜=°È©üw('„£ÿ!İ#ìÁ¬€œQ-˜Ç‚£¢˜áP,üziäÂÚ|Ÿ’ªŠ×z9éæè•p×uAÒ(Ó«…b‰­¾,/?sÖ'+Yë*E–v©¼ÉO#eº½^O?¸Â1dî¯·i™9‡rr8ğ–*±è8Ñ%Èğ§?¥¶äÆ<E[iE+&–ûh5’•s,Ó<¨Nch“lüå©4Ù½Qéu&£YÉ÷g6™Ìij—§“Dk-³XWmMBecİÖTÁ†©J Q¦ÚMM Ú D!Ä^!ÂHá’¥‚»:MÔ¿üôÏyÓÜ^äTm8e±,…»ëËgûO¶1SÖ!ÙÚŞŞ=<Ü{òl—lì.m=‘lWÒs+=òå0:ñ†(Çù‹X'|¢o'\Ò|‚ùµj âİŞ^Fq
-¿ƒ¾ŠÛ†­Ô¨ö:!Ñ):3DXÁ„Ş–`VŞë€Â³Á˜¬r×(aá¬’Mí¼öéåk‘2ÊjAç/,Ø×fŠ‡Z]^v6¡e.ùi4©É¸M­KŸ.7"-K%šÍâŸ´&5«§VõÂ|TÚ5…¯mm÷ÊX{A+”d*‘½¾æÍÚ[öÀ2á7`u?ÿËÿşÏ¿şÉhİÑti,[É°Vht [>ú)F£”xR¹]ŸEKœh&Öİ{„A;¼Í! .3À#ègrOBúÑ&…/=Á»“hˆy¬r;À	}WÄÖNR ¦¯‹ø`.Ö¡åõJÖÒ†.kIq)äû ‡…r ªüŞñ¬+Å„R¹seš.¬wù,-‘=œ	6E¡Íb2†pê$ZÓÏz{†@1¢Î×´áCÒ¼>ãà×ÁÅ&I¨İàbâ	é şdÏÏGLX%+vÄÛpö•ÍPbJÎ|b–®Ã ¥Ğü`úÓd¥QÒÑW`ïşÙÀœ’â2÷èµîR÷ïüOş.ùM+_Ø¨À_?yœÿÂ8RnYX
-µş6œ#¯(… æaÈÜÇ'Ü½pÜNı é²µÑ¸:PiÎ­îX¼©>[‚Œä0
-D£À=PIJ;kÈe• Iæ#òlïDA¦DİQë‚*î­º©ïıĞï˜²á³]P÷@w³Íğg:‡)¼Æ‹}òUx6X< @îRD!;áYˆÂÉK¶_j¹œ¢‚½hš7b¯#èıZT Wl¸Ò5k±õµWS¬¿;˜$¢â&Gt+€Ç|c©™Q.G°õß‘mñ~Šd,‚ükºÈºØúNğ=6]¿J‚à<¬‘âö2Jáí…d ö»ƒjù:Ì÷ˆ%µˆX"dBË†ê±ß‰‡¬ÌQQHOGl1…‹~è¦ê›·EÌ‹Vè	±DŠ_$ê‡* 8Y!X†u'ÛêzÃº:GÔ·—1ô$Š^ë\À—wu¥šoÊk9Œùº[ÄïüP…ÿõQXgÇ(Ù¢“¾fÔ9j°=z¿şœõÆo¼wH&“Vb•³Ø¢ZD€òÆi=Å÷“%4Â+ÈKŠi7ÎåVÈ3´Ë“å­~|úª4åkÀĞìÉ¥­ÒW_ïÏT?D¥t>Š† íŒG/¹¾F>!øï£VØ†F—KmÉ4RxøãK‚.Fš¡Á5iåæ*”Xeü‰ßŸî
-â,¼ô>Y!Gù°µ°×iZ.ÃŸJ<~G§A’°³	+™e¶Í©@¬µù¸Í¡h ƒH†€¡İó‘*>)èõä1ùş×—BÉ_ùîŠZ•µu“…ï1~e¦Èaè6Š“ZŸà˜ÂâLlê[ª‰íké~Flô…­[i	µ™ÔÑ°«Ñ?×÷ä…’®¬
-Î´83ì+­õˆW­	ãñÑ÷Òà,Š/WÚ°rªŞR5İeÒÍ)ä‚PÏ×«Ü!l`¨‹¯"=?Æš7Î4'n/o Ä ‡9!^c´Z¯p4ò2‚`ÒÍñ0p‹–Ô‡€:+ğO¨4ŒÂéˆlùşb4ÖW©Ó¤PÒzôHRÔ´¢·XLâÈŸ²Ì ‘7ôp£… ?‡}@†§Ø€le¯w…/jçÏ¹0¯;’ğºÅÚœ=n?öÒ–óÄÙspds]¶ˆøìÙGdm!_şÒ*9„ïò1yF!›¯_g­DŸL-Ü†y.8Œ˜ÊwŠÌÛ¨Â†Ï 6Ã4…“C0µyzIìT3ˆ¦±M›-êLq°xøX9F«6%ƒ(JµW¨,ŒbíENOÕD´†îıB›\‘C|ùŠ®àÆõ@M"p„t_Mp¾+«l’õ¹äSt«ïx¤û9hÙ<P{d$5vº¨<ŸÓe¯H`y™ch‡ßğoÔ´øMNÚç^8¦pÚUŞÔ Lè¶ 	VC4MıÈ€ÒÙµ*í¾…GPAØØg‘gœ—ÕÃkurV‚ÇÆ‰çÏUÍü)4ß£C¡]( Æ:Õ>9L§~ÁoArPˆu·õ«‹lcİ}¥ñ–'Şø‡iÂ"@õ%Áxé9“ùòşıÓSĞ0fàüÀ½Ë	áó†ÇìGÊ»ë@Ä„e£ƒHÌ¾|„½`²!‡½ Û›ÜEÄ‹°@(-Ê‚q˜S>aUH­/ûª–`68F@Ú8ƒ ·@1Ke“8¤Eæé±L¿cŞ»Icw<‚³C¾ê¹R}
-¦yDŒ’Şv´±Â~sS©˜Şçõg'fö4Äôº+‹qÏ<UÛÓ´>Ï¤=áçÚ‘Í‰[“Éğb~´Ï¢'¾¦â°&b¦[
-P»Ÿ‡›èS®˜;¿Şˆ"@?"u¬Õ{dõãQP½ñ¸ÉdFı&õ¾Û¶p•:8³i›w%3_Xö¦Ş°ªUD?,UÉÇãê»ag„Úä8˜¤å I•€l4EÅÑÈ•ıô˜ Yc4!™ê‡C¬Æ`L~3¬ScÙxÒ‰®-?`õ“SçQGVi²œEiÒ|´e‡—~C¾
-<Ò-V'áOÙ%D¸œ"nO	7¤]›Òùµb¤l±(W©½ªœ™!ÅÍ³¥Ñ	kojx!{;›šĞíZêº#|vÏÂñkCÅš¸eé>iˆİMF,Eø$ËÊ“ ÔhŞ<Ï2Ï	HÑ>bYİ/?ıåmËË¬â°<Tx-KÕE³+ÆÍmŞ¤‘?_@ZÎ=ëÔ*c‡¦êo–“oìAHNr§9V”ÆÜå@T2—ZdÄoåòİ¦ì#µQSê$‹.j…*Îâ>ó Wß_™1Gƒ4ˆ.)ÁÒq?Õ]Çğ3S´7ûJ?œ
-µè)ıy© cÖ“yî´fóÃ{4¼›%©˜î5ok±€ì~c‚»j [so<N@_è£Ï¶…‰Tï±ós†š;ş3.Ø`ˆùŸ«”%¬—ÚÅÊ]ÁßMéŠm?r7LŒ¤§J!á¢P(Rî®ÍŸ6_Â¬'ä¡‚T>¶ğvìi~9â‘7Ä›ÊòDfC6—Ï·bByïÿ±As‚gIÉ; u*ëƒUfÌÅV ´n?§-g,vN×œ°T/~¬9SèSwt{U;;gmHÃB¶á™Ö{ãÓÈNÂ—Üâ°0ÏÎ‡òu{¢õ™EÚâ¶c³Êºücòµ†ü#§/Ãnhö]„qbfœª œeA8ä¢¤×fÄÃLßX“ º_ºm«Í~8±‚ÃÊtè«lÍÕ§¸æ®İÖØáœ?ø(®øER¾µ›ğ»à‚<Åêóß…"Læ²ÆgÊèíMä0P³0uw°øíÆò›Áw¥ÌâI¬éˆÂ>ô¤‘-±/½q04œ0¶LcÚûÍÈ±'´C’ÄÚE†îªÅ
- ßß’.i®®vo)Ú V’j%Áâ(õÊÖ±höÿF‡ Š`àfz™¡âûjå9X•H-ç‰³ãw%ß%sën¡‘ŒKÅ¬t·íÌ™F…¥€ÖTO£˜-1ˆ¬ÌÅ£ËÌM0'xÏÀNßÚûF‰/sOÊĞg#?ó¹ÍúÂët|	ä4/in ¹;K §şîù¡yæ¼œè6#ŒQ™gBÖÍó…™Æ›,äñã<¢ÊUŞ21VßEGç)fÆ¡¯Y˜{7Å9èşü¯1Ê Z!ÌU‰sÍd|aÏ^¨Ä¬#¹’ôoÕÍ3ùùä¼Àúé8­¦ğ
-ß(*x…h‚JJ¯d°·J&ÉœàY£x¯áÉ$öá¢—Fsƒ¨ˆ y¯A™%ÌŠrøÌìt9ïmG­8ÁE)¯»ãvÆãö/ÍÊ-u­´uL'µânø
-ËD¸Ú	®I@’g)3ÓY¡[š)›¯º5€dıù°¾$)ÏüpQ?ê3©{¯¡É#ú—x¨¿ÀÏ¶É
-¯‡õ×ºdwè²¨BĞú^ñkÓA¡9$xˆ+ú&µÙ¾šNŠ
-~Wç¬(F<49,ò%ÑÓÂˆ„¿üôÇ¿Ïb	2ø)á—d1İ°O§|lÕ¢6O×î6kCÊº÷èPdrPpT€¶ •5	\Š°­ 0;õ\$¶ËhĞy¡"4ŠáÁÍAÒgñ(¡†¢1ËÂ¯Á7rár­ºr<­ù‹.XÆŠˆİ¬É4Ä.nÔ!rj;@Ä?³L5¯ŸNˆúˆffÊyI%ğU‰¯ÏŒĞd^ØÕrmglÑ‰kÃòÉXSZÕš1 NëÈOq¹Çùb1rÇâÈWŠcË°O
-Ôfï*%>Yh5³„%&AüªÎ¦!–	ñ0•g“l,ÿñü7Xö²é³’æ4ìá>YÛø,îÍòJ}ïâ>U\_ı)^^lè¢Gv1îšå–â)@åRÒ`Í&Z-Ùr¼kÊ³O]_½HY9ó§Q”RcM¢t¥Ss¥ğB¤Mc“s¿ï±~){x¢w'/½ÄÕÄĞ„OvÁæ8ï,-èõyXGÓW+`Ÿ$HwY³$.-`r§¡¾Aöı4ŠG]ÛŒ‘cò7I1gÿ¾õYÚÉÙŸ¡qˆ›y¢ınüÍngßí÷ËE¼6KU’Y«}¹N¡\9¬bÎJæì¦1›¶j*#s)³Çª‘ò`86†4Yõ´ˆåâĞ”*«,Æ©Ø•EjÑ‘,]Yñœ“Ö ñMåt åq:°Ü:ü1mş°Ş)<ÃQ¼ÿ÷éÅÖØ?‚c¨ïéR—ä‡(%îÁ?÷	#·¸GkÔ]}«$›ä[~ÏŠ¸Şé«ïœ×¿g(Â(ƒ@îy&i7{øó< a_9Ìt/Ùò}äqû“`lé,=bÈÖ0?¥m_Ãa_.Şbeö5¥(*)»×Ø»¡Ö0k³DOR»EÒÌa’:¬§¬Ë;sÎy£ò>Ëº>J?mŸûfä-­ÛbÚ–©ƒÉq&¡ß¼aïA)S§Ø|q¡«†njêäœßúSÔ {ØÊÿŠğ¯< 3 ø	CÇ¶$*“%rèéÙ N1YeKñ¼ç‚ï]”µdÉJÈ~¬|ìoœÈ™•( –F• @›‚¢|%xâ–”ËŞ&¯Ø‘£it‘Ífo(½ë‹Ò­Èÿh5kİ$Ú›ÔR>ii	{1@bÅÆ¤ô)LyoL¯á›†ô¬¶—D£€şR–byuÖj?×cM-ùª÷'¹\`š«<¦(dÁ}øÁK}„VËÈïÈÀ$uUÂÖ0‰@…`à3´ACÜ"—ı­ÀfR†_Å°„`lóQy•®UífE®Šşı4J½¢a@^`~.ï‡ü/yqøs`\_Qƒ¢w›–¬½—5—üã:éQÌòXWX=x+c-Ø¡¿& ¿‡³	òì"B=bßdˆ³Óİqz¹}ÌáÃËŒ †ÕPBöëï„‘–¿é5ü%ú.d#A£>d+×Ş‡ÌnI«ß‰Ö2c#²:á:³WOĞusK wmwÏ <¼÷è—ŸşçŸ-]ÇlVöƒµÒy)ƒÜË: ?R}³z:¬±a}¡-‘w®Ï;ÑºŠšë_uFMûóåGa²£
-&Ó–Mà®·ÍY	-‘På“Ùã(¶ëRâY²=aĞ¼ŞZ5O÷ƒ]\‘eu]¦}.¯÷£aW7L3IëuãÍr{I…1´_öK°wk¼Ì³Rår†kŠó$¯ù°¶œ%¨Êü—Uf1WÒ0xSFU½ÍA.&?¥JÄ’g!OAcÄ ƒıüÁä‘¾mq9'î’«å‘uƒ£5¼+o‘+6¬è§©òB©NB¼!éşœN§AŒ=:h{Óàm˜ UÃÏØ78áŠÅ}&ÅÁ¿€L Zè‘ÿMIPÁ¨É{š†)ş)ª4›/@·K@àİi‡ıüm‰ÎbÚ—ÚˆµŠNÌæ$ÙM~˜ ±ÍxYbó&£†³ß¡«®Ï¬-†2SK³‘lYo$«g{É¤9S.HM[Œ¾4~*jœÜ(rxÉÅ¸OªPD”c:Znjy¨šì}3¾P£Iy ,M+ŒN5ƒÓZŸ¬*io,?ÎUS}GöÑ£wgoüÆ†yØ½î!v…ÄQ? Öu¦n‰Æ½r5ùÃT‹™Øx%/ªæ¿WÜÖnO+MÙõ‰šïÜn«œn]#Ø]ŞïÎøSüîÃiøyò<9ëfUÀØ´|’°k¨)]Tlx‚hšv3ãpùt^÷ÉÖ
-µl!ú3ûÒâ˜Îm‚wğlo¯Åõ Nó:+ğ«œWä4{X¬¸6¢T9=LxY›[SáO1“g%Àf³‘>ÛÊ¿ÛŒ€xÃ4cMsyüãJÊºÒcÒ?õz½¼a»g¨yÓÈ´®ù°ò¼D»ÕD»­8  ‹%Sşås@şbTHRIô{ì.vi~Òì†sKH¦Â)L:“ém uü§ s¶ÏUCRôÿbüdmµÎ¨
-#Öš<§q4"¾—zh¡ äkTLÉ­œÆûÎ¹:OpA7ËÌìôNô½}ïDßÒûïDß;Ñ÷D_K¦áìB±%´Úšyd™P`r—è@ŠÈT!ÑŒÃé%mÍ‹*2¶ŒÁÓ-)êğ¥{Šñ5úÉA­ì`¸Íj†~°xr±ˆÿL$ñâ0‰ÆRx¿=LøULEËæé½¶íøl—¯İgÛ®Çvƒæ‘Ìä²Uş°ÔÆoYÏ±«÷®Î©¾¨öÚÏq‘èÃÄ˜Bo(]ßbµúŸÿåüç_ÿ¤R‹ZŠ^&îe&.`ôIÂCa¯²€³LĞ[Ğ°‚råz-{0‰Ìva¹!¹§6?,Ë¬ÍœûzŞTÍ¼¨¨ohÎ=7Ö9KYƒl¿ÄDÈ#ÚÕ³Šâ2&ô–1!·Xú\ÉI-Ôü-“]J_®¬’q˜pŒ1!Ş[ñ áĞ›$%OíA: î¡=’ÒXa{FŞ óıö¿,?]ùluë;“æºBÁ‡œ3`—RãÈÄùâúç™×Yo‡Ph‘¼ô°ÊUŠY¡éÀT PŒJï†¾U¬:úF™Ó9ª¿ÙØEEûëàT_ÿª&üW²Ã­Ú-ÑRQ-^¬(~VÓŸ=§Ïº¦’R”õo74İ*@şÆmŞdC”uËQªaÉŠ¦ë[\ü–3TÌP§\Ë^Nj²ôs ku)0ØĞF&7n”£æ\~x]ƒ‚¯àDÙ¨	)c5§ËR)úÂÑúíÊ*n˜51\|°&}Ş^îqäÕ´î¼+p++!˜F)ü]|®´Å:9ßÀ†¤(²ëŞLO%Zä :7¥S:rq$éÂyÌ«îHAlFîî¹‹jˆ,ğu+_©`úô÷§G™K,`§=¿nœ—;°gßÈÍ0Z/ñ^Id•ÊlÃVÒCšj«``Hk_c¤v½™÷£©P_4pù°0ÿŸş/]¸hr‡ø®'‘ûù¡ó¸ÍSçz¨ °S-¤şáĞÂ_ş´²Xm“zGÒY`+©QqvcÙlœ@¨rÏdúI,b•‹<À×©v;—RíK¨¶@Ç½G/¢”ÕÏ8›æÅÉl"aµ¸w]Ô«TÎıp¨÷ÏÿÊŠ0?LCºgw”›İ)•ÑM±À„+İd5kp âA½“üÜŠãM­çõ!ÑÈÿ>_<­úqw¾•¨$+Mæ@%…*¬+¬B+^`sj.®oº×Jp²ªB·‰XmTÑÊëƒ!§ŸÿôÿĞj­ûY8
-Ó;zšåÔ†V0ë%ˆ~ß¾/"’4·ğú§ùeÙùXÍGî‰ò>İN2ˆ¢´Sv‰ÉŸÇ¤³†±§¬ØoGFš@}{Š“ï‚t?_\YfO-Ü…î°M‚¼¢áC¢ Óı;9ÄÍf ¸£Î6¨ó±DI´+Bg¡&ı½iô6Nª&ÚmP±KŸ°¹UÒm&²>ŸÓp‘*]Ú=c‰pKhØ½.©JÆï¥şY³Ä;‚u5¿Økü;›_Šx"Õ-× 'óÓ/1Ûo¬—m-×@Ëeİ´PÙD”wŸ×¯%ñt(J¦Ş:³æW·~FƒVí@“£ÀE§£–o®Š5aQ§+Ÿ­zßÃÒ02NŠ4Q¢%£Mú=Îíõ?hKÕÊ:"… ƒĞZ?_JN*z¥¬üíıç/·ö÷_íWÏ_=Û:Úûz—¾zn«¨¥/—í(Pñ½GO¢tÇkyq@#Ò¦zí³5ŒEîñİóÃ¤M^0õ}äáŒĞ/0ñ=ğ;|¡e³&qt’I‚‚_ ÄÅ†ˆV}ğ—±Ó=Iq8~­Ô¨*T]8ÄvĞ
-ã'À-|ò2&QşÚNƒMgÈW9p¤^öXğ=5Éô$EØš|3†äp™h*ŞêëÏmk\%fIa~T™<n.,oòv‘Â¬¶Q±ğ­R“PF/Äª›{(j–†Õ/Ì™biSİ‚øV T…âê‹_ı   ÿÿ £Œ-
+                      {/* Download Reports Button */}
+                      <button
+                        type="button"
+                        id="btn_toggle_download_reports"
+                        onClick={() => setIsDownloadReportsExpanded(!isDownloadReportsExpanded)}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                          isDownloadReportsExpanded
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
+                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span>ğŸ“¥</span>
+                        <span>Download Reports</span>
+                        {isDownloadReportsExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-amber-400 ml-0.5 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
+                        )}
+                      </button>
+
+                      {/* Filters Toggle Button */}
+                      <button
+                        type="button"
+                        id="btn_toggle_filters"
+                        onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                          isFiltersExpanded || activeFilterCount > 0
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/10'
+                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <Filter className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Filters</span>
+                        {activeFilterCount > 0 && (
+                          <span className="bg-emerald-500 text-zinc-950 text-[10px] font-black px-1.5 py-0.2 rounded-full font-mono">
+                            {activeFilterCount}
+                          </span>
+                        )}
+                        {isFiltersExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-emerald-400 ml-0.5 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Collapsible Download Reports Options Panel */}
+                  <div 
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      isDownloadReportsExpanded 
+                        ? 'grid-rows-[1fr] opacity-100 pt-3 border-t border-zinc-800/60' 
+                        : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handlePrintReport}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Print lead report to paper"
+                        >
+                          <span>ğŸ–¨ï¸</span> Print Report
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={handlePrintReport}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-rose-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as PDF format"
+                        >
+                          <span>ğŸ“„</span> Download PDF
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={handleDownloadExcel}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-emerald-450 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as Excel spreadsheet"
+                        >
+                          <span>ğŸ“Š</span> Excel (.xlsx)
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleDownloadCSV}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-indigo-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as CSV file"
+                        >
+                          <span>ğŸ“</span> CSV
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Collapsible Quick Filters Panel */}
+                <div 
+                  className={`grid transition-all duration-300 ease-in-out ${
+                    isFiltersExpanded 
+                      ? 'grid-rows-[1fr] opacity-100 my-3' 
+                      : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="bg-zinc-900/40 rounded-2xl border border-zinc-850 shadow-xl relative p-4">
+                      {/* Corner calibration tick marks */}
+                      <div className="absolute top-2 left-2 w-1.5 h-1.5 border-t border-l border-emerald-500/40" />
+                      <div className="absolute top-2 right-2 w-1.5 h-1.5 border-t border-r border-emerald-500/40" />
+                      <div className="absolute bottom-2 left-2 w-1.5 h-1.5 border-b border-l border-emerald-500/40" />
+                      <div className="absolute bottom-2 right-2 w-1.5 h-1.5 border-b border-r border-emerald-500/40" />
+
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        {/* Search query */}
+                        <div className="md:col-span-3">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-zinc-400 mb-1">
+                            Search Lead / Customer Name
+                          </label>
+                          <div className="relative">
+                            <Search className="w-4 h-4 text-emerald-505 absolute left-3 top-3" />
+                            <input
+                              type="text"
+                              placeholder="ID, name, or phone..."
+                              value={filterQuery}
+                              onChange={(e) => setFilterQuery(e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-850 rounded-xl pl-9 pr-3 py-2 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Source */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Lead Source
+                          </label>
+                          <select
+                            value={filterSource}
+                            onChange={(e) => setFilterSource(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90"
+                          >
+                            <option value="">All Sources</option>
+                            {LEAD_SOURCES.map(source => (
+                              <option key={source} value={source}>{source}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Status (Stage) */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Active Stage
+                          </label>
+                          <select
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="">All Stages</option>
+                            {ACTIVE_STAGE_GROUPS.map((group, idx) => (
+                              <optgroup key={idx} label={group.label} className={`bg-slate-950 ${group.colorClass} font-bold`}>
+                                {group.options.map(opt => (
+                                  <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Start Date */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Start Date (Created)
+                          </label>
+                          <input
+                            type="date"
+                            value={dateRangeStart}
+                            onChange={(e) => setDateRangeStart(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                          />
+                        </div>
+
+                        {/* End Date */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            End Date (Created)
+                          </label>
+                          <input
+                            type="date"
+                            value={dateRangeEnd}
+                            onChange={(e) => setDateRangeEnd(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Actions */}
+                        <div className="md:col-span-1 flex flex-col sm:flex-row md:flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAppliedStartDate(dateRangeStart);
+                              setAppliedEndDate(dateRangeEnd);
+                            }}
+                            className="w-full flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 py-1.5 text-[10px] font-bold text-white rounded transition-all cursor-pointer"
+                            title="Apply Date Filter"
+                          >
+                            Apply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFilterQuery('');
+                              setFilterSource('');
+                              setFilterStatus('');
+                              setFilterSalesPerson('');
+                              setFilterDate('');
+                              setDateRangeStart('');
+                              setDateRangeEnd('');
+                              setAppliedStartDate('');
+                              setAppliedEndDate('');
+                            }}
+                            className="w-full flex items-center justify-center gap-0.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 py-1.5 px-1.5 text-[10px] text-zinc-300 rounded transition-all cursor-pointer animate-none"
+                            title="Reset all filters"
+                          >
+                            Reset
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Table view */}
+          <div className="bg-zinc-900/20 rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-max">
+                <thead>
+                  <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
+                    <th className="p-3.5 pl-5">Lead ID</th>
+                    <th className="p-3.5">Order ID</th>
+                    <th className="p-3.5">Customer Name</th>
+                    <th className="p-3.5">Mobile Number</th>
+                    <th className="p-3.5">Event</th>
+                    <th className="p-3.5">Current Status</th>
+                    <th className="p-3.5">Created Date</th>
+                    <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900/60">
+                  {filteredLeads.length > 0 ? (
+                    filteredLeads.map((lead) => {
+                      const leadStatus = getLeadCurrentStatus(lead);
+                      const currentStage = getLeadCurrentStage(lead);
+                      const isActiveInSales = currentStage === 'Sales';
+                      const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
+                      return (
+                        <tr 
+                          key={lead.lead_id} 
+                          className="hover:bg-zinc-900/30 text-zinc-300 transition-all"
+                        >
+                          <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-indigo-400">
+                            {lead.lead_id}
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-violet-400 font-bold">
+                            {linkedOrder ? linkedOrder.order_id : 'N/A'}
+                          </td>
+                          <td className="p-3.5 font-bold text-white">
+                            {lead.customer_name === 'Inbound Prospect' ? '' : lead.customer_name}
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {formatIndianPhoneNumber(lead.mobile)}
+                          </td>
+                          <td className="p-3.5 text-zinc-300 font-sans">
+                            <UnifiedEventDropdownCell lead={lead} />
+                          </td>
+                          <td className="p-3.5">
+                            <StatusText status={leadStatus} />
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
+                          </td>
+                          <td className="p-3.5 text-right pr-5 w-[160px] min-w-max overflow-visible relative">
+                            {(() => {
+                              const isManageCrmOnlyStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Contacted', 'Create Quote', 'Created Quotation'].includes(leadStatus);
+                              const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
+                              const isConfirmOrderStatus = false; // Disabled lock requirement for confirmed orders
+                              const isLeadLostStatus = ['Lead Lost', 'Lost Lead'].includes(leadStatus);
+
+                              const latestUnlockRequest = unlockRequests
+                                .filter((r: any) => r.lead_id === lead.lead_id || (linkedOrder && r.order_id === linkedOrder.order_id) || ((lead as any).order_id && r.order_id === (lead as any).order_id))
+                                .sort((a: any, b: any) => new Date(b.created_at || b.requested_at || "").getTime() - new Date(a.created_at || a.requested_at || "").getTime())[0];
+                              const isPendingUnlock = latestUnlockRequest?.status === 'Pending' || latestUnlockRequest?.request_status === 'Pending';
+                              const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected' || latestUnlockRequest?.request_status === 'Rejected';
+                              const isApprovedUnlock = lead.quotation_locked === false || (
+                                lead.quotation_locked !== true && (latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved')
+                              );
+
+                               if (isPendingUnlock || isApprovedUnlock || isRejectedUnlock || isConfirmOrderStatus) {
+                                return (
+                                  <div className="relative flex justify-end">
+                                    <button
+                                      type="button"
+                                      id={`btn_actions_confirm_${lead.lead_id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (openDropdownLeadId === lead.lead_id) {
+                                          setOpenDropdownLeadId(null);
+                                        } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const spaceBelow = window.innerHeight - rect.bottom;
+                                          const spaceAbove = rect.top;
+                                          const menuHeight = 90;
+                                          
+                                          let top: number | string = rect.bottom + 4;
+                                          let bottom: number | string = 'auto';
+                                          
+                                          if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+                                            top = 'auto';
+                                            bottom = window.innerHeight - rect.top + 4;
+                                          }
+                                          
+                                          setDropdownCoords({ top, right: window.innerWidth - rect.right, bottom });
+                                          setOpenDropdownLeadId(lead.lead_id);
+                                        }
+                                      }}
+                                      className={`w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2.5 shadow shrink-0 ${
+                                        isPendingUnlock 
+                                          ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-amber-500/30' 
+                                          : isApprovedUnlock 
+                                            ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30'
+                                            : isRejectedUnlock 
+                                              ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border-rose-500/30'
+                                              : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+                                      }`}
+                                    >
+                                      <span>
+                                        {isPendingUnlock ? 'ğŸŸ¡ Action' : isApprovedUnlock ? 'ğŸŸ¢ Action' : isRejectedUnlock ? 'ğŸ”´ Action' : 'ğŸ”’ Action'}
+                                      </span>
+                                      <span className="text-[10px] ml-1">â–¼</span>
+                                    </button>
+
+                                    {openDropdownLeadId === lead.lead_id && createPortal(
+                                      <div 
+                                        className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
+                                        style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-lg border border-zinc-850/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                                          <span>View CRM</span>
+                                        </button>
+
+                                        {isPendingUnlock ? (
+                                          <button
+                                            type="button"
+                                            disabled
+                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950/40 text-amber-400/60 rounded-lg border border-amber-900/20 flex items-center gap-2 cursor-not-allowed opacity-70"
+                                          >
+                                            <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400/60" />
+                                            <span>Waiting for Approval</span>
+                                          </button>
+                                        ) : isApprovedUnlock ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenDropdownLeadId(null);
+                                              handleSelectLead(lead, 3);
+                                            }}
+                                            className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                          >
+                                            <Edit className="w-3.5 h-3.5 shrink-0" />
+                                            <span>Edit Quotation</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenDropdownLeadId(null);
+                                              setSelectedUnlockLead(lead);
+                                              setUnlockRequestReason('Customer requested additional discount');
+                                              setUnlockRequestCustomReason('');
+                                              setShowUnlockRequestModal(true);
+                                            }}
+                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950 hover:bg-amber-900 text-amber-400 hover:text-white rounded-lg border border-amber-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                          >
+                                            <Ban className="w-3.5 h-3.5 shrink-0" />
+                                            <span>Unlock Quotation</span>
+                                          </button>
+                                        )}
+                                      </div>,
+                                      document.body
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              if (isLeadLostStatus) {
+                                return (
+                                  <button
+                                    type="button"
+                                    id={`btn_followup_${lead.lead_id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSelectLead(lead);
+                                    }}
+                                    className="w-32 h-8 text-xs font-bold bg-purple-950/30 hover:bg-purple-900/50 text-purple-400 hover:text-white rounded-xl border border-purple-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                                    <span>View CRM</span>
+                                  </button>
+                                );
+                              }
+
+                              if (isActionsDropdownStatus && isActiveInSales && canEdit) {
+                                return (
+                                  <div className="relative inline-block text-left actions-dropdown-container">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (openDropdownLeadId === lead.lead_id) {
+                                          setOpenDropdownLeadId(null);
+                                        } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const spaceBelow = window.innerHeight - rect.bottom;
+                                          const spaceAbove = rect.top;
+                                          const menuHeight = 130;
+                                          
+                                          let top: number | string = rect.bottom + 4;
+                                          let bottom: number | string = 'auto';
+                                          
+                                          if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+                                            top = 'auto';
+                                            bottom = window.innerHeight - rect.top + 4;
+                                          }
+                                          
+                                          setDropdownCoords({ top, right: window.innerWidth - rect.right, bottom });
+                                          setOpenDropdownLeadId(lead.lead_id);
+                                        }
+                                      }}
+                                      className={`w-32 h-8 text-xs font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-3 shadow shrink-0 ${
+                                        isApprovedUnlock
+                                          ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/40'
+                                          : 'bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border-zinc-850'
+                                      }`}
+                                    >
+                                      <span>{isApprovedUnlock ? 'âœ” Edit Record' : 'âš¡ Actions'}</span>
+                                      <span className="text-[10px] ml-1">â–¼</span>
+                                    </button>
+
+                                    {openDropdownLeadId === lead.lead_id && createPortal(
+                                      <div 
+                                        className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
+                                        style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
+                                      >
+                                        {/* Add Note Option */}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            setNoteModalLeadId(lead.lead_id);
+                                            setNoteModalOrderId(''); // sales leads typically don't have an orderId until confirmed
+                                            setNoteModalCustomerName(lead.customer_name);
+                                            setNoteModalOpen(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 hover:text-white rounded-lg border border-blue-900/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <FileText className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Add Note</span>
+                                        </button>
+                                        
+                                        {/* View CRM Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_followup_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-lg border border-zinc-850/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                                          <span>View CRM</span>
+                                        </button>
+
+                                        {/* Confirm Order Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_confirm_order_direct_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+
+                                            const today = new Date().toISOString().split('T')[0];
+                                            const linkedOrder = orders?.find(o => o.lead_id === lead.lead_id);
+                                            const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                                            const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(lead.advance_collected) || 0));
+
+                                            setConfirmForm({
+                                              ...confirmForm,
+                                              package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
+                                              quotation_amount: Number(lead.Final_Package_Amount) || Number((lead as any).final_package_amount) || Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
+                                              advance_received: calcAdvance,
+                                              event_date: lead.event_date || today,
+                                              event_time: lead.event_time || ''
+                                            });
+                                            initEventsReporting(lead);
+                                            setShowConfirmModal(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Confirm Order</span>
+                                        </button>
+
+                                        {/* Lost Lead Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_lost_lead_direct_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            setSelectedLead(lead);
+                                            setLostReason('');
+                                            setOtherLostReason('');
+                                            setLostNotes('');
+                                            setShowLostModal(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-400 hover:text-white rounded-lg border border-rose-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <X className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Lost Lead</span>
+                                        </button>
+                                      </div>,
+                                      document.body
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              if (isManageCrmOnlyStatus && isActiveInSales && canEdit) {
+                                return (
+                                  <div className="flex items-center justify-end gap-1.5 w-full">
+                                    <button
+                                      type="button"
+                                      id={`btn_followup_${lead.lead_id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSelectLead(lead);
+                                      }}
+                                      className="flex-1 h-8 px-2 text-xs font-bold bg-sky-950/30 hover:bg-sky-900/50 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow"
+                                    >
+                                      <Edit className="w-3.5 h-3.5 shrink-0" />
+                                      <span>Manage CRM</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      id={`btn_lost_lead_direct_${lead.lead_id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenDropdownLeadId(null);
+                                        setSelectedLead(lead);
+                                        setLostReason('');
+                                        setOtherLostReason('');
+                                        setLostNotes('');
+                                        setShowLostModal(true);
+                                      }}
+                                      className="w-8 h-8 text-xs font-bold bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 hover:text-white rounded-xl border border-rose-900/50 transition-all cursor-pointer inline-flex items-center justify-center shadow shrink-0"
+                                      title="Mark as Lost Lead"
+                                    >
+                                      <X className="w-4 h-4 shrink-0" />
+                                    </button>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <button
+                                  type="button"
+                                  id={`btn_followup_${lead.lead_id}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectLead(lead);
+                                  }}
+                                  className="w-32 h-8 text-xs font-bold bg-purple-950/30 hover:bg-purple-900/50 text-purple-400 hover:text-white rounded-xl border border-purple-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
+                                >
+                                  <Eye className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                                  <span>View CRM</span>
+                                </button>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={11} className="p-12 text-center text-slate-500">
+                        <Filter className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
+                        <span className="text-xs font-mono text-zinc-500">No matching records in the directory grid. Try resetting filters.</span>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* Confirmation Modal to Officially Log and Book Contract */}
+      <AddNoteModal
+        isOpen={noteModalOpen}
+        onClose={() => setNoteModalOpen(false)}
+        leadId={noteModalLeadId}
+        orderId={noteModalOrderId}
+        customerName={noteModalCustomerName}
+      />
+
+      {showConfirmModal && selectedLead && (
+        <div 
+          className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden transition-opacity duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm_booking_modal_title"
+        >
+          <div 
+            ref={confirmBookingModalRef}
+            id="confirm_booking_modal" 
+            className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg md:max-w-xl w-full shadow-2xl flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-150 relative"
+          >
+            {/* Header - Fixed at Top */}
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-5 py-3 sm:py-3.5 shrink-0 bg-slate-850">
+              <h4 id="confirm_booking_modal_title" className="font-bold text-slate-100 text-sm sm:text-base flex items-center gap-2 font-sans min-w-0">
+                <span className="text-base sm:text-lg shrink-0">ğŸ’</span>
+                <span className="truncate">Booking Confirmation & Contract Form</span>
+              </h4>
+              <button 
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0 ml-2"
+                title="Close"
+                aria-label="Close Booking Confirmation Modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* ONE SINGLE SCROLLABLE CONTAINER FOR THE ENTIRE POPUP CONTENT */}
+            <div className="overflow-y-auto overflow-x-hidden px-3.5 sm:px-5 md:px-6 py-4 custom-scrollbar flex-1">
+              <form onSubmit={handleConfirmOrderSubmit} className="space-y-4 text-xs">
+                
+                {/* Collapsible Customer Information Card - Expands naturally with NO inner scrollbar */}
+                {(() => {
+                  const combinedType = (selectedLead.events && selectedLead.events.length > 0)
+                    ? selectedLead.events
+                        .map(ev => ev.event_name || ev.event_type)
+                        .filter(Boolean)
+                        .join(', ') || selectedLead.event_type || 'Event'
+                    : (selectedLead.event_type === 'Other'
+                        ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other')
+                        : (selectedLead.event_type || 'Event'));
+
+                  return (
+                    <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomerInfoExpanded(!isCustomerInfoExpanded)}
+                        className="w-full px-3.5 py-2.5 flex items-center justify-between text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer select-none"
+                      >
+                        <span className="flex items-center gap-1.5 text-slate-200 font-medium truncate">
+                          Customer Information
+                        </span>
+                        <span className="flex items-center gap-1 text-slate-400 text-[11px] font-medium shrink-0">
+                          <span>{isCustomerInfoExpanded ? 'Hide' : 'Show'}</span>
+                          {isCustomerInfoExpanded ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                        </span>
+                      </button>
+
+                      {isCustomerInfoExpanded && (
+                        <div className="px-3.5 pb-3.5 pt-1.5 border-t border-slate-800/60 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-slate-300">
+                            <div className="min-w-0">
+                              <span className="text-slate-400 font-medium text-[11px] block">Client Name</span>
+                              <strong className="text-slate-100 font-semibold text-xs break-words">{selectedLead.customer_name || 'N/A'}</strong>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-slate-400 font-medium text-[11px] block">Mobile Number</span>
+                              <strong className="text-slate-100 font-mono font-semibold text-xs break-all">{selectedLead.mobile || 'N/A'}</strong>
+                            </div>
+                            <div className="sm:col-span-2 min-w-0">
+                              <span className="text-slate-400 font-medium text-[11px] block">Address</span>
+                              <strong className="text-slate-100 font-semibold text-xs break-words">{selectedLead.event_location || 'N/A'}</strong>
+                            </div>
+                            <div className="sm:col-span-2 pt-1 border-t border-slate-800/60 min-w-0">
+                              <span className="text-slate-400 font-medium text-[11px] block">Type</span>
+                              <strong className="text-amber-400 font-semibold text-xs break-words">{combinedType}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Product package name - Read-Only */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Product Package Name *
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    disabled
+                    value={confirmForm.package_name || packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || 'Custom Selected Package'}
+                    className="w-full h-9 bg-slate-900/80 border border-slate-750 rounded-lg px-3 text-slate-200 text-xs font-medium focus:outline-none opacity-85 cursor-not-allowed select-none shadow-inner"
+                  />
+                </div>
+
+                {/* Event Date & Reporting Details Section */}
+                <div>
+                  <label className="block text-xs font-semibold text-amber-400 mb-1.5 flex items-center justify-between flex-wrap gap-1">
+                    <span>ğŸ“… Events & Reporting Details *</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Set reporting time for crew</span>
+                  </label>
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-3.5 space-y-3">
+                    {selectedLead?.events && selectedLead.events.length > 0 ? (
+                      selectedLead.events.map((ev, i) => {
+                        const key = ev.id || `ev_${i}`;
+                        const repData = eventsReporting[key] || {
+                          reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || '',
+                          reporting_time: ev.reporting_time || selectedLead.reporting_time || ''
+                        };
+
+                        const startDateStr = formatDDMMYYYY(ev.event_start_date || ev.event_date);
+                        const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : (selectedLead.event_time ? convertTo12Hour(selectedLead.event_time) : 'TBD');
+                        const endTimeStr = ev.event_end_time ? convertTo12Hour(ev.event_end_time) : '';
+                        const eventTimeDisplay = endTimeStr ? `${startTimeStr} â€“ ${endTimeStr}` : startTimeStr;
+
+                        return (
+                          <div key={key} className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                              <span className="text-xs font-bold text-amber-400 font-sans tracking-wide">
+                                {selectedLead.events.length > 1 ? `EVENT ${i + 1}` : 'EVENT DETAILS'}
+                              </span>
+                              <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 truncate max-w-[150px]">
+                                {ev.event_shoot_type || selectedLead.shoot_type || 'Shoot'}
+                              </span>
+                            </div>
+
+                            {/* Event Name, Date, Time info */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
+                              <div className="min-w-0">
+                                <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Name</span>
+                                <span className="text-slate-200 font-semibold break-words">{ev.event_name || ev.event_type || 'Event'}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Date</span>
+                                <span className="text-slate-200 font-semibold font-mono">{startDateStr}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Time</span>
+                                <span className="text-slate-200 font-semibold font-mono">{eventTimeDisplay}</span>
+                              </div>
+                            </div>
+
+                            {/* Reporting Date & Reporting Time */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                              <div>
+                                <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                                  Reporting Date *
+                                </label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={repData.reporting_date || ''}
+                                  onChange={(e) => {
+                                    setEventsReporting(prev => ({
+                                      ...prev,
+                                      [key]: {
+                                        ...(prev[key] || { reporting_time: '' }),
+                                        reporting_date: e.target.value
+                                      }
+                                    }));
+                                  }}
+                                  className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                                  Reporting Time *
+                                </label>
+                                <input
+                                  type="time"
+                                  required
+                                  value={repData.reporting_time || ''}
+                                  onChange={(e) => {
+                                    setEventsReporting(prev => ({
+                                      ...prev,
+                                      [key]: {
+                                        ...(prev[key] || { reporting_date: '' }),
+                                        reporting_time: e.target.value
+                                      }
+                                    }));
+                                  }}
+                                  className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                          <span className="text-xs font-bold text-amber-400 font-sans tracking-wide">
+                            EVENT DETAILS
+                          </span>
+                          <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 truncate max-w-[150px]">
+                            {selectedLead.shoot_type || 'Shoot'}
+                          </span>
+                        </div>
+
+                        {/* Single Event Info */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
+                          <div className="min-w-0">
+                            <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Name</span>
+                            <span className="text-slate-200 font-semibold break-words">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : (selectedLead.event_type || 'General Event')}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Date</span>
+                            <span className="text-slate-200 font-semibold font-mono">{formatDDMMYYYY(selectedLead.event_date)}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Time</span>
+                            <span className="text-slate-200 font-semibold font-mono">{selectedLead.event_time ? convertTo12Hour(selectedLead.event_time) : 'TBD'}</span>
+                          </div>
+                        </div>
+
+                        {/* Reporting Inputs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                          <div>
+                            <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                              Reporting Date *
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={eventsReporting['default']?.reporting_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || ''}
+                              onChange={(e) => {
+                                setEventsReporting(prev => ({
+                                  ...prev,
+                                  default: {
+                                    ...(prev['default'] || { reporting_time: '' }),
+                                    reporting_date: e.target.value
+                                  }
+                                }));
+                              }}
+                              className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                              Reporting Time *
+                            </label>
+                            <input
+                              type="time"
+                              required
+                              value={eventsReporting['default']?.reporting_time || selectedLead.reporting_time || ''}
+                              onChange={(e) => {
+                                setEventsReporting(prev => ({
+                                  ...prev,
+                                  default: {
+                                    ...(prev['default'] || { reporting_date: '' }),
+                                    reporting_time: e.target.value
+                                  }
+                                }));
+                              }}
+                              className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <input type="hidden" value={confirmForm.event_date || ''} />
+                </div>
+
+                {/* Package cost and advance */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Final Package Amount (â‚¹) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      readOnly
+                      value={confirmForm.quotation_amount || Number(selectedLead?.Final_Package_Amount) || Number((selectedLead as any)?.final_package_amount) || Number(selectedLead?.Final_Quotation_Amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0)}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none font-mono opacity-80 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Advance Collected (â‚¹)
+                    </label>
+                    <input
+                      type="number"
+                      value={confirmForm.advance_received}
+                      onChange={(e) => setConfirmForm({ ...confirmForm, advance_received: Number(e.target.value) })}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Payment Mode & Payment Tracking ID in a responsive 2-column layout */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Payment Mode
+                    </label>
+                    <select
+                      value={confirmForm.payment_mode}
+                      onChange={(e) => setConfirmForm({ ...confirmForm, payment_mode: e.target.value })}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    >
+                      <option value="UPI">UPI (GPay/PhonePe)</option>
+                      <option value="Cash">Cash Handover</option>
+                      <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
+                      <option value="Card">Credit/Debit Card</option>
+                      <option value="Cheque">Cheque Deposit</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Payment Tracking / Ref Number *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. TXN12345678"
+                      value={confirmForm.transaction_id || ''}
+                      onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Balance due readout */}
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
+                  <span className="text-xs text-slate-300">Remaining Balance Due:</span>
+                  <strong className="text-emerald-400 font-mono font-bold text-sm sm:text-base">
+                    {formatINR(Math.max(0, confirmForm.quotation_amount - confirmForm.advance_received))}
+                  </strong>
+                </div>
+
+                {/* Bottom Action Buttons */}
+                <div className="flex flex-wrap sm:flex-nowrap items-center justify-end gap-2.5 border-t border-slate-800 pt-3.5 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmModal(false)}
+                    className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-medium transition-colors text-center"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    id="btn_confirm_submit"
+                    disabled={isSaving}
+                    className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/20 text-xs transition-all text-center"
+                  >
+                    <span>{isSaving ? 'Processing...' : 'Approve & Book Contract'}</span>
+                    {!isSaving && <ArrowRight className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Final Reporting Details Popup */}
+      {showFinalReportingModal && selectedLead && (
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 sm:p-6 backdrop-blur-md overflow-y-auto">
+          <div id="final_reporting_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-2xl w-full shadow-2xl space-y-0 my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-900/90">
+              <h4 className="font-bold text-slate-100 text-base flex items-center gap-2.5 font-sans leading-none m-0">
+                <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-sm">â°</span>
+                <span>Final Reporting Details</span>
+              </h4>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowFinalReportingModal(false);
+                  setSelectedLead(null);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer border-0 bg-transparent flex items-center justify-center"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Form Body */}
+            <form onSubmit={handleFinalReportingSubmit} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              {(selectedLead.events && selectedLead.events.length > 0) ? (
+                selectedLead.events.map((ev, idx) => {
+                  const evData = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
+                  return (
+                    <div key={ev.id} className="bg-slate-950/60 p-5 rounded-xl border border-slate-800 space-y-4">
+                      {selectedLead.events.length > 1 && (
+                        <h5 className="font-bold text-indigo-400 text-xs uppercase tracking-wider font-mono border-b border-slate-800/80 pb-2.5 flex items-center justify-between">
+                          <span>Event #{idx + 1}</span>
+                        </h5>
+                      )}
+                      
+                      {/* Row 1: Event Name (Full Width) */}
+                      <div className="w-full">
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                          Event Name
+                        </label>
+                        <input
+                          type="text"
+                          readOnly
+                          value={ev.event_name || ev.event_type || ''}
+                          className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Row 2: Event Date & Event Start Time */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                            Event Date *
+                          </label>
+                          <input
+                            type="date"
+                            readOnly
+                            value={ev.event_date || ''}
+                            className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                            Event Start Time *
+                          </label>
+                          <input
+                            type="time"
+                            readOnly
+                            value={ev.event_start_time || ev.event_time || ''}
+                            className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Row 3: Reporting Date, Reporting End Date, Reporting Time */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                            Reporting Date *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={evData.reporting_date}
+                            onChange={(e) => setFinalReportingForm({ 
+                              ...finalReportingForm, 
+                              [ev.id]: { ...evData, reporting_date: e.target.value } 
+                            })}
+                            className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                            Reporting End Date
+                          </label>
+                          <input
+                            type="date"
+                            readOnly
+                            value={ev.event_end_date || ev.Event_End_Date || (selectedLead?.Event_End_Date && selectedLead?.events?.length === 1 ? selectedLead.Event_End_Date : '') || ''}
+                            className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                            Reporting Time *
+                          </label>
+                          <input
+                            type="time"
+                            required
+                            value={evData.reporting_time}
+                            onChange={(e) => setFinalReportingForm({ 
+                              ...finalReportingForm, 
+                              [ev.id]: { ...evData, reporting_time: e.target.value } 
+                            })}
+                            className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="bg-slate-950/60 p-5 rounded-xl border border-slate-800 space-y-4">
+                  {/* Row 1: Event Name (Full Width) */}
+                  <div className="w-full">
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Event Name
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={selectedLead.event_type || selectedLead.customer_name || 'Event'}
+                      className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Row 2: Event Date & Event Start Time */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Event Date *
+                      </label>
+                      <input
+                        type="date"
+                        readOnly
+                        value={selectedLead.event_date || selectedLead.Reporting_date || ''}
+                        className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                        Event Start Time *
+                      </label>
+                      <input
+                        type="time"
+                        readOnly
+                        value={selectedLead.event_time || selectedLead.reporting_time || ''}
+                        className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Reporting Date, Reporting End Date, Reporting Time */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                        Reporting Date *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={finalReportingForm['default']?.reporting_date || ''}
+                        onChange={(e) => setFinalReportingForm({ 
+                          ...finalReportingForm, 
+                          'default': { ...finalReportingForm['default'], reporting_date: e.target.value } 
+                        })}
+                        className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                        Reporting End Date
+                      </label>
+                      <input
+                        type="date"
+                        readOnly
+                        value={selectedLead.Event_End_Date || ''}
+                        className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
+                        Reporting Time *
+                      </label>
+                      <input
+                        type="time"
+                        required
+                        value={finalReportingForm['default']?.reporting_time || ''}
+                        onChange={(e) => setFinalReportingForm({ 
+                          ...finalReportingForm, 
+                          'default': { ...finalReportingForm['default'], reporting_time: e.target.value } 
+                        })}
+                        className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+                
+              {/* Button: Centered */}
+              <div className="flex justify-center items-center pt-4 border-t border-slate-800/80">
+                 <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 transition-all cursor-pointer inline-flex items-center justify-center min-w-max"
+                >
+                  {isSaving ? 'Saving...' : 'Save Reporting Details'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3 Follow-up Popup Modal */}
+      {showStep3Popup && (selectedLead || activeTab === 'create') && (
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="step3_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>ğŸ“…</span> Follow-up Date &amp; Time
+              </h4>
+              <button
+                type="button"
+                onClick={() => setShowStep3Popup(false)}
+                className="text-slate-500 hover:text-slate-300 cursor-pointer border-0 bg-transparent"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg text-xs text-indigo-200">
+              Please schedule the follow-up date to finalize quotation and set lead status to <strong>Quote Sent</strong>.
+            </div>
+
+            <div className="space-y-3.5 text-xs text-slate-300">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                  Follow-up Date <span className="text-rose-400">* (Required)</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={step3FollowUpDate}
+                  onChange={(e) => setStep3FollowUpDate(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                  Follow-up Time <span className="text-slate-500">(Optional)</span>
+                </label>
+                <input
+                  type="time"
+                  value={step3FollowUpTime}
+                  onChange={(e) => setStep3FollowUpTime(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                  Follow-up Notes <span className="text-slate-500">(Optional)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Summarize key client preferences, expected decision timeline, or notes..."
+                  value={step3FollowUpNotes}
+                  onChange={(e) => setStep3FollowUpNotes(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowStep3Popup(false)}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border-0 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveStep3FollowUp}
+                  disabled={isSaving || isCrmLocked || !step3FollowUpDate}
+                  className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
+                >
+                  {isSaving ? 'Submitting...' : 'Submit'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Details Modal */}
+      {errorDetails && (
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-slate-900 border border-red-900/50 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <h4 className="font-bold text-red-400 text-lg flex items-center gap-2">
+                <span>âŒ</span> {errorDetails.title}
+              </h4>
+              <button 
+                onClick={() => setErrorDetails(null)}
+                className="text-slate-400 hover:text-white transition-colors"
+              >
+                âœ•
+              </button>
+            </div>
+            <div className="space-y-3 text-sm text-slate-300">
+              <p><strong>Reason:</strong> {errorDetails.reason}</p>
+              {errorDetails.source && <p><strong>Source:</strong> {errorDetails.source}</p>}
+              {errorDetails.failedFunction && <p><strong>Failed Function:</strong> {errorDetails.failedFunction}</p>}
+              {errorDetails.database && <p><strong>Database:</strong> {errorDetails.database}</p>}
+              {errorDetails.leadId && <p><strong>Lead ID:</strong> {errorDetails.leadId}</p>}
+              {errorDetails.suggestedFix && (
+                <div className="mt-4 p-3 bg-blue-950/30 border border-blue-900/50 rounded-lg text-blue-300">
+                  <strong>Suggested Fix:</strong> {errorDetails.suggestedFix}
+                </div>
+              )}
+              {process.env.NODE_ENV !== 'production' && errorDetails.stack && (
+                <div className="mt-4 p-3 bg-slate-950 rounded-lg overflow-auto max-h-40 border border-slate-800 text-[10px] font-mono text-slate-500">
+                  {errorDetails.stack}
+                </div>
+              )}
+            </div>
+            <div className="pt-4 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setErrorDetails(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lost Lead Popup Modal */}
+      {showLostModal && selectedLead && (
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
+          <div id="lost_lead_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>ğŸ’”</span> Mark Lead as Lost
+              </h4>
+              <button 
+                onClick={() => setShowLostModal(false)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-xs text-red-200">
+              Please select a mandatory reason and log notes to set lead status to <strong>Lost</strong>.
+            </div>
+
+            <div className="space-y-3.5 text-xs text-slate-300">
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Lost Reason * (Required)
+                </label>
+                <select
+                  required
+                  value={lostReason}
+                  onChange={(e) => setLostReason(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <option value="">-- Select Reason --</option>
+                  <option value="Budget Constraint">Budget Constraint</option>
+                  <option value="Chose Competitor">Chose Competitor</option>
+                  <option value="Event Cancelled / Postponed">Event Cancelled / Postponed</option>
+                  <option value="No Response / Ghosted">No Response / Ghosted</option>
+                  <option value="Desired Date Unavailable">Desired Date Unavailable</option>
+                  <option value="Other">Other (Specify below)</option>
+                </select>
+              </div>
+
+              {lostReason === 'Other' && (
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Specify Custom Lost Reason * (Required)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter custom lost reason..."
+                    value={otherLostReason}
+                    onChange={(e) => setOtherLostReason(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Lost Notes * (Required)
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="Detail the exact reason client decided otherwise..."
+                  value={lostNotes}
+                  onChange={(e) => setLostNotes(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowLostModal(false)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveLostLead}
+                  disabled={isSaving || !lostReason || (lostReason === 'Other' && !otherLostReason) || !lostNotes}
+                  className="px-4 py-2 bg-gradient-to-r from-red-650 to-rose-650 hover:from-red-600 hover:to-rose-600 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
+                >
+                  {isSaving ? 'Processing...' : 'Mark as Lost'}
+                  <CheckSquare className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unlock Request Modal */}
+      {showUnlockRequestModal && selectedUnlockLead && (
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <Ban className="w-4 h-4 text-amber-500" /> Request Quotation Unlock
+              </h4>
+              <button 
+                onClick={() => setShowUnlockRequestModal(false)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-amber-200/80">
+              This request will be sent to the Business Owner for approval. The quotation remains locked until approved.
+            </div>
+
+            <form onSubmit={handleSubmitUnlockRequest} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-medium text-slate-400 mb-1">
+                  Reason * (Required)
+                </label>
+                <select
+                  required
+                  value={unlockRequestReason}
+                  onChange={(e) => setUnlockRequestReason(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                >
+                  <option value="Customer requested additional discount">Customer requested additional discount</option>
+                  <option value="Customer requested package modification">Customer requested package modification</option>
+                  <option value="Customer requested event changes">Customer requested event changes</option>
+                  <option value="Customer requested team member changes">Customer requested team member changes</option>
+                  <option value="Customer requested deliverable changes">Customer requested deliverable changes</option>
+                  <option value="Pricing correction required">Pricing correction required</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              {unlockRequestReason === 'Other' && (
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Enter Reason * (Required)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter custom reason..."
+                    value={unlockRequestCustomReason}
+                    onChange={(e) => setUnlockRequestCustomReason(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowUnlockRequestModal(false)}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer text-xs disabled:opacity-50 border-0 flex items-center justify-center"
+                >
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : 'Submit Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Lead Cancel Confirmation Modal */}
+      {showCancelConfirmPopup && (
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-200">
+          <div id="lead_cancel_confirm_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-sm w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+                <span>âš ï¸</span> Mark Lead as Lost
+              </h4>
+              <button 
+                onClick={() => setShowCancelConfirmPopup(false)}
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-sm text-slate-300 py-2 text-left">
+              Are you sure you want to mark this lead as Lost?
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirmPopup(false)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-semibold border-0"
+              >
+                No
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelLead}
+                disabled={isSaving}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold rounded-xl cursor-pointer shadow-lg text-xs border-0"
+              >
+                {isSaving ? 'Processing...' : 'Yes, Mark as Lost'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedLead && (
+        <div 
+          id="lead_details_mobile_modal" 
+          className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative animate-fade-in text-left font-sans text-slate-100"
+        >
+            {/* Header: Sticky */}
+            {!['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) && (
+              <div className={`py-2.5 px-4 sm:px-5 border-b flex items-center justify-between sticky top-0 z-10 backdrop-blur-sm shrink-0 ${
+                isLeadLost && crmWizardStep === 3 ? 'bg-rose-950/40 border-rose-500/30' : 'bg-slate-950/40 border-slate-850'
+              }`}>
+                {crmWizardStep !== 3 ? (
+                  <div className="flex items-center gap-2 text-left flex-wrap">
+                    <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5 font-mono uppercase tracking-wider">
+                      <span>ğŸ’</span> Digital Lead CRM Workspace â€” Client Board
+                    </h3>
+                    <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-mono font-bold">Code: {selectedLead.lead_id}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                      isLeadLost ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' :
+                      getLeadCurrentStage(selectedLead) === 'Sales' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                      getLeadCurrentStage(selectedLead) === 'Operations' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                      getLeadCurrentStage(selectedLead) === 'Production' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                      'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                    }`}>
+                      Stage: {isLeadLost ? 'Lost Lead' : getLeadCurrentStage(selectedLead)}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight ${
+                      isLeadLost ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-zinc-800 text-zinc-300 border border-zinc-700'
+                    }`}>
+                      Status: {getLeadCurrentStatus(selectedLead)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-xs font-bold font-mono uppercase tracking-wider ${isLeadLost ? 'text-rose-300' : 'text-slate-200'}`}>
+                      Step 3: Package Configuration
+                    </span>
+                    {isLeadLost && (
+                      <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-mono font-bold uppercase flex items-center gap-1">
+                        <span>ğŸ’”</span> [ LOST LEAD ]
+                      </span>
+                    )}
+                  </div>
+                )}
+                <button 
+                  onClick={() => setSelectedLead(null)}
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs rounded-xl border border-slate-700 font-bold uppercase tracking-wider transition-all cursor-pointer inline-flex items-center gap-1 shadow"
+                >
+                  Back to Leads
+                </button>
+              </div>
+            )}
+
+            {/* Custom Toast Alert */}
+            {crmToast && (
+              <div id="crm-toast-container" className={`mx-4 mt-1.5 p-1.5 rounded-lg shadow-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+                crmToast.type === 'success' 
+                  ? 'bg-emerald-950 border border-emerald-500/20 text-emerald-400' 
+                  : 'bg-red-950 border border-red-500/20 text-red-400'
+              }`}>
+                <span>{crmToast.type === 'success' ? 'âš¡' : 'âš ï¸'}</span>
+                <span className="text-[10px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
+              </div>
+            )}
+
+            {/* Progress Bar & Indicators */}
+            <div className={`w-full ${isLeadLost && crmWizardStep === 3 ? 'bg-rose-950/20 border-b border-rose-500/30' : 'bg-slate-950/20 border-b border-slate-850'} py-1.5 px-4 sm:px-5 shrink-0 justify-start text-left ${['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) ? 'sticky top-0 z-10 backdrop-blur-sm' : ''}`}>
+              <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
+                <div className="flex flex-1 items-center gap-2">
+                  <span className={`text-[10px] sm:text-xs font-mono font-bold uppercase tracking-widest text-left shrink-0 ${isLeadLost && crmWizardStep === 3 ? 'text-rose-400' : 'text-indigo-400'}`}>
+                    Step {crmWizardStep} of 3:
+                  </span>
+                  <span className={`text-[10px] sm:text-xs font-semibold py-0.5 px-2 rounded border shrink-0 flex items-center gap-1.5 ${
+                    isLeadLost && crmWizardStep === 3
+                      ? 'text-rose-300 bg-rose-950/40 border-rose-500/30 font-mono font-bold'
+                      : 'text-slate-300 bg-slate-800 border-slate-750'
+                  }`}>
+                    {crmWizardStep === 1 ? 'Customer Details' :
+                     crmWizardStep === 2 ? 'Event Details' :
+                     'Quotation Workspace'}
+                    {isLeadLost && crmWizardStep === 3 && (
+                      <span className="text-[9px] bg-rose-500/20 text-rose-300 px-1 py-0.2 rounded uppercase">
+                        [ LOST LEAD ]
+                      </span>
+                    )}
+                  </span>
+                  <div className="flex-1 max-w-xs h-1 bg-slate-950 rounded-full overflow-hidden hidden sm:block ml-4">
+                    <div 
+                      className={`h-full transition-all duration-300 ${isLeadLost && crmWizardStep === 3 ? 'bg-rose-500' : 'bg-indigo-500'}`}
+                      style={{ width: `${(crmWizardStep / 3) * 100}%` }}
+                    />
+                  </div>
+                </div>
+                {['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) && (
+                  <button 
+                    onClick={() => setSelectedLead(null)}
+                    className="px-3 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-[10px] sm:text-xs rounded border border-slate-700 font-bold uppercase tracking-wider transition-all cursor-pointer inline-flex items-center gap-1 shadow shrink-0"
+                  >
+                    Back to Leads
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Content container with horizontal padding */}
+            <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
+              <div className="max-w-5xl mx-auto">
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
+                  <fieldset disabled={isCrmLocked} className="space-y-3 border-0 p-0 m-0 min-w-0">
+                    {crmWizardStep === 1 && (
+                    <div className="space-y-4 animate-fade-in text-left">
+                      <div className="border-b border-slate-800 pb-1.5">
+                        <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                          <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">1</span>
+                          <span>Customer Details</span>
+                        </h3>
+                        <p className="text-[10px] text-zinc-400 mt-0.5">Manage client contact identity, email correspondence, and location parameters.</p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3 text-left">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Customer Name (Optional)</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.customer_name || ''}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, customer_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Mobile Number *</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.mobile || ''}
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
+                              setWizardLeadData({ ...wizardLeadData, mobile: val });
+                            }}
+                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">WhatsApp Number</label>
+                          <input
+                            type="text"
+                            value={wizardLeadData.whatsapp_number || ''}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, whatsapp_number: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Email (Optional)</label>
+                          <input
+                            type="email"
+                            value={wizardLeadData.email || ''}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, email: e.target.value })}
+                            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Inbound Lead Channel Source *</label>
+                          <select
+                            value={wizardLeadData.lead_source || ''}
+                            onChange={(e) => setWizardLeadData({ ...wizardLeadData, lead_source: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-white cursor-pointer select-element"
+                            required
+                          >
+                            <option value="">â”€â”€ Choose Lead Source â”€â”€</option>
+                            {LEAD_SOURCES.map(source => (
+                              <option key={source} value={source}>{source}</option>
+                            ))}
+                          </select>
+                          {wizardLeadData.lead_source === 'Other' && (
+                            <div className="animate-fade-in-down mt-2">
+                              <label className="block text-xs font-mono font-bold text-amber-500 mb-1.5">
+                                Specify Custom Lead Source Name *
+                              </label>
+                              <input
+                                type="text"
+                                required
+                                placeholder="e.g. Billboard, Event Flyer"
+                                value={wizardLeadData.Specify_Custom_Lead_Source_Name || ''}
+                                onChange={(e) => setWizardLeadData({ ...wizardLeadData, Specify_Custom_Lead_Source_Name: e.target.value })}
+                                className="w-full bg-slate-955 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
+                              />
+                             </div>
+                           )}
+                         </div>
+                       </div>
+                     </div>
+                   )}
+
+                   {crmWizardStep === 2 && (
+                     <div className="space-y-4 animate-fade-in text-left">
+                       <div className="border-b border-slate-800 pb-1.5">
+                         <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                           <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">2</span>
+                           <span>Event Details</span>
+                         </h3>
+                         <p className="text-[11px] text-zinc-400 mt-1">Configure event metadata, starting schedules, reporting times, and lead origins.</p>
+                       </div>
+                       
+                       {renderEventDetailsSection(true)}
+                     </div>
+                   )}
+
+                   {crmWizardStep === 3 && (
+                     <div className={`space-y-4 animate-fade-in text-left ${isLeadLost ? 'bg-rose-950/10 border border-rose-500/30 rounded-2xl p-3.5 sm:p-4' : ''}`}>
+                       <div className={`border-b pb-1.5 flex items-center justify-between ${isLeadLost ? 'border-rose-500/30' : 'border-slate-800'}`}>
+                         <h3 className={`text-xs sm:text-sm font-bold flex items-center gap-2 ${isLeadLost ? 'text-rose-400' : 'text-white'}`}>
+                           <span className={`p-0.5 px-1.5 rounded text-[10px] font-mono ${isLeadLost ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'bg-indigo-500/10 text-indigo-400'}`}>3</span>
+                           <span>Quotation Workspace</span>
+                         </h3>
+                         {isLeadLost && (
+                           <span className="text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2.5 py-0.5 rounded font-mono font-bold uppercase flex items-center gap-1">
+                             <span>ğŸ’”</span> [ LOST LEAD ]
+                           </span>
+                         )}
+                       </div>
+                       {renderStep3Workspace(true)}
+                        <div className="hidden">
+                        <div className="space-y-3.5 text-left">
+                         <div>
+                           <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
+                           <select
+                             id="select_package_option"
+                             value={wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || ''}
+                             onChange={(e) => handlePackageDropdownChange(e.target.value)}
+                             className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
+                               !(wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option)
+                                 ? 'border-rose-500/40 focus:border-rose-500 text-rose-200'
+                                 : 'border-slate-800 focus:border-indigo-500 text-white'
+                             }`}
+                           >
+                             <option value="">â”€â”€ Choose configuration package â”€â”€</option>
+                             {(() => {
+                               const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || '';
+                               const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+                               const activePkgs = availablePkgs.filter(p => (!p.status || p.status.toLowerCase() === 'active') && String(p.package_id) !== 'Custom Package' && String(p.package_id) !== 'custom_package' && String(p.package_name) !== 'Custom Package');
+                               if (currentPkgId && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
+                                 const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
+                                 if (matched) {
+                                   activePkgs.unshift(matched);
+                                 } else {
+                                   activePkgs.unshift({
+                                     package_id: currentPkgId,
+                                     package_name: `Package ${currentPkgId} (Legacy)`,
+                                     price: wizardLeadData.package_cost || selectedLead?.Final_Quotation_Amount || 0,
+                                     status: 'Active'
+                                   } as any);
+                                 }
+                               }
+                               return (
+                                 <>
+                                   {activePkgs.map((pkg) => (
+                                     <option key={pkg.package_id} value={pkg.package_id}>
+                                       {pkg.package_name} (â‚¹{Number(pkg.price).toLocaleString('en-IN')})
+                                     </option>
+                                   ))}
+                                   <option value="Custom Package">Custom Package</option>
+                                 </>
+                               );
+                             })()}
+                           </select>
+                           {!(wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option) && (
+                             <p className="text-rose-450 font-bold text-xs mt-1 font-mono animate-pulse flex items-center gap-1.5">
+                               âš ï¸ Please select a package before continuing.
+                             </p>
+                           )}
+                         </div>
+ 
+                         {(() => {
+                           const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+                           const currentPkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option; 
+                           let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId)); 
+                           if (!selectedPkg && currentPkgId) { 
+                             selectedPkg = { package_id: currentPkgId, package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; 
+                           }
+                           const selectedPkgId = selectedPkg?.package_id || '';
+                          const inclusionsList = editableInclusions[selectedPkgId] || [];
+                          const deliverablesList = editableDeliverables[selectedPkgId] || [];
+
+                          return (
+                            <div className="space-y-4 animate-fade-in">
+                              {/* Sales Executive Details */}
+                              <div className="hidden bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
+                                <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
+                                  <span>ğŸ‘¤</span> Sales Executive Details
+                                </h4>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                                      Sales Staff Name *
+                                    </label>
+                                    <input
+                                      id="input_sales_staff_name"
+                                      type="text"
+                                      required
+                                      value={salesStaffName}
+                                      onChange={(e) => setSalesStaffName(e.target.value)}
+                                      placeholder="E.g., Jane Doe"
+                                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-sans transition-all"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                                      Sales Staff Mobile Number *
+                                    </label>
+                                    <input
+                                      id="input_sales_staff_mobile"
+                                      type="text"
+                                      required
+                                      value={salesStaffMobile}
+                                      onChange={(e) => setSalesStaffMobile(e.target.value)}
+                                      placeholder="E.g., 9876543210"
+                                      className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-mono transition-all"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Single Package Base Price (â‚¹) Field (Hidden visually per request) */}
+                              <div className="hidden" style={{ display: 'none' }}>
+                                <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
+                                  <span>ğŸ’°</span> Package Base Price (â‚¹) *
+                                </label>
+                                <input
+                                  type="number"
+                                  value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (selectedPkg?.price || '')}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const numVal = val === '' ? 0 : Number(val);
+                                    setWizardLeadData(prev => ({
+                                      ...prev,
+                                      package_cost: val,
+                                      package_price: numVal,
+                                      budget: numVal,
+                                      final_quoted_amount: numVal
+                                    }));
+                                    saveStep3DataRealtime(editableInclusions, editableDeliverables, wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option, numVal);
+                                  }}
+                                  placeholder="Enter package base price..."
+                                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-300 font-mono font-bold"
+                                  required
+                                />
+                              </div>
+
+                              {/* Event-Wise Configuration or Single Configuration */}
+                              <div>
+                                {crmEvents && crmEvents.length > 0 ? (
+                                  crmEvents.map((event, eventIdx) => {
+                                    const eventKey = `${selectedPkgId}_${event.id}`;
+                                    const nameKey = `${selectedPkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+
+                                    const eventInclusions = editableInclusions[eventKey] !== undefined
+                                      ? editableInclusions[eventKey]
+                                      : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : (crmEvents.length === 1 ? inclusionsList : []));
+
+                                    const eventDeliverables = editableDeliverables[eventKey] !== undefined
+                                      ? editableDeliverables[eventKey]
+                                      : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : (crmEvents.length === 1 ? deliverablesList : []));
+
+                                    const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
+                                    const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
+                                    const endDateStr = endDateRaw ? formatDDMMYYYY(endDateRaw) : 'N/A';
+                                    const startTimeStr = event.event_start_time ? convertTo12Hour(event.event_start_time) : 'N/A';
+                                    const endTimeStr = event.event_end_time ? convertTo12Hour(event.event_end_time) : 'N/A';
+                                    const guestPaxVal = event.guest_pax !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
+
+                                    return (
+                                      <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                                        {/* VERY SMALL COMPACT EVENT SUMMARY */}
+                                        <div className="bg-slate-950/60 border border-slate-800/70 p-2.5 sm:p-3 rounded-lg text-left font-mono">
+                                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                                            <span className="text-xs sm:text-sm font-bold text-slate-100 font-sans">
+                                              {event.event_name || `Event ${eventIdx + 1}`}
+                                            </span>
+                                            {event.event_type && (
+                                              <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold border border-slate-700">
+                                                [{event.event_type}]
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="text-[11px] text-slate-300 leading-tight flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                                            <span>
+                                              Start: <span className="text-slate-100 font-semibold">{startDateStr}{startTimeStr !== 'N/A' ? ` | ${startTimeStr}` : ''}</span>
+                                            </span>
+                                            {(endDateRaw || endTimeStr !== 'N/A') && (
+                                              <>
+                                                <span className="text-slate-500">â€¢</span>
+                                                <span>
+                                                  End: <span className="text-slate-100 font-semibold">{endDateStr !== 'N/A' ? endDateStr : startDateStr}{endTimeStr !== 'N/A' ? ` | ${endTimeStr}` : ''}</span>
+                                                </span>
+                                              </>
+                                            )}
+                                            <span className="text-slate-500">â€¢</span>
+                                            <span>
+                                              Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                         {/* Team Members Included */}
+                                         <div>
+                                           <div className="mb-2">
+                                             <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
+                                           </div>
+                                           {eventInclusions.length === 0 ? (
+                                             <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                               <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
+                                               <button
+                                                 type="button"
+                                                 onClick={() => {
+                                                   const currentList = [...eventInclusions];
+                                                   currentList.push("");
+                                                   const updated = {
+                                                     ...editableInclusions,
+                                                     [eventKey]: currentList,
+                                                     [nameKey]: currentList
+                                                   };
+                                                   setEditableInclusions(updated);
+                                                   saveStep3DataRealtime(updated, editableDeliverables);
+                                                 }}
+                                                 className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                                               >
+                                                 + Add Member
+                                               </button>
+                                             </div>
+                                           ) : (
+                                              <div className="space-y-1.5">
+                                                {eventInclusions.map((item, idx) => (
+                                                  <CompactQtyItemRow
+                                                    key={idx}
+                                                    value={item}
+                                                    options={activeMasterRoles}
+                                                    placeholder="Type or select Role / Team Member..."
+                                                    accentColor="indigo"
+                                                    onChange={(newVal) => {
+                                                      const currentList = [...eventInclusions];
+                                                      currentList[idx] = newVal;
+                                                      const updated = {
+                                                        ...editableInclusions,
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
+                                                      };
+                                                      setEditableInclusions(updated);
+                                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                                    }}
+                                                    onDelete={() => {
+                                                      const currentList = [...eventInclusions];
+                                                      currentList.splice(idx, 1);
+                                                      const updated = {
+                                                        ...editableInclusions,
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
+                                                      };
+                                                      setEditableInclusions(updated);
+                                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                                    }}
+                                                  />
+                                                ))}
+                                                <div className="flex justify-end pt-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      const currentList = [...eventInclusions];
+                                                      currentList.push("");
+                                                      const updated = {
+                                                        ...editableInclusions,
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
+                                                      };
+                                                      setEditableInclusions(updated);
+                                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                                    }}
+                                                    className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                                                  >
+                                                    + Add Member
+                                                  </button>
+                                                </div>
+                                              </div>
+                                           )}
+                                         </div>
+                                         {/* Deliverables Description / Base Package Deliverables */}
+                                         <div>
+                                           <div className="mb-2">
+                                             <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
+                                           </div>
+                                           {eventDeliverables.length === 0 ? (
+                                             <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                               <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                                               <button
+                                                 type="button"
+                                                 onClick={() => {
+                                                   const currentList = [...eventDeliverables];
+                                                   currentList.push("");
+                                                   const updated = {
+                                                     ...editableDeliverables,
+                                                     [eventKey]: currentList,
+                                                     [nameKey]: currentList
+                                                   };
+                                                   setEditableDeliverables(updated);
+                                                   saveStep3DataRealtime(editableInclusions, updated);
+                                                 }}
+                                                 className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                                               >
+                                                 + Add Deliverable
+                                               </button>
+                                             </div>
+                                           ) : (
+                                              <div className="space-y-1.5">
+                                                {eventDeliverables.map((item, idx) => (
+                                                  <CompactQtyItemRow
+                                                    key={idx}
+                                                    value={item}
+                                                    options={activeMasterDeliverables}
+                                                    placeholder="Type or select Deliverable..."
+                                                    accentColor="emerald"
+                                                    onChange={(newVal) => {
+                                                      const currentList = [...eventDeliverables];
+                                                      currentList[idx] = newVal;
+                                                      const updated = {
+                                                        ...editableDeliverables,
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
+                                                      };
+                                                      setEditableDeliverables(updated);
+                                                      saveStep3DataRealtime(editableInclusions, updated);
+                                                    }}
+                                                    onDelete={() => {
+                                                      const currentList = [...eventDeliverables];
+                                                      currentList.splice(idx, 1);
+                                                      const updated = {
+                                                        ...editableDeliverables,
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
+                                                      };
+                                                      setEditableDeliverables(updated);
+                                                      saveStep3DataRealtime(editableInclusions, updated);
+                                                    }}
+                                                  />
+                                                ))}
+                                                <div className="flex justify-end pt-1">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      const currentList = [...eventDeliverables];
+                                                      currentList.push("");
+                                                      const updated = {
+                                                        ...editableDeliverables,
+                                                        [eventKey]: currentList,
+                                                        [nameKey]: currentList
+                                                      };
+                                                      setEditableDeliverables(updated);
+                                                      saveStep3DataRealtime(editableInclusions, updated);
+                                                    }}
+                                                    className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                                                  >
+                                                    + Add Deliverable
+                                                  </button>
+                                                </div>
+                                              </div>
+                                           )}
+                                         </div>
+                                        </div>
+                                      );
+                                    })
+                                ) : (
+                                  <div className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                                     {/* Single Team Members Included */}
+                                     <div>
+                                       <div className="mb-2">
+                                         <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
+                                       </div>
+                                       {inclusionsList.length === 0 ? (
+                                         <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                           <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
+                                           <button
+                                             type="button"
+                                             onClick={() => {
+                                               const currentList = [...inclusionsList];
+                                               currentList.push("");
+                                               const updated = {
+                                                 ...editableInclusions,
+                                                 [selectedPkgId]: currentList
+                                               };
+                                               setEditableInclusions(updated);
+                                               saveStep3DataRealtime(updated, editableDeliverables);
+                                             }}
+                                             className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                                           >
+                                             + Add Member
+                                           </button>
+                                         </div>
+                                       ) : (
+                                          <div className="space-y-1.5">
+                                            {inclusionsList.map((item, idx) => (
+                                              <CompactQtyItemRow
+                                                key={idx}
+                                                value={item}
+                                                options={activeMasterRoles}
+                                                placeholder="Type or select Role / Team Member..."
+                                                accentColor="indigo"
+                                                onChange={(newVal) => {
+                                                  const currentList = [...inclusionsList];
+                                                  currentList[idx] = newVal;
+                                                  const updated = {
+                                                    ...editableInclusions,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableInclusions(updated);
+                                                  saveStep3DataRealtime(updated, editableDeliverables);
+                                                }}
+                                                onDelete={() => {
+                                                  const currentList = [...inclusionsList];
+                                                  currentList.splice(idx, 1);
+                                                  const updated = {
+                                                    ...editableInclusions,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableInclusions(updated);
+                                                  saveStep3DataRealtime(updated, editableDeliverables);
+                                                }}
+                                              />
+                                            ))}
+                                            <div className="flex justify-end pt-1">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentList = [...inclusionsList];
+                                                  currentList.push("");
+                                                  const updated = {
+                                                    ...editableInclusions,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableInclusions(updated);
+                                                  saveStep3DataRealtime(updated, editableDeliverables);
+                                                }}
+                                                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                                              >
+                                                + Add Member
+                                              </button>
+                                            </div>
+                                          </div>
+                                       )}
+                                     </div>
+
+                                     {/* Single Deliverables Description */}
+                                     <div>
+                                       <div className="mb-2">
+                                         <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
+                                       </div>
+                                       {deliverablesList.length === 0 ? (
+                                         <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                                           <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                                           <button
+                                             type="button"
+                                             onClick={() => {
+                                               const currentList = [...deliverablesList];
+                                               currentList.push("");
+                                               const updated = {
+                                                 ...editableDeliverables,
+                                                 [selectedPkgId]: currentList
+                                               };
+                                               setEditableDeliverables(updated);
+                                               saveStep3DataRealtime(editableInclusions, updated);
+                                             }}
+                                             className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                                           >
+                                             + Add Deliverable
+                                           </button>
+                                         </div>
+                                       ) : (
+                                          <div className="space-y-1.5">
+                                            {deliverablesList.map((item, idx) => (
+                                              <CompactQtyItemRow
+                                                key={idx}
+                                                value={item}
+                                                options={activeMasterDeliverables}
+                                                placeholder="Type or select Deliverable..."
+                                                accentColor="emerald"
+                                                onChange={(newVal) => {
+                                                  const currentList = [...deliverablesList];
+                                                  currentList[idx] = newVal;
+                                                  const updated = {
+                                                    ...editableDeliverables,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableDeliverables(updated);
+                                                  saveStep3DataRealtime(editableInclusions, updated);
+                                                }}
+                                                onDelete={() => {
+                                                  const currentList = [...deliverablesList];
+                                                  currentList.splice(idx, 1);
+                                                  const updated = {
+                                                    ...editableDeliverables,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableDeliverables(updated);
+                                                  saveStep3DataRealtime(editableInclusions, updated);
+                                                }}
+                                              />
+                                            ))}
+                                            <div className="flex justify-end pt-1">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const currentList = [...deliverablesList];
+                                                  currentList.push("");
+                                                  const updated = {
+                                                    ...editableDeliverables,
+                                                    [selectedPkgId]: currentList
+                                                  };
+                                                  setEditableDeliverables(updated);
+                                                  saveStep3DataRealtime(editableInclusions, updated);
+                                                }}
+                                                className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                                              >
+                                                + Add Deliverable
+                                              </button>
+                                            </div>
+                                          </div>
+                                       )}
+                                     </div>
+                                    </div>
+                                )}
+                              </div>
+
+                              <div className="mt-4 flex justify-end pb-2">
+                                <button
+                                  type="button"
+                                  onClick={handleSavePackageOnly}
+                                  disabled={isSaving}
+                                  className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold uppercase tracking-wider rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {isSaving ? 'Saving...' : 'Save Package'}
+                                </button>
+                              </div>
+
+                              {renderQuotationAndStep4Section(true)}
+                            </div>
+                          );
+                        })()}
+                        </div>
+                      </div>
+
+                      {/* STEP 5 INTEGRATED (CRM): Status Update / Order Confirmation Details at BOTTOM of Step 3 */}
+                      <div className="space-y-4 animate-fade-in text-left mt-6">
+                        <div className="border-b border-slate-800 pb-1.5">
+                          <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                            <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
+                            <span>Status Update</span>
+                          </h3>
+                        </div>
+                        <div className="space-y-4 text-left">
+                          {['Lost Lead', 'Lead Lost', 'Lost'].includes(wizardLeadData.status || selectedLead?.status || (selectedLead as any)?.current_status || '') ? (() => {
+                            const { reason: lostReasonText, notes: lostNotesText } = getStrictLostReasonAndNotes(selectedLead);
+                            return (
+                              <div id="lost_lead_status_update_section" className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="border-b border-rose-500/20 pb-1.5 flex items-center justify-between">
+                                  <h4 className="text-[11px] font-black text-rose-400 uppercase tracking-widest font-mono flex items-center gap-1.5">
+                                    <span>ğŸ’”</span> Lost Lead Information
+                                  </h4>
+                                  <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-mono font-bold uppercase">
+                                    Status: Lost Lead
+                                  </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3.5 text-left text-xs">
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-400 uppercase font-mono font-bold mb-1">Lost Reason</span>
+                                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-rose-300 font-semibold font-mono text-xs">
+                                      {lostReasonText}
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-400 uppercase font-mono font-bold mb-1">Lost Note</span>
+                                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 text-xs whitespace-pre-wrap font-sans">
+                                      {lostNotesText || 'No additional notes provided.'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })() : (['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Raw Footage Received', 'Editing Started', 'Client Review', 'Editing Complete', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
+                            (selectedLead?.status === 'Order Confirmed' || selectedLead?.status === 'Event Scheduled' || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
+                              <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="border-b border-emerald-500/20 pb-1.5">
+                                  <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">ğŸ’ Order Confirmation Details</h4>
+                                  <p className="text-[10px] text-zinc-400 mt-0.5">These are the finalized details saved for this order from the database.</p>
+                                </div>
+                                
+                                <div className="hidden">
+                                  <input type="text" value={selectedLead?.booking_date || selectedLead?.event_date || wizardLeadData.confirmed_event_date || ''} onChange={() => {}} />
+                                  <input type="number" value={selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0} onChange={() => {}} />
+                                  <input type="number" value={selectedLead?.advance_collected || wizardLeadData.advance_received || 0} onChange={() => {}} />
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left text-xs">
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Order Status</span>
+                                    <strong className="text-emerald-400">Order Confirmed</strong>
+                                  </div>
+                                  
+                                  <div className="col-span-1 sm:col-span-2 space-y-2 mb-2">
+                                    {crmEvents && crmEvents.length > 0 ? (
+                                      crmEvents.map((ev: any, idx: number) => (
+                                        <div key={ev.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+                                          <div className="flex flex-col min-w-max">
+                                            <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider mb-0.5">Event {idx + 1}</span>
+                                            <span className="text-xs font-bold text-slate-200">{ev.event_name || ev.event_type || 'N/A'}</span>
+                                          </div>
+                                          <div className="flex gap-4">
+                                            <div>
+                                              <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Date</span>
+                                              <strong className="text-slate-300 text-xs font-mono">{ev.event_date || 'N/A'}</strong>
+                                            </div>
+                                            <div>
+                                              <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Time</span>
+                                              <strong className="text-slate-300 text-xs font-mono">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</strong>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <div>
+                                        <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Date & Time</span>
+                                        <strong className="text-slate-200">{selectedLead?.booking_date || 'N/A'} {selectedLead?.booking_time ? `at ${selectedLead.booking_time}` : ''}</strong>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Final Package Amount</span>
+                                    <strong className="text-amber-400 font-mono">â‚¹{Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0).toLocaleString('en-IN')}</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Advance Payment</span>
+                                    <strong className="text-emerald-400 font-mono">â‚¹{Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0).toLocaleString('en-IN')}</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Payment Mode</span>
+                                    <strong className="text-slate-200">{selectedLead?.payment_mode || 'N/A'}</strong>
+                                  </div>
+                                  <div>
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Transaction ID</span>
+                                    <strong className="text-slate-200">
+                                      {(selectedLead?.payment_mode === 'Cash' || selectedLead?.payment_mode === 'Other') ? 'N/A' : (selectedLead?.transaction_id || payments?.find(p => p.order_id === (orders?.find(o => o.lead_id === selectedLead?.lead_id)?.order_id || selectedLead?.lead_id))?.transaction_id || 'N/A')}
+                                    </strong>
+                                  </div>
+                                  <div className="col-span-1 sm:col-span-2">
+                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Notes</span>
+                                    <p className="text-slate-300 whitespace-pre-wrap">{selectedLead?.contract_notes || 'No extra notes'}</p>
+                                  </div>
+                                </div>
+
+                                {crmEvents && crmEvents.length > 0 && (
+                                  <div className="mt-4 space-y-3">
+                                    <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Details</h5>
+                                    {crmEvents.map((ev: any) => (
+                                      <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-4 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                                        <div className="col-span-1 sm:col-span-4">
+                                          <span className="text-xs font-bold text-slate-200">ğŸ¬ {ev.event_name || ev.event_type}</span>
+                                        </div>
+                                        <div>
+                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Event Date</span>
+                                           <strong className="text-slate-300 font-mono">{ev.event_date || 'N/A'}</strong>
+                                        </div>
+                                        <div>
+                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Date</span>
+                                           <strong className="text-slate-300 font-mono">{ev.reporting_date || ev.event_date || 'N/A'}</strong>
+                                        </div>
+                                        <div>
+                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting End Date</span>
+                                           <strong className="text-slate-300 font-mono">{ev.event_end_date || ev.Event_End_Date || (crmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : 'N/A')}</strong>
+                                        </div>
+                                        <div>
+                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Time</span>
+                                           <strong className="text-slate-300 font-mono">{ev.reporting_time || 'N/A'}</strong>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+
+                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs mt-4">
+                                  <div>
+                                    <span className="text-[10px] text-zinc-555 uppercase font-bold font-mono">Calculated Pending Amount</span>
+                                    <strong className="block text-red-500 text-sm font-mono mt-0.5">
+                                      â‚¹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}
+                                    </strong>
+                                  </div>
+                                  {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)) > 0 ? (
+                                    <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
+                                  ) : (
+                                    <span className="text-[9px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Fully Paid</span>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+
+                            <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
+                              <div className="border-b border-emerald-500/20 pb-1.5">
+                                <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">ğŸ’ Configure Confirmed Order & Booking Contract</h4>
+                                <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order creates a real-time production entry. The CRM profile remains editable if the client requests changes.</p>
+                              </div>
+
+                              {/* Display each event separately */}
+                              {crmEvents && crmEvents.length > 0 && (
+                                <div className="space-y-2 mb-4">
+                                  <label className="block text-[10px] text-zinc-400 mb-2 uppercase font-mono font-bold border-b border-zinc-800 pb-1">Confirmed Event Dates</label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {crmEvents.map(ev => (
+                                      <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
+                                        <div className="flex flex-col">
+                                          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-0.5">ğŸ¬ {ev.event_name || ev.event_type || 'Event'}</span>
+                                          <div className="flex items-center gap-3 mt-1">
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-[10px] text-slate-500 font-mono">Date:</span>
+                                              <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_date || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-[10px] text-slate-500 font-mono">Time:</span>
+                                              <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
+                                {/* Hidden input to preserve business logic without confusing the UI */}
+                                <div className="hidden">
+                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
+                                  <input
+                                    id="input_confirmed_event_date"
+                                    type="date"
+                                    value={wizardLeadData.confirmed_event_date || (crmEvents && crmEvents.length > 0 ? crmEvents[0].event_date : '') || ''}
+                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
+                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (â‚¹) *</label>
+                                  <input
+                                    id="input_final_amount"
+                                    type="number"
+                                    value={wizardLeadData.final_amount || 0}
+                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
+                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
+                                    required
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Advance Payment Received (â‚¹) *</label>
+                                  <input
+                                    id="input_advance_received"
+                                    type="number"
+                                    value={wizardLeadData.advance_received || 0}
+                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
+                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-emerald-400 font-mono font-bold"
+                                    required
+                                  />
+                                </div>
+                                
+                                {crmEvents && crmEvents.length > 0 && (
+                                  <div className="col-span-1 sm:col-span-2 mt-4 space-y-3">
+                                    <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Reporting Details</h5>
+                                    {crmEvents.map(ev => {
+                                      const repEndDate = ev.event_end_date || ev.Event_End_Date || (crmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : '');
+                                      return (
+                                        <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
+                                          <div className="col-span-1 sm:col-span-3"><span className="text-xs font-bold text-slate-200">ğŸ¬ {ev.event_name || ev.event_type}</span></div>
+                                          <div>
+                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Date *</label>
+                                             <input 
+                                               id={`reporting_date_${ev.id}`}
+                                               type="date" 
+                                               value={ev.reporting_date || ev.event_date || ''} 
+                                               onChange={(e) => {
+                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
+                                                 setCrmEvents(updated);
+                                               }} 
+                                               className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                               required 
+                                             />
+                                          </div>
+                                          <div>
+                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting End Date</label>
+                                             <input 
+                                               id={`reporting_end_date_${ev.id}`}
+                                               type="date" 
+                                               value={repEndDate} 
+                                               readOnly
+                                               placeholder="N/A"
+                                               className="w-full bg-slate-950/60 border border-slate-850/80 rounded-lg py-1.5 px-3 text-xs text-slate-300 font-mono cursor-not-allowed"
+                                             />
+                                          </div>
+                                          <div>
+                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
+                                             <input 
+                                               id={`reporting_time_${ev.id}`}
+                                               type="time" 
+                                               value={ev.reporting_time || ''} 
+                                               onChange={(e) => {
+                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: e.target.value } : eItem);
+                                                 setCrmEvents(updated);
+                                               }} 
+                                               className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
+                                               required 
+                                             />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs">
+                                <div>
+                                  <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
+                                  <strong className="block text-red-500 text-sm font-mono mt-0.5">â‚¹{((wizardLeadData.final_amount || 0) - (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
+                                </div>
+                                <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
+                              </div>
+                            </div>
+                            )
+                          ) : (
+                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
+                              <span className="text-slate-500 text-xs font-mono">No Order Confirmation Details Available.</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                     </div>
+                   )}
+                  </fieldset>
+                </form>
+              </div>
+            </div>
+
+            {/* Footer Buttons: Sticky */}
+            <div className="py-1 px-4 sm:px-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                {crmWizardStep > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setCrmWizardStep(crmWizardStep - 1)}
+                    className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
+                  >
+                    Back
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLead(null)}
+                    className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
+                  >
+                    Back
+                  </button>
+                )}
+                {crmWizardStep === 2 && selectedLead?.status === 'Order Confirmed' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelConfirmPopup(true)}
+                    disabled={isCrmLocked}
+                    className={`px-3.5 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-lg ${
+                      isCrmLocked ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' : 'bg-rose-600 hover:bg-rose-500 text-white cursor-pointer shadow-rose-600/15'
+                    } border border-transparent`}
+                  >
+                    Lost Lead
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {crmWizardStep === 3 && (
+                  <button
+                    type="button"
+                    id="btn_step3_order_confirmed"
+                    onClick={() => {
+                      if (!selectedLead) return;
+                      if (!areReportingDetailsComplete(selectedLead)) {
+                        openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
+                        return;
+                      }
+                      const today = new Date().toISOString().split('T')[0];
+                      const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+                      const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                      const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(selectedLead.advance_collected) || Number(wizardLeadData.advance_received) || 0));
+                      
+                      setConfirmForm({
+                        ...confirmForm,
+                        package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
+                        quotation_amount: Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
+                        advance_received: calcAdvance,
+                        event_date: selectedLead.event_date || today,
+                        event_time: selectedLead.event_time || ''
+                      });
+                      setShowConfirmModal(true);
+                    }}
+                    disabled={isSaving || isCrmLocked || (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')}
+                    className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                      isCrmLocked
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
+                      (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
+                        ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-950/20'
+                    }`}
+                  >
+                    <CheckSquare className="w-3.5 h-3.5" />
+                    <span>ORDER CONFIRMED</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  id="btn_crm_save_step"
+                  onClick={() => handleSaveStep(crmWizardStep)}
+                  disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
+                  className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                    isCrmLocked
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
+                    crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
+                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                      : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
+                  }`}
+                >
+                  {isSaving ? (
+                    <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                  ) : null}
+                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'SAVE & FOLLOW-UP' : 'Save & Next'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      {saveErrorPopup && (
+        <div id="save_error_popup" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[70] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-slate-900 border border-red-500/30 rounded-2xl w-full max-w-sm shadow-2xl p-6 text-center space-y-4">
+            <div className="w-12 h-12 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center mx-auto text-xl font-bold font-mono">
+              âŒ
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                {saveErrorPopup.title}
+              </h3>
+              <p className="text-xs text-zinc-300 whitespace-pre-line leading-relaxed">
+                {saveErrorPopup.message}
+              </p>
+            </div>
+            <button
+              onClick={() => setSaveErrorPopup(null)}
+              className="w-full py-2 bg-red-600 hover:bg-red-500 text-white font-mono text-xs font-bold uppercase rounded-lg transition-all border-0 shadow-md"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+
+
+{/* MODAL: Existing Customer Detection Pop-up */}
+      {showDetectionPopup && detectedCustomer && (
+        <div id="modal_existing_customer_detection" className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[60] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-500/30 rounded-2xl w-full max-w-lg shadow-2xl relative p-6 space-y-5">
+            {/* Ambient light ring */}
+            <div className="absolute top-0 left-12 w-48 h-48 bg-indigo-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
+
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10">
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5">
+                  <span className="p-1 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[9px] rounded font-black font-mono">DUPLICATION WARNING</span>
+                  <span>EXISTING CUSTOMER DETECTED</span>
+                </h3>
+                <p className="text-[11px] text-indigo-300 mt-0.5 font-sans">
+                  The phone index or email graph entered already maps to an active account.
+                </p>
+              </div>
+              <button 
+                onClick={() => { setShowDetectionPopup(false); setDetectedCustomer(null); }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 relative z-10 text-slate-300 overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs min-w-max">
+                <thead>
+                  <tr className="bg-slate-900 text-slate-400 font-mono text-[9px] uppercase">
+                    <th className="p-2 border border-slate-800">Customer Name</th>
+                    <th className="p-2 border border-slate-800">Phone Number</th>
+                    <th className="p-2 border border-slate-800">Lead Created Date</th>
+                    <th className="p-2 border border-slate-800">Current Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-slate-950/40 text-slate-300">
+                    <td className="p-2 border border-slate-800 font-bold">{detectedCustomer.customer_name}</td>
+                    <td className="p-2 border border-slate-800 font-mono">{detectedCustomer.mobile}</td>
+                    <td className="p-2 border border-slate-800 font-mono">
+                      {detectedCustomer.leads && detectedCustomer.leads.length > 0 
+                        ? new Date(Math.max(...detectedCustomer.leads.map((l: any) => new Date(l.created_date || 0).getTime()))).toISOString().split('T')[0]
+                        : 'N/A'}
+                    </td>
+                    <td className="p-2 border border-slate-800">
+                      {detectedCustomer.leads && detectedCustomer.leads.length > 0
+                        ? getLeadCurrentStatus(detectedCustomer.leads.sort((a: any, b: any) => new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime())[0])
+                        : 'N/A'}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col sm:flex-row justify-end gap-2 p-1 border-t border-slate-800 mt-4 pt-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDetectionPopup(false);
+                  setDetectedCustomer(null);
+                  setActiveTab('list');
+                }}
+                className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-755 text-slate-200 border border-slate-700 rounded-lg cursor-pointer transition-all font-bold"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDetectionPopup(false);
+                  setDetectedCustomer(null);
+                }}
+                className="px-4 py-2 text-xs bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-505 hover:to-indigo-605 text-white rounded-lg shadow-md cursor-pointer transition-all font-bold"
+              >
+                Continue
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Business Owner Unlock Reason Prompt */}
+      {unlockingRecordId && (
+        <div id="modal_sales_record_unlock" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-fade-in text-left">
+          <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-amber-500/30 rounded-2xl w-full max-w-md shadow-2xl relative p-6 space-y-4">
+            <div className="absolute top-0 left-12 w-48 h-48 bg-amber-500/[0.03] rounded-full blur-[60px] pointer-events-none" />
+            
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3 relative z-10 font-sans">
+              <div>
+                <h3 className="text-sm font-bold text-white tracking-widest font-mono flex items-center gap-1.5">
+                  <span className="p-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[9px] rounded font-black font-mono">OWNER OVERRIDE</span>
+                  <span>UNLOCK REASON REQUIRED</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-sans">
+                  Provide a justification to unlock this protected sales record.
+                </p>
+              </div>
+              <button 
+                onClick={() => { setUnlockingRecordId(''); setUnlockReason('Data Correction'); setUnlockCustomReason(''); }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const finalReason = unlockReason === 'Other' ? unlockCustomReason : unlockReason;
+              if (!finalReason.trim()) {
+                alert('A valid unlock reason is required.');
+                return;
+              }
+              unlockRecord(unlockingRecordId, 'Sales', finalReason);
+              setUnlockingRecordId('');
+              setUnlockCustomReason('');
+              setUnlockReason('Data Correction');
+              alert('Record unlocked successfully for editing!');
+            }} className="space-y-4 relative z-10 font-sans">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
+                  Select Override Reason *
+                </label>
+                <select
+                  value={unlockReason}
+                  onChange={(e) => setUnlockReason(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg py-2 px-3 text-xs text-slate-205 focus:outline-none focus:border-slate-700"
+                >
+                  <option value="Data Correction">Data Correction</option>
+                  <option value="Customer Request">Customer Request</option>
+                  <option value="Admin Override">Admin Override</option>
+                  <option value="Other">Other (Type custom reason)</option>
+                </select>
+              </div>
+
+              {unlockReason === 'Other' && (
+                <div className="animate-fade-in">
+                  <label className="block text-[11px] font-bold text-slate-400 mb-1.5 uppercase font-mono tracking-wider">
+                    Custom justification *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter unlock justification..."
+                    value={unlockCustomReason}
+                    onChange={(e) => setUnlockCustomReason(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-2 px-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-slate-700"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-800 font-bold">
+                <button
+                  type="button"
+                  onClick={() => { setUnlockingRecordId(''); setUnlockReason('Data Correction'); setUnlockCustomReason(''); }}
+                  className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-lg cursor-pointer border border-slate-700 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs bg-amber-600 hover:bg-amber-500 text-white rounded-lg shadow-sm cursor-pointer font-extrabold uppercase tracking-wide font-mono border border-amber-500/20"
+                >
+                  ğŸ”“ Confirm Unlock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* GLOBAL MODALS ACCESSIBLE CROSS-TAB */}
+      
+      {/* 1. Global Read-Only View Details Modal wrapped in createPortal to overlay on top of any active portals (like Screen 2 Create Lead) */}
+      {viewingPkgDetails && createPortal(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20000] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 space-y-5 shadow-2xl relative text-slate-300">
+            
+            {!viewingPkgDetails.package_name ? (
+              <div className="flex flex-col items-center justify-center py-10 space-y-4 text-center">
+                <span className="text-3xl text-rose-550">âš ï¸</span>
+                <h4 className="text-sm font-bold text-slate-100">Package details not available.</h4>
+                <p className="text-xs text-slate-400">The requested package specifications could not be resolved or found.</p>
+                <button
+                  type="button"
+                  onClick={() => setViewingPkgDetails(null)}
+                  className="px-4 py-2 bg-emerald-605 hover:bg-emerald-505 text-white font-bold rounded-lg text-xs cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (() => {
+              // Internal parser helpers
+              const getDeliverableValue = (pkg: any, key: string) => {
+                const text = (pkg.deliverables || '').toLowerCase();
+                const name = (pkg.package_name || '').toLowerCase();
+                
+                if (key === 'photos') {
+                  const matches = pkg.deliverables?.match(/(\d+\s+edited\s+photos|\d+\+?\s+photos|unlimited\s+photos)/i);
+                  if (matches) return matches[0];
+                  if (text.includes('photographer') || text.includes('photos')) {
+                    const sentences = parseTeamMembers(pkg.deliverables);
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('photographer') || s.toLowerCase().includes('photo') || s.toLowerCase().includes('candid'));
+                    if (match) return match;
+                  }
+                  return 'Standard High-Res Edited Digital Photos';
+                }
+
+                if (key === 'videos') {
+                  if (text.includes('video') || text.includes('videographer') || text.includes('cinematic') || text.includes('teaser')) {
+                    const sentences = parseTeamMembers(pkg.deliverables);
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('video') || s.toLowerCase().includes('videographer') || s.toLowerCase().includes('cinematic') || s.toLowerCase().includes('teaser'));
+                    if (match) return match;
+                    return '4K Cinematic Highlight Video';
+                  }
+                  return 'Not Included';
+                }
+
+                if (key === 'reels') {
+                  if (text.includes('reels') || text.includes('reel') || text.includes('short')) {
+                    const sentences = parseTeamMembers(pkg.deliverables);
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('reel') || s.toLowerCase().includes('short'));
+                    if (match) return match;
+                    return 'Reels Package Included';
+                  }
+                  if (name.includes('platinum') || name.includes('diamond')) {
+                    return 'Complimentary social reels package included';
+                  }
+                  return 'Not Included';
+                }
+
+                if (key === 'album') {
+                  if (text.includes('album') || text.includes('book') || text.includes('print')) {
+                    const sentences = parseTeamMembers(pkg.deliverables);
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('album') || s.toLowerCase().includes('book') || s.toLowerCase().includes('print'));
+                    if (match) return match;
+                    return 'Standard Hardcover Photo Album';
+                  }
+                  return 'Not Included';
+                }
+
+                if (key === 'frames') {
+                  if (text.includes('frame') || text.includes('canvas')) {
+                    const sentences = parseTeamMembers(pkg.deliverables);
+                    const match = sentences.find((s: string) => s.toLowerCase().includes('frame') || s.toLowerCase().includes('canvas'));
+                    if (match) return match;
+                    return '1 Wall Frame / Canvas Print';
+                  }
+                  if (name.includes('platinum') || name.includes('diamond')) {
+                    return '1 Large Dynamic Acrylic Wall Frame';
+                  }
+                  return 'Not Included';
+                }
+
+                return 'N/A';
+              };
+
+              const getTeamValue = (pkg: any, key: string) => {
+                const text = ((pkg.team_members || '') + ' ' + (pkg.deliverables || '')).toLowerCase();
+                
+                if (key === 'photographer') {
+                  if (text.includes('candid photographer') && text.includes('traditional photographer')) {
+                    return '2 Photographers (1 Candid, 1 Traditional)';
+                  }
+                  if (text.includes('candid photographer') || text.includes('candid')) {
+                    return '1 Professional Candid Photographer';
+                  }
+                  if (text.includes('traditional photographer')) {
+                    return '1 Traditional Photographer';
+                  }
+                  if (text.includes('photographer')) {
+                    const matches = text.match(/(\d+)\s+photographer/i);
+                    return matches ? `${matches[1]} Lead Photographer(s)` : '1 Candid Photographer';
+                  }
+                  return '1 Candid Photographer';
+                }
+
+                if (key === 'videographer') {
+                  if (text.includes('cinematographer') && text.includes('traditional videographer')) {
+                    return '2 Videographers (1 Cinema, 1 Traditional)';
+                  }
+                  if (text.includes('cinematographer') || text.includes('cinematic videographer') || text.includes('cinematic')) {
+                    return '1 Cinematic Videographer (4K Cinematic)';
+                  }
+                  if (text.includes('traditional videographer') || text.includes('videographer')) {
+                    return '1 Traditional Videographer';
+                  }
+                  if (pkg.category?.toLowerCase().includes('photo') && !text.includes('video')) {
+                    return '0 (Photography Only Package)';
+                  }
+                  return '1 Professional Videographer';
+                }
+
+                if (key === 'drone') {
+                  if (text.includes('drone') || text.includes('aerial')) {
+                    return '1 Certified Drone Pilot (Cinematic 4K Aerials)';
+                  }
+                  return '0 (Available as Premium Add-on)';
+                }
+
+                if (key === 'assistant') {
+                  if (text.includes('assistant') || text.includes('lights') || text.includes('production manager')) {
+                    return '1 Technical Field Assistant';
+                  }
+                  const crewMatch = text.match(/(\d+)\s+crew/i);
+                  if (crewMatch) {
+                    const total = parseInt(crewMatch[1], 10);
+                    if (total > 3) return '1/2 Setup & Lights Assistants';
+                  }
+                  return '0 (Standard Crew Allocation)';
+                }
+
+                return 'N/A';
+              };
+
+              const getCoverageValue = (pkg: any, key: string) => {
+                const cat = (pkg.category || '').toLowerCase();
+                const name = (pkg.package_name || '').toLowerCase();
+
+                if (key === 'hours') {
+                  if (name.includes('pre-wedding') || name.includes('shoot') || name.includes('interior') || name.includes('product')) {
+                    return '3 to 5 Event Shoot Hours';
+                  }
+                  if (name.includes('platinum') || name.includes('diamond')) {
+                    return 'Continuous Coverage (Up to 12 Hours)';
+                  }
+                  return 'Full Day (8 to 10 Hours)';
+                }
+
+                if (key === 'events') {
+                  if (name.includes('platinum') || name.includes('diamond')) {
+                    return 'Multi-event Coverage (Pre-wedding + Wedding covered)';
+                  }
+                  return '1 Main Day Event Coverage';
+                }
+
+                if (key === 'type') {
+                  if (cat.includes('outdoor') || name.includes('outdoor')) {
+                    return 'Exclusively Outdoor Locations';
+                  }
+                  if (cat.includes('interior') || name.includes('indoor') || name.includes('interior')) {
+                    return 'Fully Indoor / Controlled Studio / Residential';
+                  }
+                  return 'Hybrid (Both Indoor Banquet & Outdoor Garden/Mandap)';
+                }
+
+                return 'N/A';
+              };
+
+              const getOffersValue = (pkg: any, key: string) => {
+                const offer = pkg.seasonal_offer || '';
+                
+                if (key === 'seasonal') {
+                  if (offer && offer !== 'None') return offer;
+                  return 'No seasonal discount currently active';
+                }
+
+                if (key === 'complimentary') {
+                  if (offer.toLowerCase().includes('complimentary') || offer.toLowerCase().includes('free')) {
+                    return offer;
+                  }
+                  const price = pkg.price || 0;
+                  if (price > 120000) {
+                    return 'Complimentary Pre-Wedding Teaser videography & 1 Framed Canvas Print';
+                  }
+                  if (price > 80000) {
+                    return 'Complimentary Wedding Film Teaser (1-min Reels Cut)';
+                  }
+                  return 'Standard Package Deliverables Apply';
+                }
+
+                return 'N/A';
+              };
+
+              const photosVal = getDeliverableValue(viewingPkgDetails, 'photos');
+              const videosVal = getDeliverableValue(viewingPkgDetails, 'videos');
+              const reelsVal = getDeliverableValue(viewingPkgDetails, 'reels');
+              const albumVal = getDeliverableValue(viewingPkgDetails, 'album');
+              const framesVal = getDeliverableValue(viewingPkgDetails, 'frames');
+
+              const photographerVal = getTeamValue(viewingPkgDetails, 'photographer');
+              const videographerVal = getTeamValue(viewingPkgDetails, 'videographer');
+              const droneVal = getTeamValue(viewingPkgDetails, 'drone');
+              const assistantVal = getTeamValue(viewingPkgDetails, 'assistant');
+
+              const hoursVal = getCoverageValue(viewingPkgDetails, 'hours');
+              const eventsVal = getCoverageValue(viewingPkgDetails, 'events');
+              const typeVal = getCoverageValue(viewingPkgDetails, 'type');
+
+              const seasonalVal = getOffersValue(viewingPkgDetails, 'seasonal');
+              const complimentaryVal = getOffersValue(viewingPkgDetails, 'complimentary');
+
+              return (
+                <>
+                  {/* Header */}
+                  <div className="flex justify-between items-start border-b border-slate-800 pb-3.5">
+                    <div>
+                      <span className="font-mono text-[10px] text-zinc-500 font-bold uppercase block mb-0.5">
+                        ID: {viewingPkgDetails.package_id || 'Dynamic Link'}
+                      </span>
+                      <h4 className="text-sm sm:text-base font-extrabold text-slate-100 font-sans tracking-tight">
+                        ğŸ“‹ {viewingPkgDetails.package_name || 'Package Specifications'}
+                      </h4>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 text-[10px] font-bold font-mono rounded ${
+                        viewingPkgDetails.status === 'Active'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                      }`}>
+                        {viewingPkgDetails.status || 'Active'}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setViewingPkgDetails(null)}
+                        className="p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg cursor-pointer"
+                        title="Close Modal"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Pricing and Category Banner */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/40 p-3 rounded-xl border border-slate-850">
+                    <div>
+                      <span className="text-slate-550 block font-bold text-[9px] uppercase font-mono mb-0.5">Category Group</span>
+                      <span className="text-indigo-400 font-bold text-xs">{normalizeCategory(viewingPkgDetails.category)}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-550 block font-bold text-[9px] uppercase font-mono mb-0.5">Standard Package Rate</span>
+                      <span className="text-emerald-400 font-mono font-black text-sm">
+                        â‚¹{viewingPkgDetails.price ? viewingPkgDetails.price.toLocaleString('en-IN') : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Dynamic Custom Info Banner */}
+                  {(viewingPkgDetails.event_type || viewingPkgDetails.duration || viewingPkgDetails.package_includes) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950/40 p-3 rounded-xl border border-slate-850 text-xs">
+                      {viewingPkgDetails.event_type && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Event Type</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.event_type}</span>
+                        </div>
+                      )}
+                      {viewingPkgDetails.duration && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Duration</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.duration}</span>
+                        </div>
+                      )}
+                      {viewingPkgDetails.package_includes && (
+                        <div>
+                          <span className="text-slate-500 block text-[9px] uppercase font-mono font-semibold mb-0.5">Key Focus</span>
+                          <span className="text-slate-200 font-medium">{viewingPkgDetails.package_includes}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4.5 max-h-[50vh] overflow-y-auto pr-1">
+                    {/* Deliverables Panel */}
+                    <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
+                      <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
+                        ğŸ“¦ Key Deliverables Included
+                      </span>
+                      <div className="space-y-2 text-xs">
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono">Photos Included</span>
+                          <span className="text-slate-200 font-semibold">{photosVal}</span>
+                        </div>
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono">Videos Included</span>
+                          <span className="text-slate-205 font-medium">{videosVal}</span>
+                        </div>
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono font-mono">Reels Included</span>
+                          <span className="text-slate-205 font-medium">{reelsVal}</span>
+                        </div>
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono">Album Included</span>
+                          <span className="text-slate-205 font-medium">{albumVal}</span>
+                        </div>
+                        <div className="flex flex-col bg-slate-900/40 p-1.5 rounded border border-transparent hover:border-slate-800/60">
+                          <span className="text-slate-500 text-[10px] font-bold font-mono">Frames Included</span>
+                          <span className="text-slate-205 font-medium">{framesVal}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right column: Crew & Coverage */}
+                    <div className="space-y-4">
+                      {/* Crew Members */}
+                      <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
+                        <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
+                          ğŸ‘¥ Team Members Included
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          <div className="bg-slate-900/40 p-1.5 rounded">
+                            <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Photographer Count</span>
+                            <span className="text-slate-250 font-medium">{photographerVal}</span>
+                          </div>
+                          <div className="bg-slate-900/40 p-1.5 rounded">
+                            <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Videographer Count</span>
+                            <span className="text-slate-250 font-medium">{videographerVal}</span>
+                          </div>
+                          <div className="bg-slate-900/40 p-1.5 rounded">
+                            <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Drone Operator Count</span>
+                            <span className="text-slate-250 font-medium">{droneVal}</span>
+                          </div>
+                          <div className="bg-slate-900/40 p-1.5 rounded">
+                            <span className="text-slate-500 text-[9px] font-bold uppercase block mb-0.5">Assistant Count</span>
+                            <span className="text-slate-250 font-medium">{assistantVal}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Coverage details */}
+                      <div className="bg-slate-950/20 border border-slate-850 p-3.5 rounded-xl space-y-2.5">
+                        <span className="text-[10px] font-bold text-slate-400 font-mono tracking-wider uppercase block border-b border-slate-850 pb-1.5 flex items-center gap-1.5">
+                          ğŸ“¸ Coverage Details
+                        </span>
+                        <div className="space-y-2 text-xs">
+                          <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded">
+                            <span className="text-slate-450 font-medium">Event Coverage Hours</span>
+                            <span className="text-slate-200 font-bold">{hoursVal}</span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded">
+                            <span className="text-slate-450 font-medium">Number of Events Covered</span>
+                            <span className="text-slate-200 font-bold">{eventsVal}</span>
+                          </div>
+                          <div className="flex justify-between items-center bg-slate-900/40 p-2 rounded">
+                            <span className="text-slate-450 font-medium">Outdoor/Indoor Coverage</span>
+                            <span className="text-slate-200 font-bold">{typeVal}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Offers & Perks */}
+                  <div className="bg-indigo-950/15 border border-indigo-900/40 p-3.5 rounded-xl space-y-2 text-xs">
+                    <span className="text-[10px] font-bold text-indigo-400 font-mono tracking-wider uppercase block border-b border-indigo-950 pb-1">
+                      ğŸ Package Offers & complimentary Items
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1">
+                      <div>
+                        <span className="text-slate-500 text-[9px] font-bold uppercase block">Seasonal Offer</span>
+                        <span className="text-indigo-300 font-semibold">{seasonalVal}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 text-[9px] font-bold uppercase block">Complimentary Items</span>
+                        <span className="text-amber-400 font-semibold">{complimentaryVal}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Terms & Conditions */}
+                  <div className="bg-slate-950/30 border border-slate-850 rounded-xl p-3.5 space-y-1.5 text-xs">
+                    <span className="text-slate-505 block font-bold text-[9px] uppercase font-mono tracking-wider">
+                      ğŸ“‘ Contractual Terms & conditions
+                    </span>
+                    <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-850 max-h-24 overflow-y-auto leading-relaxed text-slate-350">
+                      {viewingPkgDetails.terms_conditions || (
+                        <p className="italic text-slate-500 font-sans">
+                          Standard photo studio service guidelines apply: 50% advance for confirmation, 35% on event day, and 15% during delivery. Extra coverage hours chargeable.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Modal Footer Controls */}
+                  <div className="flex items-center justify-end gap-2.5 pt-3.5 border-t border-slate-800">
+                    {canEdit && activeTab === 'packages' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const pkg = viewingPkgDetails;
+                          setEditingPackage(pkg);
+                          setPkgForm({
+                            package_name: pkg.package_name,
+                            category: pkg.category,
+                            price: pkg.price,
+                            status: pkg.status,
+                            deliverables: pkg.deliverables || '',
+                            team_members: pkg.team_members || '',
+                            seasonal_offer: pkg.seasonal_offer || '',
+                            terms_conditions: pkg.terms_conditions || '',
+                            event_type: pkg.event_type || '',
+                            duration: pkg.duration || '',
+                            package_includes: pkg.package_includes || ''
+                          });
+                          const parsed = parseTeamMembers(pkg.team_members);
+                          setPkgTeamMembers(parsed.length > 0 ? parsed.map(s => { const r = parseQtyAndText(s); return { qty: r.qty, name: r.text }; }) : [{ qty: 1, name: '' }]);
+                          const parsedDel = parseTeamMembers(pkg.deliverables);
+                          setPkgDeliverablesList(parsedDel.length > 0 ? parsedDel.map(s => { const r = parseQtyAndText(s); return { qty: r.qty, name: r.text }; }) : []);
+                          setIsAddFormOpen(false);
+                          setViewingPkgDetails(null);
+                        }}
+                        className="px-4 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 font-semibold rounded-lg border border-slate-700 cursor-pointer transition-all text-xs"
+                      >
+                        Edit Details
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setViewingPkgDetails(null)}
+                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg cursor-pointer transition-all shadow-md text-xs"
+                    >
+                      Close Specs
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+
+      {/* Delete Package Confirmation / Safety Check Modal */}
+
+      {deletingPackageId && (() => {
+        const pkg = packages.find(p => p.package_id === deletingPackageId);
+        if (!pkg) return null;
+
+        const isUsed = (() => {
+          const pkgId = deletingPackageId;
+          const nameLower = (pkg.package_name || '').trim().toLowerCase();
+
+          // 1. Check Leads
+          const usedInLeads = (leads || []).some(lead => {
+            const option = (lead.Select_Package_Option || '').trim().toLowerCase();
+            return option === pkgId.toLowerCase() || option === nameLower;
+          });
+
+          // Also check LeadPackages
+          const usedInLeadPackages = (leadPackages || []).some(lp => {
+            return lp.package_id === pkgId || (lp.package_name || '').trim().toLowerCase() === nameLower;
+          });
+
+          // 2. Check Quotations
+          const usedInQuotations = (quotations || []).some(quote => {
+            return (
+              quote.package_id === pkgId ||
+              quote.selected_package_id === pkgId ||
+              quote.Select_Package_Option === pkgId ||
+              (quote.package_name || '').trim().toLowerCase() === nameLower
+            );
+          });
+
+          // 3. Check Orders
+          const usedInOrders = (orders || []).some(order => {
+            return (order.package_name || '').trim().toLowerCase() === nameLower;
+          });
+
+          return usedInLeads || usedInLeadPackages || usedInQuotations || usedInOrders;
+        })();
+
+        return createPortal(
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20001] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl relative text-slate-300">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">ğŸ—‘ï¸</span>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Delete Package</h3>
+                    <p className="text-[11px] font-mono text-zinc-400 mt-0.5">Package ID: {pkg.package_id}</p>
+                  </div>
+                </div>
+                {!isDeletingPackage && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeletePackageError(null);
+                      setDeletingPackageId(null);
+                    }}
+                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {deletePackageError && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-start gap-2">
+                  <span className="text-sm">âš ï¸</span>
+                  <div className="space-y-1">
+                    <p className="font-bold">Deletion Failed</p>
+                    <p>{deletePackageError}</p>
+                  </div>
+                </div>
+              )}
+
+              {isUsed ? (
+                <div className="space-y-4">
+                  <p className="text-slate-300 text-xs leading-relaxed font-sans">
+                    This package is already referenced in existing records (leads, quotes, or orders). You can deactivate it instead to preserve historic references.
+                  </p>
+                  <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/60">
+                    <button
+                      type="button"
+                      disabled={isDeletingPackage}
+                      onClick={() => {
+                        setDeletePackageError(null);
+                        setDeletingPackageId(null);
+                      }}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg cursor-pointer transition-all text-xs border border-transparent"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeletingPackage}
+                      onClick={async () => {
+                        const selectedPackageId = pkg.package_id;
+                        if (!selectedPackageId || typeof selectedPackageId !== 'string' || !selectedPackageId.trim()) {
+                          setDeletePackageError('Invalid package ID. Cannot proceed with deletion.');
+                          return;
+                        }
+                        try {
+                          setIsDeletingPackage(true);
+                          setDeletePackageError(null);
+                          await deletePackage(selectedPackageId.trim());
+                          setDeletingPackageId(null);
+                          setPackageSuccessMsg('Package deleted successfully.');
+                          setTimeout(() => setPackageSuccessMsg(null), 5000);
+                        } catch (err: any) {
+                          setDeletePackageError(err.message || String(err));
+                        } finally {
+                          setIsDeletingPackage(false);
+                        }
+                      }}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg cursor-pointer transition-all text-xs shadow-md disabled:opacity-50"
+                    >
+                      {isDeletingPackage ? 'Deleting...' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-slate-200 text-xs leading-relaxed font-sans">
+                    Are you sure you want to delete this package?
+                  </p>
+                  
+                  {isDeletingPackage && (
+                    <div className="text-indigo-400 font-mono text-[10px] animate-pulse flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Deleting package from database...</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/60">
+                    <button
+                      type="button"
+                      disabled={isDeletingPackage}
+                      onClick={() => {
+                        setDeletePackageError(null);
+                        setDeletingPackageId(null);
+                      }}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-lg cursor-pointer transition-all text-xs border border-slate-700 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeletingPackage}
+                      onClick={async () => {
+                        const selectedPackageId = pkg.package_id;
+                        if (!selectedPackageId || typeof selectedPackageId !== 'string' || !selectedPackageId.trim()) {
+                          setDeletePackageError('Invalid package ID. Cannot proceed with deletion.');
+                          return;
+                        }
+                        try {
+                          setIsDeletingPackage(true);
+                          setDeletePackageError(null);
+                          await deletePackage(selectedPackageId.trim());
+                          setDeletingPackageId(null);
+                          setPackageSuccessMsg('Package deleted successfully.');
+                          setTimeout(() => setPackageSuccessMsg(null), 5000);
+                        } catch (err: any) {
+                          setDeletePackageError(err.message || String(err));
+                        } finally {
+                          setIsDeletingPackage(false);
+                        }
+                      }}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg cursor-pointer transition-all text-xs shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      {isDeletingPackage ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                          <span>Deleting...</span>
+                        </>
+                      ) : (
+                        <span>Delete</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
+
+      {/* 2. Side-by-Side Comparison Modal */}
+      {isComparingPkgs && createPortal(
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20000] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl p-6 space-y-5 shadow-2xl relative text-slate-300">
+            
+            {/* Header */}
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+              <div>
+                <span className="font-mono text-[10px] text-zinc-500 font-bold uppercase block mb-0.5">Dynamic comparison checklist</span>
+                <h4 className="text-sm font-extrabold text-slate-100 font-sans tracking-tight">
+                  âš–ï¸ Side-by-Side Specifications Comparison ({selectedPkgIds.length} packages selected)
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsComparingPkgs(false)}
+                className="text-slate-450 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Comparison Grid Table */}
+            <div className="overflow-x-auto border border-slate-800/85 rounded-xl bg-slate-950/40">
+              <table className="w-full min-w-max border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 bg-[#0F172A]">
+                    <th className="p-3 text-left font-bold text-slate-400 font-mono text-[10px] uppercase w-48 border-r border-slate-800/60">Specification Parameter</th>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      if (!pkg) return null;
+                      return (
+                        <th key={id} className="p-3 text-left font-bold text-slate-100 border-r border-slate-850/60 last:border-r-0">
+                          <div className="space-y-1">
+                            <span className="text-[9px] bg-emerald-950 text-emerald-400 px-1.5 py-0.5 rounded font-mono uppercase font-black border border-emerald-900/30">
+                              {normalizeCategory(pkg.category)}
+                            </span>
+                            <h5 className="font-bold text-slate-100 mt-1 leading-tight">{pkg.package_name}</h5>
+                            <span className="block font-mono text-emerald-400 font-extrabold text-[12px] pt-1">
+                              â‚¹{pkg.price ? pkg.price.toLocaleString('en-IN') : 'N/A'}
+                            </span>
+                          </div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Category Row */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">ğŸ·ï¸ Category</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans font-medium text-slate-200">
+                          {pkg ? normalizeCategory(pkg.category) : 'General'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Pricing Row */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">ğŸ’° Price Rate</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-mono text-emerald-400 font-extrabold">
+                          â‚¹{pkg?.price ? pkg.price.toLocaleString('en-IN') : 'N/A'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Deliverables */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">ğŸ“¦ Core Deliverables</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans leading-relaxed text-slate-300">
+                          <div className="max-h-24 overflow-y-auto pr-1 whitespace-pre-line text-xs font-sans">
+                            {pkg?.deliverables || <span className="italic text-slate-500">Not configured</span>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Team Members */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">ğŸ‘¥ Crew Required</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans text-slate-300">
+                          {pkg?.team_members || <span className="italic text-slate-500">Standard team allocation</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Seasonal Offers */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">ğŸ Seasonal offers</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans text-amber-400">
+                          {pkg?.seasonal_offer && pkg.seasonal_offer !== 'None' ? pkg.seasonal_offer : <span className="italic text-slate-505">None active</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Event Duration */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">â±ï¸ Duration Limit</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans text-slate-300">
+                          {pkg?.category === 'Pre-Wedding' || pkg?.category === 'Outdoor' || pkg?.package_name?.toLowerCase().includes('shoot')
+                            ? '3 to 5 Hours' 
+                            : 'Full Day (8-10 Hours)'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Scope Condition */}
+                  <tr className="border-b border-slate-800/60 hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">ğŸ“· Shoot Scope</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans text-slate-300">
+                          {pkg?.category?.includes('Video') || pkg?.package_name?.toLowerCase().includes('video') || pkg?.package_name?.toLowerCase().includes('reel')
+                            ? 'Cinematic Video' 
+                            : 'Standard Multi-Crew (Photo/Video)'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+
+                  {/* Row: Terms & Conditions */}
+                  <tr className="hover:bg-slate-950/20 text-[11px]">
+                    <td className="p-3 font-semibold text-slate-400 border-r border-slate-850/60 font-mono text-[10px] uppercase">ğŸ“‘ Terms & Conditions</td>
+                    {selectedPkgIds.map((id) => {
+                      const pkg = packages.find(p => p.package_id === id);
+                      return (
+                        <td key={id} className="p-3 border-r border-slate-850/40 last:border-r-0 font-sans leading-relaxed text-slate-305">
+                          <div className="max-h-24 overflow-y-auto bg-slate-950/20 p-2 rounded border border-slate-900/65 text-slate-300 whitespace-pre-line text-[11px]">
+                            {pkg?.terms_conditions || <span className="italic text-slate-500 font-sans">Standard contract rules apply</span>}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Comparison Total Summary */}
+            <div className="bg-[#0f172a] border border-slate-800 p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-left font-sans">
+                <span className="text-slate-400 text-xs block font-mono font-bold">COMPARISON CUMULATIVE SUM</span>
+                <span className="text-slate-200 text-[11px] leading-relaxed">Both packages are computed dynamically. Total discount is managed directly in the main lead profile session editor.</span>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-slate-505 font-mono text-xs block">Combined Proposal Value:</span>
+                <span className="font-mono text-emerald-400 font-black text-xl">â‚¹{subtotal.toLocaleString('en-IN')}</span>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setIsComparingPkgs(false)}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md transition-all cursor-pointer border border-transparent text-xs"
+              >
+                Close Comparison
+              </button>
+            </div>
+
+          </div>
+        </div>,
+        document.body
+      )}
+
+    </div>
+  );
+};
