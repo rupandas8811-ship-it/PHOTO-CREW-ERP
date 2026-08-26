@@ -522,7 +522,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
               <span>Order History / Project History</span>
             </h2>
             <p className="text-xs text-zinc-400 mt-1">
-              Customer: <strong className="text-zinc-200">{matchedOrder?.customer_name || matchedLead?.customer_name || 'Client'}</strong> • Event: <strong className="text-purple-300">{matchedLead?.event_name || matchedOrder?.event_name || 'Event Coverage'}</strong> • Stage: <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono font-bold text-[10px]">{matchedOrder?.current_stage || matchedProd?.editing_status || 'Active'}</span>
+              Customer: <strong className="text-zinc-200">{matchedOrder?.customer_name || matchedLead?.customer_name || 'Client'}</strong> * Event: <strong className="text-purple-300">{matchedLead?.event_name || matchedOrder?.event_name || 'Event Coverage'}</strong> * Stage: <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono font-bold text-[10px]">{matchedOrder?.current_stage || matchedProd?.editing_status || 'Active'}</span>
             </p>
           </div>
 
@@ -613,7 +613,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                         <span>{item.formattedDate}</span>
                         {item.formattedTime && item.formattedTime !== 'N/A' && (
                           <>
-                            <span className="text-zinc-600">•</span>
+                            <span className="text-zinc-600">*</span>
                             <span className="text-zinc-400">{item.formattedTime}</span>
                           </>
                         )}
@@ -636,7 +636,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                   {/* Middle Bar: Activity Headline & Description */}
                   <div className="space-y-1">
                     <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                      <span className="text-blue-400">⚡</span>
+                      <span className="text-blue-400"></span>
                       <span>{item.activity}</span>
                     </h4>
                     <p className="text-xs text-zinc-300 leading-relaxed font-sans">

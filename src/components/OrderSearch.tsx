@@ -52,7 +52,7 @@ export const OrderSearch: React.FC = () => {
       {/* Header */}
       <div>
         <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
-          <span>🔍</span> Multi-Field Global Search
+          <span></span> Multi-Field Global Search
         </h2>
         <p className="text-xs text-slate-400 mt-0.5">
           Page 11-12 compliance lookup. Retrieve any contract instantly using Lead ID, Order Contract ID, Customer Name or Phone.
@@ -149,7 +149,7 @@ export const OrderSearch: React.FC = () => {
                   {/* Card 1: Lead CRM General */}
                   <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg space-y-1.5 text-xs">
                     <span className="text-[10px] font-bold text-slate-500 font-mono tracking-wider block uppercase">
-                      📞 Client CRM Info
+                       Client CRM Info
                     </span>
                     <p className="text-slate-350 break-words">Mobile: <strong className="text-slate-200">{formatIndianPhoneNumber(lead.mobile)}</strong></p>
                     <p className="text-slate-350 break-words">Email: <span className="text-slate-200">{lead.email}</span></p>
@@ -160,7 +160,7 @@ export const OrderSearch: React.FC = () => {
                   {/* Card 2: Assigned Operations Team (CREW) */}
                   <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg space-y-1.5 text-xs">
                     <span className="text-[10px] font-bold text-slate-500 font-mono tracking-wider block uppercase flex items-center justify-between">
-                      <span>⚡ Assigned Crews</span>
+                      <span> Assigned Crews</span>
                       {op && <span className="text-[9px] text-sky-400 font-mono border border-sky-500/20 px-1 rounded">Prepped</span>}
                     </span>
                     {op ? (
@@ -178,7 +178,7 @@ export const OrderSearch: React.FC = () => {
                   {/* Card 3: Post-Production (Delivery Status) */}
                   <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg space-y-1.5 text-xs">
                     <span className="text-[10px] font-bold text-slate-505 font-mono tracking-wider block uppercase">
-                      🎬 Delivery Status
+                       Delivery Status
                     </span>
                     {prod ? (
                       <div className="space-y-1 text-slate-350 text-[11px]">
@@ -194,7 +194,7 @@ export const OrderSearch: React.FC = () => {
                   {/* Card 4: Payments Ledger Status */}
                   <div className="bg-slate-900 border border-slate-800 p-3 rounded-lg space-y-1.5 text-xs">
                     <span className="text-[10px] font-bold text-slate-505 font-mono tracking-wider block uppercase">
-                      💎 Payment Status
+                       Payment Status
                     </span>
                     {pay ? (
                       <div className="space-y-1 text-slate-350 text-[11px]">

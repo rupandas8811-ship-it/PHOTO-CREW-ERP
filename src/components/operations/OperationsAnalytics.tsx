@@ -644,7 +644,7 @@ export const OperationsAnalytics: React.FC = () => {
                           onClick={() => setSelectedStaff(s)}
                           className="text-amber-500 hover:text-amber-400 font-mono text-[10px] flex items-center gap-1 cursor-pointer hover:underline"
                         >
-                          Roster File [{assigned.length} Events] ➔
+                          Roster File [{assigned.length} Events] &rarr;
                         </button>
                       </td>
                     </tr>
@@ -703,7 +703,7 @@ export const OperationsAnalytics: React.FC = () => {
                     className={`hover:bg-zinc-850/50 transition-all cursor-pointer ${isSelected ? 'bg-zinc-800/60 border-l-4 border-amber-500' : ''}`}
                   >
                     <td className="py-3 px-4 font-bold text-zinc-100 flex items-center gap-2">
-                      <span className="text-zinc-500 text-xs text-amber-500">📷</span>
+                      <span className="text-zinc-500 text-xs text-amber-500"></span>
                       <span className="font-sans text-[12px]">{s.name}</span>
                     </td>
                     <td className="py-3 px-4 text-indigo-300 text-xs font-sans">{s.role}</td>
@@ -749,7 +749,7 @@ export const OperationsAnalytics: React.FC = () => {
                 onClick={() => setSelectedStaff(null)} 
                 className="px-2.5 py-1 rounded bg-zinc-950 hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors cursor-pointer text-xs border border-zinc-800 font-mono"
               >
-                ✕ Exit
+                x Exit
               </button>
             </div>
 
@@ -762,7 +762,7 @@ export const OperationsAnalytics: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-zinc-550 block text-[9px] uppercase">Mobile Number</span>
-                  <span className="text-zinc-200 font-sans">{selectedStaff.mobile || '—'}</span>
+                  <span className="text-zinc-200 font-sans">{selectedStaff.mobile || '-'}</span>
                 </div>
                 <div>
                   <span className="text-zinc-550 block text-[9px] uppercase">Roster Department</span>
@@ -799,9 +799,9 @@ export const OperationsAnalytics: React.FC = () => {
                           </div>
                           
                           <div className="text-[11px] text-zinc-400 font-mono space-y-0.5">
-                            <div>🗓️ Date: <span className="text-zinc-200 font-bold">{formatDate(ord.event_date)}</span></div>
-                            <div>🚀 Location: <span className="text-zinc-250 break-words">{ord.event_location}</span></div>
-                            <div>⏰ Reporting Time: <span className="text-amber-400 font-bold">{getReportingTimeOfEvent(ord.order_id)}</span></div>
+                            <div> Date: <span className="text-zinc-200 font-bold">{formatDate(ord.event_date)}</span></div>
+                            <div> Location: <span className="text-zinc-250 break-words">{ord.event_location}</span></div>
+                            <div> Reporting Time: <span className="text-amber-400 font-bold">{getReportingTimeOfEvent(ord.order_id)}</span></div>
                           </div>
                         </div>
 

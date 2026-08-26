@@ -427,7 +427,7 @@ export const LoginScreen: React.FC = () => {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     required
-                    placeholder="••••••••••••"
+                    placeholder="************"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     disabled={isLoading}
@@ -593,7 +593,7 @@ export const LoginScreen: React.FC = () => {
                 )}
                 <div>
                   <h4 className="font-bold uppercase tracking-wider font-mono text-[10px] mb-0.5">
-                    {dbStatus === 'connected' ? '🟢 Supabase Connected' : dbStatus === 'checking' ? '🟡 Connection Testing' : `🔴 ${dbErrorReason}`}
+                    {dbStatus === 'connected' ? ' Supabase Connected' : dbStatus === 'checking' ? ' Connection Testing' : ` ${dbErrorReason}`}
                   </h4>
                   <p className="text-[11px] leading-relaxed opacity-90">
                     {dbStatus === 'checking' ? 'Evaluating Supabase service endpoints, secret hashes, and latency...' : dbErrorDetails}
@@ -672,11 +672,11 @@ export const LoginScreen: React.FC = () => {
                   <span className="text-zinc-550">Read Status</span>
                   <span className="flex items-center gap-1 font-bold">
                     {readTest === 'ok' ? (
-                      <span className="text-emerald-400">🟢 OK</span>
+                      <span className="text-emerald-400"> OK</span>
                     ) : readTest === 'fail' ? (
-                      <span className="text-rose-450" title={diagnosticFailMsg}>🔴 FAIL</span>
+                      <span className="text-rose-450" title={diagnosticFailMsg}> FAIL</span>
                     ) : (
-                      <span className="text-zinc-650">⚪ UNTESTED</span>
+                      <span className="text-zinc-650"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -686,11 +686,11 @@ export const LoginScreen: React.FC = () => {
                   <span className="text-zinc-550">Insert Status</span>
                   <span className="flex items-center gap-1 font-bold">
                     {insertTest === 'ok' ? (
-                      <span className="text-emerald-400">🟢 OK</span>
+                      <span className="text-emerald-400"> OK</span>
                     ) : insertTest === 'fail' ? (
-                      <span className="text-rose-450" title={diagnosticFailMsg}>🔴 FAIL</span>
+                      <span className="text-rose-450" title={diagnosticFailMsg}> FAIL</span>
                     ) : (
-                      <span className="text-zinc-650">⚪ UNTESTED</span>
+                      <span className="text-zinc-650"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -700,11 +700,11 @@ export const LoginScreen: React.FC = () => {
                   <span className="text-zinc-550">Update Status</span>
                   <span className="flex items-center gap-1 font-bold">
                     {updateTest === 'ok' ? (
-                      <span className="text-emerald-400">🟢 OK</span>
+                      <span className="text-emerald-400"> OK</span>
                     ) : updateTest === 'fail' ? (
-                      <span className="text-rose-450" title={diagnosticFailMsg}>🔴 FAIL</span>
+                      <span className="text-rose-450" title={diagnosticFailMsg}> FAIL</span>
                     ) : (
-                      <span className="text-zinc-650">⚪ UNTESTED</span>
+                      <span className="text-zinc-650"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -714,11 +714,11 @@ export const LoginScreen: React.FC = () => {
                   <span className="text-zinc-550">Delete Status</span>
                   <span className="flex items-center gap-1 font-bold">
                     {deleteTest === 'ok' ? (
-                      <span className="text-emerald-400">🟢 OK</span>
+                      <span className="text-emerald-400"> OK</span>
                     ) : deleteTest === 'fail' ? (
-                      <span className="text-rose-450" title={diagnosticFailMsg}>🔴 FAIL</span>
+                      <span className="text-rose-450" title={diagnosticFailMsg}> FAIL</span>
                     ) : (
-                      <span className="text-zinc-650">⚪ UNTESTED</span>
+                      <span className="text-zinc-650"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -731,11 +731,11 @@ export const LoginScreen: React.FC = () => {
                   </span>
                   <span className="flex items-center gap-1 font-bold">
                     {realtimeTest === 'ok' ? (
-                      <span className="text-cyan-400 bg-cyan-950/30 px-2 py-0.5 rounded-md text-[9px] uppercase tracking-wider">🟢 Synchronized</span>
+                      <span className="text-cyan-400 bg-cyan-950/30 px-2 py-0.5 rounded-md text-[9px] uppercase tracking-wider"> Synchronized</span>
                     ) : realtimeTest === 'fail' ? (
-                      <span className="text-rose-400 bg-rose-950/30 px-2 py-0.5 rounded-md text-[9px] uppercase tracking-wider">🔴 Unsubscribed</span>
+                      <span className="text-rose-400 bg-rose-950/30 px-2 py-0.5 rounded-md text-[9px] uppercase tracking-wider"> Unsubscribed</span>
                     ) : (
-                      <span className="text-zinc-650">⚪ Untested</span>
+                      <span className="text-zinc-650"> Untested</span>
                     )}
                   </span>
                 </div>
@@ -818,7 +818,7 @@ export const LoginScreen: React.FC = () => {
 
             {signUpSuccess ? (
               <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 p-6 rounded-2xl text-center space-y-3">
-                <div className="text-3xl">🎉</div>
+                <div className="text-3xl"></div>
                 <h3 className="text-sm font-bold uppercase tracking-wider">REGISTRATION SUCCESSFUL!</h3>
                 <p className="text-xs text-zinc-400">
                   Operative profile synchronized. Auto-filling sign in and redirecting is active...
@@ -833,7 +833,7 @@ export const LoginScreen: React.FC = () => {
                     <span className="text-[8px] text-zinc-500">REQUIRED</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3.5 top-3.5 text-xs select-none">👤</span>
+                    <span className="absolute left-3.5 top-3.5 text-xs select-none"></span>
                     <input
                       type="text"
                       required
@@ -854,7 +854,7 @@ export const LoginScreen: React.FC = () => {
                       <span className="text-[8px] text-zinc-500">UNIQUE</span>
                     </label>
                     <div className="relative">
-                      <span className="absolute left-3.5 top-3.5 text-xs select-none">🔑</span>
+                      <span className="absolute left-3.5 top-3.5 text-xs select-none"></span>
                       <input
                         type="text"
                         required
@@ -940,7 +940,7 @@ export const LoginScreen: React.FC = () => {
                       <input
                         type={signUpShowPassword ? 'text' : 'password'}
                         required
-                        placeholder="••••••••"
+                        placeholder="********"
                         value={signUpPassword}
                         onChange={(e) => setSignUpPassword(e.target.value)}
                         disabled={signUpLoading}
@@ -966,7 +966,7 @@ export const LoginScreen: React.FC = () => {
                       <input
                         type={signUpShowConfirmPassword ? 'text' : 'password'}
                         required
-                        placeholder="••••••••"
+                        placeholder="********"
                         value={signUpConfirmPassword}
                         onChange={(e) => setSignUpConfirmPassword(e.target.value)}
                         disabled={signUpLoading}

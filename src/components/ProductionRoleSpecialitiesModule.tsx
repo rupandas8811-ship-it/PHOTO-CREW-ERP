@@ -159,7 +159,7 @@ export const ProductionRoleSpecialitiesModule: React.FC = () => {
                 onClick={() => setIsAdding(false)}
                 className="text-zinc-500 hover:text-white transition-colors cursor-pointer text-xs"
               >
-                ✕ Close
+                x Close
               </button>
             </div>
             
@@ -194,7 +194,7 @@ export const ProductionRoleSpecialitiesModule: React.FC = () => {
       <div className="bg-zinc-950 border border-zinc-900 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-5 border-b border-zinc-900 flex items-center justify-between">
           <h2 className="text-xs font-black uppercase tracking-widest font-mono text-zinc-350 flex items-center gap-2">
-            <span>⚙️</span> Registered Production Competencies List
+            <span></span> Registered Production Competencies List
           </h2>
           <span className="text-[10px] bg-zinc-900 border border-zinc-850 px-2.5 py-1 text-zinc-500 font-mono rounded">
             DB STABLE SYNCHRONIZED
@@ -255,7 +255,7 @@ export const ProductionRoleSpecialitiesModule: React.FC = () => {
                       </div>
                       <div className="text-[10px] text-zinc-550 font-mono mt-1 flex items-center gap-3">
                         <span>ID: <strong className="text-zinc-400">{spec.speciality_id}</strong></span>
-                        <span>•</span>
+                        <span>*</span>
                         <span>Created: <strong>{spec.created_at ? new Date(spec.created_at).toLocaleDateString() : 'System Default'}</strong></span>
                       </div>
                     </div>
@@ -317,7 +317,7 @@ export const ProductionRoleSpecialitiesModule: React.FC = () => {
 
           {specialities.length === 0 && (
             <div className="text-center py-10 font-mono text-zinc-500 uppercase text-xs">
-              ⚠️ No production role specialities registered inside the system.
+               No production role specialities registered inside the system.
             </div>
           )}
         </div>

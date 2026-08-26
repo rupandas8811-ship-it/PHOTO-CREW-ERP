@@ -345,14 +345,14 @@ export const SalesStaffManagementModule: React.FC = () => {
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Mobile Number (Login ID) *</label>
-                    <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>
+                    <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold"> Locked (Permanent)</span>
                   </div>
                   <input type="tel" disabled readOnly value={editMobile} onChange={e => setEditMobile(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none opacity-60 cursor-not-allowed bg-zinc-900/60" />
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider">Email Address (Optional)</label>
-                    <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">🔒 Locked (Permanent)</span>
+                    <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold"> Locked (Permanent)</span>
                   </div>
                   <input type="email" disabled readOnly value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none opacity-60 cursor-not-allowed bg-zinc-900/60" />
                 </div>

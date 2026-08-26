@@ -75,7 +75,7 @@ const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId
           }}
           className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 focus:ring-2 focus:ring-indigo-500/40 active:scale-95 text-white rounded-xl text-xs font-sans font-black border border-indigo-500/25 shadow-lg shadow-indigo-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none action-button-trigger"
         >
-          🎯 Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
+           Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}></span>
         </button>
       </div>
     </div>
@@ -144,12 +144,12 @@ const EquipmentAssignedCell = ({ equipmentList, equipmentStatusText }: { equipme
             }}
           >
             <div className="px-3 py-2 bg-zinc-800/50 border-b border-zinc-700/60">
-              <h4 className="text-xs font-bold text-zinc-300 text-left">Equipment Assigned — {equipmentList.length}</h4>
+              <h4 className="text-xs font-bold text-zinc-300 text-left">Equipment Assigned - {equipmentList.length}</h4>
             </div>
             <div className="max-h-48 overflow-y-auto p-2 space-y-1">
               {equipmentList.map((gear, idx) => (
                 <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded bg-zinc-800/30">
-                  <span className="text-emerald-400 font-bold shrink-0">✓</span>
+                  <span className="text-emerald-400 font-bold shrink-0">v</span>
                   <span className="text-xs font-mono text-zinc-300 whitespace-normal text-left leading-tight break-words">{gear}</span>
                 </div>
               ))}
@@ -157,7 +157,7 @@ const EquipmentAssignedCell = ({ equipmentList, equipmentStatusText }: { equipme
             <div className="px-3 py-2 bg-zinc-800/80 border-t border-zinc-700/60 text-left flex items-center gap-2">
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold shrink-0">Status:</div>
               <div className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                <span className="text-emerald-400 font-bold">✓</span> <span className="whitespace-normal break-words">{equipmentStatusText.replace('✅ ', '')}</span>
+                <span className="text-emerald-400 font-bold">v</span> <span className="whitespace-normal break-words">{equipmentStatusText.replace(' ', '')}</span>
               </div>
             </div>
           </div>
@@ -2200,10 +2200,10 @@ export const OperationsLeads: React.FC = () => {
   };
 
   const renderSortIndicator = (field: 'event_date' | 'customer_name' | 'status' | 'assignment_date') => {
-    if (sortBy !== field) return <span className="text-zinc-500 ml-1 select-none">↕</span>;
+    if (sortBy !== field) return <span className="text-zinc-500 ml-1 select-none"></span>;
     return sortOrder === 'asc' 
-      ? <span className="text-amber-500 ml-1 select-none">▲</span> 
-      : <span className="text-amber-500 ml-1 select-none">▼</span>;
+      ? <span className="text-amber-500 ml-1 select-none"></span> 
+      : <span className="text-amber-500 ml-1 select-none"></span>;
   };
 
   const getCompletionDate = (o: Order) => {
@@ -2211,7 +2211,7 @@ export const OperationsLeads: React.FC = () => {
     if (rf && rf.created_at) {
       return rf.created_at.split('T')[0];
     }
-    return o.updated_at ? o.updated_at.split('T')[0] : o.event_date || '—';
+    return o.updated_at ? o.updated_at.split('T')[0] : o.event_date || '-';
   };
 
   return (
@@ -2259,9 +2259,9 @@ export const OperationsLeads: React.FC = () => {
           className="md:hidden p-4 flex justify-between items-center cursor-pointer border-b border-zinc-800/50"
           onClick={() => setIsMobileFiltersExpanded(!isMobileFiltersExpanded)}
         >
-          <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">📁 LEADS DIRECTORY</span>
+          <span className="text-xs font-bold text-zinc-300 flex items-center gap-2"> LEADS DIRECTORY</span>
           <button className="text-[10px] uppercase font-mono font-bold text-zinc-400 hover:text-zinc-200 transition-colors">
-            {isMobileFiltersExpanded ? '▲ Hide Filters' : '▼ Show Filters'}
+            {isMobileFiltersExpanded ? ' Hide Filters' : ' Show Filters'}
           </button>
         </div>
 
@@ -2338,7 +2338,7 @@ export const OperationsLeads: React.FC = () => {
                 onChange={(e) => setCustomStartDate(e.target.value)}
                 className="bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 px-2.5 py-1.5 rounded-lg font-mono focus:outline-none focus:border-amber-500/40"
               />
-              <span className="text-zinc-650">—</span>
+              <span className="text-zinc-650">-</span>
               <input
                 type="date"
                 value={customEndDate}
@@ -2478,7 +2478,7 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
-                      {op?.reporting_time ? formatTime12Hour(op.reporting_time) : <span className="text-zinc-600 italic">—</span>}
+                      {op?.reporting_time ? formatTime12Hour(op.reporting_time) : <span className="text-zinc-600 italic">-</span>}
                     </td>
                     <td className="p-4 text-xs font-mono text-zinc-300">
                       {(() => {
@@ -2489,10 +2489,10 @@ export const OperationsLeads: React.FC = () => {
                             onClick={() => setViewingStaffOrderId(ord.order_id)}
                             className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/45 rounded-xl font-bold font-mono text-xs transition-all flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
                           >
-                            👥 {assignedStaffNames.length}
+                             {assignedStaffNames.length}
                           </button>
                         ) : (
-                          <span className="text-zinc-500 font-mono text-[10.5px]">✅ Unassigned</span>
+                          <span className="text-zinc-500 font-mono text-[10.5px]"> Unassigned</span>
                         );
                       })()}
                     </td>
@@ -2560,7 +2560,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="px-2 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 rounded-full text-[10px] font-mono font-bold cursor-pointer transition-all uppercase"
                           >
-                            <option value="">▼ UPDATE STATUS</option>
+                            <option value=""> UPDATE STATUS</option>
                             <option value="Event Scheduled">Event Scheduled</option>
                             {/* Staff updates status automatically, but if admin needs override */}
                             <option value="Event Cancelled">Event Cancelled</option>
@@ -2789,7 +2789,7 @@ export const OperationsLeads: React.FC = () => {
                 className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1 shrink-0"
                 type="button"
               >
-                ✕
+                x
               </button>
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -2803,13 +2803,13 @@ export const OperationsLeads: React.FC = () => {
                     className="w-full p-4 flex items-center justify-between text-left hover:bg-zinc-900/20 transition-colors focus:outline-none"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-xs">👤</span>
+                      <span className="text-xs"></span>
                       <h4 className="text-[11px] sm:text-xs font-mono font-bold uppercase text-amber-500 tracking-wider">
                         Customer Details
                       </h4>
                     </div>
                     <span className={`text-zinc-500 text-xs transition-transform duration-300 ${collapsedCustomerDetails ? '' : 'rotate-180'}`}>
-                      ▼
+                      
                     </span>
                   </button>
 
@@ -2928,7 +2928,7 @@ export const OperationsLeads: React.FC = () => {
                         > 
                            <div className="flex items-center gap-3">
                               <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 select-none uppercase font-bold font-mono">
-                                🎥 EVENT {index + 1}
+                                 EVENT {index + 1}
                               </span>
                               <h4 className="text-sm font-sans font-bold text-white uppercase tracking-wide">
                                 {eventNameDisplay}
@@ -2937,14 +2937,14 @@ export const OperationsLeads: React.FC = () => {
                            <div className="flex items-center gap-4">
                               {includedRoles.length > 0 ? (
                                 <span className={`text-[10px] font-mono px-2 py-1 border rounded-md ${isEvFullyAssigned ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
-                                  {evTotalAssigned} / {evTotalRequired} Assigned → {isEvFullyAssigned ? 'Assigned' : 'Pending'}
+                                  {evTotalAssigned} / {evTotalRequired} Assigned &rarr; {isEvFullyAssigned ? 'Assigned' : 'Pending'}
                                 </span>
                               ) : allocStaff.length > 0 ? (
                                 <span className="text-[10px] font-mono px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md">
                                   {allocStaff.length} Staff Assigned
                                 </span>
                               ) : null}
-                              <span className={`text-zinc-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}>▼</span>
+                              <span className={`text-zinc-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}></span>
                            </div>
                         </div>
 
@@ -3051,7 +3051,7 @@ export const OperationsLeads: React.FC = () => {
                                 <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border border-zinc-900 rounded-xl">
                                   {loadError ? (
                                     <div className="text-red-400 space-y-1 p-4">
-                                      <div>❌ Failed to load Team Members Included.</div>
+                                      <div> Failed to load Team Members Included.</div>
                                       <div className="text-[10px]">Reason: {loadError}</div>
                                     </div>
                                   ) : (
@@ -3080,7 +3080,7 @@ export const OperationsLeads: React.FC = () => {
                                   {/* Task Header */}
                                   <div className="bg-zinc-900/80 px-3.5 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sky-400 text-xs">✔</span>
+                                      <span className="text-sky-400 text-xs">v</span>
                                       <span className="text-xs font-bold text-zinc-100 font-sans uppercase tracking-wide">
                                         {task.roleName}
                                       </span>
@@ -3193,12 +3193,12 @@ export const OperationsLeads: React.FC = () => {
 
                                                   return (
                                                     <>
-                                                      <option value="">▼ Select Staff</option>
+                                                      <option value=""> Select Staff</option>
                                                       {availableStaff.map(st => {
                                                         const isBusy = isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '');
                                                         return (
                                                           <option key={st.staff_id} value={st.name}>
-                                                            {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                                            {st.name} {isBusy ? ' Busy' : ' Available'} - {st.role}
                                                           </option>
                                                         );
                                                       })}
@@ -3216,11 +3216,11 @@ export const OperationsLeads: React.FC = () => {
                                                       onClick={() => setBusyRosterStaff(slot.staff_name)}
                                                       className="text-[9px] px-2 py-1 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0"
                                                     >
-                                                      🔴 Busy
+                                                       Busy
                                                     </button>
                                                   ) : (
                                                     <span className="text-[9px] px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">
-                                                      🟢 Available
+                                                       Available
                                                     </span>
                                                   )
                                                 )}
@@ -3244,7 +3244,7 @@ export const OperationsLeads: React.FC = () => {
                                                   className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded border border-rose-500/20 transition-colors cursor-pointer font-medium ml-auto sm:ml-0"
                                                   title="Remove this staff assignment slot"
                                                 >
-                                                  ✕ <span className="hidden sm:inline">Remove</span>
+                                                  x <span className="hidden sm:inline">Remove</span>
                                                 </button>
                                               </div>
                                             </div>
@@ -3361,7 +3361,7 @@ export const OperationsLeads: React.FC = () => {
                                    <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10">
                                      {loadError ? (
                                        <div className="text-red-400 space-y-1 p-4">
-                                         <div>❌ Failed to load Team Members Included.</div>
+                                         <div> Failed to load Team Members Included.</div>
                                          <div className="text-[10px]">Reason: {loadError}</div>
                                        </div>
                                      ) : (
@@ -3391,7 +3391,7 @@ export const OperationsLeads: React.FC = () => {
                                              className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
                                              title={roleStr as string}
                                            >
-                                             ✔ {formatQtyItem(roleStr as string)}
+                                             v {formatQtyItem(roleStr as string)}
                                            </div>
                                          </div>
                                        </div>
@@ -3514,12 +3514,12 @@ export const OperationsLeads: React.FC = () => {
                                                       
                                                       return (
                                                         <>
-                                                          <option value="">▼ Select Staff</option>
+                                                          <option value=""> Select Staff</option>
                                                           {availableStaff.map(st => {
                                                             const isBusy = isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '');
                                                             return (
                                                               <option key={st.staff_id} value={st.name}>
-                                                                {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                                                {st.name} {isBusy ? ' Busy' : ' Available'} - {st.role}
                                                               </option>
                                                             );
                                                           })}
@@ -3535,11 +3535,11 @@ export const OperationsLeads: React.FC = () => {
                                                            onClick={() => setBusyRosterStaff(assignedStaff.staff_name)}
                                                            className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0"
                                                         >
-                                                          🔴 Busy
+                                                           Busy
                                                         </button>
                                                       ) : (
                                                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">
-                                                          🟢 Available
+                                                           Available
                                                         </span>
                                                       )
                                                     )}
@@ -3577,7 +3577,7 @@ export const OperationsLeads: React.FC = () => {
                                                     className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs font-bold shrink-0 ml-auto sm:ml-0"
                                                     title="Remove staff assignment row"
                                                   >
-                                                    ✕
+                                                    x
                                                   </button>
                                                   </div>
                                                 </div>
@@ -3648,7 +3648,7 @@ export const OperationsLeads: React.FC = () => {
                                               {validationAttempted && isEmpty && (
                                                 <div className="pt-0.5">
                                                   <span className="text-[10px] text-rose-500 font-mono italic">
-                                                    ⚠️ Required: Assign at least one staff
+                                                     Required: Assign at least one staff
                                                   </span>
                                                 </div>
                                               )}
@@ -3764,7 +3764,7 @@ export const OperationsLeads: React.FC = () => {
                                      {/* Header */}
                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                                        <div>
-                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block">👤 Staff Name</span>
+                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block"> Staff Name</span>
                                          <span className="text-sm font-bold text-white font-sans">{staffName}</span>
                                          <span className="text-[10px] text-zinc-400 font-mono block mt-0.5">{memberInfo.role}</span>
                                        </div>
@@ -3772,11 +3772,11 @@ export const OperationsLeads: React.FC = () => {
                                          <span className="text-[10px] text-zinc-500 uppercase font-mono block">Status</span>
                                          {hasConflict ? (
                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
-                                             🔴 Busy
+                                              Busy
                                            </span>
                                          ) : (
                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                             🟢 Available
+                                              Available
                                            </span>
                                          )}
                                        </div>
@@ -3811,7 +3811,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="flex items-center gap-2 px-3 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#25D366] text-[10px] font-mono font-bold rounded cursor-pointer transition-all uppercase"
                           >
-                            <span>📱</span> Share via WhatsApp
+                            <span></span> Share via WhatsApp
                           </button>
                         </div>
                       )}
@@ -3826,7 +3826,7 @@ export const OperationsLeads: React.FC = () => {
               
               {assignValidationError && (
                  <div className="p-4 mx-6 my-4 bg-red-500/10 border border-red-500/50 rounded-xl flex items-start gap-3 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-                    <span className="text-red-400 font-bold text-lg leading-none mt-0.5">❌</span>
+                    <span className="text-red-400 font-bold text-lg leading-none mt-0.5"></span>
                     <div className="text-[13px] text-red-200 font-sans whitespace-pre-wrap flex-1 leading-relaxed">
                        {assignValidationError}
                     </div>
@@ -3865,7 +3865,7 @@ export const OperationsLeads: React.FC = () => {
             <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/50 shrink-0">
               <div className="min-w-0 pr-2">
                 <h3 className="text-xs sm:text-sm font-bold text-indigo-400 font-mono uppercase truncate">
-                  Equipment Verification • {selectedEquipmentStatus.staffName}
+                  Equipment Verification * {selectedEquipmentStatus.staffName}
                 </h3>
                 {selectedEquipmentStatus.assignedEquipment && selectedEquipmentStatus.assignedEquipment.length > 0 && (
                   <div className="text-[11px] text-zinc-400 mt-0.5 truncate">
@@ -3877,7 +3877,7 @@ export const OperationsLeads: React.FC = () => {
                 onClick={() => setSelectedEquipmentStatus(null)}
                 className="text-zinc-400 hover:text-white font-bold cursor-pointer p-1 shrink-0"
               >
-                ✕
+                x
               </button>
             </div>
 
@@ -3995,13 +3995,13 @@ export const OperationsLeads: React.FC = () => {
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/50 shrink-0">
               <h3 className="text-xs sm:text-sm font-bold text-indigo-400 font-mono uppercase truncate pr-2">
-                Event Images • {selectedEventImages.staffName}
+                Event Images * {selectedEventImages.staffName}
               </h3>
               <button
                 onClick={() => setSelectedEventImages(null)}
                 className="text-zinc-400 hover:text-white font-bold cursor-pointer p-1 shrink-0"
               >
-                ✕
+                x
               </button>
             </div>
 
@@ -4231,7 +4231,7 @@ export const OperationsLeads: React.FC = () => {
               <div className="border-b border-zinc-800 p-4 bg-zinc-950/40 flex justify-between items-start shrink-0">
                 <div className="min-w-0 pr-2">
                   <h3 className="text-sm sm:text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2 truncate">
-                    <span>🎬</span> Final Consolidated Raw Footage
+                    <span></span> Final Consolidated Raw Footage
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1 truncate">
                     Order ID: <strong className="text-zinc-200">{receivingFootageOrderId}</strong> | Customer: <strong className="text-zinc-200">{currentOrder?.customer_name || currentLead?.customer_name || 'N/A'}</strong>
@@ -4244,7 +4244,7 @@ export const OperationsLeads: React.FC = () => {
                   }}
                   className="text-zinc-400 hover:text-white p-1.5 rounded-lg bg-zinc-800 text-xs cursor-pointer shrink-0"
                 >
-                  ✕
+                  x
                 </button>
               </div>
 
@@ -4261,7 +4261,7 @@ export const OperationsLeads: React.FC = () => {
               <div className="space-y-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <span>👥</span> Assigned Team Members & Raw Footage Links
+                    <span></span> Assigned Team Members & Raw Footage Links
                   </h4>
                   <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
                     Uploaded: {assignedCrewList.filter(c => c.raw_footage_link).length} / {assignedCrewList.length}
@@ -4296,7 +4296,7 @@ export const OperationsLeads: React.FC = () => {
                                     rel="noreferrer"
                                     className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 underline font-mono text-[11px]"
                                   >
-                                    Open Drive Link ↗
+                                    Open Drive Link 
                                   </a>
                                 ) : (
                                   <span className="text-amber-500/80 italic text-[11px]">Not Uploaded Yet</span>
@@ -4305,11 +4305,11 @@ export const OperationsLeads: React.FC = () => {
                               <td className="py-2.5 px-3 text-right">
                                 {hasLink ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
-                                    ✅ Uploaded
+                                     Uploaded
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">
-                                    ❌ Missing
+                                     Missing
                                   </span>
                                 )}
                               </td>
@@ -4326,7 +4326,7 @@ export const OperationsLeads: React.FC = () => {
               {false && (
                 <div className="space-y-4">
                   <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-1">
-                    📷 Staff Uploaded Proofs & Link Review
+                     Staff Uploaded Proofs & Link Review
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4342,7 +4342,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {assetCollectionProof.photoUrl ? (
-                        <SafeProofImage url={assetCollectionProof.photoUrl} alt="Asset Collection" label="View Full Photo ↗" />
+                        <SafeProofImage url={assetCollectionProof.photoUrl} alt="Asset Collection" label="View Full Photo " />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -4361,7 +4361,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {eventStartProof.photoUrl ? (
-                        <SafeProofImage url={eventStartProof.photoUrl} alt="Event Start" label="View Full Photo ↗" />
+                        <SafeProofImage url={eventStartProof.photoUrl} alt="Event Start" label="View Full Photo " />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -4380,7 +4380,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {eventCompletionProof.photoUrl ? (
-                        <SafeProofImage url={eventCompletionProof.photoUrl} alt="Event Completion" label="View Full Photo ↗" />
+                        <SafeProofImage url={eventCompletionProof.photoUrl} alt="Event Completion" label="View Full Photo " />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -4399,7 +4399,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {equipmentHandoverProof.photoUrl ? (
-                        <SafeProofImage url={equipmentHandoverProof.photoUrl} alt="Equipment Handover" label="View Full Photo ↗" />
+                        <SafeProofImage url={equipmentHandoverProof.photoUrl} alt="Equipment Handover" label="View Full Photo " />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-[11px] text-zinc-500 p-2 text-center">
                           <span>Equipment Not Handover</span>
@@ -4415,7 +4415,7 @@ export const OperationsLeads: React.FC = () => {
               {/* UPLOAD FINAL CONSOLIDATED RAW FOOTAGE STEP */}
               {!allCrewVerified ? (
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-amber-300 text-xs flex items-center gap-2">
-                  <span>⚠️</span> Please verify each assigned crew member's Raw Footage link before uploading the final raw footage.
+                  <span></span> Please verify each assigned crew member's Raw Footage link before uploading the final raw footage.
                 </div>
               ) : (
                 <form onSubmit={async (e) => {
@@ -4472,7 +4472,7 @@ export const OperationsLeads: React.FC = () => {
                     setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
                     
                     await refreshData();
-                    alert("✅ Raw Footage Verified Successfully! Order transferred to Production Dashboard.");
+                    alert(" Raw Footage Verified Successfully! Order transferred to Production Dashboard.");
                   } catch (err: any) {
                     console.error("Failed to verify raw footage:", err);
                     alert("Failed to verify raw footage: " + (err.message || "Please try again."));
@@ -4483,7 +4483,7 @@ export const OperationsLeads: React.FC = () => {
 
                   <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 space-y-3">
                     <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
-                      <span>🎬</span> Upload Final Consolidated Raw Footage
+                      <span></span> Upload Final Consolidated Raw Footage
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-zinc-300 uppercase font-mono mb-1.5 flex items-center justify-between">
@@ -4516,7 +4516,7 @@ export const OperationsLeads: React.FC = () => {
                         disabled={isSaving || !consolidatedDriveLink.trim()}
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer shadow-lg shadow-purple-600/20 flex items-center gap-2"
                       >
-                        {isSaving ? 'Saving & Transferring...' : 'Upload Final Raw Footage & Move to Production 🚀'}
+                        {isSaving ? 'Saving & Transferring...' : 'Upload Final Raw Footage & Move to Production '}
                       </button>
                     </div>
                   </div>
@@ -4539,14 +4539,14 @@ export const OperationsLeads: React.FC = () => {
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
               type="button"
             >
-              ✕
+              x
             </button>
             <div className="text-center space-y-4">
               <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/25 rounded-full flex items-center justify-center mx-auto text-emerald-400 text-xl font-bold">
-                ✓
+                v
               </div>
               <h3 className="text-base font-bold text-white">
-                ✅ Staff assigned successfully.
+                 Staff assigned successfully.
               </h3>
               <p className="text-xs text-zinc-400">
                 Roster updated for order <span className="font-mono text-indigo-400 font-bold">{successModalData.orderId}</span>.
@@ -4555,7 +4555,7 @@ export const OperationsLeads: React.FC = () => {
               {/* Share via WhatsApp section */}
               <div className="bg-zinc-950/50 border border-zinc-850 rounded-2xl p-4 text-left space-y-3">
                 <h4 className="text-[10px] font-mono font-bold uppercase text-emerald-400 tracking-wider">
-                  📱 Share via WhatsApp
+                   Share via WhatsApp
                 </h4>
                 
                 {(() => {
@@ -4619,11 +4619,11 @@ export const OperationsLeads: React.FC = () => {
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
               type="button"
             >
-              ✕
+              x
             </button>
             
             <div className="flex items-center gap-2.5 mb-4 border-b border-zinc-800 pb-3">
-              <span className="text-xl">📱</span>
+              <span className="text-xl"></span>
               <div className="text-left">
                 <h3 className="text-base font-bold text-white">
                   Personalized WhatsApp Share
@@ -4672,7 +4672,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="text-lg text-indigo-400 hover:text-indigo-300 transition-all active:scale-90 cursor-pointer pt-0.5"
                           >
-                            {isSelected ? '☑️' : '⬛'}
+                            {isSelected ? '' : ''}
                           </button>
                           
                           <div>
@@ -4686,7 +4686,7 @@ export const OperationsLeads: React.FC = () => {
                             </div>
                             {stObj?.mobile && (
                               <div className="text-[10px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
-                                📱 {stObj.mobile}
+                                 {stObj.mobile}
                               </div>
                             )}
                           </div>
@@ -4704,7 +4704,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] active:scale-95 text-black font-extrabold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md shadow-[#25D366]/10 hover:shadow-[#25D366]/25 transition-all cursor-pointer"
                           >
-                            <span className="text-xs">📲</span> Share on WhatsApp
+                            <span className="text-xs"></span> Share on WhatsApp
                           </button>
                         )}
                       </div>
@@ -4712,7 +4712,7 @@ export const OperationsLeads: React.FC = () => {
                       {isSelected && (
                         <div className="space-y-1.5">
                           <label className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-500 font-bold block">
-                            📝 Edit Message Preview:
+                             Edit Message Preview:
                           </label>
                           <textarea
                             value={msgText}
@@ -4772,17 +4772,17 @@ export const OperationsLeads: React.FC = () => {
                 className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
                 type="button"
               >
-                ✕
+                x
               </button>
               
               <div className="flex items-center gap-2 mb-4 border-b border-zinc-800 pb-3">
-                <span className="text-xl">👥</span>
+                <span className="text-xl"></span>
                 <div className="text-left">
                   <h3 className="text-base font-bold text-white font-sans">
                     Assigned Team Members
                   </h3>
                   <p className="text-[11px] text-zinc-400">
-                    Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • {ord.customer_name}
+                    Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> * {ord.customer_name}
                   </p>
                 </div>
               </div>
@@ -4799,7 +4799,7 @@ export const OperationsLeads: React.FC = () => {
                       <div key={evIdx} className="bg-zinc-950/40 border border-zinc-850/60 rounded-2xl p-4 space-y-3">
                         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                           <h4 className="text-xs font-bold text-indigo-400 font-sans flex items-center gap-1.5">
-                            🎬 {evName}
+                             {evName}
                           </h4>
                           {members[0] && (
                             <span className="text-[10px] font-mono text-zinc-500">
@@ -4945,18 +4945,18 @@ export const OperationsLeads: React.FC = () => {
                                   );
 
                                   if (isHandoverDone) {
-                                    equipmentStatusText = hasHandoverPhoto ? '✅ Handed Over' : 'Assigned / Handed Over';
+                                    equipmentStatusText = hasHandoverPhoto ? ' Handed Over' : 'Assigned / Handed Over';
                                   } else if (isReceivedDone) {
-                                    equipmentStatusText = hasReceivedPhoto ? '✅ Received' : 'Assigned / Received';
+                                    equipmentStatusText = hasReceivedPhoto ? ' Received' : 'Assigned / Received';
                                   } else {
                                     equipmentStatusText = 'Assigned';
                                   }
                                 }
 
                                 // 3. Event Image Status Text
-                                let eventImageStatusText = '❌ Pending';
-                                if (evEnd && getRecordMeta(evEnd).url) eventImageStatusText = '✅ Event End';
-                                else if (evStart && getRecordMeta(evStart).url) eventImageStatusText = '✅ Event Start';
+                                let eventImageStatusText = ' Pending';
+                                if (evEnd && getRecordMeta(evEnd).url) eventImageStatusText = ' Event End';
+                                else if (evStart && getRecordMeta(evStart).url) eventImageStatusText = ' Event Start';
 
                                 // 4. Raw Footage Link
                                 let rawFootageLink: string | null = null;
@@ -5094,16 +5094,16 @@ export const OperationsLeads: React.FC = () => {
                                             rel="noopener noreferrer"
                                             className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 underline font-bold text-xs font-mono"
                                           >
-                                            ✅ Uploaded ↗
+                                             Uploaded 
                                           </a>
                                           <div className="flex items-center gap-2">
                                              {verificationStatus === "Verified" && (
-                                               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">✅ Verified</span>
+                                               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"> Verified</span>
                                              )}
                                           </div>
                                         </div>
                                       ) : (
-                                        <span className="text-zinc-600 font-bold text-[11px]">❌ Pending</span>
+                                        <span className="text-zinc-600 font-bold text-[11px]"> Pending</span>
                                       )}
                                     </td>
                                   </tr>
@@ -5202,7 +5202,7 @@ export const OperationsLeads: React.FC = () => {
                   onClick={() => setBusyRosterStaff(null)}
                   className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
                 >
-                  ✕
+                  x
                 </button>
               </div>
               <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
@@ -5257,13 +5257,13 @@ export const OperationsLeads: React.FC = () => {
         >
           <div className="px-3 py-1.5 border-b border-zinc-800/60 mb-1.5 flex justify-between items-center flex-shrink-0">
             <span className="text-[10px] font-mono uppercase tracking-widest text-indigo-400 font-extrabold flex items-center gap-1.5">
-              <span>🎯</span> Available Actions
+              <span></span> Available Actions
             </span>
             <button
               onClick={() => setActiveMenuOrderId(null)}
               className="text-zinc-500 hover:text-white text-xs p-0.5 rounded cursor-pointer"
             >
-              ✕
+              x
             </button>
           </div>
           <div className="overflow-y-auto space-y-1 pr-0.5" style={{ maxHeight: `${(menuCoords.maxHeight || 280) - 40}px` }}>
@@ -5312,7 +5312,7 @@ export const OperationsLeads: React.FC = () => {
                   </h3>
                 </div>
                 <p className="text-[11px] text-zinc-400 mt-1 truncate">
-                  Uploaded by <strong className="text-indigo-400">{imagePreviewModal.staffName}</strong> • {imagePreviewModal.date} {imagePreviewModal.time}
+                  Uploaded by <strong className="text-indigo-400">{imagePreviewModal.staffName}</strong> * {imagePreviewModal.date} {imagePreviewModal.time}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -5357,14 +5357,14 @@ export const OperationsLeads: React.FC = () => {
                     }}
                   />
                   <div className="img-error-fallback hidden flex-col items-center justify-center p-8 text-center space-y-2">
-                    <span className="text-3xl">⚠️</span>
+                    <span className="text-3xl"></span>
                     <p className="text-zinc-300 font-mono text-xs sm:text-sm font-semibold">Image could not be loaded</p>
                     <p className="text-zinc-500 font-mono text-[11px]">Please verify the uploaded image URL or file status.</p>
                   </div>
                 </>
               ) : (
                 <div className="flex flex-col items-center justify-center p-8 text-center space-y-2">
-                  <span className="text-3xl">⚠️</span>
+                  <span className="text-3xl"></span>
                   <p className="text-zinc-300 font-mono text-xs sm:text-sm font-semibold">No image URL provided</p>
                   <p className="text-zinc-500 font-mono text-[11px]">Verification image has not been uploaded yet.</p>
                 </div>
