@@ -727,6 +727,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           { key: 'event_status', label: 'Event Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">{item.status || 'Completed'}</span> },
           { key: 'order_status', label: 'Order Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">{item.rawOrder?.current_stage || 'Closed'}</span> },
           { key: 'completed_date', label: 'Completion Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.rawOrder?.updated_at ? item.rawOrder.updated_at.replace('T', ' ').substring(0, 16) : 'N/A'}</span> },
+          { key: 'order_closed_date', label: 'Order Closed Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.rawOrder?.updated_at ? item.rawOrder.updated_at.replace('T', ' ').substring(0, 16) : 'N/A'}</span> },
           actionCol
         ];
       }

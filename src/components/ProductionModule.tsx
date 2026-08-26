@@ -2872,6 +2872,33 @@ _Please acknowledge receipt of this task assignment._`;
   const [showSmartFilter, setShowSmartFilter] = useState(false);
   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
 
+  // Dedicated reset helper to ensure Add Staff starts completely fresh
+  const resetAddStaffForm = () => {
+    setEditingStaffId(null);
+    setNewStaffName('');
+    setNewStaffType('');
+    setNewStaffMobile('');
+    setNewStaffWhatsapp('');
+    setNewStaffEmail('');
+    setNewStaffPassword('');
+    setShowPassword(false);
+    setNewStaffSkills([]);
+    setNewSkillText('');
+    setAddStaffError('');
+    setAddStaffSuccess('');
+    setIsSubmittingStaff(false);
+  };
+
+  const handleOpenAddStaff = () => {
+    resetAddStaffForm();
+    setShowStaffModal(true);
+  };
+
+  const handleCloseStaffModal = () => {
+    resetAddStaffForm();
+    setShowStaffModal(false);
+  };
+
   // Editing timeline dates inside detailed modal
   const [dateFootageReceived, setDateFootageReceived] = useState('');
   const [dateEditingStarted, setDateEditingStarted] = useState('');
@@ -3381,6 +3408,193 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       overdueCount
     };
   };
+
+        const handleSaveStaff = async (e: React.FormEvent) => {
+          e.preventDefault();
+          setAddStaffError('');
+          setAddStaffSuccess('');
+          setIsSubmittingStaff(true);
+
+          const name = newStaffName.trim();
+          const mobile = newStaffMobile.trim();
+          const whatsapp = newStaffWhatsapp.trim();
+          const email = newStaffEmail.trim();
+          const password = newStaffPassword;
+
+          if (!name) {
+            setAddStaffError('Staff Full Name is required.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+          if (!newStaffType) {
+            setAddStaffError('Please select Staff Type.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+          if (!mobile) {
+            setAddStaffError('Mobile Number is required.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+          if (!email) {
+            setAddStaffError('Email is required.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+          if (!editingStaffId && !password) {
+            setAddStaffError('Password is required.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+
+          // Comma-separated skills
+          const skillsArray = newStaffSkills;
+
+          try {
+            if (editingStaffId) {
+              const currentStaff = productionStaff?.find(s => s.staff_id === editingStaffId);
+              
+              if (password && currentStaff?.auth_user_id) {
+                const res = await fetch('/api/auth/update-user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    auth_id: currentStaff.auth_user_id,
+                    password,
+                    name,
+                    role: 'Editor',
+                  })
+                });
+                
+                if (!res.ok) {
+                   const errData = await res.json();
+                   throw new Error(errData.error || 'Failed to update authentication credentials');
+                }
+              } else if (password && !currentStaff?.auth_user_id) {
+                 // Fallback if they were never created in auth system
+                 const computedEmail = currentStaff?.email || email || `${currentStaff?.mobile || mobile}@photocrew.com`;
+                 const res = await fetch('/api/auth/create-user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    email: computedEmail,
+                    password,
+                    name,
+                    role: 'Editor',
+                  })
+                });
+                if (!res.ok) {
+                   const errData = await res.json();
+                   throw new Error(errData.error || 'Failed to create authentication credentials');
+                }
+                const resData = await res.json();
+                
+                await updateProductionStaff(editingStaffId, {
+                  auth_user_id: resData.data.user.id
+                });
+              }
+
+              // Update explicit record being edited (mobile and email are permanently locked)
+              await updateProductionStaff(editingStaffId, {
+                name,
+                whatsapp_number: whatsapp,
+                Skill: skillsArray as any,
+                staff_type: newStaffType as any,
+                Staff_Type: newStaffType as any
+              });
+              setAddStaffSuccess('âœ… Staff details updated successfully.');
+            } else {
+              // Create new auth user
+              const computedEmail = email || `${mobile}@photocrew.com`;
+              const authRes = await fetch('/api/auth/create-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: computedEmail,
+                  password,
+                  name,
+                  role: 'Editor',
+                })
+              });
+              
+              if (!authRes.ok) {
+                 const errData = await authRes.json();
+                 throw new Error(errData.error || 'Failed to create authentication credentials');
+              }
+              
+              const authData = await authRes.json();
+              const authUserId = authData.data.user.id;
+
+              // Check if duplicate exists (name or mobile matching)
+              const existingStaff = (productionStaff || []).find(
+                (s) =>
+                  s.name.toLowerCase() === name.toLowerCase() ||
+                  s.mobile === mobile
+              );
+
+              if (existingStaff) {
+                // Update existing staff
+                await updateProductionStaff(existingStaff.staff_id, {
+                  mobile,
+                  email,
+                  whatsapp_number: whatsapp,
+                  Skill: skillsArray as any,
+                  staff_type: newStaffType as any,
+                  Staff_Type: newStaffType as any,
+                  auth_user_id: authUserId
+                });
+                setAddStaffSuccess('âœ… Staff details updated successfully.');
+              } else {
+                // Create new staff record in production_staff table
+                await addProductionStaff({
+                  name,
+                  mobile,
+                  email,
+                  whatsapp_number: whatsapp,
+                  Skill: skillsArray as any,
+                  staff_type: newStaffType as any,
+                  role: 'Editor',
+                  department: 'Post-Production',
+                  status: 'Active',
+                  joining_date: new Date().toISOString().split('T')[0],
+                  auth_user_id: authUserId
+                });
+                setAddStaffSuccess('âœ… Staff details updated successfully.');
+              }
+            }
+
+            // Set timeout to clear success message
+            setTimeout(() => {
+              setAddStaffSuccess('');
+            }, 3000);
+
+            // Reset form completely
+            resetAddStaffForm();
+            setShowStaffModal(false);
+          } catch (err: any) {
+            setAddStaffError('âŒ ' + (err.message || 'Failed to update staff details.'));
+          } finally {
+            setIsSubmittingStaff(false);
+          }
+        };
+
+        const addSkill = async (skillName: string) => {
+          const trimmed = skillName.trim();
+          if (trimmed && !newStaffSkills.includes(trimmed)) {
+            const updatedSkills = [...newStaffSkills, trimmed];
+            setNewStaffSkills(updatedSkills);
+            if (editingStaffId) {
+              try {
+                await updateProductionStaff(editingStaffId, { Skill: updatedSkills as any });
+              } catch (e) {
+                console.error('Failed real-time skill save', e);
+              }
+            }
+          }
+          setNewSkillText('');
+        };
+
+        // Use productionStaff directly from the dedicated production_staff database table
 
   return (
     <div id="production_module" className="space-y-6 animate-fade-in font-sans">
@@ -5861,202 +6075,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           return 'â€”';
         };
 
-        const handleSaveStaff = async (e: React.FormEvent) => {
-          e.preventDefault();
-          setAddStaffError('');
-          setAddStaffSuccess('');
-          setIsSubmittingStaff(true);
-
-          const name = newStaffName.trim();
-          const mobile = newStaffMobile.trim();
-          const whatsapp = newStaffWhatsapp.trim();
-          const email = newStaffEmail.trim();
-          const password = newStaffPassword;
-
-          if (!name) {
-            setAddStaffError('Staff Full Name is required.');
-            setIsSubmittingStaff(false);
-            return;
-          }
-          if (!newStaffType) {
-            setAddStaffError('Please select Staff Type.');
-            setIsSubmittingStaff(false);
-            return;
-          }
-          if (!mobile) {
-            setAddStaffError('Mobile Number is required.');
-            setIsSubmittingStaff(false);
-            return;
-          }
-          if (!email) {
-            setAddStaffError('Email is required.');
-            setIsSubmittingStaff(false);
-            return;
-          }
-          if (!editingStaffId && !password) {
-            setAddStaffError('Password is required.');
-            setIsSubmittingStaff(false);
-            return;
-          }
-
-          // Comma-separated skills
-          const skillsArray = newStaffSkills;
-
-          try {
-            if (editingStaffId) {
-              const currentStaff = productionStaff?.find(s => s.staff_id === editingStaffId);
-              
-              if (password && currentStaff?.auth_user_id) {
-                const res = await fetch('/api/auth/update-user', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    auth_id: currentStaff.auth_user_id,
-                    password,
-                    name,
-                    role: 'Editor',
-                  })
-                });
-                
-                if (!res.ok) {
-                   const errData = await res.json();
-                   throw new Error(errData.error || 'Failed to update authentication credentials');
-                }
-              } else if (password && !currentStaff?.auth_user_id) {
-                 // Fallback if they were never created in auth system
-                 const computedEmail = currentStaff?.email || email || `${currentStaff?.mobile || mobile}@photocrew.com`;
-                 const res = await fetch('/api/auth/create-user', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    email: computedEmail,
-                    password,
-                    name,
-                    role: 'Editor',
-                  })
-                });
-                if (!res.ok) {
-                   const errData = await res.json();
-                   throw new Error(errData.error || 'Failed to create authentication credentials');
-                }
-                const resData = await res.json();
-                
-                await updateProductionStaff(editingStaffId, {
-                  auth_user_id: resData.data.user.id
-                });
-              }
-
-              // Update explicit record being edited (mobile and email are permanently locked)
-              await updateProductionStaff(editingStaffId, {
-                name,
-                whatsapp_number: whatsapp,
-                Skill: skillsArray as any,
-                staff_type: newStaffType as any,
-                Staff_Type: newStaffType as any
-              });
-              setAddStaffSuccess('âœ… Staff details updated successfully.');
-            } else {
-              // Create new auth user
-              const computedEmail = email || `${mobile}@photocrew.com`;
-              const authRes = await fetch('/api/auth/create-user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  email: computedEmail,
-                  password,
-                  name,
-                  role: 'Editor',
-                })
-              });
-              
-              if (!authRes.ok) {
-                 const errData = await authRes.json();
-                 throw new Error(errData.error || 'Failed to create authentication credentials');
-              }
-              
-              const authData = await authRes.json();
-              const authUserId = authData.data.user.id;
-
-              // Check if duplicate exists (name or mobile matching)
-              const existingStaff = (productionStaff || []).find(
-                (s) =>
-                  s.name.toLowerCase() === name.toLowerCase() ||
-                  s.mobile === mobile
-              );
-
-              if (existingStaff) {
-                // Update existing staff
-                await updateProductionStaff(existingStaff.staff_id, {
-                  mobile,
-                  email,
-                  whatsapp_number: whatsapp,
-                  Skill: skillsArray as any,
-                  staff_type: newStaffType as any,
-                  Staff_Type: newStaffType as any,
-                  auth_user_id: authUserId
-                });
-                setAddStaffSuccess('âœ… Staff details updated successfully.');
-              } else {
-                // Create new staff record in production_staff table
-                await addProductionStaff({
-                  name,
-                  mobile,
-                  email,
-                  whatsapp_number: whatsapp,
-                  Skill: skillsArray as any,
-                  staff_type: newStaffType as any,
-                  role: 'Editor',
-                  department: 'Post-Production',
-                  status: 'Active',
-                  joining_date: new Date().toISOString().split('T')[0],
-                  auth_user_id: authUserId
-                });
-                setAddStaffSuccess('âœ… Staff details updated successfully.');
-              }
-            }
-
-            // Set timeout to clear success message
-            setTimeout(() => {
-              setAddStaffSuccess('');
-            }, 3000);
-
-            // Reset form
-            setNewStaffName('');
-            setNewStaffType('');
-            setNewStaffMobile('');
-            setNewStaffWhatsapp('');
-            setNewStaffEmail('');
-            setNewStaffPassword('');
-            setNewStaffType('');
-            setNewStaffMobile('');
-            setNewStaffWhatsapp('');
-            setNewStaffSkills([]);
-            setEditingStaffId(null);
-            setShowStaffModal(false);
-          } catch (err: any) {
-            setAddStaffError('âŒ ' + (err.message || 'Failed to update staff details.'));
-          } finally {
-            setIsSubmittingStaff(false);
-          }
-        };
-
-        const addSkill = async (skillName: string) => {
-          const trimmed = skillName.trim();
-          if (trimmed && !newStaffSkills.includes(trimmed)) {
-            const updatedSkills = [...newStaffSkills, trimmed];
-            setNewStaffSkills(updatedSkills);
-            if (editingStaffId) {
-              try {
-                await updateProductionStaff(editingStaffId, { Skill: updatedSkills as any });
-              } catch (e) {
-                console.error('Failed real-time skill save', e);
-              }
-            }
-          }
-          setNewSkillText('');
-        };
-
-        // Use productionStaff directly from the dedicated production_staff database table
         const productionStaffList = productionStaff || [];
 
         return (
@@ -6081,287 +6099,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </div>
 
             <div className="space-y-6">
-              {/* SECTION 1: ADD STAFF FORM (MODAL) */}
-              {showStaffModal && typeof document !== 'undefined' && createPortal(
-                <div 
-                  className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-                  onClick={(e) => { 
-                    if (e.target === e.currentTarget) {
-                      setEditingStaffId(null);
-                      setNewStaffName('');
-                      setNewStaffType('');
-                      setNewStaffMobile('');
-                      setNewStaffWhatsapp('');
-                      setNewStaffEmail('');
-                      setNewStaffPassword('');
-                      setNewStaffSkills([]);
-                      setShowStaffModal(false);
-                    }
-                  }}
-                >
-                  <div className="w-full max-w-md flex flex-col bg-zinc-950 border border-zinc-900 rounded-2xl shadow-2xl relative max-h-[90vh] overflow-hidden">
-                    <div className="flex items-start justify-between p-5 border-b border-zinc-850 bg-zinc-950 z-10 shrink-0">
-                      <div>
-                        <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                          <Plus className="w-4 h-4 text-purple-400" /> {editingStaffId ? 'Edit Staff Details' : 'Add Staff'}
-                        </h3>
-                        <p className="text-[11px] text-zinc-400 mt-1">
-                          {editingStaffId ? 'Update details of this production specialist.' : 'Onboard a new production specialist or update skills.'}
-                        </p>
-                      </div>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          setEditingStaffId(null);
-                          setNewStaffName('');
-                          setNewStaffType('');
-                          setNewStaffMobile('');
-                          setNewStaffWhatsapp('');
-                          setNewStaffEmail('');
-                          setNewStaffPassword('');
-                          setNewStaffSkills([]);
-                          setShowStaffModal(false);
-                        }}
-                        className="text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-800 p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ml-4"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-
-                    <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
-                      <form onSubmit={handleSaveStaff} className="space-y-4">
-                        {addStaffError && (
-                          <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs px-4 py-3 rounded-xl">
-                            {addStaffError}
-                          </div>
-                        )}
-
-                        {addStaffSuccess && (
-                          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs px-4 py-3 rounded-xl">
-                            {addStaffSuccess}
-                          </div>
-                        )}
-
-                        <div className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Staff Full Name <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={newStaffName}
-                        onChange={(e) => setNewStaffName(e.target.value)}
-                        placeholder="e.g. Rahul Das"
-                        className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
-                      />
-                    </div>
-
-                    <div>
-                      <label className={`block text-[10px] font-bold uppercase tracking-wider mb-1.5 font-mono ${addStaffError === 'Please select Staff Type.' ? 'text-rose-500' : 'text-zinc-400'}`}>
-                        Staff Type <span className="text-rose-500">*</span>
-                      </label>
-                      <select
-                        value={newStaffType}
-                        onChange={async (e) => {
-                          const val = e.target.value;
-                          setNewStaffType(val);
-                          if (editingStaffId) {
-                            try {
-                              await updateProductionStaff(editingStaffId, { staff_type: val as any, Staff_Type: val as any });
-                            } catch (err) {
-                              console.error('Failed real-time staff type save', err);
-                            }
-                          }
-                        }}
-                        className={`w-full bg-zinc-900 border px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans cursor-pointer ${addStaffError === 'Please select Staff Type.' ? 'border-rose-500/50' : 'border-zinc-850'}`}
-                      >
-                        <option value="">-- Select Staff Type --</option>
-                        <option value="In-House">In-House</option>
-                        <option value="Freelancer">Freelancer</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
-                          Mobile Number <span className="text-rose-500">*</span>
-                        </label>
-                        {editingStaffId && (
-                          <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                            ğŸ”’ Locked (Permanent)
-                          </span>
-                        )}
-                      </div>
-                      <input
-                        type="tel"
-                        required
-                        disabled={Boolean(editingStaffId)}
-                        readOnly={Boolean(editingStaffId)}
-                        value={newStaffMobile}
-                        onChange={(e) => setNewStaffMobile(e.target.value)}
-                        placeholder="e.g. 9876543210"
-                        className={`w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans ${
-                          editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
-                        }`}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        WhatsApp Number
-                      </label>
-                      <input
-                        type="tel"
-                        value={newStaffWhatsapp}
-                        onChange={(e) => setNewStaffWhatsapp(e.target.value)}
-                        placeholder="e.g. 9876543210"
-                        className="w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 font-mono">
-                          Email Address <span className="text-rose-500">*</span>
-                        </label>
-                        {editingStaffId && (
-                          <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                            ğŸ”’ Locked (Permanent)
-                          </span>
-                        )}
-                      </div>
-                      <input
-                        type="email"
-                        required
-                        disabled={Boolean(editingStaffId)}
-                        readOnly={Boolean(editingStaffId)}
-                        value={newStaffEmail}
-                        onChange={(e) => setNewStaffEmail(e.target.value)}
-                        placeholder="e.g. rahul@photocrew.com"
-                        className={`w-full bg-zinc-900 border border-zinc-850 px-4 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans ${
-                          editingStaffId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
-                        }`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Password {editingStaffId ? '(Leave blank to keep existing)' : <span className="text-rose-500">*</span>}
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? "text" : "password"}
-                          required={!editingStaffId}
-                          value={newStaffPassword}
-                          onChange={(e) => setNewStaffPassword(e.target.value)}
-                          placeholder={editingStaffId ? "Enter new password" : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
-                          className="w-full bg-zinc-900 border border-zinc-850 pl-4 pr-10 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white focus:outline-none cursor-pointer"
-                        >
-                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                    {/* Tag-based Skills input field */}
-                    <div>
-                      <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Skills / Specialities
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newSkillText}
-                          onChange={(e) => setNewSkillText(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              addSkill(newSkillText);
-                            }
-                          }}
-                          placeholder="Type a skill"
-                          className="flex-1 bg-zinc-900 border border-zinc-850 px-3 py-2 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 transition-all font-sans"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => addSkill(newSkillText)}
-                          className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer border border-zinc-750 whitespace-nowrap"
-                        >
-                          + Add Skill
-                        </button>
-                      </div>
-
-                      {/* Removable chips list */}
-                      <div className="flex flex-wrap gap-1.5 mt-2.5">
-                        {newStaffSkills.length === 0 ? (
-                          <span className="text-[10px] text-zinc-500 italic">No skills added yet.</span>
-                        ) : (
-                          newStaffSkills.map((skill, index) => (
-                            <span
-                              key={index}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-full text-[11px] font-sans font-medium"
-                            >
-                              <span>{skill}</span>
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const updatedSkills = newStaffSkills.filter((_, i) => i !== index);
-                                  setNewStaffSkills(updatedSkills);
-                                  if (editingStaffId) {
-                                    try {
-                                      await updateProductionStaff(editingStaffId, { Skill: updatedSkills as any });
-                                    } catch (e) {
-                                      console.error('Failed real-time skill save', e);
-                                    }
-                                  }
-                                }}
-                                className="text-purple-450 hover:text-purple-300 font-black focus:outline-none transition-colors"
-                              >
-                                âœ•
-                              </button>
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={isSubmittingStaff}
-                    className="w-full mt-4 py-3 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
-                  >
-                    {isSubmittingStaff ? 'Saving...' : editingStaffId ? 'ğŸ’¾ Update Staff Details' : 'ğŸ’¾ Save Staff Details'}
-                  </button>
-                  {editingStaffId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingStaffId(null);
-                        setNewStaffName('');
-                        setNewStaffType('');
-                        setNewStaffMobile('');
-                        setNewStaffWhatsapp('');
-                        setNewStaffEmail('');
-                        setNewStaffPassword('');
-                        setNewStaffSkills([]);
-                        setShowStaffModal(false);
-                      }}
-                      className="w-full mt-2 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      Cancel Edit
-                    </button>
-                  )}
-                    </form>
-                    </div>
-                  </div>
-                </div>,
-                document.body
-              )}
-
               {/* SECTION 2: STAFF DIRECTORY */}
               <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-6 space-y-4 shadow-xl">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-zinc-900 pb-4">
@@ -6376,7 +6113,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <div>
                     <button 
                       type="button"
-                      onClick={() => setShowStaffModal(true)}
+                      onClick={handleOpenAddStaff}
                       className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg"
                     >
                       <Plus className="w-4 h-4" />
@@ -9873,2106 +9610,85 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     if (rawAssignments.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={7} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
-                            No assigned staff or deliverables found for this order.
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    return rawAssignments.map((assignment, idx) => {
-                      const staffRec = (productionStaff || []).find(s => s.staff_id === assignment.staff_id || s.name === assignment.staff_name);
-                      const staffName = assignment.staff_name || staffRec?.name || 'Unassigned';
-                      const staffRole = staffRec?.role || staffRec?.production_role_speciality || 'Editor';
-                      const staffType = staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House';
-
-                      const eventName = getEventName(assignment.event_id, 0);
-                      const deliverableName = assignment.speciality || assignment.deliverable_id || 'Deliverable';
-                      
-                      const statusText = (assignment.status === 'Assigned' || !assignment.status) ? 'Assigned Editor' : assignment.status;
-
-                      // Extract specific link for this exact assignment/deliverable record
-                      const getSpecificAssignmentLink = (a: any): string => {
-                        if (!a) return '';
-                        const candidates = [
-                          a.Edited_Drive_Link,
-                          a.edited_drive_link,
-                          a.edited_link,
-                          a.upload_link,
-                          a.drive_link,
-                          a.edited_drive_url,
-                          a.customer_review_link,
-                          a.link,
-                          a.url,
-                          a.raw_footage_link
-                        ];
-                        for (const cand of candidates) {
-                          if (cand && typeof cand === 'string') {
-                            const trimmed = cand.trim();
-                            if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.includes('drive.google.com') || trimmed.includes('dropbox.com') || trimmed.includes('mega.nz') || trimmed.length > 10) {
-                              return trimmed;
-                            }
-                          }
-                        }
-                        return '';
-                      };
-
-                      const linkStr = getSpecificAssignmentLink(assignment);
-                      const hasLink = Boolean(linkStr);
-
-                      // Parse Customer Proof according to unified logic across Supabase storage & records
-                      const proof = parseCustomerProof(assignment, prod, order);
-
-                      return (
-                        <tr key={assignment.assignment_id || idx} className="hover:bg-zinc-900/40 transition-colors">
-                          <td className="p-3">
-                            <div className="font-bold text-white mb-0.5">{staffName}</div>
-                            <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
-                              <span>{staffRole}</span>
-                              <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
-                              <span className={staffType === 'In-House' ? 'text-blue-400' : 'text-amber-400'}>{staffType}</span>
-                            </div>
-                          </td>
-                          <td className="p-3 font-mono text-xs text-zinc-300 font-bold">
-                            {eventName}
-                          </td>
-                          <td className="p-3">
-                            <span className="inline-flex w-fit px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[11px] font-mono font-bold">
-                              {deliverableName}
-                            </span>
-                          </td>
-                          <td className="p-3">
-                            <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
-                              ['Completed', 'Editing Completed', 'Editing Complete'].includes(statusText)
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : ['Customer Review', 'Client Review'].includes(statusText)
-                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                : ['Editing Started', 'In Progress', 'Editing In Progress'].includes(statusText)
-                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
-                            }`}>
-                              {statusText}
-                            </span>
-                          </td>
-                          <td className="p-3 whitespace-nowrap">
-                            {(() => {
-                              const uploadInfo = isServerUploadSaved(assignment, prod);
-                              if (uploadInfo.isUploaded) {
-                                return (
-                                  <div className="space-y-1">
-                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold">
-                                      <span>â˜‘</span>
-                                      <span>Uploaded in Server</span>
-                                    </span>
-                                    {uploadInfo.folderName && (
-                                      <div className="text-[10px] font-mono text-zinc-400 truncate max-w-[160px]" title={uploadInfo.folderName}>
-                                        ğŸ“ {uploadInfo.folderName}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              }
-                              return (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono font-semibold">
-                                  <span>â˜</span>
-                                  <span>Pending Upload</span>
-                                </span>
-                              );
-                            })()}
-                          </td>
-                          <td className="p-3">
-                            {hasLink ? (
-                              <a
-                                href={linkStr.startsWith('http') ? linkStr : `https://${linkStr}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                referrerPolicy="no-referrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 font-bold text-xs transition-colors cursor-pointer"
-                                title={linkStr}
-                              >
-                                <span>ğŸ”— Open Link</span>
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            ) : (
-                              <span className="text-zinc-500 italic text-xs font-mono">Pending Upload</span>
-                            )}
-                          </td>
-                          <td className="p-3 whitespace-nowrap">
-                            {!proof.hasProof ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
-                                <Clock className="w-3 h-3 text-zinc-600" />
-                                <span>Pending</span>
-                              </span>
-                            ) : proof.proofType === 'both' && proof.imageUrl && proof.linkUrl ? (
-                              <div className="inline-flex items-center gap-1.5 flex-wrap">
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewProofModal({
-                                    imageUrl: proof.imageUrl!,
-                                    staffName,
-                                    deliverableName,
-                                    eventName,
-                                    orderId: prod.production_id || orderId
-                                  })}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 font-bold font-mono text-[11px] transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                                  title="Click to view uploaded confirmation image"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>View Image</span>
-                                </button>
-                                <a
-                                  href={proof.linkUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  referrerPolicy="no-referrer"
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 font-bold font-mono text-[11px] transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                                  title={proof.linkUrl}
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                  <span>Open Link</span>
-                                </a>
-                              </div>
-                            ) : proof.proofType === 'image' && proof.imageUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => setPreviewProofModal({
-                                  imageUrl: proof.imageUrl!,
-                                  staffName,
-                                  deliverableName,
-                                  eventName,
-                                  orderId: prod.production_id || orderId
-                                })}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                                title="Click to view full confirmation image"
-                              >
-                                <Eye className="w-3.5 h-3.5" />
-                                <span>View Image</span>
-                              </button>
-                            ) : proof.proofType === 'link' && proof.linkUrl ? (
-                              <a
-                                href={proof.linkUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                referrerPolicy="no-referrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                                title={proof.linkUrl}
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>View Customer Proof</span>
-                              </a>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (proof.imageUrl) {
-                                    setPreviewProofModal({
-                                      imageUrl: proof.imageUrl,
-                                      staffName,
-                                      deliverableName,
-                                      eventName,
-                                      orderId: prod.production_id || orderId
-                                    });
-                                  } else if (proof.linkUrl) {
-                                    window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
-                                  }
-                                }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                                title="View Proof"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>View Proof</span>
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* UPLOADED PROOF / IMAGE PREVIEW POPUP */}
-      {previewProofModal && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all">
-            {/* Header */}
-            <div className="p-4 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
-              <div>
-                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 block mb-0.5">
-                  Uploaded Proof / Image
-                </span>
-                <h4 className="text-xs font-mono font-black text-white uppercase tracking-wider flex items-center gap-2">
-                  <span>{previewProofModal.staffName}</span>
-                  <span className="text-zinc-500">â€¢</span>
-                  <span className="text-purple-300">{previewProofModal.deliverableName}</span>
-                  <span className="text-zinc-500">â€¢</span>
-                  <span className="text-amber-300">{previewProofModal.eventName}</span>
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewProofModal(null)}
-                className="text-zinc-400 hover:text-white p-1.5 rounded-xl bg-zinc-900/50 hover:bg-zinc-800 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Image Content */}
-            <div className="p-6 overflow-y-auto flex-1 flex flex-col items-center justify-center bg-zinc-950/80">
-              <div className="relative max-w-full max-h-[65vh] rounded-xl overflow-hidden border border-zinc-800 shadow-2xl bg-black flex items-center justify-center">
-                {(() => {
-                  const formatted = previewProofModal.imageUrl.includes('drive.google.com/file/d/')
-                    ? previewProofModal.imageUrl.replace(/\/file\/d\/([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
-                    : previewProofModal.imageUrl.includes('drive.google.com/open?id=')
-                    ? previewProofModal.imageUrl.replace(/.*id=([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
-                    : previewProofModal.imageUrl;
-                  
-                  return (
-                    <img
-                      src={formatted}
-                      alt={`Uploaded Proof - ${previewProofModal.staffName} - ${previewProofModal.deliverableName}`}
-                      className="max-h-[65vh] w-auto object-contain mx-auto rounded-lg"
-                      onError={(e) => {
-                        // Fallback if image load fails
-                        const target = e.currentTarget;
-                        target.style.display = 'none';
-                        const parent = target.parentElement;
-                        if (parent && !parent.querySelector('.img-error-msg')) {
-                          const errDiv = document.createElement('div');
-                          errDiv.className = 'img-error-msg p-8 text-center text-zinc-400 font-mono text-xs';
-                          errDiv.innerHTML = `<p class="mb-2 text-rose-400 font-bold">Image preview unavailable inline</p><p class="text-zinc-500 text-[11px]">Click "Open Full Image" below to view the uploaded proof.</p>`;
-                          parent.appendChild(errDiv);
-                        }
-                      }}
-                    />
-                  );
-                })()}
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="p-3 border-t border-zinc-900 bg-zinc-950 flex items-center justify-between gap-3">
-              <a
-                href={previewProofModal.imageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                referrerPolicy="no-referrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 font-mono text-xs font-bold transition-colors cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open Full Image</span>
-              </a>
-              <button
-                type="button"
-                onClick={() => setPreviewProofModal(null)}
-                className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold transition-colors cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* EDITOR WHATSAPP SHARING POPUP */}
-      {editorWhatsappModalOpen && (
-        <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
-            
-            {/* Header */}
-            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
-              <div>
-                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-[#10b981] block mb-0.5 animate-pulse">
-                  System Integration â€¢ WhatsApp Automation
-                </span>
-                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
-                  Editor WhatsApp Sharing Panel
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setEditorWhatsappModalOpen(false);
-                  setEditorWhatsappData(null);
-                  setEditorWhatsappError(null);
-                }}
-                className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer transition-colors"
-              >
-                âœ•
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-6 max-h-[70vh]">
-              {isGeneratingEditorWhatsapp ? (
-                <div className="flex flex-col items-center justify-center py-12 space-y-4">
-                  <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                  <p className="text-xs text-zinc-400 font-mono">Fetching latest database records...</p>
-                </div>
-              ) : editorWhatsappError ? (
-                <div className="bg-rose-500/10 border border-rose-500/20 p-5 rounded-xl space-y-4 text-center">
-                  <p className="text-xs text-rose-400 font-mono">âš ï¸ Error: {editorWhatsappError}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (editorWhatsappProdId) {
-                        prepareEditorWhatsappData(editorWhatsappProdId);
-                      }
-                    }}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-mono font-bold transition-all cursor-pointer"
-                  >
-                    Retry Loading
-                  </button>
-                </div>
-              ) : editorWhatsappData ? (
-                <>
-                  {/* Event selector if multiple events exist */}
-                  {editorWhatsappData.lead?.events && editorWhatsappData.lead.events.length > 1 && (
-                    <div className="bg-zinc-900/40 border border-zinc-850 p-4 rounded-xl space-y-3 text-left">
-                      <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">
-                        Multiple Events Detected â€” Select Event to Share:
-                      </span>
-                      <div className="flex flex-col gap-2">
-                        {editorWhatsappData.lead.events.map((ev: any, idx: number) => {
-                          const isSelected = editorWhatsappData.selectedEventIndex === idx;
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() => {
-                                if (editorWhatsappData.prod?.production_id) {
-                                  prepareEditorWhatsappData(editorWhatsappData.prod.production_id, idx);
-                                }
-                              }}
-                              className={`w-full text-left p-2.5 rounded-lg border transition-all text-xs flex justify-between items-center ${
-                                isSelected
-                                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
-                                  : 'border-zinc-850 bg-zinc-950 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
-                              }`}
-                            >
-                              <div className="flex flex-col gap-1">
-                                <span className="font-bold">{ev.event_name || ev.event_type || 'Event'}</span>
-                                <span className="text-[10px] font-mono text-zinc-500">{ev.event_date || 'â€”'}</span>
-                              </div>
-                              {isSelected && <span className="text-emerald-400 font-bold font-mono">âœ“ Selected</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                    {editorWhatsappData.editors.map((ed, idx) => (
-                      <div key={idx} className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl space-y-4 text-left">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex-1 space-y-1">
-                            <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Assigned Editor</span>
-                            <span className="text-xs font-bold text-zinc-200 block">{ed.name}</span>
-                          </div>
-                          <div className="md:w-72 space-y-1.5">
-                            <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                              WhatsApp Contact Number {!ed.phone.trim() && <span className="text-rose-500">(Required)</span>}
-                            </label>
-                            <input
-                              type="text"
-                              value={ed.phone}
-                              onChange={(e) => {
-                                const newPhone = e.target.value;
-                                setEditorWhatsappData(prev => {
-                                  if (!prev) return null;
-                                  const newEditors = [...prev.editors];
-                                  newEditors[idx] = { ...newEditors[idx], phone: newPhone };
-                                  return { ...prev, editors: newEditors };
-                                });
-                              }}
-                              placeholder="e.g. +65 8123 4567"
-                              className={`w-full bg-zinc-950 border text-xs text-zinc-200 rounded-xl px-3 py-2 font-mono focus:outline-none ${
-                                !ed.phone.trim()
-                                  ? 'border-rose-500/50 focus:border-rose-500' 
-                                  : 'border-zinc-900 hover:border-zinc-850 focus:border-emerald-500'
-                              }`}
-                            />
-                          </div>
-                        </div>
-                        {!ed.phone.trim() && (
-                          <p className="text-[10px] text-rose-400 font-mono">âš ï¸ No mobile number saved. Please enter number before sharing.</p>
-                        )}
-                        <div className="space-y-2 text-left pt-2 border-t border-zinc-900/50">
-                          <span className="text-[10px] text-emerald-400 font-black tracking-widest font-mono uppercase block">
-                            Message Preview
-                          </span>
-                          <pre className="text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-zinc-900/60 p-4 rounded-xl border border-zinc-900 select-all overflow-x-auto max-h-[30vh]">
-                            {ed.message}
-                          </pre>
-                        </div>
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            disabled={!ed.phone.trim()}
-                            onClick={() => {
-                              const formattedPhone = formatSingaporeWhatsAppNumber(ed.phone);
-                              const encodedMsg = encodeURIComponent(ed.message);
-                              const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
-                              window.open(whatsappUrl, '_blank');
-                            }}
-                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
-                          >
-                            ğŸ’¬ Share with {ed.name}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : null}
-            </div>
-            {/* Footer */}
-            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditorWhatsappModalOpen(false);
-                  setEditorWhatsappData(null);
-                  setEditorWhatsappError(null);
-                }}
-                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* WHATSAPP SHARE POPUP */}
-      {whatsappShareModalOpen && whatsappShareData && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
-            
-            {/* Header */}
-            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
-              <div>
-                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-[#a78bfa] block mb-0.5">
-                  Production Desk â€¢ WhatsApp Coordination
-                </span>
-                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
-                  Share Assignments with Crew
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setWhatsappShareModalOpen(false)}
-                className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer"
-              >
-                âœ•
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-6 max-h-[70vh]">
-              {/* Project Summary Banner */}
-              <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Project / Event Name</span>
-                  <span className="text-xs font-bold text-zinc-200 mt-0.5 block">{whatsappShareData.event_name}</span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Customer</span>
-                  <span className="text-xs font-bold text-zinc-200 mt-0.5 block">{whatsappShareData.customer_name}</span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Global Deadline</span>
-                  <span className="text-xs font-bold text-violet-400 mt-0.5 block font-mono">{whatsappShareData.global_deadline || 'N/A'}</span>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-2">
-                  Assigned Crew & Deliverables
-                </h4>
-
-                <div className="space-y-4">
-                  {whatsappShareData.staffAssignments.map(({ staff, deliverables }: any) => {
-                    const currentMobile = editedStaffMobiles[staff.staff_id] !== undefined 
-                      ? editedStaffMobiles[staff.staff_id] 
-                      : (staff.mobile || '');
-                    const isMissingMobile = !currentMobile.trim();
-
-                    return (
-                      <div key={staff.staff_id} className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-4 space-y-4 text-left">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          {/* Left: Crew Details */}
-                          <div className="space-y-1.5 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold text-zinc-100 font-sans">{staff.name}</span>
-                              <span className="px-2 py-0.5 bg-purple-950/40 border border-purple-900/30 text-purple-300 rounded text-[9px] font-mono uppercase">
-                                {staff.role || 'Crew'}
-                              </span>
-                            </div>
-                            
-                            {/* Deliverables for this crew */}
-                            <div className="space-y-1 pl-2 border-l border-purple-900/50">
-                              {(Array.isArray(deliverables) ? deliverables : []).map((d: any, idx: number) => (
-                                <div key={idx} className="text-[11px] text-zinc-400 flex items-center justify-between font-sans">
-                                  <span>â€¢ {d.name}</span>
-                                  <span className="text-[10px] text-zinc-500 font-mono">Deadline: {d.deadline || whatsappShareData.global_deadline}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Right: Phone & Action Controls */}
-                          <div className="space-y-2 md:w-72">
-                            <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
-                              Contact Number {isMissingMobile && <span className="text-rose-500">(Required)</span>}
-                            </label>
-                            <input
-                              type="text"
-                              value={currentMobile}
-                              onChange={(e) => {
-                                setEditedStaffMobiles(prev => ({
-                                  ...prev,
-                                  [staff.staff_id]: e.target.value
-                                }));
-                              }}
-                              placeholder="e.g. +65 8123 4567"
-                              className={`w-full bg-zinc-950 border text-xs text-zinc-200 rounded-xl px-3 py-2 font-mono focus:outline-none ${
-                                isMissingMobile 
-                                  ? 'border-rose-500/50 focus:border-rose-500' 
-                                  : 'border-zinc-900 hover:border-zinc-850 focus:border-purple-500'
-                              }`}
-                            />
-                            {isMissingMobile && (
-                              <p className="text-[10px] text-rose-400 font-mono">âš ï¸ No mobile number saved. Please type before sending.</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Preview / Direct Actions for this crew member */}
-                        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900/50">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const message = getPersonalizedMessage(staff, deliverables);
-                              setPreviewStaffMessage({
-                                staffName: staff.name,
-                                message: message
-                              });
-                            }}
-                            className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-300 hover:text-white text-[11px] font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
-                          >
-                            ğŸ‘ï¸ Preview Message
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isMissingMobile}
-                            onClick={() => handleSendToWhatsApp(staff, deliverables)}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-[11px] font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
-                          >
-                            ğŸ’¬ Send via WhatsApp
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer action to close everything */}
-            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-end">
-              <button
-                type="button"
-                onClick={() => setWhatsappShareModalOpen(false)}
-                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
-              >
-                Close Coordination Panel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* WHATSAPP MESSAGE PREVIEW SUB-POPUP */}
-      {previewStaffMessage && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
-            {/* Header */}
-            <div className="p-4 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
-              <div>
-                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-emerald-400 block mb-0.5">
-                  Message Preview
-                </span>
-                <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono">
-                  For {previewStaffMessage.staffName}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewStaffMessage(null)}
-                className="p-1 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer font-bold text-xs"
-              >
-                âœ• Close
-              </button>
-            </div>
-
-            {/* Message Body Box */}
-            <div className="p-5 bg-zinc-950/80 overflow-y-auto flex-1 text-left font-sans">
-              <pre className="text-[11px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-zinc-900/60 p-4 rounded-xl border border-zinc-900 select-all overflow-x-auto max-h-[50vh]">
-                {previewStaffMessage.message}
-              </pre>
-              <p className="text-[10px] text-zinc-500 font-mono mt-3 text-center">
-                ğŸ’¡ Tip: You can double-click inside the text box to select/copy the message text manually.
-              </p>
-            </div>
-
-            {/* Footer with Send Action */}
-            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => setPreviewStaffMessage(null)}
-                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
-              >
-                Back to List
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const staffAss = whatsappShareData.staffAssignments.find((sa: any) => sa.staff.name === previewStaffMessage.staffName);
-                  if (staffAss) {
-                    handleSendToWhatsApp(staffAss.staff, staffAss.deliverables);
-                  }
-                  setPreviewStaffMessage(null);
-                }}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
-              >
-                ğŸ’¬ Send to WhatsApp
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODALS GATEWAY FOR POST-PRODUCTION ROSTER */}
-
-      {/* 1. ONBOARD / EDIT STAFF MEMBER MODAL */}
-      <AnimatePresence>
-        {isStaffModalOpen && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
-              id="production_staff_modal"
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl"
-            >
-              <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
-                <div>
-                  <h3 className="text-sm font-black uppercase text-white font-mono tracking-wider">
-                    {editingStaffMember ? 'Update Professional Credentials' : 'Onboard New Production Staff'}
-                  </h3>
-                  <p className="text-[11px] text-zinc-500 font-mono mt-0.5">
-                    Configure official post-production specialties, indices, and contact details.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsStaffModalOpen(false)}
-                  className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmitStaff} className="p-6 space-y-4 font-mono text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Name */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Full Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={staffFormName}
-                      onChange={(e) => setStaffFormName(e.target.value)}
-                      placeholder="e.g. John Doe"
-                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Employee ID */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Employee ID</label>
-                    <input
-                      type="text"
-                      required
-                      value={staffFormEmployeeId}
-                      onChange={(e) => setStaffFormEmployeeId(e.target.value)}
-                      placeholder="e.g. EMP-2034"
-                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Mobile */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-zinc-500 uppercase font-black block">Mobile Number</label>
-                      {editingStaffMember && (
-                        <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                          ğŸ”’ Locked (Permanent)
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      disabled={Boolean(editingStaffMember)}
-                      readOnly={Boolean(editingStaffMember)}
-                      value={staffFormMobile}
-                      onChange={(e) => setStaffFormMobile(e.target.value)}
-                      placeholder="e.g. +91 98765 43210"
-                      className={`w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none ${
-                        editingStaffMember ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
-                      }`}
-                    />
-                  </div>
-
-                  {/* WhatsApp */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">WhatsApp Number</label>
-                    <input
-                      type="text"
-                      value={staffFormWhatsapp}
-                      onChange={(e) => setStaffFormWhatsapp(e.target.value)}
-                      placeholder="Leave blank to copy mobile"
-                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Email */}
-                  <div className="space-y-1 sm:col-span-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-zinc-500 uppercase font-black block">Email Address</label>
-                      {editingStaffMember && (
-                        <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                          ğŸ”’ Locked (Permanent)
-                        </span>
-                      )}
-                    </div>
-                    <input
-                      type="email"
-                      disabled={Boolean(editingStaffMember)}
-                      readOnly={Boolean(editingStaffMember)}
-                      value={staffFormEmail}
-                      onChange={(e) => setStaffFormEmail(e.target.value)}
-                      placeholder="e.g. editor@photocrew.pro"
-                      className={`w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none ${
-                        editingStaffMember ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
-                      }`}
-                    />
-                  </div>
-
-                  {/* Address */}
-                  <div className="space-y-1 sm:col-span-2">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Base Address & City</label>
-                    <input
-                      type="text"
-                      value={staffFormAddress}
-                      onChange={(e) => setStaffFormAddress(e.target.value)}
-                      placeholder="e.g. Suite 4B, MG Road, Bangalore"
-                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Joining Date */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Joining Date</label>
-                    <input
-                      type="date"
-                      value={staffFormJoiningDate}
-                      onChange={(e) => setStaffFormJoiningDate(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Production Role */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Production Role Specialty</label>
-                    <select
-                      value={staffFormRole}
-                      onChange={(e) => setStaffFormRole(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-850 text-xs text-zinc-200 rounded-xl px-3 py-2.5 cursor-pointer focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                    >
-                      <option value="">Select Specialty</option>
-                      {allRoles.map(role => (
-                        <option key={role} value={role}>{role}</option>
-                      ))}
-                      <option value="Other / Custom Role Specialty">Other / Custom Role Specialty</option>
-                    </select>
-                  </div>
-
-                  {/* Custom Role Specialty Input */}
-                  {staffFormRole === 'Other / Custom Role Specialty' && (
-                    <div className="space-y-1 sm:col-span-2">
-                      <label className="text-[10px] text-amber-500 uppercase font-black block">Custom Role Specialty</label>
-                      <input
-                        type="text"
-                        required
-                        value={customRoleSpecialty}
-                        onChange={(e) => setCustomRoleSpecialty(e.target.value)}
-                        placeholder="e.g. Cinematic Reels Editor"
-                        className="w-full bg-zinc-900 border border-amber-950 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none placeholder-zinc-650"
-                      />
-                    </div>
-                  )}
-
-                  {/* Status */}
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Employment Status</label>
-                    <select
-                      value={staffFormStatus}
-                      onChange={(e) => setStaffFormStatus(e.target.value as any)}
-                      className="w-full bg-zinc-900 border border-zinc-850 text-xs text-zinc-200 rounded-xl px-3 py-2.5 cursor-pointer focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                    >
-                      <option value="Active">Active / On Roster</option>
-                      <option value="Inactive">Inactive / Suspended</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="p-4 border-t border-zinc-900 bg-zinc-900/30 -mx-6 -mb-6 flex gap-2.5 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setIsStaffModalOpen(false)}
-                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded-xl cursor-pointer duration-150"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-zinc-950 font-black uppercase rounded-xl cursor-pointer hover:scale-[1.01] duration-150 shadow-md shadow-amber-500/5"
-                  >
-                    {editingStaffMember ? 'Update Staff Member' : 'Onboard Staff'}
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 2. CUSTOM ROLE FORM MODAL */}
-      <AnimatePresence>
-        {isCustomRoleModalOpen && (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-md overflow-hidden shadow-2xl"
-            >
-              <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
-                <div>
-                  <h3 className="text-sm font-black uppercase text-white font-mono tracking-wider">
-                    Create Custom Production Role
-                  </h3>
-                  <p className="text-[11px] text-zinc-500 font-mono mt-0.5">
-                    Newly created roles will instantly propagate across indices.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsCustomRoleModalOpen(false)}
-                  className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSubmitCustomRole} className="p-6 space-y-4 font-mono text-xs">
-                <div className="space-y-1">
-                  <label className="text-[10px] text-zinc-500 uppercase font-black block">Role Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={customRoleName}
-                    onChange={(e) => setCustomRoleName(e.target.value)}
-                    placeholder="e.g. Drone Video Specialist"
-                    className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
-                  />
-                  <span className="text-[9px] text-zinc-600 block mt-1">
-                    Examples: Premium Wedding Editor, Luxury Album Designer, Short Video Specialist.
-                  </span>
-                </div>
-
-                <div className="p-4 border-t border-zinc-900 bg-zinc-900/30 -mx-6 -mb-6 flex gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomRoleModalOpen(false)}
-                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded-xl cursor-pointer duration-150"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl cursor-pointer duration-150 shadow-md shadow-purple-500/5"
-                  >
-                    Create Role
-                  </button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 3. METRIC DETAILS DRILL-DOWN MODAL */}
-      <AnimatePresence>
-        {selectedMetricDetail && (
-          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl"
-            >
-              <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
-                <div>
-                  <h3 className="text-sm font-black uppercase text-white font-mono tracking-wider">
-                    {selectedMetricDetail.type} Detail Log
-                  </h3>
-                  <p className="text-[11px] text-zinc-550 font-mono mt-0.5">
-                    Individual post-production assignment roster for <span className="text-amber-500">{selectedMetricDetail.memberName}</span>
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setSelectedMetricDetail(null)}
-                  className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer transition-colors duration-100"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-6 max-h-[460px] overflow-y-auto w-full">
-                {selectedMetricDetail.list.length === 0 ? (
-                  <div className="text-center text-zinc-550 font-mono py-12">
-                    No active project assignment records found under this metric.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto w-full">
-                    <table className="w-full text-left border-collapse text-xs text-zinc-300 font-mono min-w-max">
-                      <thead>
-                        <tr className="border-b border-zinc-900 text-zinc-500 uppercase pb-2 text-[9px] tracking-widest bg-zinc-950/40">
-                          <th className="py-3 px-3 font-bold">Project ID</th>
-                          <th className="py-3 px-3 font-bold">Client / Event</th>
-                          <th className="py-3 px-3 font-bold">Editing Stage</th>
-                          <th className="py-3 px-3 font-bold">Priority</th>
-                          <th className="py-3 px-3 font-bold text-right">Target Deadline</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-900">
-                        {selectedMetricDetail.list.map((proj) => {
-                          let clientName = 'Unknown Client';
-                          const leadMatch = leadsData?.find(l => l.lead_id === proj.tracking_id || `PRD-${l.lead_id}` === proj.production_id);
-                          if (leadMatch) {
-                            clientName = `${leadMatch.client_name} - ${leadMatch.event_type || 'Wedding'}`;
-                          } else {
-                            const orderMatch = (orders || []).find(o => o.order_id === proj.tracking_id || o.lead_id === proj.tracking_id);
-                            if (orderMatch) {
-                              clientName = `${orderMatch.client_name} - Project`;
-                            } else {
-                              clientName = proj.tracking_id || 'Post-Production Job';
-                            }
-                          }
-
-                          return (
-                            <tr key={proj.production_id || proj.tracking_id} className="hover:bg-zinc-900/10">
-                              <td className="py-3 px-3 font-bold text-amber-500 text-[11px]">
-                                {proj.production_id || proj.tracking_id || 'N/A'}
-                              </td>
-                              <td className="py-3 px-3 font-sans text-xs text-zinc-250 break-words max-w-[200px]">
-                                {clientName}
-                              </td>
-                              <td className="py-3 px-3 text-[11px]">
-                                <StatusText status={proj.editing_status || 'Raw Footage Received'} />
-                              </td>
-                              <td className="py-3 px-3">
-                                <span className={`px-2 py-0.5 rounded text-[10px] ${
-                                  proj.project_priority === 'Critical' || proj.project_priority === 'High'
-                                    ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20'
-                                    : 'bg-zinc-905 border border-zinc-900 text-zinc-450'
-                                }`}>
-                                  {proj.project_priority || 'Medium'}
-                                </span>
-                              </td>
-                              <td className="py-3 px-3 text-right text-zinc-400 font-black">
-                                {proj.expected_delivery_date || proj.target_delivery_date || 'TBD'}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              <div className="p-4 border-t border-zinc-900 flex justify-end bg-[#0c0d10]">
-                <button
-                  type="button"
-                  onClick={() => setSelectedMetricDetail(null)}
-                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-455 hover:text-white rounded-xl duration-150 cursor-pointer text-xs font-mono uppercase"
-                >
-                  Close Log
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* 4. PROFESSIONAL PROFILE OVERLAY CARD MODAL */}
-      <AnimatePresence>
-        {viewingStaffMember && (() => {
-          const stats = getStaffRosterStats(viewingStaffMember.name);
-          return (
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-3xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative"
-              >
-                <div className="relative overflow-hidden bg-[#0c0d11] p-6 border-b border-zinc-900 flex justify-between items-start">
-                  <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-                  
-                  <div className="flex items-center gap-4 relative z-10 font-sans">
-                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-zinc-950 flex items-center justify-center text-3xl font-black font-mono shadow-xl relative overflow-hidden">
-                      {viewingStaffMember.name.charAt(0)}
-                      <div className="absolute inset-0 bg-white/10 scale-120 rotate-12" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-black text-white uppercase tracking-wider font-mono">
-                          {viewingStaffMember.name}
-                        </h2>
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono leading-none font-bold uppercase ${
-                          viewingStaffMember.status === 'Active' 
-                            ? 'bg-emerald-500/10 text-emerald-400' 
-                            : 'bg-zinc-800 text-zinc-500'
-                        }`}>
-                          {viewingStaffMember.status}
-                        </span>
-                      </div>
-                      <p className="text-xs text-zinc-500 font-mono mt-0.5 uppercase tracking-wide">
-                        {viewingStaffMember.production_role_speciality || viewingStaffMember.role || 'Post-Production Specialist'}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setViewingStaffMember(null)}
-                    className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer relative z-10"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Info Grid */}
-                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Left panel: Info cards */}
-                  <div className="space-y-4 font-mono text-xs">
-                    <h4 className="text-[10px] text-zinc-500 uppercase tracking-widest font-black border-b border-zinc-900 pb-1">
-                      General Contact Details
-                    </h4>
-                    <div className="space-y-3">
-                      <div className="bg-zinc-900/40 border border-zinc-900/60 p-3 rounded-xl space-y-1.5">
-                        <span className="text-[9px] text-zinc-550 uppercase font-bold block">Mobile Number</span>
-                        <span className="text-zinc-200 tracking-wide">{viewingStaffMember.mobile}</span>
-                      </div>
-                      <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl space-y-1.5">
-                        <span className="text-[9px] text-zinc-550 uppercase font-bold block">WhatsApp Number</span>
-                        <span className="text-zinc-200 tracking-wide">{viewingStaffMember.whatsapp_number || viewingStaffMember.mobile}</span>
-                      </div>
-                      <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl space-y-1.5">
-                        <span className="text-[9px] text-zinc-550 uppercase font-bold block">Email Address</span>
-                        <span className="text-zinc-200 break-words block">{viewingStaffMember.email}</span>
-                      </div>
-                      <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl space-y-1.5">
-                        <span className="text-[9px] text-zinc-550 uppercase font-bold block">Joining Date</span>
-                        <span className="text-zinc-200 tracking-wide">{viewingStaffMember.joining_date}</span>
-                      </div>
-                      {viewingStaffMember.address && (
-                        <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl space-y-1.5">
-                          <span className="text-[9px] text-zinc-550 uppercase font-bold block">Base Location / Address</span>
-                          <span className="text-zinc-200 block text-[11px] break-words">{viewingStaffMember.address}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Right/Center panel: Analytics Dashboard */}
-                  <div className="md:col-span-2 space-y-4 font-mono">
-                    <h4 className="text-[10px] text-zinc-500 uppercase tracking-widest font-black border-b border-zinc-900 pb-1">
-                      Editor Performance & Job Metrics
-                    </h4>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center">
-                        <span className="text-zinc-550 text-[9px] uppercase tracking-wider font-bold">Total Assigned</span>
-                        <div className="text-2xl font-black text-white mt-1">{stats.assigned.length}</div>
-                      </div>
-                      <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center">
-                        <span className="text-zinc-550 text-[9px] uppercase tracking-wider font-bold text-emerald-450 font-black font-mono">Completed</span>
-                        <div className="text-2xl font-black text-emerald-400 mt-1">{stats.completedCount}</div>
-                      </div>
-                      <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center">
-                        <span className="text-zinc-550 text-[9px] uppercase tracking-wider font-bold text-amber-500">Pending</span>
-                        <div className="text-2xl font-black text-amber-500 mt-1">{stats.pendingCount}</div>
-                      </div>
-                      <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center font-bold">
-                        <span className="text-zinc-550 text-[9px] uppercase tracking-wider">Approval Rate</span>
-                        <div className="text-2xl font-black text-purple-400 mt-1">
-                          {stats.assigned.length > 0 ? Math.round((stats.approvedCount / stats.assigned.length) * 100) : 100}%
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Project List */}
-                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4 space-y-2">
-                      <span className="text-[10px] text-zinc-550 uppercase tracking-widest font-black block mb-2">
-                        Staff Assignment Log
-                      </span>
-                      <div className="overflow-y-auto max-h-[220px] space-y-2 pr-1 select-none">
-                        {stats.assigned.length === 0 ? (
-                          <div className="text-center py-8 text-zinc-650 text-xs font-mono">
-                            No historic or pending jobs assigned to this staff member yet.
-                          </div>
-                        ) : (
-                          stats.assigned.map(proj => {
-                            let clientTitle = 'Post-Production Job';
-                            const leadM = leadsData?.find(l => l.lead_id === proj.tracking_id || `PRD-${l.lead_id}` === proj.production_id);
-                            if (leadM) clientTitle = `${leadM.client_name} (${leadM.event_type || 'Wedding'})`;
-
-                            return (
-                              <div key={proj.production_id || proj.tracking_id} className="bg-zinc-900/60 border border-zinc-850 p-2.5 rounded-xl flex items-center justify-between text-xs">
-                                <div>
-                                  <div className="font-extrabold text-zinc-200">{clientTitle}</div>
-                                  <div className="text-[9px] text-zinc-550 mt-0.5">
-                                    ID: {proj.production_id || proj.tracking_id} | Deadline: {proj.expected_delivery_date || proj.target_delivery_date || 'TBD'}
-                                  </div>
-                                </div>
-                                <StatusText status={proj.editing_status} />
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="p-4 border-t border-zinc-900 flex justify-end bg-[#0c0d10]">
-                  <button
-                    type="button"
-                    onClick={() => setViewingStaffMember(null)}
-                    className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded-xl duration-150 cursor-pointer text-xs uppercase"
-                  >
-                    Close Profile Card
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          );
-        })()}
-      </AnimatePresence>
-
-      {/* ASSIGNED TASKS POPUP */}
-      <AnimatePresence>
-        {selectedStaffForTasks && (() => {
-          const staffTasks = [...(editorAssignments || [])].filter(a => 
-            a.staff_name.toLowerCase() === selectedStaffForTasks.toLowerCase() && 
-            isAssignmentActive(a, production || [])
-          );
-
-          return (
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
-              >
-                {/* Header */}
-                <div className="p-4 sm:p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
-                  <div>
-                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-                      <span>ğŸ“‹</span> Assigned Tasks
-                    </h3>
-                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
-                      STAFF: <span className="text-amber-400 font-bold">{selectedStaffForTasks}</span>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedStaffForTasks(null)}
-                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
-                  >
-                    âœ• Close
-                  </button>
-                </div>
-
-                {/* Body Table */}
-                <div className="p-0 overflow-y-auto flex-1">
-                  {staffTasks.length === 0 ? (
-                    <div className="p-8 text-center text-zinc-500 font-mono text-xs">
-                      No assigned tasks found.
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto w-full max-w-full">
-<table className="w-full text-left border-collapse min-w-max">
-                      <thead className="bg-zinc-900/40 sticky top-0 border-b border-zinc-900">
-                        <tr className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
-                          <th className="px-4 py-3 font-bold">Order ID</th>
-                          <th className="px-4 py-3 font-bold">Customer Name</th>
-                          <th className="px-4 py-3 font-bold">Event Name</th>
-                          <th className="px-4 py-3 font-bold">Assigned Task</th>
-                          <th className="px-4 py-3 font-bold">Target Delivery Date</th>
-                          <th className="px-4 py-3 font-bold">Raw Footage Received</th>
-                          <th className="px-4 py-3 font-bold">Current Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
-                        {staffTasks.map(task => {
-                          const correlatedProj = (production || []).find(p => p.production_id === task.production_id);
-                          const { order, lead } = resolveOrderAndLead(correlatedProj);
-                          const trackingId = correlatedProj?.tracking_id;
-                          const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' ? order?.order_id : (trackingId || 'N/A');
-                          const customerName = lead?.customer_name || order?.customer_name || correlatedProj?.customer_name || 'Client';
-                          const eventName = order?.event_type || order?.custom_event_name || 'Project';
-                          const rawFootageLink = getRawFootageDriveLink(correlatedProj);
-
-                          return (
-                            <tr key={task.assignment_id} className="hover:bg-zinc-900/30 transition-colors">
-                              <td className="px-4 py-3 font-mono font-bold text-violet-400">{orderId}</td>
-                              <td className="px-4 py-3 font-semibold text-white">{customerName}</td>
-                              <td className="px-4 py-3 font-medium text-purple-300">{eventName}</td>
-                              <td className="px-4 py-3 font-medium text-amber-100">{task.speciality || 'Editor'}</td>
-                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">{task.target_finish_date || correlatedProj?.target_delivery_date || 'â€”'}</td>
-                              <td className="px-4 py-3">
-                                {rawFootageLink && (rawFootageLink.startsWith('http://') || rawFootageLink.startsWith('https://')) ? (
-                                  <a
-                                    href={rawFootageLink.startsWith('http') ? rawFootageLink : `https://${rawFootageLink}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    referrerPolicy="no-referrer"
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-md text-[11px] font-bold transition-all cursor-pointer"
-                                    title={rawFootageLink}
-                                  >
-                                    <FileVideo className="w-3.5 h-3.5 shrink-0" />
-                                    <span>View Raw Footage</span>
-                                    <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
-                                  </a>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-zinc-500 text-[11px] font-mono">
-                                    <Clock className="w-3 h-3 text-zinc-600" />
-                                    <span>Pending</span>
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                                  task.status === 'Completed'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
-                                    : task.status === 'Revision'
-                                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
-                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
-                                }`}>
-                                  {task.status}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-</div>
-                  )}
-                </div>
-              </motion.div>
-            </div>
-          );
-        })()}
-      </AnimatePresence>
-
-      {/* RE-SEND REVIEW MODAL */}
-      <AnimatePresence>
-        {customerReviewResendProd && (() => {
-          const { order, lead } = resolveOrderAndLead(customerReviewResendProd);
-          const customerName = order?.customer_name || lead?.customer_name || 'Customer';
-          const trackingId = customerReviewResendProd.tracking_id || 'N/A';
-          return (
-            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
-              >
-                {/* Header */}
-                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
-                  <div>
-                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-                      <span>ğŸ“¤</span> Send Customer Review Links
-                    </h3>
-                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
-                      PROJECT ID: <span className="text-violet-400 font-bold">{customerReviewResendProd.production_id}</span> â€¢ TRACKING ID: <span className="text-amber-400 font-bold">{trackingId}</span>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setCustomerReviewResendProd(null)}
-                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
-                  >
-                    âœ• Close
-                  </button>
-                </div>
-
-                {/* Body Form */}
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    try {
-                      setIsSaving(true);
-                      await updateProduction(customerReviewResendProd.production_id, {
-                        editing_status: 'Customer Review'
-                      });
-                      if (order?.order_id) {
-                        await updateOrderStage(order?.order_id, 'Customer Review');
-                      }
-                      
-                      // Trigger WhatsApp Web with encoded text
-                      const formattedPhone = customerReviewPhone.replace(/\D/g, '');
-                      const encodedMsg = encodeURIComponent(customerReviewMessage);
-                      const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
-                      window.open(whatsappUrl, '_blank');
-                      
-                      setCustomerReviewResendProd(null);
-                    } catch (err: any) {
-                      alert("Error updating status: " + (err.message || err));
-                    } finally {
-                      setIsSaving(false);
-                    }
-                  }}
-                  className="p-6 space-y-4 overflow-y-auto flex-1 text-left"
-                >
-                  <div className="space-y-1">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                      Customer Name
-                    </label>
-                    <div className="text-sm font-semibold text-zinc-200 bg-zinc-900/40 px-3 py-2 rounded-xl border border-zinc-900">
-                      {customerName}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                        WhatsApp Number / Mobile
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={customerReviewPhone}
-                        onChange={(e) => setCustomerReviewPhone(e.target.value)}
-                        className="w-full bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                        Set Stage Automatically to
-                      </label>
-                      <div className="text-xs font-semibold text-emerald-400 bg-emerald-950/10 border border-emerald-900/30 px-3 py-2 rounded-xl">
-                        ğŸ’¬ Customer Review
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                      Draft Message Content
-                    </label>
-                    <p className="text-[10px] text-zinc-500 font-mono mb-1">
-                      Customize review link messages including all assigned deliverables below:
-                    </p>
-                    <textarea
-                      required
-                      rows={10}
-                      value={customerReviewMessage}
-                      onChange={(e) => setCustomerReviewMessage(e.target.value)}
-                      className="w-full bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono whitespace-pre-wrap leading-relaxed"
-                    />
-                  </div>
-
-                  {/* Buttons */}
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setCustomerReviewResendProd(null)}
-                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      <span>ğŸ’¬</span> {isSaving ? 'Saving...' : 'Send via WhatsApp'}
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </div>
-          );
-        })()}
-      </AnimatePresence>
-
-      {/* CLIENT ACCEPTANCE POPUP */}
-      <AnimatePresence>
-        {clientAcceptanceProd && (() => {
-          const { order, lead } = resolveOrderAndLead(clientAcceptanceProd);
-          const customerName = order?.customer_name || lead?.customer_name || 'Customer';
-          const trackingId = clientAcceptanceProd.tracking_id || 'N/A';
-          const eventGroups = getClientAcceptanceDeliverables(clientAcceptanceProd);
-          const allChecklistKeys = eventGroups.flatMap(g => g.items.map(i => i.key));
-
-          // Convert a file to Base64
-          const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            setCaUploadingProof(true);
-            setCaUploadName(file.name);
-            setCaConsentProofChecked(true);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              setCaCommunicationProof(reader.result as string);
-              setCaUploadingProof(false);
-            };
-            reader.onerror = () => {
-              alert("Failed to read file");
-              setCaUploadingProof(false);
-            };
-            reader.readAsDataURL(file);
-          };
-
-          return (
-            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh]"
-              >
-                {/* Header */}
-                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
-                  <div>
-                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-                      <span>âœ“</span> Client Acceptance Verification Deck
-                    </h3>
-                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
-                      PROJECT ID: <span className="text-violet-400 font-bold">{clientAcceptanceProd.production_id}</span> â€¢ TRACKING ID: <span className="text-amber-400 font-bold">{trackingId}</span>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setClientAcceptanceProd(null);
-                      setCaUploadConfirmations({});
-                    }}
-                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
-                  >
-                    âœ• Close
-                  </button>
-                </div>
-
-                {/* Body Form */}
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-
-                    if (!caConsentProofChecked) {
-                      alert("Please check and confirm 'Client Communication & Consent Proof'.");
-                      return;
-                    }
-
-                    if (!caCommunicationProof || !caCommunicationProof.trim()) {
-                      alert("Client Communication & Consent Proof is required. Please upload or select a proof file.");
-                      return;
-                    }
-
-                    if (!caUploadName || !caUploadName.trim()) {
-                      alert("Upload Name is required. Please provide a valid file name.");
-                      return;
-                    }
-
-                    try {
-                      setIsSaving(true);
-                      
-                      let uploadedProofUrl = caCommunicationProof;
-                      if (caCommunicationProof && caCommunicationProof.trim()) {
-                        try {
-                          uploadedProofUrl = await uploadProofToStorage(caCommunicationProof, 'client_acceptance');
-                        } catch (uErr: any) {
-                          alert(`Proof upload failed: ${uErr.message}`);
-                          setIsSaving(false);
-                          return;
-                        }
-                      }
-
-                      const updates: any = {
-                        editing_status: 'Client Acceptance',
-                        client_communication_proof: uploadedProofUrl,
-                        customer_communication_proof: uploadedProofUrl,
-                        proof_url: uploadedProofUrl,
-                        upload_name: caUploadName.trim(),
-                        proof_name: caUploadName.trim(),
-                        client_communication_proof_name: caUploadName.trim(),
-                        checklist_client_communication_proof: caConsentProofChecked,
-                        checklist_customer_acceptance: caVerifyCustomerAcceptance,
-                        checklist_content_usage: caContentUsageConfirmation,
-                        checklist_footage_deleted_7_days: caFootageDeleted7Days,
-                        checklist_payment_from_sales: caVerifyPaymentSales,
-                        checklist_edited_files_uploaded: caValidateEditedFiles,
-                        server_upload_validated: caValidateEditedFiles,
-                        validated_server_uploads: caValidatedServerUploads
-                      };
-                      
-                      await updateProduction(clientAcceptanceProd.production_id, updates);
-                      
-                      const targetId = order?.order_id || trackingId || clientAcceptanceProd.production_id;
-                      if (targetId) {
-                        await updateOrderStage(targetId, 'Client Acceptance' as any);
-                      }
-
-                      // Persist unified Client Acceptance Verification records per event
-                      if (saveClientAcceptanceVerification) {
-                        if (eventGroups.length > 0) {
-                          for (const group of eventGroups) {
-                            const conf = caUploadConfirmations[group.eventId];
-                            const matchedFolder = (conf?.folderName || group.items.find(i => i.folderName)?.folderName || clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '').trim();
-                            const matchedLink = (group.items.find(i => i.uploadLink)?.uploadLink || clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '').trim();
-                            
-                            await saveClientAcceptanceVerification({
-                              order_id: targetId,
-                              event_id: group.eventId || 'default',
-                              folder_name: matchedFolder,
-                              upload_link_path: matchedLink,
-                              client_communication_consent_proof: uploadedProofUrl,
-                              proof_file_name: caUploadName.trim(),
-                              consent_proof_verified: true
-                            });
-                          }
-                        } else {
-                          await saveClientAcceptanceVerification({
-                            order_id: targetId,
-                            event_id: 'default',
-                            folder_name: (clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '').trim(),
-                            upload_link_path: (clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '').trim(),
-                            client_communication_consent_proof: uploadedProofUrl,
-                            proof_file_name: caUploadName.trim(),
-                            consent_proof_verified: true
-                          });
-                        }
-                      }
-
-                      // Update assignments with manual upload confirmations and server upload validation
-                      for (const group of eventGroups) {
-                        const conf = caUploadConfirmations[group.eventId];
-                        const isGroupValidated = Boolean(caValidatedServerUploads[group.eventId] || caValidateEditedFiles);
-
-                        for (const item of group.items) {
-                          if (item.assignmentId) {
-                            const isItemValidated = Boolean(caValidatedServerUploads[item.key] || caValidatedServerUploads[item.assignmentId] || isGroupValidated);
-                            const assignmentUpdate: any = {};
-
-                            if (conf?.confirmed) {
-                              assignmentUpdate.server_upload_confirmed = true;
-                              assignmentUpdate.server_upload_event_date = conf.eventDate;
-                              assignmentUpdate.server_upload_folder_name = conf.folderName;
-                              assignmentUpdate.server_upload_confirmed_at = new Date().toISOString();
-                              assignmentUpdate.server_upload_confirmed_by = currentUserName || 'Production Staff';
-                              assignmentUpdate.edited_folder_uploaded_to_server = true;
-                            }
-
-                            if (isItemValidated) {
-                              assignmentUpdate.server_upload_validated = true;
-                              assignmentUpdate.server_upload_validated_at = new Date().toISOString();
-                              assignmentUpdate.server_upload_validated_by = currentUserName || 'Production Staff';
-                            }
-
-                            if (Object.keys(assignmentUpdate).length > 0) {
-                              await updateEditorAssignmentStatus(item.assignmentId, item.status as any, assignmentUpdate);
-                            }
-                          }
-                        }
-                      }
-
-                      if (refreshData) {
-                        await refreshData();
-                      }
-                      setClientAcceptanceProd(null);
-                      setCaUploadConfirmations({});
-                    } catch (err: any) {
-                      alert("Error finalizing Client Acceptance: " + (err.message || err));
-                    } finally {
-                      setIsSaving(false);
-                    }
-                  }}
-                  className="p-6 space-y-5 overflow-y-auto flex-1 text-left"
-                >
-                  {/* Customer Block */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-2xl">
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
-                      <div className="text-xs font-semibold text-zinc-200">{customerName}</div>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Production Status</span>
-                      <span className="inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/15">
-                        {clientAcceptanceProd.editing_status || 'In Progress'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Production Verification Checklist */}
-                  <div className="space-y-3">
-                    <div className="border-b border-zinc-900 pb-1.5 flex items-center justify-between">
-                      <h4 className="text-[10px] text-indigo-400 uppercase font-black tracking-widest font-mono flex items-center gap-1.5">
-                        <span>â˜‘</span> Production Verification Checklist
-                      </h4>
-                      <span className="text-[10px] font-mono text-zinc-400 font-bold">
-                        Verification Steps
-                      </span>
-                    </div>
-
-                    <div className="space-y-3">
-                      {/* MANDATORY: Client Communication & Consent Proof */}
-                      <div className="p-4 bg-zinc-900/60 border border-pink-500/30 rounded-xl space-y-3 shadow-inner">
-                        <label className="flex items-start gap-3 cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            checked={caConsentProofChecked}
-                            onChange={(e) => setCaConsentProofChecked(e.target.checked)}
-                            className="w-4 h-4 mt-0.5 accent-pink-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                          />
-                          <div className="space-y-0.5 flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-zinc-100 group-hover:text-pink-300 transition-colors flex items-center gap-1.5">
-                                <span>ğŸ’¬</span> Client Communication & Consent Proof <span className="text-rose-400 font-black text-sm">*</span>
-                              </span>
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                                caConsentProofChecked && caCommunicationProof ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                              }`}>
-                                {caConsentProofChecked && caCommunicationProof ? 'Confirmed' : 'Mandatory'}
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-zinc-400 leading-normal block">
-                              Confirm client communication and consent proof has been acquired and uploaded.
-                            </span>
-                          </div>
-                        </label>
-
-                        {/* Upload Name Field */}
-                        <div className="space-y-1.5 pt-1">
-                          <label className="block text-[10px] font-mono font-bold text-zinc-300 uppercase">
-                            Upload Name <span className="text-rose-400">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. Client_Consent_Proof_24Aug2026.jpg"
-                            value={caUploadName}
-                            onChange={(e) => setCaUploadName(e.target.value)}
-                            className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-pink-500 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none transition-colors"
-                          />
-                        </div>
-
-                        {/* Upload / Select Proof Button */}
-                        <div className="space-y-2">
-                          <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 hover:border-pink-500/50 bg-zinc-950/80 hover:bg-zinc-900/60 rounded-xl py-3 px-4 cursor-pointer transition-all">
-                            <span className="text-xs text-zinc-300 font-bold mb-0.5 flex items-center gap-1.5">
-                              <Upload className="w-4 h-4 text-pink-400" />
-                              {caUploadingProof ? 'Processing proof...' : caCommunicationProof ? 'Change / Select Different Proof' : 'Upload / Select Proof'}
-                            </span>
-                            <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP, PDF formats supported</span>
-                            <input
-                              type="file"
-                              accept="image/*,application/pdf"
-                              onChange={handleFileChange}
-                              disabled={caUploadingProof}
-                              className="hidden"
-                            />
-                          </label>
-
-                          {/* Attached proof preview */}
-                          {caCommunicationProof && (
-                            <div className="p-3 bg-zinc-950 border border-pink-500/20 rounded-xl space-y-2 animate-in fade-in duration-200">
-                              <div className="flex items-center justify-between text-xs text-pink-400 font-mono font-bold">
-                                <span className="flex items-center gap-1.5">
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Proof Attached: {caUploadName || 'File'}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCaCommunicationProof('');
-                                    setCaUploadName('');
-                                    setCaConsentProofChecked(false);
-                                  }}
-                                  className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
-                                >
-                                  Remove Proof
-                                </button>
-                              </div>
-
-                              {caCommunicationProof.startsWith('data:') || caCommunicationProof.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ? (
-                                <div className="relative rounded-lg overflow-hidden border border-zinc-850 max-h-40 bg-zinc-900 flex items-center justify-center">
-                                  <img
-                                    src={resolveStorageUrl(caCommunicationProof) || caCommunicationProof}
-                                    alt="Client Communication Proof"
-                                    referrerPolicy="no-referrer"
-                                    className="max-h-40 max-w-full object-contain rounded-lg"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-300">
-                                  <span className="text-pink-400">ğŸ“„</span>
-                                  <span className="truncate flex-1">{caUploadName || 'Uploaded Proof Document'}</span>
-                                  <a
-                                    href={resolveStorageUrl(caCommunicationProof) || caCommunicationProof}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-pink-400 hover:underline text-[11px] font-bold"
-                                  >
-                                    View Proof â†—
-                                  </a>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 1. Verify Customer Acceptance */}
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={caVerifyCustomerAcceptance}
-                          onChange={(e) => setCaVerifyCustomerAcceptance(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-zinc-200 block">
-                            1. Verify Customer Acceptance
-                          </span>
-                          <span className="text-[11px] text-zinc-400 leading-normal block">
-                            Confirm that the customer has reviewed and approved the delivered output.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* 2. Content Usage Confirmation */}
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={caContentUsageConfirmation}
-                          onChange={(e) => setCaContentUsageConfirmation(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-zinc-200 block">
-                            2. Content Usage Confirmation
-                          </span>
-                          <span className="text-[11px] text-zinc-400 leading-normal block">
-                            Confirm client permission for social media, marketing, or portfolio showcase.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* 3. Footage Deleted in 7 Days */}
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={caFootageDeleted7Days}
-                          onChange={(e) => setCaFootageDeleted7Days(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-zinc-200 block">
-                            3. Footage Deleted in 7 Days
-                          </span>
-                          <span className="text-[11px] text-zinc-400 leading-normal block">
-                            Acknowledge standard 7-day raw footage retention window before local clean-up.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* 4. Verify Payment from Sales */}
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={caVerifyPaymentSales}
-                          onChange={(e) => setCaVerifyPaymentSales(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-zinc-200 block">
-                            4. Verify Payment from Sales
-                          </span>
-                          <span className="text-[11px] text-zinc-400 leading-normal block">
-                            Cross-check billing records and verify complete payment collection with Sales.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* 5. Validate Edited Files Uploaded */}
-                      <div className="p-3.5 bg-zinc-900/50 border border-zinc-850 rounded-xl space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <label className="flex items-start gap-3 cursor-pointer group">
-                            <input
-                              type="checkbox"
-                              checked={caValidateEditedFiles}
-                              onChange={(e) => {
-                                const newVal = e.target.checked;
-                                setCaValidateEditedFiles(newVal);
-                                const nextMap = { ...caValidatedServerUploads };
-                                eventGroups.forEach(g => {
-                                  nextMap[g.eventId] = newVal;
-                                  g.items.forEach(i => {
-                                    nextMap[i.key] = newVal;
-                                    if (i.assignmentId) nextMap[i.assignmentId] = newVal;
-                                  });
-                                });
-                                setCaValidatedServerUploads(nextMap);
-                              }}
-                              className="w-4 h-4 mt-0.5 accent-emerald-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                            />
-                            <div className="space-y-0.5">
-                              <span className="text-xs font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors block">
-                                5. Validate Edited Files Uploaded
-                              </span>
-                              <span className="text-[11px] text-zinc-400 leading-normal block">
-                                Validate and verify that the Editor has uploaded all edited files/folders to the server for each event.
-                              </span>
-                            </div>
-                          </label>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold shrink-0 ${
-                            caValidateEditedFiles ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'
-                          }`}>
-                            {caValidateEditedFiles ? 'Validated' : 'Pending Validation'}
-                          </span>
-                        </div>
-
-                        {/* Upload Details per Event */}
-                        {eventGroups.length > 0 ? (
-                          <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
-                            {eventGroups.map((group) => {
-                              const groupKey = group.eventId;
-                              const groupUploadItems = group.items;
-                              const hasUploadedItem = groupUploadItems.some(i => i.isUploaded);
-                              const matchedDate = groupUploadItems.find(i => i.eventDate)?.eventDate || clientAcceptanceProd.event_date || 'N/A';
-                              const matchedFolder = groupUploadItems.find(i => i.folderName)?.folderName || clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '';
-                              const matchedLink = groupUploadItems.find(i => i.uploadLink)?.uploadLink || clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '';
-
-                              return (
-                                <div key={`event_val_${groupKey}`} className="p-3 bg-zinc-950/60 border border-zinc-850/80 rounded-lg space-y-2.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-purple-300 font-mono flex items-center gap-1.5">
-                                      <span>ğŸ“…</span> {group.eventName}
-                                    </span>
-                                  </div>
-
-                                  {/* Upload Info Box */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono bg-zinc-900/40 p-2.5 rounded-md border border-zinc-850">
-                                    <div>
-                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Event Date:</span>
-                                      <span className="text-zinc-300 font-semibold">{matchedDate}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Folder Name:</span>
-                                      <span className={matchedFolder ? 'text-emerald-300 font-semibold truncate block' : 'text-zinc-500 italic block'}>
-                                        {matchedFolder || 'Not provided yet'}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Server Upload Status:</span>
-                                      <span className={hasUploadedItem ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
-                                        {hasUploadedItem ? 'âœ“ Uploaded by Editor' : 'â³ Pending Editor Upload'}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Upload Link / Path:</span>
-                                      {matchedLink ? (
-                                        <a
-                                          href={matchedLink.startsWith('http') ? matchedLink : `https://${matchedLink}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-indigo-400 hover:text-indigo-300 underline font-bold truncate block"
-                                        >
-                                          ğŸ”— {matchedLink}
-                                        </a>
-                                      ) : (
-                                        <span className="text-zinc-500 italic">No direct link stored</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] font-mono text-zinc-400 bg-zinc-950 p-2.5 rounded-lg border border-zinc-850">
-                            Single Event / Production Server Path: <span className="text-emerald-400 font-semibold">{clientAcceptanceProd.server_path || clientAcceptanceProd.server_upload_folder_name || 'Ready for Validation'}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Edited Folder Upload Confirmations */}
-                  {caCommunicationProof && eventGroups.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="text-[10px] text-emerald-400 uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5">
-                        ğŸ“¤ Edited Folder Upload Confirmation
-                      </h4>
-                      <div className="space-y-3">
-                        {eventGroups.map((group) => {
-                          const conf = caUploadConfirmations[group.eventId] || { confirmed: false, eventDate: '', folderName: '' };
-                          return (
-                            <div key={`manual_conf_${group.eventId}`} className="p-3 bg-zinc-900/30 border border-zinc-850 rounded-xl space-y-3">
-                              <label className="flex items-start gap-3 cursor-pointer group">
-                                <input
-                                  type="checkbox"
-                                  checked={conf.confirmed}
-                                  onChange={(e) => {
-                                    setCaUploadConfirmations(prev => ({
-                                      ...prev,
-                                      [group.eventId]: {
-                                        ...conf,
-                                        confirmed: e.target.checked
-                                      }
-                                    }));
-                                  }}
-                                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900 transition-colors cursor-pointer"
-                                />
-                                <div>
-                                  <span className="text-xs font-semibold text-zinc-200 group-hover:text-emerald-300 transition-colors block">
-                                    Edited Folder Uploaded to Server
-                                  </span>
-                                  <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
-                                    Confirm upload for: <span className="font-bold text-zinc-400">{group.eventName}</span>
-                                  </span>
-                                </div>
-                              </label>
-
-                              {conf.confirmed && (
-                                <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                                  <div className="space-y-1">
-                                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                                      Event Date <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
-                                      type="date"
-                                      required={conf.confirmed}
-                                      value={conf.eventDate}
-                                      onChange={(e) => setCaUploadConfirmations(prev => ({
-                                        ...prev,
-                                        [group.eventId]: { ...conf, eventDate: e.target.value }
-                                      }))}
-                                      className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono"
-                                    />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                                      Folder Name <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
-                                      type="text"
-                                      required={conf.confirmed}
-                                      placeholder="e.g. 2024-05-12_Wedding_Videos"
-                                      value={conf.folderName}
-                                      onChange={(e) => setCaUploadConfirmations(prev => ({
-                                        ...prev,
-                                        [group.eventId]: { ...conf, folderName: e.target.value }
-                                      }))}
-                                      className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Buttons */}
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setClientAcceptanceProd(null);
-                        setCaUploadConfirmations({});
-                      }}
-                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSaving || caUploadingProof}
-                      className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                    >
-                      <span>âœ“</span> {isSaving ? 'Submitting...' : 'Approve Client Acceptance'}
-                    </button>
-                  </div>
-                </form>
-              </motion.div>
-            </div>
-          );
-        })()}
-      </AnimatePresence>
-
-    </div>
-  );
-};
-const isProjectLocked = (status?: string): boolean => {
-  if (!status) return false;
-  const s = status.toLowerCase();
-  return ['project completed', 'completed', 'delivered', 'project delivered', 'project cancelled', 'cancelled', 'canceled', 'closed', 'project closed', 'order closed'].includes(s);
-};
-
-export const isAssignmentActive = (a: any, productionList: any[] = []): boolean => {
-  if (!a) return false;
-  const s = (a.status || '').toLowerCase();
-  if (['completed', 'editing completed', 'project closed', 'order closed', 'closed', 'cancelled', 'canceled'].includes(s)) return false;
-  
-  if (productionList.length > 0 && a.production_id) {
-    const prod = productionList.find(p => p.production_id === a.production_id);
-    if (prod && isProjectLocked(prod.editing_status)) {
-      return false;
-    }
-  }
-  return true;
-};
-
-
-
+                          <td colSpan={7} className="p-6 text-center text-zinc-50xœì}ÙrÜXvà»¿â]S™¬f.Ü´Ğ¢dŠ¤ªØ-Š’ªrZA™ -d" ¹‹íˆ™y™»ÛaÇDGôŒÃ~›—ùúéO˜sî\ wC2I©ª„‰$–»{ö¥K‚Ôƒ9Fik"’ú—ië2™{úWÄp½Šˆ—$ÁÙÈï“$õNOI“¾ç~ì„~-NF}ø?&é HàqßÛ†6ŸtÒ¾¾OxëÎÿòÁÍ_)oÇ~:‰G$ö.6è†ş(MÚCoÜlzÙô/çÉúSr­é´’”MıÀï‘uÒÇQÒKƒhtHäûïÉ›·óíÓ`Ôo&ØTÒ¦¯}²¾¾NòŞòûğMÒyC_ı>ÑÌ¶0¢W´õ÷´>ìgmq§ñz$ö³áĞÁAby;1Ş(´œ/Ç1><NÆ~/ XK¯hÛı b—¾®ÆÅ¾Ø\R¼-5³=ğâ®æŸµéúñ;£Ö×Ñ$ñ¡3coş9¬_º3?İJpÑ¦ïÀN-®e#¤Ã ØÂbH¤¯8<4¶ò[Úå²­b:Ià\#˜PPklˆİÇ>?«¼4Oåï¾ydT^Ô®q§C¶/ÓØëÁ€pö§€uÂ`ô>Gş%>Ì[ìH‹Ç¶(Ä8OØ³CŞr~´_b8í5
+k°q0:3mB‚SÒüÌ›¸¢¡]wÑuÏõƒ¾—Ş['oXÎkãÚùıã­¦vŒ£[0¾î³×ûôõĞõuû‹“qy./Öì™½>‰CóÛ½I’FC?>ıóÀ¿phßaJ¶NçŸFQê±	i_~«ßo„Öf¾é$:•6Ş Sªè7_|A{ñOÙùc`Ù0· ÀŞá®ÓÚøgS‹òÎùgxRã4ù6HÍÆ MÇktç^÷BRy#õÂIßOšºáí³(:ıv/êß‹Æ'Ñ¥é•¡æµGß‡şè,§d±k[œŒ¸óoÍ+rcxª¦bE7úƒ y˜ÆŒú¨1™„½-ägà%õ=€üz£&o~Ş„¡÷½8ñÉ&?œd? H½¢^DšiD&#€^÷zq”$äp2öN<ø¾‹át‘/8¾NŒcÓæ×É{Ò>¬rŒÔ¯~SÏAÂÊ¾÷¯Ö¯%’•ÿÊ‰-p}7¤Â}¤ÙësƒèÏÚÉYë;€ÒÖãn·³ÒèòFI€œM«…Qlæ•Ÿ¤}¹ÅqkÙÂZ?éçò”5?‰Â>cÍ/€gÉğ¤Õm¯Î=½Îø½›'ø°^Ó´Á7‹İñå[Ö8æj·+É§¡	R‚?LZ=X(€Š3oÜZ²LúJÆŞˆÙE½ãò™<Æ‹Ö"À¿å	¿ß:„!;ò°Û{:]Ã×s‰8ã‘Ó¡‹qNüÖJ·‹|»ãOü˜Şºyšï43ëî˜åU…6i—Å&"äX6ë:ã|M8±ş m€^Şê`8ÊoQˆ»h€!.[Kd|…°{î~ğÂ>Bhg±KN(Nà?
+—ºl)Ä=Ø2@„ı"½æk«UâìMk†«fƒ;_×ëwò2:.ùÜFkß46£á8ôëk,0i„ñfãmNîs±dŞÒÁ#YİşÊ›à¡aícg$(ßeKq
+›a ‡CÜ¸ÕøúGŸ!”ÒØó7]G.VúY7¶ø;#$àg±Ÿ$ò^È·o5ŠåÙ„YšLöÛ\¹?êv%„VmWP s£7ïn¬':ŸûıfB	:´Ûó[£è"öÆ6lİl5Sâb<“óvF§0ZArèÇ€º^Ó›‡Ş¹ß¯pZ9‚Iy«í a­ù};{îÀ¦åW™YaKtÕZ´bhş½‰¼TšE@*4YF;«uĞÎr÷ÖÔ¦0›§?üë?¹q;ÅÏÄ‘`DÔi¥Î»×dœÂüü˜*¿@âuÙrÚ›G-1<^HãÉ¨ç![ì]¶.àíøúIƒ4ú§“+ä×_şü‡ĞÌÌŒ/¤YÙ™sqÍ»´éØõ0Ûúr>¯3;mBÒ*	$
+ÔŸÑõñJüaà|ÄÄñúîÀÎ>Ù÷GT4fGÌõk·÷,»w3ß4ÂÊÌËk¡Txfˆ'u±º~Íµ•S5ÎB#²FŞ	5Ôçâ ëÖ. Í3?]Ÿ;>	½Ñû9ê®Ï¢hì ÖFŒĞc?vù’½¹…Aï
+i¹\÷Ôà«\$ÆS EjÁHz&ä"~q'SqÈw¢c.Z–µ¤7‰“(n£ GhŸ&ÇÆbÿ,ï;"z†şòç?şÙƒ#šÎpûÆ<òB
+ÏuÃ2,ï ÿŸ#«R¡ã™_™Øµ•2ê,b>n¡ûa¹¹)pÏŒñE}Şõ3ªók"aºELR°Ü!Yq $O6Ã¨W†'„&©Ûİ®d•è‹£Ë "Ù&ĞÿsØI”È©±§ÁĞ;ó_Ça~.ŞpØ³gÅjø¤å ?´ñ“IšF#
+F–õ9öº=@Øï½_¿fVâ§ûÌ<Eau7ê{aÓ.âà%o­´˜Ÿ™Tù•)uİ^/)¤Ü>Êt~n¯Ó²Ó§êËÆ}¦8çšºqâoëŸ÷\C)t…™&ß¦&4(‘V%²XE8®°I’¼~tÑJ†|@IÏ}øºİ]zK<XÑs_Üë¶?z«À°.€O)í…f4Ú sM `Ã^4:â¡‡ÃdjoÓ‰!Ş¾ò§'¥´Š¾¾ÁÑîà¸ÜÙivÈŞ´ó¥‚3- =˜­ËmŞ†ß¼%Ç9‹Vd9³óeæ6õœéìpÕ·4¦”6EN}¶ØÆÏ:i´,E6*Ã¥p¤úõhş¬(ş­è}-j?­¯EégDç]¨ü-ÅŞBçá{ACJ
+OMãõ©»‹´|;Ê>]w£êZdƒ¨¹1•ôâª»ªI~Ú¨{ç>®#Y(îMQU8ƒEÿ.×Ã8M×}q'z}Jıõ%Jíb¼ÄëJ=›à&‚×ÖL©¨­˜¡v 9›ÍŠ¾Eü0ñ¥}äÎu/ ¹DmÄ­ÅHƒágt™Èw!G¾·áÙ¤ûâÆ“xúD,İˆ˜ßª"bùİ"£¨Ò0@›¿÷~3ˆ{¡¿4#,\ù:qBÓ+÷§	¯RŞWÛ$¡ù“¨Uîn#f*Ş®È—¥…?ç³ ¯ëÎ—äõşË½­í-²°·÷‚tÈÎîÆWÛğ×ö7;Ûß’ı½ı×ûäËê"/ú)TqƒKêB$ Õ%ßÔ.wß*ücä58½[+„zKy½÷Çp¶à':Ã£_TÜö‰7:Âéöú>0=xy™%cUk»Çé2D/J”	˜[ŞÀCwÂ	ı¾?çÑ‰PE<]úÉ õæq÷|PĞ¼xaXÒÑãÊí{8”|mÕ£§KÁÂ
+ãFÃLíÍ_w{İş¢qUOüôÂ÷GCÁ¥ZBm[«¸“ä8m2ûq}Ù1Vé}0:k]8·ª IM=Â[q2¯fêê0ÙGq8Ô(àÉ`¥2pÙşÇ`%{†k'PÇ‘›;oWH[v7×a.³=sîé¿û·ºs
+´ŒŸ+FUöÈ½×±1_MİĞr×jí>w+UÌ¨€f÷læ–]T\#@
+´­\¦’Ï :Æ„ÌsÊ×ÎªÄväÖšîŠuû»"!^2¼¢ ÂjâÉW¸‚Éè%›p´Ğë×Ğä(õªåMR0\Xš„„Ó;ºJÄ&÷û¡‡|Çê‚lı`±µ´et¯!”ÊJ×xÃä™Ê¼QO#ÔL¥4t­zV„8dˆ.ëœ¡ßéwj'åg¦Vc3ó›ßĞV~Óéÿ¦Ó|ãµ¾Ûhıçnëñqëí/æÛ_v€ïïLzÏüËq§ëØØAıóEM—kSN%‹gĞğ­fÒşZ¸Û9¨¸<Å-££à“`x¦á.“¸·~…ƒõÂtıú]‰ ¶ÈçF
+¥y¡L,´~dÒ™+œ¯vÎ£“ßú½N÷(õ‚^²Û¹ô¥;¢ÑvG1`dß¢°ètÈ`¸cDQ—n	Á5 §^ê‚ë²(Qªo„“ 7Ùu”Ñ;z–}Kx@Ú€²+øäà‘>ö<‹æó°x·ÂşŞ}ô-×LExö)pßŸ±_Û?ñã«C?„âf ñ¬åãªµ†ÉYcŞ,æópş8ŞÌ¹NúQoBÃız±|6ÉàÜ,Í³ÚjÂ’tïã½8Š,’ÉŠ|lXÃ¬·`4òã¯v_BoïŒ´–X3q”øyóÌÃ•Q-ëd2òÎ>hÜ<Ó<éŒŸæm] $ëÜSfP˜£†ÃHYhËsäÄ*’ÒŸ»0õ	öğÎ4=¾±°§£şæ ûM6cÃèN¦Fy¢”¿Í«„TÇ¥c^DQê$ì,B›ª„L³Ê:”Q¯:ç*ìÂ.¡CæÕu³%ÜµŒ5u[ËT³%±˜µlö Y®“˜[q{Yu˜eÙÛ3³Óªù%C~^Õ¢†B…ÿ!E
+ØÖõ¶f|iQlx(“9îvC6C@³u$	íƒÂj{kçhï€|ûõÆÑáÆş>9üzã`çÕWUM•O®|;ğÒ(]aºå5õU‹«™¾ê±Z_u'j+ÒŸÄÔ*ÎdõÂN¯ĞZı8ZUú,*ÇiôAÈÒ/ÿz±{òøÑâÛ‚>+Ûãñ$L|¥Šèğ*Ù˜Ë[WòÃïşPİÉ0ÃÌ¡†Æk¹2³dX[Ïeô×f©‹òa<šhßù¡J7³|ºO‡w[}ø›§ì’{ª|´å¥CÉN¯SùD÷¾‚ù*œÄç•¼%·ûŠI" %‹Q5Û†wÿğ§¾•ˆÙGı«©@"PõÀFU ñ:H¾B¦ÊÃ¨ìâú+T*èİYÁ„Dv)ÖŠZã[jı$›üãHmEÁ=eÜm‹îâ
+y:IÆ@'Ôü¹KŠZn 5÷ô…Ÿöx`CL¸”’>@6M=ÃÎ´ÛTQœdÅ©EŸ¿
+ùNËÀM%1eÈUö¸O¤’J.ÛYpTo‰~eŠ2 [™şçÿúÿ÷	ÁZ™e wo”+cvË°»b8º_ œ_p‹ıcÔ82U
+\¦lI›xIy_#D*8Ô%"6ûÌ”ŠM&
+<­3Ø”øSäLì‘tjãìŸÆWä%Èáp"T«µ;\kõiPˆ²´hï ŠÂ47¸ëÃI˜ãĞg^%˜æ/HªšuŞBµûv¬Ø³6ÿ^Í+ü)_˜>ê\Ë¥²O*-ùj—2ÆŠƒÌc»Bÿ4ÕF/™¸¶"eÌÙI¾)28”Q3JíŠßfk¶å§° 
+üğ»?¦SãÛÄ
+ùM7l£w‚™ Ù²Dé¶Zì#ÍÈêŸÓ´4ëMĞÔfuòbê?Ìu²y¯«`&áOéJìÀ¦^R·QèÈ¤ÅrŠ‡wss£ÉÈ0á˜å½:Îpµ]áªX™.zp=+úq¹yV¹bì¬—b',ï®İÃÊ¶fVï*9;—6³S}©¤“`¡„µ3p_VÙø1k.%"«Ã*cş;fÎ´lË”Ã®µ¬íñÉB¼ÖLï-åô±Nš¥Çø†ÕCÊŠ‹\ÒÆTĞ´¤b¿öÏyößÏ™œİ©ˆ—43İ9;§”\ò`ÎQÚ/ v×^‡\KÈˆ¨zœ²ÎTáéŸş@D3|p¶ôJv77“µ@ë g˜´öÑ¼2¸.)‘Z¨RS9vKP¸~k\GUh§¹Ğ1.ËZ›†qYq`\l'kØ_£¿ÇÑşnµbèÖIßWk1°íß—UÊyí”êQ9Œ¢~º€1yW +4»ÃI¶g“,­$ìÍEëa®XÔø¬I-„Ş‰Ö\MÕÖH iåĞÿ“¿¢¹ş–f<ˆF>Ïu¬ÇJB(›{Ú<ğÿ~Ä~ŞùĞ	[%'©Ã†£±±kç^8DLÎÆ´ w7ğFg¾ƒç€¸/<ò/ö±êÀÍó´o;§¥V%¢…±N¬ÅgøA–O‹.^ôÙàÙhnõv»m	$jÈÔ_yo ¾…f®	´Sº½@è&¬å«uãÒ8ŸmG¶À…dM¹CSöÀ+WK½‚49Ùúœß>k“_<X%—–ÉÊêƒ‡6pT0Å
+ûMUE·$Yq€¾{íRAõÑ›$kÑ$¥¶^ô'qaŠËÇ¾kœéàĞÄN»/=hèÊ&ÈW‰~¬dp•»øğÛr¾Æ °<V¢U“h«ĞHÊÙ£ZÉWF'Aès!$˜|²MöAäºÁşèÄ?bm|h™Q«sÅeˆyĞ±jK²¤—¢rOã¤€cæVLì»†EfV¬’!.?&9%µ)yğÚõ“ı~¸õİ'Vp—Y_t‚âràKš»‡ ú§…ª—Å´K6TÃ¬2½°3Ã
+w­ãæ”e¥9¥x!M²å1GÅÀà§>?JÖXp½şÈœyĞEIä®úé	º{õ×+gÚŒ]j*ŒJ^¼‚©`7aï½1]ÁÆ1î­)d¥oÜooÔ‹ Dv“3dWè¯v0ƒ4´1J›ùÎ:6xÁ9Œş^Ï3	zã -QÜ¶ìéúç×Å9Ş|ç nçƒ»1z»á%ÇJcÈ#mùÍ[W4T¬f†
+t
+¶ŠªÙNeĞ“&ë…lä024!'h ğº
+	RF»& 7ö¿üù÷ÿÁÙ°æé€d‚”ñäÛtÆÃox8¯<ršTÈ;aA.Ù«Ÿ×rE\1º"–ÜT$¦s=üäî 0–9Ä3I…ª6)YÂjfq?W·‚ÛvÕÃM HzŒn…'Ô Y×ëíc‹Òtñz[şäõ&ß¹×›÷ğÑÉ©÷ÖÅ¹ŸÙ§È–Ÿ¼/:¹mF´2ÒÇçæÆ¨¡Tá’QÆÍX!&Ü¯“œËo•g#ø{õ.ûÉø’AO ¨D'Ã¡_‘çF’(-LŞÎF„³8èÓÿ%­EÔşç.k•ıêó}7º{±"îî€×î5¨í‡)«KÄµ÷:%™Á¿j|w«$²İçÊdå?öÅù*ŒNàünadqT·]£ó 
+3Y)­’ŒÎëuF‡qÜçÃ FßW½ÑW¿8ªIS•“@Vxåtµ´Ä6Å—–Ÿh¼ˆ2ÃÒ4ò‘ÊäV#YŒ½’Ü­¹Š}¡Á¦å:Ò×,QÓB± ö«@«W³ğª¢,Ts—iK™ë’ß§%Ù½äm=+ı–|¶¾N1Ÿ¸‰õ™KKšo×x•å6×á"øé´Âûj7€eeóø¬0±¬f©²‹—Un/_k¯Ä€UØp4[ ûxMãHá_ÂpÖ¼où)F kÜ(u”¬¿<MAİZ”·)éJA…¢9AF”¸tµŒ+{+•äÙD0ßBÅÛS<“‚óä#¥ây%ñ#CyF|R¢lz7µa3ïÍ¤Î¤¶X8À™ŒJóòÜ=„;3¼ ŒÃÜÔ*VÛbl¡cknÄ±wÕú³)£W,S@·käÍÛy†û'R‡ªFZÏ›Bbêb°‚5œWn$/Mbçµ³HáÛš_ç
+ng{”y+câîúæâ†¦Ö¤ÖhDÍğÈ‚ûAp6 ¼ÊŒ_&ì£
+ÏiQìá.7¡›MÙ»¦L¬RÎ5¶ã<l¸6¹ÈXe2N©A…çˆÃ«em­äĞcmâfş“›Iù*Ã¿Ã>|n&ybÎ;õ2!JaMö{WÎ"ÔİZ8‰°òHf'¼,É1]Üh´Ï™öå^é-@‹€\)óOCŸNÈDSl^Œå¾¥ëÊL¦r"à6|yíûq¼0øÎïs¯–¦B†¶¢®<ÃÆ¼),.²F­‘\Ü°#d>‰5ñ‹íÎÒâ¿Ü^‰åqYky4T¿½ÀmÌıÿôˆ&Ä‘Ûµ®½K`Á]ùã”0g-wàEú¡‡ş(6'å¹¨7+wá)r§ rŞ"ˆHÏ/3åİ
+z¦vQ§PV%PÖ«s·*V(î'â1Ñ& $¢„FäÆW)§¿;’»q¹Q>œ‰*‚œ±Ò¦BŸµ³”£ŸFÁä¬ÌZrw®»Û‡‡rBíÃ×Ï[º¤Ú2ı­ë°±Tßacõƒ;l„gµı5­Vm¹?ÆlÚS»aÔJ§móv®ãn‘igänñ˜|äKÙHU6©ûu»PqÆiÚZ‹³LçS),íä‚QßG­r¨øPWŒçÑ¥›—S!5³.ÕsO ×ì*ıë+úãÆÇ~Uãc¯r£½Ò¹Ş¢¨ª£ÑL¾lÉ•,İÿ&GÁxü:šà¨~4†±Õ£éL¶À¦YK±XKäØ*tzÑøŠ>)}gè&°>Wíê¤j±\ÔíŠr›\¯|GŒ–%Uè‡E!?'Ùç+´÷2HÊ*j|pgNÒL"|ÈºÂ.SqL8Fıf3ñr'„„¿EU4÷‰‘€)eŒí]é„è…Xø¨Í¥Ùìo«ºG%êš s
+îW,…vs‰ X#ğÎ\jØİÛÚxyH¾Ú8Úşvã×äÅŞÙß;<jíìm½Ş<ÚÙ{EàïíŠ¥ÛdïÕó½ƒ-tÜÛÚ9"‡G/^€ô±ûŞ¦íJXôÉãó Ô“f±`6eºT›$’	ÊŞàÉÄcâæ\F)¡â'Ã7¸=—v èğåÉp˜‰gˆc/ïp0(ñÂõëkBke­‘nûñêáÚø³
+ã\’¾Y”>X¬~à_i­î3ëkqETÂ‹³¿º={Ltëx´Zİ¼%aC™Ö¸ ˜ŒÀKñQëÂ3Òx=¦Éaöãèa€ºut‚UDÈIhpÚD^Ü'¯X12áåN[Rú¢¨$z_ÅÓ-Zx:˜GÍÓ§ÁÙøåèô4èÁxÉ8JÒV~8H2öñ~øÉÁ:¡=üéqÛvŸ9H•Ù76×ü&­°M\evJèH«©ºW—wµºÔµ¸ûQ;›b\%¬Íáädˆø…3ô/º:7Å¹?\ò*	¿5‡Qn¡â¦%7õ%ƒã’"lCc«Ó::i€Zçç¡’}”¾³Ü!™&ygì—
+£+…İ…"æÎšÇÜ³‚R¨°Ÿjı»*på›E­)£êtğËh0"[‘¶¾u€‹nÎ-Oò˜Öà‡‚‰“6f‹Ç$Xï)ÿƒUc¯ì ¬:3®ÖìLmÇatåûdgë#QidŠQíh‹A5ÿ|z€İŞİo-u—W~ Ë=Gf«VÇd›†;kiFPÏ§Ç|ê,şn*¦ÍèQc÷ã”·0“2Õ"£\8HÛ#Jü=y	s™¨¹ïÇCÓ/èsğ˜]?5ÇÄ”™ïvè!·À?¢Ğ÷FÍê¢kÏnì{ı½Qx5ÕÇeÌc6ü±ûtzŒó‹Ç‹äñ£‡VÉÊòÒ¢ÖhnòÈûp˜Çäº§–z„{Àƒ®`zGUsGUUy©"‰tnt:÷¹)Ğ`;üqílXì–'³|>„ª">êŒ¼ô½sLµä¨n—Z˜çáÏ“DoAf®˜(R4ÕBì¯úøè5›ëF¿ûIò‰^—¯;¡×>®ùÇO°)hL)%À—Ó“k–9òoÇƒ(Ğ]“£¢Ùfs,q7˜qFøì9Şı‚lÂšŞ'ç=Oujø·ÓŸ›Ã	‚ğÊó²û9ˆ¼şf¿8óÂ(ş™Rò_FÁİ:·Ğ
+ğqqšòĞn¡häp…PŞ/v;”Jß»BêOÆ$›ÑA4;ÍÎŒÀ¬<ºCn2²`EæäRØğT°„Ş)¹GÏŒU\ôfTZ>Óaë97÷”W%’öˆ½¡eÈ?À5d	7h½1[tHC¹ñõ±—ô§ì‡­W}<riB{é Ö±CXjüÍ=5>6˜vºTõO«²3²ƒ(VWŒ« çÔC¨azÃ½âV=É	+äàiBš57Š–Àd—d‹±BŠVÆááè²Áéc{T(f³Ú€+¢QqV›pÀ±Škø~˜ğ*úyÖAVlÃß‡T"MŒæÁªVª	…­Y( ûtR[j¸ë:òñÍ²§¢ˆìÓ¨/¡îŠ?_ÒˆNÃçşÜSöï²3IŠZ3±*5´3òxSâ7hìp’Œ}œö­‰ævõ~Mog91akxÙz ÿŸÀÿTUF¡a“l)×gZß´#ÏT~Ğ‡g	TKà™åz]T£7¿•7ê)j_›íkšP§õšêümÏb¯ jj¥QN[¥£÷®|Ôåşµ™—¡Ò«N¿PlM©k#`Ğvwñmaí„§á°/~ËFÑQ.Oã›Gïv»àgrÀ«UÏõI½­Ê½¹ªÁ±7æ'Š-‚n	8„×‡G{»ä`ïå6:ùîÖsĞÍÙ•[{é–C gã¥[ZÒŸƒë-@ı'Ï[»çífìã1æEIİ <¼÷â=ûÊ¿¯0Ùˆ‡ÕQ®ÅÜÏ°¹pbRo”ÂÃ1œïïõâ(I„íÇå,«@Ÿ<f‹³ùÍØmÖ,ŒÌJ¡B¸Å—Õ {Ûän£Ì]‘·õN¬f1Ûİ‡µ*]oÅ(œ~H&Êˆ ±³L·.Y­IvÊÍü Oµ‚ğö¥"¬Ÿ¬a$ø0˜É·~cb¹rb¼œ\Nâ+²ÀÃ-Ÿæ	†Û‡ƒ(N+«­FzÆ¬Ê÷ Õ| ™¦¾ı$ØÔlD’‘Õj’‘Å`AŠ&áÏØ£ñ.ÒŒYtÉS–Ô‘]8w£åe>2Ad¹Mv·v6ÉÖöÑÆÎËC²u°óòekkïÛWu$’„×«ŞõÓ8è±,ËŸ’O±€?
+‰D	½mDZ7<a8yÍZ4YuMv@Ì8úE@Ÿ—…ª4$LÕk¸†Œ!ÁÜàª³$‹¯Ì©’?”`s¨±.‡ÂŠ5r¼y/
+±JqNHº
+2{¯R¢6OM²ò€Šå\,c¨R–(a„²~¡?:KÔ²Ù%Ï”¦Ëò@¤D$ÚC DQgÊ|®~óê42èû=ÀH˜( öŒ–tà¹C‡tèjVU	±XEĞe:åô/ÚU¤§è ©Dò8£<…Ş8ñÆ–bŠ›a0B“w©·ü¦ßëë_Ÿ¤qÜèp»N,Å#r>ÿr¢*9ĞŠ%«*À’³WhGBc’äÀ+jal\:¸mk€\nx£Y´¸ÍTÖ¨„>ógÑà~D1uF¼m[<o0fkŸ{zDåm©0©uxká«c°'é	&Œ’FFi˜ßº"üaĞ0  Z  Q5unÓíÑı~E¶ÆëÑûQt1"
+¦Ü²,e&ÚõÒ <ú{‚¹b±Ü0!öƒ‚ÛÇAŸçƒ‰~Ûço~ÿ=y·°Õúü:{ñæ]şª”½"èSİbŞ˜l0ºÄ1ÙØåI¿ƒ¾Å‡mö„‘"-"?bµ·hªh¬¯ÁUsÕŞâƒ¼k]JŠ]ÄZ6é_	ö„E'èzF¸Q›>1-hd\rKÂ`\Ç|$¶…¬.eşmy-9²9vZ°R·ªEhì#?(éĞáY(fxh).Ä.¤*ÔY¬
+Ø8Şò
+ê×
+‹ÖY´×6y’öĞŸdÍÙq—‚3nÉ+‹ÙÆÛIDÙeN˜&OåŒrbì{ï[”b"à›¥n×q¢9°İéê-ÿæßr„©åú+-n">f7éòx4{æ¢;ğ{>0‹ıÆ-Eÿí¦ã2…’0vıN.«T¬ŒÄ,¥HF9Û9³Àœ7á× ç…RÕï},­ »°lÃY^²a±+×"¨((²÷–¬õØµF›çÇ~U§î´ «ß¼»±otÀ‹„ µ@6Z´-$,ë¶Ç†òpå²I™.Ä›ù—cÊUó¤qWÇÔ±"Ck”E¬>l=ßš~31•xH·*ÅwÖ(ò›:?,*€ÕpÃªôã*mì•z6ØG¡<©o¡X]5Z(
+J÷²f¥’ğ/¯ç¤Va©¾UÊ:‹¥xk–ö•6Ù?Ø{±}x¸³÷jã%ıcçå6ÙûfûàåÆ¯É&&ì«¡iÇlŠÚjÖË,Ûeš°b!ôæ‰T5iV›¢9-PÉõ9jòUåà§Õä›tùÓió§ĞçO¡ÑŸV§¿¬Ñé¯˜ëÛczcê®Z†İuA|Yi=GS‹o	ê§1 Æê’ åqx'INĞÔPë$~^´? üïäLö*ÌŒ™öÊpé8FiQq6a6w5'è0$u|ùJ¶Ø Ô‹…Ò›j*Tjõ¢µˆ3‚ÿd;NÉ™óDåÍÉşxPuæ´+úú2õYÈ(9®å`$AQ´†+QTÒî¼x#mvõ„[·ı6¡4™Næxº¸„Ç$Å‹Kš]5Äè­Mî{oªNød°TÍ›_XòÛçÍ·­»¡JVg°d{Y¥T½@$X§q#¹ğOĞ(Õ(æÁ%;*©07~KE8&¤H¹„39Eª—`iC’D••ßz‘Ã"j¨v)1†|ØD
+sáœªõ± )P9Eê Ñ¤œUÌJÒ“ å1Ï7Ê*ÅY!ß²"+w4ÒŠÚÚuÚÕÑ>P½;cG¡o*“×3àwk¿,-wÏw“¥ƒŸKÕÚ¬òÎè4"_aæQUè—Ê´YIS:ìKiJ—)®~ MSŠuÁÉK­±¾{jÎêÅ¹9ŠÒ+u}?ËF5ÙTÇ…OåÉ¿òGˆ
+³R¶¼ºæVÜX±zu˜¶pPWQK¼X˜cY–¥Jì&ìä5‰Æç²›-’,ubB³†Gİc%WÂ©*ÔÉògY
+A›ñ~ıâLnu+yÓîz}E­‡c^UM~f»PJæu«=¼yÕ>Ğ\V?›.&m¹kÿ-ëjlo³Äª¶=‘"É˜¿íöfF»Cs?½Œz¬(`Çõ ØõÅ—ış¤Ã¡Ş:¾¼–]³ì[İäsæÌ¨zélrc“6F^x•½ :°¸K7~	8³<_…*Ìæ#æšX€Ù÷côÇFïxòšÚ	Ó§›Ø''şÉ–m¿ÀÕ®hjUégú»“nk_éa.ßÓš:¹»^m™<éHšõÌãé(J3İ n}Zo9*Ã%­¢…Æ\SuxÛã}pGÆ›iëĞşh»¤)‚K'r3Â¡t†»!—®,ìIOtµ	“ş\·DòÑŞ÷G¨P›ÙÊç*äÂºY7Ûª;%o½ıúÏ=$Îñ¸°h®‹Íƒ‡r(7©•H‰<¥¾Õ»^:hÓ%j6ù{tÀüœ Ó¢üz|I»]tg†7ÿi:~Â¤C×²Y’;ê¯‹uÿ4ÂTì¢l+AŒ`$)°¬9…¬¢‰…wMF –¤b#wQW°•4òé:Çó«BİÑ¥%:l5È8F6‚Õ+¥Ö/“—­şLŞıºÑÉx|Õz$Ç¨J)„ÜŒÔé ğE€ÿâ¨Šü6:Iˆ.& §¾ş4›a1,äÊW¨ækn€z}€¸J†¾Èè9cóD–}‘‚4¤ÎÈõ=8%Ÿäí,y$Ï—&&‹²MqWçg<ÿîoLN¨n¨2§õDUfO®‰Óàp9Ü–œİ¢ .ßÅ}­b¯,†ÁäR ùÒ™‰½©­¨mŒb+_;[k®Şµ7äû,baíœØè¤İVÇõ57?V'oUk‡Æ#{£Ïloğ®³ñÎf’
+ ®+İÇdÍÑííÕ™ı»¸Ôé´¡ìÔ™Ka¢dÓ‹UAjG´«}ë¯KP|3ßtô¶Û8<ÜùêÕö9Ú8üÕ!ÙßÛ½_/‚]dV<ò’÷‰Íµîô”½¶NŞ´Ûí&«Cs}"²å-æv£éaK…ióbÒ”<¶ÓèetáÇ›°MØ)Ğcå¨JïÁMI>æ8Ñôˆ4ÌU\jé¯O.…ëŞ\ştaü.l‰ñ?Ô
+ÁàÑêùà­İÏÎ×@aaxn¶÷ÔQÎ,)À¢këÉ51€œ@íÃuç+*T>ıËŸÿğß¹ø–é-	=¢:°2]€ÒeG©ãF]‚Ãèháï5c€<t€ªXÔèÏhĞ¸ßè‚“àCÕˆİ©0MU»h¦Â]g*ÙÊĞõ| 8ÓáşôÏŒOC~•'ı9†æÑ t·ÓŞ­¤ xF­×ºÎ	£›.¡Úß£‚*Pçºf“¦0g@¦% tš&P+ôyªµÊ ·¤ ‹óü Säpõ7ø× î½¿â.Õ:ŒmR´“”¶ ‚ªVôæ8“:T‚ÙyôI!0~Ñúy Tm±Ü]ĞÜ+šMïöÒ|3k­@SfÑ`ıÏ¤bî–pûvU¡—³ÙŸ8–3®ğdÆÜeK2ƒ-¢Æ1’McÈ^S&ÏïïS-#iV˜y¦ûc{ã’>q/öUC­Çº½fÁúTÅHn _š¢ğÜ§'pcÔ	÷›ÅÁ94+ĞÁ­4µg²ÒÇŞm†şö,O "QùÖgèGşêõË—ıÓxø¬òĞ¿4fèí0ÓÇ.¯X ?.ã³¶¸I%>šÈ€uW¹_^šÊçüTÙÊGÁ»+ê_c8fÏ²n¸)Ç¡ŸØ»àXàe0zÏ¢Î²{[1 |P…CËõÒP@Ï3ÙS,w«ùœj'(¢.V“²ÈïQ’ò
+UÂr¸½™& ¸ØUâƒ¼Ê’¢’W‚»t2¤aĞ»&Åt×XÍ¸&¡,Ò>è†ÃÌ§1‹^<Œèë’ÅÉ Ó$WP—NãüÃïşx»±ºv—ê­Š·Ú4/ù6HÍÆ MÇkNchy/¡/Î[,Ù<'åÿ öO×¯-=7°ÓÒÄÖÈ;1¨ÏKßë
+W–/¶QësÇ´€±¾&|ÁN¯Ï¢hŒşódÁğ}Ø~CEŸâ×ìíıdØ+l¨U¯	*‚Í"¬©y‹I‹/©r¥[R‡Ê0 |©'URV•Şbï0K\±˜Eƒ1|d†İæœ¢‘ª#.;ìf~zò"}–Ô¸ Œ¡KÊ€şŸbè±ÕÕ†Vš¤Ê4‰!vKÁ[Ø¾„õy!…õâ¸pTÙ˜„²õĞuxO:ı5›á»0Sw¨,IğqpÈzŞ¤îŠ¥)¤Ã®¹g¾VÒgoŠ†‰†î”.T:ùN1/çèNuÆÕ¢ÖÔ)m£çRhgæbX'%ÈÓ€¼W]SÒTFzàŸ	`4·,Is*ƒÌßs¡VÍƒáE¹†WU8Îµ×ü9Ò:İ_¦œ˜DÆTĞ®úÑ°l··_mÁÏov¶¿­“[DéşÅ>Gæ¶o4ƒ:ª	4M6J)6ëäc8İ:½Fµå¢êA3"eZ·™¥D)'7ÿd½ã4çûèãîİØGö†Ñ†ÑCtĞÉíì´äo?°‘tÿ`ï—Û›GÔMm)Í•6S©q¬ÂvJ~øİ¿‘£ƒÍ_í¼úÊĞ™Ú,›c¬Ú»©Y’OæØü‰Å‹Å\Õ¸cÎ}å¥­¼äjÔ#¼È’š	÷8©ºnË?õ&aÚÔ0Hi|¥5H°
+Ş9€c3'¾–Çò.¼ $Ò§\†8Z xn‘¢³äZNë9ZÑ1µ7Ú¡f‰€s}¿)°<3ÊŞĞtßåªÓ@Ç‹jnw:ä(ÎÎ å,‚ş[ÿ„\é€ 7		Nó=ãƒhcŠšËfë)óBôn;öiá­fç7[3˜’~ÜÈÀzßMÎ AöÇëƒï µQZÚş]?I`é,mŠ ı×qˆ.åBóçƒ,Ç:JÏÆ8ìõÏ¯‹³»ù—nçãÓ'³¾FÀ6´QÍ×”ú†Ù3e¡~ôgÆŒÕíİM‘İôãx–rÖ%0]qÚœÛã(f‰!â„Ì‘_ĞFÚC¶ŞÈĞÂŸóÚ~Oƒ K7$Àª\iZRÜUp‚¥L7rı=µÇIî'áXhãÖåÂÁÜİb0YAá)3JŠ­Ff¤àˆ !ñ¦rã*}ÁöDyzÑE$«Ş-{«9r}¸‚åI3Ú±èÖhéBxôKÎç˜„Ï )eH!Â2Òh•ø ¦zxÙjBâe¬‰W¡6d˜èCú"‘…Ü*EâUõ¬R'ÍZÔTÌê5ò»y8e­{EL›t×¤üAë¡Ÿ²Ú'd5Ğ_L@¢ËÙ”ğªÂhb™‹­ øÍuÃXxfQ§
+æ¦Ò3Lò/şı”EYíô¦™ùñR±­Ø;M	gíh1`ü¦ f‚¾”ÄĞ”½ƒmXğˆ‡Lù¢q3DXÄ¹Nh\)Ê‰™Ã(·ã£Î7!0Ôèb­èV¬û:ƒ¸ÆÑE²~½ØÕa:%²åK¯ûÆly®èöƒ#[Bå~v@Âm]ÄŞ8KEŠš¿K¿¯FÈš¼…¦„8Ï©lïš 0+JcOµÁâ&MŒ‹.fVÚR:ğUÔOÆ5HmYÖ\UÃÎÊ¨EÎúPßW@{Ôu•kMªúÔaLõk	é	âŠşúuÀå£ú-g~æ‰Ÿåb·QÎŸEô/¶ò;RĞìÍÌÜ.Æ”ÔÀÓíW®‡gv«Ó'—ëîò¥ZNêâÄúmJæßÿ‡P²f‹VWö[»İn ‰”êŸÏ/c¨5á¿ÆâÆº`Öj}Ş»·ïm¾ÜÙ~uD667·÷6^mn×	sdà½?Nñ°ÌÊ¼§höšö£±šõ$WÙ¯ öÇ¼jÂf©­-‰/p6šÍß{éŒå_aËR?íÓĞKw½qówà¬MÏuğFĞ~ï_Íd;ä®`Ğ6¡á¹iD0›İƒ•Jç@ñû¡ŞNŒø£ÿ¸¿Ü«×KÛì«‚øõÑîË”·CgŸ*ôÉ\Ğ“€'ÏÚoºo‹Ê Ô®~†ç¹Ñ´øI•÷zF”\ÃÚE§*Å²ôÂM¬ªàïÁ² È§´1ºæ~_Õ&÷Wf½u2®Wè€Ş(+ÇÙkíh„C@l+¨Ôµó‡“QÀ’
+²IñààLB,\J’4†WTgªQ)Ùn4ãó©P7:®)|áÁDiÚüîåÜŒG‚?6hR’×/é~>»™]¸ñ's:™9ÙÑ—oeG_údGŸ½ı‡?ıAp8¼dmNkÈ7~œr<C¶ ÕiØšŞ®¢Ö?S[ºÁìRfDl6¤²x Y4i^ë¢JÍ'S=»> ©^ù"å®z*Çj-Ü°R_"ÕG~áCÄ”‘C¾ ¼B{i´«ƒ¸T|¸4åe³y”ù&dÓ•€—†Íyë4]&C‚$SÅµ	_˜	=4˜såE .{L_¦¼ç]Ì>çoù¬ó®³e_P¢rR˜6¨ÌåÜÆùä£g;¡™¸hncş<¶74ê*:e*1y|(„à©`Í<c¼#$ø€Ş>ŠÓ(FÕ«j¤ÁÓèyş7E fş“m«^‚Ş±…àÀJå„5òù56"nŞ_]İØe‚.:Ímj&Ö1ÿœ„ÎÖº?Q™Éj,h?æÒ“7ë˜b‰µÊZJ[¶C?8ÄaØ›T¿²F(ÇÖİêWmªÖ„VåØ´JéÔ¨ØœüÔak”ñ¾Ê¨XœšdF±ã	&>4¼ñÿ–¹4—ÆNY„ÆœbÍñÃã¾w•`«"äš=x¸·]{W4lÕÊÇ	`…$Ÿï>{vˆw]ÚÂÃc¢º¡c“´9¤>p@·é¨v1´—ø10üûãsşiıv²/-&rCıCúˆÁŸÚ;¹¢ñÈ/qÖ8CZ…ÇêI®¥ª9ev`0Š	ìƒ1QSÑÓ“âÓêEER.½ë¤æA§ƒ¥Ì<¸à4ğû6é9ö{´nˆëL3k˜nâûeYLnÌ´ø½¬ùÍS}›é3ÈÀµĞ}=Ã/	i©óÇy‘Ñ)e–"áÚ,Ë
+±Ók"Ú¢¹!rpî@2£:Tßé³ö)ı[0²¬Y¦Ñ¦)J¸J;k¾ü‰‹h€}gÊ0|1ö`}Qİß˜çÔ¤ÆÜx‹¦nl8øÌ"ÿC;&û˜ã84½™eo¹ßøB 7mqœ‘¬eHFwÙÅ2Šà8£ë31×Ài±KÚôµ"ğÙ¾äPƒKIáaMŞ_ÛÇJÆ¢Çø‰úl»¿ƒ”q¦‡KÂñ9İ?¤‹(V?Õ;ÃÓ§™Â~Ş,FÌ¾êBW[ T $5!!º1¥
+šêÍs˜‡2{@¿=˜O	ä&¯-S7ñšò-Ä“ûÒ€‹¡7šx¡˜{2A¥Z5â9gA­›É-¨ü)<k*Hh§kÍ>¢Ğ÷€uÕ0Ì¥(„ª˜tS¾'i	Üâ
+HÄ×Ìç s…¯IùŸÌL©<Ûø°ÖdiOïı«Ò<UoÉã¡¯—×‰'É[aà˜©7n,¨Æ‹òfBM
+bq•{+¡Ä¬% Fó¬Í1NÙ:…bE˜ğ–-Ë¸›7³›·l;[„c/åN8â&àÛhçpïùm[^N®h¨M‰ø:É9æ†\7“Z
+ˆ(ºÂ:[-æÓˆ‹ËNÛ¬E¡ì¢ç³xĞn‡çÒ‘æZ‚»ÜÑ¼—Yí¨ÃÊï`?ÄXI³<¾ygA”ÎN’å·KïY¢Î*^ è\¤Sa‚ıBe,kJ/bà[ë|\­Ø?ıd€.,vµ†ô²6tÃ¸/Ëî”…40ø=++:”qxáêŒÂ©?¦yNc,Ü¼Ã‚ØH)S¥¶ŞŠìÕ3»Ğ7·»†dÏ¼Xš\Q²˜q¹Né3C\á¨˜ü²~ÎÇ²RE@ÓWK“’í}TæîåYÖ)~«švJ~×TJíT´ÑQâ¸3BÓıÖKÖ–r2{øLUYÚ‚ò8síu<úœtùÛ*UM5‹a?­eÇô`k©­,mi9ZŒ¹À©ª$20Ò¥§´Uó|úÃ¿ş“ğö².¸vï±ò²¡İ¤K9a‹‘o–Z¤…¦şXg@r€ÌZXIŸvwãÕÖÆÑŞÁ¯×ˆ“7Œ®T§Ê7³HŸ*…òÆ˜©r•Q.E…÷eá\ŒFæ*»•`F	ºhÎXfUr£Šs¹sP4^ÌƒZ5O¢KsæÒ³,¯_+ÎæäxÊĞ<¥7{æuÏ»³¤˜,„è­üceúµ®Å6‘ªïpîÌ'hFÅ7ƒ÷P(jiBxØeLÆ©ì.Çm–ò¹šÈ»©bÖ¢KŞ£Äw`p#…µ–ääHWcâ*ÙÅ§Â…"ŸœNµz>Y&Ê²Ws2œ{ú¥kªF§·*iHï;ó¨òHê|¾net¹ÛàÙ9k§ÿ„O-“qJÌ©ÆA¦	o
+=ú®7‰<Š¯¬Å2] À¡h¥0/VKËˆøŞ&ú	çl=;|zÜÌA
+fáKOsôxõíÃ£s£¤ïÅ˜©¶°ËŠXÖ#‹×óÊ@ÚeÏ8IO¼Bæ
+·•(wÉ' ­}…ç5(Í›%OÌŒ¹œĞ”%Ó}Å•0gHÁËš%/šYk@•­ës~û¬ÍÑø1?³ÇôT/­lLÎ–ºKÚ¿Ÿ™»é $Û4‡fçœq/C"€Õ©¦D
+0¥`G“”Ê¼Xğ\QÖc:ÅÄ“ã%ÅaEé8Õeù¦:•¦ÚòZ8‹É2¾ñ^¿ô½d Ø­¼<£ÄÉ¯¸ÄÎ£rÜ—äÜÈèÓŒååÂ´… ‡§ãÇtù†'û8«õ„o©‚}Îù»§DóÙ¡‘”Hmá—Ÿ$¨W¥‡G«k‰3İÍ l+8=õã<"I¶-äÛ‰x›DfMF–¹§û¯¾Z ¿Ü§ÿmÃÿßn?ß_ û[/xöÁ„$@¢8ÅJaƒ°ch£iD«Í†A•LësÁĞ;ó;_.xãqÈ×¼3îŸÚ>Ï‘g9ºÚÆ-åi"ÊPaûR.cDƒ3Íƒ4‹\Vƒ—SNS¥8S4æ	tL³ªğ
+K§Š~aY!’V”KJåÂ’½m#r
+,şÌêd/µ©‡c*‹á~P±ESÔmPtï.4Bs”ÿßâ^è/iqš$Û ZãTLÀÀ¹.‡)5î­‚«hËÂ"_.‰qäË1Ì²xéÂù©PH,U½UÊ{L¸4¡œÅ«ŒÔ3D.i22µR¶…Ë_u‹û¸ ì?„0t /Sjù=3'Ç.%ú*Ô¦ÁØ[cµ³”ïRïÒfç7íæoÇşÙ÷À»œ~?}áŸŒç›¿yÖşrşÙçÀ­ªVe‘øs\ÜW1Ù€DY´şJ!û§5Y‚Š	†gn°÷Ö¯yóö:•aoÚ%v+ôå…@á•ú1ÚÈı×îÊV?/	L"ê—ÑÂ¸ hT¾¥.­;9rP½¸Ö}²“D–ö ÿÉğ¥øäğŠ@çZUU’MÍøt¬Iğ_jxª´OF='{@uI•¾æÚ!N8·@&Eß–†1İ@©ÛZåóîãİµ<İr¢„@£˜¯.=çÒ‡[i0ZÈmåÿí_\6Ï¥ÄšÛy´Im–6ß¿5SH”ÛÌÒy•»½HAUë¡«o\Ì9ˆ©©-‰l.+)#ªJ‰‡]w…ƒUÔt·	JA]Ğ¨i§Õ::]Kõ,ƒv»`UğÎ,ƒ&µ›Ş*hÖÕ1İÑ<èæ#Ôål«rúNÍÂè‘¼şó³psjß`Ò<7mxcÌV8x‘À_Ñ$…Ã`²wØæhA8fE¢œ¥¶H%L^‹ÄÂ™Ëã'”SºŠNÊĞòú(G×Ò'”C¿»”c„úÊávÖ±ƒËfÒØ$ÂBŞ«}{ Åï}ôî[ÀT;¨>)+"É º@;áE;ËmQÁ—ğ4
+ä³‡s)|Â:¥KÂ:ŠÔõ¢‘O¸†~w¸Æê1ªÙè½E¡ß‡qÃÉõ½¸O¶úŞV'<;
+f‚GÄÊ;‘P‘O Ô^b˜_k2ş ¸f%ã/y–šü›Ğ\+ŸpMéªUrfšiÅ)¹O˜†~w˜Æè1¦ÙŒ£$i±t‰'A¢Ù^äŒAáéœÍ©Çk™G	n„hŠg¸'°y~PL³
+ÀÃ	‹É¦‰¯’)/ëx€/³€vÔY‡Ñğ r 7¡½ª™áµ²ñ•j§qš™y-ï7Wò"–«ÆĞÛt·Tçà!K£ÌGşt''wç±Û6­µÉÚt°ZŠ!\b:|m'ív[[¯ÏÄ•_…,ûQ¼íõ,Ë¾‹˜ãÍYÒ`¯‹V$òıî†gÑsÀÔé•‡Y—r äsÔiÙœ7Æı˜·´ÉÇimÅjÜ¶eÉ[û.¬&ºi©3ıöÖQ
+²7{5PÁÍ±šØiŠÕ.?MÁ¬ÄI>	‰¤gšSéNõ¦Âœc™h2İ¤Ãò'$X\¿á¹Pñá
+`èÈì;>#zŸç1zïd£y®k‹ÁPR1UœÅêtqê´ã¦P
+k…šòâ˜3ìE{ß÷G´|Ü7Y~£K”#‹§}.ùoù©„,m!­ábôÌ»Vg´¸ h=”YÜ@æGœ–Qgç‘Ín_Ö»a‰öœø)MÒ¯|Ì¢QH>d£Ò×l)1+I’µB	·[€–Ã6DR«í$ú"c`½m¥q…L„[,5N¥m9a–2gşYş»>arGUÉ:¢,ï£qL Ïc­YğÆ9Ük–GK.'M¹ÕE.ğ€ØÙ^Ÿ{áñç×âÈ ú3xÛV£y…$‡Nÿ’ç„Ü¼tf«ÉÛuä…¸2&‹˜:Z]Ñ=ºı×¬"„ìÑ8Y;îBNÎŒxIcgt‘çÑ¥Åƒ;ëÃ–´$V’–,Uİrè—ËS" iØ×@›ëî;øÔdï*!%ó|•ÛkêäÎ=eÔìšû–YzÏ`Rä6™{z-¡ÿ^d^FüÕû^;N9°[.Şu‘gVà+J2'>:RÊ½g¤ÀÄõøc‡0[q•FB)j”Š’}rå§~ò|–?‘}f¢½@=,‡Ím7¼Ìn•·¼­#ß_EA¨Z»«èö‡?ı!×™\qùvùÃ?ş"„.6²7v À÷²K²	nëÀµÌ§¹øÊgÃws¤es§•º*¸ûÒtÜ@O}y,käŞOÖ:Ïå/­ªÑñ4Îµìº‹-»Ê›+¥û‘tDü.àÎ\oå’ñ2JuïŞıôò—?ÿñ_
+ à¾ÆN>¹ìrs‚Ï6ŸFHæ¾ŠH?ˆ1“òø	 ·€Gi\®¬£ãév|ÑÍQÙ’±Ñ8vK¶ıPæ‡«ğEÍ ¬ê-²  ËLÅ‚–}®~éÈ9«8ı£XO.²%±~.Òn}º%n¯¨JRÖWİ:e…v£§IÁgÎÃ&TÌŒÕâ$¦S#ŞhS5Š1mÈjıT\¶Lk2 ÔLµfIg _Wÿİ¾šÚ}5$Y«½>Ó+kg>ÇSp-’µcX+©\ ™Ê8¸ÆÉ•Uø·ÙØè¤“‘ô1,o<Íì,42bx&µŒ6	èv>¦;´‰Óö]ìâxÕ³ã•ÛÇ1§w¶.´r
+ã8^Ú¤»ÍX§ˆ«İ¦5>m%>ÄUà5Çñòpi\{"ò¹({ 8¶áÆ­Üèr—^«ÅÌ¼Âæ+¬XòayXb
+øw5KDCm»šÛÑé)"Ï0mÕtZ7&Ú%Ó•½3jBÕysõ–au
+;W‹*^*ÃêÏ3É‰c>lÓ«„Ë²t'%¼ÜE­Ì(V°x*3<E­è†ë¨}S)¸pï.i@ğ*áX{.ÚxÙ[,l=$.äeUîxUü¥…ş‚­4BEs­|ª!Ù;—¾wHƒ¦Ğƒ”Ó*’Ë+«—¯\ùlJ¶ê˜Mšİi@zÙ•´ãÅÈ;]"Ú4ô/‘­PKÄõcSn´[’şÚÄ_Eş3².3­Å|md˜b×WgäM¦®Å<oÔ¹€å&¬¤pƒ ‚ZGeòÓ@’ååÇ…9ìióë¶˜£š›q©»´Òê®¶—¿õû¨Ö?şö#2f”/åråOÉ2ó't$_³DG÷“AÂPAo¦º¾yeÔó±ô™:eÒ‘„G;¥ÚP s†1—¬bÎ™Ä¦*ì3Miƒ”\Zà·i>N99O1¬ëQáäsj
+Ğ×¦á–TPÅ¸0'qX›¸r¡¨L‰¿\ö:™œ-iÉ“5¼(Ë¥ã–¸Q¿øg1|^èiÔŠiT†| ¼µRßéïl{
+¯HùÙø‹«Âïõb¤Eµñô{Æ«3 ´åã~?%¡X¼µ˜¥ ½‚QÖÛx^äOÈ\ª²]xF‡tç0xœ§Nml°Õ:U³»	z4èêI“—–ï?é#\¶vå›J3Ò¾™ofˆôIgƒ‰¼û±Ÿø0äL$GDx¸½y´³÷Š,®‘­-rx´ñây±w°Kš»{[/ç(òcèié¸İ¨ï…(²#ÄG§¤ÏÓR‘ÏÖ×Iwÿ4¡+3æ†}D§^X•ğ)ÊU,–èÁ%FõX—|×zó¯·vâÕD(ÔRçCøÙAÌ?	'1$Pô›£b®ÆUW¿¦E×97BÖ×1´‰—Ü;¢÷ô•ĞXr×Í˜â|)u%ŞK’)¡¶<¿¤Ñ0ÌØ;cÉ6æo<K%7ì“b
+h}æÔJ¨ïÒevØñ×,» ËV÷æq÷|ğ¶œ_Ğ±t‘5loÜZU°SM(-v³`½™ÍœV°\x’a]2$ªÅ˜6·QKâ~8IôY¥™wªHÀzÍ‹_QàÛé#ÚCm*+	)¼ÿîë÷y¡HSæ¯Á²aqÆn±5C[­ Å yıä>W $”‚½ã„­<û˜$HR†Ë÷F'Fó{´§òELÂŠP’ä}†IÛ8÷±%ç™æ!#jÄ‚—["Úìl+1Š~ØJ÷’’WKG+.]l‹<®g¶Vt3@Óßa|`|Õ+İÂÉÕ(‹5VÔvdY¯ZI/ÂğÄ‹me… •‡Mc<†Ø5à=Ø¦İ¨TA+&Û¶×ïÓ/YMM‹ú¼Rÿ­XEFS7f©\_F°~4ù>å<s^Ï˜Sïm\x…i³N'=L…?Å²”
+ôèãÄ–Õ{f±>|èw´B:­£ÔLÔÏ¹‚õ´Ä¯DxBE$#Y/c™…úÑ¢p´¨]”ŠÖ:.\©ô‰ÎÍ¬ÑSéğ^I_ºW[©ª'¼Á$$[AiP•i”cèÇ†ì%‡b¢œæiL²}µR’¥Xâ%O‹"™Öå?¤WJÂ)³eÃ-İœ5”ÆFIœÏõ»©ÎOùÄÏK´å“Æ~èã·	«ãÁÎÀ,ğFÂá]œ”RÆ¼[óÆîú²Ñ»‘Ëññ’«Q8øí0¿°ób.Ú©ÉïD:–8¢æ¹%o•-ü®­~zë«_‹K®°;”ÒJ½-€Ğ›à¯ÇˆÓÖè|EuuúÊñQé¾5Gƒ\)Ü^—9
+ı¶ĞÛl¼ ßïòôÂV}68ŠpIüScÖ¿“:ï.lôõ;=şûQà»2Ÿ>ş(s«<ˆ¾ˆşúHÛ©”Æ÷ÜÜÓVKT#’O«õ¤Ã^tnigÔú:š`å8ñ[í&^Ä¾¢:0{šÿnkp ÿŒÉIíâ2C›3ï0xn&æİèN=y5Á(«Û–­Æä²†Á&8X}ÂXxXÑ)Lì\Åç/şãïÉËˆVİlîûñĞA3óFIÁ¼.Ó˜İœYáğœpn&yE˜N±Lõ˜Eo^Mñi‰`@8Î¾½şøÑÃ«+ËK‹†l@nTèGÉ…›³¿T‚Â$ô +èÙ(J±ÉÓ‘+«ŠgÊ,J¬ô‰]ôdë®E‚{–¨¿xi²1s¼{§‚²;”!•7OwÅ×÷w?ÉÃŸ²=±…lôû1ê!˜ÿ  ÿÿì]ÍNÛ@¾ç)L.8j1*¨EJ‹(j9µ•à!d’¸X±;¨Bê3Tê­R¥>H†'è#tgf×?ëµwP$,Äûcïìxvìı¾™GF?îÿæÀ0˜Á‡îÂ .f8±é2Vs
+_ÇQ§lî#í–;Ì*{2Ú¢vd>òëÎ¹dt;Çî!ó?Clr	”¡KÆb‡]	Ôë m­u½íivjr/.ê:ÙĞ÷ÚàêÆâd·é;Xr^+K­©‘boäÕÛÆL¯´o“*¾hyªóİ=À…
+÷ü¥@$·_iÿE´˜“‚‘šÚdÕMÕbÑà)vmSë*@X®Gv×Šúm@ß?K¢pÆÅ:Î/Òmˆ^Ï6·œB¤°k<a€ChfÀ–’ÙˆmQÚW×ìÃx¬Áó ~§jJ›À*ÍùlY’ğØ?ß8ã¶{ä!dÆASåŒÖ~_åµCcÓ9¸ 4¨M$ĞÒÒg€ò&@—eZ¥`˜a@Ç¼ú"FY¶mc£É;vı6šO,Ùğ„¦¼„˜«°Õ€{İ¼OÄfd56ögaZ‡¢ÌØ×€¹E©,³sd»,uq“Â'TYc"’
+ÀÛÎŞÆ¥å/,cÕĞO²åj‘‹²ˆu+£ßv4Ğø<.P)>¨-}A7³;|fñ
+„Ñ™Dó©/¶Æ<qÌ	ÂXv…¨)…• ¬Ã+¯3¼âÄAD¥}êl•áRÚ6ó=ÉpËh;`JŒ¨í©ı…à[=£(Œñ#…!ê”2 ŒTƒyÊÓ»Bµ6D‚;0X?ƒ¶HuLĞ.Ô†³-rÙà™ÉÍÀç²¢æ…º[9vİêJà-|‘¦G»ø³†/	p£à„}A![FJ0Û+:l­™í ëØ1„E!<ÇH¸,»ª&ƒO•ërEÂdhRÙÄJ)¼™Q—néŠV}´Ç³ÈÃ×"vø¼ı¾">K0‹<rP‹íx, -p'ªÅöF,j™ëX„Å©dQöóÒÛ’›h7£7=.fëíï¦ÇØ°ÌÉZ&“Ğ«ÿj}Oqëš’™‰Xâ!f¼7Â¢khhB©D9çvÿEÑ[*ºwì/YòsÂ¡%u°æ=·"#¤"qPP«ßÿüüöÛ4•*»Kş¯”iyÉ:k½ïs‡4åVŒ­ŞlÉ/a^v™6|?Š³£RÕ<ÜõóWc,ô¬PYÖl+ô§«á$kÓ;‹F×J©¸­¬G¾İ¼ìÓ$|ıÄ†©ØÉÛuÜ#qïõ$…O½>wñpãJº3à¬Q­ŒmˆAa‰£nÁ¡^Fs6}ã'Œ^êE‹ÁzLWÎÒ"ø:¹^ú‘å™‡²ºöä§-}TˆÿAÍËí²3äÍŠß'WÔp6b‰›¸:ì
+P;RlûY¢´ı!Ò!¹äü>!ks>Ú!mÂ“H¦68©¦ß$G×÷H””¤W•(ô1(KNX’²lƒ.	H/Ã’\ª7-î¥<~%dªïåÅ§Aæ?Òx¡ˆYé ³­Ä ±¸Ü_ÕÉÑ’÷—T”Ï{BB§B‘s¿O9\7¹æ¦S ‰ƒNt:  ÿÿ r¢à
