@@ -1942,17 +1942,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
   // Combined detailed records
   const records = useMemo(() => {
-    const uniqueOrders = new Map();
-    orders.forEach(o => {
-      const id = o.order_id || o.lead_id;
-      if (id && !uniqueOrders.has(id)) {
-        uniqueOrders.set(id, o);
-      } else if (!id) {
-        uniqueOrders.set(Math.random().toString(), o);
-      }
-    });
-
-    return Array.from(uniqueOrders.values()).map(o => {
+    return orders.map(o => {
       const pay = payments.find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
       const prod = production.find(p => p.tracking_id === o.lead_id || p.order_id === o.lead_id || p.tracking_id === o.order_id);
 
@@ -1962,9 +1952,8 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         : (o.advance_received || 0);
       const outstanding = pay ? pay.balance_due : (o.balance_amount || Math.max(0, totalRevenue - paymentReceived));
 
-      const isCompleted = ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed', 'Order Closed', 'Project Closed', 'Closed'].includes(o.current_stage) || 
-                          (prod && ['Client Acceptance', 'Delivered', 'Project Delivered', 'Completed', 'Project Completed', 'Order Closed', 'Project Closed', 'Closed'].includes(prod.editing_status));
-      const isClosed = o.current_stage === 'Order Closed' || o.current_stage === 'Closed' || (prod && ['Order Closed', 'Project Closed', 'Closed'].includes(prod.editing_status));
+      const isCompleted = ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed'].includes(o.current_stage) || prod?.editing_status === 'Client Acceptance';
+      const isClosed = o.current_stage === 'Order Closed' || o.current_stage === 'Closed' || prod?.editing_status === 'Order Closed';
 
       const paymentDate = pay?.payment_date || o.created_at || o.event_date;
       const paymentType = pay?.payment_type || pay?.Payment_type || (pay?.final_payment_received ? 'Final Payment' : pay?.advance_received ? 'Advance Payment' : 'Standard Payment');
@@ -2219,9 +2208,9 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       'Customer Name': r.customerName,
       'Event Name': r.eventName,
       'Event Date': r.eventDate,
-      'Total Revenue (Rs. )': r.totalRevenue,
-      'Payment Received (Rs. )': r.paymentReceived,
-      'Outstanding Balance (Rs. )': r.outstanding,
+      'Total Revenue (₹)': r.totalRevenue,
+      'Payment Received (₹)': r.paymentReceived,
+      'Outstanding Balance (₹)': r.outstanding,
       'Payment Status': r.paymentStatus,
       'Current Status': r.currentStage
     }));
@@ -3350,9 +3339,9 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
                   const evName = ev.eventName || ev.rawOrder?.custom_event_name || ev.title || 'Event';
                   const evDate = ev.eventDate || ev.rawOrder?.event_date || dateStr;
                   const evTime = ev.rawOrder?.event_time || '10:00 AM';
-                  const custName = ev.customerName || ev.rawOrder?.customer_name || '-';
+                  const custName = ev.customerName || ev.rawOrder?.customer_name || '—';
                   const status = ev.currentStatus || ev.rawOrder?.current_stage || 'Active';
-                  const targetDel = ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || '-';
+                  const targetDel = ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || '—';
 
                   return (
                     <tr 

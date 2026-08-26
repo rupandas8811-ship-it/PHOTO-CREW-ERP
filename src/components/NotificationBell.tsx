@@ -238,7 +238,7 @@ export const NotificationBell: React.FC = () => {
                           <Clock className="w-2.5 h-2.5" />
                           {notif.created_at ? new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
                         </span>
-                        <span>*</span>
+                        <span>•</span>
                         <span className="uppercase text-[7px] bg-zinc-900 px-1 py-0.2 rounded border border-zinc-850">
                           {notif.notification_type}
                         </span>

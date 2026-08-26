@@ -26,23 +26,10 @@ export const BusinessOverviewAnalytics: React.FC = () => {
 
   // Filtered Datasets based on dates
   const filteredOrders = useMemo(() => {
-    const uniqueOrders = new Map();
-    orders.forEach(o => {
-      const id = o.order_id || o.lead_id;
-      if (id && !uniqueOrders.has(id)) {
-        const orderDate = o.created_at ? o.created_at.split('T')[0] : o.event_date;
-        if (isDateInRange(orderDate, activeRange)) {
-          uniqueOrders.set(id, o);
-        }
-      } else if (!id) {
-        // Fallback for items without ID
-        const orderDate = o.created_at ? o.created_at.split('T')[0] : o.event_date;
-        if (isDateInRange(orderDate, activeRange)) {
-          uniqueOrders.set(Math.random().toString(), o);
-        }
-      }
+    return orders.filter(o => {
+      const orderDate = o.created_at ? o.created_at.split('T')[0] : o.event_date;
+      return isDateInRange(orderDate, activeRange);
     });
-    return Array.from(uniqueOrders.values());
   }, [orders, activeRange]);
 
   const filteredPayments = useMemo(() => {
@@ -78,11 +65,9 @@ export const BusinessOverviewAnalytics: React.FC = () => {
   // 2. Event Analytics calculations
   const totalEvents = filteredOrders.length;
   
-  const completedEvents = filteredOrders.filter(o => {
-    const prod = production.find(p => p.tracking_id === o.order_id || p.order_id === o.order_id || p.tracking_id === o.lead_id || p.original_lead_id === o.lead_id);
-    return ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed', 'Order Closed', 'Project Closed', 'Closed'].includes(o.current_stage) || 
-           (prod && ['Client Acceptance', 'Delivered', 'Project Delivered', 'Completed', 'Project Completed', 'Order Closed', 'Project Closed', 'Closed'].includes(prod.editing_status));
-  }).length;
+  const completedEvents = filteredOrders.filter(o => 
+    o.current_stage === 'Event Completed' || o.current_stage === 'Closed' || o.current_stage === 'Delivered'
+  ).length;
 
   const upcomingEvents = filteredOrders.filter(o => o.event_date >= TODAY_REF).length;
   const ongoingEvents = filteredOrders.filter(o => o.event_date === TODAY_REF).length;
@@ -203,7 +188,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
             Finances Overview
           </div>
           <div className="flex items-center gap-2">
-            <div className="p-1 px-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-xs font-bold">Rs. </div>
+            <div className="p-1 px-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-xs font-bold">₹</div>
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">Revenue Analytics</h3>
           </div>
           

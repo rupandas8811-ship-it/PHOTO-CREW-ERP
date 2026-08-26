@@ -20,10 +20,10 @@ export const DatabaseHealthModule: React.FC = () => {
     if (isRunning) return;
     setIsRunning(true);
     setLogs([]);
-    addLog(' Starting comprehensive Supabase database diagnostics pipeline...');
+    addLog('🚀 Starting comprehensive Supabase database diagnostics pipeline...');
 
     if (!supabaseClient) {
-      addLog(' Supabase client is not initialized. Check your environment variables (SUPABASE_URL, SUPABASE_ANON_KEY).');
+      addLog('❌ Supabase client is not initialized. Check your environment variables (SUPABASE_URL, SUPABASE_ANON_KEY).');
       updateDiagnosticMetric('connection', 'error', 'Client Not Initialized');
       updateDiagnosticMetric('auth', 'fail');
       updateDiagnosticMetric('read', 'fail');
@@ -39,7 +39,7 @@ export const DatabaseHealthModule: React.FC = () => {
 
     try {
       // 1. Connection Ping
-      addLog(' 1. Pinging Supabase connection endpoint...');
+      addLog('📡 1. Pinging Supabase connection endpoint...');
       updateDiagnosticMetric('connection', 'checking');
       setReport({ ...currentDiagnosticReport });
 
@@ -48,46 +48,46 @@ export const DatabaseHealthModule: React.FC = () => {
       const latency = Date.now() - startTime;
 
       if (pingErr) {
-        addLog(` Connection ping failed: ${pingErr.message}`);
+        addLog(`❌ Connection ping failed: ${pingErr.message}`);
         updateDiagnosticMetric('connection', 'error', pingErr.message);
       } else {
-        addLog(` Connection ping successful! Latency: ${latency}ms`);
+        addLog(`✅ Connection ping successful! Latency: ${latency}ms`);
         updateDiagnosticMetric('connection', 'connected');
       }
 
       // 2. Auth Session Check
-      addLog(' 2. Inspecting active Supabase Auth session...');
+      addLog('🔐 2. Inspecting active Supabase Auth session...');
       const { data: sessionData, error: sessErr } = await supabaseClient.auth.getSession();
       
       if (sessErr) {
-        addLog(` Auth session load error: ${sessErr.message}`);
+        addLog(`❌ Auth session load error: ${sessErr.message}`);
         updateDiagnosticMetric('auth', 'fail', sessErr.message);
       } else {
         const session = sessionData?.session;
         if (session) {
-          addLog(` Active Supabase JWT detected! User: ${session.user.email} (UID: ${session.user.id})`);
+          addLog(`✅ Active Supabase JWT detected! User: ${session.user.email} (UID: ${session.user.id})`);
           updateDiagnosticMetric('auth', 'ok');
         } else {
-          addLog(' No active Supabase Auth JWT detected. Using fallback anonymous client routing (Local password authentication active).');
+          addLog('🟡 No active Supabase Auth JWT detected. Using fallback anonymous client routing (Local password authentication active).');
           updateDiagnosticMetric('auth', 'ok'); // Fallback is ok as it aligns with auto-login matching
         }
       }
 
       // 3. Read Verification Check
-      addLog(' 3. Attempting DB SELECT on table [leads]...');
+      addLog('📖 3. Attempting DB SELECT on table [leads]...');
       const { data: leadRows, error: leadErr } = await supabaseClient.from('leads').select('*').limit(1);
       
       if (leadErr) {
-        addLog(` SELECT query denied or failed: ${leadErr.message}`);
+        addLog(`❌ SELECT query denied or failed: ${leadErr.message}`);
         updateDiagnosticMetric('read', 'fail', leadErr.message);
       } else {
-        addLog(` Read operation succeeded. Retrieved ${leadRows?.length || 0} columns matching current RLS policies.`);
+        addLog(`✅ Read operation succeeded. Retrieved ${leadRows?.length || 0} columns matching current RLS policies.`);
         updateDiagnosticMetric('read', 'ok');
       }
 
       // 4. CRUD Test (Insert, Update, Delete) on [activity_logs]
       const auditId = `LOG-TEST-${Math.floor(1000 + Math.random() * 9000)}`;
-      addLog(` 4a. Attempting test INSERT into [activity_logs] (ID: ${auditId})...`);
+      addLog(`✍️ 4a. Attempting test INSERT into [activity_logs] (ID: ${auditId})...`);
       
       const { error: insErr } = await supabaseClient.from('activity_logs').insert({
         log_id: auditId,
@@ -101,54 +101,54 @@ export const DatabaseHealthModule: React.FC = () => {
 
       if (insErr) {
         if (insErr.code === 'PGRST205') {
-          addLog(` INSERT operation simulated (Table missing but safely bypassed).`);
+          addLog(`✅ INSERT operation simulated (Table missing but safely bypassed).`);
           updateDiagnosticMetric('insert', 'ok');
           updateDiagnosticMetric('update', 'ok');
           updateDiagnosticMetric('delete', 'ok');
         } else {
-          addLog(` INSERT failed: ${insErr.message}`);
-          addLog(' Skipping Update/Delete checks due to write block.');
+          addLog(`❌ INSERT failed: ${insErr.message}`);
+          addLog('🟠 Skipping Update/Delete checks due to write block.');
           updateDiagnosticMetric('insert', 'fail', insErr.message);
           updateDiagnosticMetric('update', 'untested');
           updateDiagnosticMetric('delete', 'untested');
         }
       } else {
-        addLog(' INSERT operation completed successfully.');
+        addLog('✅ INSERT operation completed successfully.');
         updateDiagnosticMetric('insert', 'ok');
 
         // Update verify
-        addLog(` 4b. Attempting test UPDATE on audit row [activity_logs]...`);
+        addLog(`🔄 4b. Attempting test UPDATE on audit row [activity_logs]...`);
         const { error: updErr } = await supabaseClient
           .from('activity_logs')
           .update({ action: 'System Integrity Ping - Handshake Latency Verified' })
           .eq('log_id', auditId);
 
         if (updErr) {
-          addLog(` UPDATE failed: ${updErr.message}`);
+          addLog(`❌ UPDATE failed: ${updErr.message}`);
           updateDiagnosticMetric('update', 'fail', updErr.message);
         } else {
-          addLog(' UPDATE operation completed successfully.');
+          addLog('✅ UPDATE operation completed successfully.');
           updateDiagnosticMetric('update', 'ok');
         }
 
         // Delete verify
-        addLog(` 4c. Attempting test DELETE on audit row [activity_logs]...`);
+        addLog(`🗑️ 4c. Attempting test DELETE on audit row [activity_logs]...`);
         const { error: delErr } = await supabaseClient
           .from('activity_logs')
           .delete()
           .eq('log_id', auditId);
 
         if (delErr) {
-          addLog(` DELETE failed: ${delErr.message}`);
+          addLog(`❌ DELETE failed: ${delErr.message}`);
           updateDiagnosticMetric('delete', 'fail', delErr.message);
         } else {
-          addLog(' DELETE operation completed successfully. Workspace database is pristine.');
+          addLog('✅ DELETE operation completed successfully. Workspace database is pristine.');
           updateDiagnosticMetric('delete', 'ok');
         }
       }
 
       // 5. Realtime Channel Subscription
-      addLog(' 5. Testing WebSocket PostgreSQL Realtime channel...');
+      addLog('📡 5. Testing WebSocket PostgreSQL Realtime channel...');
       const channel = supabaseClient.channel('health_test_channel_rx');
       
       const subPromise = new Promise<'ok' | 'fail'>((resolve) => {
@@ -167,16 +167,16 @@ export const DatabaseHealthModule: React.FC = () => {
       ]);
 
       if (subResult === 'ok') {
-        addLog(' Realtime websocket connected! Successfully subscribed to public.postgres_changes stream.');
+        addLog('✅ Realtime websocket connected! Successfully subscribed to public.postgres_changes stream.');
         updateDiagnosticMetric('realtime', 'ok');
         supabaseClient.removeChannel(channel);
       } else {
-        addLog(' Realtime websocket subscription timed out or disconnected.');
+        addLog('❌ Realtime websocket subscription timed out or disconnected.');
         updateDiagnosticMetric('realtime', 'fail');
       }
 
       // 6. RLS Policies Check
-      addLog(' 6. Running RLS protection audit on schema objects...');
+      addLog('🛡️ 6. Running RLS protection audit on schema objects...');
       
       const tables = [
         { name: 'users', role_req: 'Business Owner / authenticated' },
@@ -193,7 +193,7 @@ export const DatabaseHealthModule: React.FC = () => {
       let activeRLSCount = 0;
 
       for (const tbl of tables) {
-        addLog(`   * Auditing RLS Policy rules for [public.${tbl.name}]...`);
+        addLog(`   • Auditing RLS Policy rules for [public.${tbl.name}]...`);
         checkRLSResults.push({
           name: tbl.name,
           rls_enabled: true, // Configured with policies
@@ -203,15 +203,15 @@ export const DatabaseHealthModule: React.FC = () => {
       }
 
       setRlsTableStatus(checkRLSResults);
-      addLog(` Row Level Security (RLS) is ACTIVE across all ${activeRLSCount} core tables. Policies verified.`);
+      addLog(`✅ Row Level Security (RLS) is ACTIVE across all ${activeRLSCount} core tables. Policies verified.`);
       updateDiagnosticMetric('rls', 'ok');
 
-      addLog(' All tests completed. Diagnostic report compile success.');
+      addLog('🏁 All tests completed. Diagnostic report compile success.');
       refreshData(); // Synchronize local lists on victory!
 
     } catch (err: any) {
       console.error('Diagnostic routine crashed:', err);
-      addLog(` Critical Diagnostic Exception: ${err?.message || String(err)}`);
+      addLog(`🚨 Critical Diagnostic Exception: ${err?.message || String(err)}`);
       updateDiagnosticMetric('connection', 'error', err?.message || 'Exception during diagnostics');
     } finally {
       setReport({ ...currentDiagnosticReport });

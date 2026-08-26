@@ -524,7 +524,7 @@ export const NotificationsModule: React.FC = () => {
                           <p className="text-[10.5px] text-zinc-500 leading-relaxed max-w-xl font-mono">
                             {item.details} 
                             {item.previous_state && (
-                              <span className="text-zinc-600"> (Changed: {item.previous_state} &rarr; {item.new_state})</span>
+                              <span className="text-zinc-600"> (Changed: {item.previous_state} → {item.new_state})</span>
                             )}
                           </p>
                         </div>

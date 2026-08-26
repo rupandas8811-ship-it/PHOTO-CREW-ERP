@@ -12,3 +12,15 @@ check_db*.mjs
 inspect-*.ts
 query-*.ts
 *.sql
+!dist/**
+!revert.mjs
+!download_icons.mjs
+!server.ts
+!vite.config.ts
+!tsconfig.json
+!package.json
+!package-lock.json
+!metadata.json
+!README.md
+!index.html
+!*.d.ts

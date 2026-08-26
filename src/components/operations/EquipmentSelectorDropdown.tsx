@@ -19,6 +19,7 @@ interface EquipmentSelectorDropdownProps {
   targetEventDate?: string;
   placeholder?: string;
   disabled?: boolean;
+  onShowRoster?: (eq: Equipment) => void;
 }
 
 export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps> = ({
@@ -31,7 +32,8 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
   currentOrderId,
   targetEventDate,
   placeholder = 'Search to assign equipment...',
-  disabled = false
+  disabled = false,
+  onShowRoster
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -181,6 +183,8 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
       let canAssign = true;
       let reason = '';
 
+      let requiresWarning = false;
+
       if (isSelected) {
         statusType = 'selected';
         statusLabel = 'Selected';
@@ -190,7 +194,8 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
         statusLabel = assignedToOtherStaff.staffName
           ? `Assigned to ${assignedToOtherStaff.staffName}`
           : 'Assigned to Crew';
-        canAssign = false;
+        canAssign = true; // REMOVED HARD LOCK
+        requiresWarning = true;
         reason = `Already assigned to ${assignedToOtherStaff.staffName || 'another crew member'} for this shoot.`;
       } else if (isMaintenance) {
         statusType = 'maintenance';
@@ -205,7 +210,8 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
       } else if (isBusyElsewhere) {
         statusType = 'busy';
         statusLabel = 'Busy / In Use';
-        canAssign = false;
+        canAssign = true; // REMOVED HARD LOCK
+        requiresWarning = true;
         reason = `Assigned to another active event on this date.`;
       }
 
@@ -214,6 +220,7 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
         statusType,
         statusLabel,
         canAssign,
+        requiresWarning,
         reason,
         isSelected
       };
@@ -274,6 +281,12 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
     if (!eq.canAssign) {
       alert(`⚠️ Cannot Assign "${eq.equipment_name}":\n${eq.reason || 'This equipment is currently unavailable/busy.'}`);
       return;
+    }
+    
+    if (eq.requiresWarning) {
+      if (!window.confirm(`This equipment is already assigned. Please check the Equipment Roster before assigning it again.\n\nDo you want to continue assigning "${eq.equipment_name}"?`)) {
+        return;
+      }
     }
 
     // Assign
@@ -523,14 +536,30 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
 
                       {/* Status Badge & Checkbox Indicator */}
                       <div className="flex items-center gap-2 shrink-0">
+                        {onShowRoster && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onShowRoster(eq);
+                            }}
+                            className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-zinc-800 text-zinc-300 hover:bg-amber-500/20 hover:text-amber-400 border border-zinc-700 transition-colors"
+                          >
+                            Equipment Roster
+                          </button>
+                        )}
                         {/* Availability Badge */}
                         {eq.isSelected ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
                             <Check className="w-3 h-3 text-amber-400" /> Selected
                           </span>
-                        ) : eq.canAssign ? (
+                        ) : eq.statusType === 'available' ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> Available
+                          </span>
+                        ) : eq.statusType === 'busy' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" /> {eq.statusLabel}
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">

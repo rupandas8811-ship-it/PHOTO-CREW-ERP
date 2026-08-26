@@ -11,109 +11,35 @@ import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 export const getStatusRank = (status: string | undefined | null): number => {
   if (!status) return 0;
   const s = status.trim();
-
-  // Terminal states (do not downgrade from Lost Lead on general edits)
-  if (['Lost Lead', 'Lead Lost', 'Lost'].includes(s)) return 999;
-  if (['Event Cancelled', 'Project Cancelled', 'Cancelled'].includes(s)) return 998;
-
-  // Rank 120: Completed / Closed / Delivered / Payment Pending
+  if (['Lost Lead', 'Lead Lost'].includes(s)) return 99;
   if ([
-    'Delivered', 'Project Delivered', 'Payment Pending', 'Paid', 
-    'Business Owner Review', 'Order Closed', 'Project Closed', 'Closed', 
-    'Completed', 'Project Completed'
+    'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 
+    'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Start', 
+    'Event Ended', 'Event End', 'Event Completed', 'Event Complete', 'Footage Handover', 
+    'Equipment Handover', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 
+    'Event Cancelled', 'Assigned Editor', 'Editor Assigned', 'Editing Started', 
+    'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 
+    'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 
+    'Revision', 'Client Acceptance', 'Final Approval', 'Approved', 'Ready for Delivery', 
+    'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
   ].includes(s)) {
-    return 120;
+    return 4;
   }
-
-  // Rank 110: Review, Revision, QC & Editing Completed/Approved
-  if ([
-    'Internal QC Review', 'Customer Review', 'Client Review Sent', 'Internal Review', 
-    'Client Review', 'Review Pending', 'Revision Required', 'Revision In Progress', 
-    'Revision', 'Feedback Given', 'Client Acceptance', 'Final Approval', 'Approved', 
-    'Editing Complete', 'Editing Completed', 'Ready for Delivery'
-  ].includes(s)) {
-    return 110;
+  if (['Quote Follow-up', 'Follow Up', 'Follow-up', 'Negotiation'].includes(s)) {
+    return 3;
   }
-
-  // Rank 100: Editor Assigned & Editing In Progress
-  if ([
-    'Assigned Editor', 'Editor Assigned', 'Editing Started', 
-    'Editing In Progress', 'In Progress'
-  ].includes(s)) {
-    return 100;
+  if (['Quote Sent', 'Quotation Sent'].includes(s)) {
+    return 2;
   }
-
-  // Rank 90: Footage & Handover
-  if ([
-    'Footage Handover', 'Equipment Handover', 'Verified Footage', 
-    'Footage Handover Verified', 'Raw Footage Received', 'Footage Received', 'Received'
-  ].includes(s)) {
-    return 90;
+  if (['Create Quote', 'Created Quotation', 'New Lead', 'Contacted'].includes(s)) {
+    return 1;
   }
-
-  // Rank 80: Event Completed
-  if ([
-    'Event Ended', 'Event End', 'Event Completed', 'Event Complete'
-  ].includes(s)) {
-    return 80;
-  }
-
-  // Rank 70: Event Started
-  if ([
-    'Event Started', 'Event Start'
-  ].includes(s)) {
-    return 70;
-  }
-
-  // Rank 60: Operations / Staffing / Scheduling
-  if ([
-    'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled'
-  ].includes(s)) {
-    return 60;
-  }
-
-  // Rank 50: Order / Booking Confirmed
-  if ([
-    'Confirm Order', 'Order Confirmed', 'Booking Confirm', 'Booking Confirmed', 
-    'New Order Received', 'Confirmed'
-  ].includes(s)) {
-    return 50;
-  }
-
-  // Rank 40: Follow Up & Negotiation
-  if ([
-    'Quote Follow-up', 'Follow Up', 'Follow-up', 'Follow-Up', 'Negotiation'
-  ].includes(s)) {
-    return 40;
-  }
-
-  // Rank 30: Quote Sent
-  if ([
-    'Quote Sent', 'Quotation Sent'
-  ].includes(s)) {
-    return 30;
-  }
-
-  // Rank 20: Contacted / Quoting
-  if ([
-    'Create Quote', 'Created Quotation', 'Contacted'
-  ].includes(s)) {
-    return 20;
-  }
-
-  // Rank 10: New Lead
-  if ([
-    'New Lead'
-  ].includes(s)) {
-    return 10;
-  }
-
   return 0;
 };
 
 export const isFollowUpDateTimeReached = (lead: Lead): boolean => {
   const rawStatus = lead.current_status || lead.status || '';
-  if (getStatusRank(rawStatus) >= 50 || ['Confirm Order', 'Order Confirmed', 'Lost Lead', 'Lead Lost'].includes(rawStatus)) {
+  if (['Confirm Order', 'Order Confirmed', 'Lost Lead', 'Lead Lost'].includes(rawStatus)) {
     return false;
   }
 
@@ -641,7 +567,7 @@ export const validatePackagesDatabase = async (operation: 'SELECT' | 'INSERT' | 
   const { error: tableError } = await supabaseClient.from('packages').select('package_id').limit(0);
   if (tableError) {
     if (tableError.code === '42P01' || tableError.message?.toLowerCase().includes('relation "packages" does not exist')) {
-      const errorMsg = ` Database Error\n\nTable: packages\n\nReason: The table does not exist.\n\nSuggested Fix: Create the **packages** table in Supabase.`;
+      const errorMsg = `❌ Database Error\n\nTable: packages\n\nReason: The table does not exist.\n\nSuggested Fix: Create the **packages** table in Supabase.`;
       window.alert(errorMsg);
       throw new Error(errorMsg);
     }
@@ -653,7 +579,7 @@ export const validatePackagesDatabase = async (operation: 'SELECT' | 'INSERT' | 
     const { error: colError } = await supabaseClient.from('packages').select(col).limit(0);
     if (colError) {
       if (colError.code === '42703' || colError.message?.toLowerCase().includes('column') || colError.message?.toLowerCase().includes('does not exist')) {
-        const errorMsg = ` Database Error\n\nTable: packages\n\nMissing Column: ${col}\n\nReason: The column does not exist in the Supabase database.\n\nSuggested Fix: Create the column: ${col} in the table: packages`;
+        const errorMsg = `❌ Database Error\n\nTable: packages\n\nMissing Column: ${col}\n\nReason: The column does not exist in the Supabase database.\n\nSuggested Fix: Create the column: ${col} in the table: packages`;
         window.alert(errorMsg);
         throw new Error(errorMsg);
       }
@@ -663,39 +589,39 @@ export const validatePackagesDatabase = async (operation: 'SELECT' | 'INSERT' | 
   // 3. For INSERT/UPDATE operations, check the payload
   if (operation === 'INSERT' || operation === 'UPDATE') {
     if (!payload) {
-      const errorMsg = ` Mapping Error\n\nReason: Payload is missing.`;
+      const errorMsg = `❌ Mapping Error\n\nReason: Payload is missing.`;
       window.alert(errorMsg);
       throw new Error(errorMsg);
     }
 
     if (operation === 'INSERT') {
       if (!payload.package_id) {
-        const errorMsg = ` Mapping Error\n\nField: Package ID\n\nReason: The frontend is not sending this value to Supabase.\n\nSuggested Fix: Include the **package_id** field in the INSERT and UPDATE payload.`;
+        const errorMsg = `❌ Mapping Error\n\nField: Package ID\n\nReason: The frontend is not sending this value to Supabase.\n\nSuggested Fix: Include the **package_id** field in the INSERT and UPDATE payload.`;
         window.alert(errorMsg);
         throw new Error(errorMsg);
       }
     }
 
     if (!payload.name) {
-      const errorMsg = ` Mapping Error\n\nField: Package Name\n\nReason: The frontend form is not sending this value to Supabase.\n\nSuggested Fix: Include the **name** field in the INSERT and UPDATE payload.`;
+      const errorMsg = `❌ Mapping Error\n\nField: Package Name\n\nReason: The frontend form is not sending this value to Supabase.\n\nSuggested Fix: Include the **name** field in the INSERT and UPDATE payload.`;
       window.alert(errorMsg);
       throw new Error(errorMsg);
     }
 
     if (payload.price === undefined || payload.price === null) {
-      const errorMsg = ` Mapping Error\n\nField: Price\n\nReason: The frontend form is not sending this value to Supabase.\n\nSuggested Fix: Include the **price** field in the INSERT and UPDATE payload.`;
+      const errorMsg = `❌ Mapping Error\n\nField: Price\n\nReason: The frontend form is not sending this value to Supabase.\n\nSuggested Fix: Include the **price** field in the INSERT and UPDATE payload.`;
       window.alert(errorMsg);
       throw new Error(errorMsg);
     }
 
     if (!payload.status) {
-      const errorMsg = ` Mapping Error\n\nField: Status\n\nReason: The frontend form is not sending this value to Supabase.\n\nSuggested Fix: Include the **status** field in the INSERT and UPDATE payload.`;
+      const errorMsg = `❌ Mapping Error\n\nField: Status\n\nReason: The frontend form is not sending this value to Supabase.\n\nSuggested Fix: Include the **status** field in the INSERT and UPDATE payload.`;
       window.alert(errorMsg);
       throw new Error(errorMsg);
     }
 
     if (payload.description === undefined || payload.description === null) {
-      const errorMsg = ` Mapping Error\n\nField: Description\n\nReason: The frontend form is not sending this value to Supabase.\n\nSuggested Fix: Include the **description** field in the INSERT and UPDATE payload.`;
+      const errorMsg = `❌ Mapping Error\n\nField: Description\n\nReason: The frontend form is not sending this value to Supabase.\n\nSuggested Fix: Include the **description** field in the INSERT and UPDATE payload.`;
       window.alert(errorMsg);
       throw new Error(errorMsg);
     }
@@ -905,7 +831,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.alert = (message: string) => {
       let title = "Notification";
       const lower = message.toLowerCase();
-      if (message.startsWith("") || lower.includes("success") || lower.includes("successfully") || lower.includes("completed") || lower.includes("congrat")) {
+      if (message.startsWith("🎉") || lower.includes("success") || lower.includes("successfully") || lower.includes("completed") || lower.includes("congrat")) {
         title = "Operation Successful";
       } else if (lower.includes("fail") || lower.includes("error") || lower.includes("invalid") || lower.includes("required") || lower.includes("mandatory") || lower.includes("not allow")) {
         title = "Action Required";
@@ -3597,7 +3523,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       project_id: leadId,
       task_id: 'New Lead Inflow',
       notification_type: 'New Lead Created',
-      title: ' New Lead Created',
+      title: '🆕 New Lead Created',
       message: `A new Lead (${leadId}) has been created for ${newLead.customer_name}. Reference Source: ${newLead.reference_source || 'Direct'}.`,
       recipient_role: 'Business Owner'
     });
@@ -3716,28 +3642,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     const previousStage = targetLead ? (targetLead.current_status || targetLead.status || 'New Lead') : 'New Lead';
-    const prevRank = getStatusRank(previousStage);
     const timestamp = new Date().toISOString();
 
     // Normalize different spellings of Follow Up to prevent fragmented sources of truth
     const normalizedStatus = (status as string === 'Follow-up' || status as string === 'Follow-Up' || status === 'Follow Up') ? 'Follow Up' : status;
-    const newRank = getStatusRank(normalizedStatus);
-
-    // Forward-only rule:
-    // If previousStage is already Lost Lead, and normalizedStatus is not Lost Lead, preserve Lost Lead
-    // If prevRank > newRank (e.g. lead is already Order Confirmed, Editing Completed, etc.), preserve previousStage!
-    let effectiveStatus = normalizedStatus;
-    if (prevRank === 999 && newRank !== 999) {
-      console.warn(`[FORWARD-ONLY STATUS] Preserving terminal "Lost Lead" status for lead ${leadId}`);
-      effectiveStatus = previousStage as CurrentStage;
-    } else if (prevRank > newRank) {
-      console.warn(`[FORWARD-ONLY STATUS] Prevented status downgrade in follow-up for lead ${leadId} from "${previousStage}" (rank ${prevRank}) to "${normalizedStatus}" (rank ${newRank}). Retaining "${previousStage}".`);
-      effectiveStatus = previousStage as CurrentStage;
-    }
 
     const updatesPayload: any = {
-      status: effectiveStatus,
-      current_status: effectiveStatus,
+      status: normalizedStatus,
+      current_status: normalizedStatus,
       budget: quotationAmount !== undefined ? quotationAmount : targetLead?.budget,
       remarks: `${targetLead?.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
       updated_by: currentUserName,
@@ -3805,8 +3717,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (ld.lead_id === leadId) {
           const updatedLd = {
             ...ld,
-            status: effectiveStatus,
-            current_status: effectiveStatus,
+            status: normalizedStatus,
+            current_status: normalizedStatus,
             budget: quotationAmount !== undefined ? quotationAmount : ld.budget,
             remarks: `${ld.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${callNotes}. ${negotiationNotes ? 'Neg Notes: ' + negotiationNotes : ''}. Next follow-up: ${nextFollowUpDate}`,
             follow_up_notes: callNotes || undefined,
@@ -3814,7 +3726,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updated_by: currentUserName,
             updated_at: timestamp
           };
-          if (effectiveStatus === 'Lost Lead') {
+          if (normalizedStatus === 'Lost Lead') {
              const reasonVal = callNotes || '';
              const notesVal = negotiationNotes || '';
              (updatedLd as any).Lost_Reason = reasonVal;
@@ -4364,7 +4276,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       project_id: orderId,
       task_id: 'Operations Assignment',
       notification_type: 'Event Scheduled',
-      title: ' Event Scheduled',
+      title: '📅 Event Scheduled',
       message: `${eventName} Event has been scheduled. Customer: ${customerName}. Event: ${eventName}. Date: ${formattedDate}.`,
       recipient_role: 'Sales Team'
     });
@@ -4374,7 +4286,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       project_id: orderId,
       task_id: 'Operations Assignment',
       notification_type: 'Event Scheduled',
-      title: ' Event Scheduled',
+      title: '📅 Event Scheduled',
       message: `${eventName} Event has been scheduled. Customer: ${customerName}. Event: ${eventName}. Date: ${formattedDate}.`,
       recipient_role: 'Business Owner'
     });
@@ -4431,9 +4343,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           const preparedLead = {
             ...targetLead,
             lead_source: targetLead.lead_source || 'Direct',
-            email: targetLead.email || '-',
+            email: targetLead.email || '—',
             event_time: targetLead.event_time || '12:00',
-            event_location: targetLead.event_location || '-',
+            event_location: targetLead.event_location || '—',
             budget: targetLead.budget !== undefined && targetLead.budget !== null ? targetLead.budget : 0,
             sales_person: targetLead.sales_person || 'Sales Team'
           };
@@ -4452,7 +4364,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           const preparedOrder = {
             ...targetOrder,
             event_time: targetOrder.event_time || '12:00',
-            event_location: targetOrder.event_location || '-',
+            event_location: targetOrder.event_location || '—',
             package_name: targetOrder.package_name || 'Custom Shoot Package',
             balance_amount: targetOrder.balance_amount !== undefined && targetOrder.balance_amount !== null ? targetOrder.balance_amount : 0,
             sales_person: targetOrder.sales_person || 'Sales Team'
@@ -4747,7 +4659,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       project_id: orderId,
       task_id: 'Operations Completion',
       notification_type: 'Event Completed',
-      title: ' Event Completed',
+      title: '✅ Event Completed',
       message: `${eventName} coverage has been completed. Customer: ${customerName}.`,
       recipient_role: 'Operations Team'
     });
@@ -4756,7 +4668,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       project_id: orderId,
       task_id: 'Operations Completion',
       notification_type: 'Event Completed',
-      title: ' Event Completed',
+      title: '✅ Event Completed',
       message: `${eventName} coverage has been completed. Customer: ${customerName}.`,
       recipient_role: 'Business Owner'
     });
@@ -4767,7 +4679,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       project_id: orderId,
       task_id: 'Editing Ready',
       notification_type: 'New Event Ready for Editing',
-      title: ' New Event Ready for Editing',
+      title: '🎥 New Event Ready for Editing',
       message: `Raw footage for "${eventName}" (Order: ${orderId}) is ready for editing. Customer: ${customerName}.`,
       recipient_role: 'Production Team'
     });
@@ -5527,7 +5439,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         project_id: orderId,
         task_id: 'Delivery',
         notification_type: 'Project Delivered',
-        title: ' Project Delivered',
+        title: '✅ Project Delivered',
         message: `Customer deliverables for "${orderName}" (Order: ${orderId}) have been completed and delivered successfully.`,
         recipient_role: 'Sales Team'
       });
@@ -5536,7 +5448,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         project_id: orderId,
         task_id: 'Delivery',
         notification_type: 'Project Delivered',
-        title: ' Project Delivered',
+        title: '✅ Project Delivered',
         message: `Customer deliverables for "${orderName}" (Order: ${orderId}) have been completed and delivered successfully.`,
         recipient_role: 'Business Owner'
       });
@@ -5751,7 +5663,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }));
     }
 
-    logActivity(`Recorded payment of Rs. ${actualAmountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, currentStage, currentStage);
+    logActivity(`Recorded payment of ₹${actualAmountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, currentStage, currentStage);
   };
 
   // User Management Admin features
@@ -6232,7 +6144,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     } catch (err: any) {
       console.error(err);
-      window.alert(` Database Error\n\nTable: packages\n\nReason: ${err.message || err}`);
+      window.alert(`❌ Database Error\n\nTable: packages\n\nReason: ${err.message || err}`);
       throw err;
     }
   };
@@ -6311,7 +6223,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     } catch (err: any) {
       console.error(err);
-      window.alert(` Database Error\n\nTable: packages\n\nReason: ${err.message || err}`);
+      window.alert(`❌ Database Error\n\nTable: packages\n\nReason: ${err.message || err}`);
       throw err;
     }
   };
@@ -6805,7 +6717,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const finalQuoteNum = result.r_quotation_number || newQuote.quotation_number;
         const action = result.r_action || 'INSERT';
 
-        console.log(`v Database transaction succeeded via RPC [Action: ${action}]! Final Quote Number: ${finalQuoteNum}`);
+        console.log(`✔ Database transaction succeeded via RPC [Action: ${action}]! Final Quote Number: ${finalQuoteNum}`);
 
         const finalQuoteObj = {
           ...newQuote,
@@ -7218,26 +7130,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
     
     const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
-    const oldRank = getStatusRank(oldStatus);
     
     const anyStatus = finalUpdates.status || finalUpdates.current_status;
     if (anyStatus) {
-      const newRank = getStatusRank(anyStatus);
-      // Forward-only rule:
-      // If the lead is already Lost Lead, keep Lost Lead unless explicitly set to Lost Lead.
-      // If oldRank > newRank (i.e. would move status backward), preserve the existing status!
-      if (oldRank === 999 && newRank !== 999) {
-        console.warn(`[FORWARD-ONLY STATUS] Preserving terminal "Lost Lead" status for lead ${leadId}`);
-        finalUpdates.status = oldStatus as CurrentStage;
-        finalUpdates.current_status = oldStatus;
-      } else if (oldRank > newRank) {
-        console.warn(`[FORWARD-ONLY STATUS] Prevented status downgrade for lead ${leadId} from "${oldStatus}" (rank ${oldRank}) to "${anyStatus}" (rank ${newRank}). Retaining "${oldStatus}".`);
-        finalUpdates.status = oldStatus as CurrentStage;
-        finalUpdates.current_status = oldStatus;
-      } else {
-        finalUpdates.status = anyStatus as CurrentStage;
-        finalUpdates.current_status = anyStatus;
-      }
+      finalUpdates.status = anyStatus as CurrentStage;
+      finalUpdates.current_status = anyStatus;
     }
     const res = await pushUpdate('leads', 'lead_id', leadId, { ...finalUpdates, updated_at: timestamp });
     if (!res?.success) {
@@ -7830,10 +7727,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                   let message = '';
                   
                   if (role === 'Sales Team' || role === 'Business Owner') {
-                    title = ` Event Reminder (${t.label})`;
+                    title = `📅 Event Reminder (${t.label})`;
                     message = `Event scheduled for **${customerName}** (${eventType}) is coming up in ${t.days === 0 ? 'TODAY' : t.days + ' days'} (Date: ${cleanEventDateStr}).`;
                   } else if (role === 'Operations Team') {
-                    title = ` Event Schedule Reminder (${t.label})`;
+                    title = `📅 Event Schedule Reminder (${t.label})`;
                     message = `Operations Reminder: Event for **${customerName}** is scheduled in ${t.days === 0 ? 'TODAY' : t.days + ' days'}. Please verify staff assignments and kit readiness!`;
                   }
 
