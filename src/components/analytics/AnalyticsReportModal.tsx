@@ -253,15 +253,30 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             });
           }
         } else {
-          return orders.map(o => ({
-            "Order ID": o.order_id || '-',
-            "Customer Name": o.customer_name || 'CRM Client',
-            "Event Type": o.event_type === 'Other' ? (o.custom_event_name || o.custom_event_type || 'Other') : (o.event_type || '-'),
-            "Event Date": o.event_date || '-',
-            "Amount": o.quotation_amount || 0,
-            "Status": o.current_stage || '-'
-          })).filter(row => {
-            if (cardName === 'Completed Events') return row["Status"] === 'Event Completed' || row["Status"] === 'Closed' || row["Status"] === 'Delivered';
+          const uniqueOrders = new Map();
+          orders.forEach(o => {
+            const id = o.order_id || o.lead_id;
+            if (id && !uniqueOrders.has(id)) {
+              uniqueOrders.set(id, o);
+            } else if (!id) {
+              uniqueOrders.set(Math.random().toString(), o);
+            }
+          });
+          
+          return Array.from(uniqueOrders.values()).map(o => {
+            const prod = production.find(p => p.tracking_id === o.order_id || p.order_id === o.order_id || p.tracking_id === o.lead_id || p.original_lead_id === o.lead_id);
+            return {
+              "Order ID": o.order_id || '-',
+              "Customer Name": o.customer_name || 'CRM Client',
+              "Event Type": o.event_type === 'Other' ? (o.custom_event_name || o.custom_event_type || 'Other') : (o.event_type || '-'),
+              "Event Date": o.event_date || '-',
+              "Amount": o.quotation_amount || 0,
+              "Status": o.current_stage || '-',
+              "_isCompleted": ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed', 'Order Closed', 'Project Closed', 'Closed'].includes(o.current_stage) || 
+                              (prod && ['Client Acceptance', 'Delivered', 'Project Delivered', 'Completed', 'Project Completed', 'Order Closed', 'Project Closed', 'Closed'].includes(prod.editing_status))
+            };
+          }).filter(row => {
+            if (cardName === 'Completed Events') return row._isCompleted;
             if (cardName === 'Upcoming Events') return row["Event Date"] >= TODAY_REF;
             if (cardName === 'Ongoing Events') return row["Event Date"] === TODAY_REF;
             if (cardName === 'Cancelled Events') return row["Status"] === 'Closed' && row["Amount"] === 0;
@@ -334,12 +349,12 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
   // 5. Exporters
   const downloadCSV = () => {
     if (filteredRows.length === 0) return;
-    const headers = Object.keys(filteredRows[0]);
+    const headers = Object.keys(filteredRows[0]).filter(k => !k.startsWith('_'));
     const csvRows = [
       headers.join(','), // Header row
       ...filteredRows.map(row => 
         headers.map(fieldName => {
-          const val = row[fieldName];
+          const val = row[fieldName as keyof typeof row];
           return `"${String(val ?? '').replace(/"/g, '""')}"`;
          }).join(',')
       )
@@ -357,12 +372,12 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
   const downloadExcel = () => {
     if (filteredRows.length === 0) return;
     try {
-      const headers = Object.keys(filteredRows[0]);
+      const headers = Object.keys(filteredRows[0]).filter(k => !k.startsWith('_'));
       const worksheetData = filteredRows.map(row => {
         const obj: { [key: string]: any } = {};
         headers.forEach(h => {
           const cleanHeading = h.replace(/_/g, ' ').toUpperCase();
-          obj[cleanHeading] = row[h];
+          obj[cleanHeading] = row[h as keyof typeof row];
         });
         return obj;
       });
@@ -730,7 +745,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-zinc-850 bg-zinc-900 text-zinc-400 font-mono text-[10px] uppercase tracking-wide">
-                      {Object.keys(filteredRows[0]).map((header) => (
+                      {Object.keys(filteredRows[0]).filter(k => !k.startsWith('_')).map((header) => (
                         <th key={header} className="p-3 font-extrabold ">
                           {header.replace(/_/g, ' ')}
                         </th>
@@ -740,8 +755,8 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
                   <tbody className="divide-y divide-zinc-900 text-zinc-300 font-mono text-[11px] ">
                     {filteredRows.map((row, rIdx) => (
                       <tr key={rIdx} className="hover:bg-zinc-900/40 transition-colors">
-                        {Object.keys(row).map((header, cIdx) => {
-                          const val = row[header];
+                        {Object.keys(row).filter(k => !k.startsWith('_')).map((header, cIdx) => {
+                          const val = row[header as keyof typeof row];
                           // Custom styles for specific values
                           let styling = "p-3 font-sans text-zinc-350";
                           if (header.toLowerCase() === 'id' || header.toLowerCase() === 'order_id') {
