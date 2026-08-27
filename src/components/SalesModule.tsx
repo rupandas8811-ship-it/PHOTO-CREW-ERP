@@ -11603,4 +11603,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     ? 'bg-slate-800 text-slate-500 border-slate-850 cursor-not-allowed opacity-50 shadow-none'
                     : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-500/30 cursor-pointer'
                 }`}
-              
+              >
+                {isSavinxœJçRÀ ö
+êEùÉ©ÅÅ™yézzzêXÔX)”gV%¥—¤(Ø(cQ6È/µ¢›~	êÁ‰e©
+j
+Îùy%™y¥©êµh
+mô“JKJòóì¸PES2Ë…Ð4Fç•æäÀLC’†35­¹j­¹    ÿÿ "æ3‹
