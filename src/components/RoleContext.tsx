@@ -7130,11 +7130,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
     
     const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
+    const isPrevConfirmed = [
+      'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned', 
+      'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Start', 
+      'Event Ended', 'Event End', 'Event Completed', 'Event Complete', 'Footage Handover', 
+      'Equipment Handover', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 
+      'Assigned Editor', 'Editor Assigned', 'Editing Started', 
+      'Editing In Progress', 'Internal QC Review', 'Customer Review', 'Client Review Sent', 
+      'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 
+      'Revision', 'Client Acceptance', 'Final Approval', 'Approved', 'Ready for Delivery', 
+      'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
+    ].includes(oldStatus) || (prevLead as any)?.booking_status === 'Confirmed';
     
     const anyStatus = finalUpdates.status || finalUpdates.current_status;
     if (anyStatus) {
-      finalUpdates.status = anyStatus as CurrentStage;
-      finalUpdates.current_status = anyStatus;
+      if (isPrevConfirmed && !['Lost Lead', 'Lead Lost'].includes(anyStatus)) {
+        finalUpdates.status = 'Order Confirmed' as CurrentStage;
+        finalUpdates.current_status = 'Order Confirmed';
+        finalUpdates.booking_status = 'Confirmed';
+      } else {
+        finalUpdates.status = anyStatus as CurrentStage;
+        finalUpdates.current_status = anyStatus;
+      }
+    } else if (isPrevConfirmed) {
+      finalUpdates.status = 'Order Confirmed' as CurrentStage;
+      finalUpdates.current_status = 'Order Confirmed';
+      finalUpdates.booking_status = 'Confirmed';
     }
     const res = await pushUpdate('leads', 'lead_id', leadId, { ...finalUpdates, updated_at: timestamp });
     if (!res?.success) {
