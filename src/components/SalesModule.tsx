@@ -11568,7 +11568,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {/* Sticky Footer */}
-            <div className="flex justify-between items-center gap-3 border-t border-slate-800/80 py-2 px-4 sm:px-5 bg-slate-950/40 backdrop-blur-md shrink-0">
+            <div className="flex justify-between items-center gap-3 border-t border-slate-800/80 py-2 px-4 sm:px-5 bg-slate-955/40 backdrop-blur-md shrink-0">
               {/* Back or Cancel */}
               <div className="flex items-center gap-2">
                 {wizardStep > 1 ? (
@@ -11592,7 +11592,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <div />
                 )}
               </div>
-            </div>
-</div>
-  );
-};
+
+              {/* Next or Save */}
+              <button
+                type="button"
+                onClick={handleWizardNext}
+                disabled={isSaving}
+                className={`px-5.5 py-2 text-xs font-bold text-white rounded-xl shadow-lg border transition-all ${
+                  isSaving
+                    ? 'bg-slate-800 text-slate-500 border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                    : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-500/30 cursor-pointer'
+                }`}
+              >
+                {isSavinxœJçRÀ ö
+êEùÉ©ÅÅ™yézzzêXÔX)”gV%¥—¤(Ø(cQ6È/µ¢›~	êÁ‰e©
+j
+Îùy%™y¥©êµh
+mô“JKJòóì¸PES2Ë…Ğ4Fç•æäÀLC’†35­¹j­¹    ÿÿ "æ3‹

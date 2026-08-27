@@ -9587,61 +9587,51 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
-{(() => {
-  const prod = assignedEditorsModalProd;
-  const orderId =
-    (prod as any)?.order_id ||
-    (prod as any)?.tracking_id ||
-    (prod as any)?.production_id;
+                  {(() => {
+                    const prod = assignedEditorsModalProd;
+                    const orderId =
+                      (prod as any)?.order_id ||
+                      (prod as any)?.tracking_id ||
+                      (prod as any)?.production_id;
 
-  const { order, lead } = resolveOrderAndLead(prod);
+                    const { order, lead } = resolveOrderAndLead(prod);
 
-  const eventsList =
-    (prod as any)?.events &&
-    Array.isArray((prod as any)?.events)
-      ? (prod as any).events
-      : (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
-        ? lead.events
-        : (order?.events &&
-           Array.isArray(order.events) &&
-           order.events.length > 0)
-          ? order.events
-          : [];
+                    const eventsList =
+                      (prod as any)?.events &&
+                      Array.isArray((prod as any)?.events)
+                        ? (prod as any).events
+                        : (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
+                          ? lead.events
+                          : (order?.events &&
+                             Array.isArray(order.events) &&
+                             order.events.length > 0)
+                            ? order.events
+                            : [];
 
-  const getEventName = (
-    eventId: string,
-    fallbackIdx: number = 0
-  ): string => {
-    if (eventId) {
-      const found = eventsList.find(
-        (e: any) => e?.id === eventId || e?.event_id === eventId
-      );
+                    const getEventName = (
+                      eventId?: string,
+                      fallbackIdx: number = 0
+                    ): string => {
+                      if (eventId) {
+                        const found = eventsList.find(
+                          (e: any) => e?.id === eventId || e?.event_id === eventId
+                        );
 
-      if (found) {
-        return (
-          found.event_name ||
-          found.event_type ||
-          `Event ${fallbackIdx + 1}`
-        );
-      }
-    }
+                        if (found) {
+                          return (
+                            found.event_name ||
+                            found.event_type ||
+                            `Event ${fallbackIdx + 1}`
+                          );
+                        }
 
-    const match = eventId?.match(/EVT-(\d+)/i);
-
-    if (match) {
-      const idx = parseInt(match[1], 10) - 1;
-
-      if (eventsList[idx]) {
-        return (
-          eventsList[idx].event_name ||
-          eventsList[idx].event_type ||
-          `Event ${idx + 1}`
-        );
-      }
-    }
-
-    return `Event ${fallbackIdx + 1}`;
-  };
-
-  return null;
-})()}
+                        const match = eventId.matchxœÔYínÛÈý¿O1p‹•%Ê²³µc9ÈzÂ@²	ºÝ´€k8#r$ÍŠœ†CK^G@¢OÐGë“ôÎ)‘âðCŽ³EØ‡óyï=çž;vú—ÿêzÏœßuû´ûòTñ¡äDXú³.z¨ì„ÏY,Vh„XÄäŠI3îzpó¼.rÑ z³¹#LÆoi,¯aª›ú%D&‚!§¶B;³öôó-ÃAŸ??j¬¼_´ûéRuF|PfùÖŸjÔ8¡uå»ª7ëo*^¤VÛìn‚ÃpŒýùU¶Kû>Ö/íÏ¼|ÇtÊ"e/‡Tr‘oüü]ßt{J"Ÿ"Ìî»htŽ*vêàÞBð ñ%åì–h4‚è‚–æjOØ&à" âª~”îóèŽZáXŸïUO
+°.eÓ¦­æ(³‹¾ý¶b0?lzþ,ñd²5»ƒ»ÖAÝ
+w*Ù	›Ê™Þ•WÉF0žIq^ág2¨…‡ÏÃŸ˜¾¯Æ‚îâ8þ	À=:X¸/$+éúp"Ì÷ß(óÝ#Ï;¨™¥nŸýÄQ¬ŒVF"’É[ôêÙ—Aõäð¶ÒDìPòÔ;ŽŒð"ƒÝsÅÕ§ˆ%Ñ˜Á*¿|ë“)«´§D^f QC‰4ÐSV’Xš â_!ÇØl„~à<$˜UGîÅDÜ&=èæ˜Pƒ)’Z†‘àvÂÃ`3	<K~kæm5£ÈžOJ›IgÕiDÍÓ‰¥ w ¥u}hät3P+H=bõ²yã²ª“e½ý",s™ó­^×¾àwÜ+5‚Þ‘Ís§S¿
+0Ÿ\ExJô*~KÁ:>¢„Qk2Ô½Ìôúë-U#næÓGµäpš“ûÑîá«h_çÙfÆÁ §ã©a˜Ïëy]˜ÅTmÚã">hàÀ"Ñ„3éBÈÓ$2üµœAP£IHV¾DqFnS¼pkg‡ùc`Ðü
+K÷ÍàGð„4ÜI†Ž@Y@§Ü=ö<Ï ¾æ®w€ú-&?KirÌôU
+C.6×mêTÕYŸõõÈGÓ¦Õn[®Â!Œ9ã¦ýz0X¬nŒõ°á¼º„ó¥[kÚ ˆ„€ Ç!É5×j7ß:?nßtžvç{F×Ã§Å
+bkqïz½ã,Ä2xà€œ[’Å‚ÇejÉ]RàLÓeü	JµAo;:ôdÔw{’¿åK".`Z`@0x˜$v:@&‹HÒQÔÛ~XjòNn?¯P@D€¸p(õž9xÖµàKÿzzÆ5NÛoèp*HïyÞ%ó‡ÍŽ‹•”(Ö´”ºíÙæ ê¨ŒVÿäyE·3µnþÞk˜výi]Êx9+e”U(©§g²&‚ÈIªW¥p)P™™¸öt2¨ k9’KÁnC~]¼7œRïýbFüù~H‹IlIlXÚVcÆÚXä<3a³õ˜½º
+ ¿Ÿ7tÜWdú£…2Lµ2Èýy¥Ý³ìaôT›>¡ÍŸ8Q?J5ätr<âF[Í™Œr³Ö3úH, DÜŽCÌæuu®ùŽçÂ 2‡‰D4ÌÙËÔÙ÷˜iB0ZxÛ¦4˜Š?¡â»B¼šÖkW—+˜áP›¿ª{çGJ–m#*Ø‚ê…‚çþù¯ÿšb=W­µˆõq"%gÍáïèÀtnAÎ.BêÏGŽ¾Åˆ‰ü È8ïƒÚÛ;àÐiŽê£+È_Dxš+AŸ·§‹e°SÔ\ùtÚÌ˜SöÙ¼­J€v³oŠš6Ó›ÏS¨ÔÔ%ƒ“>7kÂum šÏ“«édÍC«8ÙTêE²§hZª{ä'"æÂ]pªöÿŒvO¾œÈC[:3ÐûÚœfü·Šn{ÌÅªµ}Ýu,Û€éÇ<¸ß]š6‹Ígý€Þ/¤úÏf*ô†söÏúÅEÎ`L‘š²ˆ”)w’W€Çž%ÓþšÄ’Nî]Ð^%v¯bèzF.3pV-]jú‹õÑÔ?(–„¡Å~ù“­àh ÁÃ‚-^­k@ñìújfQ•ç‰=AZP¾1)9×“Ô»•…Çîæò^À‡¿\~¼ºüü}ÿþºz÷úÏ—èÝû_¿ÍE$ÜÜ¦®}·8Ü“	]…Q>q=ôpè¡wSé£¯©òÑŸ÷O ¢ào øZáFÂÒ¥Â†šÉ¥¬H»{È‡£¥ø8É¹ïü·4w^¹KÝ \?	ùÒÑ  Å3póJDýRŽÕCfîõ‰w7Ûé5øÛðsýÏ÷‚A­­ÆD.	aeíD@ÚjåÂë“bJ3—]ÊìUb±´Tßº0‹Æ*oYÛEz‹Ž.ò·è&)XÈÌNÅg³aiÿq”»ŸËßNoO´Ç=uz\Šñ^*;j.Š-ƒ6ÂLA¤&e×Ã1Ð„ù%P„Ã|‚úwí
+ÙÆl	Ê2nGà}µýí¬S½Ë³þlXN^–8.ñKkïZ]SÚ–7žiq›=›‹Û}ÊÙ]‹Ç×˜C•Ý[é†ÓzY!Ša†òÿ–J'´Â¬¦H†Ygêw…¾4}–Eo€¥+©ÂVW—M_›¯BY”=¼¹(Ë9ÓVY'@(ïh…¼*éï
+““‚ié¿]p8²š¿J˜[j™¶¨sç`›bq"m”½#6Ò Q¦’.ÀÀv5vF£ié±ð÷=ïº'J_6mî`©xq: ÕZRðñ¯Ä—à[&1eÕøÛhÌTiDÁîrýÇX{ø¥Š=…kIŠ¶ÊN(å‘0 $5œÏ–t7þ°£ü©j…ÖP¶	ŠS&€Ëÿ/Ë„Ü¨N×/ÿ  ÿÿ Öd¤f
