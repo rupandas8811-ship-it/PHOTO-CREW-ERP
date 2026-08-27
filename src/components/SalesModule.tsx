@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
-  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw, Folder, Download, Printer, FileSpreadsheet, Lock, Unlock, HeartCrack, Sparkles, Gift, Camera, Tag, MessageSquare, AlertTriangle, Scale, Flame, Film, FileCheck
+  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
@@ -153,23 +153,23 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 2. Check for dimension / size specifications at the start of the string:
-  // e.g. "166", "16x6", "128 Album", "166 Frame", "16  6", "12 x 18", "8x24", "8*12", "1236"
-  // If the string starts with a dimension (digits x/ digits), it is deliverable text, NOT a leading quantity!
-  const isLeadingDimension = /^\d+\s*[\*xX]\s*\d+/.test(text);
+  // e.g. "16Ã—6", "16x6", "12Ã—8 Album", "16Ã—6 Frame", "16 Ã— 6", "12 x 18", "8x24", "8*12", "12Ã—36"
+  // If the string starts with a dimension (digits x/Ã— digits), it is deliverable text, NOT a leading quantity!
+  const isLeadingDimension = /^\d+\s*[\*xXÃ—]\s*\d+/.test(text);
   if (isLeadingDimension) {
     return { qty: 1, text };
   }
 
   // 3. Check for technical specifications / units starting with numbers:
-  // e.g. "4K Cinematic Video", "8K Video", "20 Pages  2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
+  // e.g. "4K Cinematic Video", "8K Video", "20 Pages Ã— 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
   const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
   if (isUnitOrSpec) {
     return { qty: 1, text };
   }
 
   // 4. Check for leading quantity with explicit multiplier:
-  // e.g. "2 x Traditional Photos", "2  Cinematic Video", "2 * Album", "2 x 166 Frame", "2  166"
-  const multiplierMatch = text.match(/^(\d+)\s*[xX\*]\s+(.+)$/);
+  // e.g. "2 x Traditional Photos", "2 Ã— Cinematic Video", "2 * Album", "2 x 16Ã—6 Frame", "2 Ã— 16Ã—6"
+  const multiplierMatch = text.match(/^(\d+)\s*[xXÃ—\*]\s+(.+)$/);
   if (multiplierMatch) {
     const parsedQty = parseInt(multiplierMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
@@ -178,8 +178,8 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 5. Check for leading quantity followed by dimension:
-  // e.g. "2 166", "3 128 Album", "2 166 Frame"
-  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX]\s*\d+.*)$/);
+  // e.g. "2 16Ã—6", "3 12Ã—8 Album", "2 16Ã—6 Frame"
+  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xXÃ—]\s*\d+.*)$/);
   if (qtyDimensionMatch) {
     const parsedQty = parseInt(qtyDimensionMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
@@ -188,7 +188,7 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 6. Check for leading quantity with space followed by item name:
-  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (1218)"
+  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12Ã—18)"
   const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
   if (wordMatch) {
     const parsedQty = parseInt(wordMatch[1], 10);
@@ -661,7 +661,7 @@ const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
           onClick={onDelete}
           className={`w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1 text-[16px] sm:text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 rounded-md transition-all flex items-center justify-center gap-1 border border-rose-500/20 ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          <Trash2 className="w-4 h-4 sm:hidden inline" />
+          <span className="sm:hidden">ğŸ—‘</span>
           <span className="hidden sm:inline">Delete</span>
         </button>
       </div>
@@ -836,7 +836,7 @@ const generateQuotationPDF = (
   const shootTypeStr = lead.desired_event_shoot_type || lead.shoot_type || '';
   const shootTypes = shootTypeStr ? shootTypeStr.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
   const wrapShootType = shootTypes.length > 0 
-    ? shootTypes.map((st: string) => `* ${st}`) 
+    ? shootTypes.map((st: string) => `â€¢ ${st}`) 
     : ['N/A'];  // Resolve dynamic services
   let services = [...quoteServices];
 
@@ -896,8 +896,8 @@ const generateQuotationPDF = (
       .replace(/\u00ff\u00fe/g, '')
       .replace(/\uFEFF/g, '')
       .replace(/\uFFFE/g, '');
-    cleaned = cleaned.replace(/^[\s*\-\*\u2022\u0095\x95\x96\u2013\u2014\s]+/g, '');
-    cleaned = cleaned.replace(/[Rs. \u20B9\u20b9]/g, 'Rs.');
+    cleaned = cleaned.replace(/^[\sâ€¢\-\*\u2022\u0095\x95\x96\u2013\u2014\s]+/g, '');
+    cleaned = cleaned.replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.');
     return cleaned.trim();
   };
 
@@ -1013,7 +1013,7 @@ const generateQuotationPDF = (
     'Payments are non-refundable.',
     'Crew food arrangements from client side.',
     '50% advance payment before the event.',
-    'If duration exceeds 1 hour, additional charges of Rs. 1,500 per hour will be applicable.',
+    'If duration exceeds 1 hour, additional charges of â‚¹1,500 per hour will be applicable.',
     '50% full payment on event day.',
     'Pendrive and Hard Disk are not included.',
     'Edited data will be shared via Google Drive link.'
@@ -1122,7 +1122,7 @@ const generateQuotationPDF = (
 
       while (simTermsIndex < termsToRender.length) {
         const term = termsToRender[simTermsIndex];
-        const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[Rs. \u20B9\u20b9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
+        const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
         const wrapped = doc.splitTextToSize(cleanTerm, 163);
         const termH = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
 
@@ -1631,8 +1631,8 @@ const generateQuotationPDF = (
     doc.setFontSize(10);
     doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
     const eventHeading = eventsToRender.length === 1
-      ? `EVENT - ${evObj.eventName.toUpperCase()}`
-      : `EVENT ${idx + 1} - ${evObj.eventName.toUpperCase()}`;
+      ? `EVENT â€” ${evObj.eventName.toUpperCase()}`
+      : `EVENT ${idx + 1} â€” ${evObj.eventName.toUpperCase()}`;
     doc.text(eventHeading, 15, currentY);
     currentY += 4.5;
 
@@ -1822,7 +1822,7 @@ const generateQuotationPDF = (
 
     while (termsIndex < termsToRender.length) {
       const term = termsToRender[termsIndex];
-      const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[Rs. \u20B9\u20b9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
+      const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
       const prefix = `${termsIndex + 1}. `;
       const wrapped = doc.splitTextToSize(cleanTerm, 163); // fits beautifully inside 180mm box with margins and padding
       const termHeight = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
@@ -2275,7 +2275,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const { error } = await supabaseClient.from('packages').select('category').limit(0);
         if (error && (error.code === '42703' || error.message?.toLowerCase().includes('column') || error.message?.toLowerCase().includes('does not exist'))) {
           setDbCategoryError(
-            ` Database Schema Alert: The 'category' column is missing from the 'packages' table in Supabase. Although the app is safely resolving categories using automated description serialization, categories are not stored as a dedicated column at the database level.`
+            `âŒ Database Schema Alert: The 'category' column is missing from the 'packages' table in Supabase. Although the app is safely resolving categories using automated description serialization, categories are not stored as a dedicated column at the database level.`
           );
         }
       } catch (e) {
@@ -2668,7 +2668,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   } | null>(null);
 
   const showErrorHelper = (title: string, reason: string, failedFunction: string, leadId: string, suggestedFix: string, err?: any) => {
-    console.error(` ${title}\nReason: ${reason}\nFunction: ${failedFunction}\n`, err);
+    console.error(`âŒ ${title}\nReason: ${reason}\nFunction: ${failedFunction}\n`, err);
     setErrorDetails({
       title,
       reason: err?.message || reason,
@@ -2681,19 +2681,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
   };
 
-  const isLeadAlreadyConfirmed = (lead: Lead | null | undefined): boolean => {
-    if (!lead) return false;
-    const rawStatus = String(lead.current_status || lead.status || '').trim();
-    if (getStatusRank(rawStatus) >= 50) return true;
-    if (['Confirm Order', 'Order Confirmed', 'Booking Confirm', 'Booking Confirmed', 'Confirmed'].includes(rawStatus)) return true;
-    if ((lead as any).booking_status === 'Confirmed') return true;
-    if (getLeadCurrentStatus(lead) === 'Order Confirmed') return true;
-    if (['Operations', 'Production', 'Post-Production', 'Completed'].includes(getLeadCurrentStage(lead))) return true;
-    if (orders && orders.some(o => o.lead_id === lead.lead_id && o.status !== 'Cancelled')) return true;
-    return false;
-  };
-
-  const isLeadConfirmed = Boolean(selectedLead && isLeadAlreadyConfirmed(selectedLead));
+  const isLeadConfirmed = selectedLead
+    ? (['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(selectedLead.status || '') ||
+       (selectedLead as any).current_status === 'Order Confirmed' ||
+       (selectedLead as any).booking_status === 'Confirmed' ||
+       getLeadCurrentStatus(selectedLead) === 'Order Confirmed' ||
+       ['Operations', 'Production', 'Post-Production', 'Completed'].includes(getLeadCurrentStage(selectedLead)) ||
+       (orders && orders.some(o => o.lead_id === selectedLead.lead_id && o.status !== 'Cancelled')))
+    : false;
 
   const isApprovedUnlocked = selectedLead
     ? (selectedLead.quotation_locked === false ||
@@ -3265,7 +3260,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     "1. Payments are non-refundable.\n" +
     "2. Crew food arrangements from client side.\n" +
     "3. 50% advance payment before the event.\n" +
-    "4. If duration exceeds 1 hour, additional charges of Rs. 1,500 per hour will be applicable.\n" +
+    "4. If duration exceeds 1 hour, additional charges of â‚¹1,500 per hour will be applicable.\n" +
     "5. 50% full payment on event day.\n" +
     "6. Pendrive and Hard Disk are not included.\n" +
     "7. Edited data will be shared via Google Drive link."
@@ -4324,7 +4319,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleGenerateQuote = async (isEdit: boolean): Promise<string | null> => {
     setIsSaving(true);
-    console.log(" Starting quotation generation...");
+    console.log("âœ” Starting quotation generation...");
     try {
       const effName = getEffectiveSalesStaffName();
       const effMobile = getEffectiveSalesStaffMobile();
@@ -4334,7 +4329,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const leadObj = getLeadInfoForQuote(isEdit);
       const leadIdForError = leadObj?.lead_id || createdLeadId || 'UNKNOWN';
 
-      console.log(" Validating form...");
+      console.log("âœ” Validating form...");
       const activePkgs = getSelectedPkgsInfo(isEdit);
 
       const missingFields = validateLeadForQuotation(leadObj, activePkgs);
@@ -4374,7 +4369,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const generatedQuotNum = existingQuotation ? existingQuotation.quotation_number : `QT-${dateStr}-${randomFour}`;
       const quotNum = activeQuoteNum || generatedQuotNum;
       
-      console.log(` Creating/Updating quotation ${quotNum}...`);
+      console.log(`âœ” Creating/Updating quotation ${quotNum}...`);
       const qId = existingQuotation ? existingQuotation.quotation_id : ('QT-' + Math.random().toString(36).substring(2, 9).toUpperCase());
       
       const activePkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
@@ -4437,9 +4432,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableDeliverables: editableDeliverables
       };
 
-      console.log(" Saving to Supabase...");
+      console.log("âœ” Saving to Supabase...");
       const finalQuoteNum = await addQuotation(standardQuotation);
-      console.log(` Quotation saved successfully. Confirmed Quotation Number: ${finalQuoteNum}`);
+      console.log(`âœ” Quotation saved successfully. Confirmed Quotation Number: ${finalQuoteNum}`);
       setActiveQuoteNum(finalQuoteNum);
 
       if (isEdit) {
@@ -4495,16 +4490,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
 
         const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
-        const currentLeadStatus = leadObj.current_status || leadObj.status || 'New Lead';
-        const targetQuoteStatus: CurrentStage = (getStatusRank(currentLeadStatus) < getStatusRank('Quotation Sent'))
-          ? ('Quotation Sent' as CurrentStage)
-          : (currentLeadStatus as CurrentStage);
 
         setWizardLeadData(prev => ({
           ...prev,
           budget: finalAmt,
           final_quoted_amount: finalAmt,
-          status: targetQuoteStatus,
+          status: 'Quotation Sent' as CurrentStage,
           remarks: updatedRemarks,
           deliverables: activeDeliverablesText,
           deliverables_description: activeDeliverablesText,
@@ -4514,7 +4505,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }));
         await updateLead(leadObj.lead_id, {
           budget: finalAmt,
-          status: targetQuoteStatus,
+          status: 'Quotation Sent' as CurrentStage,
           package_price: finalBasePkgSum,
           deliverables_description: activeDeliverablesText,
           Team_member: activeTeamMembersText,
@@ -4538,7 +4529,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           if (!prev) return null;
           return {
             ...prev,
-            status: targetQuoteStatus,
+            status: 'Quotation Sent' as CurrentStage,
             remarks: updatedRemarks
           };
         });
@@ -4574,7 +4565,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
       }
 
-      console.log(" Process completed");
+      console.log("âœ” Process completed");
       return finalQuoteNum;
     } catch (err: any) {
       showErrorHelper(
@@ -4643,7 +4634,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleDownloadQuotePDF = async (isEdit: boolean) => {
     try {
-      console.log(" Generating PDF...");
+      console.log("âœ” Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
       
@@ -4661,7 +4652,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         quoteServices
       );
       
-      console.log(" PDF generated");
+      console.log("âœ” PDF generated");
       const pdfFileName = generateQuotationPdfFileName(leadObj);
       doc.save(pdfFileName);
       
@@ -4680,7 +4671,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSendWhatsAppQuote = async (isEdit: boolean) => {
     try {
-      console.log(" Generating PDF...");
+      console.log("âœ” Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
       const finalAmt = dynamicFinalAmt;
@@ -4699,7 +4690,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         quoteServices
       );
       
-      console.log(" PDF generated");
+      console.log("âœ” PDF generated");
       const pdfBlob = doc.output('blob');
       const blobUrl = URL.createObjectURL(pdfBlob);
       setGeneratedPDFBlobUrl(blobUrl);
@@ -4708,7 +4699,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const pdfFileName = generateQuotationPdfFileName(leadObj);
       doc.save(pdfFileName);
 
-      console.log(" Opening WhatsApp...");
+      console.log("âœ” Opening WhatsApp...");
       const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
       const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
       
@@ -4721,20 +4712,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           const eName = ev.event_name || ev.event_type || 'Event';
           const eDate = ev.event_date || 'N/A';
           const eTime = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '';
-          return `${eName}\nDate: ${eDate}${eTime ? ` | Time: ${eTime}` : ''}`;
+          return `ğŸ‰ ${eName}\nğŸ“… Date: ${eDate}${eTime ? ` | Time: ${eTime}` : ''}`;
         }).join('\n\n') + '\n';
       } else {
         const safeEventType = String(leadObj.event_type || 'Event');
         const safeEventDate = String(leadObj.event_date || 'N/A');
-        eventDetailsStr = `Event: ${safeEventType}\nEvent Date: ${safeEventDate}\n`;
+        eventDetailsStr = `ğŸ‰ Event: ${safeEventType}\nğŸ“… Event Date: ${safeEventDate}\n`;
       }
 
       const message = `Hello *${safeCustomerName}*,\n\n` +
         `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
         `Please find your quotation details below:\n\n` +
         eventDetailsStr +
-        `Event Address: ${safeEventLocation}\n` +
-        `Final Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `ğŸ“ Event Address: ${safeEventLocation}\n` +
+        `ğŸ’° Final Amount: â‚¹${finalAmt.toLocaleString('en-IN')}\n\n` +
         `Thank you.\nPhotoCrew Pictures`;
 
       const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
@@ -4753,7 +4744,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
 
       showToastMsg("Quotation downloaded and WhatsApp prepared!", "success");
-      console.log(" Process completed");
+      console.log("âœ” Process completed");
     } catch (err: any) {
       showErrorHelper(
         "WhatsApp Redirect Failed",
@@ -4862,14 +4853,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         {/* Quotation Details */}
         <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
           <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-            <FileText className="w-4 h-4 text-amber-400 inline mr-1" /> Quotation Details
+            <span>ğŸ“‹</span> Quotation Details
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Package Amount (Editable Package Base Price) */}
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5 font-mono">
-                <DollarSign className="w-4 h-4 text-emerald-400 inline mr-1" /> Package Base Price (Rs. )
+                <span>ğŸ’°</span> Package Base Price (â‚¹)
               </label>
               <input
                 type="number"
@@ -4900,7 +4891,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* Discount */}
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Quotation Discount (Rs. )
+                Quotation Discount (â‚¹)
               </label>
               <input
                 type="number"
@@ -4920,7 +4911,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* Additional Services Cost - Hidden per user request */}
             <div className="hidden">
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Additional Services Cost (Rs. )
+                Additional Services Cost (â‚¹)
               </label>
               <input
                 type="number"
@@ -4945,11 +4936,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between shadow-inner mt-2">
             <div className="space-y-0.5">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
-              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (Rs. {basePkgSum}) - Disc (Rs. {quoteDiscount || 0})</p>
+              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (â‚¹{basePkgSum}) - Disc (â‚¹{quoteDiscount || 0})</p>
             </div>
             <div className="text-right">
               <span className="text-lg font-extrabold text-amber-500 font-mono">
-                Rs. {finalAmt.toLocaleString('en-IN')}
+                â‚¹{finalAmt.toLocaleString('en-IN')}
               </span>
             </div>
           </div>
@@ -4963,7 +4954,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               disabled={isSaving}
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg transition-all border border-red-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span></span> {isSaving ? 'Processing...' : 'Download PDF Document'}
+              <span>ğŸ“„</span> {isSaving ? 'Processing...' : 'Download PDF Document'}
             </button>
 
             {/* Send WhatsApp */}
@@ -4973,7 +4964,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               disabled={isSaving}
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span></span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
+              <span>ğŸ’¬</span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
             </button>
           </div>
         </div>
@@ -5017,7 +5008,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {step3AutoSaveStatus === 'saved' && (
               <span className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                Saved 
+                Saved âœ“
               </span>
             )}
             {step3AutoSaveStatus === 'error' && (
@@ -5043,7 +5034,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   const pId = String(p.package_id || '');
                   const pName = String(p.package_name || '');
                   if (pId === 'Custom Package' || pId === 'custom_package' || pName === 'Custom Package') return false;
-                  if (pName.toLowerCase().includes('legacy') || pName.toLowerCase().includes('Rs. 0')) return false;
+                  if (pName.toLowerCase().includes('legacy') || pName.toLowerCase().includes('â‚¹0')) return false;
                   return true;
                 });
                 if (currentPkgId && currentPkgId !== 'Custom Package' && currentPkgId !== 'custom_package' && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
@@ -5054,7 +5045,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 }
                 return activePkgs.map((pkg) => (
                   <option key={pkg.package_id} value={pkg.package_id}>
-                    {pkg.package_name} (Rs. {Number(pkg.price).toLocaleString('en-IN')})
+                    {pkg.package_name} (â‚¹{Number(pkg.price).toLocaleString('en-IN')})
                   </option>
                 ));
               })()}
@@ -5064,7 +5055,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           {/* Sales Executive Details */}
           <div className="hidden bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
             <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
-              <Users className="w-4 h-4 text-indigo-400 inline mr-1" /> Sales Executive Details
+              <span>ğŸ‘¤</span> Sales Executive Details
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
@@ -5098,10 +5089,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
           </div>
 
-          {/* Single Package Base Price (Rs. ) Field (Hidden visually per request, keeping value intact internally) */}
+          {/* Single Package Base Price (â‚¹) Field (Hidden visually per request, keeping value intact internally) */}
           <div className="hidden" style={{ display: 'none' }}>
             <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
-              <DollarSign className="w-4 h-4 text-emerald-400 inline mr-1" /> Package Base Price (Rs. ) *
+              <span>ğŸ’°</span> Package Base Price (â‚¹) *
             </label>
             <input
               type="number"
@@ -5190,13 +5181,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </span>
                         {(endDateRaw || endTimeStr !== 'N/A') && (
                           <>
-                            <span className="text-slate-500">*</span>
+                            <span className="text-slate-500">â€¢</span>
                             <span>
                               End: <span className="text-slate-100 font-semibold">{endDateStr !== 'N/A' ? endDateStr : startDateStr}{endTimeStr !== 'N/A' ? ` | ${endTimeStr}` : ''}</span>
                             </span>
                           </>
                         )}
-                        <span className="text-slate-500">*</span>
+                        <span className="text-slate-500">â€¢</span>
                         <span>
                           Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
                         </span>
@@ -6026,7 +6017,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
     if (!pkgId || pkgId.trim() === '') {
       showValidationError("select_package_option", "Please select a package before continuing.");
-      showToastMsg(" Please complete all required fields before saving the package.", "error");
+      showToastMsg("âŒ Please complete all required fields before saving the package.", "error");
       return false;
     }
 
@@ -6044,18 +6035,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (wizardLeadData.status === 'Order Confirmed') {
         if (!wizardLeadData.confirmed_event_date) {
           showValidationError("input_confirmed_event_date", "Please provide Confirmed Event Date.");
-          showToastMsg(" Please complete all required fields before saving.", "error");
+          showToastMsg("âŒ Please complete all required fields before saving.", "error");
           return false;
         }
 
         if (wizardLeadData.final_amount === undefined || wizardLeadData.final_amount === null || isNaN(wizardLeadData.final_amount) || wizardLeadData.final_amount <= 0) {
           showValidationError("input_final_amount", "Please provide Final Amount.");
-          showToastMsg(" Please complete all required fields before saving.", "error");
+          showToastMsg("âŒ Please complete all required fields before saving.", "error");
           return false;
         }
         if (wizardLeadData.advance_received === undefined || wizardLeadData.advance_received === null || isNaN(wizardLeadData.advance_received)) {
           showValidationError("input_advance_received", "Please provide Advance Payment Received.");
-          showToastMsg(" Please complete all required fields before saving.", "error");
+          showToastMsg("âŒ Please complete all required fields before saving.", "error");
           return false;
         }
 
@@ -6064,12 +6055,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             const rDate = ev.reporting_date || ev.event_date || wizardLeadData.confirmed_event_date;
             if (!rDate) {
               showValidationError(`reporting_date_${ev.id}`, "Reporting Date is required.");
-              showToastMsg(" Please complete all required fields before saving.", "error");
+              showToastMsg("âŒ Please complete all required fields before saving.", "error");
               return false;
             }
             if (!ev.reporting_time) {
               showValidationError(`reporting_time_${ev.id}`, "Reporting Time is required.");
-              showToastMsg(" Please complete all required fields before saving.", "error");
+              showToastMsg("âŒ Please complete all required fields before saving.", "error");
               return false;
             }
           }
@@ -6385,7 +6376,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       console.error("Save package only failed:", err);
       setSaveErrorPopup({
         title: "Failed to save package",
-        message: "Failed to save package.\nPlease try again."
+        message: "âŒ Failed to save package.\nPlease try again."
       });
     } finally {
       setIsSaving(false);
@@ -6435,8 +6426,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           reference_source: wizardLeadData.reference_source,
           Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
           remarks: updatedRemarks,
-          status: isLeadAlreadyConfirmed(selectedLead) ? (selectedLead.current_status || selectedLead.status || 'Order Confirmed') : (getStatusRank(selectedLead.status || selectedLead.current_status) < getStatusRank('Contacted') ? 'Contacted' : (selectedLead.status || selectedLead.current_status || 'Contacted')),
-          current_status: isLeadAlreadyConfirmed(selectedLead) ? (selectedLead.current_status || selectedLead.status || 'Order Confirmed') : (getStatusRank(selectedLead.status || selectedLead.current_status) < getStatusRank('Contacted') ? 'Contacted' : (selectedLead.current_status || selectedLead.status || 'Contacted'))
+          status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.status || 'Create Quote'),
+          current_status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.current_status || selectedLead.status || 'Create Quote')
         });
 
         const newCompleted = Math.max(crmHighestStep, 1);
@@ -6710,32 +6701,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
-        if (isLeadAlreadyConfirmed(selectedLead)) {
-          try {
-            const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
-            if (linkedOrder && supabaseClient) {
-              await supabaseClient
-                .from('orders')
-                .update({
-                  package_name: packages?.find(p => p.package_id === pkgId)?.package_name || pkgId,
-                  quotation_amount: cleanFinalAmt,
-                  package_price: cleanPkgCost,
-                  total_amount: cleanFinalAmt,
-                  final_amount: cleanFinalAmt,
-                  discount_amount: cleanDiscount || 0
-                })
-                .eq('order_id', linkedOrder.order_id);
-            }
-          } catch (orderSyncErr) {
-            console.warn("Failed to sync updated quotation amounts to linked order:", orderSyncErr);
-          }
-
-          await completeApprovedUnlockRequest(selectedLead.lead_id);
-          showToastMsg("Quotation & CRM changes saved successfully.", "success");
-          setIsSaving(false);
-          return;
-        }
-
         if (wizardLeadData.status === 'Order Confirmed') {
           if (!wizardLeadData.confirmed_event_date) {
              showToastMsg("Please provide Confirmed Event Date.", "error");
@@ -6831,7 +6796,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
 
         await completeApprovedUnlockRequest(selectedLead.lead_id);
-        showToastMsg(`Quotation & CRM changes saved.`, "success");
+        showToastMsg(`âœ… Quotation & CRM changes saved.`, "success");
         setStep3FollowUpDate(selectedLead?.next_follow_up_date || '');
         setStep3FollowUpTime((selectedLead as any)?.next_follow_up_time || '');
         setStep3FollowUpNotes(selectedLead?.follow_up_notes || '');
@@ -7068,7 +7033,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setCrmWizardStep(3);
       }
 
-      showToastMsg("Event Details Saved Successfully", "success");
+      showToastMsg("âœ… Event Details Saved Successfully", "success");
     } catch (err: any) {
       console.error("Step 2 direct save failed:", err);
       showToastMsg(`Failed to save event details: ${err.message || err}`, "error");
@@ -7102,9 +7067,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const prevRank = getStatusRank(previousStatus);
 
       // Target stage:
-      // If previous status rank < getStatusRank('Quote Sent') (i.e. Create Quote or New Lead), update status to Quote Sent.
-      // If previous status rank >= getStatusRank('Quote Sent') (already Quote Sent, Quote Follow-up, Confirm Order, Lost Lead, Editing Completed), preserve existing status!
-      const targetStage: CurrentStage = (isCreateFlow || prevRank < getStatusRank('Quote Sent')) 
+      // If previous status rank < 2 (i.e. Create Quote or New Lead), update status to Quote Sent.
+      // If previous status rank >= 2 (already Quote Sent, Quote Follow-up, Confirm Order, Lost Lead), preserve existing status!
+      const targetStage: CurrentStage = (isCreateFlow || prevRank < 2) 
         ? ('Quote Sent' as CurrentStage) 
         : (previousStatus as CurrentStage);
 
@@ -7132,7 +7097,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setActiveTab('list');
       }
 
-      showToastMsg("Quotation & Follow-up saved! Status updated to Quote Sent.", "success");
+      showToastMsg("âœ… Quotation & Follow-up saved! Status updated to Quote Sent.", "success");
       setShowStep3Popup(false);
     } catch (err: any) {
       console.error("Failed to save Step 3 follow-up:", err);
@@ -7271,8 +7236,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       // Determine target status: If the current status is New Lead or empty, update to Follow Up. Otherwise preserve advanced status.
       const previousStatus = isCreateFlow ? 'New Lead' : (selectedLead ? getLeadCurrentStatus(selectedLead) : 'New Lead');
-      const prevRank = getStatusRank(previousStatus);
-      const targetStatus = (isCreateFlow || prevRank < getStatusRank('Follow Up')) ? 'Follow Up' : previousStatus;
+      const targetStatus = (previousStatus === 'New Lead' || !previousStatus) ? 'Follow Up' : previousStatus;
 
       // Update lead follow up and preserve/update status
       await updateLeadFollowUp(
@@ -7320,7 +7284,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setCrmWizardStep(3);
       }
 
-      showToastMsg("Event Details Saved Successfully", "success");
+      showToastMsg("âœ… Event Details Saved Successfully", "success");
       setShowStep2Popup(false);
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
@@ -7710,7 +7674,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const p = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
         if (p) {
           result += `Package: ${p.name}\n`;
-          result += `  Custom Price: Rs. ${(pkgPrices[id] !== undefined ? pkgPrices[id] : p.cost).toLocaleString('en-IN')}\n`;
+          result += `  Custom Price: â‚¹${(pkgPrices[id] !== undefined ? pkgPrices[id] : p.cost).toLocaleString('en-IN')}\n`;
           result += `  Deliverables: ${pkgDeliverables[id] || 'N/A'}\n`;
           result += `  Notes: ${pkgNotes[id] || 'N/A'}\n`;
         }
@@ -8032,7 +7996,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const endParts = parseDateParts(effectiveEndDate);
     if (!endParts) return null;
 
-    // Rule 3 - Check if End Date is earlier than Start Date
+    // Rule 3 â€“ Check if End Date is earlier than Start Date
     if (
       startParts.year > endParts.year ||
       (startParts.year === endParts.year && startParts.month > endParts.month) ||
@@ -8046,7 +8010,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       startParts.month === endParts.month &&
       startParts.day === endParts.day;
 
-    // Rule 1 - If Start Date and End Date are the same date
+    // Rule 1 â€“ If Start Date and End Date are the same date
     if (isSameDate) {
       const startT = parseTimeParts(startTime);
       const endT = parseTimeParts(endTime);
@@ -8059,7 +8023,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    // Rule 2 - Different Start Date & End Date (End Date > Start Date): any End Time allowed
+    // Rule 2 â€“ Different Start Date & End Date (End Date > Start Date): any End Time allowed
     return null;
   };
 
@@ -8308,11 +8272,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 const staffPaxVal = ev.staff_pax !== '' && ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : 'N/A';
 
                 const dateTimeSummary = (() => {
-                  const startPart = `${startDateStr} * ${startTimeStr}`;
+                  const startPart = `${startDateStr} â€¢ ${startTimeStr}`;
                   if (endDateRaw && endDateStr !== 'N/A') {
-                    return `${startPart} -> ${endDateStr} * ${endTimeStr}`;
+                    return `${startPart} â†’ ${endDateStr} â€¢ ${endTimeStr}`;
                   } else if (endTimeStr !== 'N/A') {
-                    return `${startPart} -> ${endTimeStr}`;
+                    return `${startPart} â†’ ${endTimeStr}`;
                   }
                   return startPart;
                 })();
@@ -8532,6 +8496,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {renderFormFields(false)}
           </div>
         ) : (
+          /* Add Another Event Button */
           <div className="flex justify-start">
             <button
               type="button"
@@ -8966,11 +8931,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleStatusSave = async () => {
     if (isSaving) return;
-    const targetLd = leads.find(l => l.lead_id === createdLeadId);
-    const existingStatus = targetLd ? (targetLd.current_status || targetLd.status) : null;
-    const existingRank = getStatusRank(existingStatus);
-    const newRank = getStatusRank(salesStatus);
-    const finalStatus = (existingStatus && existingRank > newRank) ? existingStatus : (salesStatus || existingStatus || 'New Lead');
+    const finalStatus = salesStatus || 'New Lead';
     try {
       setIsSaving(true);
 
@@ -9024,7 +8985,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             follow_up_notes: internalNotes || null,
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
       });
-      showToastMsg("Quotation created successfully.", "success");
+      showToastMsg("âœ… Quotation created successfully.", "success");
       setStep3FollowUpDate(followUpDate || '');
       setStep3FollowUpTime('');
       setStep3FollowUpNotes(internalNotes || '');
@@ -9157,30 +9118,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     if (!selectedLead || isSaving) return;
 
     if (followUpForm.status === 'Order Confirmed' || followUpForm.status === 'Confirm Order') {
-      if (isLeadAlreadyConfirmed(selectedLead)) {
-        try {
-          setIsSaving(true);
-          const currentLeadStatus = selectedLead.current_status || selectedLead.status || 'Order Confirmed';
-          await updateLeadFollowUp(
-            selectedLead.lead_id,
-            currentLeadStatus as CurrentStage,
-            followUpForm.call_notes || 'CRM updated for confirmed order',
-            followUpForm.next_follow_up_date || '',
-            Number(followUpForm.quotation_amount) || Number(selectedLead.Final_Package_Amount) || Number(selectedLead.budget) || 0,
-            followUpForm.negotiation_notes
-          );
-          setSelectedLead(prev => prev ? { ...prev, remarks: `${prev.remarks || ''}\n${followUpForm.call_notes || ''}` } : null);
-          setFollowUpForm(prev => ({ ...prev, call_notes: '', negotiation_notes: '' }));
-          showToastMsg("CRM Notes updated successfully.", "success");
-        } catch (err: any) {
-          console.error("Failed to update CRM for confirmed order:", err);
-          showToastMsg("Failed to update CRM: " + (err.message || err), "error");
-        } finally {
-          setIsSaving(false);
-        }
-        return;
-      }
-
       if (!areReportingDetailsComplete(selectedLead)) {
         openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
         return;
@@ -9269,17 +9206,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     try {
       setIsSaving(true);
-      const currentLeadStatus = selectedLead.current_status || selectedLead.status || 'New Lead';
-      const currentRank = getStatusRank(currentLeadStatus);
-      const formRank = getStatusRank(followUpForm.status);
-      
-      const targetFollowUpStatus = (currentRank === 999 && formRank !== 999)
-        ? currentLeadStatus
-        : (currentRank > formRank ? currentLeadStatus : followUpForm.status);
-
       await updateLeadFollowUp(
         selectedLead.lead_id,
-        targetFollowUpStatus as CurrentStage,
+        followUpForm.status,
         followUpForm.call_notes,
         followUpForm.next_follow_up_date || '',
         Number(followUpForm.quotation_amount),
@@ -9291,8 +9220,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         if (!prev) return null;
         return {
           ...prev,
-          status: targetFollowUpStatus as CurrentStage,
-          current_status: targetFollowUpStatus,
+          status: followUpForm.status,
           budget: Number(followUpForm.quotation_amount),
         };
       });
@@ -9675,7 +9603,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="fixed inset-0 bg-slate-955/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-red-500/40 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-red-500/10 border-b border-red-500/20 px-6 py-4 flex items-center gap-3">
-              <span className="p-2.5 bg-red-500/20 text-red-400 rounded-xl text-lg flex items-center justify-center"><AlertTriangle className="w-5 h-5 text-red-400" /></span>
+              <span className="p-2.5 bg-red-500/20 text-red-400 rounded-xl text-lg">âš ï¸</span>
               <div>
                 <h3 className="font-bold text-slate-100 text-sm font-sans">{statusError.title || 'Status Update Failed'}</h3>
                 <p className="text-[10px] text-red-400 font-mono tracking-wider">DATABASE SCHEMA / INTEGRITY EXCEPTION</p>
@@ -9737,7 +9665,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              Customer Profiles
+              ğŸ‘¥ Customer Profiles
             </button>
 
             <button
@@ -9884,7 +9812,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
 
             {/* Action Area: Convert Lead */}
-            {canEdit && !isLeadAlreadyConfirmed(selectedLead) && (
+            {canEdit && (
               <div className="border-t border-slate-800 pt-4">
                 <button
                   id="btn_confirm_order"
@@ -9918,14 +9846,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           {/* Column B: Follow-up Activity Logger */}
           <div className="lg:col-span-8 bg-slate-850 rounded-xl border border-slate-800 p-5">
             <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-1.5 pb-2.5 border-b border-slate-800 mb-4">
-              <Edit className="w-4 h-4 text-amber-400 inline mr-1" /> Log Lead Follow-up activity & CRM notes
+              <span>ğŸ“</span> Log Lead Follow-up activity & CRM notes
             </h3>
 
             {selectedLead && isLeadLocked && (
               <div className="p-4 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-left animate-fade-in relative z-10">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider font-mono">
-                    <Lock className="w-3.5 h-3.5 inline mr-1 text-amber-400 animate-pulse" /> Stage-Locked: Order Confirmed
+                    <span className="animate-pulse">ğŸ”’</span> Stage-Locked: Order Confirmed
                   </div>
                   <p className="text-[11px] text-slate-350 leading-relaxed font-sans">
                     This lead is lock-protected due to having officially transitioned to operations. Only payment schedules are editable.
@@ -9940,7 +9868,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     }}
                     className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer font-mono font-extrabold uppercase tracking-wide border border-amber-500/20 shadow-lg"
                   >
-                    <Unlock className="w-3.5 h-3.5 inline mr-1" /> Owner Override
+                    ğŸ”“ Owner Override
                   </button>
                 )}
               </div>
@@ -9981,7 +9909,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {selectedLead.events.map(ev => (
                               <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex flex-col">
-                                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-1">{ev.event_name || ev.event_type || 'Event'}</span>
+                                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-1">ğŸ¬ {ev.event_name || ev.event_type || 'Event'}</span>
                                 <div className="flex items-center gap-3">
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-[10px] text-slate-500 font-mono">Date:</span>
@@ -10035,7 +9963,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Final Amount (Rs. ) *
+                            Final Amount (â‚¹) *
                           </label>
                           <input
                             type="number"
@@ -10047,7 +9975,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Advance Amount Received (Rs. )
+                            Advance Amount Received (â‚¹)
                           </label>
                           <input
                             type="number"
@@ -10107,7 +10035,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         {/* Proposed budget */}
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Negotiated Quotation Amount (Rs. ) *
+                            Negotiated Quotation Amount (â‚¹) *
                           </label>
                           <input
                             type="number"
@@ -10169,7 +10097,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       : 'bg-indigo-650 hover:bg-indigo-550 text-white border-indigo-500/10 cursor-pointer text-shadow'
                     }`}
                   >
-                    {isSaving ? 'Saving...' : (isLeadLocked ? ' Locked' : followUpForm.status === 'Order Confirmed' ? ' Confirm Order booking' : 'Save Follow-up Notes')}
+                    {isSaving ? 'Saving...' : (isLeadLocked ? 'ğŸ”’ Locked' : followUpForm.status === 'Order Confirmed' ? 'ğŸ’ Confirm Order booking' : 'Save Follow-up Notes')}
                   </button>
                 </div>
               </form>
@@ -10191,12 +10119,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         {selectedLead ? null : activeTab === 'calendar' ? (
           <SalesCalendar onSelectLead={(lead) => handleSelectLead(lead)} />
         ) : activeTab === 'profiles' ? (
+          /* NEW SCREEN: Customer Profiles & History Timeline sub-tab */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Left Column: Accounts Directory / Ledger */}
             <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-4 space-y-4 text-left">
               <div className="border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 font-mono">
-                  <Users className="w-4 h-4 inline mr-1.5" /> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
+                  <span>ğŸ‘¥</span> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Unified customer profiles compiled via CRM phone & email graphs.
@@ -10263,7 +10192,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </span>
                           {cust.totalOrders >= 2 && (
                             <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-black uppercase">
-                              REPEAT ({cust.totalOrders})
+                              ğŸ”¥ REPEAT ({cust.totalOrders})
                             </span>
                           )}
                         </div>
@@ -10361,7 +10290,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <div className="bg-slate-900 border border-indigo-500/20 p-4 rounded-xl space-y-4 animate-fade-in-up">
                         <div className="border-b border-slate-800 pb-2">
                           <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest font-mono">
-                            CONFIGURE REPEAT SHOOT CONTRACT
+                            âœï¸ CONFIGURE REPEAT SHOOT CONTRACT
                           </h4>
                           <p className="text-[10px] text-slate-400">
                             Book a new independent contract project. This generates a new Lead and verified Order ID, keeping customer ID intact.
@@ -10432,7 +10361,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Quotation Contract Sum (Rs. )</label>
+                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Quotation Contract Sum (â‚¹)</label>
                             <input
                               type="number"
                               value={reorderForm.quotation_amount}
@@ -10442,7 +10371,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Advance Deposited (Rs. )</label>
+                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Advance Deposited (â‚¹)</label>
                             <input
                               type="number"
                               value={reorderForm.advance_received}
@@ -10530,7 +10459,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     {ld.events && ld.events.length > 0 ? ld.events.map((ev, evIdx) => (
                                       <div key={ev.id || evIdx} className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
                                         <div className="flex items-center gap-2 mb-1">
-                                          <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1"><Calendar className="w-3 h-3 text-indigo-400" /> {ev.event_name || ev.event_type || 'Event'}</span>
+                                          <span className="text-[10px] text-slate-500 font-mono">ğŸ“… {ev.event_name || ev.event_type || 'Event'}</span>
                                         </div>
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
                                           <span className="text-slate-300">Date: {ev.event_date || 'N/A'}</span>
@@ -10540,7 +10469,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     )) : (
                                       <div className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
                                         <div className="flex items-center gap-2 mb-1">
-                                          <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1"><Calendar className="w-3 h-3 text-indigo-400" /> {ld.event_type || 'Event'}</span>
+                                          <span className="text-[10px] text-slate-500 font-mono">ğŸ“… {ld.event_type || 'Event'}</span>
                                         </div>
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
                                           <span className="text-slate-300">Date: {ld.event_date || 'N/A'}</span>
@@ -10591,7 +10520,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       return ordLead.events.map((ev, evIdx) => (
                                         <div key={ev.id || evIdx} className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
                                           <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-[10px] text-slate-500 font-mono flex items-center gap-1"><Calendar className="w-3 h-3 text-indigo-400" /> {ev.event_name || ev.event_type || 'Event'}</span>
+                                            <span className="text-[10px] text-slate-500 font-mono">ğŸ“… {ev.event_name || ev.event_type || 'Event'}</span>
                                           </div>
                                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
                                             <span className="text-slate-300">Date: {ev.event_date || 'N/A'}</span>
@@ -10714,6 +10643,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         ) : activeTab === 'custom_package_master' ? (
           <CustomPackageMaster />
         ) : activeTab === 'packages' ? (
+          /* NEW SCREEN: Package Management Catalog */
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-left relative overflow-hidden font-sans">
             <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
@@ -10777,7 +10707,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {dbCategoryError && (
               <div id="db_category_error_banner" className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-4 text-xs text-amber-400 font-medium space-y-1">
-                <span className="font-bold flex items-center gap-1"><AlertTriangle className="w-4 h-4 text-amber-400" /> Database Schema Notice</span>
+                <span className="font-bold flex items-center gap-1">âš ï¸ Database Schema Notice</span>
                 <p>{dbCategoryError}</p>
               </div>
             )}
@@ -10789,7 +10719,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {/* Modal Header */}
                   <div className="border-b border-slate-800 p-4 sm:p-6 flex items-center justify-between shrink-0">
                     <h4 className="text-sm sm:text-base font-bold text-slate-100 font-mono tracking-wide flex items-center gap-2">
-                      <span>{editingPackage ? ' Edit Service Package' : ' Define New Service Package'}</span>
+                      <span>{editingPackage ? 'âœï¸ Edit Service Package' : 'âœ¨ Define New Service Package'}</span>
                     </h4>
                     <button
                       type="button"
@@ -10857,7 +10787,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             {categoriesList.filter(c => c !== 'CUSTOM_CATEGORY').map(cat => (
                               <option key={cat} value={cat}>{cat}</option>
                             ))}
-                            <option value="CUSTOM_CATEGORY">+ Create Custom Category...</option>
+                            <option value="CUSTOM_CATEGORY">â• Create Custom Category...</option>
                           </select>
                           {pkgForm.category === 'CUSTOM_CATEGORY' && (
                             <div className="animate-slide-down mt-2">
@@ -10879,7 +10809,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             Package Price (INR) <span className="text-rose-400">*</span>
                           </label>
                           <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">Rs. </span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">â‚¹</span>
                             <input
                               type="number"
                               placeholder="e.g. 25000"
@@ -11260,7 +11190,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                           <div className="flex flex-col gap-3 pt-2.5 border-t border-slate-900/80">
                             <div className="flex items-center justify-between">
-                              <span className="font-mono text-xs font-bold text-emerald-400">Rs. {pkg.price.toLocaleString('en-IN')}</span>
+                              <span className="font-mono text-xs font-bold text-emerald-400">â‚¹{pkg.price.toLocaleString('en-IN')}</span>
                             </div>
                             
                             {canEdit && (
@@ -11331,6 +11261,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
           </div>
         ) : activeTab === 'create' ? (
+          /* SCREEN 2: Create Lead Layout as dedicated Full Page inside the application */
           <div 
             id="create_lead_form"
             className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative h-[calc(100vh-220px)] min-h-[500px]"
@@ -11350,7 +11281,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   ? 'bg-emerald-950/90 border border-emerald-500/20 text-emerald-400' 
                   : 'bg-red-950/90 border border-red-500/20 text-red-400'
               }`}>
-                <span>{crmToast.type === 'success' ? '' : ''}</span>
+                <span>{crmToast.type === 'success' ? 'âš¡' : 'âš ï¸'}</span>
                 <span className="text-[11px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
               </div>
             )}
@@ -11375,7 +11306,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               ? 'bg-emerald-500 text-slate-955' 
                               : 'bg-slate-800 text-slate-500'
                         }`}>
-                          {isCompleted ? '' : item.step}
+                          {isCompleted ? 'âœ“' : item.step}
                         </span>
                         <div className={`hidden sm:block flex-1 h-0.5 rounded transition-all duration-300 ${
                           isCompleted ? 'bg-emerald-500' : 'bg-slate-800'
@@ -11563,7 +11494,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     onClick={() => setWizardStep(wizardStep - 1)}
                     className="px-4.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer border border-slate-850 hover:border-slate-700 transition-colors"
                   >
-                    &larr; Back Step
+                    â† Back Step
                   </button>
                 ) : (
                   <button
@@ -11591,7 +11522,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       : 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-500/10 cursor-pointer'
                   }`}
                 >
-                  {isSaving ? 'Processing...' : 'Save & Continue &rarr;'}
+                  {isSaving ? 'Processing...' : 'Save & Continue â†’'}
                 </button>
               ) : (
                 <button
@@ -11606,126 +11537,76 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   disabled={isSaving}
                   className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' :xœì}k[ÜFÒè÷ıŞœ0d™á;,àN8¯/,àäìããƒÅH€^ÏŒf%—ÌòßOUuKê–º[­™ãÄ½ÏÆŒÔêkuİ«š%^/HNR/%l{{›Í¿‹ı f{Ñà"Œû?Ï^°ùì'ã/`§±7HÂ4ŒólßÇ—ìŸ£ZÂ§÷c¥²µt>JÓh°Sz³ VİZòÃk¹NéÁô×ÊmÁ;ÖíyIòÖëÛsÉĞëí»öúÜÎß¤6ÆK?²œ(;
-â‹(î{ƒnÀö½äê<òbŸı‡>ûqII¹åK¬‚ÿiw£^Ò^eI³ø¹Æú¾ôsƒ]zC|˜¶WçÔ	?”æ?f=ï<èÁ*J‹Ì/²k&°ü¹Ÿ/î"K¯‚~ _œ÷FÁ<ó¶cŒ½×Á 9ÅW‹ì"ì¥Aü›ª-w¯¼8=ŠÂAšl²+Ë‹leş¿
-ÿÿ__d«øì§ĞSüÓà6…V°ã^½< ‹ûEãD¨vRyô4Á§Å†£xØsš‚Òfi«|Ğ4x˜Èê
-üÿ]-M _A †ëÀe¯¢^/ºi†•‰ğ7£aRLæ2êùîS‘›Vç#öBÌ†¶çgœai6'İ«ÀõŸí¿±ÎE9½
-de§œŞHSéŞy'À*µ¬NäyX Ä¾”gr±wCè·&±ÎA½°ğ!>+†N!·¦ 	»¶È-²ÚŠò˜ß‡QœàHÜ±½^”hÀéc§ï[­.`˜Eú·l{GÂ]ÏcD,œìAí
-îüÜm¡…*V¥…Ùcú»ZÖIT€¿ª¯iÍDú[S%›wV-û]­šŒÎ©âÜÉîëƒvrº{úşd®RMZmÑ¦ô¤Úª×MÃëàU±yÛc¾“œpU?èbcª|AİH Pı*ìõÂîçíq‹¶*	D¼—–Ü%ÑÊr‹H*‘–Ÿ/hööûuyï:	t´ğ¨,/tÒèıNÅ—­JK*UYP*Thh‰"Ü'l?ŒƒnÅwìWødı¥‡¤}ğ’7LÂó^ÀŞ§ap>ĞM•8[|…ÆÊ ºpzSe¯ö¢Ñ eÛ¬Ló^FQ/ğbEÿ9
-â; ª°ßZX(Ÿ}µêI4Š»A]%Ú!c%Há±7¸ ^œ²ÿü‡yÃa/|ú½oë?=øÒ‡ğ‹>+~>š–øx¡{~™^ıãoJµ8HGñ ŠŒÍÚ\™Òoéi˜ÂşánÒ8ê±—Ä{%´Çê^êû;¿lÿºíŸ———~ZfÃö:‹a3ıÀo¯ŞöØyDŒ ÿ‡×|¾±Ì’+Ïšlã­övÑnşÙ'ä¬èï8ºÁ¿Ã4è'í.gèñFI^ÜµÏƒô&œÏÒöaèEi¿.3hÒ÷@¢q–R7ÀÚ]ÁÿSÀqm¯“__ÆyÇáàs{y®|.ÕÁ˜ŞÁÛ«5¹j>é³Ø½öyÏë~æ=Ş\ÁğÙÑBĞ fx.Û7!”ª÷£A4·S‚‡­¥«5KïÃJçÀo?ò^i{ašs;·HôÄgÃpôÂA 0|&°	%0$ÊXÎĞ	As“­¥¡qmÊøÊéÕ4{ÎnÚ£ÚMÛ¥‡¾›ØÁ„œ>‚8†K{¦Äˆ^ÃÚàwâƒkNxBİ#Ù¹B¤ª)/íüÍ2”ıèfĞ‹€9pS‡‘pÌéİO>Uª’ì¬„>ÔIgityÙÎ|1Œ³˜Ãüa•º&Ù$Ä ¾<Ä1­ïBÓ+-ÍJ±íãO´+9*D ¦UXÈ°‰ÃÛöZgƒïào‚ÿÛDD@9,`šËÂm@
-XØÛöYx+P"æïÇÆ‘Ãªšækù†!¿ˆšã¡ÀÔ«Ë2fZÌ$0tQe=ÇÒÅ³•åyk7›Ô§€å¯¢ë Ş”(„„&¤>9UXÎëKOŸ-[z¼ÿdÚbËOƒ‚¬q¯è¿á€0U?n/w6,hšÒ5Ø)Ÿ®­%zlüjlÜ@Ø¤2qWºÛ»
-®ãhğ~hz‰Öô{8’SV–˜;Ç¡[»ÏH@³Şˆ(WYğG—	;%<ó…°› ]Íš¹ŒÌJş´H¬4Oâ‘+òÀ[vÀjŠÅ=_ÁkÙ3	ËÈÕ
-Ü&?ı`7Á:ØNh6cGv4Ãs¯2æ¬½iw‘ığƒ½`£%©BÚiaqáe¾Sb|’W8$/wVsÈ%îMâw­;\½ùü!v²¯…åğ«'`&Ø_ŞÜ?ş×¿5°üâ…æÒYoQáßI·È¼AĞ3´#’q2ÙJØÒqİ%á‡ ³v8hG£ÔŒ-ÍÜ‚q5+’¤âÉEü‘E d‡é]{º¦íµ7¥e$"ü¼¹åM¥åe¹eh—“€vpä%!¤GnzÄæ&™#
-½@møUèûÁÀ,‘õ(¹éä<X–v¨c\Ù‰ QÎïGp>R¾·6\SšËDÄ°#{±w nwiPìT‰’¾÷.íüƒmİRTTmÏÑz±*ä¹ É@&zCÛÇ6¤¿Ešif!¬ c¼¾afh±â-,ß ÍhqÈñKÂYN”y@ö_1²	§‚ü ®°–zşª`-øÁmWgh*Ê¶œmÚxR GËÇ’aŒ:Ú« ˜îNŠV\ÁwßêÜö’Ûøûrp¶wòÛW eáÀ/£§†Õ`íPó<Nƒî&Fe“¨ÿ/L"BY@øçÀ-W1™¥“L0k‰ *7ÖªF
-èßµ×Œœş,ø|—ïbásãğmVÈõåfÈ8èyÜLEŞ`ú%ápQôzá9ß58V }/ş\6|Ûë'Qo”À¹¢äÑ.R24­Ğ¡Áÿ–Å³^‰UcE´ô‡—WuÆ³ëô<‚cİ·Îõüæšwk™î¹Ët;.¹ş­¨¾~+«ÂÙ“š`à[äM²!^Ü½bÿF¯xUÇİBmÔNmŞâKr'QNR/ÊŒÈBÅVX‘s5šD÷JZŸs«EÌŠ\ª–ØPÚœaïV]Ô:—Ò*dçºf<[b@
-ıZ YWyÃå–CÁñ¦5«j‹zÃ‘YXä…s@Ø£Œcö¼npEÛs‡û‹là¡ÇZ³á ãN§S×ÂµìEN56î	KaynªË}Ş
-:©_içÚàÆ¤e­IC+³OŒ-Ù"†½öÏl—¹±‘Ä]DİQ²	´ÁéÑ£!Vä²®™@;"m_Eë[éµığ“ÓÄÇŞì¬B_ÎæØ'pÀ×sOÏjÊs½ k?O
-„óNí0ipşu3×Â7_­Ÿ+Ü?şlCaô®s‰Co^à{éçe„Ö ¤ˆôÜbæævvaŒ|¦ÉÖYc*y}°»vòîıñŞÁ	ù¯&b5®«¦ŞÉ[•v_¸»ĞÏì·Ñ,X7dk‰ƒÌ”'’ûs¶àßK€‘?ÏÉÜå^Z4¯Ç>š·\¹X&w·}ŠG³ #e¹‘,UÙÏYŸoÜ`×ã½»wzøÛÁÙÉéî/g¿¿{ÄOyë–bhvS×„>)|Ó3_tz,œÑA¹ØXùïE=8@Q¼‡µîhÿtoŸM…ÏgĞ$ào—±Ë+I£‡¿9åèJzRöŒä>˜4Ôj{s;TOØm°Øqq)[ä'%ã”¡—óŸCJ“j‰ +³BÔSÖË\"@Or;'* QõVoR÷•ïŸRU¶²ŒBm+dsmq hôàÿ“s>¥§Ì0Ô)@¾şÈX‘ÍC×–Iáx…™£/ ^ş\XKìP_kr·	U|+m‡X BvK<¥XŸ…87!Bz”ˆŸšÏï›Â ›ŠINs?-KV(Y»!À³êB—cÎ¶ˆÜà”›œpî8ºá\ûä\-5eEUu¦ğ/y²Öl~ŞĞ5D£O¸xÔèŒ}?
-`“¾£#àöA‰Ïhøbt·O*G¼ÑgÙ±®ıèa3ºNæ”ç¹|˜¢£%FÅî°ú ­µÂ¬\ãÑíÂ>¶\Gœòó~À*2l©Ö'¾î¼SSSw«"vöæäÚ‡
-0İ/`¸®ô ©ô©‡fçë0¸©É3!›<WL%Ójf…/J´Úh“½¥¸
-eßJiĞUX'€C[IÎ
-‰1u¹‰=`ıpĞ¾i÷½[»°•^¯İ…4Ö.ÅÆòÒ³eÅ$µ!»h”,~ùÂÔñÚjô¤É$*6¤!«èµ7xŒ%;ÜßZJ¯Ü¿ÛááƒÍ¿SljM?~‡°—oGèéÙôãô	h>\
-ÁúÕÆ_s	†Œfß
-GC4£-iƒİ üD@ A%çšM-ÃóX‡»•Gş<8i Sí;&şb©µp&ô¦Oq»"RœB,Lñê¤ÂCïY+¿Âô±Z–Ä€…-ˆÍ¬5d¢¼‘nşÁe kæ2pi%L¸’úpÀ³ól—ÚÅ|DôfŞŞÈYŸEhƒĞ@Ò¹©hE´"QGsúÔ&ş=0Ğ˜_ÄV*FšE¹§{[m	v*nfKkå$•¶Oèâ•úzÄ&cHAW4òDáõV|£¬•ì§Zª`°~¬ô÷uõ‚””'ùØkÇ*Ò¬:T@›lşíÒ®&ÁÕ,fR’×œ–¶+èÂ:ğ3s88G¾ÅQ2ºé|–™¤úÁCïH‘<À>î}PåĞá“*Â">Q¯5÷cUOUá"Pc…y?/P˜@²¸GCŒß€1ÂÁòC_çIĞ|´µ/„¼Éi3¡?ùH„-nöã™t§9rú~†ú<iågä5#Oç>,|°CçÀ+üõuÈG=ôIrª%#…o¼½½¸ÿnĞ»Ë	ô‡ù· 3PÊµE6/'?Ø{ú‰^¼.,ıPó½ÍgÜT‘Ÿïcv«7òNíEÊœ:AZ¦ÚğgûÒ`•4mrÂ5é‰šûæw¥!Öb5¥X%!¡~èj¬0ßÕ3åi‰>¨Ã|N^/	şÁ––Ø~˜ @ä3ÒäÇÁ¿Gaô‘Çä…ğ
-şÃ±Ï,y™´†rZ²yü—o¿iËœ:B5B’¾àĞaäğúÉ¿ëFÌX–Ñ¨o2opGĞ9+Ü‘–LPøIt”ªk,í$gfÑû)>ª6¡¯¸`3}ˆÉ`–VË£©,²óbJ8p¤%:ÏQ’Gy¢Î;1_ªüÉÜÜBxßÓ°ÀaoŸz¥O=û§ˆä\¡ô( "9¸ä{	›¨ÙÚDÊè)>˜Ç^µ•ÅĞÎt¹ê8øŸ Ñû°²/š+ÿÊW‡1 pi`£ÿÎ0Ó>8,ÑQ'ğ«…}#ˆsÒxP`|íd#k¶ ùWu ^XxÁZe€‚±T•v˜U1æB-½s­ŠbòşåúÖLÅjwºVÚs°ÅİbP”ĞGW—tpæq"y&ÃÙ÷ª$dÌQ.…1"pâ'Š\TAz—§­Z
-/Í`#ƒŒÈ#:ÔÈÏÆCšøw•6[ƒQ¯×`d÷,ÀsÚ¤_0 € #…SnA†ÿ¿Dq	Î ¬t€á´İ´ÉReíSÒ»—2eÛì$äèhö ˆˆÅlÓ:<~aÂæwÏá\BóÔìnóf€c‰m³Ÿ—›4Ğ *ˆŞèG¿É$Ç±ÿ€P‚NÙÙĞù"°¿³õ&ÀVù—º†çQ]K&œiƒ·äut/mÎÍÃ%›h"L,‹ğ°ñ†îŠ¤°4Ã¹àÓ–´Æ8õEÒ³©Ìá÷ĞO¯²)ĞûÅl²÷©ù8)«Åuaj‰E‘=%oÚk?±«ösƒ®iú&¬Ù6›(³lšÃÛö*ewARäÅôI-en¢Áö”“Ù­T’SäšQ%ã]%Åİš-ÙIµlVùF¯š®j¥npÛF/?]«IX¥›@‰9kô}6JÎ ?ÏÖ>¯RŒ<ÔtØYæ­Â«dEXóŸkyÉ¡¥l&w‚+ûåÆUfÙ´œç?.Ÿ¼dkUæu Y~]Únõuş·+ê©ËxUªmN…Áá˜"jE œÚºbµÙä2v`L‘(sü}¯ç"mĞPŒi tEÎAŞ‚xÓ^® è:GÃçËË’ÉıÑşğ3”Œç&Èò(ãß™ÏF8 IÕ§ÿˆ¢>†–ÿ¼Q„œ¯dÇ†,ôB
-iûbµÚÈ¶¸Ê2@3Ó»P¤1çå|…fwdŠ]z¥ĞéÊÛŒ|»¨ûÁj&ßa™DÆÃ2¹X†e*ÑËL$),<åÆ	Å`+v»­®8o#–ª7	ò9Š_í„©«*´ArßÕ»Î`N;çdJÍ¬;¸¸0€ğÁ]Éé¦H»á”wOÓ$á÷ßĞûhïøM3tß9cÑĞ7WüK=6>Å“ŸcÆ|¡×oôQS8æpú³ :r1Á¾VÅwœå2£€ÚA”"G7h„™=YÃÍÊ¥	P!'@{[«ÕÙ6„Ş~÷àœ‚ ÖÎy½¦°ìæM¬–=Götz:Ò4â4Còd P‹l­aC¨Tóó	p
-©ÊV2’5¢WR3äô($«128ğCcº¨	éVvò©éÜ˜üXgşÛ·”p¼õ‚Nw†\'cCESŠ	í8ğ(æ!÷Í­°Ìó}:C^€.f…®$¨ë÷“õ:Q{'WÑÒæ›ÈéÍŠOãåMY/7o^ğ;OÓ½ôŒÙ²§Dt‚¹x\Tç®&ÂÀ‡òİX¦âGİ:ÇtĞ7Úé§ÔäàÉÛª;*÷uÂ·«î9³6n7 Í‰Enˆ¾WUNh”ØLAd¦ÑI8b=õü®Ö–2šãW”’ä¶&¡ºì1 ª,ÔD<²â»JO©éì8¥Ä¦%;Ø8ªkTå5q×O¨¬pÇ|³Bjğê›½²ªå#àAÊ, WùvÑ7jšbœ*>¾“Ì7ç˜oÎ1OÎ9fåÙ7ïÇòÍ;¦®|óÑÕ›Ğ;ÆÄ¯=¤gÌÚt~1ªş¸±_LÉmDëN²¦Ñ2j³7qÔp»Í"ê—Œn_ÖCc¬u­ ı"6©ì@‘Ìßs‡òÍ5B*_›k¦¡Xé°]ßgo£šÄgåòxn…dàûgçÄ¢–?‹“4„{Fªàé(s¹5
-İÀæŠP¬E„…pi#±àMcı¶Üo¦‘GÑª†%O3#Xñæêòub9ï‚ÌöŸPş›ÿé+zĞL[·ñ4=Yên‘QuEÙü'rnÉĞÚc8· "]í°LCõÔ)&:ëN€„åÏ‚H¿y»=5á¬JÎçşäß ?¬uX¹ıÔDzFXÁQğQ0Å)aRwha`Ro œJzÄS¶Ÿ#atÊYù½°…	YRä‰‚,ù“Êe£î¸2kàñœa²ÿó ~Á9¢z$Ü¸Şa<×É×À=õi¤ßø'Q8ÿ”|¾«ÈYôL³ğw3¬µğD(¿Keæ!‰âÄN%\ëÿ•ÜŒœı Üq_Sœ7G¡É0ÜÄ˜mrDä„€¾¹iŠ“ÎÃ¹M&È¹¢Ÿº„à”ÕÙÖ-ıœ>¡¬µã{]~³[ú–¹Ê|õN`¹¶Ç++÷j¼qÑ¢ )àzÃšËo‹§ˆW÷úyqPÁÀµG×ôy†i¼ÄdÕºÙ´Å•+—²3WÊ5Hã{­zi÷
-}b²à%pNŒK³Q|G—·vØ)ücîqEÄÓ˜wìpdŞVÓ–j ª"uª&§Û¥$İeÂSzPú™÷¦^Âï5¦¼C<ÿÉo¶àİÅEØ{Ü±×Ñ%,Ê^FÑg¬ù°S‰ßÚõı\«÷&ÈIn²¾½˜3’¢²«*ŠyÊ±%­QXQ©9Î›Jr…Ü!RTéJ¶©lbÈ*·şmÅñÕA?Iä§$^Åº—lŸëf8€¹n#Í¾×ı¼ô|ƒ,–ëïò´ıÍa{/]¶bçĞÚQ-·û~%Ï»DD°_aè\Uo™‹£%¥özÑ¥üÜ‹CNLNÈö•wtGP/ğÏï¶ç²<Vç .p€Îè»3º øNÜŠ¹8.¶Ç¢—¼ZúãàB=5À’èû›ST³Å«±é…5~y=ûŞmû™Ø ş7TR‡d…VoËÁŠW°ËË×WñöuBs®ÖhP–KTš–Šğ(ÿ
-àÓi³Wj^ÊN£aEr.û‰Ö{µ”Sçfw±Ö	 oÛxõÄı¸SÉ¸¼äÕÛ®ÖÍÛ(ÀF­îæ«Ü`Ÿôq ÜLDYü’Vq?#Oàª£`[@	ãÏè²«Ğ.äR6Êjv«b¥J­âÑ ‹—aíèV‘ğ–}Å}=åÙZºZ¯<ã,LÕ÷ÂÎê—®±ê<çUĞqVÊ$¸¸ˆLâ]ùÃUb(%Z—Ê¥ÀWtécå
-Í®ú=`ªså‘y©¾-Ğ•¨Â´[@³.­ÙÙ’¦.×À€¹Ô]Û…ÇøİÛvrøö—×ğÏŞñ»×¯w_ÂŸ{ïŞî¾=8f¯Ş³Ó_ØÁÛÓÃãvôîèı½†µ§=Gg	I·{‡jAfğT#¹B§z]ĞvÒRÑ;÷¸*CsãÜæéÀ:÷Ãt{ÌÅ0%$½Q˜ÌÌSg=¡4‡²ò€³0tŸe]ÎCø<W8nçû€ná ã7ğ@˜&Şæ&L¯ØÛwŒ|$Y1-¶Ñ–¨YÜvõÏA´òOá¸±mÖ’Ù„N€iÀ“2÷ KW9èóu¾Ğ}eäé¢‡àG\óÊ<íûşS<@¤`Nš%ñ…ã¼×ÀRñà\¶01¥ä­“:"GÊ„®wìÛÔ­ÿ’Ò™’‰Ãìø¢ô9‡Ó3uææùy7æÉZ†YLpAŸRÕªÂÑÜï“;½á…ÂFÉ¿@œ%FÅ(“ÕiˆÜôBU¢q˜dg?kßú.Ô>·HÉUm®@I€‚®gXª7q‚ôÃ2ë°ªM(FZàZBD`½««gUòK¼ŠÑr7ğÃQŸœ„Eç C‰„]_â:îòÅ¤•…b9çdMÊŸ9åê 	]sı€\r‘sqqÇ5·eW±f®»ï‡&í•:ïU}ş ‹¯ğ„]Zîÿ¬ÑqÔ˜ñLkªÈ•VKˆ/;êçüŸ”N€ÀuiéåÖ-³`î5=¤îÁ£ ´·Sü\%FÑÿ¤SÊ/XwÅFùU£ˆQúN«Õ*rğ¥ãD}s;<îJ\ûå¢ôÜJR ¬KCù]µ*ÖÄ[ÜâÀûÜ¾AÚÜÎXCU³Kf$Ò}0êªfİê)_hiK×¢Ípq‹ÛœËŒ7•™_só«‡¢¸ÇÚ")Ït­w}?’ä‹0gé`,\txìUFŒgÇw´(ÄL·	…zÄedáiV‹]SÁúÚ@'ßhì3•+>yA‘õ(üQ7e ò~Fƒ9áË6;lãÅ>Z	tËt-©íyó»&nŒ7Ş•óH[g?ê†`¾'Şr?<5p@z ÄÇÕĞ¾´æã7É­"ªÑ:b©sÒ$~'/Ä€CdN(¶5Ì«cx6Š â…‚+¸]ùL¬ÎÙ»!¢Œ……•¾ê¿"DÃÙ'–yfËnÈĞ«ózùY	—Zzîvk}î(SHªEc‰ê…õyşÀçºì‚’„”éÆIÓ¢ÛmâÔp¯= µùÅâ?À±F1™ëöƒÔ{	,!Em=ô1*P?F²)iÌnboÈå$Ó}²<¡™Ğyıá?4“üÑ†Ÿõè_¾ºD
-(³q`”ÖWö~qUÜ˜û³‹jÃ¨ÌôCaUàZI¡#\3¬›BË_8+İ,rŸîCºG5¸^da×~î0eÂu‡D}
-®Ï¾‡÷ŸÌ®Y®…! ¸Gßb¿9|€?bS6ï™|é¦¼Mì_}Da[Áu´u\y›ë
-+¼X=¬¬QµiæİU£áÃ²Wóó6O¯¢)×ÒT	‚Ë­W_Ï›µ‹÷–+’DZ‰ìy x©Yö÷ß¼ù”–aÕ”Õµø•H]à5`¼‹R›4‹Xõ:€jÑÊê¯Ñ(.÷ŒµLJL}†šØÊüéË}›¯8w0ğ5£†§µcÎêP_–D¢ü{Ú“aÏ£Wtı‚}ú~,/á=p[ß‹÷Ÿ ¹‚eÏœñéÑİ¾ğŸ{=úã÷•0 ’n™D#¸oµş’ÏÙ™xQâÚXD©W«WhfXå’u‡üC™MÂç+¸ß¿¡=-û;[¡íçöNw_ŸÔŞ{à*ıXèlIÆ|ŞŸ‚ÊìåÂªF¹—Xt‘Ì´¿Â'áÃÊvê²z^¸Š¢Â€¡,ªú
-5«Q:“53±uÊsu‘½E†G“…ƒ‹¨6 ™ÂoM¸(¼3>Ù²cØ÷‡õ'EÁ]R&TcÕõÇ*@p4q—œ!2`œÛ)–ÖÙ?ÒÒñjEÄWE{»R²œ9æÑpòº~"kŒ€û0k,u5–ù?á"â¹øE,s³[HWŒ'‰xeÁ–Pßl±7s¬r3Ë²w
-v°ŠÑzºH[Qì	TP´vJIXZ>ª4T³ÔZªhÖa©…k´¡w	©—C»\)!ZB$ÔOóN÷8Eƒ½+op4Œ¿H‚ô@A[Ã˜;˜´\cÔ:~ã±C2îfƒ8hŸUÇ¹p~İ/¸@#AwRí6Ã±·8¶û…
-JÑê•‚«™mxx)
-E>¼… „ªR@7ÒüŞ½úsQåáLº¾dÅQûCVx4YÊ–oÈÊŒ¬8¶™Y	Ø7dõµ «ií˜ÆİĞ‡Ù½ÌÚú‡QW=¾ªê±ÔTŠ²Éº¹uRÆ×¦bO§GªuA¬‘¦P’:MêB…tX§1zºÚ¢Éğ/¢%šFCäàû=kï:_î_‚æÂeÂ§ÛAPÆ¿üfºª£&×¢”l_›ŞŸe=]5SS¨öffª›~É]0o!×¢’Ìñ6RXÕË_Fök¤¤r’ùœä=wÅ”£œ'd¼²gÂ¼\x£^:ÿñE…ÿê¤	¤Êi%ÊÒ¤X>WY2—#‹uŸZõ5µÚ«^îs k¥Ç¯Yr´JNtïi£6•Ö¬Q›‹ë!P›³{Ñ7¼4¥–kj×7¼ôxÉúÚòRëho¬Ï1‚8ó"ÒUçí]á
-š:g.ï]L{‰ùo<ÿÚtõFØIøX½«·?œ—?c¯B¼à6›òn¯¹e­ã¤ÃhÜŠ¾­h›o¿xÊ5ˆÚ uşÿwvUê™Ç'@ÁÃ¹ZªÇ0­Dî›ÏWbAª­eQ)„ >ËÜş½ÊgºNòë[ånZâƒ›ğ/¦êdBáígíre—š›lÙğ93D¥ä¹X$5*Ã^yèÀ²&t@ZôdJ¿ÌYÚx³Rğ0~¾À1ÒÅÎâ „×o
-7¼Æ^ÑNkŒ$^jx‘•[ŞÌ T¥Ó@dŸDêI¦t–¤i—†Çšs‡IJ1ızÿd?O…ÕîcÒ:ÓÓ£A‚—{®"Iõ¬çİÁ´ş”ÔI^–	NÇ½îGdÈ»ÃTÁì‡Üj™wıZDidş"âÆ×zîıÑáÜü‡µ~]:º‚.‚…­%^Í±•=/¹šÛÁÿ²_=Ã[xé>ãÙ$xç-ı|ûêtéøô—“¥Ã7G'Gû0"`[Âti?8SJ<Ô´•+à}h‡şeû ô$ajodk‰Ãø×@+Hm‰‚V<³i0­e5‡=¯\Á4ƒx{.è\vØéÿy»²º¶¾ñÓ³çè.e“áWÉå÷bÍ¹¨­­èåPÜ—^˜5V	¥
-WŠ¥k5WÊKUº‹S
-i,’CR (_ú1ˆè§Õû, zÚlòk('/9ú^8À£—Í~lZb;ñıòı¡:e¢.#£)l“[ß·ŞxéU§ïİ¶–™U‚k3_»`P+˜ò
-X„_¶Èoûd/)Ş®¥õfi¶ÑÁÀÏÍ\Æ<h ÃpØ~jK’¯ú_Sd„ÄRE*0ño2†b"/¦d},¥àz¶QñP‘O)—.T½š¼KÊ^­›´.÷¦zZ@2§¯_û„’ê×“¡b–ı,!ª­n–a{&'Ş5é)7ä2ö|Ì"ÔN£vÌ.â¨ŸŸòŸ§Gí4ğzô7ß1¥ÊF‘÷STÄ'Ù 73?Û[IY¾•¹iúJŠPÊ5 ”Iü•ØVÚTJ”?ˆä¹Éø`6²£8êI¿€NSZ2q™0ÈtJm»I~ü]Şè?°­İ8né*r}0Lü¥Gz&XÕÌ­%DÆêÓFéÆ‹œ'ˆ<¹j±š¼à(ääÄ”h›*çu]óm;$Ù^Æ$ÛÏ–’lóŒÆÖÜÚ<yª‚yi$xx¹®0Vˆ„Ô“f@0ç ^Õ&ÎÜ.—›æ™^­$6“rJ?pi‘^¶”õR›,Ú9´-4fêÈ:1·<²ŸÄ›öõ¹ Ë¼U%“1=øáe”ñ‚4ñh½²ÏRİÕ<wõÜ	p$c8J Zg,‚æü
-NAgV+_g¸hJcq«ìD]öémšOykÓ}Š#¬B•‡^Œ‚lFqIBİŸ,ß4å"ošoZ~T9îÈKò«	¨ô)Õ×$uF<š¡¤Ÿ²<øÏ60~9u9¹tå'Ì¨¬ÍîbÏëâßÖäz®Ej–epı>P¦£½{Që›£;õƒ)ÃugÎ1AÉ.„óÜFåM]Ú{ªÏ«ö–PeÆIŞ(²ß},I›æ`€çà”/Ø!÷,÷öü¯1 ¥“¨÷Q¿Ú0½5*cL‹^•Ñ[Ù”R"°Ö+$ü¿‡~zµ`ñ±,jÎ0Ø2P÷‡¥˜‚eñj\ƒjİ‚êÕ~XjÌÈXrW ÚVÿšme¹ÌïÔò‚Šª­¢Ù‘…&[Ug^£ˆİ8ÔÕM5=ÿq‚9
-êâØ'1U™ÑU½«ÜCC;“WÂæçàçàçêåë ùUØwu±ıÊ€İêõTçóôDÀK>[dõş–™”ÎLA³n”ØsÃÄk›¥xƒEé÷ÁÀ¯<›)zærë”ÓøËâhFºFÎßrå{Í±j¥ñØ˜ÛÁ…9?Tš\!öó£3=¾ªH8­±‰WÍJ§Ó©
-F‹u_	Éi“‘…“±&İÛ[5Û>yqÀF(?ê•ÑÀ)UqÀ4j’xUWıÕ’³)Nb†¯ĞYœ€ÀaVK)(Ñï3˜ÚÙ¾.êE¹BIÛ‘¥¸}‘Iá1»R¾.ªÔj¾QSõõ“ı'ÇÙMA„°ù¯™é‚O¾¡r™’¯môJ{õBé‘>ç‰5ÛÉ¬§ëïéîRÔ¬ÑÙ=¬{K¨‡%‘CÍıD"ñ¨¡ù¯ˆ 6Œ˜RW7K=ô>¬ÅA7WCXkˆª'YËEšaÜ1¬ŞÆæ}En$*6šñ…aËA17³³lS@Ø¢›ÿÔV`g©‚›¹úíG#‰ÇQåö¹FºÇEcù·g?±’YÈ<Íå|¼BÚ±NiMœM ús	?OFMxk´mO”/ªªÓş²¤é©Ög†fŒİ]x ¯»7Uq}Ãî5ü¡ÓcÍ"–P0yvn²=reReµÎÙ%7wÅ8ÄuË¥³Ïµ)Ía.uA.na+ê¥àä!N1Qù6Q(Šó5Ã8Èë@zø¬>
-EÎSıf*á$Å È{[")¹»†²ğä•}ï¶ºbZ¥¢pÂÿÊ‚MàWPõ×`'S`ˆ:«A!î 'i0dkìU„$¯=ŠĞİQ
- Áºkü=ú’*€cùÖzç<3lx„4˜_˜,&dƒıÑŞ°¹‡J!åP}èG‚£?» ‰†¶ÈçõµÆÀ¾¯‰û@Uu®‡<æc¦çš4b8’¾!‚cEàĞlìy½`à{±JÖø¬WüùeıädÀğ¤r¥(]¿ŠlKåœC,*ja!¢)ŠÃ`·Ôg”•ñTÆÍ-¤¡y ­kÓ@+ÜUâilñ3-‡rÈ´^Ô¬B:cG½ Ë“îUàzK¯01Û{’ÚÓˆ;ø‡,@¦t`°G9„—F¦£kŠ@éLì°XÉ<Ş¸Óxò›nËYà¤Hnİ×ì•=äJ²|
-ñhhR›sA–Î> =jznçGÖ:Ìø‚1ğÉ$%»hiáş3qŸÉ{¼¾Dk«Öñó'åË‰j˜Òç^ÀĞ]]†‰$æI¦Öæ_Ğœrôé@#Iœ¶Ü˜Ñf§Å/b÷z3F“@ªƒ¸SƒwD-Äá‡ß î‰@Ü[  ÉÃ‚¶ÔÚÓ!¹è&Ù¯év_Igs2ê÷½IŞPŞíaä?ÆÁÈ•ƒn,²àvÈSØùA7Lô!,ãö.²(fœ&ˆ®ÀMË2tÓ—_3xOÔFa>OR“*DÇ!×ˆïæü 3«e™~]’éÍ©@ª—ÕhSFdh$çiU^×Mª6äû°dP˜~y -
-í
-Äë–¯ª8A¡8Löâşk@iÉÈß9q0%ˆğ-öB“DR¹ÀC‚ƒr	äó Tï‹ç )CÆ$
-Òe¥²’…L«T™8«ÆAşÍriTT)¾ÎŞN¬ù XÏ1cF½~Ä-ÿ°æduqQƒÀÖêÔ E¼ùÆ“QƒT]Ÿìj\†<æiHc¡Cë»=¼&=º Ë¤ıÈ¤°ŠîCN¦½
-úh”Y¢J,¤xÊWµF)³Ç•¼õÚ‹Û&Z
-å‘IFÏµUuúp'S^6sAiåcz}¿µ4¬dAPê%Ñ(îRX€Ôö	=4¶Í¿¡¶ËK¯V¼€ÿş«Ñ€g>S;yE/YöÖØ›ÚˆC¯ »{”¼Eío_<6v”}çĞ*nıR¤d>Ü7¶Ï?rh=]^@…ıWá­>%Båæ*4Àˆœ‚D4Ñÿx­Œù;fôŞé@ºËà"ƒ‘™ÁC¾¾¹˜®ÆC«®;oßíœ¼ı}‡J{xãæqqÔ®S #Í—,÷Ù–—%'”\„gY·Ütè®F)Kl:F¡:ƒÉVÍá¡®,T±ÌŒtĞ1µÏ‘60ÿÃY†dÔùÛ2ùÕãwÊ©3wçÀ^ã½„2,æ,¬4Ã,f³·XÁJ¥gˆØ¾«¾ ±ê×À‹Ó=ÌqÓœa{ãÅŸYvÂÛl¹µŠgb†Ú¨˜¡²ı'•ŠIJûBF(äÄµ¨ìEù	«ÙlO„˜‡e üKß1Îù‘©]rZ—,'Ü §ljRğ¹ÊÏ•©„_9“ÌdKQ©1ñ½ñ"ïÜU]ù:ÿâÑÔ”ˆW¦TTZ2úkI5WıÜN»Íx
-¿l«Úm[ªúrş‘Ë„éPv=@s;•GšÛ»Â\z{Q€àÅ˜D_}Ò 1¿Á‚(ç,OÒ!,¦Ÿ]şª}Ù ‹·¬İä@¿ÀXSl\û¸A³ûA‚ÀÍ°ïŞ5ğo¨}›Û1½iĞ8İ<·Cÿ°ÖÉ0èyepş¢Ë¦
-ô*oéô)7@åí¸gˆ‹Ë&ºG„îÈÉêÑjñf­Œ´z±*F"±<ğ‘áÂ
-c0Ûä0Â5mEƒzDøNıĞ>A|(1lš›ï’S"C^íq'7@NH7m¦E3Ü¹Z¹@IÎ6Á­×Íà1³?¢¥¶”üİ„I`·/"D72+¾Î>ø*Éô_ÆœX/s”­‰È½>ÌÅNòÉS4(â"¢hènKüN"½˜‹ÆL‰¿+ˆ…üsãqÔYöF›~Ú c#I¾ø·dl¤×²¥‘Wšµ¥ñ1L‹ÕËH¢Â¼6¦dkï*è~>ù÷´å. g¨›­iòı€H Iõz1^GT©(ÈøÛéÔdn»ü¦{`¥ØKÕwJÑ†b+ªÀ2PË/T08{MXnÿ‚*±|ñ«J±âUZŒW\Õ^…	qš¸©7!r]¨)æ0ˆo|9|	H“½»P:pX0ºaÅëuàkÙU;¦Ë®Öãş1£A
-¼'¯øª2mÖ{şK†{Bm=g×_öÅTg#yYšéĞŞW?ı*¹ô‰”i{"7Qù^9î‡ÜAùš.^{6·ãV¯‰Ú¬Ú ¸Èï¥/Â.%mÏºŠÓuMyGX—`#Ñö©Ô˜®³4ğú¬ĞÕ“¶.5õ¦ëØz!PdU­kê5èø(»Èfv£8ºòó;·cy9¡>pfú?
-y*Š@®Nû
-UnZ?eå9<6Õÿ½75ñM¨V›&F—RmÖš˜<ï_S%3Û@wyÍ8*qî%M %zİ°r:Iî3ßü.«:ı†áò"=r…¯#¼onÕ Ö ·‡Ná×›ÃVÕÁ‹â¶­ˆöÛ…ÂÃ;.¿\ø<éA8Ğ2q+m´š^QÔ+é'Ò¡Lêj¤Ó]…+z!uiøùå§å””ô¿é_êô/nä}!Ç¤*°ÿÕÔ1z¿sN@xğ@p‘Vvw7Ø]4bÉHüqãqåJ÷,EõKOÚ¸‡5«Ò,s)L*}[u`Ë¦ŞFNÀ3õêqM_6½É…»1­en¯É—’L+6±¦º¾5Æ™aX¬ÕB3[Oã§a©Áœ†úÜcˆçyØ2*ÕTÉé‡ÿZ^Ãÿ}tºŠ¸J6‹;î»Q•ŞÆ4^9
-Íˆi¤›xUVì•º”ÅµÄ›ì$`­^V:şîÃü%"£@0¿ÈÄo¿°àÃ·ÁÑ¨ùpĞíü i„ŠöF1&C9!oK%ÑÂ‚NQÂãOÂ¿ào”FŸ÷œÔ×s	ŸZ
-|Ş^ºv…Ï¬Ÿ\¨ú^_½¨4Lp¨äƒíÆıßÃ?¼Ø§dL¨KYCøÎÎ†›ä±ùQ\Z[&˜W²âÕr>l¾Ôùı§{Í¹R‡ğ‚N>¨ç 89‘@ÁÏ’pëj­B51±WS	9 ŞWA6vÖ‰BDL·”“!nô‚¤SÅºl?¼Sàû¹Xpü†ıÅŸ‰mem¶Ç}h^F°ÌyçjÍ°DÚd" fªÛ­ğW¸P»\„{H˜cô¹½È6K·ÌN}ë•«åÁÃá»Å(~µËJˆ‘Íş¥áåUª;T¼HGK:Cò]Şô`­İª,Cëôs¨Ø‡«BO<€ y1 Å$§ZH-º©ÇğVPi>äó2ü]…¬Ö†p$E“ñ!Gñ°(£ª‘êÚÆ‚Íşô¡£_Õöèñ³å
-FäE‹y¡ùm"ó!ƒVc„h¸vAôúÔ?İ±1íFõ»ivh>lG=+ĞtÑ	Aõ×Ó¸“ÂZXÙiE¡­'i°·ê&*»F{#±p«ğÈºÈ˜r“	"Éf—B¯Ò”Ç*¿cº…¼ÊM ’Lwf4ÔMÎ%¤g+lwdN"ö½~wrÊ^ìî³¦…±¬­ÈM€¬Ñ“š”:ZY]:\¦˜SƒÊ|¥.“LUL¯f§¢æÒ§gJãq™03,ƒ±Ü4î/‰oˆV$Ó(ªËf*”µDÌÃiäÁÙ"­`UŞæ¿7	F(B¥vŠµ@R€Œ: &YÁI}•ú)gé¿’Y¯êMHP£²Mz!ıÑ&·Q”¥Vİ­U„Ê&Õ¡»¤ˆİHF]TÌë€™µ <QÏ§htt²72zÉ­#úÔ´É©eE©´'E ÊICœ¤1Âƒ;cÛa:„Ñçœ·™ê0 ”0~‚^ƒèC¿@	ı9B+0„—1ú†½ôbö;Q¤‹•Ih+»Ğm|?n,;¯.’½‹­©_HÓ÷’»Ğä€šé	è¦lIş~üÀ:˜s½NB€Læ*ùÈ³N=¥h¨W‰˜nÓrI"­•SÖ#ƒ$€9SÈi
-ë	@"o„hœÀK!ékUÈÜfŞŠRõ-÷,º fKKÇ¬j£%ÉUÙ‚"®(c‡âÊ×À¬W1HµKf`kÊ<*«Õxé6X/@°¿+š/ø²]R×ŒqÇÕIâ½¾ó¹“X–×İ$µV¿_ÅïÅw5Ï¾Ô¹~Ép¿…87gÈ®åÇ‡"gİr§ ³üZ8éb†‡Hƒš`àûÁÙ¹‚Ú6DŠÊÚtñœ=îÃÖïYoU4İØ!Ÿé+ŞS‰UÍy$\ê†qc9§x…"±•a4Iz×ƒ‘ŒÙ^†ºÉ>}?n©],±µö#[Y^¾ÿ_ŸØ½¾!Û˜š‚ÎE@š\DªIÄUÌF@ª’€¢ÿBÂRN`tÎXúcb—œlna•U7‡QUE*XrbÎä €ıô
-V;ÿÀG=6DŸîÁ¥iÍ„©:"í¤G½^¨ÊNIî8³5$Û2—:Ã{¯¦ãÁJ‘Â!4è §$gŸ_4ÔZĞFJèBJ±Í0èù˜øD¶5çÙNõ-ŞlÈ¤öñÿtµŠ>{—Ğ)–)wÊºÙÀi6•ckl~@öÛF]\¹›Í¾¥çó®Ê{˜ñ{+Êõ<K‘Q«L©¿wVl´WÀN™ªûÎlù¢·C“«ªûû)Nvnç7@¥ˆY§“×Má\Â¯0½[duÔã®õ˜ÉÃÇ|Ú‹"§’€Cg°æIG“å±¶í·	naF™ÿÍ³VZAÔìVŸ¿·§W_¶¦WGG{mõ²)5ßmì‚ÉyÓ­÷ÅÑ íwÆa©¿†œá$ÏÑ.RÌI©¹TÜr×üïJ›-º¯Míg‘)Uïg³\Â†ÅæXoğ¥|¾\w›âJoóÁÏÿïØVÙèÌ[s
-¤¾!¯övDÁB?> å@A¦É–—•.æiÂnÙv	ñ†DFi-}øÿ×ÿ¸t	|óüB'f6h-/3¿ğšÆŸŞ&â¾¦QƒìOÇvF6õŒØîÃKí}–_ÿ‘úıÊK“İáPª§p¤npHŞpx6àçü±~©«¯ï»Áô×®Äû=B|å$ ËÒSê`¶ÀùîtÀ©HıM`ËÛ(µÔI\¶‡ƒs\*áX00€>y&y76Æ˜3 (zØ$?‘Èş!Têæ«F¢egwZö6ü·¯¹»Q-Ì‚m‹+Ñß” tï*Â,›7^ìY@‹2F5üÙÉ»÷Ç{'¾7l	0€]5YÊCùÜmÅ•ù­SüçÎ8¿êÀe4V 0Å°+ó±@vm »ÒY	Y””Km?º 2Â8¨%—‹ŞKöÌ’i¿Nû”•r–L	"Hn7İúµËPµzj‰Å•ÃÃâp0xQìƒÎe‡½{½st¸^dÜ¶öªw§‹”-=.KxÆ—ğŸŸñ%<{ë¨^À2)¬é¾1ŞÄÒˆÆşÉÖ[Ù*y„&Ì¦èté{V,´ŸJÀÆC§¯moÍïªY¨hTŞ«œ4K÷,•Ş©õ~`µ÷j½Ú[è½û}íWv­·^í½¢U{¯`t÷ĞD
->Â'´A¾Hh®ÊîRN¥f7Ğã‘‰Ğ~#Iˆâğ2XÕŞ5§Áô|°Êñ78ÑğÜ6­46¦™É²y9T<ÍNPÅ×Zö\©ŞF 9°ÈázCr%3ßºÑ5Ë<Îüpò³èà¢UµÁ®tØ­Ã*ôÂy]{ÒMî¡fçuÅÃŠpDÍx´¡2>°wãÖNaE<4‘5gì¢qû™Ç8zækWuVîùNágS9èóá?´—¾Xïš1sv¬*°']Cšo¿q²*=ç.J5Eëí#5ÉZ-ß#éKÄ½Yø
-W÷9iJœT%ääÁë‰,{g\ˆ­aSõrEæ‰”·Òe±eéƒ÷'æt&æä"sT?@´´GCYy·D`yÑ¸hëˆæ:•’"Å¸–—ïZ®ëå¶ú²{Ø}cº¼r¥¢¡²ë%ÕS\¡@A«¦¸8¥hHµQ©%QO{ÃfW@*uHÖ¬‚êÊ!dynJWe·ZNFOaõìrW¿£Ï—‡>ÛvÜr÷Wg£È/qq$0Œ–èîıÍşîô‚ÁezÅvØ2úñçU6ÙáÛÃÓÃİ×gG»{ÿ½ûËÁ‰k¯]Lê ºT†Ğ¹{pšZCÒá}7ìˆëª`NÙß4zİñ Ø–ˆãåÎ“äIŠbzkØ)–nß)Kb¹æí•¹»D¶şúÊèI¡o»Ö:ÍÂÖR` ³âÓI¢~À—A;Fœ¶x!·²°°P€Ù6€è€—fş$]×Î™ÏZtë4P&ÁJg4H®Â‹4oÀ¡¿{ôàhOÚ“ÓwŒ«³©œëÅfŸsÇœOOğıXnëµ^—^÷ná“k³qˆ¶ŠÎÈ:ë"G]¡"¯Â×;Ëùø³İ>¦ÆzË½&"úy~—ŸI—¯î17¸sÚÑº*µâ ÅƒZc¢A¥Œ%ÀA#DkøùrÁÅ‘õ"›"à[é°å&‰Òc§qÑØä¾ Œ“sgˆ½F8Y ´Úõz8ÚóÁ }øv~áŞ‡ Y¸QI^ì¶’¢M]&äÇfn}ÙïĞçmTGXŠ÷-û\>l\á	§ üÆyTU•)7–ËB°¸¨¸“d˜LÛ4õÌR®“©§|eÆlQLœXF˜8«NgnÖbqÑ˜[t.İãóQÌ?şÃ²"Œõ‚4'Ğ÷ìxk¯È6|'w‹qDò÷llı•Æ<6“ì5Vy´mgëZ­Tæ‹à»‚ÿt¢õd|yQÎöTêË/±şÜÜbNªç8©Ëé°}3¬h§´ÚÒï$í¢
-oÂ¤Ìô:„ŸÛ,ğÃ§r˜¿ø tù[şğ±¾eyYJmïK¯­[šwb2œMcµ(Ã‚(§;¸º#Ê™'L•  úqˆ@A9uú’ÑOeõ²®¤½–'Â¥(!y!é#9ÑGê”F£f¨•íJ%%YÈa²¦Ö5l7":ŒÆü>	bsJ6i eÅ­a×êWI“ ·~g]b<ÖœH¸ƒ&µ¨éªRÍÃÀ5jU§1aá+z’zn#bnî#¢²›	/¨‹¥úg	í,Á¡}©÷óà¥‰3
-/Î.)¼dO8>Z9\8'éİEN”–êló¢^HÑ¹ì,²ÿíÁéÙœ—nÆ¾w.vİ¡f=”²š6r2á¥^¼a.ş&YÅ¯àœ—âfäç‘&O÷Èó5œÍ¡çmÍğØÿüüÙOëk«+Úèl]ùŠ~f1ü¢ß©šş
-¦r!î4¤› 2ç%²jx‰TÀRìFk³Ö¯œ÷¼“Lû‹­&feçŠ4~˜ xİm²yÜ•yvï L«Ák:Ö´HÂ;gêÆ†íG½Ÿ„—æ/¥DaÔ¼#õhÔ…:£Oöx°’ÌëíÕŠtŒö<»0m2³ÔUÆ¬ ¯Ûªm²–*ÓÒº‘8ë„å‡Jòb˜tĞœçßÃêşFMPC¨­À|mË0)¡†ç.ªx¦²Ä„¤üv´ 1~ãh^`ò6PÔfÓ…>…/‚ëÇç#–ºéWdMÁëDÿÌ#SJÖ„S÷N65(‰wãnÁqàõĞi²UÕ’,jµ‹3Ô.Šù9¼&–Í¥t¹ºQí§ñf:µÌ‚'¯v›(‡7°¶¬Mæ2gF¯–p'ßäÛş=LJ©vYg¤]}îFªë):ËRç‰HÅHºtã=aj)>%#9!/r_äCÿ¶1¦ÿ;¸4úéû±¢¼?û~L¯;¡ÿ©fĞ¬k“ş›g‹ŸQN¤AïøÚç›6Ch:±eèµ­Ùì?ªÔÕ/¾°6éØ`M+bKãÒ÷˜×E5°²”y%İó&ûğ±rÓ•ñ­IÉ<«EÕ7Ú|Y•vjV_Û¶´åû‹K±@ĞlëŠi¤¼tÿÍ›AiÉ§ƒjù˜Ÿ­tnğ™#¡;:@
-{7¸•RKğ"ïwy6th	Î Â¾¨àà¤Uí“OSÀ‹ÊœówtáÛ¥İFıĞ2û zª¬ ²Ğ+Ô¾Æ+Ş¢•Õ_£Q¬Yj¬8Ñ`úàò:tŸU›¨óK”4¼[Î!ófé0C·Ü×‹œÁtoHp0¼SLé}>L§qºû¯P!‰˜|K2š”Ã?Ğ=%šbğY5Ğ/ı´L77JiÎËyPgÊ,©+È`üvpü/vòf÷õk¶÷îÍÑîŞ);øíàí);yÿæÍ.¼«g(JsÖNlƒFošØ³e%µÌÎ•nœâWÎ²eÆDÖºˆ“FÊPÑ‰6ÂÔ&ë¬Ì÷9Ú‹–3ùÄcÍÛ ÆşÎVjœw«ª=±†x¢z¿˜jÇ5±$…pPÊyé|_‘)ÛeãÕgìCeÊ÷®ä>Ÿïí¬Ïå8›ÄºË*åøÂbÍ1.°¸B¦îdñâYì–•lÒ°š¯]	ƒè¯ªò	¶‘¹±ÌÜÜÊL„‰“Oì?pÌä×÷Ÿì¹÷­œäÈI\Q—‚‚çuqO«¦ùa°-ò¯'™aŞróÏ®¯ùæKŸ¼ÙÒãM¦ˆnÕsğ(^N´}çàs©”FÈå¡v}¢ÿù:,dó=—˜ÏG:»Ñ²›ÂH*ÈÚ^Ÿ½	Pí•°CòÚoÄÏ5°AK(IˆÏ²”Ûhnö)LÙ.A€Ú…id–ÎFÚ”¸
-&©P†È²¹«FM€á^73ÜÏ—™ÌggÂÚ‚Ä›óG§çLK9
-P—‹·b†İ¹·°K¸+}±+°z¤Ö|Æ·(×û5Ëµ¥”öİÕ£ÅÍXøF~èt:%À±:Yš/šíGÉUknÎQ£åhèSıíÉ¦JF(µd²¶
-•Û¦<ÏI[ËTiJc“´u?Ñ'AzPY™–XğÉöLo­MêMT“täd]*›¼!9qJˆ§¹9§tb%ÃB~kBåš[‘g`%Ç†ı²Œ¨~b½ò 1Ò˜€¯ı;Ûõ}A¿cFãÍ5Ÿ5%t¦»1­½ü²]]2ÔR!µdB·ÈBayj:Bå^Ô‡¥ÿLï¡±ãèf"CªAÇ§…åş8›ÉàA[É¶ˆ¢{ã% ½ÇœùÉÚSÌÅ§¨ı‰²,‡›eK2?êh7®¯‹ÜÉ^Ô‹bôõÃs9YC’'È ¸AËùÄ›=0Ñf
-İş 0óšç£¸ÁÙĞo6[ÎfMÅÙ,	9›”–³!çìÑ(:›Œ¨3<eĞwSqÄìQÏW'R¶{8f‹leâ­ùvÀ&*ßX“ÒP·‡Å1\)ZZ¦>¦Mf¢åIu6µ¬Îf#®³ÇENS	íìZú+¡¥ÿ  ÿÿì}kWÜFÒğ÷ı¿ûx†g¸'YâËÁ€ÎÚ†œì{òä1ŒgFIcLXşûSÕ©[ênµ4ÀrNR«Õª®ª®{İá¹ÿpõyÒH¥'óiõ¤±bOšèöªsîÔ½J¤ßnâU1Yæ)<xY÷èyÙn·é+‘ßûè-É¼%Ja‰Go‰Vö’Qç«ó—(™$EÔ’a³Ÿ‰.Ãg×´í1‘Ó%K\¶ÈXbHQÈ’¯»JY…gî‰ÛDBGß‰ñGsô>zO¤­÷DWûNiöv¼'œ>ï½ûdşSœ|)”ÎtòL)íïä–xr¿](mÓØ}v¢<™åçAÙ£åŞ»QZgP÷Ò‘òÈš,?’5=xEŸÌçO™Cİ'Û©Rk¸#I8µwµ}˜mù·˜C-X›3Ù¦–oi^¿Ò—‘`S_¯Õ‚!sxŠî­—ènòiÉ–s•óJ“&1RÅú2d+ÂcRc[q7…Úês‰võeº–ãbn! ¦®øö0C`jŠ<Mƒ^fõ“º.˜öÜ/Åƒ¬¿K>—æş–¹|-mf©ÜB†J+Ù)í¹Vu’–ı)íØRZHmól$MíGŞNÔh3G.ÛÁõüÈ®ùy0È^·Kİr,q14u/ÌçZhÁ­pKLa_Â#;Ğü<vğPÕDÒÄª?G†D3C~ıÚyõtLWÛpâO’IÚÙÿ@­Ò·‘éPÓh],Åüh¶n+±ák1[1ä«0\ÏçpoL×íÄ!,< ¡MÓõWrĞÈ~İ0Èàk6b—¶G3v»é‹Lh'M`ñvìùÏFrß-ÙóGŞ3}¾µĞ½ÛÛ»g¶ì¶ñı>Z³Ş8ç}DøG{¶óÏíÙ­3†{eÑ~d	Æ9ï#KxĞú#inØnªş5X·[Zùf7ƒzÉö6Hù r³r»9u™ìXeËÇÀ¸!û`2ºrÙ?Lé|Ğnx<œ\¸<%AHnCô]•ò»=•2Fp9]Z¶ÖKr`èâË-Â’¡çG—2PuM¾×²ŞŠ¦Ş L¯`Qù5Nü“(E^]ª¯úfÀ%¯H‡ıg\{Âà	ïC§ö®äîØeB è¿gQJ;ÈnO|<R6áÀ„?»i<*(ª’.-ÇÎÍR×2»ufû÷QGØÉŞ!Ù$ûïOö~:Ú>ÙÛ%İ£wK[Ø*%ä=É29 ‡í¤‹MÑ)´¤^8Jˆ—’×''ïHtN2dİâ@3™Ğ6ˆ7	Çès9÷ü N¤ÆvÀX¾³°’c‡agå~ÉÀ‹ªLuÏ‡ëõúÔq2ÕSRã+µá™Òæl¼U[ÉQ]ôy‹&n%ÎÀš n¸tİa„”í®~ìùòpİ²vl7c@¶ãV°]ÿÖy‹­î±ßwçéà¿¯Ğ?ğßßYüŠÂc±8ûÎÿş—o½’®wå¢Iê«>—‡OóÎú]t&ğ_“8ğ’h²EF°È#úû	|ñ3¬4HØå÷ø+^%7 \éq‡ƒômöp:FYg…ÔêØ˜“nLè¿x‚9ÅŞuüsO™p|š0÷¤àE£„9Q×ŠNTz‘w}EöŸN{ëØÊ’ï;ş.hÈ^ÿ_Q4†abâóŞİ½5§.„Uü [Õšà-ytŸ7L¢=c#O¸ëéT¿¼r~'R;Osqw:<ÿ9ğâtçW;Ío¡ »lAá»Æ“qÜ[}B–_’ŒÖÈş„uôÄ4àN@Ó7´ü'ïg)oV¾PÔ‚Ì¨†K£Ëöpd\r+‰Ü:Ÿ¹Æ°‘û"}‚ÿC™.•QI*?>ùæ†ÂîºFqß”`”•LŸ¥!¦”|/XSY
-YÆèê´Œ³…v˜â:d™õÖUÑKiWÃ¡‰?×*·wSúœu>÷Ğ§û°³xrİÑ¾²ûkB¹‘
-nìšÆëÉZ¿Õğµzj£`ğ>Â°ªhy#v¸“i}¶î÷Ôúå5 •aƒ¬’ª*èQÿ­£¨ÓX×åãÁ0ğg#åö
-•/ =Dô6n}êu cá'>º¢ô4¨ùøøQğ).å1bB:(›|)…¿Òí³(Âó[Èˆ¢ÖÉA€ã¿ù†"kòªb|7BÑ1êSI¸8> ÎÈï,-UFºuµ+¥K(î…ñ»èèâ6İ¯Ï”„Ô¾òb§ñòSúZ“˜*,ZIU¶wŞ+aµh¼­Ö`³™İ¥QÙæì >yi68‹}å GíÙº?í…}2`I^ËÂ9kÿ¹ÎçV´ôã1Ãı0!lsÏãhLÇƒúâÁ7¹EI:òÔÚ{;}ßU•'ÓYÊm‘'"ÀFOŒÔLS"UÖw]Ü+p¹œlÔaÎšÂôÛ›7O¦²îÉ#Ñ+§[x:eF½So—–¿à•ÙŞN·³q…¯aÓåÓ¬ÜÊGxş'o2@4b—5+cb~zÍ·ºÖô„d¼•ÿ¹v?Õ†Má’²Æ˜‚VKÂLÒ8¡È‹$XàvX§…=Ô¢xæÀLÊ[
-;×Ã/e›™ıµ–Vk¤FŠÁõ ÓÃ?!OŸ’ìpÿ²V¸}ş8k>m¡F6nFQ5#éÇÓèÄàS?ôoŒ¥6Õp}ĞLŠ5«àÿ„ô÷8º¤Ä°Á-.´•=Ş•0µ"*´1Ù{Ç 6\öÆŞçšQ»‰DB‚™ÒtŞıE‚’˜ ˆ1 ä[²Ú¬Û»vi ri³S¨œ„»Ê!,¥‡,2»€l˜éUËÛë©ïÆÕíE‰º[Ô¤Ä™?ş³&{|òò5“È®“]_¿ =‡d›·.)Ô’|˜og&UˆİsfÒê×Š»G ?	ÇwzÊ¹N1â87H{Ÿ‚8=‰V×~fqW3
-u÷[İ¦…Ü«®¤G‡ÕÈ ¨‡Std‚&O!—­;¶kKˆaÇ¸?¼”ü]¢Œ¸ùÑ­>®ÕÀ§›;· ºï=U†²,L¦
-µ!ì2AaC
-Œ%}rıŠjİÛÕÜ–úiô6x£ Ÿ“‹n'˜ôößw–jáŠ»õ®·u›)ˆ°±Wã •:N{ÚX‘}h›Å7‰¼‹üz®ŒÚLwÊŞt:†75“ ¾¨`hšGÍ¶d·e¸ºzrºø3+·—5ñòÀƒtÄ4>„nÊê#iş½h‡)ù$Âf>EíxÚgmn4ï6³ª¿Êg)-=³¼ë–D×î¥º0´t1x¸†A,V"£NÀZ¨[6ç’½Æ;Yâ Ó£:3õ1rß#Ì{ÌíˆìÂ©*@=/bå8[\oRÅšÆgÎ×nš%szBˆ£»†~?<’Ÿd³®aN1¦Õ²ŸÙ¬gvËğFfnfe«a2q$÷zV˜ömQµMPuÕÜÚ]tÃ×˜!°¡á¨Út±kÑ
-ê£`ÅévºÚàÅ3?îØƒ½‰ËhL|y(åÂ2NwùÅnéEyoOQU$(<úJ¹]¼»%D¼¸É­²s5‹İ]Õ±’Õ1“UNvSß5­Dõ¹H›+ÕÛ™i%ÆEû°h¹¹YDK5–ôÉËo4˜hğ!0DÌVÌzµÄ”S&ÒW(yˆĞG”¢Æ£îİXI´l¶2Û­îNßıŠ [+^ * ğ•(Ñ…€@Ép.ÆÿW¢0ëq*t'?wRÅW²·m´üµšœîš_üf6]‘C/ôk|¬KîeKÆ®Ö!_W(è¢Aº# ŸGñLÑ§D˜Åv¸‘Ê-0´nX(/¾HŠûÄ‡1SîF=*yMãÈŸ13z|Õ''CX÷Ñ;¼s;öÂI’Õ:&á9°¸ò8øsßŸÛK\bI3Œ—ÿAvÃd:ò®Hà†„jÀß§ P dZ]¶-“›);sÍ½ï[EZİnÁüv	¾HôY‘Ó›áà_n¶¨S›¶Q¸díÈ:jÀ>µe¹+[äÖrş_ùÖR[ktÛbMuÕÁl.aetk–é¾¼”¦¹¼ªn	&·©ë—tÑ]x7UUéi«i“ş«…7*Ê³š~g5ÖOlNv¯öÍ÷c?æŠ2[üŞ-2Æì®Œ,NÃª-1s§8 ;Š6?Ó´Â“*"·‚$ˆ?äl–„“ IÈ(º Y¦Ã† w.¨ôõaß©ÿ<¹6Mä•ÕªğODBşQG$¡ sÂ.T‚èèS]R[}.–íâ>çÃ8&u]²²Ë¿­ü.sû-‘oÙqÌ•rkê'M‚ôWe¡İk, §.şÑ­~‹}`^AÚ§ŸLnMDJ¥…sĞ¶Iuúò¦š¾Ì*Fr¿™3u¥¡\6¬åÔ¢;¥+ªOÉÍ\]´N.-¾dãYºâYdsPV9Ám¡¤ ¿n‹¼óÒ!(/Ÿ»+Ï(¥I°?I»*],q[â= M<«„AN«Ce?Œ—
-î”U9ìN	«†šeÛßmMÉ·K_ú4Í…ÒXñ•_i£Œ¿J»Ã6cÖæ—Ú&…±ÌäÆld®…‘Y}µ8˜îM|*f¿ ÷ ´¢ã\KØ±>[şÓ<œoıöÂùœQp}qQz²?kšTs«Aaµ_ymLí®i#ÂSùú5HìôïÛş¨]ğZÒ-k¯„ŸÖ1k›Ú/(Şê±Kº¸vãÁ™é/}­O	l„ŠôÎ3¢~bYõ¾BG6)†BÉXVó¢ê7õ|¿aåG5¿©VS‡¯å!‘wÇƒÄI~·|(—2êB‚Ö¯ûœÒÊêıòvm4·SàòwF"Äæ—.t¨ó4©®ü<8*C§Îİóè ™›¾p’vÎù,dö«9Öñ‹õx¬×+^á¶n& »m
-²ĞànÇúŠNK×˜îRªÁbºçèf¡ÚÅ²¦ÚÀßâ ºÑÒîĞ®Fğ/4Øáó\Â^-w«CÍÄÇl<U%“iŒ+/ïXèL¿]yÌŠ¦BÑûÈÖNdûüC;³:µ¯¨ì¬2_ï”š÷´o{¾|#êò3p/ŠÇÅëšè¸/W`md åkÚğ&ÁÆ-áàc9`´ˆ´ûmK”Œ·àßMiv¬h+$a‹8‹`QãŞ
-ù«äšs|„¿Î¼ÁG?¦½³ÑŞ3.á˜[´•.íÍÈÌóBÑ¼$«†$[»©êS…N…LËßÛUWÑ#«,T[D­‹®l8D±Kßo®U.©KœJ4§í•u±õvÓ²ŒïW2tYÑHO6¯aÛµÔajÖdâwmïİ±dÇïN@}Ü­&»UZQ;Z+ûU¬µÊN¶ÖQ`]î Ü3âï>Œ¦³©­µ—Üˆ„£_…7×Èˆ3×Æ³n(Eÿİ¤ØJÃJ4
-Né²­†H­ßø»&Ñ$ íØD[¥hÀ"kpìäóˆg—W7;Ú¥ßğ˜~úÔÃLZ›„ƒm]Zj ±^í1G½Ó>M+$€uDøoÂ—½=B{áUFjÇ§ÅPcœ¥“Ó{¦òª,(Î‰˜ŒÈxNºß¨_ÀÜ&U—> {™Ç¸€(8¨àX²˜w¢i0)Îò.ò½‘2Å3òäp Åøˆ7ñi]y‡Zrn“³ d·@ŠxU
-´¾­3°ı»Mò*³E¥°î+ò‚L‚Kjï¢f¶|ÀÕ²%Ú±<ívN:K¿­»³¹F >c¹/HâRYİ(—mê…òÂW.¯¤²(à!m5¨ªĞô¢°ìÚ¦\1(½ä[R'2qY½¯bÊë–.¾PşÓôxH“{[N½¥a?|d…ÊÎ#„Œ›c¸ŒR,Cå7 ’tÍôÔï‹0_hn8-2–Ñ?¿%şÛİRvÁñvÚƒqƒqëùbg£Ó|x1ºÏÄ¹S^&óô`Šg&V8“×£Édn<7³P›áğg–“-Â)u;Îò·ÅÌÌb$oº¶1¡67Ü‚*²	H¦YI1“Üu-Òä+f˜”Cß$Š5?&‡e+kVÃ (—¬š…™â5³ä^‹6’–%y°C†
-‘ú­ÃËı†q9²8‡qKß¸áoõ¨>Ú¸ËÈ®c*€Pb7ÚaÇ¾¹Áa¦¸8I¹ÆoQú5¼ca»Ñô›L¶u÷o5¾™i ušXëõ 5ß 
-ÔøŸïƒÁÇã?gØ%HñN¡Ê5Äÿ?1ùxXÜƒ£İ½#²sğşÍşÑ»=KÒZj°Y$¯È…8ŠÂ)
-¢T.×,áy§ó²9JKßnÇ ¯,÷µK½§Œ¨š-š	İöî4ûÌ…ñ%Æ•xwìï6%¦$®Ùx’nVïÑ1¹q½Ş?Sr’H,I€bMüB———%é‰'uµ‹Â#É4œ<yifTB[Òú%èCòê;ì7ğÑÎãd†`„[$øœqØö/{ä)ysğöíÁ¯½‡Ô”DŸ}JŞÃ¾˜‚MÜÖì&1^È³b¯‘¡îÅqS[ŸjOÉJËP®à¨Ó)S*Éœ‡ŸMÃ	H}èÖ ?lÜÀ\şêıöıÊïw
-ÿ]pbEU}Î­ÍßgğˆJmÖ>Ü{Ÿ{—èKæ„¶F=ßÉÀ,5¡X¤¸ˆËŞê 6üÏâ®U¹"ãÏ=o–ŠŞ»#½×¶€v´0:)—jx>\/;8ÇÅĞtF¤ÆŠæ…–P±Ÿ†é((Û!‡ë¥••«åˆ­ )$M›{£ù—#PØaIã Ià(/jZA&ñGcƒWŞ¨wÄ”c¦Xš†#šjJbh©‰³MH@ÓzANÈd€L`Pe±"wFQÀSæd)"»úÛßĞÏûî`wûíÙû&¬§-PH4Z#Y‘+pë#Ë]¿×	è¢ÙıŒÍùôJàgSèYßµ×Ó€¿ğtÀGŸúbBg^Xtù2^øİÂyáEhÙIiÔ;£Í@%ö×LÁj\`¨b—€ »DZJC8Ío
-fR¬‚;¹=>£õ¤FáÅ0%håªôÖ{gI4š¡¯@¸BğÛ‘¿^ö6~ NÿË¥\ôo+ı•õßUK0Ç0.óô¨¹#¡RUŒ¬k¶ŠµÄ+òÅrpz†q_> uùkşœ×œÈV¯XKIV›2¯_q˜ñK¥ÃV»¶"7
-ˆ”›'Ùùpøvgûdÿà=ùuûèışûŸ,*(½±÷ŸıãGv>Ÿ¼íuwïdoçÄ¬¼êÎCİµ¼"ÿ õ¬òZE§t,­6^GğúQL°¸Úˆ IN‡„î€Ác²%ĞÓ4ÁÊ  xì@HâhFìk–_*º¦Çá§NÙØ]ôW	›Ê'»çŞ(	–~Ä»»~É¦uÖ;}Ô†Æí_Ôâ5[òõ¸Û@R×0ôÒ±Îmiy6Tâ,F,àÊÏA%ë1)¬L»¬Z^ùlÎµ ôfÀVç1¶æ—ÏÓ! ‡õÓØ(õÀ^8òfg½!ºŞ¬2€5½ÚŠiˆÙ!ŠcŸ/§Ãù§<¤„ÃLííÌHÍô;´(¢ÈãicÚYÓnñ¼í®~N¸ëØa{Ÿ§g‘UkÛYĞ™ŠµÆ­õ?ONÑ¸.ŠLıLBg(®©Që¿/½o…£ö_d°¥”ßC¢Ù9/Şb±Î¼ÖYƒ~¿o˜‘ö:å­N²gG}VŞ3Ïë^Yê_)fÏt—––¬q›Q›%Ó·°/ØXDì92í&L¢8ív=Ş¤ùLô3+ĞI/éÙ·öÀìÓh´	Fş¢ã#p+·ØÚm¦W±ã5©”ÒÍı¤…¨L|D¨P©¸e2Ö™ê
-×›|	vO‚CŒU
-Ò7ÈEúÁÛT®;ñÎºh”ºâvyJØú×2áÁx¹Y,ªT’
-~ª‚úo,lRÆ>KhÔ¾‚Mm°Y²:3u\6ÍGâ¯ï³í”Çl®l
-!:ÊŸÛ”U@i's—N{{
-CÃÉ,0îªzµÈRªÌ<ì7ÉÔóZTG<¸œÀÂ?LhĞQà%hëÈLSÙÖ3£÷áÈ;
-€âû¾Õ¬“x£ ÁèzÊÓ´$v_í9¬X•9>£ÊœSeúv±Óä‹ij¦‘Wp{&‹Æÿ79Ğ…z›×ˆ3áJËÍÁ¯ï÷ÈÁ/{GGû»{UF›ïßìü‹ím¼‡şıaÿ¨eƒM®;Ùk€|È£H8`IYiDs`Õõ§qÄNBùaüã–Œ4Š®‹%–ò;Œ3v;è¾fb/=ó”1ìT#;_¤Æ @Ç³³q˜³Ûƒş4¦Œc78÷f£´[:ÃY ,Úã‡Ê¾ÙâÏ¼•-è³ A\—Çç§ÜÒô<|@©È
-Hg‹ „¾@¹˜½%L²|î¾NlÔ‡S·U¬Q§[:+Ÿ¡'0ºóLHéeF,4+á›i yOpP±·ó¯Bzœ +œÓ¦.çhnõCtÛ|SœáæÆÅX›×Û+cHİF
-¥¼D‘Œ~©U3Ú)NT-ëb!¹ä (3FÆqó¦d¨«ñœE4hææ5)d,×é¦ºúÊ¶*8ÚÃšÜ«)¬«)¬K³¬­à0˜%[Ñ,E0'ø¥¢JTÖ5´gYÄ¢Ÿ0—¶/<_fã¦ÊlªG¬åŠdeåWjL¶íAÆèeNå¿kLD9!õøé`ûfäŒjÉ<íÅ‡báêµ‘ks~JB¨*^ëå¤»£WÂ]×I£L¯Š%¶³¼¬YŸ°d-8ª”ZÚ£ò&?”åöû}ıä
-Ç¹¿Ş¦eæÊÉáÀ?ZªÇ¢ã LD— ÃŸşÚ’óm½­˜Xne ÕtJV6L´LóÀ:¡M²ñ——Ò8l÷N¥×¹Œf%ßŸÙ8f2§©BœN­µÌd]µ5	•u[S¦ş)D™Fh75j[€…<{…#…K–*îê4QÇ™ÛˆÊ	'4ğkSÕ(O$Ys»’3ğµ1—Åî¶®ŸŞ¼Ş~ËL^Çd{ggïøxÿõÛ=²stp|Ü;Ù~-Ù¸¤çVûä§QtæPŞó{XUü¢‚'gÒÜ‚É¸SjÈâ=á£8…ë ×âöbÃ5ªåNItN~0¥ÃÌàûcx6˜5îB%,òU²½}‚7Ã~~é¥¬htşÂ‚n®¸©µ•gS[æº¿b”FÓ›LÔº±üİJÓPÓ²tZ²µ‰øÒ,NJkz³ztUoÍ7¥-PÓıÊ‘Ùvï°W´œI¦:ÙËåèä¬æá,mŞZeELı|u¿“8‰¡oöÅ¤ANC*7Ú”4M!Ë¶9úU“À€‰IŠß“(%T©G×ÛÑš	“O^b¨o­„À7 2i+!ƒh‹Â—áè$am„<0Lß‰±µóHó—"v™ë„hO%_jS—/¥82ò}ƒQ9 ÕSÆñ„-E¢R¹óxš¨¬w4-/“}\	vc¡=b2FpÖ%ZƒÓú˜F@Ş1¢Î/´ âÒ~¼àîçÁÕI¨÷ŞàØâ©ğ şdßÏgLXê&«XvÄ;pâ–_bÊø$Åü`‡IJĞèÀ´¶é0J£¤£¯MÀŞÜx0„5¿ ÅÏxÕ§÷ºËİÿõ¿ıßä[4è>üÂfı/^ıöUş7¨áX²´j½|¸Fş^Q„A¬ÃP3 Ÿ@p÷ÃÉ`4óƒ¤Ë¾FóbJ³}uàãM•Ø÷'ÈÛ@ú£@ä9	¼ñ» EŸ¤´³†,Z	’äE>#Ï3OdJÔµ~PÅØªAoâ‡~Ç”‡Ÿí‚ººÁ:6ÃŸé§ğ/öÉÏáÅ°w€Ü£ˆBvÃ‹EC¶n¹”£‚½è0b¯#èx-*Ğ;6\€lŠeàÚ»)Våˆ¿L’ Q1Èİ
-à1Ì 57Êå¶ñ/²#ŞO‘ŒÅ­ÿB?².¶¾‡|Ÿ-×o€’ †j`¤^F)¼£½‘A^ÿrP-ÿóñI-âÄ–™Ğ²¡zlÀwâ!+sTù'³1û˜ÂM?ô@?öÍÛ"ÖEk…XœÅ‹¯HBÕ	\¬,Ãº‹m	u½Ñı:GÔÃËzEõ.àË„ºÒšåk9Œùw·ˆßù¡
-ÿ °ÎQ²M}Ë¨s9Ô`{t¼şœõ&Ÿ¼/H&“¾Ä*g±jVÉ¯ößO–Ñ@	¯ ‡ÓîœË­’·è »W0ÊÛƒø
-ôUiÉ·€¡Ù“ËÛ¥n~,ÏT?D¥t>Š† íŒOÇ/¹¾F¾%øï[£VØ†F—KmÉ4RxøéÓ’ ‹ñmhğ@MZ\…kŒ?ññ	é®"ÎÂKŸ‘Ur’O»T{>CËe˜âS‰Ç‡qt$	ûb¶`åCæYms`*km=nk(Zè$’!`Ih÷|&ƒŠO
-z=yEşøûµPòW¿¡6låÛºÉÒ€¿:×Fä0t›ÅI	­OpLaq&6õ-ÕÄö‹4}a«ÄVú‹ÚLêhØÕèŸë{ò‡’®¬
-ÎõqfØWZê¯¼şZÆãcà¥ÁE_½ª´aÑV½5¤j¹+¤›SÈ¡~,®W¹CØÀP+>¾Šôü«í8Óœ^Ş@/ˆAsB¼ Æ´^álä0`ÒÍñ0p›Î–Ô‡€:ë-@¨4ŒÃÙ˜lû~/šèæ«Ôé Ò	¨
-i½Nz¤)jZÑ[,¦qäÏX>ÒØ› z¸ÑB0NÂ ÃlA@¶³×»B—SƒËw\˜×IxßbmÎ·{i„Ëyçãì98²€¹®XD|öìK²¾”şò9†ß§ä)yK!›¿Î Z‰>™Z¸ë]p1ÿ”#î4™wPÿ„ŸCl†e
-'‡`j‹ô’Ø©fÍb›6[Ô™â wøX¯F«6%Ã(Jµw¨,ŒbíMNOÕD´Á›„6Ø"Çø2ò3ı‚;×yBR4KˆÀÒı0Åõ®®±EÖç’oĞI¿ë]‘ît¢óDUì‘å­ÔØéV òn6JC–3#å0Ç"Ğå¿QÓNà79ißyá„ÂiOyS0¡7Ú$ X	Ñ,õ#Jg÷ª@´÷I@5aã€=DŞr^V¯ÕÅY	.œ?Wµò74¾}ŸN…v €+dûä8ùa×‚ä 9ênëÏWgØ=»û:J‡â-¯½ÉŸ³ …3D€ê'8‚Éò;<¦‹åıçç aÌÁù#œ€{—8èNÙEÊ»ë@Ä„e³ƒHÌ~ù{ÏdCzC·7¹9ŠˆaiRZ
-ã0“}$‚´Ú@öT}‚ÙàX˜ ià<‚JÜ6Å,•Mã–·§Ç2ı³íMBñÎ «çJAö)˜æ	u2JzÛĞÆ*3<úÍM¥by?Ô_XÙ›p4Ëë®ö0ÎŸyªvfi}ŸI{ÂÏµ+›·§ÓÑÕâhŸEOüBÅaMÄL·îö,7Ñ'z1w~½E€~FêX«7!÷Èêç£¡zóq'’!µúMêM(|-¶má*u6qfÓ6ïJf¾°ìM½iU«ˆ~Zª’;ÎÇÕwÃÎµÉq2IË5 ’*ÙlŠŠ£‘+úå1A³ÆlB2ÕO‡YÉ˜üføNqŒeóI'ºv¶ü€Õ/N9|œg-Y¥År¥I.Ò<^şù9ğ0ä·X…?eKÏÉçrbº=İìmJFä÷Šq·ÅR`¥Ö®r>ˆ­Ï2£Æg¬µªám„ìïniÁûj‘íğÙ½'unhº˜¥ñ¥!v7³Ää³,#+O=P£yóìÎ<!EûˆåëÃÙœ ÷M“\PH¨/çXà’™Ä){¬DşZ`¤9fwŒXÑ¼±$¾€S´}Ö]VF+M…â¬„€±•!e8ÉİñXscQ|]êÂÕ;×ÊäÑ¦6ìGjı¦Ôtß
-§Å8ó¤7Ü˜QNƒ4ˆ.IÈÒ$ª¥áÏ\aâì§P©¢U(Ÿ_¨@W62&i™×NKL¿xBãÂY®Œi¬…'8Ö6ÈÆó¹Ø]Ùšûã9ŠÆ eìÕ¶#l› ³Oœ§Tùñ˜ø‘À. 'Íÿ\£,a£ÔâVneşydÊ®lãÜ’(`'=
-™…º–rKp~ne°ù	V=­ í¤j·…·c#öëI½QøW ŞTD2ãó’±Ô¿Ê{ÇøõìZ<KÚá-«Y¬2c.v/¡eføo9œi»wÍK5êWšC…Ş1µt·Wá³³Ö†D,¤"¾?9ì4|­A.Ş¼óòá€(ß÷g±'ÚµYä4nµ16Ø¬Ë@Ö)YoÈ@r3ì†fß%@¿A|‡©*(gEPN½(éÀõ0£9ÖP¨nòn[ÆZF4Î€F¬à°rú*[Gxã1®yg†k÷uvù~ŠÛ~‘”ïí&ü+¸"o°ZÂâw¡“…ì†ñ™r:¼‰ z¦{¿m®|ş^ÊpÆš.ì‡4²÷Ğ›#Ã	cËx¦ıêŒ{J»:I¬]d
-¯Yìúı-)“æêæj·™¢õÂ`_Ù¤ö,æR¯Ì_³}L&Ib,Ûù•İñÇÍ4:CiûµÊ´*\Ntgçöj¾½æFåB—+Ø³Šiõnxs›
--ŸF90[â,Y=—×™gb>ò•ÆÚµöÍCçÎ›G U~ææ[ô…£ëøÈi*ÔÂ@.| —@N]ì‹CóÌ_:Ğmæ£€IgG4µvf6l±(Ë§y—« fªÖ¬¾‹ÎÎ³ÚŒSß²øeÊXx*A(šä@ÙÄUÑ•œmD…X%6S*\„D{¤ó°ÎäÊ
-ş©nºÉ%)§Ø µÌ&i5g¨à›E²øPÉ!*ó=†§’ô² x">¾jx²\¸é¥ÑÂ *‚]¾jPfù‹‚¢é3?$]äÛ-N~Quìñ˜ï˜Şñğ$6ÓÉÇ+Ãí·'¶v<×±ÓÔŠ+â`)SîZt»Q¤5	€¥LÌMœ…t"dnîŞ ’u=Äjœ¤<³ÅE×©Ì,dğ«†&ÏXXæ©?Û&˜¼ó¢Ö-»Û™EM‚ŠyÄM§‹ædávm<ZV7õ­³}5/ü®ÎSÌhrÂäŸD³Ÿâ§ğÜ8ÅÓQ`8C„· ƒº”Jö‘>»k	8h î­³ºà–´#iİ“—Ç"¿…‚£òØ´Eä¬k¬ôRÜqYÚiî ±SFƒfàÈ#P‹Ğ(M7ICNsÄã„Ú²&¬6An“Ë±ëÕUüi]eDpÁhVE`jMV#vq³n€”SˆyŠiâŸ7Hg@@¶ƒ¶ssåx¦ZÂšÄÆGÆm`®éµrámì³Š@ÁÚÖXğ[‚ñº1LPİâçæ‹áL–è¥3¤@¦öÖ`â'x£¦ ’°|Ë$ˆ?a”ÙÅ,ÄjK“ !fFm‘Í•ÿ!ÿ	KûÓ†DVoÆ‚<#ë›ÿƒ•×Yš®ï]=£œ«pÕŸa4áµ›®údÃØYª.T&ƒ!–À¢Å§-Ò„¦*4û©À`§nVkşM¥Ô`DsR]	Ü\ö»ĞÆ‰ÚØÈÂñ0ğ&X#`<Ñ€•W²b§qbh*Ã»ˆ8isô{–eõñ‚¼(Çèé‹?°Ÿ$H÷XÇ+.f`®¬¡\DöLı&ŠÇ]ÛŠ‘3¶H±Â3ë³"à•='ş²?Cƒ3·ò¤NûhÏ†³ßíãåšh[¥¢Ó,)Ø>ƒ\vÍP.ÄV±f%yË˜œ\µ•Šµ”ÙcÕLy„ ›C$­zZ¸qhJQ¦UOƒ²TìÊÂ×èL–‰n¬xÎI
-Kªø¦‚ò:ò8XîÿşŠ¿ŒvpOX0*Şÿïôj{âãéß…÷‰ì³kòg
-”÷áŸg„‘[Ü§%ÿn~„¯$[ä7>fUÜïtÈÍïÎß¿Œæ¨i)ƒ@\z&i7{xyĞ°9¬t?Ùö}äqÓ`biü,=bÈa1?¥íAÄa_î…€òhD¥¤*)[Ù[>iØ°j³DOR»Ôâb’:¬§¬Ë;w&’y£ò¶+º¶JS$mÛ
-ûfä}º­ÛbÚ–¿„)ƒ&¡ß¼aïy)©ØAs©«Æ³j»åœß3T=ûg‘Å¯âüW• ü„…dG•É29öÎƒôŠìĞÃ˜¬‰²¥xŞÇ‡sÁ‡7ş.ÊZ²d%d?VwŠ§r¢*
-ˆ¥Y%(ĞÎ®(_	^…¸%å³w…Évähú†d«ÙÇ¥wıXŠü×°–¡¢f-Õ¨–—±q$ÀLJï™Á’÷'ô¾iDéÕö“hĞ+e)–[aı"ùs}Ö™ô”ÕéÁ4—Lk•çuAø¤/^0x©Ğâ#ùˆLòT7% l’T(¾B4ÄñqÙß
-l¦eÈğ¯•Œm>*¯Ò½ªİ¬ó‘kb§ÿ=‹R¯h?0€Ÿ÷gş—üqx90~_Qƒ¢£MŸ¬Ë:„şi‡ô(fy¬«.¬¼•¹–ìĞ_Ğ?ÀÃÙyv¡±ßdˆ³Óİqz»}ÌáÓËŒ ¦ÕPBvõß
-ÂÈ–¿é5ü%úq#A£&q«·Ş$ÎnI«ß&¾eÎ.qu.ÂSg/F¡kñæVVÀà~{ÉpMµƒn’ao³ÜÏÍ`P2X5‡ë%³n^"·å²Vö/U!äùòpİ0m¹­›Ü18¯°A«jĞ†Á)TC°T†¢êú7cQHÓ^¾ş&LvUaÂdŞ²	İÕ"·£I+¡U‡ ª|1{qÅv}J<"‹C¶'Ú—ÁA¬Và}{«²¼®«AËìƒhÅÕ=èL{’fÙ½¤Æúhû%Ø»uĞæéºr¡Ci‹uÅó’“ëúJ–¹+ó`VìÆ\cÄÖáQç±°]Éã©R´äÙg˜ÅP!1Ã`P>}©v4]Î¼æzE¹£gİHp#Ë‹İ+:nªœ%'ÃPj6”og¼ÇÕycÚŒ6ø&Hâp»A'\ÓxÆÄ:øP•IDK}òÿ£xP“¨;Ğ†)J)ê"4ç1@?L@àİi‡ƒüm‰Î=bÚ—Ú®‰õŠşÚæŒˆùm~˜ õÍq]âù&+‡³#¢ß®Ï¹-–3SQ³ÕlEo5«gŒÉÄ;SâKMãŒ¾­7şT”‚¹Säğ’«É€T¡ˆ(ïÆ”¶ÜöòBµáûf|¡V”òXú¾0:×LNk©²ª¯X~œë>¦ú™ìGŞıÉ'oæ=x÷wû¸‡ØuwGƒ X×e˜¹¹&šôË5êä¦ãXìÆÆ;i|Uµşıâ¶vÓxViÛ®OÔ„x—p[åtëÁîò~wşÀŸâ£gàçÉ»ä¢›KcËòIÂî¡êtU±-0áI8¢YÚÍ¬Åå7Ğu=#›X‹Õ²…èàI7ˆcZ˜¸	ŞÁ³ı1¼¿pšW£«6pŞópâa1èÚˆRå1áemnM%AÅnUJ›Ïh.øtn<ün+âSP•Wêñê2ŸÄZrâR¿ßï`Y ¶{†Ê@lí:‘[M/J´[›C´Ûr²X2ã¿\b"È_Œ
-I*‰~¯ÜÅ.Í%Ín8W#²„„J!¤ÂÆ3Ğ P·âQp2çpçRÕQ0FeHÿ/æO¦áÄVÆd‰oÍNó8ßK=4W ò5*9åVtäQÈıâ…\k¸‰ ›¿envú(ú>Š¾¢oéı¢ï£è{¢¯%=r~¡ØkmÍ|2‰L(0¹ŠKt"EdªèÆéô’¶æEcÆhê–uúÒ˜bÀ>äFòX+<³Ö'Ç¡ôÎ®zø/Á”/“h"ÅÛğáaÂïÒè*Z\PïÆmÇ‰»rëNÜv]¸›4#e.®ò‡¥÷@ƒ4Ìz^½«uADMÜA‹4bg&Æ¼Ck€»(d¢–ê—©¦{É	‡’ğ Ø›,ô,“ğ–4< \Ù_ËL²²]J.ÇJî«ÍOÉ2O3'İŞ‚OU³ÙÿÑ„h=Ö¹LYÍ…lÂ\ÊÚ.µŠÔ2îó™q›XşAI†-”D.Ó[J_®|%c-á£C¼Ïâ Â‘7MKªÛótlC{¥±ÂïŒLÖûÛÿ[y³úıÚöï&•”„‚'9ç¼.…!$‘s†ËŞÆ™ïYo€Ph‘zXË+ÅÄÒthÈ*P(Æ§wCßªûÕ"}£°iˆ!Õ6¶§‘Áş1¸×¿©	ÿÕìT+vAK`¶TÔz‹{%ŞjzŞ³çôéŞ4ÉRŠ·şç¦¦›Ş«Í›ˆâu9J’4YQy}Ò†Šµê”kıËéM–~ô[]ª7µ!	Å§Àh…—ŸZ×Åğà8Q6kÂ_JzÍé²Tª¿p¦ş¶º†fÍ-?´fŞ¸ïUïÕ´.¿+t+k0˜8F)^üÜhw&Šu¾?OQX×½™K·ÈQtiÊ¬tdãHÓ…™	’bÙŒìİ/²ÕY`ìVÆRÁõó 3íÁuçLÜ/ûF¾l†ÍF‰éJBªTà¤`¶ÒÒPYçBû)˜ ™[èÌ¼HÄ€ò¢³ÍCÂøCÊY+•Gœw=}¬ˆ/šWm4·C€ù[jø‡B;Q¬ö›}$é°Ó¨8Šº±`ö‘ T™g2ü4z´
-IÖëT5ƒpÚ+&Ù—Nmi'/ßG)«œq1Ë« Ù$Àjéî¶W©ëû`«JÎBº]D›İ‰”‘L±ª„+Éd…jpâ@““[İ‹CM­şõpÈ#ÿpZæãñX+QHÛQM!…š)OŸê*©ĞÀ‰÷ØÜ›‹~…û[n„µ‰g¬ŒĞ}¢%V{U44{8¤”}ñÛp¦”4ÏY# ¬6Ö!Èz¿¾/b4CxeÕü¶lp|¥¦÷E%Ÿn'FQÚ)û¼äŸW¤³Q¥›¬ŒpG šÿ€ªö]"»ŞéşĞ[]aO-İåíxMƒ¼êáÃ!ÎcÜhöù”Ùe¾’¨ˆ6hè,Õ¤½OÂŞOÕ»š!Ök¶¶JšÍ„Ôw³Qö¨ÚĞ¥<–é÷„~İë–ª$üePiùëiÕÕÌRÑiÀÕÌRD©º6ˆ =”ßmØˆÙNcE¶lk¹ºY.è¦rÊ¦ Œ®¼B-‰g#QõŞ™o4WuN8¸Œ†«Ú$'€‹ÏÆc¬ì\CÂ¢+ÎW¿_ó~7Æ™a¨›A¢¶sKÆ[ô÷8º´Wø d++…¶>kA~)Û¨èQ–ÒìwŞní¼';Ş}x»}²ÿË9şğÎçUQœ_.ÊQ â'/_Gé0Ãòâ€†˜Í0–Úg1g\Üç»ç‡É [Í`.ûØ›À3r+]a&{:à:üBcMãè<$	’å½ ˆ)Š!ªú .İ&Ä´/\2ŒÃÉGmFUëÂQ ¶ƒ?ná“Ã8šF	|ğ/Şhl9C¾ÊIÃÂ-Ø[GO^RoL2;K¸&ÿ‹¡<¹^&"äµˆ·ú3Û)‰yO˜ñT¦»‹·›~îÑ—µ6Š~VÊªñå…èssHC¹Â2Æ°…9W,mª[t^Ã"ƒÊ£pBÜüø·ÿ  ÿÿ [T’
+                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? 'ğŸ‰ Confirm Order & Transition' : 'âœï¸ Create Quotation'}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+        /* SCREEN 1: Lead List datagrid */
+        <div className="space-y-4">
+
+          {/* Sales Performance Dashboard Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-2">
+            {[
+              { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
+              { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Quotation Saved' },
+              { label: 'Quote Follow-up', val: statQuoteFollowups, theme: 'gold' as CameraLensTheme, filterValue: 'Quote Follow-up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Scheduled CRM' },
+              { label: 'Confirm Order', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Confirm Order', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'To Operations' },
+              { label: 'Lead Lost', val: statLeadLost, theme: 'red' as CameraLensTheme, filterValue: 'Lead Lost', chartPoints: [4, 6, 3, 7, 5, 8, 4], trendText: 'Opportunity Closed' },
+            ].map((card, idx) => (
+              <CameraLensStatsCard
+                key={idx}
+                label={card.label}
+                val={card.val}
+                theme={card.theme}
+                trendText={card.trendText}
+                subText="SALES STATUS"
+                chartPoints={card.chartPoints}
+                activeFilterValue={filterStatus}
+                currentFilterValue={card.filterValue}
+                onClick={() => setFilterStatus(filterStatus === card.filterValue ? '' : card.filterValue)}
+                lensLabel={card.label.slice(0, 10).toUpperCase()}
+              />
+            ))}
+          </div>
+          
+          {/* Leads Directory Header Bar & Collapsible Utilities */}
+          {(() => {
+            const activeFilterCount = [
+              Boolean(filterQuery.trim()),
+              Boolean(filterSource),
+              Boolean(filterStatus),
+              Boolean(dateRangeStart || appliedStartDate),
+              Boolean(dateRangeEnd || appliedEndDate)
+            ].filter(Boolean).length;
+
+            return (
+              <div className="space-y-3">
+                {/* Leads Directory Title & Control Buttons Bar */}
+                <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">ğŸ“</span>
+                      <div>
+                        <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
+                        <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                      {/* Sort Order Filter Button */}
+                      <ListSortFilter value={sortOrder} onChange={setSortOrder} />
+
+                      {/* Download Reports Button */}
+                      <button
+                        type="button"
+                        id="btn_toggle_download_reports"
+                        onClick={() => setIsDownloadReportsExpanded(!isDownloadReportsExpanded)}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                          isDownloadReportsExpanded
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
+                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span>ğŸ“¥</span>

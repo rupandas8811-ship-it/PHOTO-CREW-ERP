@@ -77,7 +77,7 @@ function toInputDateFormat(dateStr?: string | null): string {
 
 function parseExactDeliverables(description: string, targetEventName?: string, targetEventId?: string): string[] {
   const list = parseDeliverablesWithQty(description, targetEventName, targetEventId);
-  return list.map(item => `${item.qty} x ${item.name}`);
+  return list.map(item => `${item.qty} Ã— ${item.name}`);
 }
 
 function formatWhatsAppNumber(phone: string) {
@@ -137,7 +137,7 @@ export const CameraLensGraphic: React.FC<{
     in_review: { label: 'QC-GOLD 24mm f/1.2', color: 'text-amber-400', glow: 'shadow-[0_0_20px_rgba(245,158,11,0.35)]', innerGlow: 'from-amber-950/80 via-zinc-950 to-yellow-950/30' },
     approved: { label: 'M-GREEN 105mm f/2.8', color: 'text-emerald-400', glow: 'shadow-[0_0_20px_rgba(16,185,129,0.35)]', innerGlow: 'from-teal-950/80 via-zinc-950 to-emerald-900/30' },
     delivered: { label: 'C-GLASS 70-200mm f/2.8', color: 'text-cyan-400', glow: 'shadow-[0_0_20px_rgba(6,182,212,0.35)]', innerGlow: 'from-cyan-950/80 via-zinc-950 to-teal-900/30' },
-    overdue: { label: '0 77mm WARNING', color: 'text-rose-400', glow: 'shadow-[0_0_20px_rgba(244,63,94,0.45)]', innerGlow: 'from-rose-950/80 via-zinc-950 to-red-900/30' },
+    overdue: { label: 'Ã˜ 77mm WARNING', color: 'text-rose-400', glow: 'shadow-[0_0_20px_rgba(244,63,94,0.45)]', innerGlow: 'from-rose-950/80 via-zinc-950 to-red-900/30' },
   }[type];
 
   return (
@@ -158,7 +158,7 @@ export const CameraLensGraphic: React.FC<{
 
         {/* Outer Rim Text label scale */}
         <div className="absolute inset-1 rounded-full overflow-hidden flex items-center justify-center pointer-events-none opacity-0 group-hover/lens:opacity-100 transition-opacity duration-300">
-          <span className="text-[5px] font-mono font-semibold tracking-widest text-zinc-500 scale-95 uppercase">{type === 'overdue' ? '0 58mm' : 'AF CORE'}</span>
+          <span className="text-[5px] font-mono font-semibold tracking-widest text-zinc-500 scale-95 uppercase">{type === 'overdue' ? 'Ã˜ 58mm' : 'AF CORE'}</span>
         </div>
 
         {/* Inner lens element barrel */}
@@ -368,14 +368,14 @@ const StaffSelectDropdown = React.memo(({
             </span>
           ) : currentStaff ? (
             <span className="flex items-center gap-1.5">
-              <span className="text-xs shrink-0">{currentStaffIsBusy ? '' : ''}</span>
+              <span className="text-xs shrink-0">{currentStaffIsBusy ? 'ğŸ”´' : 'ğŸŸ¢'}</span>
               <span className="truncate">{currentStaff.name}</span>
             </span>
           ) : (
             <span className="text-zinc-500">Select Staff</span>
           )}
         </span>
-        <span className="text-[10px] text-zinc-500 shrink-0 select-none"></span>
+        <span className="text-[10px] text-zinc-500 shrink-0 select-none">â–¼</span>
       </button>
 
       {currentStaff && currentStaffIsBusy && (
@@ -428,7 +428,7 @@ const StaffSelectDropdown = React.memo(({
                       }`}
                     >
                       <span className="flex items-center gap-1.5 truncate">
-                        <span className="text-xs shrink-0">{isBusy ? '' : ''}</span>
+                        <span className="text-xs shrink-0">{isBusy ? 'ğŸ”´' : 'ğŸŸ¢'}</span>
                         <span className="font-medium truncate">{s.name}</span>
                         <span className="text-[10px] text-zinc-550 font-mono truncate">({s.role || 'Staff'})</span>
                         {isAlreadyAssigned && <span className="text-[9px] text-zinc-600 font-mono italic">(Already assigned)</span>}
@@ -693,15 +693,15 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
 
   const getPersonalizedMessage = (staff: any, deliverables: any[]) => {
     const coordinatorName = whatsappShareData?.coordinator_name || currentUserName || 'Operations Coordinator';
-    const coordinatorContact = whatsappShareData?.coordinator_contact || (currentUser?.mobile || currentUser?.phone || '-');
+    const coordinatorContact = whatsappShareData?.coordinator_contact || (currentUser?.mobile || currentUser?.phone || 'â€”');
     const eventName = whatsappShareData?.event_name || 'Event';
-    const clientName = whatsappShareData?.customer_name || '-';
-    const clientMobile = whatsappShareData?.mobile || '-';
+    const clientName = whatsappShareData?.customer_name || 'â€”';
+    const clientMobile = whatsappShareData?.mobile || 'â€”';
     const notes = whatsappShareData?.notes || 'No special notes.';
-    const globalDeadline = whatsappShareData?.global_deadline || '-';
-    const reportingDate = whatsappShareData?.reporting_date && whatsappShareData.reporting_date !== '-' ? whatsappShareData.reporting_date : null;
-    const reportingTime = whatsappShareData?.reporting_time && whatsappShareData.reporting_time !== '-' ? whatsappShareData.reporting_time : null;
-    const assignedEquipment = whatsappShareData?.assigned_equipment && whatsappShareData.assigned_equipment !== '-' ? whatsappShareData.assigned_equipment : null;
+    const globalDeadline = whatsappShareData?.global_deadline || 'â€”';
+    const reportingDate = whatsappShareData?.reporting_date && whatsappShareData.reporting_date !== 'â€”' ? whatsappShareData.reporting_date : null;
+    const reportingTime = whatsappShareData?.reporting_time && whatsappShareData.reporting_time !== 'â€”' ? whatsappShareData.reporting_time : null;
+    const assignedEquipment = whatsappShareData?.assigned_equipment && whatsappShareData.assigned_equipment !== 'â€”' ? whatsappShareData.assigned_equipment : null;
 
     const deliverableLines = (Array.isArray(deliverables) ? deliverables : []).map((d: any, index: number) => {
       return `${index + 1}. ${d.name} (Deadline: ${d.deadline || globalDeadline})`;
@@ -1858,23 +1858,23 @@ ${coordinatorName}`;
 
         const validDates = refined
           .map(a => a.target_finish_date)
-          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== '-' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
+          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== 'â€”' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
 
         if (validDates.length > 0) return validDates[0];
 
         const anyValidDates = matching
           .map(a => a.target_finish_date)
-          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== '-' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
+          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== 'â€”' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
 
         if (anyValidDates.length > 0) return anyValidDates[0];
       }
     }
 
-    if (prod.target_delivery_date && typeof prod.target_delivery_date === 'string' && prod.target_delivery_date.trim() !== '' && prod.target_delivery_date.trim() !== 'N/A' && prod.target_delivery_date.trim() !== '-' && prod.target_delivery_date.trim() !== 'Pending' && prod.target_delivery_date.trim() !== 'Not Set') {
+    if (prod.target_delivery_date && typeof prod.target_delivery_date === 'string' && prod.target_delivery_date.trim() !== '' && prod.target_delivery_date.trim() !== 'N/A' && prod.target_delivery_date.trim() !== 'â€”' && prod.target_delivery_date.trim() !== 'Pending' && prod.target_delivery_date.trim() !== 'Not Set') {
       return prod.target_delivery_date;
     }
 
-    if (prod.expected_delivery_date && typeof prod.expected_delivery_date === 'string' && prod.expected_delivery_date.trim() !== '' && prod.expected_delivery_date.trim() !== 'N/A' && prod.expected_delivery_date.trim() !== '-' && prod.expected_delivery_date.trim() !== 'Pending' && prod.expected_delivery_date.trim() !== 'Not Set') {
+    if (prod.expected_delivery_date && typeof prod.expected_delivery_date === 'string' && prod.expected_delivery_date.trim() !== '' && prod.expected_delivery_date.trim() !== 'N/A' && prod.expected_delivery_date.trim() !== 'â€”' && prod.expected_delivery_date.trim() !== 'Pending' && prod.expected_delivery_date.trim() !== 'Not Set') {
       return prod.expected_delivery_date;
     }
 
@@ -1882,7 +1882,7 @@ ${coordinatorName}`;
   };
 
   const formatDisplayDate = (dateStr?: string | null): string => {
-    if (!dateStr || dateStr.trim() === '' || dateStr.trim() === 'N/A' || dateStr.trim() === '-' || dateStr.trim() === 'Pending' || dateStr.trim() === 'Not Set') return 'Pending';
+    if (!dateStr || dateStr.trim() === '' || dateStr.trim() === 'N/A' || dateStr.trim() === 'â€”' || dateStr.trim() === 'Pending' || dateStr.trim() === 'Not Set') return 'Pending';
     const cleanStr = dateStr.trim().split('T')[0];
     const parts = cleanStr.split('-');
     if (parts.length === 3) {
@@ -1958,7 +1958,7 @@ ${coordinatorName}`;
         a => a.production_id === prod.production_id && a.speciality === row.deliverable
       );
       const link = assignment?.raw_footage_link || assignment?.edited_drive_link || '';
-      return `* ${row.deliverable}: ${link || '(Link Pending)'}`;
+      return `â€¢ ${row.deliverable}: ${link || '(Link Pending)'}`;
     }).join('\n');
 
     const msg = `Hello ${customerName},
@@ -2422,7 +2422,7 @@ Production Team`;
           </table>
 </div>
           <div class="footer">
-            CINEMATIC PRODUCTION & OPERATIONS ERP SYSTEM ~ PHOTOCREW VAULT (c) 2026
+            CINEMATIC PRODUCTION & OPERATIONS ERP SYSTEM ~ PHOTOCREW VAULT Â© 2026
           </div>
           <script>
             window.onload = function() {
@@ -2750,14 +2750,14 @@ Production Team`;
       const selectedEvent = eventsList[eventIndex] || null;
 
       // Build fields for WhatsApp prefilled message
-      const customerName = orderData?.customer_name || leadData?.customer_name || '-';
-      const customerMobile = orderData?.customer_mobile || leadData?.mobile || '-';
-      const customerWhatsapp = orderData?.whatsapp_number || leadData?.whatsapp_number || '-';
+      const customerName = orderData?.customer_name || leadData?.customer_name || 'â€”';
+      const customerMobile = orderData?.customer_mobile || leadData?.mobile || 'â€”';
+      const customerWhatsapp = orderData?.whatsapp_number || leadData?.whatsapp_number || 'â€”';
       const eventName = selectedEvent?.event_name || orderData?.event_type || 'Event';
       const eventType = selectedEvent?.event_type || selectedEvent?.event_shoot_type || orderData?.event_type || 'Shoot Type';
 
       // Raw footage drive link
-      const driveLink = getRawFootageDriveLink(prodData) || '-';
+      const driveLink = getRawFootageDriveLink(prodData) || 'â€”';
 
       // Target Delivery date
       const targetDate = formatDisplayDate(getTargetDeliveryDateFromAssignments(prodData));
@@ -2775,21 +2775,21 @@ Production Team`;
           .filter(Boolean);
 
         const deliverableListText = displayDeliverables.length > 0
-          ? displayDeliverables.map((d: any) => `* ${d}`).join('\n')
+          ? displayDeliverables.map((d: any) => `â€¢ ${d}`).join('\n')
           : 'None Assigned';
 
         const msg = `*PHOTOCREW STUDIO TASK ASSIGNMENT*
 
 *Customer Details:*
-* Name: ${customerName}
-* Mobile: ${customerMobile}
-* WhatsApp: ${customerWhatsapp}
+â€¢ Name: ${customerName}
+â€¢ Mobile: ${customerMobile}
+â€¢ WhatsApp: ${customerWhatsapp}
 
 *Project Details:*
-* Event Type: ${eventType}
-* Event Name: ${eventName}
-* Raw Footage Drive Link: ${driveLink}
-* Target Delivery Date: ${targetDate}
+â€¢ Event Type: ${eventType}
+â€¢ Event Name: ${eventName}
+â€¢ Raw Footage Drive Link: ${driveLink}
+â€¢ Target Delivery Date: ${targetDate}
 
 *Assignment Details:*
 ${deliverableListText}
@@ -2845,12 +2845,12 @@ _Please acknowledge receipt of this task assignment._`;
       return {
         staffName: rosterStaffName,
         orderId: orderId,
-        assignedDate: assignmentRecord?.assigned_date || p.created_at?.split('T')[0] || '-',
-        targetDeliveryDate: p.target_delivery_date || '-',
+        assignedDate: assignmentRecord?.assigned_date || p.created_at?.split('T')[0] || 'â€”',
+        targetDeliveryDate: p.target_delivery_date || 'â€”',
       };
     }).sort((a, b) => {
-      if (a.assignedDate === '-') return 1;
-      if (b.assignedDate === '-') return -1;
+      if (a.assignedDate === 'â€”') return 1;
+      if (b.assignedDate === 'â€”') return -1;
       return new Date(a.assignedDate).getTime() - new Date(b.assignedDate).getTime();
     });
   }, [rosterStaffName, editorAssignments, production, orders, leads]);
@@ -3512,7 +3512,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
               <div>
                 <h4 className="text-xs font-black text-zinc-300 uppercase tracking-widest font-mono">
-                   Smart Filter & Report Center
+                  ğŸ” Smart Filter & Report Center
                 </h4>
                 <p className="text-[11.5px] text-zinc-500 font-mono mt-0.5">
                   Refine live interactive metrics, card counts, and sheet data. Apply start & end date thresholds securely.
@@ -3535,7 +3535,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     className="ml-2 hover:text-white transition-colors cursor-pointer text-amber-400/70 font-bold"
                     title="Clear Focus"
                   >
-                    x
+                    âœ•
                   </button>
                 </div>
               )}
@@ -3662,7 +3662,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             {/* EXPORTS BAR CONTAINER */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-900/60 font-mono">
               <div className="text-[10px] text-zinc-500 uppercase tracking-widest">
-                 REPORT DOWNLOAD VAULT ({filteredLeadsList.length} items parsed)
+                ğŸ“„ REPORT DOWNLOAD VAULT ({filteredLeadsList.length} items parsed)
               </div>
               
               <div className="flex flex-wrap items-center gap-2">
@@ -3776,7 +3776,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
                                   title="View Assigned Team"
                                 >
-                                   {editorsList.length}
+                                  ğŸ‘¥ {editorsList.length}
                                 </span>
                               ) : (
                                 <span className="text-zinc-650 italic text-[10px]">No Production Staff Assigned.</span>
@@ -3798,7 +3798,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1.5 cursor-pointer max-w-[200px] break-words"
                                       title={finalDriveLink}
                                     >
-                                      <span></span> Open Drive Link
+                                      <span>ğŸ”—</span> Open Drive Link
                                     </a>
                                   );
                                 }
@@ -3817,7 +3817,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                   disabled={isProjectLocked(prod.editing_status)}
                                 >
-                                  <span></span> Assign Editor
+                                  <span>ğŸ‘¤</span> Assign Editor
                                 </button>
                                 {(() => {
                                   const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned.trim() !== '';
@@ -3834,7 +3834,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         }}
                                         className="px-2 py-1 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer inline-flex items-center gap-1 mt-1"
                                       >
-                                        <span></span> Share
+                                        <span>ğŸ’¬</span> Share
                                       </button>
                                     );
                                   }
@@ -4129,7 +4129,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1.5 cursor-pointer max-w-[150px] break-words"
                                       title={finalDriveLink}
                                     >
-                                      <span></span> Open Drive Link
+                                      <span>ğŸ”—</span> Open Drive Link
                                     </a>
                                   );
                                 }
@@ -4152,7 +4152,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
                                     title="View Assigned Team"
                                   >
-                                     {editorsList.length}
+                                    ğŸ‘¥ {editorsList.length}
                                   </span>
                                 );
                               })()}
@@ -4220,14 +4220,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     {isFinished && (
                                       <div className="flex flex-col gap-1 w-full items-center mb-1">
                                         <span className="px-2.5 py-1 bg-zinc-800/90 border border-zinc-700 text-zinc-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
-                                           Order Closed
+                                          ğŸ”’ Order Closed
                                         </span>
                                       </div>
                                     )}
                                     
                                     {displayStatus === "Editing Completed" && currentRole === "Production Staff" && (
                                       <span className="px-3 py-1.5 mb-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 w-full max-w-[160px]">
-                                        v Editing Completed
+                                        âœ“ Editing Completed
                                       </span>
                                     )}
                                     
@@ -4261,7 +4261,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         }`}
                                       >
                                         <span>Action</span>
-                                        <span className={`text-[8px] transition-transform duration-200 ${openActionDropdown?.id === prod.production_id ? 'rotate-180 text-purple-300' : 'text-zinc-400'}`}></span>
+                                        <span className={`text-[8px] transition-transform duration-200 ${openActionDropdown?.id === prod.production_id ? 'rotate-180 text-purple-300' : 'text-zinc-400'}`}>â–¼</span>
                                       </button>
                                     )}
                                   </>
@@ -4350,7 +4350,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               }}
                               className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                             >
-                              <span className="text-sm"></span>
+                              <span className="text-sm">ğŸ‘¤</span>
                               <span>Reassign Editor</span>
                             </button>
                           );
@@ -4364,7 +4364,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               }}
                               className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                             >
-                              <span className="text-sm"></span>
+                              <span className="text-sm">ğŸ‘¤</span>
                               <span>Assign Editor</span>
                             </button>
                           );
@@ -4397,7 +4397,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-cyan-300 hover:text-white hover:bg-cyan-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
-                          <span className="text-sm"></span>
+                          <span className="text-sm">ğŸ“¤</span>
                           <span>Send Review Link</span>
                         </button>
                       )}
@@ -4412,7 +4412,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
-                          <span className="text-sm">v</span>
+                          <span className="text-sm">âœ“</span>
                           <span>Client Acceptance</span>
                         </button>
                       )}
@@ -4427,7 +4427,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-green-300 hover:text-white hover:bg-green-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
-                          <span className="text-sm"></span>
+                          <span className="text-sm">ğŸ’¬</span>
                           <span>Share</span>
                         </button>
                       )}
@@ -4479,7 +4479,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer border-t border-zinc-800/80 mt-0.5 pt-1.5"
                         >
-                          <span className="text-sm"></span>
+                          <span className="text-sm">âœ</span>
                           <span>Edit Full Dossier</span>
                         </button>
                       )}
@@ -4777,7 +4777,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <span>{member.employee_id || member.staff_id}</span>
                                 {member.address && (
                                   <>
-                                    <span>*</span>
+                                    <span>â€¢</span>
                                     <span className="flex items-center gap-0.5 max-w-[120px] break-words">
                                       <MapPin className="w-2.5 h-2.5" /> {member.address}
                                     </span>
@@ -4880,7 +4880,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {stats.avgDeliveryTimeDays !== null ? (
                             <span className="text-amber-500">{stats.avgDeliveryTimeDays} days</span>
                           ) : (
-                            <span className="text-zinc-550">-</span>
+                            <span className="text-zinc-550">â€”</span>
                           )}
                         </td>
 
@@ -5604,12 +5604,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
                       
                       <div className="text-xs text-zinc-300">
-                        Client: <strong className="text-white">{orderItem?.client_name || 'N/A'}</strong> - Editor: <strong className="text-zinc-350">{prod.editor_assigned || 'Unassigned'}</strong>
+                        Client: <strong className="text-white">{orderItem?.client_name || 'N/A'}</strong> â€” Editor: <strong className="text-zinc-350">{prod.editor_assigned || 'Unassigned'}</strong>
                       </div>
                       
                       <div className="text-[10px] font-mono text-zinc-500 flex items-center gap-2">
                         <span>Ref ID: <strong className="text-violet-400">{prod.tracking_id}</strong></span>
-                        <span>*</span>
+                        <span>â€¢</span>
                         <span>Stage: <strong>{prod.editing_status}</strong></span>
                       </div>
                     </div>
@@ -5728,7 +5728,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           </div>
                           <div className="text-[10px] text-zinc-500 font-mono mt-1 flex items-center gap-2 flex-wrap">
                             <span>Assigned Date: <strong className="text-zinc-400">{assign.assigned_date}</strong></span>
-                            <span>*</span>
+                            <span>â€¢</span>
                             <span>Target Completion Date: <strong className="text-amber-500">{assign.target_finish_date}</strong></span>
                           </div>
                         </div>
@@ -5750,7 +5750,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-zinc-900 text-xs">
                         <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-sans">
                           <span className="font-bold text-white uppercase">{assign.staff_name}</span>
-                          <span className="text-zinc-650">*</span>
+                          <span className="text-zinc-650">â€¢</span>
                           <span className="italic">Role: {assign.speciality}</span>
                         </div>
 
@@ -5779,7 +5779,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               }}
                               className="p-1 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold rounded-lg transition-all cursor-pointer shadow-sm hover:shadow-emerald-500/10"
                             >
-                              v Mark Task Completed
+                              âœ“ Mark Task Completed
                             </button>
                           )}
 
@@ -5793,7 +5793,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             className="p-1 text-rose-400 hover:text-rose-350 bg-rose-500/5 hover:bg-rose-500/10 rounded transition-all cursor-pointer"
                             title="Delete Assignment"
                           >
-                            x
+                            âœ•
                           </button>
                         </div>
                       </div>
@@ -5845,7 +5845,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         // Find event date for a production project
         const getTaskEventDate = (productionId: string) => {
           const correlatedProj = (production || []).find(p => p.production_id === productionId);
-          if (!correlatedProj) return '-';
+          if (!correlatedProj) return 'â€”';
           const trackingId = correlatedProj.tracking_id;
           
           const linkedOrder = (orders || []).find(o => o.order_id === trackingId || o.lead_id === trackingId);
@@ -5858,7 +5858,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             return linkedLead.event_date;
           }
 
-          return '-';
+          return 'â€”';
         };
 
         const handleSaveStaff = async (e: React.FormEvent) => {
@@ -5954,7 +5954,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 staff_type: newStaffType as any,
                 Staff_Type: newStaffType as any
               });
-              setAddStaffSuccess(' Staff details updated successfully.');
+              setAddStaffSuccess('âœ… Staff details updated successfully.');
             } else {
               // Create new auth user
               const computedEmail = email || `${mobile}@photocrew.com`;
@@ -5995,7 +5995,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   Staff_Type: newStaffType as any,
                   auth_user_id: authUserId
                 });
-                setAddStaffSuccess(' Staff details updated successfully.');
+                setAddStaffSuccess('âœ… Staff details updated successfully.');
               } else {
                 // Create new staff record in production_staff table
                 await addProductionStaff({
@@ -6011,7 +6011,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   joining_date: new Date().toISOString().split('T')[0],
                   auth_user_id: authUserId
                 });
-                setAddStaffSuccess(' Staff details updated successfully.');
+                setAddStaffSuccess('âœ… Staff details updated successfully.');
               }
             }
 
@@ -6034,7 +6034,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setEditingStaffId(null);
             setShowStaffModal(false);
           } catch (err: any) {
-            setAddStaffError(' ' + (err.message || 'Failed to update staff details.'));
+            setAddStaffError('âŒ ' + (err.message || 'Failed to update staff details.'));
           } finally {
             setIsSubmittingStaff(false);
           }
@@ -6066,7 +6066,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500" />
               <div>
                 <h1 className="text-xl font-black text-white tracking-tight uppercase font-mono flex items-center gap-2">
-                  <span></span> Production Staff Hub
+                  <span>ğŸ‘¥</span> Production Staff Hub
                 </h1>
                 <p className="text-xs text-zinc-400 mt-1 font-sans">
                   Real-time synchronization with Supabase DB. Manage crew directory, tag-based skills, and live task workloads.
@@ -6189,7 +6189,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </label>
                         {editingStaffId && (
                           <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                             Locked (Permanent)
+                            ğŸ”’ Locked (Permanent)
                           </span>
                         )}
                       </div>
@@ -6227,7 +6227,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </label>
                         {editingStaffId && (
                           <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                             Locked (Permanent)
+                            ğŸ”’ Locked (Permanent)
                           </span>
                         )}
                       </div>
@@ -6254,7 +6254,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           required={!editingStaffId}
                           value={newStaffPassword}
                           onChange={(e) => setNewStaffPassword(e.target.value)}
-                          placeholder={editingStaffId ? "Enter new password" : "********"}
+                          placeholder={editingStaffId ? "Enter new password" : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
                           className="w-full bg-zinc-900 border border-zinc-850 pl-4 pr-10 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
                         />
                         <button
@@ -6320,7 +6320,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 }}
                                 className="text-purple-450 hover:text-purple-300 font-black focus:outline-none transition-colors"
                               >
-                                x
+                                âœ•
                               </button>
                             </span>
                           ))
@@ -6334,7 +6334,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     disabled={isSubmittingStaff}
                     className="w-full mt-4 py-3 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
                   >
-                    {isSubmittingStaff ? 'Saving...' : editingStaffId ? ' Update Staff Details' : ' Save Staff Details'}
+                    {isSubmittingStaff ? 'Saving...' : editingStaffId ? 'ğŸ’¾ Update Staff Details' : 'ğŸ’¾ Save Staff Details'}
                   </button>
                   {editingStaffId && (
                     <button
@@ -6493,9 +6493,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               {/* Contact Details */}
                               <td className="px-4 py-3">
                                 <div className="flex flex-col text-zinc-400 font-mono text-[10px] space-y-0.5">
-                                  <span> {member.mobile}</span>
+                                  <span>ğŸ“ {member.mobile}</span>
                                   {member.whatsapp_number && (
-                                    <span className="text-emerald-400"> {member.whatsapp_number}</span>
+                                    <span className="text-emerald-400">ğŸ’¬ {member.whatsapp_number}</span>
                                   )}
                                 </div>
                               </td>
@@ -6609,7 +6609,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500" />
             <div>
               <h1 className="text-xl font-black text-white tracking-tight uppercase font-mono flex items-center gap-2">
-                <span></span> Staff Roster
+                <span>ğŸ“‹</span> Staff Roster
               </h1>
               <p className="text-xs text-zinc-400 mt-1 font-sans">
                 Track production editor assignments, order IDs, assigned timelines, target finished dates, and current project workflows.
@@ -6695,8 +6695,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         groupedRoster.set(staffName, {
                           staffName: staffName,
                           orderId: orderId,
-                          dateAssigned: assign.assigned_date || '-',
-                          deliveryTargetDate: assign.target_finish_date || '-',
+                          dateAssigned: assign.assigned_date || 'â€”',
+                          deliveryTargetDate: assign.target_finish_date || 'â€”',
                           status: assign.status,
                           speciality: assign.speciality || 'Editor',
                           eventName: order?.event_type || order?.custom_event_name || 'Project',
@@ -6713,8 +6713,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const assignTime = new Date(assign.assigned_date || 0).getTime();
                         if (assignTime > existing.latestAssignmentTime) {
                            existing.orderId = orderId;
-                           existing.dateAssigned = assign.assigned_date || '-';
-                           existing.deliveryTargetDate = assign.target_finish_date || '-';
+                           existing.dateAssigned = assign.assigned_date || 'â€”';
+                           existing.deliveryTargetDate = assign.target_finish_date || 'â€”';
                            existing.status = assign.status;
                            existing.speciality = assign.speciality || 'Editor';
                            existing.eventName = order?.event_type || order?.custom_event_name || 'Project';
@@ -6743,8 +6743,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     // Sort: Latest assigned staff at the top (descending by date/ID)
                     const sortedRosterRows = [...filteredRosterRows].sort((a, b) => {
-                      const dateA = a.dateAssigned !== '-' ? new Date(a.dateAssigned).getTime() : 0;
-                      const dateB = b.dateAssigned !== '-' ? new Date(b.dateAssigned).getTime() : 0;
+                      const dateA = a.dateAssigned !== 'â€”' ? new Date(a.dateAssigned).getTime() : 0;
+                      const dateB = b.dateAssigned !== 'â€”' ? new Date(b.dateAssigned).getTime() : 0;
                       if (dateA !== dateB) return dateB - dateA;
                       return String(b.assignmentId).localeCompare(String(a.assignmentId));
                     });
@@ -6975,7 +6975,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </span>
                       </div>
                       <div className="text-xs text-zinc-300 mt-1.5">
-                        Editor Assigned: <strong className="text-zinc-200">{prod.editor_assigned || 'Unassigned'}</strong> - Deliverables: 
+                        Editor Assigned: <strong className="text-zinc-200">{prod.editor_assigned || 'Unassigned'}</strong> â€” Deliverables: 
                         <span className="text-violet-400 font-mono text-[11px] ml-1 select-all">{prod.raw_footage_location || 'N/A'}</span>
                       </div>
                     </div>
@@ -7230,7 +7230,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="text-[10px] font-bold text-amber-400 hover:text-amber-300 font-mono tracking-wider flex items-center gap-1 cursor-pointer bg-amber-500/15 border border-amber-500/20 px-2.5 py-1 rounded-lg hover:bg-amber-500/25 transition-all w-fit"
                         >
-                           VIEW SEAMLESS WORKFLOW DOSSIER
+                          ğŸ“‹ VIEW SEAMLESS WORKFLOW DOSSIER
                         </button>
                       </div>
                     )}
@@ -7256,7 +7256,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     {isPendingFootageAudit && (
                       <div className="p-4 bg-violet-500/15 border border-violet-500/25 rounded-2xl space-y-3">
                         <div className="flex items-start gap-4">
-                          <span className="text-base mt-0.5"></span>
+                          <span className="text-base mt-0.5">ğŸ“©</span>
                           <div className="space-y-1">
                             <h4 className="text-xs font-bold text-violet-300 font-mono tracking-widest uppercase">Awaiting Ingest & Audit</h4>
                             <p className="text-[11.5px] text-zinc-400 leading-relaxed font-sans">
@@ -7597,17 +7597,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const formattedHandoverDate = selectedLeadProd.delivery_date ? formatDate(selectedLeadProd.delivery_date) : 'Pending';
 
         // Resolve customer details
-        const customerName = order?.customer_name || lead?.customer_name || '-';
-        const customerMobile = order?.mobile || lead?.mobile || '-';
-        const customerWhatsApp = order.whatsapp_number || lead?.whatsapp_number || customerMobile || '-';
+        const customerName = order?.customer_name || lead?.customer_name || 'â€”';
+        const customerMobile = order?.mobile || lead?.mobile || 'â€”';
+        const customerWhatsApp = order.whatsapp_number || lead?.whatsapp_number || customerMobile || 'â€”';
 
         // Resolve Event Scheduled details
         const eventList = lead?.events && lead.events.length > 0 
           ? lead.events 
           : [{
               event_name: order.custom_event_name || lead?.custom_event_name || order?.event_type || lead?.event_type || 'Event',
-              event_date: order?.event_date || lead?.event_date || '-',
-              event_start_time: order.event_time || lead?.event_time || '-'
+              event_date: order?.event_date || lead?.event_date || 'â€”',
+              event_start_time: order.event_time || lead?.event_time || 'â€”'
             }];
 
         // Resolve Deliverables and assigned staff
@@ -7641,7 +7641,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <span>Order Ref: {order?.order_id}</span>
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1 font-mono uppercase tracking-wider">
-                    PRODUCTION MANAGER CONTROL DECK * SERIAL {selectedLeadProd.production_id}
+                    PRODUCTION MANAGER CONTROL DECK â€¢ SERIAL {selectedLeadProd.production_id}
                   </p>
                 </div>
                 <button
@@ -7649,7 +7649,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   onClick={() => setSelectedLeadProd(null)}
                   className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
                 >
-                  x Close
+                  âœ• Close
                 </button>
               </div>
 
@@ -7845,7 +7845,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         <span className="text-[10px] text-zinc-500 font-mono">({s.employee_id})</span>
                                       </div>
                                       <div className="text-[9px] text-zinc-550 font-mono mt-0.5">
-                                        Active Jobs: {workload.activeCount} * Contact: {s.mobile}
+                                        Active Jobs: {workload.activeCount} â€¢ Contact: {s.mobile}
                                       </div>
                                     </div>
 
@@ -7867,7 +7867,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                             : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-850'
                                         }`}
                                       >
-                                        {isLead ? 'v Lead' : 'Set Lead'}
+                                        {isLead ? 'âœ“ Lead' : 'Set Lead'}
                                       </button>
 
                                       {/* Multiple Selection Button */}
@@ -7887,7 +7887,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                             : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-850'
                                         }`}
                                       >
-                                        {isColl ? 'v Crew' : 'Add Crew'}
+                                        {isColl ? 'âœ“ Crew' : 'Add Crew'}
                                       </button>
                                     </div>
                                   </div>
@@ -8031,7 +8031,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 {/* Submit actions */}
                 {dossierError && (
                   <div className="p-3 bg-red-500/10 border border-red-500/30 text-rose-400 text-xs rounded-xl font-mono">
-                     {dossierError}
+                    âš ï¸ {dossierError}
                   </div>
                 )}
                 <div className="flex justify-end items-center gap-3 border-t border-zinc-900 pt-4">
@@ -8041,7 +8041,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       onClick={() => handleSendWhatsAppTask(selectedLeadProd, leadEditor, leadRemarks)}
                       className="mr-auto px-4 py-2 bg-green-600 hover:bg-green-500 text-black font-black uppercase text-[10px] tracking-wider rounded-xl cursor-pointer shadow-lg transition-all duration-150 font-mono font-extrabold flex items-center gap-1.5"
                     >
-                      <span> Send Task on WhatsApp</span>
+                      <span>ğŸ’¬ Send Task on WhatsApp</span>
                     </button>
                   )}
                   <button
@@ -8100,7 +8100,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <div className="p-4 border-b border-zinc-900 bg-zinc-900/30 flex items-center justify-between">
                 <div>
                   <span className="text-[9px] font-mono font-black uppercase tracking-widest text-violet-400 block mb-0.5">
-                    Step Workflow Wizard * {orderId}
+                    Step Workflow Wizard â€¢ {orderId}
                   </span>
                   <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono">
                     {workflowActionType === 'assign_editor' && 'Assign Editor'}
@@ -8120,7 +8120,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   }}
                   className="text-zinc-500 hover:text-white transition-colors p-1"
                 >
-                  x
+                  âœ•
                 </button>
               </div>
 
@@ -8146,16 +8146,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       {(() => {
                         const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
                         
-                        const leadId = activeWorkflowProd.tracking_id || '-';
-                        const customerName = activeWorkflowProd.customer_name || order?.customer_name || lead?.customer_name || '-';
-                        const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || '-';
-                        const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || '-';
-                        const eventShootType = activeWorkflowProd.shoot_type || activeWorkflowProd.desired_event_shoot_type || order?.shoot_type || lead?.shoot_type || order?.desired_event_shoot_type || lead?.desired_event_shoot_type || '-';
-                        const packageName = order?.package_name || lead?.package_name || '-';
-                        const deliverables = order?.deliverables_description || lead?.deliverables_description || '-';
-                        const eventDate = activeWorkflowProd.event_date || order?.event_date || lead?.event_date || '-';
-                        const eventLocation = order?.event_location || lead?.event_location || '-';
-                        const currentStatus = activeWorkflowProd.editing_status || '-';
+                        const leadId = activeWorkflowProd.tracking_id || 'â€”';
+                        const customerName = activeWorkflowProd.customer_name || order?.customer_name || lead?.customer_name || 'â€”';
+                        const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || 'â€”';
+                        const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || 'â€”';
+                        const eventShootType = activeWorkflowProd.shoot_type || activeWorkflowProd.desired_event_shoot_type || order?.shoot_type || lead?.shoot_type || order?.desired_event_shoot_type || lead?.desired_event_shoot_type || 'â€”';
+                        const packageName = order?.package_name || lead?.package_name || 'â€”';
+                        const deliverables = order?.deliverables_description || lead?.deliverables_description || 'â€”';
+                        const eventDate = activeWorkflowProd.event_date || order?.event_date || lead?.event_date || 'â€”';
+                        const eventLocation = order?.event_location || lead?.event_location || 'â€”';
+                        const currentStatus = activeWorkflowProd.editing_status || 'â€”';
 
                         return (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-sans">
@@ -8190,7 +8190,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                       {wfError && (
                         <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 text-xs p-3 rounded-xl font-mono">
-                           {wfError}
+                          âš ï¸ {wfError}
                         </div>
                       )}
                       {wfSuccess && (
@@ -8260,7 +8260,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                           className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
                                           title={deliverable}
                                         >
-                                          v {deliverable}
+                                          âœ” {deliverable}
                                         </div>
                                       </div>
                                     </td>
@@ -8344,7 +8344,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                     className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs"
                                                     title="Remove Staff Assignment"
                                                   >
-                                                    x
+                                                    âœ•
                                                   </button>
                                                 )}
                                               </div>
@@ -8356,7 +8356,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         <div className="pt-0.5 flex items-center justify-between">
                                           {validationAttempted && isEmpty && (
                                             <span className="text-[10px] text-rose-500 font-mono italic">
-                                               Required: Assign at least one staff
+                                              âš ï¸ Required: Assign at least one staff
                                             </span>
                                           )}
                                           <div className="flex-1" />
@@ -8400,13 +8400,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl p-6 shadow-2xl flex flex-col space-y-4">
                             <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
                               <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                                <span></span> Production Staff Roster - <span className="text-[#a78bfa]">{rosterStaffName}</span>
+                                <span>ğŸ“…</span> Production Staff Roster â€” <span className="text-[#a78bfa]">{rosterStaffName}</span>
                               </h3>
                               <button
                                 onClick={() => setRosterStaffName(null)}
                                 className="text-zinc-500 hover:text-white transition-colors text-lg"
                               >
-                                x
+                                âœ•
                               </button>
                             </div>
 
@@ -8647,7 +8647,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                       {wfError && (
                         <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 text-xs p-3 rounded-xl font-mono">
-                           {wfError}
+                          âš ï¸ {wfError}
                         </div>
                       )}
 
@@ -8758,9 +8758,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 {/* FORM: Delivery Checklist */}
                 {workflowActionType === 'delivery_checklist' && activeWorkflowProd && (() => {
                   const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
-                  const customerName = order?.customer_name || lead?.customer_name || '-';
-                  const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || '-';
-                  const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || '-';
+                  const customerName = order?.customer_name || lead?.customer_name || 'â€”';
+                  const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || 'â€”';
+                  const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || 'â€”';
                   
                   const assignedDeliverables = getAssignedDeliverablesForProd(activeWorkflowProd, true);
 
@@ -8794,7 +8794,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const pendingUploads = deliverableUploadStatuses.filter(d => !d.isUploaded);
                       if (assignedDeliverables.length > 0 && pendingUploads.length > 0) {
                         alert(`Cannot submit deliverables!\n\nThe following ${pendingUploads.length} deliverable(s) do not have a verified server upload saved by their assigned editor:\n\n` +
-                          pendingUploads.map(d => `* ${d.name} (${d.staffName}) - Server Upload Pending`).join('\n') +
+                          pendingUploads.map(d => `â€¢ ${d.name} (${d.staffName}) - Server Upload Pending`).join('\n') +
                           `\n\nPlease wait for the editor(s) to upload the edited folders to the server.`
                         );
                         return;
@@ -8871,7 +8871,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         {item.name}
                                       </span>
                                       <span className="text-[10px] text-zinc-500 block font-mono">
-                                        ASSIGNED TO: <span className="text-zinc-400 font-bold">{item.staffName}</span> * STATUS:{' '}
+                                        ASSIGNED TO: <span className="text-zinc-400 font-bold">{item.staffName}</span> â€¢ STATUS:{' '}
                                         {item.isUploaded ? (
                                           <span className="text-emerald-400 font-bold">Ready for Delivery</span>
                                         ) : (
@@ -8891,19 +8891,19 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   <div className="flex items-center gap-1.5">
                                     {item.isUploaded ? (
                                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold">
-                                        <span></span>
+                                        <span>â˜‘</span>
                                         <span>Edited Folder is uploaded in Server</span>
                                       </span>
                                     ) : (
                                       <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 text-[11px] font-mono font-bold">
-                                        <span></span>
+                                        <span>â˜</span>
                                         <span>Edited Folder is uploaded in Server</span>
                                       </span>
                                     )}
                                   </div>
                                   {item.isUploaded ? (
                                     <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-1.5 truncate">
-                                      {item.folderName && <span className="text-emerald-300 font-bold truncate"> {item.folderName}</span>}
+                                      {item.folderName && <span className="text-emerald-300 font-bold truncate">ğŸ“ {item.folderName}</span>}
                                       {item.eventDate && <span className="text-zinc-500 font-bold shrink-0">({item.eventDate})</span>}
                                     </div>
                                   ) : (
@@ -9154,7 +9154,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <div className="space-y-3">
                         <div className="p-3 bg-amber-500/10 border border-amber-500/10 rounded-xl">
                           <p className="text-[10px] text-amber-500 font-semibold leading-relaxed">
-                             Outstanding balance of <strong>{formatINR(balanceDue)}</strong> remains. Mark "Payment Pending" until commercial clearance is log-checked.
+                            âš ï¸ Outstanding balance of <strong>{formatINR(balanceDue)}</strong> remains. Mark "Payment Pending" until commercial clearance is log-checked.
                           </p>
                         </div>
 
@@ -9189,7 +9189,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     ) : (
                       <div className="space-y-3">
                         <div className="p-3 text-green-400 bg-green-500/10 border border-green-500/10 rounded-xl flex items-center gap-2">
-                          <span>v</span>
+                          <span>âœ“</span>
                           <span className="text-[11px] font-semibold">Client Acceptance Completed!</span>
                         </div>
 
@@ -9205,7 +9205,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               }}
                               className="w-full py-2 bg-gradient-to-r from-violet-600 to-indigo-650 text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:from-violet-500 hover:to-indigo-500 transition-all shadow-md"
                             >
-                               Final Review & Close Project
+                              ğŸ” Final Review & Close Project
                             </button>
                           </div>
                         ) : (
@@ -9337,11 +9337,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             </div>
                             <div className="flex justify-between">
                               <span className="text-zinc-550 font-mono">Event Type:</span>
-                              <span className="text-zinc-300 font-semibold">{order?.event_type || '-'}</span>
+                              <span className="text-zinc-300 font-semibold">{order?.event_type || 'â€”'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-zinc-550 font-mono">Event Date:</span>
-                              <span className="text-zinc-300 font-mono">{order?.event_date || '-'}</span>
+                              <span className="text-zinc-300 font-mono">{order?.event_date || 'â€”'}</span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-zinc-550 font-mono">Assigned Team:</span>
@@ -9351,7 +9351,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     onClick={() => setAssignedEditorsModalProd(activeWorkflowProd)}
                                     className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
                                   >
-                                     {getAssignedEditorsList(activeWorkflowProd).length}
+                                    ğŸ‘¥ {getAssignedEditorsList(activeWorkflowProd).length}
                                   </span>
                                 ) : 'Unassigned'}
                               </span>
@@ -9362,7 +9362,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             </div>
                             <div className="flex justify-between">
                               <span className="text-zinc-550 font-mono">Delivery Target Date:</span>
-                              <span className="text-purple-400 font-mono font-bold">{activeWorkflowProd.target_delivery_date || '-'}</span>
+                              <span className="text-purple-400 font-mono font-bold">{activeWorkflowProd.target_delivery_date || 'â€”'}</span>
                             </div>
                             <div className="flex flex-col pt-2 border-t border-zinc-900">
                               <span className="text-zinc-550 font-mono mb-1">Raw Footage Link:</span>
@@ -9593,107 +9593,90 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         ? 'bg-sky-500/10 border border-sky-500 text-sky-400 font-extrabold shadow-[0_0_8px_rgba(14,165,233,0.25)]'
                                         : isCurrent
                                           ? 'bg-amber-500/10 border border-amber-500 text-amber-500 animate-pulse font-extrabold'
-                                          : 'bg-zinc-900/80 border border-zinc-850 text-zinc-600'
-                                    }`}>
-                                      {isDone ? 'v' : idx + 1}
-                                    </div>
+                                          : 'bg-zinc-900/80 border border-zinc-850xœì}[sÜVšØ{~Å1×q7=ìn^%¹W”B‘”ÍJd‘”FEİènXh @ó24«v«’¼äa³3³µ[©©šd+û–—üÿÌOÈù¾s  ç†f“¢m¡Ê—sıÎw¿Ä½LZ¿ó‚^ëÑòrãß‹ëæıÍ3«	¹öâ0pÉsÒøñOh.ñú—äWdåÆª§¾wşìßY½{İù’ì¸‰ãù1ù²cÙ>mô|'_;cwsaà»—­2ö‚ÖEk™L¢ÖÊ‚íTem/qÇq«ç‰‘ï§qâ®Zgnráº:“íÓâ‰]\¿ÇÍ{»²2¹|Ga´ÎB¿Ïş‡AH’È	b/ñÂ Õı0ŠÉç×ÖİâÅÛÓ(¢ƒ'5>"°Ù80g|æF­õåe6"z+r`€zÍQ˜a@Të«|Ü«¸ë6Ğx´ay:àªqBàºgèÂÚ-\O; ö½\¤7rûûá|ñiÖ^îØ}•Aƒµl©6èã¯È’ ã„ê‰7v}/pá_º:ãI3;Io.Ú¯Wı³nœc)»—Kû ÌÊéÁA­·9O'Š})î†—8¾×#ã¤µÜŞöV¸E×CD…Yğq·#wâ;=·ùşÍ¤ï$nŸFaÊæôù5¼tî~F~xÚ“ìù©×¿é’÷K¤Ñ¨±£O;Û![¶j½‘–/.şµá•ÃÀŒı^ĞÓOıS §/Ã×î’¬J‰Ğ·ÕŒê¹AŸLZä,Œú”,$é¤_Q =fwV—5àøôlš$a Y–äjBÁ^[Ğ¼×÷bçÌwû›”O9vÎ½`¨Û0Ø¦§èÃæus‘l>#zJ»ÉVæ›ÁÔ÷PA?L?aë~B'cşğF7rag&—­u2¹¢#¬7…çnÔMï<ÙXæ»SØ¤')^Ç_ëÙgxïbDyµL'7ê9±K8“²Œh)rzè2·.<h=
+§Aßí·ü¡Èª8¾ŸíL7œ8=/¹¢hL½‘º²í=××œ%·‡¶xz6ö’ùA[qÏ6²=FNß£<Y+	[Dá¸uæO]`P½å}oâ/¶;Âùåï¥{:çıcÜ(%H<rúá¼3·MÍ˜<öW»İñ~¹ä8q’iL%j¨WÙ´ûôú´ŒŠì™ä˜Ş,6)¦¯ÜF{pôªK¶ı®4Eß»½„LÂÉt"Å¶×Ô@677I£œNX`"ªY5îŠÜd
+æã)Ì–bÀc„rŠ]-t)uwÏ)”î¸gê'M%îò¤ùYìútØnÿøàEfu|7Jš‡¾É>#|Ö$Æ]_Ğ I6EÕsÉ±«G‰_BzL:@¼¸IšˆcòÃäí»Åö€¨fk¶ñ	ejpk$œOzŠàúyØ¦ÓéÛ½¯œ\aŒû´="´[¡#ô6Å‰=ÏÑ¯C±Ë¡s5’v4aG4MŠkVRöÌ<&xe"¬I6;»vğç”a¦È˜×MB1!€ÿ‹iLùå8>¸ÜèÈ=÷Ü‹Â@—Äå_’Œt©´&êAà©ÈÇĞöâoá‡ùhßP)†ã¤>SÄ9ŸŞ4qéKZ¦ÇíSüO·CŠ‹Ó#¸b„-YcIÓDäèıö½ô[rH¹HÚE—JÂL'ìî([Úß‡^Ğlü5¡¢Ä{eO7šU™‰s›‰k›ÍuÛ*›Æğ¤¾f¯²ÊCxM%…Xq@ù»êÆúTÖ§|ÉÕ)L¬›ıÜ¡¿ É€î<üİ\l'áŞñÁqÑé¯xâ{I³qÒX|»üNµŒêS6ÃN×Şç›‘“‹)ãã¶('×ŞP
+8JYj]'™Eß9s}±Ù3?¤ÌYY•ÃX6ù>Š‹z…ñYQ¡`Ğ!¤üÍŞV¤Å¡j'SZ¡‚šñ2G%S?TãÆNŒÖçÁ¯=])Å¹ïuïQá?»ê6o³ÊM†¾á¿ş©	&š%0ìtJzö\{ËA¿ˆóõûb^xq<Ãˆr]ğ?°7Ä­»ùÏUDck­X$&T¦"æ—·<QL„ÑvH©»y]‘ôjÃ0Ø9ÁĞÍÄ4JµÅÏ›n;q¢¡›´±qâÄd—Á›–A-),ÿEk@i_A—$Óm,‹º‚ÉUk…É%ĞA"±ò}YAp¦ø£NÔS`b·€üã–e?Î½ĞwÜÍ|#µ“ˆÜ¿z‘Û×¼¤„§áå¶?™zã[k.¶Ûí§öj­ö¶âØnw&Œ•nä–>ä;	Ñ_xVº¡üp›#kÎl/<+İ0ö¸'tÄ>³[ê^‘0‘­^Ï$ ¬£ı–oÙ,àÓ;!?=2n{øjÂê?|KÜã“©õ0Í&à;ıYâ(JäÛëc¨áë‚úùã£ÎÏ‰/²hœQ|¼_cp"×ÑôæL“ğ%ìæÈ¢Lk°UÀx[ø¶GáE¼y½ji˜Î)&‡îÕY¡[Óh…>%gı>q‚+2ğÇ'jÂˆ8QoDO=X¢? ©T·§<!õ8T•e2ÑZÀçgrü¹×R¬y¿fÄ¯êX¡~òC‰İ–/¹Ä
+È%ZôTv@,•-¶–ÀZ[ 5Î¶/hÙ{˜¦<Iã•[¥YÓ…Á"¸u|¼÷õëİ²»³wrptL:ädwë9<8|s(X¯.0y ~ö?³óeU wIe/ (¢µL~´`™z¥·"ÿ9¡àGáw²ó=Øôß~NÀ´µÆ€Ü½1åÜZ§ïR˜* Óò2œ!Ç€JRˆZ½ô	'vüŸ±sÙºh­Ñû Á€âZ#¯ßwƒÀàœºsöBöÉˆBîòùè]ÅÓ`¡¡µ¶\v:İøÆu`xeclyF‚gË™Ì³åí_-÷–ûú•æ~¡2$çâì¼òì8 36)¸¤DQpíBSã÷¯$OO\g\­Âùîéh­2‡x,[ÀIŠDâ|+«‹´^:\ÁgÊcTrPS»^kŒê©=ñš„ÌDHrC6IäÆ¡î¢¹e+èÃ:6UCQmÖt@W¶2[iªq=ÅÛ?ü€–nË[ãöüî¹¼2’+ÓƒÄş
+ÀiÓÏµ ×Súâ²‘.îCÖ3C€•ÍéŒÖ*A†ÃUÔ¶Äh+¥X]ÆU‡ ü†Œ_©úYÙ›Fqµ&¡‡€(ú·m”y%å]VÉ¹ùEi`ŒZëU&YN%iÄn²½j$%B óšÏ^¸Äªh,í˜DˆÁ…ôİA’™8¥ké;zÜ™C>Åâ’sü4Q—ï$*zN©Qçq™7-©Ô¹”
+)D:Æâr®åîúÏg0 ğèi'ÍÒÂ.¸ÚÌúq†¸¹viÖ¶ŠvÙZ!x¦˜¥4/"gB—ÈèÈÈ›‰:ıYÇ¾&ûTÔœßÈ2)Å$á@Õ.½I@·£€İ§ÉYØ¿ÇA$…¯ÖádÀ›Cëšˆ–¥€hC¨€èQj¢¢D:B„Çj°'‰±à¾3‘ø?M*ÄV×‹%0ª©iİÓâ}/F×¤âˆÙ3à£·¢È¹j{1ş+}kÙmÉƒ¶ïC
+MÏÈò¢B(y.ıPñr—ùs=WŠƒ~[ŒF#|¡|«Ë=ßÔãÀÇâ@ÄV#±ˆi^ì’·ï´û<tD¯›ÔÄ÷úÏ»$F7’%2 b ˆ3{ıKàRÀšJ_\ÖêgÀA‹·¤sÊbC a§Mæ Ç\ßšn÷:rÛÜ_·
+ÃeÓ?->Ñhp`TØÙbÊÍá/ŞLÊŠ÷@÷Şã‘Ï¯…ÅÀ8½÷êŞØä0„d£kãïfg÷Û“Öò—ÍßöµØñCÆOtË˜öÁƒ›dâD±»$ì»·+ï–È
+İ­YÑé¶²ÃxK›z§ï2ãˆK_•VSş´²®y=ÁåË8˜:ªšSİ/-‘ 
+Ú¥ª.“ø¥z¹$oÍª9ñÁ!aBĞiq@"2+÷¿¢èîF‹q"ç‚ñTÌÙpRQñfæëSÑ é PL éi#¢‚*É¤-ª6HÖ@J«u_\rk ¡ôu¾,¨ˆ
+fã\Œt¾ÊMGNaT|€qïRb£ZV­ç<\OeÜŸø¸OAÇ?¦‚òæõã›"ÿùˆ±x\›!ë“¸ıhñÚë0ãïÀI
+a”:]÷sŠ5 ·“‘sZ¬›A'‘Š`ÙSåüUn“ò-â+]Ú¥±3irİ	ÜX:¡¥ŞìœâÔÜ^Ê°
+@TğPQĞÆ×3/ı¬·ü>ı&n3mŒìxbp™Ç9£"ıûàÃ~ŞNï4Şé~6,:8
+}è o'‚…–…ÓOã‰Ûó(¬%WØ“
+lúb*BËl.)mf{ÀYàçm\ÿÓşBc/h}Nc·apØwOdù¸È¸©%z˜õcƒd;
+‹!<¾âğĞdjår™V‘JÒ'ô\˜Ğ0ú'áĞçg•—!Lªä>ÁR••kÜé]ß¯&˜ı€b0Ùæ(Â½„‡y‹a1è±íQ¢'İ³cŞr~´ATÇi3>9eÙõ†SŒp2¸¡\÷,PÅ	úJà­~«ÁrNÖÎíŸîDtj§0:]0ƒƒ–ôõ>¾îÛ¾n~qŠš‹köÌ^ŸF¾şíL™¡_˜EûS2uJqşé Á};T¾üN½ß ­Í|ÓI86_/ Tá7TìÅ?eçeÃ$O°é»ã±ò 4Ğ†Ÿêğ¸¼sşœÔ(‰¿ó’Q³1J’I·Ói`Ø“ê…¸òeüiß›Üğö0‡¾Ûî…cõ{áä,¼Ô½2v‡N;ø]ñq&ì¯hØ§ôâ–«_¤¤~¦~bD*–?İU Éã$bÔGÉìm ?#'æ¨ïEHÉ¯4yóêXŠ¡A.&E…$qz€zi&!™tTôüpH¸Ó‹Â8&ÇÓ‰s†á””,ĞÓE¾àøZ¥vÉ…´y.§bŸVl‚qoÈ@ªoÃ@“îÕæµ@²ò?9±¥\_w®XX:ëËUS–WFÎ¼ 6°Ök{¦;ÌE©eõ:ã÷L±²¦qÙ±`6sh¡/fÍØEõ³òYÑÂ³BFô¿Ô´UpZ{÷Ù¾˜K@À—˜eıÁˆ÷uÈúÓ-§#jÜ<Ë¿·š™Eü#ƒ£ªĞ&Så3Ã…vl×ç«Ã‰õhôòV{ú"Ä]´^‚ş´à²´Ì\–\Š¿ÚY)û}ˆW¹U#½·ÛFî‹e/óZÑÕ*qö¦ü+&Ø¸óu½~/.£å2˜Ó|½mdù%&ĞÜõe7ïrrŸ‹%:->»è‘¬ne‡uğ`Î¼Õ…Ã`
+<’€ß¸ÕøúGŸÇ]Ç¿i;òR„Œ|/ >ŒÜ8÷B¼}«é ~g“"ÌÒd²÷ìæÒÈœ?+^G¯Ç¦”ƒ‰Ô®ó¹ßÿa–Y„õØZk‚Í/Æc19o/„”Ñòbfgflğ†ìW8-cÆ)$òVÛ^ÌZsµV¬ô2²iùUfVÒÀgÛ4cZòRahÒè2š,£:hgmùÖÔ¦0›g?şË?ÖËAÇ>KwˆxaP§•:ï^1@¿}T~ÕÈH§ãQe©a’hô ¤’9v¾]y¯/ÄK|Jÿ¤cª‘^ñ/şÃß+fv	ş¬2ÍÍ-}œ@mŞ¼¹6‰[Ê†"4eY{¼bwìY±ôxıw{`gŸğt"™_‘İ×vïvOîõ(v2gÆò:U*<7ÄS]»F‘;Ø¼æZ‰ŠÊ©çT#Ò%ïS5Ôçé”®»`‘S›§g¾|Ğ Â¹şæB†Æ!¡Endó%{ó0ô½Ş4Ò²ÿ¸î©ic*·ñÔäUÁHx–ÊE‚§¶à‰ÊïDÇ\´¬8¨SÍÓäØ8İ?Ãû‡ÏĞ_şüÇ&tÇ¸WåÜ½¤cá¹ nX£Ë;‚ÿK|a+Ítı+‹àìTWå!µĞJrcÔÇ=sÆõy×ÏPç×¦ˆ„é-0I=Âr‡dÅ‚<İÆ¸‡"<4	İ>Z^¶€¬}±ÔqÙ€ …H¶	øÿ\v&#LûÇzcgè¾‰üü\¸a±g%ÎˆÕĞÿÛ~°qcl\zÙT¦WÕßÿ™§VÑµi—ü<]¼ni1?Ó¨ò+SêÚ½^RHÙ}”éüì^çÎ;]¹ßPúØ¢)SÂbvÕ?ï+baUY”iòMjBiC!_‡6É4¾,óÅ=Çwé×íåÕw<ïYzo¹ıÕ“wkøHišÁhƒ‰ï¦©ØƒÒ!ø
+!ÓÜ¦C¼{åÎNJ±D_ßÂh÷`\öì´) 6{ÓÌ—¦œiéÙÀl]nó6üæ-9Îy°"Ë™/=·©æLb‡«.xØ ¹0¥Øœúl±‰ŸµÒ<(YD62Ã‚¥°¤úõhş¼(ş­è}-j?­¯EéçDçm¨ü-ÅŞBç-á{ACR
+¦ñúÔİFZ¾eŸ®ÛQu%²ÔÜ˜Iz±Õ]Õ$¿mÔ½sëHÖŠ{STÎ`9àÔî0ÎCÓuDÜŠ^Ğ__ Ô6ÆK¸n¡P³	v"xm½ÀŒšÚº9jôyÕ…·ˆëÇ®°üÀÙnãE.áEpk±%Ò`ø\&Rä»”#ß†İğÌÒ}ñG“i4ñİ
+"n§ˆ˜ßª"bñİŸ"^@T‡‡tĞöÈí}Øö¢ï®Î	×B¾VœĞìÊıYÂ«¤÷U™X0A5³æó¨—õªğ³˜öêÍáşÁÖÎî9<:8xI:dïÕÖ×»ô×î·{»ßU³_MÊˆ¼nÚ«µ‡–öê‰<ís‹XS¾«Û¤¸Z)®Êî$9NS&ˆª
+¦W™×3uu˜ì#9ª¼Vë•‹ö¿Ú®êçµª¶èn®Â\z{&fvªû1§@˜_M2ª²Gî½ùjª†–»V+÷¹3Z¿Uš*=·l£âª“½Jšm“1!yö)}¦*´°Öt'¸£üUL†g”lÓ£^¿f„ö¨šÕŠå²*¢S“G=©V­,÷¹¾|Çê‚§ØúÑ`kaÊè^A2*R*#]“àgjšÆ4S	†®UÏJ*i¢Ë:Ïw;ıNCî¤ü\×jZ^¶ó[lå·şo;Í·Nëw[­ÿ´Üúê´õîW‹í/;”ïïL{ÏİËI%›ĞØ^óóE—İ'’ÅsÚğ­fÒş’¶p·sqy’[úÒŞx¨à.ã¨·y…Šƒuüdóú}‰ ¶ÈçZ
+¥x¡L,”~dÂ™+œ¯vÎÃ3¨DDOw8^@Æ,g }©Ä0Ø¢02V@Äˆ¼—<{	ˆº¸%3 H½ò;%ŠúFÈ«ÓæEãNğZ€å™ÆãäŠiß‹)”]ÑïÉÛ=q"V¤·Â~ïú.ø–ë³÷ğO)÷ıû³ı·S7ºbE0Â¨Ù Ğ8l¹°j­q<l,Údú¡¯ïPÌ¹IúaoŠá~½È¥|6=’Ş¹^šg-´38 hÂBéŞEni-Íf½yAàFßœ¼Ú§½½O‹sS<K3¯GaìæÍ3WFµ8¬“iàœSøÀ¸y¦9€B×y[’:ëÌÄŠu3(¬- áğ%Plyœ¹”Šd††däæîL}=hñu&Pjo{äùı&›±f”Ù‡ä¤ò·2sñ:ÿr…Eà%­Í¼ÁšE¥jÊeEÍ#‰"µK¨yuİLF	{#D-£CMİV–*~&ÛŸ9@C”ëæ6½½&;Ì¢ìí™ÙYÕü‚¡??¯rQC¢Âÿ˜"…˜¾¸­_Z«ÒËßÅ†`õÊ:’„ò†FaÅÒ³“ï¾Ù:9Ş:<$Çßlí½şºª©bÙ¿¾9IL(®0nyİ4íL_e“¦}^j+]šöÙZ?õœíoÿjeùì«'+ï
+ú¬l'S?v¥*¢ã«˜Î†ìÑ¹Ùºbw„Ñ­É„lQf˜y!ÔĞxÍ5“»tØ,uQ>Ìã‘ƒù€@R±ãÖ)Äk!ROKï®üğ7İ)÷TùhÇIuí–Êë(Ÿ¨Ş—0_…ø¼š™Üş\  %‹Q5Û†wÿø§º•ˆÙ^@şäY@i ê£=lTÆk/ş˜*¢²‹ë/uR‘–!²R0‘]Í†%¯\nı‚J6#úGjëî)ãn[¸G\ˆ+äéHÑH<¡tBÎŸ§bIQË­¤½t“Ş¬	—Ò§©gxÂ¬•8‘iY%§|Ü*ä[-?n”Ä¤!WÙÊ}TrÙ6ˆ‚£|KÔ+S”ÙÊüø?şçÿû¿ÿ@pİ2Ë€wo¤+£wË0»bXº_`fØÂ˜ ë¦>÷1d ª$¸LÚR½Ä®
+!RÂ¡®’t³‰LiºÉD‚Ç.ıjÀ–œ?ÎÄI'7Î¹ItEö©NO„lc•vcËã k-?²!K‹Yoc®¹]OıÄ›ø.ÏÛKÜKH˜^F¬¼…j÷írÆrÅ+•äà+ê¨s%—Ê<)Êàc,9Èkyõ	uAv×V¤Œ9[#È7E5M Ô«tÁwÙší¸	Öí¥üÙ	/,Ë¶‰+àÜ®jØZï=A2e‰Rmuº˜‘Õ=Ç´˜5M¬ntòâ‰¾ã´^1h@«}¥Åq%öè¦^¢Û(íH§Å²Š‡·ssÃddpÌğ^g¸Ú®pU¬Œ‹\ÏË	”m<«l1vÖK±–w×ìaeZ3£w•˜©RCf‚¾T¢N‚!„ÖÎ<À}YeWàÇŒ¹”ˆ ®«ùw$ì˜>CÒš)S»ºYÛyFAˆW‚³" œ>ÖÉÑƒYz´o=¤Œ¸È&mLM*ök÷¼’‡¾”ò½¸¤a™éÎÚ9¥ä¢«ÈC¿±Ûöj•8äZ@”ˆÊÇ)êL%>”!ıÓHÚœ)½’ÙÍMg-P:Ài+7*UK4âëŠ¤Dr¡JNåØ­”Âõó\ã*ª‚fäBÅ¸¬)5l
+Æeİ‚q1¬q¿‹Gáüm´b¨ÖIİWk%°éß—UÊym•êQ:Œ¢~º€1yWV0»ÅI6g“,­$İ›‹Öã\	°¢ğYZ¨”ö¶XMÙÖH iåÀÿ’¿f¥t®?£K3…Ës«±R*”-<k¹;õ"·¿h‰|Œåî‰MÁû”aƒÑ˜Ø5^+<œ‰i©Ô
+7³¼¾£{q /€XNÜÌiÉU‰`a¬kñ|åSW•qT—ƒÜêívÚJ‘¨&Sw~å-`}ÚÌ5¡í”n/Ü„n¾Z76ó9a‹0²%.lÄ]qäM™Œ\m¡\ºÛ¶É¯m'+«kd}ãÑc8J˜b‰ı¦ª¢[-TÌìµ«ÕG¥2¼S\>öµXãL·‘¦/=h¨KAçW‰şJÊà>)w!ğá·å|µA:`x,E«:ÑV¢‘³Gk´’¯C2Ï<ßM«£Å|²M©ÈOécø£3wF.ØøÀ2#Wç¦—&æAÅª­Š’^Ê=…“=·¢cß,2³b•q²Bé&%\¯Ü8¿n}×Â‰‘£ ¸K¯ˆ/:Aq9ôKÌİƒµÿ`Zà¡zYL»ÔyTaCÌ*ÓË €]*›šSÖ¤æ”â4uÌ–GC?óù‘²Æ)×ëúÌƒ6J"{ÕOß‹Áİ«¿Y9ÓzìRSaTòâM™
+vã˜î½3¡G7eã÷ÖLd¤oÜo/è…D^ÅC`WğÇ›£=È MÛ’f¾³–^pÎ¢¿7óL‚ÎÄk§Ğ#7¦[öGºùùuq7_À9 ·óÁéËğÁ%Æ
+cÈ#Mùõ[W4Tld†ŠélU³Ì 'Ö£ÖX/D#‡Î¡9q
+¯İ¢/¡Âè²Àõ‡ı/şı¿1E6]ódD2AJ{òMºíá×<\”9ÅO+ä}‘×9/Ù«Ÿ×rE\×º"–ÜT¦r=üäî 1–9Ä¡ B•›”a5ó8„ÄÕ­àã¶[õpK$ã‚ƒ[á	$ëz½=´(M¯·µO^oâİ¹{½9Ÿœœwæ(Î¼6(ÙqãE'·í+#=<77FÅr±H·#‰˜p¿Nnô\~'=ëÁß«wÙÏÆ—ŒöD’Èñt<v¢+òÂH‰£…ÎûÁÚˆ0Œ¼>şPÜZíşsM©ì—Ÿï»Ñİ§+ÒáîĞpİè^Ú~œ°ºD\{_¡S‚¹Pü+Çw÷¸Ji6 û\™¬üãC_œ¯ığŒßJYÕm×èÜ}Ê™¬—VIDç’õâ0Nû|hô}İÙR}åø[‚£ê™4e9	D…WNWKKlR|)Ù‰É™Â‹(3ÌM#_¡Ln50’ÅØK!ÉŞš+Ù—¸X.œÛt¯Y¢¦¥bAìVV­fáUEY¨æ+¦-e®KnK³{ñ[l=+ı|¶¹I 1<X…ÄúÜ¦%Å·]^e¹Íu¸ ~*íEê}õÊ£Ë³y|V˜XV³TÚ†ÁË*·‡Ç¯4WbÀ*l8˜-({¸¦q ğût8]ï;nÀ
+7JÕ ë/OSP·åmŠAÚR•TÑSA&-qik—öV*#È³‰@¾…Š·gúLÌ“”Šç•ÄåYxñI¥eÓ°©“yo.u&•ÅÂùÀ(œ‰¨4/Ïİ¸ÓÃ›âÈÄÏM-¾dµÆ[s+Šœ«¶ã¿M½B¹˜ºí’·ï>î+œH-ª)=o
+‰©‹Á
+Æp^¸-,¼4;¯­ıC
+ßÖ¬øºğ,åvºĞ£Ès{×774¹&µF#r†G¼ Ü¼áˆâUfÌø‚l1a\PèñœÅ®îró İlÊŞ5ebı³r®)°wàaÃµÉEÆ*s±JšzX¼ZæØº%‡c7‹ŸÜLÊWş-öáa¸™ä‰9ïÔË„HQ„1Ùï]9‹ »uê$ÂÊ#éDà2$Ç´q£Q>gÚ7–{¥Cv(Z¤È•‘‘2ÿ4vqB:šbò*`,÷-]Wæê|0“·áSÉ"¯C7ŠÃÀñ½ß¹}îÕÒ”ÈĞFÔ•§¢`Ø˜7eÅÓ¬Q]’‹f„Ì'ÑMÿ0ÂyZü×Ús±<®)-šêà·w¸¹ÿÿĞDzä^×Ş&°à®üqJ˜³–;åEú¾{LıI˜Úœ¤ç¢Ü¬ß…§È‚Ê]x‹ "=÷œÌ”w+è™ÙUDBY–@Y­Î•ÜªX¡¸ŸˆÃD›$¤ Æ‘]%Nw.$wã<r;3¢x
+8U89c¥L…>og)K?‚ÉYšµäî\7^í‹	µß¼h©’j‹ô·®ÃÆj}‡î°ákûk<Ù¨ÚrŠÙ´gvÃ¨•NÛäí\Çİ"Ó<ÏÉİâ%eòe/d#•Ù¤î×íBÆ[¤ik­Ì3O¥°´•F}µÊ¡JÁ]1^„—v^N…ÔÌªTÏy<Z³+õ¯¯èŒı†ÂÇ^
+ä
+G{©s½A+PUGƒ™|Í+‡²tÿ‹œx“.ù›pJzGõÃ)e[=LgJi=Ã˜µÚ¡Ëq	<[…N/œ\á³T"ÅwÆN0¥ësÕ®NªË…nWÈmr½ò1Z†T¡…üœd_8¬ĞŞ¾—UÔ*ùàÎœ¤™%õ= ›»LÅ1aàıf3vr'„˜¿…ªÌ}¢%`RYb;Ó®T	BÔB,ı¨Í¥Ùì·Qİ#uu9ƒG÷O+–Â»¹ÄKX!ğÎ]jxu°³µL¾Ş:ÙınëoÈËƒ#rxp|Ò:<:Øy³}²wğšÑß»Gˆ…WÚäàõ‹ƒ­£pÜÛÙ;!Ç'[/_RéãÕú6¶+`Ñ§[ŒÏ§ »AO 8Å‚Ùd¤éRM’H&\<){ƒÇc*¦h7ç2J	?‡°Ámè¹´^Ÿ_‡™xÆ0öò{…Çß¼¾&X+«K–Û_m,®¡?«0Î¥!á›áƒ•êî¥—Ôêá>³¾WD&¼Xû«›³÷ˆD·G«ÑÍ[6¤iˆ.Á}‰#>´.<'7Ls…Š=Ğ­ƒã]E€œ¸§ƒà,t¢>yÍŠ‘¥^îØ’ÔE&±à}O·bàéTbš§ŞpJùåp0ğzt¼dÆI+?$¸p?ñÜx‰@ĞüA	éqÛvŸ9H•Ù76Ûü:­°I\eöJèH©©ºW—w¹ºÔ¶¸†û‘;›B\%]›ãéÙğgğ®ÎMqî—¼JÂoÅa[¨¸©ÇcÁM}Uãx¤ÚPØê”N
+ VùyÈd©ï,wHÆ$ïÌ‘]ãR¡u¥0»PDÜ¹Cñ˜{V …zI÷S®ß`WÅ£‚„cñÃfÑAiÊ¨:ü:d'TÖ·. pÑÍ Â¹åIsÃıGÂÄ	³ÅC’¨÷”ÿ`ÁÆ+û#È+ÏŒ«4;c¢ÍñÄ¯\—ìí<0Fö€€4Õ²ÈTóÏgØİW‡­Õåµõ_&ÀrÏ‘9ÁªÑ1Ù¤áÎZšÔóé1Ÿ:ƒ¿›ŒiÓzÔ˜ı8Å-Ì¤L¹È(RöRãOöéÜ¨LÔ<t£±éÔ9xô®ŸŠc¢ËÌw;ô[à_„¡ï:A³ºèÊ³¹Nÿ ğ¯fú¸Œyô†-ÖaŸÎq~õÕ
+ùêÉãGd}muEi4×yä}<Ì£sİ“K=©{À£å”éBTs‡UUy©"ŠD*7:•ûÜh0‹~XD;–»åÉ,ŸÔ?Ó	I?éŒì»Î9¤ZrÔí¢%€yş2Iôî˜ÊÌuD**Mµ û+C½fsİê÷#7?Ñëòu'ôÚ…5øAcF)~9;¹f™#ÿÃd&!¸CrôO4ûãÓl%î3Î	Ÿ½€Ûé@¿ ÛtMï“ˆóg:5üÛÙÏÍñ@xıÅyõ59
+şd¿:~ıB)ù¯C/ ·Î°<,NSÚm!Œ¶Êû…ng‚Rá{[HıyÃ˜`3:
+ç§Ù™˜•GwÌMF¬Èœ‚,A
+	–àÃ;"ûè9
+c½y•’‡'¸1l=ñªDÂ±7”9å`YÂŒ¢×Æs§b(7¼~“î%şxÆş1õªG.Mè Ñuì–Z§Ï´õƒ L;.UıÓ*íŒìŠUã*À9z5´CoØWÜªÇ#Ya…<uhA±æZñÏ˜l’l0VÑÊ0<]68ulÅlW°E42Îj›p¨âÚ#G®ëÇ¼
+†zuÛ°¯îC*&ÆFóhC©U„ÂÖ,G¢ûdZ[j¸ë8òñÍ‘²g¢ˆìÓ¨'FwÅ_.i§áswáû—"Ş`gâ4´zbUjh/pxSé_´±ãi<qaÚ·&:ŠÛÕû5½ÅÄ„­ñeëıÿı?ªÊ0šn’)åú\ë›Ösä™ÉÚàğ,€j	<³\¯+rô¦ğ·r‚¤öµ>ğÑ¼¦1:õÈ×Tåo;Œœ¾GQS+	[ô´EáX8ZôŞ•z¡Ü¿6ó2”zÕ©Š­)º6RÚ^^yWX»ÔÓpÜOÿÊFÑ‘.Ïâ›‡w	»]ğÇÓ9àÕªçú´ŞVeŞÜUãØ›óÓNÅ¿–?
+·J9„7Ç'¯ÈÑÁş.8ù¾ªç ›³+·öÒ-‡ ÎÇK·´¤¿×[
+õŸ<oÍ·Û‘Ç˜%uƒôğŞ‹÷ìk÷Â¿‚d#To¹r?ÓÍ¥'&q‚„>œĞ3âağN/
+ã8õ }XÎ²ÔğÉc¶è1›/ÑœİfõÂÈ¼DÂ¾¬ÙÛ$wkeîŠ¼­vbÕ‹Ùö>¬Uéz'áô[ŠdÂTáÅf–éaë’åšd«ÜÌò8ğD)ï^:T„uã.D‚½é˜|çö!&–+'–Èşôr]‘-ÿŒ>Üq1O0½}<
+£¤²Úr¤§Íª|RÍGiêáÛO‚M-Á&M2²QM2ò¨,ˆh’şŒŒ´‘fô¢K²¤ìÂ¹%/óÀ‘µ6yµ{r´·MvvO¶ööÉÎÑŞş~kçà»×u$’˜×«~å&‘×cY–?	$Ÿb‰zÛ€´nxÂp²ç-šlX‹&{TÌ8÷úSI@Ÿ“…ªShˆ™ª5RpC¹Áe3fI_ëS%,ÁæX2bU…;kÄxó^èC•âœ,KÈì½J=’Ú8<5Éú#3Ê¹XÆ¥,‘Â²~¾“Z6—És©é²<!‰òP¢¿¢2e¾	W¿OxuôİÅH(€î–tà¹CÇ8t9«*…X¨"h3rúå*âÇ	8hJ$‘<Ç¨|g»cK1ÅÍØ@ãä\ª-¿ÉÈuújÇ×§IT 7*Ü®K¡Àˆ˜Ï¿œ¨JL´nÈªJaI„Ù+°#1IpàMkAl\2ºmk¹ ÜğGóhq—©¬A	=tçÑàaä…:#Ş¶-7²µ/<;Ay[(Ì£k>”ğÕÑØÓäF	#Cæ¶®ÿ#…0hhP( T`LëÓéöp¿_cÂÒx|Â‹€0(hèrË²”1<ê•“ô(ÊÃ¿cÈóœå†ñ¡:(zûÔëó|0á÷íô<ÀÍ~ ïvZŸ_g/Ş¼Ï_²Wx}mª[È“F•8&»8é÷´ïôÃ6{ÂŠH‘±Ú[˜*êkpAC_µ÷†¸TŞ5—±Kº–MüCOPt×3„õÛøD· ¡vÉ	ƒaó‘˜²º”ù·åµäxÊPäØjÁJİÊ¡qü  Cÿux¦…gy ü™æ¡¡¸»€ª ³X°a¼å9Ô¯­³b®mò4é[¡?Áš³ã6gì&’W3·“hˆ²Íœ MÌäÄÈu>´.b"àÛÕåeË‰æÀv§s¨·üO™Ë	¤–‹ñOZÜD|Ênâò9˜=rÑ¹=—2‹ıÆ)Eÿí¦c3…’0vı^,«T¬ŒÄ,¥HF9 ÛœN8³Àœ·éŸ^Ïñ¤Êßû†²¦ì‚²Ã¼dÃÊ²X‹ ¢ ÈŞ[5ÖW`W›çÇ~C¥î´ ß¼¿1opÀ‹ õŠÙtl<Ò¦°ü­ÛäáÊe“2]ˆ56s/'ÈUò¤qW§èX‘¡5d«'/væ€ßtL%\Ò-Kñ5
+ü¦Ê°nX•~l¥mı¢RÂ¤{Ê“úŠ­…¢ t/kV*	ÿòÚpVj–ê[¦¬3¨QŠ·æ©a_o“Ã£ƒ—»ÇÇ{¯·öñÇŞş.9øv÷hëoÈ6$ì«¡i‡l’ÚjÖË,Ûe³b!ø	s‚ª7«MaNËÂ”r}–š|Y9øY5ù:]şlÚüôù3hôgÕé¯)túëúúöŞİUKÃ0».¤_VZÏÑÔÊ;úÄYÌ #yIĞò8œ³8ô§`j§PC×Hı÷¢õÕ#2‚ÿE¯ÂlÁ˜i –c”Š³1³¹Ë9A‹!ÉãË×³Å¦@½R(½)§B¥V/Z+0#ú?ÑSræ<“ys²ªÎœ¦c…¯¯¡ÏBf@Éq-#ŠÊ° ä0$X	QI»7r¢­¤¹¬&Üªí°	Ò`:™ãéÊ*“j¬¬*vUw ¶6Ùï½®:áÓÑj5o~aÉoŸ7ß´îš*YÑªfì5d•Rõ‚4Á:ÆäÂw>A­T#™—ìPRanü†ŠpLHr	grŠP/ÁĞ† ‰<)+¿Õ"‡AÔíR¬ù0‰úÂ9UëcAS sŠT¢N9+™• 'ÊSo”T’²B¾eEVîh¤9”µë”«£| {wÎBßV&¯fÀïÖ~Y [ö-ö&K?—ªµ‘²Ê{Á $_CæQYè—Ì´YIS:îiJ×W?R¦)…ºàd¥€º¬ïš³zqgv¢ØÂh½®ïgÙ¨&ú‚ª¸°É™¦<ù×n ¨0+eËë¡+Ñhİ•I×B­SZ–Ô/æX¥G¡»[yM‚ñ¹ìf$K˜P¯á‘÷˜EÉ•pªu²üY†BĞz¼_¿8ÓÇ[İJŞ´»^ß´ÖÃ)¯*§G¿°](%óºÕˆÆŞ¼l0—Õ/f‹I[îÆ¿g½¡Æö6K,kÛIS$ió·İÓŞÌiw0÷Ó~ØcE;¶Á|Ğ_ôû‡|ëøòvÍ°ou“Ïé3_ê¥³Í5rŒMÚ
+ÿ*ñz1…èxÄâ.íø%Ê™åù*da6˜kbäĞÀ¼ãÉ`j'LŸ®cŸ¬ø'S¶ıW»®¨U¥jœéïÎ–{PûJ}sùkêäîzµQdvò„#©×s0§“0¡œéºõAh½á ÈW•Šsêğ¶ÃûàŒ7³Ö¡ıÉ.vI-RNäv!CÉwC,]YØ“^ÚÕ6]˜ä—º%‚ö¡€Bmn+Ÿ«ë>aİ<´U·JŞzûõ_xFe(<§ˆçÈ†E³]l<”C¹N=(EJäúV¿r’Q—¨Ùäïá€ù9¡L‹ôëEò%YY^wfúÏÍ¿ŸŸĞéĞ•¬C–äıu¡îŸ‚C˜‰]m%`ƒI	M
+,cNa	«¨c!Ò‚»:# KR±•»¨ËHØJjùt•ãùU¡îèê*N'[2‰€`õJÑú¥ó²•ÂŸÎ»_5:ñ O®ZOÄU!…qşG~BÊcÊqTE¾Ïb’£¯?fS",†…\¹Ò Õ|Í5P¯H¯Ò‚/2xÎ˜<‘E_ä/ñÑ¹¾§à“ü±ı‘äÅÒÄR‡ã¢ƒl3½«ò3^|ÿ×:'TK7T™³z¢J³'WƒÄ18\Œ7%g7(ˆËã·q_«Ø+‹a°¹”Ò|aôÄ^×‡RÔÖF±•¯½®­wíù!‹XèŞƒNÚnul_³ócµòV5v¨=²7êÌöï:`ı`.© êºÒ=$k^İŞŞ˜[Ğ¿KÆ‘NÊÎtP
+ì ÛN$ËR;¢]î['y]€â›Å¦¥·İÖññŞ×¯wwÈÉÖñoÉáÁá›ÃzìifÅ'ş›\ëöÚ&yÛn·›¬AÎõ¥‘-ï(iöén4h©0m^LÉc;	÷Ã7Ú¦ÛRz,Ué=:ÆB“^œ€9N4%"³A—ZøõÉå¯pİ›ËŸ*ŒßÒå-1üô„©`ğdã|ôÎìgçJaéğìlïë £œ[R€ÖV“cb 1€Ü‡ë6ÎW(T>ûËŸÿğß¸ø–é-	Q•FXš.@ê²#Õqƒ.ÁbtXø»«M‡ ŠEş´Ö…ûš!˜3	>–Ø
+cªÚ=^¶¦ÂşĞT†¾¨ç£2€5şñOÿÄhñ,äWzÒ_@hî	¥ÛöåJÚ Ä3r½ÖuNít	ÕşT*×5“492-ÒiL W¨óT+•vI8çùfÈ`ë¯ñ¯¡H¸÷áŠ»T«0¶NÑZLPÚ‚
+ªZW›ãtêtR	fçÑ'…Àø$¢õó ÈÚb¹»hs¯1›ŞíÄ|sk­@SæÑ`ıÏ¤bî–pûve¡—óÙŸ(3®ôdÚÜ5C2ƒ-‚Æ0’IcÈ^!“çöQËHšféş&ĞŞ¤¤OÜ}ÕPë±n¯Y°şªÉí—JM¡îâ	Ü
+úûô~³88‹fSt°G‡VšÚsQécn	‡‡Íà_Ïó¤T$*ßúüÈ_¿Ùßo¨ŸîÑ‡Ï+Ï(úÆœz[Ì´Ç±ËkÀËø¼ŞD‰°î*÷ËKSy¡a¿•­|¼»¢şµ0†Sö,ë†›r,ú‰œö½à‹:;ÊîíD-Àƒ*ÌhZ®—v =ÏdN1°¶\ÍçT;é@u±š”E~ïÜ}*)¯£–ÃíÍ,ÁÅ®bwìå K
+J^îæĞÉÃ vMÄt×XÍ¹&¡¬`¸¡Å0‚sÇiÌ£W-“vÏuÉÅzñ(Ó$WP—Jãüãßıñvcµ	ì.=Ğ[oµ1/şÎKFÍÆ(I&İN§±4¼ã‹‹K`6ÇJù?ŠÜÁæµ¡çtZšX—¼Oõyé{UáÊòÅ6jsá«kòˆİéÍ… 'à?O‚ß¥Û¯©èSüš½}Rö
+jÕk@€
+/À,ÂŠš·´ø•Ë İ’j<T†Åû«Õ8©’²ªôv*ö³Ä+Y4ÃG:aØnÎ	©Ê0b³Ãvæ§§/=ßeIÂ¸¤Œğÿñ(¢=¶–•!†•&QY¦"0ÄvÉ!x»—t}ÇGX/F•)U@¶ÛïiÇ1¿f2|fj•%	¾2® YÏÛè~!YšB:ìš{fék%|fù¦¦hXÚĞÒ…j@'ß)æÅbİ)Ï¸ZÔšZ¥­aô\íÌ\ëd¢1yj×Ê†mJšÊHÜs/¦Í®CÒœÊ ó÷,G˜«æÁği¹†WV8Î¶Ûü9Â:İ_¦œ˜DFWĞ®úÑG°í¶w_ïĞ¿İÛı®Nn‘Tp Hw/à90·}­ÔRM hº°QR±Y%+ÄéFªÓkT[.ª#’¦u›[J”rróOöÑ;Nsn°~µ|7öÑ_¼aô§†ÑcpĞÉíì´ào?²‘ôğèà×»Û'è‡&·”æJ›‚©T‰8
 
-                                    {/* Details */}
-                                    <div className="flex-1 min-w-0 pr-1">
-                                      <div className="flex items-center justify-betxœì}ûWÛÆÖèï÷¯˜òõÖ¦Û<ÓÔ$— i9'	, í=7'‹{l«‘-’Ì£”ÿıÎŞ3’FÒ¼d¡m´VS¬Ç<÷ì÷ãŠÒ	zÓÖÚÒ‹ÿE¯íxêMH/ğâø7¦;·Ÿz´>¬­M¯?’A8IZaĞçÃIH’È›Ä~â‡“V/Â(&ßŞ:wGˆïÍ¢ˆNRã#B^’Ì_Ğ¨µ¹ºÊGÄnE°Q¯¹.Ç~8¡õ¾Ê‡ñ»?éµÖWWkvK<ÛZm8÷éÎ}[	¹oHaOïÜ¡ĞàŞËíØKz#ÚÉwß‘fá•án‰ƒİÔqXË–j‹í8şŠüá(©à8ÎA±¡ùcø
-ÿg«36óñ·“ôæ²ûzÕ_1çÆ·;}ÿÒµİÒ>H³òzpPëmÎöT³/Åİğ/ğ{dœ´VÛ[ÒÁ
-·Xãzˆ¨01îvD§×£ÍOï§}/¡}r…ıŸÓ··ğÒ%ı5Œ>‚ğ
-µ§Ùós¿×%ŸVH£QcG·;S×!;¶ê¼‘/.ÿ·å•;ËÀ¬ıX^5ÏÍOo;ß“×a˜Ğˆìâ.Åäûn¸Û¬%½Fú¶N~›Å‰?¸iÑIŸL[[ä"ŒúŒ,$é¤?2 ½fwÖWà¸}1K’pbX–äfÊÁ_[2¼×÷cï" ı[?>õ.ıÉĞ´ád¢Ï;·Íe²ó‚˜)iL“İ
-Ì7'³ °@û0ı„¯û›ŒıÃ;ÓÈ¥™^·6Éô†mŒ´Şd^Ò¨›Şy¾µ*v§°IÏS¼¿6³ÏğŞÕÈO¨„ZfÓ)z^L‰`RV-E^ï3[æÖ•­GálÒ§ıV0”Y/²é†S¯ç'7é7ÒtBö¼I†Â¡äşĞÏ.Æ~²8h+îÙV¶gÃÈëûŒ'k%a+"ƒ(·.‚…°[ş¤ïCüÅwGz#ß±ü½tO¼œeá3‰G^?¼‚w¶©Ù“Çÿj·ÛàØØ/JN/™Å„S¢†~•m»o@¯Û`TTÏÇôn¹É0}å6¢Ø£“·]²„l¥Šøö2§³©ÛŞ^UPÙÙÙ!4p>å4€‰¨R\d-ô¸+¢É,šh˜m˜-Ã€§åR#¤ŒºÓK¥ûtàÍ‚¤©Å]ş€4¿‰iÀ†Mû§À/0«Ğ(i. “FÄ¬IŒ»¾d@“|ŠºçŠâW¿„ô¸,t„xq‡43Æä?È‡Ëí;PÍÖ$lãÆÔàÖ(8ŸôÁ+ìó°Í¦Ów{_;¹Âß°ö`ˆĞnq„Œ0(tØ”'ö2{Ä¾²Åm,ÇŞÍDHÖÑ”ÿYÑF4-®YiHÙ3û˜à•©rz°&Ùì`ìÆÁ_2†™!`^wÃ„ ş¯f1ã—ãøèjB£zéÓ«Â@Wäå_QŒt¥´&úAà©ÈÇĞöã_à‡ıhHß0)†ã¤?3Ä9ŸŞ´qé+F¦‡öşgÛÀÏ!ÃÅé‚\1Â—¬±bh"¢c/úÌ¾ı¤ü–3.’uÑe…4Ó)¿{˜ĞqÜş-ô'ÍÆ&J|ÒötgX•¹8·¹¸¶9ÑÑB·­²i¿!Aêö*Û) <¬wLRˆ5T¼«o¬Ïd}Æ—ÜœÃÄºÙÏ}öšœ°‡¿›Ëí$<<=:M"Ö#ûO?i6ÎËV?ê–QÊæØéÚû|w'sr1c|h‹qrí-­€£•¥6M2‘MP¼ÈÍ^!cÎÊªÎ²IÌŸÌğ1¼XÔ+Œ/Š
-‹!åo÷"-Õ8™Ò
-Ô||ˆ×±<*•úA¢wnb´i8O~í™èÊ(Îc¯{	ÿá˜F¨Û¼Ï*[4æ†¿üú§zt.˜–À²Ê(éÙsmìu¬ı"Î7ï‹}áåñ#ÆuÁ?`oˆ[k$wóŸëˆÆ6"[s>H\¨LEÌïïy¢¸cì1:3ºs[‘ÌjÃp²7ò&Cš‰iŒjÊŸ7i;ñ¢!MÚØ8ñbrÀa‚OË¢–”–ÿª5`´¯ KRi¶Ve]Áô¦µÆÎôè ‘Xù¾¬!83üÑg	ê©'`â·€üã–e?.ı0 	îf¾‘ÆIDôf~Dû†—Ì€°NQ>àû³´”©7^ğµòh»İŞîğWkµ·ÇşpBû¸3a´ô¢t#o´ô¡ØI€ĞˆmøÒ‹Òí‡{Yf{éEé†µÇ½p<e» ÷™İÒ÷Š„‰ìöztš€²õ[¾å²€Û~Bş|dÜ÷ˆÕ„Õ~ø¸ÇŸLgfÔÃ5›€ïÌgI (™o¯¡ö¥¯Kê¯:%¾È %pFññ|ŒÁ‹¨gèÍ›%ákØ!Ã;e™Öbª€ñôm0Â«xçvİÑ$0œ3LİëóB·	¦Ñ<
-6FÎú}âMnÈÀŸx™ ¶ ŒˆõFìÔƒ%ú3J}{ÚRCÕY&£|q&Ç¿Šq#ÅškFü±êOo1TØmÅ’+¬€âP¢EOg”ÈRÙ¸åj	¬µJCà|û‚–½§iÊS4^¹Uº‘5]h,‚»§§‡?½;Ø'û‡gG'§¤CÎvß’ã£ã÷Ç’UğÖ—â·aß2;_ÖQú×L†ğ'E´VÉï@V¡´èƒ½Õc`Å¶4Åâç”ƒ;ÜÉÎì`³ÿ÷£p
-¦å¨5äîçÖx}Ê`ª€LËcÈp†C *I!jı: ‚Ø‰ÿ½ëÖUkƒİ×ùı>¤ Ÿà|àĞ<à'#¹«—£OƒY„V„ÖÆjÙévãgêÁğÊÆØòŒ$Ï–•gË‡ÿZí­öÍ+}A“+J'2¤æâÜ¼òÜ8 s6+¸”DQríBS#ÚT8=£Ş¸:Vëİöh£2ƒx,ZÂHšñGòl+k‹”^9\¿ÚCTrOÓ;ŞLê©5ñ–„Ü@æGrGvHDã0¸¤hlÙôa›º¡hH6ozÂVµrKiªo=ÇÛü–n«[Öüî¥¸2‚+³cÄÿš€Ëfë¿'·®ğÅE#]œ‡ª_ü*[ÓmT
-ë(m‰É6J³¶œ'ªA9õ-¯Rõ±Ş²7‹â0jMCÁPömÛ*óI2º»®0-ŠSó‹’À&µ6—ª²š$*ÒŠÙ2D{Ó)JŞ@±kù×øB…% S0¸$™ù@ O¶–7e‡}ìOºg\qŠ·“ƒoåéN¢Á1 æ”u~(ó¥%uºğÒá!øÀÆX\ÎÜUéÅiâmw’Ñ<-€›Í¼gh[(_`—æm«hã˜¯‚gŠ[I'áUäMÙÑˆŒ¼Ÿ¡×Ÿwpükò†‰™‹Y¦e˜$èÚe÷#èv4°»\„ıyì@2øjİñG¼9´nÈHY	ˆ.d
-H£%::d"Cx¬Ñé[ñbö—®;S…ïÓ´BjM½¸ÑÑ)§™†vĞ5-~ãÇè–T1<ôny7m?Æÿ+ßZFV[ñ ĞÉAÓ²º¬H^*?Ô¼Üå¾\/µ£ƒ§ò ¤ßcÑH_hßê
-¯7ı8ğ±<ù†ÓH`,òG†»äÃGã>i‚èñg’šØâaÿe—ÄèB²BL Qæ°\
-XRÙ‹«Fİ8g‰–LY| ì¬Éä¸Û[“vqß¡#Ú¾j¢U8”Oÿ¼øÄ ½QagË)/‡¿D3)?(ß-Üû„kD¾½•ƒüƒ¬İ}Ò÷Æ'‡Q $]7;¿œµV¿oş§ÿåo2~bZÆ´/Ÿj‡L½(¦‡“„÷aíã
-Yc»Õ"k&½V¶c¸XSÍ]füpé«ÒjªŸVÖÕ·¯'¸{YS§A]sºû¥%’@Á¸TÕe’¿Ô/—â­ùÁQ7'18¤1\:/HFfåş×4İİ1Nä]qŠ;ºÎA**ßÌ¼_&4=À š	4½"mDTP%™¬Eİ©Hiµé«‚;ní”¾Î—…!ÑÁlœ+"‘ÎW¹é©)Œ/ ğ/î]J¬`T«ú#`ôš‡k[ÅıÉût‚S&(ïÜşpWä?ŸqOè2”1}
-—#^{fü8(0á#ŒR‡KàşcA±ìv2òcA‹M3è$J,{ª¿ÎeR½Eb¥K»4ö¦M¡9+@'ŒÔ›ŸSœú	í¥«Dïôõm|=óĞÏzËï³oâ6×Å¨Ş€'wy|Q0*Êï±1ì—íôNãı$İÏ†C'a äíDp£Ğ²túàáy<¥=ŸÁZrƒıq©À¥/"µÌç’âÙf¶‚~ÙÆõ??/4'­ŸÃYLg}*ñx2Ë'ÁEÆM­°Ãl»tÛQXéô•€‡†$Sk—Ë¶ŠL’>cçÀ´à|†‘?©ß€>¿©¼´!R%×!”ª¼¨]ãN‡@è>x4Áìë€¹6Gôæ-v¤Å`Ç¶ÇPˆqlÏNEËùÑQ§Íùä”e7M1nÂË8à†vİ³ oÒ‡0
-´úƒËymX;Ú?ßØÔÎat¦@,Ùë}|=p}İşâ5/Öì™¿>‹óÛ™*9BŸ0‡ö¦dë”áüóA‚ë"v¨}ù£~¿Z›ù¦“p m¾Y ¨Âo˜<ØK|ÊÏË†Mà=³wÇc
-ò 4Ğ†ŸúĞ¸¼sñœÔ(‰õ“Q³1J’i·Ói`È“î…¸òc‚YŸÆÍnx{†Ã€¶{áXÿ^8½¯M¯ŒéĞkO~/>Î„ı5û”^âÀŠoÍ+b’”ôÏôO¬ÈBÇò§»
- yšDœú¨1™„½-ägäÅõ½
-ùõ&MÑ¼>…aèc‹IQ!I¼ ^@šIHf6*zA8dÜëEa“ÓÙÔ»ÀPJFØé"ß	|­S»dŠBÖ¼ÆÓN±Ï+6Å˜7d õƒwa Égz³s+‘¬üOAl×Wà+–ÎæjÕTcä•‘3/hƒ-¬uÅÒé%sQjU½Íø=[\„ªéBLvA,˜ÏZè‹F3vÑ`û¬|V´ğ¬‘û/5mÖ~ cû|ßJÌ% àŒKÌ2ş`´û&düé–S5î^äß;ÍÌ!‡IşQÁQUhS©ò¹áÂ8¶ÛŒó5áÄú´zy«ı	ú"Ä]µ~‚¾´à®´Êİ•(Ã^Ğí¬•}>ä‡ëÂª‘ŞÛÌm£×Å²‡ƒ}­Øj•8{[îl<øºŞ~’—Ñqì)¾>42¯üÆ
-è
-®úª›9¹ÏÅ“Ÿ_ìHV·¿²Ã&x°gİêÂŒŠ¡
-0E nÜkü}È£Ïc®ŠcÏßty):F~8>ŒhË{!ß¾×t?Ê³Ifi2Ù{nsidŸO…“£ æF’¨İæsüÃ¬²›±µÑ›_œÇârŞád2FË¹œ›±Á²_á´¬Ù¦@’È[mû1o­XéeeÓò«Ì¬¤AÏ®)ÆŒä¥ÂĞ¤‘e4YF;[uĞÎÆê½©Ma6¬Nñ›t{ˆ?!|ûë´Rçİ[	,è°š¯©èLª*G ,Í&=ˆ¥äÖÁëK$ñ“€?å˜êäUÔ´à:#÷¬~Néå–3ÎM’¶oÜÂ™ÂeK²j<W1ûÎg«î¹âï‹"™7‘Û×nïY¶Níë(w²`vò6U%¼´BÃ¶)pŠ_£ˆvn….¢¢hj€9ÕƒtÉ§Tùômú£æÖ.x¬ÔÎÒùEàM>›CáŠh°³4	Ã)…1“F\¾äo‡ß»FZî×=2mLŞ¶&™<æ¢*IÏRiHòÍ–üOÅİ‚À˜”·Ô¢Kª}š§ûgyßáqgà#¶[ÂÏñğ\³ñN¼ a¹ `Ø`K;‚Ş¯•f:ù•epoª«äPÚd™0êããŠúÜê7¨åk3$Âµ‰X¤Ey@zâ@A¶÷0Ê¡O MR·ÏVW «D[µZ. À ’oş›«¼.Âd„IşøSìéû(ÈïÀ¡…{VbÜ¬=¾à·FÂ¥—kødzU=ü¹A
-a]V›n©ÎÓÅë–ó“I*¿25®Ûë%”ÛG™–Ïíuá®ÓU{
-¥š²¥'æWıó¾&ÇVÕC™îŞ¦4¨¶ÔùğåàgL£Éâ±PÜóÊ¾n¯®YÎÒ{«íŸT`XÀG*»„ĞfLs7K%¿^8øB­2ím:1Ã7t~RŠ- úúF{ãrg¥má³Ù›v4åJHÏfërš÷á5ïÉm.â€ÙÍì|™9M=Wú';\uÁÃí -„)Å¦ğàÔg‹mü¬“ÊAËb ²Qñ,…#Õ¯GóEñïEïkQû9h}-J¿ :ïBåï)ò~:ï ?
-RRx4†×§î.Òòı(û|tİªk‘ æÆ\Ò‹«Şª&	ø{h¢;xZG²P<š¢ªpË!¦n‡qš®Ç âNôz€ú¥v1WÂu¥€MpÁkëæÔÔÖ,P;`Î¢.½EhSiÅsİÆ+†\Â«6àÖb+¤Áñ38I¤Èw%G¾·áÙ¤Çâ¦³hĞ
-"–n§ˆXÜª"bùİ?"^BT‡‡tĞŞˆö>ïùQ/ ëÂÂµ¯'4¿r€*å}]îÌ?PÍ%‚<êå¸*ü,&¹züæhwÿ`ŸŸ½&røv÷§öëà—Ãƒ_«¹®¦eD^7ÉÕÆSKrõ\äŠûB¬/(»Õ}Zm>„Ve’§iBUH[B«ÌÕ†›º:\öQ]«ÍÊÀeû_íŒVõóXUH[v0×a.³=séÅ÷u?ôs©)ÆTöÀ}Ä‘qÏLİÀrGjíwF›÷JJeæ”]Ô[urU)ójr$Ï5eÎK…ÖÕšn”­ª‚Åğ|’=v¬ÀÇ×ÌUsXñÌUETj"rª¨çÕú”å>#xÀ#	Œ!w†©Ÿm¦–¶¡Œê5äB¢ )•²Ò4Î0ù¡¦IK@+•` Zõ¬¤¢!–¬3ğÚéwj—ä—¦VÓB²ÿ`+ÿéôÿÓi~ğZ¿ï¶şßjëÇóÖÇ,·¿ï0¿3ë½¤×Ó0Jv ±ïüşÎ·kš.»sN¤Š—¬á{Í¤ı=káaç âğ·ÌEşüñPÃYÆQoç6÷êÉÎí§1m‘oÔIóB™ThıÇ¤3W8_Wüœ‡PsˆîIâù2æê$ÉK'r„“ƒ(
-#k­CŒ¿{-r•€˜‹[B0ßØÀó}#ŠºFÈ¢ÓåáÎğ^x9Åãä†iß”İ°ï³Ûñ<õ"^O´Â<ÉÍ¹zÄ§Œóş†ÿÙşŸnx¹‹0j64[V­5‡e—¼>ìõ}†9wH?ìÍ0¸¯QÆc‹±#é_š%yŞB;ƒ‚æ+i Œî=×dÒPVÍ1¬aÖ›?™Ğèç³·oXoŸÒ2Ü/ÒëQÓ¼yîÖÊ©–€u2›x—>0Jk ¤uŞ–¢¢:7¯b…kKh4|”[^"”Q‘ÌÈŒhîJÀU'Ğƒ1‘ØXo
-EõöF~Ğoò¶@›kHı@){kS-ïé3-WXQ¼ÚÎl8Ô¤fÌ‘UÎÑT7RØ(R›„™W×Ífp7@Ô28ÔÔkeIáç²ûÙÃ1d™NbnÓÛªÃ,ûÆŞŸ™WÅ/ùóóª5êû/)RÈ‰ç‹Ûšñ¥E±á]"ù‡Ø¬SYG’ĞŞ0(«x"vòëÏ»g§»ÇÇäôçİ“Ãw?UµT<××¯#/‰ÅÆ-¯›}ë‰éª\²/JeeJÈ>¿2ëÏıÃ­­^üø|ícA—•íñtÄT©:½‰ÙlÈ!›Ë¯+ù „îN§d—±ÂÜÿ †®k¡9Û•ƒæiŠòa<ÌısìM•9î.¼Uq´ìè¨~sà±QòN•ö½ÄÓ×h©¼Ò‰î}ëU8€Í«YÈ-©Î%ô_²U3kX1÷õ½ô?Üğ
-2%Ï£üICRŸ¥˜èÀDX¼õãŸ€¡ò şº¸úJçe±!'åØõlXêJ¿åÖ¯˜T3bÿ	„¶©àœ2Î¶…;$¸BF…ÄSF#Ô¼y*’µÛ!jéÅkšôFp\H­”>ƒkL2#RË`EÄ©JÃª8³à«@«pï´ü´Q
-S†YeOç	ôARÇeÛ ê-Ñ¯LQşã+Cpìİ2£€wï”kbvÄ°;_8:\`ö×Â˜ ³¦9¿1_ 8LÙR½ä­ÑQÁ—®“t›ŸÉ¬hº½D¿®ƒjˆ–š+~Ä7§6ÇĞ$º!o˜ôÍÎ‚jcµ–bÇƒ k­>ª!#‹™mc¡¯]Ï‚ÄŸTäæ%ô’¢—Qªh¡Ú}»œ•\óJ%øš>¸\Ë›ò$Nš2wÀ+ğF^aB_pİÀ«)bÎÎHRM‘±AöÌõ6]ğ¾fû4Áº¼¤EDÙX¾IŒH×C»ºA½Ì„È–J·Ñé.bÎUz‰‰1ájš:İêÔ%RyÇi5bĞzVûJKãJ²-½F7QÖ‘IsåøîæÖ†éÆ ¥˜å½:Îoµ]ßª8<¶^–S$»xR¹âë¬—b'<³®İ£Ê¶fVo*9ÿQ¥JÌ}§d=G%œ¡w€û²š®À‡Y³%	\V2ì(Ø0s¤[.~u³¶óúŠ’à®5şf%>u¬“…óğß°zDYq‘Kb˜
-’–Ôê·ô²’i¾”Ô½¸¤á˜ËÎÙ¥ä”kÄC¿-×>òƒÜJ¨“Põ(e-©ÂpéÅ%IC³%O²»´™¬Zg7cMFÍ£jñE|]“rH-H©)¿•R·~I\GQ°ÓŒTèX–­FMÃ²l:°,¶S5îwñï(¼‚¿­Vİ:éûj­e¶ß‡à¯J­9*‡QÔG°¥èŠÁ
-f[w8Çö\‘¥•d{sÕú!ü×4şiR•¢İ«©ZÃÉ2=øÛ@ªïw¼PÎí7li¦£pBE&c=NJÅ±¥Íú?3?¢ıeGäc-dO\JÙ§ÌŒÆÆª‰*àéälK¥
-¸¥µéÕ1t€¶¹P¸ËR+Á¢X'®âø Ë–®+Ò¨¼(™ÓÛí6´•"QCîüÊ[Àê9¬™[ÂÚ)İ^!¸	İ|µî\sÂad+BĞˆ»òÈš²9X9ÚB!tÚ¶É?m‘çkëdsëÙ6pT0Ä
-{MU-·^¨+™Ùg×JJÍw†¸|ìk±Å™Şm+-9_zĞĞyÎ¯+ü£’¹}^îBâÁïËõ,tÀòX‰VMb­B)ç†Vj"ß…d^øM«ÅT²M™ Ï(gÄ£:#
-Ö<°Â¨•·éeˆlĞ1ië²|—€BOãÁ@ÆÌ§˜˜vkÌ-V%“›ªø¹M±×[Çàá#ììF±òk™ÕîEw)ú†}‰z°¦L|Q¯‹É•:Ï*¨†MåÚ«Ke^SãÉ†ÒxR¼€šùò˜c_Øàç>9J¦8åwéÄœXĞE5ä®ğéû18võw*§ÙŒWjª‰Jşº);Áoœ²½÷¦ìè¦çÛšé€¬”MxèMz!‘·ñüñşä2C³6&I3ßYÇ¯Ï1Ş;y®@oê·ÓGè{³-{‰#İùö¶8Ç»ïà°ÛùàÌåõà’#	¥1äq„¶æ­+'¶2ãDŠt
-ö‰ª‘Ne¾“ëL,²aÃd¼Ğ–€18…×nÈPˆŸ01tÕà‘U×l½“ÉÄ'ã©·iŒßğpYyÜ4lWˆú²¨]^²0W?¯åp¸it8,9£HèKç`øÕ­Aa,ó…CIiª6!Y‚gq ŸˆC[Á“í êÇ–"G<Æ7¶Â4@Öõm{jq˜.¾m_}Ûä»÷mó~x~1ğ>Úã4ózŸdŸÆŸeW¶½k==g6Nå°H÷"…€ğ¸®lìTşª<é½?ªÙ_ÄcŒõÄ€BÈél<ö¢òÊƒX…S…ÉÓÁÙl0Œü>şÈ'n­¾?ÿ¹¡Uï«ÏöÃhëÓéçh¸nü®AQ?Nx!¡¯¯Ğ(É8hïUãºG\¥4×Ïc®LVÎñ©/ÎOAxÁÎï>#Š<Rê¾kté‡ãJ6K«$#sÅzqç}14ñ¾ëìê¼jì­ÀQõŒ˜ªŒ²¢+§©¥%¶)¼´¬ÄôBã3”™â€¢‘ïˆTö¶úÈ£è•än¿UìK\,ÿ-¬¸·<ÓJ±Àõ¯(«W¯ˆ*¡<ó-×’rG%ÚÇÅü^ü[ÏŠ@$ßìì@ÌÖC#­¾tiIómWTMnİ-€ŸNk‘úZ½õÙ²L†Ù<¾)L,«AªlÃâS•[À‹ã×Ã+Q^ŒÀ=]c8Pø7l8]ïû4_Ë¤n€’½W$"¨[[ò>Å])ÈZª`™“–¬tµ…+{+•ÙB £BÅ³3}&…ÿåÉEJÅğJ¢G†òüŠÄ¤Ò2èØÔ†Í ·º‘Úâßb`ÎdTš—ÛîÜ™áÍ qdä&–@±Ú#­¹EŞMÛñÿM½B!˜ºí’—9>îk\FŠi}m
-i§‹!	Ö€]	¸l<†ó{rëìRø²fıÖ¥)¯Ó…eÃÊ–¸»¹¹8©u¨5Q³;òÀ~âG«rÆwd—‹ùàrÂç¼v›'èVSö¦)“ê¿”3Méx ¡G.²U™CŒSÚÏÔSÄáÕ2¿Ö-9ğX›¸[şêVR¾Êğï°OÃ­$Oºù ^%D‰"¬‰|ï‚NÕ©S/zdv
-Ë’òÒÅaFûœkİxV•Ùg‘¡UN@Ê|Ó˜â„LÔÄæEÀYí{ºª,ÔÙ`.§a³g!C[Ç4ŠÃ‰ø¿Ó¾ğbi*dg+ÒÊ“Lp<,šrÀßi>¨.ÉÅ;*“è¦ØÎß"-üí­…X7´ÖFC•ïû›üïaŞOÏÚ[ë¢»Ä<”ãM	YÖò»aìG? §ì´Ÿ…©‰Iy ê ÌæC¸„<(Œ,Ú-°ç¥ïeV»{AÎÜ>!êlÈª\Èzİ­âVÅä$B<.É$!‡0ÆPÛè&Áù‡óy/‘ûYå x¦ÂÈù(mVóE{D9:d¬ËÊ4$ç£ñöàôTÎ}úşUK—[&ºu=3Öë{fl}qÏŒ`XÛ1ãùVÕpûgLŒ=·¿E­ÌØ6—æ:™šyA¯g¯‚|)¹¨Ê õ¸*vØ!ëZkm‘ùy*õ¡¼-ê»¢UT
-<èuñ*¼vsf*äYÖåmÎCôJ\¥}EUüdÜè·4nôJ×øÒ+ıç-*€ªî,â¶ä7gş´KşÎHa§~8clb«‡yIUa§ÓBl)®ûá+Ğé…Ó|–
- øÎØ›ÌØÚÜ´«ªÅl¡oò™Bü@,–%çç—E?ØW¯–÷ÆËºhdğ`~Ğ\_’º…¦â0ğ'ıf3ör_ƒX¼…šLhb$]J)‚6Ó®tY?ô¢+û¨-dØì·U»£pM9‡ÓöŸ+TÂ»ÿ0àÕˆ¹—Şíï¾9%?íüºûoòúè„µOößï½#'ì÷Á	bCéÃµ69z÷êh÷d|óöÏÈéÙîë×LæxûŠ½íJt{—s÷lóc:éI„SpÃ‹2ç©MşÈDŠçegïxÌ„cöå\2)¡áíq›Û†K;à÷àåÙm¸gc/ï®?aâ;··‹]uÉjûÇ­"ô!ìg¾…$}³&}°Vı€^ûI­3ukqET"‹³;º=Lpë8­Zı¸%C™›¸ w˜²†°—ÒCCÂKÒx?Ål/ÇQ8`ˆĞ5:ø±UÈ‰`U:š\„^Ô'ïx5±Ô‰[Rº›¨ä¼¯âåÖ,¼œN¸CôÀÎŸ~—LÃ8iå‡ƒÄS
-÷ŸÆ+
-}öàFdHO°ûÜªÌºñi¸&z4émÚß*ãtXBGZıÔ£ú´«¤®rœÚŸB&ÙÚœÎ.Æ€_c€¿puîŠs&yİU²vk£ÜBÅ=Kèëß: EĞ†Æ,§õeÒ µÎ™C%ó(İc…Ï1fjç¾ê¿	£¿„İO"šÇÂ})Ôk¶Ÿj­¿*nì œÊ6‹^
-ZãEÕ³àŸáhBöCmê }	*\[³1·¡±ÿ)8‰YãwÈ? E›ò¼¬Çxe§õ`Õ)nµfÌ›9á¥äpÿ‰¨4²'¤é¨µ•‚Œ š>?À¼=n­¯nlş=V¸‡,V­¾Ç6½vÖÒ‚ ^L;ÎYœÚTL›ÑmÆî¬)oa&aªÅE¹ú¶Gv½aóbòPó˜Fc²*è“ê˜};5GÄ”jï~¨!··¿
-Ã€z“fuÁµç6¢^ÿhÜÌõqë˜ÍüFŒÃ?ÛüãÇ5òãóm‘Íõ5­‰Üär÷å°É7O-ñ¤Î ÏVS†w¢j;¼ªªÇKUQÒùÉéüãæ@Y`ğÓ"ØÙ°×=Ofù|¤–û¹NHúñ\gäõ.!ƒ’7A.Z ¸ƒáß“<Œ™¼\0Aœb’T°¿6ÒçéÑj>×İ~?¢qü•VË×ƒĞj
-ëıô‰5‚ÅœÒûr~RÍÓ@şŸé(LBğ†,ç_éõ—§×C<V\.{·Ó~GöØš>&=ÏujÄ·óŸ›Ó€ğæ«òö'rzıHl1ô‚0ú›Rñ†şœ8÷Aûÿ´¸Lyh÷…P0n¸B¨èºJ¥ï]!õ¯c’­è$\œFgA`Vİ©0Y°"wr)hx.X‚ˆÜCãŒUòTZş=œâÆğõ\Zz!ÊI{ÄßĞ2ãŒ?€5ä¹40@ŞªvˆQÚğú]º—øãÿŸ­W}°qiBGÉˆ­c‡ğ¬9%ø[za|lcÚq©êŸVegäP¬®¦VÎÑ+¨azÃ½pV=É	+äàiBš57Š~–¨c—xc‹‘B
-E†áÁè²Áé£xT(f¯Ú€+¢QqV{ì€CÖ9¡4ˆEIı<ë +¾a?>†T"MŒæÙ–Vª‰s­YõC÷É¬¶Ôğ(V9pã[ =äÎEù§%P%^Œ.Š_ÒÂ—téÿ?C¼GÀÎÄ	hgÍÄªÔĞáÄM¥±ÆNgñ”Â´ïMt4·«÷kz8Ë9[ãëÖ3öïûÕdëÌ6É–E}¡eJë9ğÌåûlqr–@µY
-×55zÓøYy“¢tµ9ÌÑ¾¦1:ó¨×Tçc;Œ¼¾ÏPS+	[ì´EáX:ZìŞ½PîS›y*½éôÅ×]m¯®},¬]êa8î§e£è(c“çñÉÃ»„ß.øá™ïj•eİî€—UÙ“7÷<58ôfÀ¼İ©øÕŠ'@áÖ‡ğşôìè-99zs Î½oë9ææìÊ½½sË‹ñÎ--éßÁå–AıW[»Çí^Dá¢¤nPŞGñš}G¯‚È'âA!Fk!©3Û\vbo’°‡SvF¼!ŞëEa§³OËIV¾zÊ=eó%Z°»¬YY”(‚B¸Å‡Õ {Ûän£Ì]‘·õÎ«f1Ûİwµ*]ïG œşÂL˜*#üØÎ2=m]²Z“ì”vùYõháƒk‰°4îBÜ÷ØŸÉ¯´1°B9±BŞÌ®gÑÙ.ØÃ}Š)€ÙíÓQ%•ÕV#=cÂäGj¾€LSß~lj	6iJ‘­jJ‘gÅ AD“ìgäaL ‹4c]ò%udÁİhy™'&ˆl´ÉÛƒ³“Ã=²p¶{øæ”ìŸ¾yÓÚ?úõ]‰$Å§ßÒ$ò{<òWäkàŸB"QBoÖÈNŞ„ÃE‹&[Î¢É!3.ışLÈçeáéb®j4\CÆ@ÚoÕŒyÅwæ<È_J°9UŒX—7áAÅ9Æ¼Pr8'$«
-2û¨R¢ìHE²ùÅŒrî1T)J”0‚¬_@'Ãd„–ÍUòRiº,DJ<¢=Œè¯éL™ïB"ÔïSQxF}Úc	’°=Ãj"=è‡®fU•Å]¦SN÷¢]Eü8M…$’'¼•ÁSàMcª0¶SÚŒı	hœ¼k½å7Q¯¯wzİN¢¹ÑávX
-µCäTıå´TrÊŸMKâTK2ÌŞ€	ŒI’ónZnbâ’Ñ}[cÈàFÔ.ZD‹\eJè!]DƒÇ‘FèŒxß¶DR`HÅ¾ôâåm©æ©uö4ÒÂWÇ`ÛÉ$ˆ’F†4Œ¶nˆø#…0hPÖ T`Í°éöp¿ßa’Òx?ù<	¯&„CAÃ”>–§‰dQo½¤ÇPşC~˜—<L ı³A±Ûç~_ä€	k§çnşñùt|²ßúö6{ñîSşª”µÂï³ÙB®˜l0ºd1ÙØåIb}§¶ù^Š´ˆüˆ—ÕÂlĞP:C¨æB¼w„2y×6\JÄ.éZ6ñW=A=	\ÏÖ3lãÓ‚†Æ%·ä†uÌGb[ÈêRæß–×Rà)Kİb§+u«Z„Æ1ğƒ’ıŸá…Õ¹òg†‡–ºAüª‚ÎbUÀ†ñ–çPP¿VX´Îš½lÉvÒwB’94gÇ]jÉ¸M$/fo'1e—9AZ<•3È‰õ>·®â"à‡õÕUÇ‰æÀö s¨·üÛÜ¿åÒÉÅø§ -a">ç7qùO¼+ÌùçNh2f±ß¸³åß¿ßt\¦PÆn?É“ŠE¸%À¡®É(`›ó©`¸³áûÓïyA#ƒTõ{?3–ÀVİ€_P“a˜×cX[•TÙ{ëÖâ	üêbóâØoéÔ’tË¡á»OwöÍ‘xq  Ş2 ›­GÚ–¿ußcƒ<\¹"R¦qÆfôzŠ\Õ¹HwsZC±ú°qöjøÍÄTÂe İª„ŞY£Àoêü°P «á†UéÇUÚ6Ø/*%'l:±'¡<©o¡ØÚ2Z(
-J÷²f¥’ä//ûæ¤Vá‰½UÊ:‹¥xk‘öÍ69>9z}pzzxôn÷ş8|s@~98y³ûo²‰újhÚ!C£"œ¶šé2Ëp™Ä¼~Â ªÆÍjS˜Ç²p •\Ÿ£&_Uå}^M¾I—?Ÿ6}şıyuúş¦¹l=¤3FwÕÒ0ì®é—•Ös4µö‘€>q3 ÃH]í³<ï"ƒ˜ÚÔ°õ ’ÇşÕúñÁ?CÙ«0[0nÚ(ƒ¥¥…âlÌmîjNĞaHêØòÍl±P¯ªjª©P©Õ«ÖÌˆı#ÛqJÎœ*oNşãYÕ™Óv¬ğõôYÈ(9®`$AQ´†+!*i÷F^´›4Wõ„[·ı6AL'w<][‡c’@E‚µuÍ®âôÖ&÷½7•Ü­W³ä–üşYòmën(„Õ­Æ^CV)Õ*HªcÜH.|ç4J5ŠyÉ%îÆo)÷Æ…)p&§HÕ,mH’Èó²ò[/rXDÕ.ÅÆ›Ha.“Sµ>4*§H š”³ŠYIzğ <yF…@¥ø «Ñ[VdåFZ‘C[N»:Úªwì(ôKeòzüaí—²åîÙân²tğs©Z«|8„ä'È8ª
-ıR™6+éIÇ})=éâêgÚô¤Pò›L¡ğO—÷İó@sV/îÌÍQ[mÖõı,Õd_P6½0Tÿ‰N fujE©sÍ1mº±2éZèÕaÚ2A«Š2áÅB²ô(Y7‘`'¯I0>—İld©š5<ê³(¹NU¡N;ËRåÙŒ÷ë—búr«[É™öĞë›Öw8åOÕôèo¶¥D^÷ÚÙø šWíæ²úÛ,p1iËCÃøo¼7ÔØŞg‰Um{iŠ$cî¶GÚ›íæ~zöx	ÀëA°ôÅ—ış¤Ã¡Ş:±¼–]³ì[İäsæÌ' zéì	g“v'^p“ø½˜At<âq—nüãÌò|ª0›'Ì5ñ 	rL#ğÇïxò˜Ú	×§›Ø''şÉ–e¿ÀÕnjêSéçú»‹ÕÔ»ÒÂ\¾Ç::¹»^m™<éHšõÜãé,Lgº‹n}Zo9*Ãu­¢…ÆÜ¢:¼í‰>„#ãİ¼Ugÿ´‹]R‹Á¥¹BÈP²ÀİUö¤—vµÇ&ù»n‰ä£}L' P[ØÊç*äÂºOy7OmÕ·Şı—^0$
-/â9qaÑ\[åPnR*‘y¾Õo½dÔÆ%j6Å{8`qNÓ¢üz™|OÖVWÁ™ıïîÏÇO˜tèZÖ!Kr‡şºPëOÃ!ÌÅ.Ê¶°Á¤Œ„!–5Ÿ°‚U4±iy]“€'©ØÍ]ÔÕ$|%|ºÎñü¦Pgt}§“­™FÀFğú¤hı2yÙ*áÏäİ¯|€§7­çrŒª”BÈÍ¸Nÿ#?!ã±ã¿ª"¿…1I‡ÉÇÑ×³)ÃBn¨2@5_sÔë£ Ò«´`à‹36OdÙùÌOtF®ïÁ)ù$idÉ#y¹4±Ôá¸è ÛLïêüŒ—?ı·É	ÕÑU@æ¼¨ÊìÉÕ q—#Ám‰Ù-
-âòø]Ü×*öÊblA.e4_Ú#3±7õ¡µQlåëp¿ëê]{GşÈ"ºàÄ†“v[××ÜüX¼U­ì>³½Á»ÎÆ8?XH*€º®tOÉš—F···ôïâRgp¤Ó†²£3”À;È©2‚ÔhWûÖ)^— øn¹éèm·{zzøÓ»ƒ}r¶{ú¯Sr|tüş¸^{šYñÌ‹?Ç6×ºÁ€¿¶C>´Ûí&¯Cs}idËGFš¶MZ*L[FòØNÂ7áöØ6A§Œ+GUz±Ğ¤ç#àMo…HAÃ|PÅ¥–~}uù+\æò§ãwtùãKÿ€0o]>Ú½áìüÌ(,›í}t”K
-°¦ÁÚz²cM §PûpİÇù
-…ÊBtËt–§N¬L t×Qê·Aà02,öİ5¦ ÈÃP½¢F}FK„ÆõFÏ,˜üªFìN1Míš™¯:Sà`h+;_Ôñ1şß™_s*<áUñW”{†áènç|µ’0 1ŒZ£u›“D7-Bµ¿ç% ÎiÍ&GA¶€L?€S¨UúÕZ5€[: ¿Ef€9² ¸Fù<kúí}¾ÎÔ:\mR±Ó”¶ ‚¨6õ†8“"TÂØEÜI!$şÉgı ª¶xÖ.ÖÜ;Ì£wÿ1“ÀÂZ+P”E4˜ÅısyX8$Ü¿]UĞåbö'Šä\ë_<M1øvÃ’Æ G‹ +ŒdÓr£FÈŞÑş1êI³ÂÆs­ßÚ›–4)€{¡¯
-=Şí-Ó_Aå"¹cı2y).)ÀİIÿ»ß,Î¡Ù²¡•¦öRV÷Ø[Âáa3ø×Ë<] †Ê·¾òwïß¼ièŸ²‡/+Ïú—Æœ†x;Ì´'°Ë;ºËø²ŞDYSğî*÷ËKSy¡áœ¹Õ¬b¢»¢æµ0†sş,ëFqú‰¼+Şø“Ï<Şì$»·1´ ª0ch¹^Âô<'=¹ÀÆj5“SítEÔÅ+Q¹½K?˜Œ¼‰êW·wó„»ŠéØÏ;A†Ô»Ü- “1@,šˆén3°Zp'\>YÃ>pC‹îˆÓXD¯F&í^h‘ŠõãQ¦C® .®¹u¿‘ºt—è«Š·Úzÿê'£fc”$Ón§ÓX†áYŞ‹ñÅe‹0›ƒç¤ôEt°ské¹–&Ö%ŸÒA}[ú^W°²|ñmÚY:Ç¢ÅúZ<òÅöygi†Sğ›'“Ÿ²Í7Tò)~Íß>™üzµê5 A…?ÁìÁš:·¬ø•Ê Ù’jT†ÿäûëÕø¨’’ªôv*ò³„kYÇF&AØmÎ	§Ê0â²Ãnf§í×~@y2ã‚(®(#ü7E¬ÇÖª6´°Ò$*JÀ$@$vØ-)„háàš­ÏÄÖ‹ã‚QecJ­\‡·İñì¯ÙŞ…™ºCeI~¯€Œƒ@Öóº](–¦»æ9úXIŸ9¾i(–6ô t¡È)vŠ{¯8Guª3­µ¥Néj85—B:3×Â:h,Áäµ¶åšŠ¦2ÒzéÇ£¹5`I–SdşãÓ Õ<>í!×îª
-Æ¹öáš7GZ§ÇËó“Ç˜
-ÙU?ú¶Ï“ƒÖéÁ»}öÿ_~­“S$ ÒéÕ	<Ö¶o4:*	4M6J)4ë¤c0İH5zjËEÅƒfDÊtnK…RNjşÕ.úÀéÍ-vÑWÆ.úÕ 
-ÑSpÊÉTìü¤àm¿°qôøäèŸ{gè{¦¶æêš‚‰T‹4
-ªÕÔfJ¾'g'»{ÿ:|÷“¡+µ16ÇUOÚ»§Y¯FØô‰ÅÅ[Õ8bÌ}å¥¬¼øfÒ#¢¨’šù¦0QI·OŞ,HšÆ(‰n´f^±Ó»dÀØL¢ÕòVŞ•ç'yô‘»HÏƒ–ôÏÌŠÁRtìæ4^ 3{§j–ø7×ò›²ÿÊ3C¶Ó{—[X©L; ª¹İé³ÈYËYÄü¯ô‚\ùÉˆ0..L%7Í÷œÿÁ¨Åô•#ÈÎSæğn;¢Xh«ÙùÏ~gÈ¦¤Ÿƒ0-ğŞßÆCÖ ÿñşäÄ:ÖÚ$)mÿ[Çlé,m¦Aúï£ \ÈSŸ7õ³ø}ë (½œÂ°w¾½-Îîî;Xv;Ÿ>yõ•?aìBÔ{M©o6{®$Ô¯şÌ˜1£º½;ÒÃ”ØME],İ¬JÆlEIsé ŠÂˆC&„D¤'d‰üiùz#Ë~.kûø†,İ ¯j¥iIqWÁ–2ÛÈõöÔ~&¹w„ca{—/o¯ƒÇ
-ŠN™ARäd52"÷7•Wyä§ì^Ñ4”¥C²jİ²'±š×§}+Ø›4Ó¨{n.„C¯ód|I÷làğÅ ‚RFÒ!<Via€bªÿ—­$\Æ:pjAˆ‰^!¤/
-YhÀ­2$\U*u’¬5MµÇ¬>£¸›—}SÖ¶WÄ°éHwıÀÉ?´Ò„×:!»Y3ú	Çp4›^U-]æ"F+(|s0šYÓ©€…Á_…ôLÚô[§ÚÜá1^
-¶yƒ„¶ó‰1¦oJæ(àK	M™:ø†ù¿3Á+0¨	f
-6÷‚Æ‚„˜¹ˆ
-Ë=èycÂ†^uëİ`©aƒõ"ª3‚[Pi^Å;·k«:,§D´béußØ­hÀÕ~qDKPâçÇI·­«È›fiGAÛwMûjd¬ÉQhJ~ó
-åz×d€YZ6öDnÒÁ¸ha¥‡!å¡3
-=c\Ò6dU5Ä¬ŒZäõı´G]W¥Ö¤–Á§Û`ªUKHßWôwn}!Õ_h9Ë³Hò,¶[P\~â/¾ò;RÊÏìÍÌÄ.Á”T¿óíP¨C»¥‚ëË5vÅRuSÇu!bı6ËÙ‚ƒ••ÿÕn·`Eó¥ïeŒ´&Ì×XÄX´Z­Ãûğö¼½7‡ïÎÈîŞŞÁñÙî»½ƒ:áŒ<Ğ{·×£ÓÊ¢ÌyŠf¿ )O1«OrŒı‰ÁıTTGØ+µµ/ñ®ÓffoD{Ÿ!mñ¿è´,õÓ^òÖ›6‡°Ã6%t÷á†ßşLo–‹.±pVl¬m‚a¸IH kİ³ÍJçŒÚ÷
-ŞMœğƒ·8í2ÎÕë%m~‹W;üùìí›C
-®²/zd¡7ô1•CÆ ÀïøeûÃêÇ¢´ªßÀÃea$->2å½Ÿ!’j¶vá@¥P–^¸iBƒÕ‚â=¶,äl×œöUm
-ïdnÁÛ!ÆÂ
-à²Rœ¿Ö'0À&l•:v1‚ñx6ñyò@>)Ñ ;8³ 
-”’8‰ØŒ+*3Õ‚¨”kwšñQTşéF'4„¯=6QLßá^.-x$ğ¿]L>òşäîWá³»Å…5Ÿ“˜Ï¹İ|ã^vóõ¯vóÅÛÍ/SşF¦Í)ù…Fş@`²Ï†©yòt­ş[ZÏ¦–2b³8#‰Lal9ãæ­Îª´Ê|5ÎÃõóÊ‘¯ê©x«}ğ˜ñÖõàuFúÀ	t¤±c¤À¾ïˆè„`/v•UH/‡—^š²Ù<Ê0èÊŒ‹÷ÇÍeë4]&Cü8SÀµ‰X˜È*Ç³0şzŠ/#×ù³Ï9[1ëü†ëlùh3TN
-C2ºÃæré>çùpĞ‹ĞBœF4·!CßŒ®
-Ü@#&%°1ñw.X3Ï.ÅˆS×x€·ÏÂÓ$Œ@áªÄ
-iˆDy^†ıM‘¦™ÇÀìÀê2 ‡ O|!ğPBè’oo¡‘Ôeàî“1ÀÕÕ!€_&èÂihh+Qs{äÄ8o¶Öu<ˆÊVcEû±Ø¼Yçˆ%º•7´’ª7îÙ~p>‹‚:ñ7Q³Ò%
-”cënõ«6Wk©>åÜ´JéÔhº9ù©ƒÖé¾IÕP9°85ÉMaç38Lbhpã=ü–y4—Æ<–bK!Væü‡ó¾wC«ih5ğÃ>»íÒàÔ»ÁğhP&ŸÇ+Äù|ù³S¸ëÒ.6&Ô
-§0‰Íõaô _ …‹¡½˜FŒmßŸ_ŠOë·“}y^h1–êŸâ#j_äŠ®#¿tÄYãşhxVR<V—H
-U(*å”YƒQL\`Œ‰š¦=Íá*™~º¢B½ "Ê¥w–Ô<èt C¹¥.ø´o“œ#ÚÃÊ4LPç:YÃtcï’–%1¹1Ó2À÷²Î7Oæm¦ÏL®`\îë¾$ŒLKí˜?ÎÓ…LÈ,)ÂØ,ÏşpØÿh"Úiscà0Ø¹crjOa|ƒ—íşNYŞ,×ec*¡ÌÎßZ.¢Æ"àä1_L=¶¾ èo,jRcn"[ES7>x‹Í"ÿ¡“@‰}Hxq˜ŞÌ²¤o¹ßøŸB 7m›)"éfHFwùÅ3‡À8Ã‰õ¹˜kà´ø%mz·|¶/ÔÀR"<tåıµ}¬d,zœŸ¨Ï¦ñ‹ó;@çazÄ¸ä!œ_âş]±Êø©ŞıŸd
-Êøy³±øª]9l9‚RÔ„xèÆ<–*hª´ÌaÊâış`>'›@¼¶LÉ¸‰÷È·OJİ‹!co2ó‚T`îÉµj(Òç‚õµÎ%÷ ò¤ğ¼)?ÆN3Ö˜5û*ê1ÖUÃ0—z@U1é¦¼NÒ ¹…ˆ¯™Ïæ
-^“ò<™™Ry¶‡ìÃZ“Å>Ó›Ò<UoÉãÁ×Ë‹ëÄ“ä­ppÌÔw–š¨ñBŞL@¨IAœ^åŞJ(1k‰ £yÖæ8ÇC¶ƒPÌ¡ÒŞ³ew‹¦svómg‹pî%Â} FÜdø6<<=:Eó¾a«ÑËÅgaêÃ÷qÎ17äÊØLĞR"DÑe*¬óÕJÑüy
-qÙi›µ(”_x>‹íŞpx)ÙÀa®%xÈÍ{YÔ:¬üÑ$ëŒ7Ëã[vDqv’,PÊiÏrVÑğ
-¢ó4q
-ìW*ëdYXS"ßZ—àÃjEtÑxÎ+vµ†ô²6tÃx,»îœ1„èÿ>•ÊŸ8 pkA…è‰™†¼ÂÈ
-7Ÿp§°5RÊH©­”·)ûó,.ØÍ­Š®!©³(‡&×Œ,fV®SÜÌô#×0*&¹¬{óTVªH0Í±qµ4É× ¥ƒÊÜ©<Ë/%nULÉïšÊ?©€Š6:$‡0İ¡"²¶X“Ù¿g®ŠÇÒ†”Ç™S¯ãÑOÁI—©­R÷ĞT•˜í§µ°˜l-Õ“¥--Çˆqç7UDFºD”¶z™/¿uµµ…•=èf\JüZv³”-Œğ4¡SõÈ,k¡$}¶?€Ø·»ïöwÏNşİ%N®0ºJœ*—Ì"qªÔÁ›BBÊ-N¶Ü7RŸR21Ñ­Ä/J …©aEdUÉgµæšæh¸¸óš4/Âks‚Ò7+ïÜ*­ÍæxÊh<¥{æl/º³d’,Dåm’ûWá#`Ñfpn©ºç~|)Á¨¸åA¼HD-MÔ¿Œ97u€½*›¥:®&Øn.l˜µ¨Ä)ãQb: a­%ù7âªB\%…ø\ˆ±0°%g`ó‰VÏ%K6YvdÇK/¾wÍÆèôV%Óèc'UG³×½‰n¬6DÎÚ>Ù§–É8åŞTãÓ„÷Rı­7a¢xİXë`º@€C=JQ^«ÖIÃy'Ó'à,³õÜˆé	û)Ø7RßW<1ÜÃsäA7ezÜßI5b¦²Á.+bY,^Ï$3².;z¾ö)ÃGzÂmf ¸­ú¸Kú mqƒ,8//iŞ,ybfÌå„¦,I%ğW&Àœ.kB¸0‰Öµ¬;K´=l4~.Îì9ÊóõÍİÙp}uıYû·éĞÜmı/™Öæa6¤È:çä*pâş·æŠûO):ÀõÏ?g	
-»PË\Q·c>æÄÄÃ%Åá5çÕåéæ:•¦²ñZn8Ã2Åº‰^Oÿè{ñˆa·ònˆ0¿Uà;ÏËáBS5 “IÉË5g±6îNÇ‹éÒŒ/2Öq>6k[l©‚uÎy»M§\òÙ¡Lƒ'Ú²?z4A¡ŠG¨k‰3ÖÍ lßh”‡b ÉV¡…|;o“¸¬IÀ²ôâøİO+äŸÇøÏû÷×ƒWÇ+äxÿµH4“˜Ñƒ0J ˜Ã ì:ÅÑÄj3^ vigÉ{CÚù~Å›N±æi`û<Gå€j·”g…(C…íK¹NÆcši·¬†¨”œ$xH	¦h*òå˜0š`=Uq–"MİÂ†B­(Ö•Š…õ4Ú¶åOÈ€±lğÿ¬öº±›z8V²Xñ-Å*¶hÒŠîİFÖòÿ{~Ôèº§I² 5AÅRè’Ûr|RàŞ* ¸
-‰¶¤+òå’G¾£+‹—.‚ßõTÑ€ÄRÕûP¥ø±Ó¤—&‚³x•‘z†È%-F&°V*³ù«nı€=¡c6àeÊä#¿gæäø¥D_…òSL0öº¼<–ò]t+mvşÓnş6¥Ã?ïşÇĞü1ÿ¸¢Óåæ^¶¿_~ùmÇw+œUFEYğ½Ä—cõUL6C¢<@³èÓšÁÅøã¡lG½[‘6F»½e¼›v‰İjyy£ğJı6òøå¹²ÕÏkş’2Zä1•o©KëuŒT/®¥ì$‘g:€ÿdøÒ|ràwE s-›*NÉ¦f|ú‹õ›*-E³IÏ¹@UR¥„ï…fHÍ}&‚CKÃ˜a Ôm­êxq€¿nûA€‰@ÄWW–séÃ­òÖiã[é²s.åÓÜ¢M\³´aøŞø­™4‚(°ÖææÍ›ÜÑE
-£2˜]-wÓbnAH?mIZs]IQÕFü°ê®i°Ê˜î†@É¨5í´Z9§k©9ĞnÌ³>˜9Ğ¤oÓ›ÍJ±:ö:Ìuî`70B½QÀ¶j¥ÔŞ‘Z;’‘—°h`†.Æ›†7…Œ`~c¯‰°ö+œ%ì0˜¶9ZY(g½¦&ïÓÂ™“ãW”SºŠÊ`òú(G×ÒW”ƒß=Ê1BıŸ åë”Fc?†’˜Í‡P¢›@oo…É?Ñg
-ş|+\´À&^…$…W` ü¢hg£Vç%"qa‚Ù²'|Å:¥KÂ:Šdõ¢‘¯¸¿{\cõ'Œjv{Ÿ'áU@ûlÜìdMú^Ô'?´úŞT„'"
-äbˆ—p"”¡"JX ¶„À¾ÖlúEqÍfÆ_Š¼*˜ä›`v•¯¸¦tU„*9Í¼â”ÜÆWLƒß=¦1úÆ4{QÇ- ñÂ°×§Yb@xºäsê‰:åDdNb7°ÁsÜ“Œø<¿(¦Ùb 	ÂÆ$×1É4—uÜ¾7ŠY?;êÃ`qPy}›Ğ…^ÇÌñZÙêŠ*çy¼eà;^Ë-ÁÍ¼ˆåªQó6ÅmÕ9¸Æb\ù„^±îäDîb vc#Ç¦Õ±6y›æÊt×ú‚ÙI»İÖEÓësoåW!£~x½Ï¨ïbùãø0Ì“ìˆõq±¼¦IûÓ~}w‹sÚ³ÏS
-ÔéUV—²ä³ÔiÙœ)Æı˜·´)ÆimÅjÕ¶eÉMû!£¬¶¹y©3~{ïĞÙ½àæQMì4ÅjŸ'x`Ñá$Ÿ„DÒ3Í)mG½iêş…Áx®LŸwxÆ„
-)À7"[(>(C™ÆäHïâì\#CïÚ"°Í­Ú‚/”TL`±5_€…:Í¸)†Â?¡¦¼0æ{aïÇt‚eâ~É2ú}¡Y<ísÉÑxŸ&ğD…X¯Åè’w«Î5hñ=Ñº&ó€Ì8)£ÎÎs›Á¾0 ¨mÃSë9ñ+Rb¤QÈ›QH7d£Ò×|)!Iœµ‚„Û­†R,m¤MH­¶ãpLÓ~ö¶•Ærîód8•¶åüƒY’œå—ùßúìƒy’Uå#ëˆ²LÆ1}Ìµf!r:çğ¨y-Ù›4¥qT\Æ?2ÄÎ÷úÒÎ¿½MC7Ûjo*É·¿ä²#¡7÷œ…hŠvy!¡ŒÉÂæOWtŸW“‘='kÃİEÈÉƒ.‰XN!y^[Ü¶³>l)Jâq%EÉzÕ×·\N‰G
-Dã¾Ò\wŞÁŸ&{W	%™»«Íö£¦îÒNi¹vİ·ÌÒ{i&“¥·ê¯á>æèa$^}ìµT¸çâİéãÊ
-|ceAIæ½‡#EÎ­8?a\O<vˆ­M¯ÒHš†IZ`£Onhâà/fùÙg.Ö§¨‡g¬¹ï†—Y­ò–Òsäû«(şTkwİ^æÚÒ‹!b‡$•„´È_ûÛí¾Øvä’:ä2ÙÖÛû[™=sñÏ†ïæ<Ë/îB+uUpï%É´ùòXºäÜ»Î·ò—Œ›ªÑqòÿ  ÿÿì]İoÓ0ï_xI+5í”¡²2M{Ò$x¨¦©¬Dê”©ÉêÿÏg;¶ãK:˜ğS“&svîÎ÷ñ»µØö«ÅfO®†ë£™†ÄY°­ÂmõŠğ:7¥?şá%æ2 Ó—†‹ğ®:(?^~øX&ëb©—\­¯# %7jã¢jŒÄ/›x!-69Ë{ä	±ùp‚ÀµÔMÓ¨[wMÍ“m_ziŒÃoraq™êØTBìqçY.-i¥i|”n÷ms
-l¹R7QíOáè>8{a°5iUFKˆëÒ³«ñ&¡zlaŞôÔî[185}!tÄS‹`À…–o”’Ş9 ©u¦MÛ_ghsø~I4vH_å¹“ãDYÈ˜Ú–“Æ6Çaß"É£™_C7KŒ^È
-ãEùìáOcúƒ.pŞ?Å­›+ZãĞn59ÙÃÍ‹ªéïĞM´2Šl“	/â«á!›µ€çÄñŠ'i¨OJôïÂvøû i*;°uYÇleáÓ•.^é´Ò?–#K0xïLÎpW®çtys5Æ—m{J»æ>S6©ª]ĞğéÆõ;‚İ0uT*4—€ÁÒò¨‘´Õş)šqL±‡Å¥C|)Ô.‹a–[‡zçòºó”Ó–9¸‹¥—™@ÑÜ)pĞ,ÇìàÛÁa›ì(¡_»0:*¦§ÂÂ³ºÛr'Ü×âÈÍÖı¸3‡ıÃ†%t ÈË¦Û­±7‡`ĞfD4íõâ1ÚÅTÑÅ;ø©†	—ÖG¾C“¸gF±êÍ!´=EgáïÿJ¬ëJ«‰ËFÃ\S/}j07]ºšxn<– 1[ ´D¨]Ì%ÏƒqhÎ–‹sÄá›¶/çhc0¾ÉfÙ«Ã«/ùÌùWŸÙ|”Aä@½éÌ¨ÙW>?n¤ï™ÿ³#½=%;ú;€yOjç9í€a2}†<gÜˆHnª½‘ÿa$1
-z1¬Wå>µ{»d‹>Lßæ¸›:™ÅõÎørLìL¹ô½pÛš	ÊL#m‡}«ñ(·ñ,ªÀe®«û¯·…W´4 Œ…¨:„¸94€F?ñ¿mÙİt^—Ù–'<)æóöÛeVç«ÿÓc\¢á°‰g2Ìõá{Q›&ãşs&*00Ã¡>–Po^2e©¨Ù(»M<†PıP1TjN’ô‚ÏdŠ€Ôôá*Úe¨<ÎöĞÚñ0«ã)@”Úç§·%mÒº§ÕöïFCÅF§§¸áı´Í«œYlÈÕıì¾İû¬EÉ@ƒ—¹}‘±öÍÉ<©xºÑœÉ9^R2(È yW¤±š[½a<Ø-Äºâ“º</òí[-X¯LÜ±LïğÉ*­m“Ô8P8!p /w¼æŸõFôÑ>¿7L!5ïSgP¤‹ãË	cX›ûu^+$× ÿ	 ª„gS…îôš£ä1Ê­æXi®)f^T5?¹„d˜å¥‡˜«‡«‰VêëÚ…>–&åD!#“¶‘—6ä¦¡A—ö ÅXÌ÷·ü_«Ió÷U¡Š2âûÂ_ì•­x´ìPìÎ¼9Y,­ñ«ã€GZ‹œŸ·J=š
-uöK¡z×¬\,ıkb0ø  ÿÿ á´Ê
+ÖÔvJ~ü»%'G[Û¿Ù{ıµ¦3¹Y6ÇXÚ»­X’OæØü‰ÁÅ\å¸bÎ$}å¥­œø*è^dIÎ„»8Q]·ãœ©Ÿ4R])¬‚§sNÁ±™DSWÉc9—P$ÒG.#=J xn–4‘¢³d7§õ­¨˜ÚåP³DÀ¹¾_—Xœ²7˜î»ÜÂRu`Ê¨xQÅíN‡œDŞpH[Î"è¿sÏÈ…—ŒåæÂT‚S|Ïø ŒbL@s9‚l=e^ï¶#o5;¿İéé”ÔsàFÖû«xHd?ŞíxG[’Òö¿rã˜.¡Í4hÿMäƒKyªùs&^Ïc ¥çöæç×ÅÙİ|ËAoçãS'³¾ğÊ6´AÍ×ú¦³gÊBõ¨ÏŒ7ÊÛ»!=L‘İt£¨‹¥œ•@I™®(i.ìFQ1È„‰ô„,_a#í1[o`héÏEe¿/ èÒ	°*WŠ–$w%œ`)ÓXOîq’ûIXÚ¸u¹ğB0÷r1˜¬ ğ%IV-3RpDPx]¹q™‡~ÊöDyzÑE$«Ş-zË9ru¸‚åI1Ú±èÆhéBxô*KÎg™„Ï )eH!Â2Ò(•ø ºzp™jBÂ¥­	W¡6d˜¨Cê"‘…ì*EÂUõ¬’'ÍZQTÌê5ò»y8i­{IL›Št×¤ü	Aë±›°Ú'd‹"kJ!¹.g3Â«£¥Ë\ÄhÅo®†Â3+*U07ıËf’ùóïÿ­,Ê*§7sÈÌO—ŠíDÎ !œµÃc”ñ›šY
+úBC]ö¶aŞï¨xÈ”>×8CEœ{şãJANÌF¹t¾1¡C/ºuDo°ÚĞÁ:‘«2ˆĞi^Ä›×+Ë*L'E¶|éUß˜‘-oÀİ~tdKPîgÇJ¸­‹È™d©HAówéöåY‘·P—çÊö¶	³¢´tì‰2X\§‰±ÑÅÌKCÊC§|úÉØ©­‰š«jØYµˆYêû
+(ºªr­N5ƒO-¶AW¿–¾®èo^{\>ª¿ĞbægøY,v¶ àü0Ä_l/Äw„4 Ù›™¹](Œ)¨gÛ!®\÷‡f«Ó'—ëîò¥ê¦NòâÄêmN•Ì¿ÿ·TÉš-:X]Ù_ív»&RÔ?Ÿ{NÆP+ÂµÅUÁ¬Õú¼woßÛŞßÛ}}B¶¶·wO¶^oïÖ	sdà[½;Ià°ÌË¼'iö#šö$£1šõWÙ¯)ìOxÕ„íR[;_`;mzh¶Gnï¤3ş{-ı´¾“¼r&Í!ìÀ°ç	]Ä=¸áµ?¸W‹E'ÙN¸+:Ú6ÁğÜ$$ÍîÑz¥sJñû¾ŞNŒøƒÿ¸Û¥Ü«ÓKÚì«‚øÍÉ«ı=w}œgŸIôÉ\èaŠ‡ŒI€ßñóöÛåwEehW?ƒ‡‹ÜhZ|¤Êy3ñC$×tíÂL±,¼pÓ„«…*ø{tY(È'Ø®¹Û—µÉı•™Eo“”+„:Âeå8{­0À&t¥ºv>‚ñxx,© ›o€œ©…KIœDtÆÕ™lAdJ¶Åø\TªFÇ5…/:QL›ßá^.Ìy$ğÏ&%ys´ûUøìf~áÆŸÌédætfG_»•}õ“}şvôÿô‡”Ãá%ksZC¾u#oÀñÙ¡¨NÁÖ<x{ºŒZÿBmé³K™1Ù
+Hœ’Åf1º qóZe•Zh>™êÙõMõÒ‘»êÉ8£µğrØ+õàuJ¤úÀ|¤1e¤ÀÄ/ï„`/v•aH/Ÿ—^Šò²Ù<Ê|°éÒ”—÷ÆÍEã4m&C¼8SÅµ	_˜)È9Çò"P.{‚/#ïy³Ïù[>ëü†ílÙhA”N
+ÒFRêCçrîøãüğÑóĞ\\H·!ÛŒº
+Ì1@#:)°Q!x&XÓÏ.ÉˆSGx€·OÂã$Œ@õ*Äiğ4zN†ÿu¨™ÿÀt×è@ ƒ ÷l!8ğPNè’Ï¯¡‘Ôàæ½6ğÕÖ=€]:èÂi((ëT3±ùçÄ8oºÖuü‰ÊLVcIù1ß¸Y§ˆ%º•×´’*9nÙ~p:ü:±7Q¿Ò%”cên†Õ«6Sk©VåT·RiÕhº9ù©ƒÖñ¾J•Q9°X5ÉŒb§S8L|hpãü¹4›Æ,ÂbN!‚æôñiß¹Š¡Õ4äš=x¼CoÛ48q®0lÔÊ§1Å
+q>ßCöìîÚ´‡‹	uC§)Lbs@}èİÅ@í¢i/v#Ê8òïOÏù§õÛÉ¾<-´‹õñƒ?¹wrEã‘_*â¬p†4
+=K)«K$¹BUsÒì”Á(&40FGMÓfpœL?]’¡^P”åR»N*t:Pª!†ÌÓ<·o’#·‡uk¨¸Î4³šéÆÎ¹[–ÅÄÆtË ß‹šß<Õ·>S¹‚r-¸¯Cø’P2-´£ÿ8O#Y’ˆ„o±Y–b¯ÿNG´ÓæÆÀaĞsG%3Ô¡ÂøÏÛü2²¬Y¦ÑÆ%\¥¿µXşD
+ŒE4À>È3eh¾˜8t}AİßXäÔ¤ÆÜx‹¦jl8ğEşC9&ûãÔ×½™eHß²¿ö!;…& nšâ8SDÒÍŒï²‹e/
+p†ë31WÃi±KØônøL_r¨¥DxèŠûkúXÊXô?QŸMcãw€2ÎÂôğq‰C8=Çıºb•öSµ3<>ÕÈ.åçõbÄ<à«.tå°e	J@’â9¢ıXª )Ğ\0‡~(óôÛƒùŒ@®ñÚ2%å&Ş ßB!±/\Œ`êø©ÀÜ	*jÕP¤Ï9ê)İLnAåçHáYS^Œf¬1möEú®CYWÃ\ê!TÆ¤ëò=	K äV@ ¾z>˜+xMÈÿ¤gJÅÙîÑkM{úà^•æ){K¾^^\+$o…c¦Ş¸1TL@òfBu
+âô*÷VB‰YKt põ06Çp8²M„bEğ–-‹¸›7³›·l;[„S'áN0â&Å·áŞñÁ1ùM[^Î®0TS"¾‰s¹!ÖÍ†$ƒ†"’.Sa­VŠæO“‹ËVÛ¬D¡ìÂóY<h·†ÃsáÈÎs-Á]îhŞË¼vÔbåÎ ‰`¬¸Yß¢µ Š³dùİRÆ{–¨³Š†—§éT˜`¿TY'ÃÂêÒ‹høÖºV+r‘À…Å¬Ö^VÃ†j÷eÙ1¢ã½ßgeE‡ò/Ü˜Sx!úc¦!/0ÆÂÎ;Ü*ˆ”2U*ëè­‹^=ó}³«±«IöÌ‹¥‰%‹—ë”>Ó„ ‰ŠÉ/ëGá<”•*’ L¬]-EJ¶;HôE¡2w/Ï²Nñ[Õ´Sâ»ºâPrG ¢‰ã^ ¦û!ÔKV–rÒ{øÌTYØ‚ò8síµ<ú)8©ò·Uª"êjÓı4–Sƒ­¡¶²°¥åh1æ'«’ÈÀH•ÒTÍóÙÿò©·—qÁ•{•—5¨&]Ê	[Œ|3Ô"-Œğ8q'*’dÖÂJê4€ ´¯¶^ïlıM—XyÃ¨JuÊ|3‹ô©R(o™*7å’Tx_KK½ ĞWÙ­3
+Ğ…9cy˜UÉqúrú h¸˜Z5ÏÂK}æÒ³,o^KÎúäxÒĞ<©7{æuÏ»3¤˜,„è­“ı•é#`Ô¦pn©úçÎ|)Í¨øæAğE-E»´É8U€½Ìq›¡|®"òn&„˜µ(Å)ïQâ; ¸a­%89âªBL\%»øL¸±0°Bä“Õ©–Ï'ËDYöjÇÏ¾´MÕhõV%é}g•I•Ï×­³Œ®-7xvÎÚé?é§†ÉX%æ”ã İ„·S=ı•P‰<Œ®ŒÅ2m À¢h¥Š0¯TKË¤ñ½$úñçl<;|zÜÌA
+fÔOsô9õíÒG=æF‰ï¤Š1]ma›1¬G¯æ•)iı=_z.ÅIjâ­j W¸©D¹M>eíƒ,<8¯A©ß,qbzÌe…¦™&ğ[F@Ÿ!.c–¸0³Ö•­›n{Øæhü”ŸÙS<•§«ë[Óáêòê£ö÷“¡¾Û4€`a›…áÂì¬3®À¥I°1S"€”)Âti ØÇá4A™
+KÊzÌÆ èxr¸„£Ø!¬(§º,_ÀL§RW[^Ég1YºÀ7¾À«é}'QìVŞÏQâä7
+\bçI9îƒËbî`ô1cy¹0m!èÃÄá©ø1UşñYÆ>ÎÆj=å[*aŸsşnİ*Ñ|v(ÓHJ ¶ôÇ WE‚Ã£Õ•Ä™…îf ¶ãn”Gd É–¡|[oÈ¬ÈÈ²ğìğõ×Kä×‡ø¿]úÿïv_.‘Ã—<û`LbJÂ(Jaƒ0cèGcD«É†J¦ÍoìİÎ—KÎdâó5ïLúÓç9ò,GW›¸¥<MD*L_ŠeŒ08S?H½Èed0x9å$qÀQŠ3E@G‡Ñ8ë)¯0ÔpªèÖ$"iE¹°*U.¬¦¡·-/ Ê²Á¿YìUm¡6ùpŒBe± \ŠdlÑu$İÛ´9äÿ·½¨ç»«Jœ&È6€Ö8Ka K®ËaJ€{£€`+$š²°ˆ—Mbñ²³,^ªp~M*TIKUïC™òÇS“^ŠPÎâUFê"4™ÀZ)ÛÂå¯ºÅ}l öÈÓ0´ /]jñ=='Ç.)ú*Ô¦¢‚±Óeµ³¤ï¢wi³óÛvóû‰;üòî?½Á“`øÃ…{6YlşöyûËÅçŸw<»ªZeT”EâÌq9p_ÆdS$Ê¢õ×Ù?ÉìPŒ7ÚÁvÔÛ¼æ9dxÌÛ›È—†½)—Ø®Ğ—ãS
+/Õa#÷_»+[ı¼$0	Ñ/£qA¥Qù–Ú´nQäÈBõb[÷ÉLYÚøO„/…À'F€W:ÛªªÂè¤ljÆ§CM‚ÿ\£ÀS¥µhôìÔ%Ujø†k‡8áÜ¡2)ø¶4´éJİÖ*Ÿw‡èş«å©¶% šÄ|yé9›>ìJƒa!7¶•?ş×¶Ù<›kvçÑ$µÚĞ|¯ıVO!A"Xi3KçUîö"Ui¬‡¶F¼I1ç ¤¦6$²¹¬¤Œ¨*%/Û+Œ¢¦½MP°ª‚Fu;-×Ñ©Zªg4Ûó¬‚wfÔ©İÔVA½n¬éó [˜´P¯•³Êé;5{¤Fdä$ônnö&ÍsÓ†3ü`…£¯ñ ú+œ&ô0èì¦9^(gµ¦&oÒÄÂ™Ëã'”SºŠNÒĞòú(GÕÒ'”ƒßİÊÑBıO åp;ëÄÆ^e31¶'¡7jßÎƒ¢.x÷-AªP¨”’x^€ğ£¢µvZÁ—ğ4
+„Êg	äRø„uJ—€u$©'ê#I#Ÿp~w¸FêÕlõ>á…ïöé¸éÉ
+úNÔ'[}ç
+ªÆ²ÑÄÊ;‘3—¢"—Ğ@{	a~­éä£âšõŒ¿äYV0ù7Á\+ŸpMéªUbfšYÅ)±O˜¿»L£ôŒi¶£0[,]â™çû`¶OsÆ€ğtÎæÔãµÌ	Ï£Doø`Šg¸'±y~TL³A7€‡“‰¯c’)/ëx€¯³€väY‡Áğ s ×¡µª™áµ²ñ5Ï³8ÍÌÁ¼–w‚+yËUcèMºÛ
+ª³ğÅ(óÀ½ İ‰Éİù@Ì6G†M«cm²6-¬–é.!>„¶“v»­Š­WgâÊ¯B–ı0Úuz#–eßÆ ÌÇñv˜§4Øäëcc€Mù§ızö†ç´g%¨Ó+³.å@È,æ"¨Ó²>oŒı;0)ni“ÓØŠÑ¸m$Ê‚·ö]>Mt³RgüöÖQ
+¢7{5PÁÎ±š˜iŠÑ.?KÁ¼ÄI>	¤gšSézÓÔ†±Ì	˜L7î°ü	1W€oxîP|¸0t¤÷Ÿ“?½Ïs˜µ‡w<ŠÀ<·lŠÁR1YœÅÆlqò´ãºP
+c…œòÂ˜3ì…½º–û6Ëï£u‰²dñ”Ïã7q<Ÿ¥-Ä.ZÏ¼kyæAƒŠÒC™Åd~ÄIuv˜ìö…A½–hÏŠ_Ò$ıÆ…,…äC&ú!|Í–²’ÄY+H¸íÚ ø ÅrĞFÚ„Ğj;Çnš1ĞËŞ6Ò¸B&Â–§Ò¶˜0K™³ø<ÿ[‹0O¹#«†dQ–÷Q;¦ç±Ö,x†Gíî5Ë£!—“¢\ìÂƒKùGŠØÙ^Ÿ;şéç×é‘¡èOãm[æM%9pú<wt`ç¥3÷XMŞ®%/Ä•1Y´ÀÌÑê’îÁÅè¿dé„dÆÉÚ±÷²rf„K {Á $/ÂKƒwÖ‡)iI<®$-Y­ºåà—Ë#IiÜW@›íî[øÔdïJ!%ó|Û¾RÔÉ]xÆ¨- Ø®ı–zÏ`2Ím²ğìZ@ÿ5¼È,½Œø«÷½vœr@·\¼ë"-¢œYw¬,(Éœøp¤È½gà%”‰ëñÇa¶éU	RÔ0IKnôÉ•›XøÉóYşLö™‰ö)êa9ln»áev«¼å…lùşJ
+BÕÚ]I·?şé¹ÎôìŠË‡ØåÿğH*p±‘½Y ÿ  ÿÿì]QkÛ0~ï¯ğÆÀ	4I×-ëÈš•Ò×2
+…í!”.kÜ5â»teäWl°—Á^ö÷¦ÓIòI¶ä³ÓV¦§Ø±dù$İNwß¿ûL5öR]D' pÛl|¦zÇWŞtŸçH‹İiÉ«,wÿ«<_Æà©Oû2ŠŞÃıl4<¡5…ZÕàÅmœk±læb‹Å\÷ClDê®à6®·4e<e©ü×óW_ıúñõ›5ø4fùäbá9Á›†ÃëÉã×oÒh6_A8¦Ôñ3Áx¤_\Õ‘¹º™ò•kƒ}¯yCİxTâÃ•ôNÛ2HM½¶
+*ö2­TĞSÁå‰2¿(f•’’ëy¦KIlÕ³Ûm¾‡!Åí4IR{ÕÆŞnÁÆaÓ&fTµ”ˆ±`0=Ûo`ªÇ0æYmÅU‡´F'BC¨µx¸ÀôÛÕŸõÔôk d­1}Ú#ŸÃ*ø¬ÁÚ!¬UÆTnGÆd&4¸x;*ŒUp>ldÙdˆ=qã%²³¶Èèî…Ì2^ĞìªOğL\¶Ï9‡ÒìlJq>˜Şf89²²Åá8/è.„ÅC3µ‰Sté÷eÏºº8xÄì¯z†û¦ˆ®×€ÙO[Yû0‚ÇF1«C^}æ«O±èbÙsÔ ‹ÿ<ÛõÜN//!¹á´å£Ó¦1Ñœ@N®z´„VãæúO†«!ì¸'ªPªæŸG‰¥±¶Û¬Ç*Q{Yœ:ÌÒ^î:WfºªPñªáe(jÉ6ÜÄìË„Ràhï(­Çò»Şb‹Ş^Ä± ?«ÂîÈ„®
+?zà/ØËS047Âó¨êR=°³SŸƒVaqá
++Àeƒ™ÕİRŸCğhC&<ù¼z§ò0W´CAñ‡\†Qk#ß¡h<4+—·rmCÑßXøW‰#Ö©Òjãµ1Å°ÄÜGïäJWçM: 6a	€7ƒµ‰Éäa0ròòoqzØÅ¢lÊ9ÊØŒ»;»Ï{;ÃŞÓİówÉÌúçoÅx¤ADAZ(3*ö•Ñ=óvDË}²£¿ƒ È w¯¶¾ne°ó!|¦Ï˜WéH¢¢ro(@aŒƒ*ÆFk•Ø§MjŸÀ.Ù¡Ğ·%'ç±Ãº^Z+ÇÆÔÔSßÃMLPv\k;ì›G@¹…gR…€¿8cİ|¸{EKÖ8WI‰K‡Üè'şÇ•¨^èyÚ[É(Ã|^À~;íåÉt!ãğX|6õàPû½Ş^ÍsÛlÜ~ÌTvÁëğÁ”ßc#ÔÄ¥BYšçw¢—Í^åùşÅ¸T™Q8ˆâS9r<® SãCD°(ç©ò»‡f‡]í ¼Ô½¿?¸NlıRR3d	¯»ÃH÷‡¸å=Y%Y"º¬¶ä¦¾¨·~µ¥“UŠi aÇ©ÄtGLs0Š2™¡®;’Næ¯Ô,
+‚BáS]m®–voè6î¯øD?OÓÛdu$æ&4S5&ñßl"İfñv[:.ôã•7/äÂ^¨6Êê÷B¨¤v=s…ºº>ë–µ¸™%Y'Crm%Ÿ SÀäø,ÒÔ^Hü<A¹éSÑÙîçY.oN >fræ!æ4DÇÎ´OòA^—¢ĞÆÄ¦œÊtdÓ¶æ£-UÓĞ¢K¹Óª/ö÷;§`Ó~ñ÷ùÜdmÄï…¿Ä';HÚ%PliWÆãq©A\ºğJg’ËûN.¨n‘ÂÎı(´B¯‹™‹¹!aNlmı  ÿÿ ¹ÕR
