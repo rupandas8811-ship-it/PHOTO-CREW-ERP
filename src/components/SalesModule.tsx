@@ -1,4 +1,4 @@
-ï»¿ï»¿ï»¿import React, { useState, useEffect, useRef } from 'react';
+ï»¿import React, { useState, useEffect, useRef } from 'react';
 import { AddNoteModal } from "./AddNoteModal";
 import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
@@ -11660,13 +11660,86 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {[
               { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
 
-              { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue:xœ¬Wmoâ8şŞ_1ê­o…m·[zªØ]é¤^»wTûeUuMbˆUcçb§À±ü÷;	yAíQ$ˆ3ÏÌ3o öW$5…1ºÖ×'¡ş&™Ğê~t{MèáwĞ„YÄg¿İû&è
-ï.õ9XD3)j°iÁÎgœL(O¸(|•œË…¨î‰ ]áQ»ïDBá>S<2“Ü«Q0"s’k*ÔÙjÂ”qMÃï„G´Tô.`À$XºK·ŸÃ1v}êEœz0úûÏ½XFRLY8‡ÛĞ£aI²A=»“â®ˆx	”¼ä] )Ó3(>àÓD'äNÂm€jLPÔ^$×”xp-•Î¢0DC{6?¤/
-DVÚ®å˜7hìIN›0°¡ÈÛ|2Ô‘`z#.•Ñ˜3ü¾5'A½î’Ğkó–^B=‡íâÙÆ1bQ#äÎ± <ÒÕp6…ë˜áÚèhÙu‘ı”0àª¸m}–0Øu‘EŠgîãp]·Õ_­Á‘² [ÏÏ±j1uåjö„ê¦0!/¤x8¡ÄÜ¥W¬[úgm_î;v_´=öty”¥ \N”ºÁÈ'3ç_&\çc§iê yÄä3$‡2õœŞ’ƒ|¢áÔ¾Ï<
-P>ñğÍlÍµÓ?Ş5&¯l{zéHË7òk2á4{báL#ÎA#p‡Ó©Wj?­‰'hâÂgšª€¸Ôr’  Ú÷MÁ”atÚƒ¾3)8ÀêZ*ˆ,s—(ŠÑ!î#3gÁŒÇt:%ªò°Œl­Êš,>+ç¦Rh{‹æÇ—¶Ôÿø|ÑÖş!bF‘ÒëõP9_ğ
-S‡JùæKA‚58;XÈÕS\&%N‚Í|]{TIDzI:nŒsYæN¤·ÊZ€u…‰ç¬ Y¤©Ši\š~IÃ¢I$7vËÒ*ãÆmøZæçyğëØwæm²öø¦²ÏÓz2†ô:¦H„bÆ+¹Ì°•”•fªÑ+õrå<‚5/²‡â€H!·E›«ÍßÖõ
-@fY«5Z
-/ZÇÿCcsÑ6
-*në’híSLk[·¢o$á³&ºIõ>RvÍı›^ãàÔ­™X
-êAÖ ½,rıY‡‘p	s²tÎî ,ï÷èM1SÓiô* 6<7í«ZrƒıÍ£õ£o"5—ÆcƒœÚæ­=Oæª·ãa¤†iøÃĞ8#&n7~İäç€qçê(ä¾ëJã¿ş@lCİÚøOúŸ%ÙhÀ%tàwøùîİ«!Ûµt	§câí[ol~Â¹Â›Ç<iäÕašDZK±'‹cç˜rêê¸	Çí·:—aÇ6§‹¥•m¯8®ìöÜÓtNI“5Ù·4;=—f¡/cj):™Eix¼Ç(Í4Gƒ¾3º€ÏTÆU5û¾ò¾ø²Êz}ğq€¬ÎcÍØé¯Ïôò7?-§ŸÜmÉ©˜á `Æü¼_}_îÍ4ÉÇØœ†ëÓMYÖÅÁs©	ÀæÉøs#m¡(,WmëíÜRô
-²š!¤0±·íÈûã•„×­®u»l|:Ú|:ú  ÿÿ ä¢
+'Quote Sent', chartPoints: [12, 18, 15, 22, 19, 24, 21], trendText: 'Quotation' },
+              { label: 'Quote Follow-up', val: statQuoteFollowups, theme: 'gold' as CameraLensTheme, filterValue: 'Quote Follow-up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Scheduled CRM' },
+              { label: 'Confirm Order', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Confirm Order', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'To Operations' },
+              { label: 'Lead Lost', val: statLeadLost, theme: 'red' as CameraLensTheme, filterValue: 'Lead Lost', chartPoints: [4, 6, 3, 7, 5, 8, 4], trendText: 'Opportunity Closed' },
+            ].map((card, idx) => (
+              <CameraLensStatsCard
+                key={idx}
+                label={card.label}
+                val={card.val}
+                theme={card.theme}
+                onClick={() => setFilterStatus(card.filterValue as any)}
+                isActive={filterStatus === card.filterValue}
+                chartPoints={card.chartPoints}
+                trendText={card.trendText}
+              />
+            ))}
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mt-4">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-300 whitespace-nowrap">
+                <thead className="bg-slate-950/50 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Lead ID</th>
+                    <th className="px-4 py-3 font-medium">Customer</th>
+                    <th className="px-4 py-3 font-medium">Events</th>
+                    <th className="px-4 py-3 font-medium">Phone</th>
+                    <th className="px-4 py-3 font-medium">Stage</th>
+                    <th className="px-4 py-3 font-medium">Amount</th>
+                    <th className="px-4 py-3 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {filteredLeads.map((lead) => (
+                    <tr key={lead.lead_id || lead.id} className="hover:bg-slate-800/20 transition-colors group">
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-xs text-slate-500">#{(lead.lead_id || lead.id || '').slice(0, 6)}</span>
+                      </td>
+                      <td className="px-4 py-3 font-medium text-slate-100">
+                        {lead.customer_name}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-300 truncate max-w-[150px]">
+                          {lead.event_type || 'N/A'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-400">{lead.mobile || '-'}</td>
+                      <td className="px-4 py-3">
+                        <StatusText status={lead.current_status || lead.status} />
+                      </td>
+                      <td className="px-4 py-3 font-mono text-slate-300">
+                        {(lead.total_amount || lead.quotation_amount) > 0 ? `$${(lead.total_amount || lead.quotation_amount).toLocaleString()}` : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => setSelectedLead(lead)}
+                          className="p-1.5 bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
+                          title="View Details"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredLeads.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                        No leads found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
+    </div>
+  );
+};
+
+export default SalesModule;
