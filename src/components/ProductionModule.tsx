@@ -77,7 +77,7 @@ function toInputDateFormat(dateStr?: string | null): string {
 
 function parseExactDeliverables(description: string, targetEventName?: string, targetEventId?: string): string[] {
   const list = parseDeliverablesWithQty(description, targetEventName, targetEventId);
-  return list.map(item => `${item.qty} Ã— ${item.name}`);
+  return list.map(item => `${item.qty} x ${item.name}`);
 }
 
 function formatWhatsAppNumber(phone: string) {
@@ -137,7 +137,7 @@ export const CameraLensGraphic: React.FC<{
     in_review: { label: 'QC-GOLD 24mm f/1.2', color: 'text-amber-400', glow: 'shadow-[0_0_20px_rgba(245,158,11,0.35)]', innerGlow: 'from-amber-950/80 via-zinc-950 to-yellow-950/30' },
     approved: { label: 'M-GREEN 105mm f/2.8', color: 'text-emerald-400', glow: 'shadow-[0_0_20px_rgba(16,185,129,0.35)]', innerGlow: 'from-teal-950/80 via-zinc-950 to-emerald-900/30' },
     delivered: { label: 'C-GLASS 70-200mm f/2.8', color: 'text-cyan-400', glow: 'shadow-[0_0_20px_rgba(6,182,212,0.35)]', innerGlow: 'from-cyan-950/80 via-zinc-950 to-teal-900/30' },
-    overdue: { label: 'Ã˜ 77mm WARNING', color: 'text-rose-400', glow: 'shadow-[0_0_20px_rgba(244,63,94,0.45)]', innerGlow: 'from-rose-950/80 via-zinc-950 to-red-900/30' },
+    overdue: { label: '0 77mm WARNING', color: 'text-rose-400', glow: 'shadow-[0_0_20px_rgba(244,63,94,0.45)]', innerGlow: 'from-rose-950/80 via-zinc-950 to-red-900/30' },
   }[type];
 
   return (
@@ -158,7 +158,7 @@ export const CameraLensGraphic: React.FC<{
 
         {/* Outer Rim Text label scale */}
         <div className="absolute inset-1 rounded-full overflow-hidden flex items-center justify-center pointer-events-none opacity-0 group-hover/lens:opacity-100 transition-opacity duration-300">
-          <span className="text-[5px] font-mono font-semibold tracking-widest text-zinc-500 scale-95 uppercase">{type === 'overdue' ? 'Ã˜ 58mm' : 'AF CORE'}</span>
+          <span className="text-[5px] font-mono font-semibold tracking-widest text-zinc-500 scale-95 uppercase">{type === 'overdue' ? '0 58mm' : 'AF CORE'}</span>
         </div>
 
         {/* Inner lens element barrel */}
@@ -368,14 +368,14 @@ const StaffSelectDropdown = React.memo(({
             </span>
           ) : currentStaff ? (
             <span className="flex items-center gap-1.5">
-              <span className="text-xs shrink-0">{currentStaffIsBusy ? 'ğŸ”´' : 'ğŸŸ¢'}</span>
+              <span className="text-xs shrink-0">{currentStaffIsBusy ? '' : ''}</span>
               <span className="truncate">{currentStaff.name}</span>
             </span>
           ) : (
             <span className="text-zinc-500">Select Staff</span>
           )}
         </span>
-        <span className="text-[10px] text-zinc-500 shrink-0 select-none">â–¼</span>
+        <span className="text-[10px] text-zinc-500 shrink-0 select-none"></span>
       </button>
 
       {currentStaff && currentStaffIsBusy && (
@@ -428,7 +428,7 @@ const StaffSelectDropdown = React.memo(({
                       }`}
                     >
                       <span className="flex items-center gap-1.5 truncate">
-                        <span className="text-xs shrink-0">{isBusy ? 'ğŸ”´' : 'ğŸŸ¢'}</span>
+                        <span className="text-xs shrink-0">{isBusy ? '' : ''}</span>
                         <span className="font-medium truncate">{s.name}</span>
                         <span className="text-[10px] text-zinc-550 font-mono truncate">({s.role || 'Staff'})</span>
                         {isAlreadyAssigned && <span className="text-[9px] text-zinc-600 font-mono italic">(Already assigned)</span>}
@@ -491,21 +491,7 @@ export interface ProductionModuleProps {
   setActiveSubTab: (tab: any) => void;
 }
 
-
-export const isProjectLocked = (status: string | undefined | null) => {
-  if (!status) return false;
-  return ['Project Delivered', 'Completed', 'Client Review Sent'].includes(status);
-};
-
-export const isAssignmentActive = (assignment: any, productions: any[]) => {
-  if (assignment.status === 'Completed') return false;
-  const prod = productions.find(p => p.production_id === assignment.production_id);
-  if (prod && isProjectLocked(prod.editing_status)) return false;
-  return true;
-};
-
 export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab, setActiveSubTab }) => {
-
   const { 
     currentRole, 
     currentUser,
@@ -707,15 +693,15 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
 
   const getPersonalizedMessage = (staff: any, deliverables: any[]) => {
     const coordinatorName = whatsappShareData?.coordinator_name || currentUserName || 'Operations Coordinator';
-    const coordinatorContact = whatsappShareData?.coordinator_contact || (currentUser?.mobile || currentUser?.phone || 'â€”');
+    const coordinatorContact = whatsappShareData?.coordinator_contact || (currentUser?.mobile || currentUser?.phone || '-');
     const eventName = whatsappShareData?.event_name || 'Event';
-    const clientName = whatsappShareData?.customer_name || 'â€”';
-    const clientMobile = whatsappShareData?.mobile || 'â€”';
+    const clientName = whatsappShareData?.customer_name || '-';
+    const clientMobile = whatsappShareData?.mobile || '-';
     const notes = whatsappShareData?.notes || 'No special notes.';
-    const globalDeadline = whatsappShareData?.global_deadline || 'â€”';
-    const reportingDate = whatsappShareData?.reporting_date && whatsappShareData.reporting_date !== 'â€”' ? whatsappShareData.reporting_date : null;
-    const reportingTime = whatsappShareData?.reporting_time && whatsappShareData.reporting_time !== 'â€”' ? whatsappShareData.reporting_time : null;
-    const assignedEquipment = whatsappShareData?.assigned_equipment && whatsappShareData.assigned_equipment !== 'â€”' ? whatsappShareData.assigned_equipment : null;
+    const globalDeadline = whatsappShareData?.global_deadline || '-';
+    const reportingDate = whatsappShareData?.reporting_date && whatsappShareData.reporting_date !== '-' ? whatsappShareData.reporting_date : null;
+    const reportingTime = whatsappShareData?.reporting_time && whatsappShareData.reporting_time !== '-' ? whatsappShareData.reporting_time : null;
+    const assignedEquipment = whatsappShareData?.assigned_equipment && whatsappShareData.assigned_equipment !== '-' ? whatsappShareData.assigned_equipment : null;
 
     const deliverableLines = (Array.isArray(deliverables) ? deliverables : []).map((d: any, index: number) => {
       return `${index + 1}. ${d.name} (Deadline: ${d.deadline || globalDeadline})`;
@@ -1872,23 +1858,23 @@ ${coordinatorName}`;
 
         const validDates = refined
           .map(a => a.target_finish_date)
-          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== 'â€”' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
+          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== '-' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
 
         if (validDates.length > 0) return validDates[0];
 
         const anyValidDates = matching
           .map(a => a.target_finish_date)
-          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== 'â€”' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
+          .filter((d): d is string => !!d && typeof d === 'string' && d.trim() !== '' && d.trim() !== 'N/A' && d.trim() !== '-' && d.trim() !== 'Pending' && d.trim() !== 'Not Set');
 
         if (anyValidDates.length > 0) return anyValidDates[0];
       }
     }
 
-    if (prod.target_delivery_date && typeof prod.target_delivery_date === 'string' && prod.target_delivery_date.trim() !== '' && prod.target_delivery_date.trim() !== 'N/A' && prod.target_delivery_date.trim() !== 'â€”' && prod.target_delivery_date.trim() !== 'Pending' && prod.target_delivery_date.trim() !== 'Not Set') {
+    if (prod.target_delivery_date && typeof prod.target_delivery_date === 'string' && prod.target_delivery_date.trim() !== '' && prod.target_delivery_date.trim() !== 'N/A' && prod.target_delivery_date.trim() !== '-' && prod.target_delivery_date.trim() !== 'Pending' && prod.target_delivery_date.trim() !== 'Not Set') {
       return prod.target_delivery_date;
     }
 
-    if (prod.expected_delivery_date && typeof prod.expected_delivery_date === 'string' && prod.expected_delivery_date.trim() !== '' && prod.expected_delivery_date.trim() !== 'N/A' && prod.expected_delivery_date.trim() !== 'â€”' && prod.expected_delivery_date.trim() !== 'Pending' && prod.expected_delivery_date.trim() !== 'Not Set') {
+    if (prod.expected_delivery_date && typeof prod.expected_delivery_date === 'string' && prod.expected_delivery_date.trim() !== '' && prod.expected_delivery_date.trim() !== 'N/A' && prod.expected_delivery_date.trim() !== '-' && prod.expected_delivery_date.trim() !== 'Pending' && prod.expected_delivery_date.trim() !== 'Not Set') {
       return prod.expected_delivery_date;
     }
 
@@ -1896,7 +1882,7 @@ ${coordinatorName}`;
   };
 
   const formatDisplayDate = (dateStr?: string | null): string => {
-    if (!dateStr || dateStr.trim() === '' || dateStr.trim() === 'N/A' || dateStr.trim() === 'â€”' || dateStr.trim() === 'Pending' || dateStr.trim() === 'Not Set') return 'Pending';
+    if (!dateStr || dateStr.trim() === '' || dateStr.trim() === 'N/A' || dateStr.trim() === '-' || dateStr.trim() === 'Pending' || dateStr.trim() === 'Not Set') return 'Pending';
     const cleanStr = dateStr.trim().split('T')[0];
     const parts = cleanStr.split('-');
     if (parts.length === 3) {
@@ -1972,7 +1958,7 @@ ${coordinatorName}`;
         a => a.production_id === prod.production_id && a.speciality === row.deliverable
       );
       const link = assignment?.raw_footage_link || assignment?.edited_drive_link || '';
-      return `â€¢ ${row.deliverable}: ${link || '(Link Pending)'}`;
+      return `* ${row.deliverable}: ${link || '(Link Pending)'}`;
     }).join('\n');
 
     const msg = `Hello ${customerName},
@@ -2436,7 +2422,7 @@ Production Team`;
           </table>
 </div>
           <div class="footer">
-            CINEMATIC PRODUCTION & OPERATIONS ERP SYSTEM ~ PHOTOCREW VAULT Â© 2026
+            CINEMATIC PRODUCTION & OPERATIONS ERP SYSTEM ~ PHOTOCREW VAULT (c) 2026
           </div>
           <script>
             window.onload = function() {
@@ -2455,15 +2441,6 @@ Production Team`;
 
   // Step-by-step action popup modal states
   const [activeWorkflowProd, setActiveWorkflowProd] = useState<Production | null>(null);
-  useEffect(() => {
-    if (activeWorkflowProd) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => { document.body.style.overflow = 'unset'; };
-  }, [activeWorkflowProd]);
-
   useEffect(() => {
     const handler = (e: any) => {
       if (e.detail.role === 'production') {
@@ -2773,14 +2750,14 @@ Production Team`;
       const selectedEvent = eventsList[eventIndex] || null;
 
       // Build fields for WhatsApp prefilled message
-      const customerName = orderData?.customer_name || leadData?.customer_name || 'â€”';
-      const customerMobile = orderData?.customer_mobile || leadData?.mobile || 'â€”';
-      const customerWhatsapp = orderData?.whatsapp_number || leadData?.whatsapp_number || 'â€”';
+      const customerName = orderData?.customer_name || leadData?.customer_name || '-';
+      const customerMobile = orderData?.customer_mobile || leadData?.mobile || '-';
+      const customerWhatsapp = orderData?.whatsapp_number || leadData?.whatsapp_number || '-';
       const eventName = selectedEvent?.event_name || orderData?.event_type || 'Event';
       const eventType = selectedEvent?.event_type || selectedEvent?.event_shoot_type || orderData?.event_type || 'Shoot Type';
 
       // Raw footage drive link
-      const driveLink = getRawFootageDriveLink(prodData) || 'â€”';
+      const driveLink = getRawFootageDriveLink(prodData) || '-';
 
       // Target Delivery date
       const targetDate = formatDisplayDate(getTargetDeliveryDateFromAssignments(prodData));
@@ -2798,21 +2775,21 @@ Production Team`;
           .filter(Boolean);
 
         const deliverableListText = displayDeliverables.length > 0
-          ? displayDeliverables.map((d: any) => `â€¢ ${d}`).join('\n')
+          ? displayDeliverables.map((d: any) => `* ${d}`).join('\n')
           : 'None Assigned';
 
         const msg = `*PHOTOCREW STUDIO TASK ASSIGNMENT*
 
 *Customer Details:*
-â€¢ Name: ${customerName}
-â€¢ Mobile: ${customerMobile}
-â€¢ WhatsApp: ${customerWhatsapp}
+* Name: ${customerName}
+* Mobile: ${customerMobile}
+* WhatsApp: ${customerWhatsapp}
 
 *Project Details:*
-â€¢ Event Type: ${eventType}
-â€¢ Event Name: ${eventName}
-â€¢ Raw Footage Drive Link: ${driveLink}
-â€¢ Target Delivery Date: ${targetDate}
+* Event Type: ${eventType}
+* Event Name: ${eventName}
+* Raw Footage Drive Link: ${driveLink}
+* Target Delivery Date: ${targetDate}
 
 *Assignment Details:*
 ${deliverableListText}
@@ -2868,12 +2845,12 @@ _Please acknowledge receipt of this task assignment._`;
       return {
         staffName: rosterStaffName,
         orderId: orderId,
-        assignedDate: assignmentRecord?.assigned_date || p.created_at?.split('T')[0] || 'â€”',
-        targetDeliveryDate: p.target_delivery_date || 'â€”',
+        assignedDate: assignmentRecord?.assigned_date || p.created_at?.split('T')[0] || '-',
+        targetDeliveryDate: p.target_delivery_date || '-',
       };
     }).sort((a, b) => {
-      if (a.assignedDate === 'â€”') return 1;
-      if (b.assignedDate === 'â€”') return -1;
+      if (a.assignedDate === '-') return 1;
+      if (b.assignedDate === '-') return -1;
       return new Date(a.assignedDate).getTime() - new Date(b.assignedDate).getTime();
     });
   }, [rosterStaffName, editorAssignments, production, orders, leads]);
@@ -3263,8 +3240,7 @@ _Please acknowledge receipt of this task assignment._`;
   }, []);
 
   useEffect(() => {
-    if (workflowActionType === 'assign_editor'
-                && activeWorkflowProd) {
+    if (workflowActionType === 'assign_editor' && activeWorkflowProd) {
       setSelectedWfEditor(null);
       setWfTargetDeliveryDate('');
     }
@@ -3536,7 +3512,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 border-b border-zinc-900 pb-4">
               <div>
                 <h4 className="text-xs font-black text-zinc-300 uppercase tracking-widest font-mono">
-                  ğŸ” Smart Filter & Report Center
+                   Smart Filter & Report Center
                 </h4>
                 <p className="text-[11.5px] text-zinc-500 font-mono mt-0.5">
                   Refine live interactive metrics, card counts, and sheet data. Apply start & end date thresholds securely.
@@ -3559,7 +3535,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     className="ml-2 hover:text-white transition-colors cursor-pointer text-amber-400/70 font-bold"
                     title="Clear Focus"
                   >
-                    âœ•
+                    x
                   </button>
                 </div>
               )}
@@ -3686,7 +3662,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             {/* EXPORTS BAR CONTAINER */}
             <div className="flex flex-col md:flex-row items-center justify-between gap-3 pt-3 border-t border-zinc-900/60 font-mono">
               <div className="text-[10px] text-zinc-500 uppercase tracking-widest">
-                ğŸ“„ REPORT DOWNLOAD VAULT ({filteredLeadsList.length} items parsed)
+                 REPORT DOWNLOAD VAULT ({filteredLeadsList.length} items parsed)
               </div>
               
               <div className="flex flex-wrap items-center gap-2">
@@ -3800,7 +3776,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
                                   title="View Assigned Team"
                                 >
-                                  ğŸ‘¥ {editorsList.length}
+                                   {editorsList.length}
                                 </span>
                               ) : (
                                 <span className="text-zinc-650 italic text-[10px]">No Production Staff Assigned.</span>
@@ -3822,7 +3798,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1.5 cursor-pointer max-w-[200px] break-words"
                                       title={finalDriveLink}
                                     >
-                                      <span>ğŸ”—</span> Open Drive Link
+                                      <span></span> Open Drive Link
                                     </a>
                                   );
                                 }
@@ -3841,7 +3817,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                   className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-500 hover:border-purple-400 transition-all text-[10px] font-black uppercase tracking-wider rounded-lg shadow-md cursor-pointer inline-flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                   disabled={isProjectLocked(prod.editing_status)}
                                 >
-                                  <span>ğŸ‘¤</span> Assign Editor
+                                  <span></span> Assign Editor
                                 </button>
                                 {(() => {
                                   const isEditorAssigned = prod.editor_assigned && prod.editor_assigned !== 'Unassigned' && prod.editor_assigned.trim() !== '';
@@ -3858,7 +3834,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         }}
                                         className="px-2 py-1 bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 hover:border-emerald-400 transition-all text-[9px] font-bold uppercase tracking-wider rounded-lg shadow-sm cursor-pointer inline-flex items-center gap-1 mt-1"
                                       >
-                                        <span>ğŸ’¬</span> Share
+                                        <span></span> Share
                                       </button>
                                     );
                                   }
@@ -4153,7 +4129,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1.5 cursor-pointer max-w-[150px] break-words"
                                       title={finalDriveLink}
                                     >
-                                      <span>ğŸ”—</span> Open Drive Link
+                                      <span></span> Open Drive Link
                                     </a>
                                   );
                                 }
@@ -4176,7 +4152,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
                                     title="View Assigned Team"
                                   >
-                                    ğŸ‘¥ {editorsList.length}
+                                     {editorsList.length}
                                   </span>
                                 );
                               })()}
@@ -4244,14 +4220,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     {isFinished && (
                                       <div className="flex flex-col gap-1 w-full items-center mb-1">
                                         <span className="px-2.5 py-1 bg-zinc-800/90 border border-zinc-700 text-zinc-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 font-mono">
-                                          ğŸ”’ Order Closed
+                                           Order Closed
                                         </span>
                                       </div>
                                     )}
                                     
                                     {displayStatus === "Editing Completed" && currentRole === "Production Staff" && (
                                       <span className="px-3 py-1.5 mb-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-bold rounded-lg flex items-center justify-center gap-1 w-full max-w-[160px]">
-                                        âœ“ Editing Completed
+                                        v Editing Completed
                                       </span>
                                     )}
                                     
@@ -4285,7 +4261,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         }`}
                                       >
                                         <span>Action</span>
-                                        <span className={`text-[8px] transition-transform duration-200 ${openActionDropdown?.id === prod.production_id ? 'rotate-180 text-purple-300' : 'text-zinc-400'}`}>â–¼</span>
+                                        <span className={`text-[8px] transition-transform duration-200 ${openActionDropdown?.id === prod.production_id ? 'rotate-180 text-purple-300' : 'text-zinc-400'}`}></span>
                                       </button>
                                     )}
                                   </>
@@ -4374,7 +4350,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               }}
                               className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                             >
-                              <span className="text-sm">ğŸ‘¤</span>
+                              <span className="text-sm"></span>
                               <span>Reassign Editor</span>
                             </button>
                           );
@@ -4388,7 +4364,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               }}
                               className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-purple-300 hover:text-white hover:bg-purple-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                             >
-                              <span className="text-sm">ğŸ‘¤</span>
+                              <span className="text-sm"></span>
                               <span>Assign Editor</span>
                             </button>
                           );
@@ -4421,7 +4397,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-cyan-300 hover:text-white hover:bg-cyan-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
-                          <span className="text-sm">ğŸ“¤</span>
+                          <span className="text-sm"></span>
                           <span>Send Review Link</span>
                         </button>
                       )}
@@ -4436,7 +4412,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
-                          <span className="text-sm">âœ“</span>
+                          <span className="text-sm">v</span>
                           <span>Client Acceptance</span>
                         </button>
                       )}
@@ -4451,7 +4427,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-green-300 hover:text-white hover:bg-green-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
-                          <span className="text-sm">ğŸ’¬</span>
+                          <span className="text-sm"></span>
                           <span>Share</span>
                         </button>
                       )}
@@ -4503,7 +4479,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-zinc-300 hover:text-white hover:bg-zinc-800/90 rounded-lg transition-colors flex items-center gap-2 cursor-pointer border-t border-zinc-800/80 mt-0.5 pt-1.5"
                         >
-                          <span className="text-sm">âœ</span>
+                          <span className="text-sm"></span>
                           <span>Edit Full Dossier</span>
                         </button>
                       )}
@@ -4801,7 +4777,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <span>{member.employee_id || member.staff_id}</span>
                                 {member.address && (
                                   <>
-                                    <span>â€¢</span>
+                                    <span>*</span>
                                     <span className="flex items-center gap-0.5 max-w-[120px] break-words">
                                       <MapPin className="w-2.5 h-2.5" /> {member.address}
                                     </span>
@@ -4904,7 +4880,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {stats.avgDeliveryTimeDays !== null ? (
                             <span className="text-amber-500">{stats.avgDeliveryTimeDays} days</span>
                           ) : (
-                            <span className="text-zinc-550">â€”</span>
+                            <span className="text-zinc-550">-</span>
                           )}
                         </td>
 
@@ -5628,12 +5604,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
                       
                       <div className="text-xs text-zinc-300">
-                        Client: <strong className="text-white">{orderItem?.client_name || 'N/A'}</strong> â€” Editor: <strong className="text-zinc-350">{prod.editor_assigned || 'Unassigned'}</strong>
+                        Client: <strong className="text-white">{orderItem?.client_name || 'N/A'}</strong> - Editor: <strong className="text-zinc-350">{prod.editor_assigned || 'Unassigned'}</strong>
                       </div>
                       
                       <div className="text-[10px] font-mono text-zinc-500 flex items-center gap-2">
                         <span>Ref ID: <strong className="text-violet-400">{prod.tracking_id}</strong></span>
-                        <span>â€¢</span>
+                        <span>*</span>
                         <span>Stage: <strong>{prod.editing_status}</strong></span>
                       </div>
                     </div>
@@ -5752,7 +5728,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           </div>
                           <div className="text-[10px] text-zinc-500 font-mono mt-1 flex items-center gap-2 flex-wrap">
                             <span>Assigned Date: <strong className="text-zinc-400">{assign.assigned_date}</strong></span>
-                            <span>â€¢</span>
+                            <span>*</span>
                             <span>Target Completion Date: <strong className="text-amber-500">{assign.target_finish_date}</strong></span>
                           </div>
                         </div>
@@ -5774,7 +5750,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-zinc-900 text-xs">
                         <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-sans">
                           <span className="font-bold text-white uppercase">{assign.staff_name}</span>
-                          <span className="text-zinc-650">â€¢</span>
+                          <span className="text-zinc-650">*</span>
                           <span className="italic">Role: {assign.speciality}</span>
                         </div>
 
@@ -5803,7 +5779,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               }}
                               className="p-1 px-3 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-bold rounded-lg transition-all cursor-pointer shadow-sm hover:shadow-emerald-500/10"
                             >
-                              âœ“ Mark Task Completed
+                              v Mark Task Completed
                             </button>
                           )}
 
@@ -5817,7 +5793,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             className="p-1 text-rose-400 hover:text-rose-350 bg-rose-500/5 hover:bg-rose-500/10 rounded transition-all cursor-pointer"
                             title="Delete Assignment"
                           >
-                            âœ•
+                            x
                           </button>
                         </div>
                       </div>
@@ -5869,7 +5845,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         // Find event date for a production project
         const getTaskEventDate = (productionId: string) => {
           const correlatedProj = (production || []).find(p => p.production_id === productionId);
-          if (!correlatedProj) return 'â€”';
+          if (!correlatedProj) return '-';
           const trackingId = correlatedProj.tracking_id;
           
           const linkedOrder = (orders || []).find(o => o.order_id === trackingId || o.lead_id === trackingId);
@@ -5882,7 +5858,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             return linkedLead.event_date;
           }
 
-          return 'â€”';
+          return '-';
         };
 
         const handleSaveStaff = async (e: React.FormEvent) => {
@@ -5978,7 +5954,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 staff_type: newStaffType as any,
                 Staff_Type: newStaffType as any
               });
-              setAddStaffSuccess('âœ… Staff details updated successfully.');
+              setAddStaffSuccess(' Staff details updated successfully.');
             } else {
               // Create new auth user
               const computedEmail = email || `${mobile}@photocrew.com`;
@@ -6019,7 +5995,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   Staff_Type: newStaffType as any,
                   auth_user_id: authUserId
                 });
-                setAddStaffSuccess('âœ… Staff details updated successfully.');
+                setAddStaffSuccess(' Staff details updated successfully.');
               } else {
                 // Create new staff record in production_staff table
                 await addProductionStaff({
@@ -6035,7 +6011,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   joining_date: new Date().toISOString().split('T')[0],
                   auth_user_id: authUserId
                 });
-                setAddStaffSuccess('âœ… Staff details updated successfully.');
+                setAddStaffSuccess(' Staff details updated successfully.');
               }
             }
 
@@ -6058,7 +6034,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setEditingStaffId(null);
             setShowStaffModal(false);
           } catch (err: any) {
-            setAddStaffError('âŒ ' + (err.message || 'Failed to update staff details.'));
+            setAddStaffError(' ' + (err.message || 'Failed to update staff details.'));
           } finally {
             setIsSubmittingStaff(false);
           }
@@ -6090,7 +6066,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500" />
               <div>
                 <h1 className="text-xl font-black text-white tracking-tight uppercase font-mono flex items-center gap-2">
-                  <span>ğŸ‘¥</span> Production Staff Hub
+                  <span></span> Production Staff Hub
                 </h1>
                 <p className="text-xs text-zinc-400 mt-1 font-sans">
                   Real-time synchronization with Supabase DB. Manage crew directory, tag-based skills, and live task workloads.
@@ -6213,7 +6189,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </label>
                         {editingStaffId && (
                           <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                            ğŸ”’ Locked (Permanent)
+                             Locked (Permanent)
                           </span>
                         )}
                       </div>
@@ -6251,7 +6227,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </label>
                         {editingStaffId && (
                           <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                            ğŸ”’ Locked (Permanent)
+                             Locked (Permanent)
                           </span>
                         )}
                       </div>
@@ -6278,7 +6254,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           required={!editingStaffId}
                           value={newStaffPassword}
                           onChange={(e) => setNewStaffPassword(e.target.value)}
-                          placeholder={editingStaffId ? "Enter new password" : "â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"}
+                          placeholder={editingStaffId ? "Enter new password" : "********"}
                           className="w-full bg-zinc-900 border border-zinc-850 pl-4 pr-10 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
                         />
                         <button
@@ -6344,7 +6320,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 }}
                                 className="text-purple-450 hover:text-purple-300 font-black focus:outline-none transition-colors"
                               >
-                                âœ•
+                                x
                               </button>
                             </span>
                           ))
@@ -6358,7 +6334,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     disabled={isSubmittingStaff}
                     className="w-full mt-4 py-3 bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
                   >
-                    {isSubmittingStaff ? 'Saving...' : editingStaffId ? 'ğŸ’¾ Update Staff Details' : 'ğŸ’¾ Save Staff Details'}
+                    {isSubmittingStaff ? 'Saving...' : editingStaffId ? ' Update Staff Details' : ' Save Staff Details'}
                   </button>
                   {editingStaffId && (
                     <button
@@ -6517,9 +6493,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               {/* Contact Details */}
                               <td className="px-4 py-3">
                                 <div className="flex flex-col text-zinc-400 font-mono text-[10px] space-y-0.5">
-                                  <span>ğŸ“ {member.mobile}</span>
+                                  <span> {member.mobile}</span>
                                   {member.whatsapp_number && (
-                                    <span className="text-emerald-400">ğŸ’¬ {member.whatsapp_number}</span>
+                                    <span className="text-emerald-400"> {member.whatsapp_number}</span>
                                   )}
                                 </div>
                               </td>
@@ -6633,7 +6609,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             <div className="absolute top-0 left-0 w-2 h-full bg-gradient-to-b from-purple-500 to-pink-500" />
             <div>
               <h1 className="text-xl font-black text-white tracking-tight uppercase font-mono flex items-center gap-2">
-                <span>ğŸ“‹</span> Staff Roster
+                <span></span> Staff Roster
               </h1>
               <p className="text-xs text-zinc-400 mt-1 font-sans">
                 Track production editor assignments, order IDs, assigned timelines, target finished dates, and current project workflows.
@@ -6719,8 +6695,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         groupedRoster.set(staffName, {
                           staffName: staffName,
                           orderId: orderId,
-                          dateAssigned: assign.assigned_date || 'â€”',
-                          deliveryTargetDate: assign.target_finish_date || 'â€”',
+                          dateAssigned: assign.assigned_date || '-',
+                          deliveryTargetDate: assign.target_finish_date || '-',
                           status: assign.status,
                           speciality: assign.speciality || 'Editor',
                           eventName: order?.event_type || order?.custom_event_name || 'Project',
@@ -6737,8 +6713,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const assignTime = new Date(assign.assigned_date || 0).getTime();
                         if (assignTime > existing.latestAssignmentTime) {
                            existing.orderId = orderId;
-                           existing.dateAssigned = assign.assigned_date || 'â€”';
-                           existing.deliveryTargetDate = assign.target_finish_date || 'â€”';
+                           existing.dateAssigned = assign.assigned_date || '-';
+                           existing.deliveryTargetDate = assign.target_finish_date || '-';
                            existing.status = assign.status;
                            existing.speciality = assign.speciality || 'Editor';
                            existing.eventName = order?.event_type || order?.custom_event_name || 'Project';
@@ -6767,8 +6743,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     // Sort: Latest assigned staff at the top (descending by date/ID)
                     const sortedRosterRows = [...filteredRosterRows].sort((a, b) => {
-                      const dateA = a.dateAssigned !== 'â€”' ? new Date(a.dateAssigned).getTime() : 0;
-                      const dateB = b.dateAssigned !== 'â€”' ? new Date(b.dateAssigned).getTime() : 0;
+                      const dateA = a.dateAssigned !== '-' ? new Date(a.dateAssigned).getTime() : 0;
+                      const dateB = b.dateAssigned !== '-' ? new Date(b.dateAssigned).getTime() : 0;
                       if (dateA !== dateB) return dateB - dateA;
                       return String(b.assignmentId).localeCompare(String(a.assignmentId));
                     });
@@ -6999,7 +6975,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         </span>
                       </div>
                       <div className="text-xs text-zinc-300 mt-1.5">
-                        Editor Assigned: <strong className="text-zinc-200">{prod.editor_assigned || 'Unassigned'}</strong> â€” Deliverables: 
+                        Editor Assigned: <strong className="text-zinc-200">{prod.editor_assigned || 'Unassigned'}</strong> - Deliverables: 
                         <span className="text-violet-400 font-mono text-[11px] ml-1 select-all">{prod.raw_footage_location || 'N/A'}</span>
                       </div>
                     </div>
@@ -7254,7 +7230,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }}
                           className="text-[10px] font-bold text-amber-400 hover:text-amber-300 font-mono tracking-wider flex items-center gap-1 cursor-pointer bg-amber-500/15 border border-amber-500/20 px-2.5 py-1 rounded-lg hover:bg-amber-500/25 transition-all w-fit"
                         >
-                          ğŸ“‹ VIEW SEAMLESS WORKFLOW DOSSIER
+                           VIEW SEAMLESS WORKFLOW DOSSIER
                         </button>
                       </div>
                     )}
@@ -7280,7 +7256,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     {isPendingFootageAudit && (
                       <div className="p-4 bg-violet-500/15 border border-violet-500/25 rounded-2xl space-y-3">
                         <div className="flex items-start gap-4">
-                          <span className="text-base mt-0.5">ğŸ“©</span>
+                          <span className="text-base mt-0.5"></span>
                           <div className="space-y-1">
                             <h4 className="text-xs font-bold text-violet-300 font-mono tracking-widest uppercase">Awaiting Ingest & Audit</h4>
                             <p className="text-[11.5px] text-zinc-400 leading-relaxed font-sans">
@@ -7621,17 +7597,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const formattedHandoverDate = selectedLeadProd.delivery_date ? formatDate(selectedLeadProd.delivery_date) : 'Pending';
 
         // Resolve customer details
-        const customerName = order?.customer_name || lead?.customer_name || 'â€”';
-        const customerMobile = order?.mobile || lead?.mobile || 'â€”';
-        const customerWhatsApp = order.whatsapp_number || lead?.whatsapp_number || customerMobile || 'â€”';
+        const customerName = order?.customer_name || lead?.customer_name || '-';
+        const customerMobile = order?.mobile || lead?.mobile || '-';
+        const customerWhatsApp = order.whatsapp_number || lead?.whatsapp_number || customerMobile || '-';
 
         // Resolve Event Scheduled details
         const eventList = lead?.events && lead.events.length > 0 
           ? lead.events 
           : [{
               event_name: order.custom_event_name || lead?.custom_event_name || order?.event_type || lead?.event_type || 'Event',
-              event_date: order?.event_date || lead?.event_date || 'â€”',
-              event_start_time: order.event_time || lead?.event_time || 'â€”'
+              event_date: order?.event_date || lead?.event_date || '-',
+              event_start_time: order.event_time || lead?.event_time || '-'
             }];
 
         // Resolve Deliverables and assigned staff
@@ -7665,7 +7641,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <span>Order Ref: {order?.order_id}</span>
                   </h3>
                   <p className="text-xs text-zinc-400 mt-1 font-mono uppercase tracking-wider">
-                    PRODUCTION MANAGER CONTROL DECK â€¢ SERIAL {selectedLeadProd.production_id}
+                    PRODUCTION MANAGER CONTROL DECK * SERIAL {selectedLeadProd.production_id}
                   </p>
                 </div>
                 <button
@@ -7673,7 +7649,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   onClick={() => setSelectedLeadProd(null)}
                   className="px-2.5 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
                 >
-                  âœ• Close
+                  x Close
                 </button>
               </div>
 
@@ -7869,7 +7845,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         <span className="text-[10px] text-zinc-500 font-mono">({s.employee_id})</span>
                                       </div>
                                       <div className="text-[9px] text-zinc-550 font-mono mt-0.5">
-                                        Active Jobs: {workload.activeCount} â€¢ Contact: {s.mobile}
+                                        Active Jobs: {workload.activeCount} * Contact: {s.mobile}
                                       </div>
                                     </div>
 
@@ -7891,7 +7867,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                             : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-850'
                                         }`}
                                       >
-                                        {isLead ? 'âœ“ Lead' : 'Set Lead'}
+                                        {isLead ? 'v Lead' : 'Set Lead'}
                                       </button>
 
                                       {/* Multiple Selection Button */}
@@ -7911,7 +7887,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                             : 'bg-zinc-950 text-zinc-400 hover:text-white border border-zinc-850'
                                         }`}
                                       >
-                                        {isColl ? 'âœ“ Crew' : 'Add Crew'}
+                                        {isColl ? 'v Crew' : 'Add Crew'}
                                       </button>
                                     </div>
                                   </div>
@@ -8055,7 +8031,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 {/* Submit actions */}
                 {dossierError && (
                   <div className="p-3 bg-red-500/10 border border-red-500/30 text-rose-400 text-xs rounded-xl font-mono">
-                    âš ï¸ {dossierError}
+                     {dossierError}
                   </div>
                 )}
                 <div className="flex justify-end items-center gap-3 border-t border-zinc-900 pt-4">
@@ -8065,7 +8041,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       onClick={() => handleSendWhatsAppTask(selectedLeadProd, leadEditor, leadRemarks)}
                       className="mr-auto px-4 py-2 bg-green-600 hover:bg-green-500 text-black font-black uppercase text-[10px] tracking-wider rounded-xl cursor-pointer shadow-lg transition-all duration-150 font-mono font-extrabold flex items-center gap-1.5"
                     >
-                      <span>ğŸ’¬ Send Task on WhatsApp</span>
+                      <span> Send Task on WhatsApp</span>
                     </button>
                   )}
                   <button
@@ -8111,32 +8087,30 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
 
         return (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-            <div id="production_workflow_modal" className={`bg-zinc-950 border-0 sm:border border-zinc-900 rounded-none sm:rounded-2xl ${
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <div id="production_workflow_modal" className={`bg-zinc-950 border border-zinc-900 rounded-2xl ${
               workflowActionType === 'assign_editor'
-                ? 'w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] md:w-[90%] lg:w-[85%] max-w-5xl'
+                ? 'w-full md:w-[90%] lg:w-[85%] max-w-5xl'
                 : workflowActionType === 'manage_status'
-                  ? 'w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] max-w-4xl'
-                  : 'w-full h-[100dvh] sm:h-auto sm:max-h-[90vh] max-w-sm'
+                  ? 'max-w-4xl w-full'
+                  : 'max-w-sm w-full'
             } overflow-hidden shadow-2xl flex flex-col transition-all duration-300`}>
               
               {/* Header */}
-              <div className="p-4 border-b border-zinc-900 bg-zinc-900/30 flex items-center justify-between shrink-0">
+              <div className="p-4 border-b border-zinc-900 bg-zinc-900/30 flex items-center justify-between">
                 <div>
                   <span className="text-[9px] font-mono font-black uppercase tracking-widest text-violet-400 block mb-0.5">
-                    Step Workflow Wizard â€¢ {orderId}
+                    Step Workflow Wizard * {orderId}
                   </span>
                   <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono">
-                    {workflowActionType === 'assign_editor'
-                && 'Assign Editor'}
+                    {workflowActionType === 'assign_editor' && 'Assign Editor'}
                     {workflowActionType === 'reassign_staff' && 'Reassign Staff'}
                     {workflowActionType === 'delivery_checklist' && 'Delivery Checklist'}
                     {workflowActionType === 'send_review' && 'Step 4: Send For Review'}
                     {workflowActionType === 'request_revision' && 'Step 5: Request Revision'}
                     {workflowActionType === 'deliver_project' && 'Step 8: Deliver Project'}
                     {workflowActionType === 'manage_payment_close' && 'Release & Close Options'}
-                    {workflowActionType === 'manage_status'
-                  && 'CRM Status Management'}
+                    {workflowActionType === 'manage_status' && 'CRM Status Management'}
                   </h3>
                 </div>
                 <button 
@@ -8146,13 +8120,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   }}
                   className="text-zinc-500 hover:text-white transition-colors p-1"
                 >
-                  âœ•
+                  x
                 </button>
               </div>
 
               {/* Form Body wrapper */}
-              <div className={`${workflowActionType === 'assign_editor'
-                ? 'p-3.5 sm:p-4 pb-2' : 'p-4'} overflow-y-auto custom-scrollbar flex-1 min-h-0`}>
+              <div className={`${workflowActionType === 'assign_editor' ? 'p-3.5 sm:p-4 pb-2' : 'p-4'} overflow-y-auto max-h-[85vh]`}>
                 <p className="text-[11px] text-zinc-400 mb-2.5">
                   Step workflow update for <strong className="text-white">{customerName}</strong>.
                 </p>
@@ -8173,16 +8146,16 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       {(() => {
                         const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
                         
-                        const leadId = activeWorkflowProd.tracking_id || 'â€”';
-                        const customerName = activeWorkflowProd.customer_name || order?.customer_name || lead?.customer_name || 'â€”';
-                        const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || 'â€”';
-                        const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || 'â€”';
-                        const eventShootType = activeWorkflowProd.shoot_type || activeWorkflowProd.desired_event_shoot_type || order?.shoot_type || lead?.shoot_type || order?.desired_event_shoot_type || lead?.desired_event_shoot_type || 'â€”';
-                        const packageName = order?.package_name || lead?.package_name || 'â€”';
-                        const deliverables = order?.deliverables_description || lead?.deliverables_description || 'â€”';
-                        const eventDate = activeWorkflowProd.event_date || order?.event_date || lead?.event_date || 'â€”';
-                        const eventLocation = order?.event_location || lead?.event_location || 'â€”';
-                        const currentStatus = activeWorkflowProd.editing_status || 'â€”';
+                        const leadId = activeWorkflowProd.tracking_id || '-';
+                        const customerName = activeWorkflowProd.customer_name || order?.customer_name || lead?.customer_name || '-';
+                        const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || '-';
+                        const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || '-';
+                        const eventShootType = activeWorkflowProd.shoot_type || activeWorkflowProd.desired_event_shoot_type || order?.shoot_type || lead?.shoot_type || order?.desired_event_shoot_type || lead?.desired_event_shoot_type || '-';
+                        const packageName = order?.package_name || lead?.package_name || '-';
+                        const deliverables = order?.deliverables_description || lead?.deliverables_description || '-';
+                        const eventDate = activeWorkflowProd.event_date || order?.event_date || lead?.event_date || '-';
+                        const eventLocation = order?.event_location || lead?.event_location || '-';
+                        const currentStatus = activeWorkflowProd.editing_status || '-';
 
                         return (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-sans">
@@ -8217,7 +8190,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                       {wfError && (
                         <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 text-xs p-3 rounded-xl font-mono">
-                          âš ï¸ {wfError}
+                           {wfError}
                         </div>
                       )}
                       {wfSuccess && (
@@ -8287,7 +8260,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                           className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
                                           title={deliverable}
                                         >
-                                          âœ” {deliverable}
+                                          v {deliverable}
                                         </div>
                                       </div>
                                     </td>
@@ -8371,7 +8344,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                     className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs"
                                                     title="Remove Staff Assignment"
                                                   >
-                                                    âœ•
+                                                    x
                                                   </button>
                                                 )}
                                               </div>
@@ -8383,7 +8356,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         <div className="pt-0.5 flex items-center justify-between">
                                           {validationAttempted && isEmpty && (
                                             <span className="text-[10px] text-rose-500 font-mono italic">
-                                              âš ï¸ Required: Assign at least one staff
+                                               Required: Assign at least one staff
                                             </span>
                                           )}
                                           <div className="flex-1" />
@@ -8427,13 +8400,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl p-6 shadow-2xl flex flex-col space-y-4">
                             <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
                               <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                                <span>ğŸ“…</span> Production Staff Roster â€” <span className="text-[#a78bfa]">{rosterStaffName}</span>
+                                <span></span> Production Staff Roster - <span className="text-[#a78bfa]">{rosterStaffName}</span>
                               </h3>
                               <button
                                 onClick={() => setRosterStaffName(null)}
                                 className="text-zinc-500 hover:text-white transition-colors text-lg"
                               >
-                                âœ•
+                                x
                               </button>
                             </div>
 
@@ -8674,7 +8647,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                       {wfError && (
                         <div className="bg-rose-950/20 border border-rose-900/30 text-rose-400 text-xs p-3 rounded-xl font-mono">
-                          âš ï¸ {wfError}
+                           {wfError}
                         </div>
                       )}
 
@@ -8780,13 +8753,947 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </div>
                     </form>
                   );
-                })()} 
-              </div>
-            </div>
-          </div>
-        );
-      })()} 
-    </div>
-  );
-};
-export default ProductionModule;
+                })()}
+
+                {/* FORM: Delivery Checklist */}
+                {workflowActionType === 'delivery_checklist' && activeWorkflowProd && (() => {
+                  const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+                  const customerName = order?.customer_name || lead?.customer_name || '-';
+                  const eventName = activeWorkflowProd.custom_event_name || order?.custom_event_name || lead?.custom_event_name || '-';
+                  const eventType = activeWorkflowProd.event_type || order?.event_type || lead?.event_type || '-';
+                  
+                  const assignedDeliverables = getAssignedDeliverablesForProd(activeWorkflowProd, true);
+
+                  // Validate real saved server upload status for each deliverable independently
+                  const deliverableUploadStatuses = assignedDeliverables.map(item => {
+                    const matchingAssign = (editorAssignments || []).find(a =>
+                      (a.production_id === activeWorkflowProd.production_id ||
+                       (order?.order_id && (a.order_id === order.order_id || a.production_id === order.order_id)) ||
+                       (activeWorkflowProd.tracking_id && (a.order_id === activeWorkflowProd.tracking_id || a.production_id === activeWorkflowProd.tracking_id))) &&
+                      (!activeWorkflowProd.event_id || !a.event_id || a.event_id === activeWorkflowProd.event_id) &&
+                      (a.speciality === item.name || a.deliverable_id === item.name || parseQtyAndText(a.speciality || '').text === item.name || parseQtyAndText(a.deliverable_id || '').text === item.name)
+                    );
+
+                    const uploadStatus = isServerUploadSaved(matchingAssign, activeWorkflowProd);
+                    return {
+                      ...item,
+                      matchingAssign,
+                      isUploaded: uploadStatus.isUploaded,
+                      folderName: uploadStatus.folderName,
+                      eventDate: uploadStatus.eventDate,
+                      uploadLink: uploadStatus.uploadLink,
+                      staffName: matchingAssign?.staff_name || 'Unassigned'
+                    };
+                  });
+
+                  return (
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+
+                      // Strict validation: cannot submit if any assigned deliverable lacks a real persisted server upload
+                      const pendingUploads = deliverableUploadStatuses.filter(d => !d.isUploaded);
+                      if (assignedDeliverables.length > 0 && pendingUploads.length > 0) {
+                        alert(`Cannot submit deliverables!\n\nThe following ${pendingUploads.length} deliverable(s) do not have a verified server upload saved by their assigned editor:\n\n` +
+                          pendingUploads.map(d => `* ${d.name} (${d.staffName}) - Server Upload Pending`).join('\n') +
+                          `\n\nPlease wait for the editor(s) to upload the edited folders to the server.`
+                        );
+                        return;
+                      }
+
+                      try {
+                        setIsSaving(true);
+                        await updateProduction(activeWorkflowProd.production_id, {
+                          editing_status: 'Client Acceptance'
+                        });
+                        const targetOrderId = order?.order_id || activeWorkflowProd.order_id || activeWorkflowProd.tracking_id || activeWorkflowProd.lead_id || lead?.lead_id;
+                        if (targetOrderId && updateOrderStage) {
+                          await updateOrderStage(targetOrderId, 'Client Acceptance');
+                        }
+                        setActiveWorkflowProd(null);
+                        setWorkflowActionType(null);
+                      } catch (err: any) {
+                        alert("Failed to update status: " + (err.message || err));
+                      } finally {
+                        setIsSaving(false);
+                      }
+                    }} className="space-y-5 font-sans text-left">
+                      <div className="bg-zinc-900/40 border border-zinc-900 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-sans">
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
+                          <div className="text-zinc-200 font-semibold">{customerName}</div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Name</span>
+                          <div className="text-zinc-200 font-semibold">{eventName}</div>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Event Type</span>
+                          <div className="text-zinc-200 font-semibold">{eventType}</div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-2 flex items-center justify-between">
+                          <span>Deliverables Checklist</span>
+                          <span className="text-zinc-400 font-mono text-[10px]">
+                            {deliverableUploadStatuses.length > 0 
+                              ? `${deliverableUploadStatuses.filter(d => d.isUploaded).length} / ${deliverableUploadStatuses.length} Uploaded to Server`
+                              : `Order: ${order?.order_id || activeWorkflowProd.tracking_id}`
+                            }
+                          </span>
+                        </h4>
+                        {assignedDeliverables.length === 0 ? (
+                          <div className="text-zinc-500 text-xs italic font-mono p-4 text-center bg-zinc-900/20 rounded-xl">
+                            No assigned deliverables found for this order/event.
+                            <label className="flex items-center gap-3 mt-3 justify-center text-zinc-300 cursor-pointer">
+                              <input type="checkbox" required className="w-4 h-4 accent-purple-500 bg-zinc-900 border-zinc-700 rounded" />
+                              <span className="font-semibold text-xs">Proceed without deliverables</span>
+                            </label>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+                            {deliverableUploadStatuses.map((item, idx) => (
+                              <div key={idx} className={`p-3.5 border rounded-xl transition-all ${
+                                item.isUploaded
+                                  ? 'bg-emerald-950/20 border-emerald-900/50 text-emerald-200 shadow-sm'
+                                  : 'bg-zinc-900/40 border-zinc-850 text-zinc-300'
+                              }`}>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={item.isUploaded}
+                                      disabled
+                                      className="w-4 h-4 accent-emerald-500 bg-zinc-950 border-zinc-700 rounded cursor-not-allowed"
+                                    />
+                                    <div>
+                                      <span className="font-bold text-xs text-zinc-200 uppercase tracking-tight block">
+                                        {item.name}
+                                      </span>
+                                      <span className="text-[10px] text-zinc-500 block font-mono">
+                                        ASSIGNED TO: <span className="text-zinc-400 font-bold">{item.staffName}</span> * STATUS:{' '}
+                                        {item.isUploaded ? (
+                                          <span className="text-emerald-400 font-bold">Ready for Delivery</span>
+                                        ) : (
+                                          <span className="text-rose-400 font-bold">Pending Editor Upload</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="inline-block px-2.5 py-1 bg-purple-500/10 text-purple-300 font-mono text-xs font-bold rounded-lg border border-purple-500/20">
+                                      Qty: {item.qty}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="mt-2.5 pt-2 border-t border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                  <div className="flex items-center gap-1.5">
+                                    {item.isUploaded ? (
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold">
+                                        <span></span>
+                                        <span>Edited Folder is uploaded in Server</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-800 text-[11px] font-mono font-bold">
+                                        <span></span>
+                                        <span>Edited Folder is uploaded in Server</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  {item.isUploaded ? (
+                                    <div className="text-[10px] font-mono text-zinc-400 flex items-center gap-1.5 truncate">
+                                      {item.folderName && <span className="text-emerald-300 font-bold truncate"> {item.folderName}</span>}
+                                      {item.eventDate && <span className="text-zinc-500 font-bold shrink-0">({item.eventDate})</span>}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] font-mono text-rose-400/90 italic font-semibold">
+                                      Pending upload by {item.staffName}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => { setActiveWorkflowProd(null); setWorkflowActionType(null); }}
+                          className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSaving}
+                          className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSaving ? 'Submitting...' : 'Submit Deliverables'}
+                        </button>
+                      </div>
+                    </form>
+                  );
+                })()}
+
+                {/* FORM: Send For Review (Step 4) */}
+                {workflowActionType === 'send_review' && (
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    updateProduction(activeWorkflowProd.production_id, {
+                      review_link: wfReviewLink,
+                      preview_link: wfPreviewLink,
+                      remarks: `Send for review: ${wfReviewNotes}`,
+                      editing_status: 'Customer Review'
+                    });
+                    setActiveWorkflowProd(null);
+                    setWorkflowActionType(null);
+                  }} className="space-y-4">
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Review Link * (Frame.io/Youtube/etc)</label>
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        value={wfReviewLink}
+                        onChange={(e) => setWfReviewLink(e.target.value)}
+                        required
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Preview Link (Optional)</label>
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        value={wfPreviewLink}
+                        onChange={(e) => setWfPreviewLink(e.target.value)}
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Notes / Comments</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Notes on draft..."
+                        value={wfReviewNotes}
+                        onChange={(e) => setWfReviewNotes(e.target.value)}
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl p-2.5 text-white"
+                      />
+                    </div>
+
+                    <div className="flex justify-end items-center gap-2 pt-3 border-t border-zinc-900/60 mt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveWorkflowProd(null);
+                          setWorkflowActionType(null);
+                        }}
+                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-855 text-zinc-400 text-[10px] rounded-lg font-mono"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black uppercase text-[10px] tracking-wider rounded-lg transition-all"
+                      >
+                        Confirm Ready
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* FORM: Request Revision (Step 5) */}
+                {workflowActionType === 'request_revision' && (
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    updateProduction(activeWorkflowProd.production_id, {
+                      remarks: `Revision requested. Deadline: ${wfRevisionDeadline}. Special remarks: ${wfRevisionNotes}`,
+                      editing_status: 'Revision Required'
+                    });
+                    setActiveWorkflowProd(null);
+                    setWorkflowActionType(null);
+                  }} className="space-y-4">
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Revision Deadline *</label>
+                      <input
+                        type="date"
+                        value={wfRevisionDeadline}
+                        onChange={(e) => setWfRevisionDeadline(e.target.value)}
+                        required
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Instructions / Change request notes *</label>
+                      <textarea
+                        rows={4}
+                        placeholder="Special client revision highlights..."
+                        value={wfRevisionNotes}
+                        onChange={(e) => setWfRevisionNotes(e.target.value)}
+                        required
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl p-2.5 text-white"
+                      />
+                    </div>
+
+                    <div className="flex justify-end items-center gap-2 pt-3 border-t border-zinc-900/60 mt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveWorkflowProd(null);
+                          setWorkflowActionType(null);
+                        }}
+                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-855 text-zinc-400 text-[10px] rounded-lg font-mono"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 bg-red-650 hover:bg-red-600 text-white font-black uppercase text-[10px] tracking-wider rounded-lg transition-all"
+                      >
+                        File Revision
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* FORM: Deliver Project (Step 8) */}
+                {workflowActionType === 'deliver_project' && (
+                  <form onSubmit={(e) => {
+                    e.preventDefault();
+                    updateProduction(activeWorkflowProd.production_id, {
+                      remarks: `Release Deliverables: Links logged. Remark: ${wfDeliveryNotes}`,
+                      delivery_link: wfDeliveryLink,
+                      raw_footage_location: wfGoogleDriveLink,
+                      editing_status: 'Delivered',
+                      delivery_date: new Date().toISOString().split('T')[0]
+                    });
+                    setActiveWorkflowProd(null);
+                    setWorkflowActionType(null);
+                  }} className="space-y-4">
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Final HD Gallery Delivery Link *</label>
+                      <input
+                        type="url"
+                        placeholder="https://..."
+                        value={wfDeliveryLink}
+                        onChange={(e) => setWfDeliveryLink(e.target.value)}
+                        required
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Google Drive / Archive Location</label>
+                      <input
+                        type="url"
+                        value={wfGoogleDriveLink}
+                        onChange={(e) => setWfGoogleDriveLink(e.target.value)}
+                        placeholder="https://drive.google.com/..."
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Delivery Remarks</label>
+                      <textarea
+                        rows={3}
+                        placeholder="Credentials or links commentary..."
+                        value={wfDeliveryNotes}
+                        onChange={(e) => setWfDeliveryNotes(e.target.value)}
+                        className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl p-2.5 text-white"
+                      />
+                    </div>
+
+                    <div className="flex justify-end items-center gap-2 pt-3 border-t border-zinc-900/60 mt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveWorkflowProd(null);
+                          setWorkflowActionType(null);
+                        }}
+                        className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-855 text-zinc-400 text-[10px] rounded-lg font-mono"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 bg-teal-600 hover:bg-teal-500 text-white font-black uppercase text-[10px] tracking-wider rounded-lg transition-all"
+                      >
+                        Confirm Release
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* FORM: Manage Payment & Close (Step 9 & 10) */}
+                {workflowActionType === 'manage_payment_close' && (
+                  <div className="space-y-4 text-xs">
+                    <div className="bg-zinc-900/50 p-4 border border-zinc-900 rounded-xl space-y-1">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-zinc-500">Order Quotation:</span>
+                        <span className="text-zinc-200 font-bold">{formatINR(totalAmount)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-zinc-500">Advance Received:</span>
+                        <span className="text-emerald-400 font-bold">{formatINR(advanceReceived)}</span>
+                      </div>
+                      <div className="border-t border-zinc-900 my-1 pt-1 flex justify-between text-xs font-mono">
+                        <span className="text-zinc-400 font-bold">Total Balance Due:</span>
+                        <span className={`font-black ${balanceDue > 0 ? 'text-amber-400' : 'text-green-400'}`}>
+                          {formatINR(balanceDue)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {balanceDue > 0 ? (
+                      <div className="space-y-3">
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/10 rounded-xl">
+                          <p className="text-[10px] text-amber-500 font-semibold leading-relaxed">
+                             Outstanding balance of <strong>{formatINR(balanceDue)}</strong> remains. Mark "Payment Pending" until commercial clearance is log-checked.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              updateProduction(activeWorkflowProd.production_id, {
+                                editing_status: 'Payment Pending'
+                              });
+                              setActiveWorkflowProd(null);
+                              setWorkflowActionType(null);
+                            }}
+                            className="px-2 py-2 bg-amber-600 hover:bg-amber-500 text-white text-[9px] font-black uppercase tracking-wider rounded-lg transition-all"
+                          >
+                            Set Payment Pending
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedStage('Completed' as any);
+                              setDeliveryDate(new Date().toISOString().split('T')[0]);
+                              setClosingNotes('');
+                              setWorkflowActionType('close_project');
+                            }}
+                            className="px-2 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-805 text-[9px] font-semibold uppercase tracking-wider rounded-lg transition-all"
+                          >
+                            Archive Closed
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="p-3 text-green-400 bg-green-500/10 border border-green-500/10 rounded-xl flex items-center gap-2">
+                          <span>v</span>
+                          <span className="text-[11px] font-semibold">Client Acceptance Completed!</span>
+                        </div>
+
+                        {currentRole === 'Business Owner' ? (
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedStage('Completed' as any);
+                                setDeliveryDate(new Date().toISOString().split('T')[0]);
+                                setClosingNotes('');
+                                setWorkflowActionType('close_project');
+                              }}
+                              className="w-full py-2 bg-gradient-to-r from-violet-600 to-indigo-650 text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:from-violet-500 hover:to-indigo-500 transition-all shadow-md"
+                            >
+                               Final Review & Close Project
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="p-3 text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs space-y-1">
+                            <div className="font-bold">Pending Business Owner Review</div>
+                            <div className="text-[11px] text-zinc-400">
+                              This project has reached Client Acceptance and is automatically queued in the <strong>Business Owner Dashboard</strong> under <strong>Orders Awaiting Final Approval</strong>. Only the Business Owner can perform final approval and close orders.
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* FORM: CRM Status Management Popup */}
+                {workflowActionType === 'manage_status' && (() => {
+                  const projectLogs = (logs || []).filter(log => 
+                    log.record_id === activeWorkflowProd.production_id ||
+                    log.record_id === activeWorkflowProd.tracking_id ||
+                    (order && log.record_id === order?.order_id)
+                  );
+
+                  const findLogForStage = (stage: string) => {
+                    return projectLogs.find(log => 
+                      log.new_stage === stage || 
+                      log.action.toLowerCase().includes(`status=${stage.toLowerCase()}`) ||
+                      log.action.toLowerCase().includes(`status='${stage.toLowerCase()}'`) ||
+                      log.action.toLowerCase().includes(`status: ${stage.toLowerCase()}`)
+                    );
+                  };
+
+                  const formatTimelineTimestamp = (isoStr: string) => {
+                    if (!isoStr) return "";
+                    const d = new Date(isoStr);
+                    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                    const day = String(d.getDate()).padStart(2, "0");
+                    const month = months[d.getMonth()];
+                    const year = d.getFullYear();
+                    let hours = d.getHours();
+                    const minutes = String(d.getMinutes()).padStart(2, "0");
+                    const ampm = hours >= 12 ? "PM" : "AM";
+                    hours = hours % 12;
+                    hours = hours ? hours : 12;
+                    const hoursStr = String(hours).padStart(2, "0");
+                    return `${day}-${month}-${year} ${hoursStr}:${minutes} ${ampm}`;
+                  };
+
+                  const stagesSequence = [
+                    'Raw Footage Received',
+                    'Editor Assigned',
+                    'Editing Started',
+                    'Editing In Progress',
+                    'Internal QC Review',
+                    'Client Review Sent',
+                    'Revision Required',
+                    'Revision In Progress',
+                    'Final Approval',
+                    'Project Delivered',
+                    'Completed'
+                  ];
+
+                  return (
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        setIsSaving(true);
+                        try {
+                          const updates: any = {
+                            editing_status: selectedStage,
+                          };
+
+                          // Map dynamic fields to remarks or specific fields
+                          if (selectedStage === 'Internal QC Review') {
+                            updates.remarks = qcNotes;
+                          } else if (selectedStage === 'Client Review Sent') {
+                            updates.remarks = reviewNotes;
+                            updates.raw_footage_location = reviewLink || activeWorkflowProd.raw_footage_location;
+                          } else if (selectedStage === 'Revision Required') {
+                            updates.remarks = revisionNotes;
+                            updates.expected_delivery_date = revisionDeadline || activeWorkflowProd.expected_delivery_date;
+                            updates.target_delivery_date = revisionDeadline || activeWorkflowProd.target_delivery_date;
+                          } else if (selectedStage === 'Revision In Progress') {
+                            updates.remarks = revisionComments;
+                          } else if (selectedStage === 'Final Approval') {
+                            updates.remarks = approvalNotes;
+                          } else if (selectedStage === 'Project Delivered') {
+                            updates.remarks = `Delivered via ${deliveryLink}`;
+                            updates.delivery_date = deliveryDate || new Date().toISOString().split('T')[0];
+                            updates.raw_footage_location = deliveryLink || activeWorkflowProd.raw_footage_location;
+                          } else if (selectedStage === 'Completed') {
+                            updates.remarks = closingNotes;
+                          }
+
+                          // Execute update
+                          await updateProduction(activeWorkflowProd.production_id, updates);
+
+                          const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
+                          const targetOrderId = order?.order_id || activeWorkflowProd.order_id || activeWorkflowProd.tracking_id || activeWorkflowProd.lead_id || lead?.lead_id;
+                          if (targetOrderId && updateOrderStage && selectedStage) {
+                            await updateOrderStage(targetOrderId, selectedStage as any);
+                          }
+
+                          // Close the modal
+                          setActiveWorkflowProd(null);
+                          setWorkflowActionType(null);
+                        } catch (err: any) {
+                          console.error("Failed to update status:", err);
+                          alert("Failed to update status: " + (err.message || err));
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                      className="flex flex-col"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-5">
+                        
+                        {/* LEFT COLUMN: CRM Inputs and Cards */}
+                        <div className="space-y-4">
+                          {/* CRM Information Cards */}
+                          <div className="bg-zinc-900/40 border border-zinc-900 p-4 rounded-xl space-y-2 text-xs">
+                            <div className="flex justify-between">
+                              <span className="text-zinc-550 font-mono">Order ID:</span>
+                              <span className="text-zinc-350 font-bold font-mono">{orderId}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-zinc-550 font-mono">Customer Name:</span>
+                              <span className="text-zinc-300 font-bold">{customerName}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-zinc-550 font-mono">Event Type:</span>
+                              <span className="text-zinc-300 font-semibold">{order?.event_type || '-'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-zinc-550 font-mono">Event Date:</span>
+                              <span className="text-zinc-300 font-mono">{order?.event_date || '-'}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-zinc-550 font-mono">Assigned Team:</span>
+                              <span className="text-violet-400 font-bold">
+                                {getAssignedEditorsList(activeWorkflowProd).length > 0 ? (
+                                  <span 
+                                    onClick={() => setAssignedEditorsModalProd(activeWorkflowProd)}
+                                    className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2"
+                                  >
+                                     {getAssignedEditorsList(activeWorkflowProd).length}
+                                  </span>
+                                ) : 'Unassigned'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-zinc-550 font-mono">Current Status:</span>
+                              <span className="text-amber-400 font-mono font-black">{activeWorkflowProd.editing_status}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-zinc-550 font-mono">Delivery Target Date:</span>
+                              <span className="text-purple-400 font-mono font-bold">{activeWorkflowProd.target_delivery_date || '-'}</span>
+                            </div>
+                            <div className="flex flex-col pt-2 border-t border-zinc-900">
+                              <span className="text-zinc-550 font-mono mb-1">Raw Footage Link:</span>
+                              {(() => {
+                                const rawLink = getRawFootageDriveLink(activeWorkflowProd);
+                                if (rawLink) {
+                                  const fullHref = rawLink.startsWith('http') ? rawLink : `https://${rawLink}`;
+                                  return (
+                                    <a 
+                                      href={fullHref} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      referrerPolicy="no-referrer"
+                                      className="text-cyan-400 hover:underline break-all font-mono text-[10px]"
+                                    >
+                                      {rawLink}
+                                    </a>
+                                  );
+                                }
+                                return <span className="text-zinc-600 italic font-mono text-[10px]">No Link Attached</span>;
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Dropdown status changer */}
+                          <div>
+                            <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                              Update Status
+                            </label>
+                            <select
+                              value={selectedStage}
+                              onChange={(e) => setSelectedStage(e.target.value as EditingStatus)}
+                              className="w-full bg-zinc-900 border border-zinc-850 rounded-xl py-2.5 px-3 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono cursor-pointer"
+                            >
+                              <option value="Assigned Editor">Assigned Editor</option>
+<option value="Editing Started">Editing Started</option>
+<option value="Customer Review">Customer Review</option>
+<option value="Editing Completed">Editing Completed</option>
+<option value="Client Acceptance">Client Acceptance</option>
+                            </select>
+                          </div>
+
+                          {/* Dynamic CRM Fields based on Status Choice */}
+                          {selectedStage === 'Internal QC Review' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  QC Notes
+                                </label>
+                                <textarea
+                                  value={qcNotes}
+                                  onChange={(e) => setQcNotes(e.target.value)}
+                                  rows={3}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                  placeholder="Describe internal QC findings or checks remaining..."
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedStage === 'Client Review Sent' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Review Link
+                                </label>
+                                <input
+                                  type="text"
+                                  value={reviewLink}
+                                  onChange={(e) => setReviewLink(e.target.value)}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
+                                  placeholder="https://clientreview.com/album..."
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Review Notes
+                                </label>
+                                <textarea
+                                  value={reviewNotes}
+                                  onChange={(e) => setReviewNotes(e.target.value)}
+                                  rows={2}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                  placeholder="E.g., Sent layout via portal..."
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedStage === 'Revision Required' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Revision Notes
+                                </label>
+                                <textarea
+                                  value={revisionNotes}
+                                  onChange={(e) => setRevisionNotes(e.target.value)}
+                                  rows={3}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                  placeholder="Detail what client has requested to change..."
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Revision Deadline
+                                </label>
+                                <input
+                                  type="date"
+                                  value={revisionDeadline}
+                                  onChange={(e) => setRevisionDeadline(e.target.value)}
+                                  className="w-full bg-zinc-900 border border-zinc-855 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedStage === 'Revision In Progress' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Revision Update Notes
+                                </label>
+                                <textarea
+                                  value={revisionComments}
+                                  onChange={(e) => setRevisionComments(e.target.value)}
+                                  rows={3}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                  placeholder="Detail revision workflows or specific editor remarks..."
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedStage === 'Final Approval' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Approval Notes
+                                </label>
+                                <textarea
+                                  value={approvalNotes}
+                                  onChange={(e) => setApprovalNotes(e.target.value)}
+                                  rows={3}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                  placeholder="Notes from customer approval loop..."
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedStage === 'Project Delivered' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Delivery Link
+                                </label>
+                                <input
+                                  type="text"
+                                  value={deliveryLink}
+                                  onChange={(e) => setDeliveryLink(e.target.value)}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
+                                  placeholder="Google Drive, WeTransfer, or Album delivery link..."
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Delivery Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={deliveryDate}
+                                  onChange={(e) => setDeliveryDate(e.target.value)}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {selectedStage === 'Completed' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Closing Notes
+                                </label>
+                                <textarea
+                                  value={closingNotes}
+                                  onChange={(e) => setClosingNotes(e.target.value)}
+                                  rows={3}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                  placeholder="Closing summaries, archive drives, or delivery receipts..."
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* RIGHT COLUMN: Live Production Timeline */}
+                        <div className="space-y-4 md:border-l md:border-zinc-900/60 md:pl-6 flex flex-col justify-between">
+                          <div className="space-y-3">
+                            <div>
+                              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block mb-1 font-mono">
+                                Complete Production Timeline
+                              </span>
+                              <h4 className="text-xs font-bold text-zinc-300">
+                                Milestones & Ledger Tracking
+                              </h4>
+                            </div>
+
+                            <div className="overflow-y-auto max-h-[380px] p-1.5 pr-2 space-y-4">
+                              {stagesSequence.map((stageName, idx) => {
+                                const matchedLog = findLogForStage(stageName);
+                                const isCurrent = activeWorkflowProd.editing_status === stageName;
+                                const isDone = !!matchedLog || isCurrent;
+
+                                return (
+                                  <div key={stageName} className="flex gap-3 relative">
+                                    {/* Line connecting milestones */}
+                                    {idx < stagesSequence.length - 1 && (
+                                      <div className={`absolute left-2.5 top-5 bottom-0 w-[1px] transition-colors ${
+                                        isDone ? 'bg-gradient-to-b from-sky-500 to-zinc-900' : 'bg-zinc-900'
+                                      }`} />
+                                    )}
+
+                                    {/* Icon Indicator Dot */}
+                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-sans shrink-0 z-10 transition-all ${
+                                      isDone
+                                        ? 'bg-sky-500/10 border border-sky-500 text-sky-400 font-extrabold shadow-[0_0_8px_rgba(14,165,233,0.25)]'
+                                        : isCurrent
+                                          ? 'bg-amber-500/10 border border-amber-500 text-amber-500 animate-pulse font-extrabold'
+                                          : 'bg-zinc-900/80 border border-zinc-850 text-zinc-600'
+                                    }`}>
+                                      {isDone ? 'v' : idx + 1}
+                                    </div>
+
+                                    {/* Details */}
+                                    <div className="flex-1 min-w-0 pr-1">
+                                      <div className="flex items-center justify-betxœì}ûWÛÆÖèï÷¯˜òõÖ¦Û<ÓÔ$— i9'	, í=7'‹{l«‘-’Ì£”ÿıÎŞ3’FÒ¼d¡m´VS¬Ç<÷ì÷ãŠÒ	zÓÖÚÒ‹ÿE¯íxêMH/ğâø7¦;·Ÿz´>¬­M¯?’A8IZaĞçÃIH’È›Ä~â‡“V/Â(&ßŞ:wGˆïÍ¢ˆNRã#B^’Ì_Ğ¨µ¹ºÊGÄnE°Q¯¹.Ç~8¡õ¾Ê‡ñ»?éµÖWWkvK<ÛZm8÷éÎ}[	¹oHaOïÜ¡ĞàŞËíØKz#ÚÉwß‘fá•án‰ƒİÔqXË–j‹í8şŠüá(©à8ÎA±¡ùcø
+ÿg«36óñ·“ôæ²ûzÕ_1çÆ·;}ÿÒµİÒ>H³òzpPëmÎöT³/Åİğ/ğ{dœ´VÛ[ÒÁ
+·Xãzˆ¨01îvD§×£ÍOï§}/¡}r…ıŸÓ··ğÒ%ı5Œ>‚ğ
+µ§Ùós¿×%ŸVH£QcG·;S×!;¶ê¼‘/.ÿ·å•;ËÀ¬ıX^5ÏÍOo;ß“×a˜Ğˆìâ.Åäûn¸Û¬%½Fú¶N~›Å‰?¸iÑIŸL[[ä"ŒúŒ,$é¤?2 ½fwÖWà¸}1K’pbX–äfÊÁ_[2¼×÷cï" ı[?>õ.ıÉĞ´ád¢Ï;·Íe²ó‚˜)iL“İ
+Ì7'³ °@û0ı„¯û›ŒıÃ;ÓÈ¥™^·6Éô†mŒ´Şd^Ò¨›Şy¾µ*v§°IÏS¼¿6³ÏğŞÕÈO¨„ZfÓ)z^L‰`RV-E^ï3[æÖ•­GálÒ§ıV0”Y/²é†S¯ç'7é7ÒtBö¼I†Â¡äşĞÏ.Æ~²8h+îÙV¶gÃÈëûŒ'k%a+"ƒ(·.‚…°[ş¤ïCüÅwGz#ß±ü½tO¼œeá3‰G^?¼‚w¶©Ù“Çÿj·ÛàØØ/JN/™Å„S¢†~•m»o@¯Û`TTÏÇôn¹É0}å6¢Ø£“·]²„l¥Šøö2§³©ÛŞ^UPÙÙÙ!4p>å4€‰¨R\d-ô¸+¢É,šh˜m˜-Ã€§åR#¤ŒºÓK¥ûtàÍ‚¤©Å]ş€4¿‰iÀ†Mû§À/0«Ğ(i. “FÄ¬IŒ»¾d@“|ŠºçŠâW¿„ô¸,t„xq‡43Æä?È‡Ëí;PÍÖ$lãÆÔàÖ(8ŸôÁ+ìó°Í¦Ów{_;¹Âß°ö`ˆĞnq„Œ0(tØ”'ö2{Ä¾²Åm,ÇŞÍDHÖÑ”ÿYÑF4-®YiHÙ3û˜à•©rz°&Ùì`ìÆÁ_2†™!`^wÃ„ ş¯f1ã—ãøèjB£zéÓ«Â@Wäå_QŒt¥´&úAà©ÈÇĞöã_à‡ıhHß0)†ã¤?3Ä9ŸŞ´qé+F¦‡öşgÛÀÏ!ÃÅé‚\1Â—¬±bh"¢c/úÌ¾ı¤ü–3.’uÑe…4Ó)¿{˜ĞqÜş-ô'ÍÆ&J|ÒötgX•¹8·¹¸¶9ÑÑB·­²i¿!Aêö*Û) <¬wLRˆ5T¼«o¬Ïd}Æ—ÜœÃÄºÙÏ}öšœ°‡¿›Ëí$<<=:M"Ö#ûO?i6ÎËV?ê–QÊæØéÚû|w'sr1c|h‹qrí-­€£•¥6M2‘MP¼ÈÍ^!cÎÊªÎ²IÌŸÌğ1¼XÔ+Œ/Š
+‹!åo÷"-Õ8™Ò
+Ô||ˆ×±<*•úA¢wnb´i8O~í™èÊ(Îc¯{	ÿá˜F¨Û¼Ï*[4æ†¿üú§zt.˜–À²Ê(éÙsmìu¬ı"Î7ï‹}áåñ#ÆuÁ?`oˆ[k$wóŸëˆÆ6"[s>H\¨LEÌïïy¢¸cì1:3ºs[‘ÌjÃp²7ò&Cš‰iŒjÊŸ7i;ñ¢!MÚØ8ñbrÀa‚OË¢–”–ÿª5`´¯ KRi¶Ve]Áô¦µÆÎôè ‘Xù¾¬!83üÑg	ê©'`â·€üã–e?.ı0 	îf¾‘ÆIDôf~Dû†—Ì€°NQ>àû³´”©7^ğµòh»İŞîğWkµ·ÇşpBû¸3a´ô¢t#o´ô¡ØI€ĞˆmøÒ‹Òí‡{Yf{éEé†µÇ½p<e» ÷™İÒ÷Š„‰ìöztš€²õ[¾å²€Û~Bş|dÜ÷ˆÕ„Õ~ø¸ÇŸLgfÔÃ5›€ïÌgI (™o¯¡ö¥¯Kê¯:%¾È %pFññ|ŒÁ‹¨gèÍ›%ákØ!Ã;e™Öbª€ñôm0Â«xçvİÑ$0œ3LİëóB·	¦Ñ<
+6FÎú}âMnÈÀŸx™ ¶ ŒˆõFìÔƒ%ú3J}{ÚRCÕY&£|q&Ç¿Šq#ÅškFü±êOo1TØmÅ’+¬€âP¢EOg”ÈRÙ¸åj	¬µJCà|û‚–½§iÊS4^¹Uº‘5]h,‚»§§‡?½;Ø'û‡gG'§¤CÎvß’ã£ã÷Ç’UğÖ—â·aß2;_ÖQú×L†ğ'E´VÉï@V¡´èƒ½Õc`Å¶4Åâç”ƒ;ÜÉÎì`³ÿ÷£p
+¦å¨5äîçÖx}Ê`ª€LËcÈp†C *I!jı: ‚Ø‰ÿ½ëÖUkƒİ×ùı>¤ Ÿà|àĞ<à'#¹«—£OƒY„V„ÖÆjÙévãgêÁğÊÆØòŒ$Ï–•gË‡ÿZí­öÍ+}A“+J'2¤æâÜ¼òÜ8 s6+¸”DQríBS#ÚT8=£Ş¸:Vëİöh£2ƒx,ZÂHšñGòl+k‹”^9\¿ÚCTrOÓ;ŞLê©5ñ–„Ü@æGrGvHDã0¸¤hlÙôa›º¡hH6ozÂVµrKiªo=ÇÛü–n«[Öüî¥¸2‚+³cÄÿš€Ëfë¿'·®ğÅE#]œ‡ª_ü*[ÓmT
+ë(m‰É6J³¶œ'ªA9õ-¯Rõ±Ş²7‹â0jMCÁPömÛ*óI2º»®0-ŠSó‹’À&µ6—ª²š$*ÒŠÙ2D{Ó)JŞ@±kù×øB…% S0¸$™ù@ O¶–7e‡}ìOºg\qŠ·“ƒoåéN¢Á1 æ”u~(ó¥%uºğÒá!øÀÆX\ÎÜUéÅiâmw’Ñ<-€›Í¼gh[(_`—æm«hã˜¯‚gŠ[I'áUäMÙÑˆŒ¼Ÿ¡×Ÿwpükò†‰™‹Y¦e˜$èÚe÷#èv4°»\„ıyì@2øjİñG¼9´nÈHY	ˆ.d
+H£%::d"Cx¬Ñé[ñbö—®;S…ïÓ´BjM½¸ÑÑ)§™†vĞ5-~ãÇè–T1<ôny7m?Æÿ+ßZFV[ñ ĞÉAÓ²º¬H^*?Ô¼Üå¾\/µ£ƒ§ò ¤ßcÑH_hßê
+¯7ı8ğ±<ù†ÓH`,òG†»äÃGã>i‚èñg’šØâaÿe—ÄèB²BL Qæ°\
+XRÙ‹«Fİ8g‰–LY| ì¬Éä¸Û[“vqß¡#Ú¾j¢U8”Oÿ¼øÄ ½QagË)/‡¿D3)?(ß-Üû„kD¾½•ƒüƒ¬İ}Ò÷Æ'‡Q $]7;¿œµV¿oş§ÿåo2~bZÆ´/Ÿj‡L½(¦‡“„÷aíã
+Yc»Õ"k&½V¶c¸XSÍ]füpé«ÒjªŸVÖÕ·¯'¸{YS§A]sºû¥%’@Á¸TÕe’¿Ô/—â­ùÁQ7'18¤1\:/HFfåş×4İİ1Nä]qŠ;ºÎA**ßÌ¼_&4=À š	4½"mDTP%™¬Eİ©Hiµé«‚;ní”¾Î—…!ÑÁlœ+"‘ÎW¹é©)Œ/ ğ/î]J¬`T«ú#`ôš‡k[ÅıÉût‚S&(ïÜşpWä?ŸqOè2”1}
+—#^{fü8(0á#ŒR‡KàşcA±ìv2òcA‹M3è$J,{ª¿ÎeR½Eb¥K»4ö¦M¡9+@'ŒÔ›ŸSœú	í¥«Dïôõm|=óĞÏzËï³oâ6×Å¨Ş€'wy|Q0*Êï±1ì—íôNãı$İÏ†C'a äíDp£Ğ²túàáy<¥=ŸÁZrƒıq©À¥/"µÌç’âÙf¶‚~ÙÆõ??/4'­ŸÃYLg}*ñx2Ë'ÁEÆM­°Ãl»tÛQXéô•€‡†$Sk—Ë¶ŠL’>cçÀ´à|†‘?©ß€>¿©¼´!R%×!”ª¼¨]ãN‡@è>x4Áìë€¹6Gôæ-v¤Å`Ç¶ÇPˆqlÏNEËùÑQ§Íùä”e7M1nÂË8à†vİ³ oÒ‡0
+´úƒËymX;Ú?ßØÔÎat¦@,Ùë}|=p}İşâ5/Öì™¿>‹óÛ™*9BŸ0‡ö¦dë”áüóA‚ë"v¨}ù£~¿Z›ù¦“p m¾Y ¨Âo˜<ØK|ÊÏË†Mà=³wÇc
+ò 4Ğ†ŸúĞ¸¼sñœÔ(‰õ“Q³1J’i·Ói`È“î…¸òc‚YŸÆÍnx{†Ã€¶{áXÿ^8½¯M¯ŒéĞkO~/>Î„ı5û”^âÀŠoÍ+b’”ôÏôO¬ÈBÇò§»
+ yšDœú¨1™„½-ägäÅõ½
+ùõ&MÑ¼>…aèc‹IQ!I¼ ^@šIHf6*zA8dÜëEa“ÓÙÔ»ÀPJFØé"ß	|­S»dŠBÖ¼ÆÓN±Ï+6Å˜7d õƒwa Égz³s+‘¬üOAl×Wà+–ÎæjÕTcä•‘3/hƒ-¬uÅÒé%sQjU½Íø=[\„ªéBLvA,˜ÏZè‹F3vÑ`û¬|V´ğ¬‘û/5mÖ~ cû|ßJÌ% àŒKÌ2ş`´û&düé–S5î^äß;ÍÌ!‡IşQÁQUhS©ò¹áÂ8¶ÛŒó5áÄú´zy«ı	ú"Ä]µ~‚¾´à®´Êİ•(Ã^Ğí¬•}>ä‡ëÂª‘ŞÛÌm£×Å²‡ƒ}­Øj•8{[îl<øºŞ~’—Ñqì)¾>42¯üÆ
+è
+®úª›9¹ÏÅ“Ÿ_ìHV·¿²Ã&x°gİêÂŒŠ¡
+0E nÜkü}È£Ïc®ŠcÏßty):F~8>ŒhË{!ß¾×t?Ê³Ifi2Ù{nsidŸO…“£ æF’¨İæsüÃ¬²›±µÑ›_œÇârŞád2FË¹œ›±Á²_á´¬Ù¦@’È[mû1o­XéeeÓò«Ì¬¤AÏ®)ÆŒä¥ÂĞ¤‘e4YF;[uĞÎÆê½©Ma6¬Nñ›t{ˆ?!|ûë´Rçİ[	,è°š¯©èLª*G ,Í&=ˆ¥äÖÁëK$ñ“€?å˜êäUÔ´à:#÷¬~Néå–3ÎM’¶oÜÂ™ÂeK²j<W1ûÎg«î¹âï‹"™7‘Û×nïY¶Níë(w²`vò6U%¼´BÃ¶)pŠ_£ˆvn….¢¢hj€9ÕƒtÉ§Tùômú£æÖ.x¬ÔÎÒùEàM>›CáŠh°³4	Ã)…1“F\¾äo‡ß»FZî×=2mLŞ¶&™<æ¢*IÏRiHòÍ–üOÅİ‚À˜”·Ô¢Kª}š§ûgyßáqgà#¶[ÂÏñğ\³ñN¼ a¹ `Ø`K;‚Ş¯•f:ù•epoª«äPÚd™0êããŠúÜê7¨åk3$Âµ‰X¤Ey@zâ@A¶÷0Ê¡O MR·ÏVW «D[µZ. À ’oş›«¼.Âd„IşøSìéû(ÈïÀ¡…{VbÜ¬=¾à·FÂ¥—kødzU=ü¹A
+a]V›n©ÎÓÅë–ó“I*¿25®Ûë%”ÛG™–Ïíuá®ÓU{
+¥š²¥'æWıó¾&ÇVÕC™îŞ¦4¨¶ÔùğåàgL£Éâ±PÜóÊ¾n¯®YÎÒ{«íŸT`XÀG*»„ĞfLs7K%¿^8øB­2ím:1Ã7t~RŠ- úúF{ãrg¥má³Ù›v4åJHÏfërš÷á5ïÉm.â€ÙÍì|™9M=Wú';\uÁÃí -„)Å¦ğàÔg‹mü¬“ÊAËb ²Qñ,…#Õ¯GóEñïEïkQû9h}-J¿ :ïBåï)ò~:ï ?
+RRx4†×§î.Òòı(û|tİªk‘ æÆ\Ò‹«Şª&	ø{h¢;xZG²P<š¢ªpË!¦n‡qš®Ç âNôz€ú¥v1WÂu¥€MpÁkëæÔÔÖ,P;`Î¢.½EhSiÅsİÆ+†\Â«6àÖb+¤Áñ38I¤Èw%G¾·áÙ¤Çâ¦³hĞ
+"–n§ˆXÜª"bùİ?"^BT‡‡tĞŞˆö>ïùQ/ ëÂÂµ¯'4¿r€*å}]îÌ?PÍ%‚<êå¸*ü,&¹züæhwÿ`ŸŸ½&røv÷§öëà—Ãƒ_«¹®¦eD^7ÉÕÆSKrõ\äŠûB¬/(»Õ}Zm>„Ve’§iBUH[B«ÌÕ†›º:\öQ]«ÍÊÀeû_íŒVõóXUH[v0×a.³=séÅ÷u?ôs©)ÆTöÀ}Ä‘qÏLİÀrGjíwF›÷JJeæ”]Ô[urU)ójr$Ï5eÎK…ÖÕšn”­ª‚Åğ|’=v¬ÀÇ×ÌUsXñÌUETj"rª¨çÕú”å>#xÀ#	Œ!w†©Ÿm¦–¶¡Œê5äB¢ )•²Ò4Î0ù¡¦IK@+•` Zõ¬¤¢!–¬3ğÚéwj—ä—¦VÓB²ÿ`+ÿéôÿÓi~ğZ¿ï¶şßjëÇóÖÇ,·¿ï0¿3ë½¤×Ó0Jv ±ïüşÎ·kš.»sN¤Š—¬á{Í¤ı=káaç âğ·ÌEşüñPÃYÆQoç6÷êÉÎí§1m‘oÔIóB™ThıÇ¤3W8_Wüœ‡PsˆîIâù2æê$ÉK'r„“ƒ(
+#k­CŒ¿{-r•€˜‹[B0ßØÀó}#ŠºFÈ¢ÓåáÎğ^x9Åãä†iß”İ°ï³Ûñ<õ"^O´Â<ÉÍ¹zÄ§Œóş†ÿÙşŸnx¹‹0j64[V­5‡e—¼>ìõ}†9wH?ìÍ0¸¯QÆc‹±#é_š%yŞB;ƒ‚æ+i Œî=×dÒPVÍ1¬aÖ›?™Ğèç³·oXoŸÒ2Ü/ÒëQÓ¼yîÖÊ©–€u2›x—>0Jk ¤uŞ–¢¢:7¯b…kKh4|”[^"”Q‘ÌÈŒhîJÀU'Ğƒ1‘ØXo
+EõöF~Ğoò¶@›kHı@){kS-ïé3-WXQ¼ÚÎl8Ô¤fÌ‘UÎÑT7RØ(R›„™W×Ífp7@Ô28ÔÔkeIáç²ûÙÃ1d™NbnÓÛªÃ,ûÆŞŸ™WÅ/ùóóª5êû/)RÈ‰ç‹Ûšñ¥E±á]"ù‡Ø¬SYG’ĞŞ0(«x"vòëÏ»g§»ÇÇäôçİ“Ãw?UµT<××¯#/‰ÅÆ-¯›}ë‰éª\²/JeeJÈ>¿2ëÏıÃ­­^üø|ícA—•íñtÄT©:½‰ÙlÈ!›Ë¯+ù „îN§d—±ÂÜÿ †®k¡9Û•ƒæiŠòa<ÌısìM•9î.¼Uq´ìè¨~sà±QòN•ö½ÄÓ×h©¼Ò‰î}ëU8€Í«YÈ-©Î%ô_²U3kX1÷õ½ô?Üğ
+2%Ï£üICRŸ¥˜èÀDX¼õãŸ€¡ò şº¸úJçe±!'åØõlXêJ¿åÖ¯˜T3bÿ	„¶©àœ2Î¶…;$¸BF…ÄSF#Ô¼y*’µÛ!jéÅkšôFp\H­”>ƒkL2#RË`EÄ©JÃª8³à«@«pï´ü´Q
+S†YeOç	ôARÇeÛ ê-Ñ¯LQşã+Cpìİ2£€wï”kbvÄ°;_8:\`ö×Â˜ ³¦9¿1_ 8LÙR½ä­ÑQÁ—®“t›ŸÉ¬hº½D¿®ƒjˆ–š+~Ä7§6ÇĞ$º!o˜ôÍÎ‚jcµ–bÇƒ k­>ª!#‹™mc¡¯]Ï‚ÄŸTäæ%ô’¢—Qªh¡Ú}»œ•\óJ%øš>¸\Ë›ò$Nš2wÀ+ğF^aB_pİÀ«)bÎÎHRM‘±AöÌõ6]ğ¾fû4Áº¼¤EDÙX¾IŒH×C»ºA½Ì„È–J·Ñé.bÎUz‰‰1ájš:İêÔ%RyÇi5bĞzVûJKãJ²-½F7QÖ‘IsåøîæÖ†éÆ ¥˜å½:Îoµ]ßª8<¶^–S$»xR¹âë¬—b'<³®İ£Ê¶fVo*9ÿQ¥JÌ}§d=G%œ¡w€û²š®À‡Y³%	\V2ì(Ø0s¤[.~u³¶óúŠ’à®5şf%>u¬“…óğß°zDYq‘Kb˜
+’–Ôê·ô²’i¾”Ô½¸¤á˜ËÎÙ¥ä”kÄC¿-×>òƒÜJ¨“Põ(e-©ÂpéÅ%IC³%O²»´™¬Zg7cMFÍ£jñE|]“rH-H©)¿•R·~I\GQ°ÓŒTèX–­FMÃ²l:°,¶S5îwñï(¼‚¿­Vİ:éûj­e¶ß‡à¯J­9*‡QÔG°¥èŠÁ
+f[w8Çö\‘¥•d{sÕú!ü×4şiR•¢İ«©ZÃÉ2=øÛ@ªïw¼PÎí7li¦£pBE&c=NJÅ±¥Íú?3?¢ıeGäc-dO\JÙ§ÌŒÆÆª‰*àéälK¥
+¸¥µéÕ1t€¶¹P¸ËR+Á¢X'®âø Ë–®+Ò¨¼(™ÓÛí6´•"QCîüÊ[Àê9¬™[ÂÚ)İ^!¸	İ|µî\sÂad+BĞˆ»òÈš²9X9ÚB!tÚ¶É?m‘çkëdsëÙ6pT0Ä
+{MU-·^¨+™Ùg×JJÍw†¸|ìk±Å™Şm+-9_zĞĞyÎ¯+ü£’¹}^îBâÁïËõ,tÀòX‰VMb­B)ç†Vj"ß…d^øM«ÅT²M™ Ï(gÄ£:#
+Ö<°Â¨•·éeˆlĞ1ië²|—€BOãÁ@ÆÌ§˜˜vkÌ-V%“›ªø¹M±×[Çàá#ììF±òk™ÕîEw)ú†}‰z°¦L|Q¯‹É•:Ï*¨†MåÚ«Ke^SãÉ†ÒxR¼€šùò˜c_Øàç>9J¦8åwéÄœXĞE5ä®ğéû18võw*§ÙŒWjª‰Jşº);Áoœ²½÷¦ìè¦çÛšé€¬”MxèMz!‘·ñüñşä2C³6&I3ßYÇ¯Ï1Ş;y®@oê·ÓGè{³-{‰#İùö¶8Ç»ïà°ÛùàÌåõà’#	¥1äq„¶æ­+'¶2ãDŠt
+ö‰ª‘Ne¾“ëL,²aÃd¼Ğ–€18…×nÈPˆŸ01tÕà‘U×l½“ÉÄ'ã©·iŒßğpYyÜ4lWˆú²¨]^²0W?¯åp¸it8,9£HèKç`øÕ­Aa,ó…CIiª6!Y‚gq ŸˆC[Á“í êÇ–"G<Æ7¶Â4@Öõm{jq˜.¾m_}Ûä»÷mó~x~1ğ>Úã4ózŸdŸÆŸeW¶½k==g6Nå°H÷"…€ğ¸®lìTşª<é½?ªÙ_ÄcŒõÄ€BÈél<ö¢òÊƒX…S…ÉÓÁÙl0Œü>şÈ'n­¾?ÿ¹¡Uï«ÏöÃhëÓéçh¸nü®AQ?Nx!¡¯¯Ğ(É8hïUãºG\¥4×Ïc®LVÎñ©/ÎOAxÁÎï>#Š<Rê¾kté‡ãJ6K«$#sÅzqç}14ñ¾ëìê¼jì­ÀQõŒ˜ªŒ²¢+§©¥%¶)¼´¬ÄôBã3”™â€¢‘ïˆTö¶úÈ£è•än¿UìK\,ÿ-¬¸·<ÓJ±Àõ¯(«W¯ˆ*¡<ó-×’rG%ÚÇÅü^ü[ÏŠ@$ßìì@ÌÖC#­¾tiIómWTMnİ-€ŸNk‘úZ½õÙ²L†Ù<¾)L,«AªlÃâS•[À‹ã×Ã+Q^ŒÀ=]c8Pø7l8]ïû4_Ë¤n€’½W$"¨[[ò>Å])ÈZª`™“–¬tµ…+{+•ÙB £BÅ³3}&…ÿåÉEJÅğJ¢G†òüŠÄ¤Ò2èØÔ†Í ·º‘Úâßb`ÎdTš—ÛîÜ™áÍ qdä&–@±Ú#­¹EŞMÛñÿM½B!˜ºí’—9>îk\FŠi}m
+i§‹!	Ö€]	¸l<†ó{rëìRø²fıÖ¥)¯Ó…eÃÊ–¸»¹¹8©u¨5Q³;òÀ~âG«rÆwd—‹ùàrÂç¼v›'èVSö¦)“ê¿”3Méx ¡G.²U™CŒSÚÏÔSÄáÕ2¿Ö-9ğX›¸[şêVR¾Êğï°OÃ­$Oºù ^%D‰"¬‰|ï‚NÕ©S/zdv
+Ë’òÒÅaFûœkİxV•Ùg‘¡UN@Ê|Ó˜â„LÔÄæEÀYí{ºª,ÔÙ`.§a³g!C[Ç4ŠÃ‰ø¿Ó¾ğbi*dg+ÒÊ“Lp<,šrÀßi>¨.ÉÅ;*“è¦ØÎß"-üí­…X7´ÖFC•ïû›üïaŞOÏÚ[ë¢»Ä<”ãM	YÖò»aìG? §ì´Ÿ…©‰Iy ê ÌæC¸„<(Œ,Ú-°ç¥ïeV»{AÎÜ>!êlÈª\Èzİ­âVÅä$B<.É$!‡0ÆPÛè&Áù‡óy/‘ûYå x¦ÂÈù(mVóE{D9:d¬ËÊ4$ç£ñöàôTÎ}úşUK—[&ºu=3Öë{fl}qÏŒ`XÛ1ãùVÕpûgLŒ=·¿E­ÌØ6—æ:™šyA¯g¯‚|)¹¨Ê õ¸*vØ!ëZkm‘ùy*õ¡¼-ê»¢UT
+<èuñ*¼vsf*äYÖåmÎCôJ\¥}EUüdÜè·4nôJ×øÒ+ıç-*€ªî,â¶ä7gş´KşÎHa§~8clb«‡yIUa§ÓBl)®ûá+Ğé…Ó|–
+ øÎØ›ÌØÚÜ´«ªÅl¡oò™Bü@,–%çç—E?ØW¯–÷ÆËºhdğ`~Ğ\_’º…¦â0ğ'ıf3ör_ƒX¼…šLhb$]J)‚6Ó®tY?ô¢+û¨-dØì·U»£pM9‡ÓöŸ+TÂ»ÿ0àÕˆ¹—Şíï¾9%?íüºûoòúè„µOößï½#'ì÷Á	bCéÃµ69z÷êh÷d|óöÏÈéÙîë×LæxûŠ½íJt{—s÷lóc:éI„SpÃ‹2ç©MşÈDŠçegïxÌ„cöå\2)¡áíq›Û†K;à÷àåÙm¸gc/ï®?aâ;··‹]uÉjûÇ­"ô!ìg¾…$}³&}°Vı€^ûI­3ukqET"‹³;º=Lpë8­Zı¸%C™›¸ w˜²†°—ÒCCÂKÒx?Ål/ÇQ8`ˆĞ5:ø±UÈ‰`U:š\„^Ô'ïx5±Ô‰[Rº›¨ä¼¯âåÖ,¼œN¸CôÀÎŸ~—LÃ8iå‡ƒÄS
+÷ŸÆ+
+}öàFdHO°ûÜªÌºñi¸&z4émÚß*ãtXBGZıÔ£ú´«¤®rœÚŸB&ÙÚœÎ.Æ€_c€¿puîŠs&yİU²vk£ÜBÅ=Kèëß: EĞ†Æ,§õeÒ µÎ™C%ó(İc…Ï1fjç¾ê¿	£¿„İO"šÇÂ})Ôk¶Ÿj­¿*nì œÊ6‹^
+ZãEÕ³àŸáhBöCmê }	*\[³1·¡±ÿ)8‰YãwÈ? E›ò¼¬Çxe§õ`Õ)nµfÌ›9á¥äpÿ‰¨4²'¤é¨µ•‚Œ š>?À¼=n­¯nlş=V¸‡,V­¾Ç6½vÖÒ‚ ^L;ÎYœÚTL›ÑmÆî¬)oa&aªÅE¹ú¶Gv½aóbòPó˜Fc²*è“ê˜};5GÄ”jï~¨!··¿
+Ã€z“fuÁµç6¢^ÿhÜÌõqë˜ÍüFŒÃ?ÛüãÇ5òãóm‘Íõ5­‰Üär÷å°É7O-ñ¤Î ÏVS†w¢j;¼ªªÇKUQÒùÉéüãæ@Y`ğÓ"ØÙ°×=Ofù|¤–û¹NHúñ\gäõ.!ƒ’7A.Z ¸ƒáß“<Œ™¼\0Aœb’T°¿6ÒçéÑj>×İ~?¢qü•VË×ƒĞj
+ëıô‰5‚ÅœÒûr~RÍÓ@şŸé(LBğ†,ç_éõ—§×C<V\.{·Ó~GöØš>&=ÏujÄ·óŸ›Ó€ğæ«òö'rzıHl1ô‚0ú›Rñ†şœ8÷Aûÿ´¸Lyh÷…P0n¸B¨èºJ¥ï]!õ¯c’­è$\œFgA`Vİ©0Y°"wr)hx.X‚ˆÜCãŒUòTZş=œâÆğõ\Zz!ÊI{ÄßĞ2ãŒ?€5ä¹40@ŞªvˆQÚğú]º—øãÿŸ­W}°qiBGÉˆ­c‡ğ¬9%ø[za|lcÚq©êŸVegäP¬®¦VÎÑ+¨azÃ½pV=É	+äàiBš57Š~–¨c—xc‹‘B
+E†áÁè²Áé£xT(f¯Ú€+¢QqV{ì€CÖ9¡4ˆEIı<ë +¾a?>†T"MŒæÙ–Vª‰s­YõC÷É¬¶Ôğ(V9pã[ =äÎEù§%P%^Œ.Š_ÒÂ—téÿ?C¼GÀÎÄ	hgÍÄªÔĞáÄM¥±ÆNgñ”Â´ïMt4·«÷kz8Ë9[ãëÖ3öïûÕdëÌ6É–E}¡eJë9ğÌåûlqr–@µY
+×55zÓøYy“¢tµ9ÌÑ¾¦1:ó¨×Tçc;Œ¼¾ÏPS+	[ì´EáX:ZìŞ½PîS›y*½éôÅ×]m¯®},¬]êa8î§e£è(c“çñÉÃ»„ß.øá™ïj•eİî€—UÙ“7÷<58ôfÀ¼İ©øÕŠ'@áÖ‡ğşôìè-99zs Î½oë9ææìÊ½½sË‹ñÎ--éßÁå–AıW[»Çí^Dá¢¤nPŞGñš}G¯‚È'âA!Fk!©3Û\vbo’°‡SvF¼!ŞëEa§³OËIV¾zÊ=eó%Z°»¬YY”(‚B¸Å‡Õ {Ûän£Ì]‘·õÎ«f1Ûİwµ*]ïG œşÂL˜*#üØÎ2=m]²Z“ì”vùYõháƒk‰°4îBÜ÷ØŸÉ¯´1°B9±BŞÌ®gÑÙ.ØÃ}Š)€ÙíÓQ%•ÕV#=cÂäGj¾€LSß~lj	6iJ‘­jJ‘gÅ AD“ìgäaL ‹4c]ò%udÁİhy™'&ˆl´ÉÛƒ³“Ã=²p¶{øæ”ìŸ¾yÓÚ?úõ]‰$Å§ßÒ$ò{<òWäkàŸB"QBoÖÈNŞ„ÃE‹&[Î¢É!3.ışLÈçeáéb®j4\CÆ@ÚoÕŒyÅwæ<È_J°9UŒX—7áAÅ9Æ¼Pr8'$«
+2û¨R¢ìHE²ùÅŒrî1T)J”0‚¬_@'Ãd„–ÍUòRiº,DJ<¢=Œè¯éL™ïB"ÔïSQxF}Úc	’°=Ãj"=è‡®fU•Å]¦SN÷¢]Eü8M…$’'¼•ÁSàMcª0¶SÚŒı	hœ¼k½å7Q¯¯wzİN¢¹ÑávX
+µCäTıå´TrÊŸMKâTK2ÌŞ€	ŒI’ónZnbâ’Ñ}[cÈàFÔ.ZD‹\eJè!]DƒÇ‘FèŒxß¶DR`HÅ¾ôâåm©æ©uö4ÒÂWÇ`ÛÉ$ˆ’F†4Œ¶nˆø#…0hPÖ T`Í°éöp¿ßa’Òx?ù<	¯&„CAÃ”>–§‰dQo½¤ÇPşC~˜—<L ı³A±Ûç~_ä€	k§çnşñùt|²ßúö6{ñîSşª”µÂï³ÙB®˜l0ºd1ÙØåIb}§¶ù^Š´ˆüˆ—ÕÂlĞP:C¨æB¼w„2y×6\JÄ.éZ6ñW=A=	\ÏÖ3lãÓ‚†Æ%·ä†uÌGb[ÈêRæß–×Rà)Kİb§+u«Z„Æ1ğƒ’ıŸá…Õ¹òg†‡–ºAüª‚ÎbUÀ†ñ–çPP¿VX´Îš½lÉvÒwB’94gÇ]jÉ¸M$/fo'1e—9AZ<•3È‰õ>·®â"à‡õÕUÇ‰æÀö s¨·üÛÜ¿åÒÉÅø§ -a">ç7qùO¼+ÌùçNh2f±ß¸³åß¿ßt\¦PÆn?É“ŠE¸%À¡®É(`›ó©`¸³áûÓïyA#ƒTõ{?3–ÀVİ€_P“a˜×cX[•TÙ{ëÖâ	üêbóâØoéÔ’tË¡á»OwöÍ‘xq  Ş2 ›­GÚ–¿ußcƒ<\¹"R¦qÆfôzŠ\Õ¹HwsZC±ú°qöjøÍÄTÂe İª„ŞY£Àoêü°P «á†UéÇUÚ6Ø/*%'l:±'¡<©o¡ØÚ2Z(
+J÷²f¥’ä//ûæ¤Vá‰½UÊ:‹¥xk‘öÍ69>9z}pzzxôn÷ş8|s@~98y³ûo²‰újhÚ!C£"œ¶šé2Ëp™Ä¼~Â ªÆÍjS˜Ç²p •\Ÿ£&_Uå}^M¾I—?Ÿ6}şıyuúş¦¹l=¤3FwÕÒ0ì®é—•Ös4µö‘€>q3 ÃH]í³<ï"ƒ˜ÚÔ°õ ’ÇşÕúñÁ?CÙ«0[0nÚ(ƒ¥¥…âlÌmîjNĞaHêØòÍl±P¯ªjª©P©Õ«ÖÌˆı#ÛqJÎœ*oNşãYÕ™Óv¬ğõôYÈ(9®`$AQ´†+!*i÷F^´›4Wõ„[·ı6AL'w<][‡c’@E‚µuÍ®âôÖ&÷½7•Ü­W³ä–üşYòmën(„Õ­Æ^CV)Õ*HªcÜH.|ç4J5ŠyÉ%îÆo)÷Æ…)p&§HÕ,mH’Èó²ò[/rXDÕ.ÅÆ›Ha.“Sµ>4*§H š”³ŠYIzğ <yF…@¥ø «Ñ[VdåFZ‘C[N»:Úªwì(ôKeòzüaí—²åîÙân²tğs©Z«|8„ä'È8ª
+ıR™6+éIÇ})=éâêgÚô¤Pò›L¡ğO—÷İó@sV/îÌÍQ[mÖõı,Õd_P6½0Tÿ‰N fujE©sÍ1mº±2éZèÕaÚ2A«Š2áÅB²ô(Y7‘`'¯I0>—İld©š5<ê³(¹NU¡N;ËRåÙŒ÷ë—búr«[É™öĞë›Öw8åOÕôèo¶¥D^÷ÚÙø šWíæ²úÛ,p1iËCÃøo¼7ÔØŞg‰Um{iŠ$cî¶GÚ›íæ~zöx	ÀëA°ôÅ—ış¤Ã¡Ş:±¼–]³ì[İäsæÌ' zéì	g“v'^p“ø½˜At<âq—nüãÌò|ª0›'Ì5ñ 	rL#ğÇïxò˜Ú	×§›Ø''şÉ–e¿ÀÕnjêSéçú»‹ÕÔ»ÒÂ\¾Ç::¹»^m™<éHšõÜãé,Lgº‹n}Zo9*Ãu­¢…ÆÜ¢:¼í‰>„#ãİ¼Ugÿ´‹]R‹Á¥¹BÈP²ÀİUö¤—vµÇ&ù»n‰ä£}L' P[ØÊç*äÂºOy7OmÕ·Şı—^0$
+/â9qaÑ\[åPnR*‘y¾Õo½dÔÆ%j6Å{8`qNÓ¢üz™|OÖVWÁ™ıïîÏÇO˜tèZÖ!Kr‡şºPëOÃ!ÌÅ.Ê¶°Á¤Œ„!–5Ÿ°‚U4±iy]“€'©ØÍ]ÔÕ$|%|ºÎñü¦Pgt}§“­™FÀFğú¤hı2yÙ*áÏäİ¯|€§7­çrŒª”BÈÍ¸Nÿ#?!ã±ã¿ª"¿…1I‡ÉÇÑ×³)ÃBn¨2@5_sÔë£ Ò«´`à‹36OdÙùÌOtF®ïÁ)ù$idÉ#y¹4±Ôá¸è ÛLïêüŒ—?ı·É	ÕÑU@æ¼¨ÊìÉÕ q—#Ám‰Ù-
+âòø]Ü×*öÊblA.e4_Ú#3±7õ¡µQlåëp¿ëê]{GşÈ"ºàÄ†“v[××ÜüX¼U­ì>³½Á»ÎÆ8?XH*€º®tOÉš—F···ôïâRgp¤Ó†²£3”À;È©2‚ÔhWûÖ)^— øn¹éèm·{zzøÓ»ƒ}r¶{ú¯Sr|tüş¸^{šYñÌ‹?Ç6×ºÁ€¿¶C>´Ûí&¯Cs}idËGFš¶MZ*L[FòØNÂ7áöØ6A§Œ+GUz±Ğ¤ç#àMo…HAÃ|PÅ¥–~}uù+\æò§ãwtùãKÿ€0o]>Ú½áìüÌ(,›í}t”K
+°¦ÁÚz²cM §PûpİÇù
+…ÊBtËt–§N¬L t×Qê·Aà02,öİ5¦ ÈÃP½¢F}FK„ÆõFÏ,˜üªFìN1Míš™¯:Sà`h+;_Ôñ1şß™_s*<áUñW”{†áènç|µ’0 1ŒZ£u›“D7-Bµ¿ç% ÎiÍ&GA¶€L?€S¨UúÕZ5€[: ¿Ef€9² ¸Fù<kúí}¾ÎÔ:\mR±Ó”¶ ‚¨6õ†8“"TÂØEÜI!$şÉgı ª¶xÖ.ÖÜ;Ì£wÿ1“ÀÂZ+P”E4˜ÅısyX8$Ü¿]UĞåbö'Šä\ë_<M1øvÃ’Æ G‹ +ŒdÓr£FÈŞÑş1êI³ÂÆs­ßÚ›–4)€{¡¯
+=Şí-Ó_Aå"¹cı2y).)ÀİIÿ»ß,Î¡Ù²¡•¦öRV÷Ø[Âáa3ø×Ë<] †Ê·¾òwïß¼ièŸ²‡/+Ïú—Æœ†x;Ì´'°Ë;ºËø²ŞDYSğî*÷ËKSy¡áœ¹Õ¬b¢»¢æµ0†sş,ëFqú‰¼+Şø“Ï<Şì$»·1´ ª0ch¹^Âô<'=¹ÀÆj5“SítEÔÅ+Q¹½K?˜Œ¼‰êW·wó„»ŠéØÏ;A†Ô»Ü- “1@,šˆén3°Zp'\>YÃ>pC‹îˆÓXD¯F&í^h‘ŠõãQ¦C® .®¹u¿‘ºt—è«Š·Úzÿê'£fc”$Ón§ÓX†áYŞ‹ñÅe‹0›ƒç¤ôEt°ské¹–&Ö%ŸÒA}[ú^W°²|ñmÚY:Ç¢ÅúZ<òÅöygi†Sğ›'“Ÿ²Í7Tò)~Íß>™üzµê5 A…?ÁìÁš:·¬ø•Ê Ù’jT†ÿäûëÕø¨’’ªôv*ò³„kYÇF&AØmÎ	§Ê0â²Ãnf§í×~@y2ã‚(®(#ü7E¬ÇÖª6´°Ò$*JÀ$@$vØ-)„háàš­ÏÄÖ‹ã‚QecJ­\‡·İñì¯ÙŞ…™ºCeI~¯€Œƒ@Öóº](–¦»æ9úXIŸ9¾i(–6ô t¡È)vŠ{¯8Guª3­µ¥Néj85—B:3×Â:h,Áäµ¶åšŠ¦2ÒzéÇ£¹5`I–SdşãÓ Õ<>í!×îª
+Æ¹öáš7GZ§ÇËó“Ç˜
+ÙU?ú¶Ï“ƒÖéÁ»}öÿ_~­“S$ ÒéÕ	<Ö¶o4:*	4M6J)4ë¤c0İH5zjËEÅƒfDÊtnK…RNjşÕ.úÀéÍ-vÑWÆ.úÕ 
+ÑSpÊÉTìü¤àm¿°qôøäèŸ{gè{¦¶æêš‚‰T‹4
+ªÕÔfJ¾'g'»{ÿ:|÷“¡+µ16ÇUOÚ»§Y¯FØô‰ÅÅ[Õ8bÌ}å¥¬¼øfÒ#¢¨’šù¦0QI·OŞ,HšÆ(‰n´f^±Ó»dÀØL¢ÕòVŞ•ç'yô‘»HÏƒ–ôÏÌŠÁRtìæ4^ 3{§j–ø7×ò›²ÿÊ3C¶Ó{—[X©L; ª¹İé³ÈYËYÄü¯ô‚\ùÉˆ0..L%7Í÷œÿÁ¨Åô•#ÈÎSæğn;¢Xh«ÙùÏ~gÈ¦¤Ÿƒ0-ğŞßÆCÖ ÿñşäÄ:ÖÚ$)mÿ[Çlé,m¦Aúï£ \ÈSŸ7õ³ø}ë (½œÂ°w¾½-Îîî;Xv;Ÿ>yõ•?aìBÔ{M©o6{®$Ô¯şÌ˜1£º½;ÒÃ”ØME],İ¬JÆlEIsé ŠÂˆC&„D¤'d‰üiùz#Ë~.kûø†,İ ¯j¥iIqWÁ–2ÛÈõöÔ~&¹w„ca{—/o¯ƒÇ
+ŠN™ARäd52"÷7•Wyä§ì^Ñ4”¥C²jİ²'±š×§}+Ø›4Ó¨{n.„C¯ód|I÷làğÅ ‚RFÒ!<Via€bªÿ—­$\Æ:pjAˆ‰^!¤/
+YhÀ­2$\U*u’¬5MµÇ¬>£¸›—}SÖ¶WÄ°éHwıÀÉ?´Ò„×:!»Y3ú	Çp4›^U-]æ"F+(|s0šYÓ©€…Á_…ôLÚô[§ÚÜá1^
+¶yƒ„¶ó‰1¦oJæ(àK	M™:ø†ù¿3Á+0¨	f
+6÷‚Æ‚„˜¹ˆ
+Ë=èycÂ†^uëİ`©aƒõ"ª3‚[Pi^Å;·k«:,§D´béußØ­hÀÕ~qDKPâçÇI·­«È›fiGAÛwMûjd¬ÉQhJ~ó
+åz×d€YZ6öDnÒÁ¸ha¥‡!å¡3
+=c\Ò6dU5Ä¬ŒZäõı´G]W¥Ö¤–Á§Û`ªUKHßWôwn}!Õ_h9Ë³Hò,¶[P\~â/¾ò;RÊÏìÍÌÄ.Á”T¿óíP¨C»¥‚ëË5vÅRuSÇu!bı6ËÙ‚ƒ••ÿÕn·`Eó¥ïeŒ´&Ì×XÄX´Z­Ãûğö¼½7‡ïÎÈîŞŞÁñÙî»½ƒ:áŒ<Ğ{·×£ÓÊ¢ÌyŠf¿ )O1«OrŒı‰ÁıTTGØ+µµ/ñ®ÓffoD{Ÿ!mñ¿è´,õÓ^òÖ›6‡°Ã6%t÷á†ßşLo–‹.±pVl¬m‚a¸IH kİ³ÍJçŒÚ÷
+ŞMœğƒ·8í2ÎÕë%m~‹W;üùìí›C
+®²/zd¡7ô1•CÆ ÀïøeûÃêÇ¢´ªßÀÃea$->2å½Ÿ!’j¶vá@¥P–^¸iBƒÕ‚â=¶,äl×œöUm
+ïdnÁÛ!ÆÂ
+à²Rœ¿Ö'0À&l•:v1‚ñx6ñyò@>)Ñ ;8³ 
+”’8‰ØŒ+*3Õ‚¨”kwšñQTşéF'4„¯=6QLßá^.-x$ğ¿]L>òşäîWá³»Å…5Ÿ“˜Ï¹İ|ã^vóõ¯vóÅÛÍ/SşF¦Í)ù…Fş@`²Ï†©yòt­ş[ZÏ¦–2b³8#‰Lal9ãæ­Îª´Ê|5ÎÃõóÊ‘¯ê©x«}ğ˜ñÖõàuFúÀ	t¤±c¤À¾ïˆè„`/v•UH/‡—^š²Ù<Ê0èÊŒ‹÷ÇÍeë4]&Cü8SÀµ‰X˜È*Ç³0şzŠ/#×ù³Ï9[1ëü†ëlùh3TN
+C2ºÃæré>çùpĞ‹ĞBœF4·!CßŒ®
+Ü@#&%°1ñw.X3Ï.ÅˆS×x€·ÏÂÓ$Œ@áªÄ
+iˆDy^†ıM‘¦™ÇÀìÀê2 ‡ O|!ğPBè’oo¡‘Ôeàî“1ÀÕÕ!€_&èÂihh+Qs{äÄ8o¶Öu<ˆÊVcEû±Ø¼Yçˆ%º•7´’ª7îÙ~p>‹‚:ñ7Q³Ò%
+”cënõ«6Wk©>åÜ´JéÔhº9ù©ƒÖé¾IÕP9°85ÉMaç38Lbhpã=ü–y4—Æ<–bK!Væü‡ó¾wC«ih5ğÃ>»íÒàÔ»ÁğhP&ŸÇ+Äù|ù³S¸ëÒ.6&Ô
+§0‰Íõaô _ …‹¡½˜FŒmßŸ_ŠOë·“}y^h1–êŸâ#j_äŠ®#¿tÄYãşhxVR<V—H
+U(*å”YƒQL\`Œ‰š¦=Íá*™~º¢B½ "Ê¥w–Ô<èt C¹¥.ø´o“œ#ÚÃÊ4LPç:YÃtcï’–%1¹1Ó2À÷²Î7Oæm¦ÏL®`\îë¾$ŒLKí˜?ÎÓ…LÈ,)ÂØ,ÏşpØÿh"Úiscà0Ø¹crjOa|ƒ—íşNYŞ,×ec*¡ÌÎßZ.¢Æ"àä1_L=¶¾ èo,jRcn"[ES7>x‹Í"ÿ¡“@‰}Hxq˜ŞÌ²¤o¹ßøŸB 7m›)"éfHFwùÅ3‡À8Ã‰õ¹˜kà´ø%mz·|¶/ÔÀR"<tåıµ}¬d,zœŸ¨Ï¦ñ‹ó;@çazÄ¸ä!œ_âş]±Êø©ŞıŸd
+Êøy³±øª]9l9‚RÔ„xèÆ<–*hª´ÌaÊâış`>'›@¼¶LÉ¸‰÷È·OJİ‹!co2ó‚T`îÉµj(Òç‚õµÎ%÷ ò¤ğ¼)?ÆN3Ö˜5û*ê1ÖUÃ0—z@U1é¦¼NÒ ¹…ˆ¯™Ïæ
+^“ò<™™Ry¶‡ìÃZ“Å>Ó›Ò<UoÉãÁ×Ë‹ëÄ“ä­ppÌÔw–š¨ñBŞL@¨IAœ^åŞJ(1k‰ £yÖæ8ÇC¶ƒPÌ¡ÒŞ³ew‹¦svómg‹pî%Â} FÜdø6<<=:Eó¾a«ÑËÅgaêÃ÷qÎ17äÊØLĞR"DÑe*¬óÕJÑüy
+qÙi›µ(”_x>‹íŞpx)ÙÀa®%xÈÍ{YÔ:¬üÑ$ëŒ7Ëã[vDqv’,PÊiÏrVÑğ
+¢ó4q
+ìW*ëdYXS"ßZ—àÃjEtÑxÎ+vµ†ô²6tÃx,»îœ1„èÿ>•ÊŸ8 pkA…è‰™†¼ÂÈ
+7Ÿp§°5RÊH©­”·)ûó,.ØÍ­Š®!©³(‡&×Œ,fV®SÜÌô#×0*&¹¬{óTVªH0Í±qµ4É× ¥ƒÊÜ©<Ë/%nULÉïšÊ?©€Š6:$‡0İ¡"²¶X“Ù¿g®ŠÇÒ†”Ç™S¯ãÑOÁI—©­R÷ĞT•˜í§µ°˜l-Õ“¥--Çˆqç7UDFºD”¶z™/¿uµµ…•=èf\JüZv³”-Œğ4¡SõÈ,k¡$}¶?€Ø·»ïöwÏNşİ%N®0ºJœ*—Ì"qªÔÁ›BBÊ-N¶Ü7RŸR21Ñ­Ä/J …©aEdUÉgµæšæh¸¸óš4/Âks‚Ò7+ïÜ*­ÍæxÊh<¥{æl/º³d’,Dåm’ûWá#`Ñfpn©ºç~|)Á¨¸åA¼HD-MÔ¿Œ97u€½*›¥:®&Øn.l˜µ¨Ä)ãQb: a­%ù7âªB\%…ø\ˆ±0°%g`ó‰VÏ%K6YvdÇK/¾wÍÆèôV%Óèc'UG³×½‰n¬6DÎÚ>Ù§–É8åŞTãÓ„÷Rı­7a¢xİXë`º@€C=JQ^«ÖIÃy'Ó'à,³õÜˆé	û)Ø7RßW<1ÜÃsäA7ezÜßI5b¦²Á.+bY,^Ï$3².;z¾ö)ÃGzÂmf ¸­ú¸Kú mqƒ,8//iŞ,ybfÌå„¦,I%ğW&Àœ.kB¸0‰Öµ¬;K´=l4~.Îì9ÊóõÍİÙp}uıYû·éĞÜmı/™Öæa6¤È:çä*pâş·æŠûO):ÀõÏ?g	
+»PË\Q·c>æÄÄÃ%Åá5çÕåéæ:•¦²ñZn8Ã2Åº‰^Oÿè{ñˆa·ònˆ0¿Uà;ÏËáBS5 “IÉË5g±6îNÇ‹éÒŒ/2Öq>6k[l©‚uÎy»M§\òÙ¡Lƒ'Ú²?z4A¡ŠG¨k‰3ÖÍ lßh”‡b ÉV¡…|;o“¸¬IÀ²ôâøİO+äŸÇøÏû÷×ƒWÇ+äxÿµH4“˜Ñƒ0J ˜Ã ì:ÅÑÄj3^ vigÉ{CÚù~Å›N±æi`û<Gå€j·”g…(C…íK¹NÆcši·¬†¨”œ$xH	¦h*òå˜0š`=Uq–"MİÂ†B­(Ö•Š…õ4Ú¶åOÈ€±lğÿ¬öº±›z8V²Xñ-Å*¶hÒŠîİFÖòÿ{~Ôèº§I² 5AÅRè’Ûr|RàŞ* ¸
+‰¶¤+òå’G¾£+‹—.‚ßõTÑ€ÄRÕûP¥ø±Ó¤—&‚³x•‘z†È%-F&°V*³ù«nı€=¡c6àeÊä#¿gæäø¥D_…òSL0öº¼<–ò]t+mvşÓnş6¥Ã?ïşÇĞü1ÿ¸¢Óåæ^¶¿_~ùmÇw+œUFEYğ½Ä—cõUL6C¢<@³èÓšÁÅøã¡lG½[‘6F»½e¼›v‰İjyy£ğJı6òøå¹²ÕÏkş’2Zä1•o©KëuŒT/®¥ì$‘g:€ÿdøÒ|ràwE s-›*NÉ¦f|ú‹õ›*-E³IÏ¹@UR¥„ï…fHÍ}&‚CKÃ˜a Ôm­êxq€¿nûA€‰@ÄWW–séÃ­òÖiã[é²s.åÓÜ¢M\³´aøŞø­™4‚(°ÖææÍ›ÜÑE
+£2˜]-wÓbnAH?mIZs]IQÕFü°ê®i°Ê˜î†@É¨5í´Z9§k©9ĞnÌ³>˜9Ğ¤oÓ›ÍJ±:ö:Ìuî`70B½QÀ¶j¥ÔŞ‘Z;’‘—°h`†.Æ›†7…Œ`~c¯‰°ö+œ%ì0˜¶9ZY(g½¦&ïÓÂ™“ãW”SºŠÊ`òú(G×ÒW”ƒß=Ê1BıŸ åë”Fc?†’˜Í‡P¢›@oo…É?Ñg
+ş|+\´À&^…$…W` ü¢hg£Vç%"qa‚Ù²'|Å:¥KÂ:Šdõ¢‘¯¸¿{\cõ'Œjv{Ÿ'áU@ûlÜìdMú^Ô'?´úŞT„'"
+äbˆ—p"”¡"JX ¶„À¾ÖlúEqÍfÆ_Š¼*˜ä›`v•¯¸¦tU„*9Í¼â”ÜÆWLƒß=¦1úÆ4{QÇ- ñÂ°×§Yb@xºäsê‰:åDdNb7°ÁsÜ“Œø<¿(¦Ùb 	ÂÆ$×1É4—uÜ¾7ŠY?;êÃ`qPy}›Ğ…^ÇÌñZÙêŠ*çy¼eà;^Ë-ÁÍ¼ˆåªQó6ÅmÕ9¸Æb\ù„^±îäDîb vc#Ç¦Õ±6y›æÊt×ú‚ÙI»İÖEÓësoåW!£~x½Ï¨ïbùãø0Ì“ìˆõq±¼¦IûÓ~}w‹sÚ³ÏS
+ÔéUV—²ä³ÔiÙœ)Æı˜·´)ÆimÅjÕ¶eÉMû!£¬¶¹y©3~{ïĞÙ½àæQMì4ÅjŸ'x`Ñá$Ÿ„DÒ3Í)mG½iêş…Áx®LŸwxÆ„
+)À7"[(>(C™ÆäHïâì\#CïÚ"°Í­Ú‚/”TL`±5_€…:Í¸)†Â?¡¦¼0æ{aïÇt‚eâ~É2ú}¡Y<ísÉÑxŸ&ğD…X¯Åè’w«Î5hñ=Ñº&ó€Ì8)£ÎÎs›Á¾0 ¨mÃSë9ñ+Rb¤QÈ›QH7d£Ò×|)!Iœµ‚„Û­†R,m¤MH­¶ãpLÓ~ö¶•Ærîód8•¶åüƒY’œå—ùßúìƒy’Uå#ëˆ²LÆ1}Ìµf!r:çğ¨y-Ù›4¥qT\Æ?2ÄÎ÷úÒÎ¿½MC7Ûjo*É·¿ä²#¡7÷œ…hŠvy!¡ŒÉÂæOWtŸW“‘='kÃİEÈÉƒ.‰XN!y^[Ü¶³>l)Jâq%EÉzÕ×·\N‰G
+Dã¾Ò\wŞÁŸ&{W	%™»«Íö£¦îÒNi¹vİ·ÌÒ{i&“¥·ê¯á>æèa$^}ìµT¸çâİéãÊ
+|ceAIæ½‡#EÎ­8?a\O<vˆ­M¯ÒHš†IZ`£Onhâà/fùÙg.Ö§¨‡g¬¹ï†—Y­ò–Òsäû«(şTkwİ^æÚÒ‹!b‡$•„´È_ûÛí¾Øvä’:ä2ÙÖÛû[™=sñÏ†ïæ<Ë/îB+uUpï%É´ùòXºäÜ»Î·ò—Œ›ªÑqòÿ  ÿÿì]İoÓ0ï_xI+5í”¡²2M{Ò$x¨¦©¬Dê”©ÉêÿÏg;¶ãK:˜ğS“&svîÎ÷ñ»µØö«ÅfO®†ë£™†ÄY°­ÂmõŠğ:7¥?şá%æ2 Ó—†‹ğ®:(?^~øX&ëb©—\­¯# %7jã¢jŒÄ/›x!-69Ë{ä	±ùp‚ÀµÔMÓ¨[wMÍ“m_ziŒÃoraq™êØTBìqçY.-i¥i|”n÷ms
+l¹R7QíOáè>8{a°5iUFKˆëÒ³«ñ&¡zlaŞôÔî[185}!tÄS‹`À…–o”’Ş9 ©u¦MÛ_ghsø~I4vH_å¹“ãDYÈ˜Ú–“Æ6Çaß"É£™_C7KŒ^È
+ãEùìáOcúƒ.pŞ?Å­›+ZãĞn59ÙÃÍ‹ªéïĞM´2Šl“	/â«á!›µ€çÄñŠ'i¨OJôïÂvøû i*;°uYÇleáÓ•.^é´Ò?–#K0xïLÎpW®çtys5Æ—m{J»æ>S6©ª]ĞğéÆõ;‚İ0uT*4—€ÁÒò¨‘´Õş)šqL±‡Å¥C|)Ô.‹a–[‡zçòºó”Ó–9¸‹¥—™@ÑÜ)pĞ,ÇìàÛÁa›ì(¡_»0:*¦§ÂÂ³ºÛr'Ü×âÈÍÖı¸3‡ıÃ†%t ÈË¦Û­±7‡`ĞfD4íõâ1ÚÅTÑÅ;ø©†	—ÖG¾C“¸gF±êÍ!´=EgáïÿJ¬ëJ«‰ËFÃ\S/}j07]ºšxn<– 1[ ´D¨]Ì%ÏƒqhÎ–‹sÄá›¶/çhc0¾ÉfÙ«Ã«/ùÌùWŸÙ|”Aä@½éÌ¨ÙW>?n¤ï™ÿ³#½=%;ú;€yOjç9í€a2}†<gÜˆHnª½‘ÿa$1
+z1¬Wå>µ{»d‹>Lßæ¸›:™ÅõÎørLìL¹ô½pÛš	ÊL#m‡}«ñ(·ñ,ªÀe®«û¯·…W´4 Œ…¨:„¸94€F?ñ¿mÙİt^—Ù–'<)æóöÛeVç«ÿÓc\¢á°‰g2Ìõá{Q›&ãşs&*00Ã¡>–Po^2e©¨Ù(»M<†PıP1TjN’ô‚ÏdŠ€Ôôá*Úe¨<ÎöĞÚñ0«ã)@”Úç§·%mÒº§ÕöïFCÅF§§¸áı´Í«œYlÈÕıì¾İû¬EÉ@ƒ—¹}‘±öÍÉ<©xºÑœÉ9^R2(È yW¤±š[½a<Ø-Äºâ“º</òí[-X¯LÜ±LïğÉ*­m“Ô8P8!p /w¼æŸõFôÑ>¿7L!5ïSgP¤‹ãË	cX›ûu^+$× ÿ	 ª„gS…îôš£ä1Ê­æXi®)f^T5?¹„d˜å¥‡˜«‡«‰VêëÚ…>–&åD!#“¶‘—6ä¦¡A—ö ÅXÌ÷·ü_«Ió÷U¡Š2âûÂ_ì•­x´ìPìÎ¼9Y,­ñ«ã€GZ‹œŸ·J=š
+uöK¡z×¬\,ıkb0ø  ÿÿ á´Ê

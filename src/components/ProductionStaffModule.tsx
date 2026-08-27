@@ -453,7 +453,7 @@ const getAssignedDeliverableQty = (
     ''
   ).toString().trim();
 
-  // 1. Direct check: If assignment speciality itself starts with or contains quantity (e.g. "2 x Photobook Album", "2 × Photobook Album", "Photobook Album - Qty: 2")
+  // 1. Direct check: If assignment speciality itself starts with or contains quantity (e.g. "2 x Photobook Album", "2 x Photobook Album", "Photobook Album - Qty: 2")
   const directParsed = parseQtyAndText(rawSpeciality);
   if (directParsed.qty > 1) {
     return directParsed.qty;
@@ -662,7 +662,7 @@ export const ProductionStaffModule: React.FC = () => {
           const vOrd = String(v.order_id || '').trim().toLowerCase();
           const vEvt = String(v.event_id || 'default').trim().toLowerCase();
           if (cleanOrdId && vOrd === cleanOrdId) {
-            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase()) || vEvt === String(item.assignmentId).trim().toLowerCase()) {
+            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase())) {
               return true;
             }
           }
@@ -718,20 +718,15 @@ export const ProductionStaffModule: React.FC = () => {
       confirmedAt: ''
     };
 
-    const targetAssignment = (editorAssignments || []).find((ea: any) => ea.assignment_id === delivItem.assignmentId) || delivItem.assignmentObj;
-    const existingImage = (
-      targetAssignment?.customer_review_image ||
-      targetAssignment?.confirmation_proof ||
-      targetAssignment?.customer_communication_proof ||
-      targetAssignment?.client_communication_proof ||
-      targetAssignment?.proof_url ||
-      targetAssignment?.proof_image ||
-      targetAssignment?.uploaded_proof ||
-      ''
-    ).trim();
+    const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
+      const vOrd = String(v.order_id || '').trim().toLowerCase();
+      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
+      return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
+    });
+
+    const existingImage = (savedTargetVerif?.client_communication_consent_proof || delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
     const existingEditedLink = (
-      targetAssignment?.Edited_Drive_Link ||
-      targetAssignment?.edited_drive_link ||
+      savedTargetVerif?.upload_link_path ||
       delivItem.editedDriveLink || 
       delivItem.assignmentObj?.edited_drive_link || 
       delivItem.assignmentObj?.Edited_Drive_Link || 
@@ -748,19 +743,6 @@ export const ProductionStaffModule: React.FC = () => {
       server_upload_event_date: currentCfg.eventDate,
       server_upload_folder_name: currentCfg.folderName || '',
       event_configs: eventConfigs
-    });
-  };
-
-  const closeCustomerReviewModal = () => {
-    setCustomerReviewModal(null);
-    setCustomerReviewForm({
-      edited_drive_link: '',
-      customer_review_image: '',
-      selectedIds: [],
-      server_upload_confirmed: false,
-      server_upload_event_date: '',
-      server_upload_folder_name: '',
-      event_configs: {}
     });
   };
 
@@ -807,7 +789,7 @@ export const ProductionStaffModule: React.FC = () => {
           const vOrd = String(v.order_id || '').trim().toLowerCase();
           const vEvt = String(v.event_id || 'default').trim().toLowerCase();
           if (cleanOrdId && vOrd === cleanOrdId) {
-            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase()) || vEvt === String(item.assignmentId).trim().toLowerCase()) {
+            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase())) {
               return true;
             }
           }
@@ -858,18 +840,13 @@ export const ProductionStaffModule: React.FC = () => {
       confirmed: false
     };
 
-    // Strictly task-specific proof: Retrieve exclusively from this assignment's own record
-    const targetAssignment = (editorAssignments || []).find((ea: any) => ea.assignment_id === delivItem.assignmentId) || delivItem.assignmentObj;
-    const existingProof = (
-      targetAssignment?.confirmation_proof ||
-      targetAssignment?.customer_review_image ||
-      targetAssignment?.customer_communication_proof ||
-      targetAssignment?.client_communication_proof ||
-      targetAssignment?.proof_url ||
-      targetAssignment?.proof_image ||
-      targetAssignment?.uploaded_proof ||
-      ''
-    ).trim();
+    const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
+      const vOrd = String(v.order_id || '').trim().toLowerCase();
+      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
+      return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
+    });
+
+    const existingProof = (savedTargetVerif?.client_communication_consent_proof || delivItem.confirmationProof || '').trim();
 
     setEditingCompletedModal({ group: grp, actionItem: delivItem });
     setEditingCompletedForm({
@@ -879,18 +856,6 @@ export const ProductionStaffModule: React.FC = () => {
       server_upload_event_date: currentCfg.eventDate,
       server_upload_folder_name: currentCfg.folderName,
       event_configs: eventConfigs
-    });
-  };
-
-  const closeEditingCompletedModal = () => {
-    setEditingCompletedModal(null);
-    setEditingCompletedForm({
-      confirmation_proof: '',
-      selectedIds: [],
-      server_upload_confirmed: false,
-      server_upload_event_date: '',
-      server_upload_folder_name: '',
-      event_configs: {}
     });
   };
 
@@ -1033,16 +998,14 @@ export const ProductionStaffModule: React.FC = () => {
         // Edited Drive Link resolution
         const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
 
-        // Customer Confirmation Image / Proof resolution (strictly per task/assignment)
-        const targetAssign = (editorAssignments || []).find((ea: any) => ea.assignment_id === assignment.assignment_id) || assignment;
+        // Customer Confirmation Image / Proof resolution
         const confirmationProof = (
-          targetAssign?.confirmation_proof ||
-          (targetAssign as any)?.customer_review_image ||
-          targetAssign?.customer_communication_proof ||
-          targetAssign?.client_communication_proof ||
-          targetAssign?.proof_url ||
-          targetAssign?.proof_image ||
-          targetAssign?.uploaded_proof ||
+          assignment.confirmation_proof ||
+          assignment.customer_communication_proof ||
+          assignment.client_communication_proof ||
+          assignment.proof_url ||
+          assignment.proof_image ||
+          assignment.uploaded_proof ||
           ''
         ).trim();
 
@@ -1115,6 +1078,7 @@ export const ProductionStaffModule: React.FC = () => {
           eventDate: item.eventDate,
           targetFinishDate: item.targetFinishDate,
           rawFootageLink: item.rawFootageLink,
+          confirmationProof: item.confirmationProof,
           serverUploadConfirmed: item.serverUploadConfirmed,
           serverUploadEventDate: item.serverUploadEventDate,
           serverUploadFolderName: item.serverUploadFolderName,
@@ -1130,6 +1094,9 @@ export const ProductionStaffModule: React.FC = () => {
       grp.deliverables.push(item);
       if (!grp.rawFootageLink && item.rawFootageLink) {
         grp.rawFootageLink = item.rawFootageLink;
+      }
+      if (!grp.confirmationProof && item.confirmationProof) {
+        grp.confirmationProof = item.confirmationProof;
       }
       if (!grp.serverUploadConfirmed && item.serverUploadConfirmed) {
         grp.serverUploadConfirmed = item.serverUploadConfirmed;
@@ -1274,7 +1241,7 @@ export const ProductionStaffModule: React.FC = () => {
       setEditingStartedModal(null);
       setEditingStartedForm({ expected_delivery_date: '', estimated_completion_date: '', estimated_completion_time: '', selectedIds: [] });
       await refreshData();
-      showToast('🚀 Status updated to Editing Started!');
+      showToast(' Status updated to Editing Started!');
     } catch (err: any) {
       console.error('Error submitting Editing Started:', err);
       alert('Failed to update status: ' + (err.message || 'Please try again.'));
@@ -1370,6 +1337,10 @@ export const ProductionStaffModule: React.FC = () => {
         if (customerReviewForm.edited_drive_link?.trim()) {
           prodUpdate.edited_drive_link = customerReviewForm.edited_drive_link.trim();
         }
+        if (imgUrl) {
+          prodUpdate.client_communication_proof = imgUrl;
+          prodUpdate.customer_communication_proof = imgUrl;
+        }
         await updateProduction(prodId, prodUpdate);
       }
 
@@ -1395,10 +1366,10 @@ export const ProductionStaffModule: React.FC = () => {
       });
 
       await refreshData();
-      showToast("✅ Edited Folder Server Upload Confirmed & Saved!");
+      showToast(" Edited Folder Server Upload Confirmed & Saved!");
     } catch (err: any) {
       console.error("Error saving server upload confirmation:", err);
-      alert("❌ Failed to save confirmation: " + (err.message || String(err)));
+      alert(" Failed to save confirmation: " + (err.message || String(err)));
     } finally {
       setIsSubmitting(false);
     }
@@ -1481,6 +1452,11 @@ export const ProductionStaffModule: React.FC = () => {
           remarks: `Customer Review updated by ${staffName} on ${new Date().toLocaleDateString()}`
         };
 
+        if (imgUrl) {
+          prodPayload.client_communication_proof = imgUrl;
+          prodPayload.customer_communication_proof = imgUrl;
+        }
+
         if (cfg.confirmed && cfg.eventDate && cfg.folderName) {
           prodPayload.server_upload_confirmed = true;
           prodPayload.server_upload_event_date = cfg.eventDate.trim();
@@ -1513,7 +1489,7 @@ export const ProductionStaffModule: React.FC = () => {
           if (orderId) {
             await saveClientAcceptanceVerification({
               order_id: orderId,
-              event_id: deliv.assignmentId || deliv.eventId || evtKey || 'default',
+              event_id: deliv.eventId || evtKey || 'default',
               folder_name: fName,
               upload_link_path: lPath,
               client_communication_consent_proof: imgUrl || '',
@@ -1559,7 +1535,7 @@ Thank you.`;
         event_configs: {} 
       });
       await refreshData();
-      showToast('📁 Customer Review saved & moved to Customer Review!');
+      showToast(' Customer Review saved & moved to Customer Review!');
 
       // Automatically open 2nd popup: WhatsApp review message
       setWhatsappModal({
@@ -1687,6 +1663,9 @@ Thank you.`;
           server_upload_confirmed: true,
           server_upload_event_date: serverEventDate,
           server_upload_folder_name: serverFolderName,
+          client_communication_proof: mainProofUrl || proofInput,
+          customer_communication_proof: mainProofUrl || proofInput,
+          proof_url: mainProofUrl || proofInput,
           remarks: `Editing Completed & Customer Review Proof (${mainProofUrl || proofInput}) uploaded. Server Folder: "${serverFolderName}" (Event Date: ${serverEventDate}) by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }
@@ -1715,7 +1694,7 @@ Thank you.`;
           if (orderId) {
             await saveClientAcceptanceVerification({
               order_id: orderId,
-              event_id: deliv.assignmentId || deliv.eventId || evtKey || 'default',
+              event_id: deliv.eventId || evtKey || 'default',
               folder_name: fName,
               upload_link_path: lPath,
               client_communication_consent_proof: mainProofUrl || proofInput,
@@ -1744,11 +1723,11 @@ Thank you.`;
         event_configs: {}
       });
       await refreshData();
-      showToast("✅ Customer Review Proof & Server Upload confirmed!");
-      alert("✅ Customer Review Proof and Server Upload confirmed successfully!");
+      showToast(" Customer Review Proof & Server Upload confirmed!");
+      alert(" Customer Review Proof and Server Upload confirmed successfully!");
     } catch (err: any) {
       console.error("[ProductionStaffModule] Error saving confirmation proof:", err);
-      alert("❌ Failed to save Customer Review Proof: " + (err.message || String(err)));
+      alert(" Failed to save Customer Review Proof: " + (err.message || String(err)));
     } finally {
       setIsSubmitting(false);
     }
@@ -1877,7 +1856,7 @@ Thank you.`;
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 pl-1">
             <h2 className="text-xs font-mono font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-              <span>🎬 My Assigned Deliverables</span>
+              <span> My Assigned Deliverables</span>
               <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px]">{activeBookings.length}</span>
             </h2>
             <ListSortFilter value={sortOrder} onChange={setSortOrder} />
@@ -1902,7 +1881,7 @@ Thank you.`;
                         <div className="flex items-center justify-between mb-3 border-b border-zinc-800/80 pb-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
-                              📋 Customer & Order Details
+                               Customer & Order Details
                             </span>
                             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-bold">
                               {grp.orderId}
@@ -1929,7 +1908,7 @@ Thank you.`;
                             </div>
                             {grp.customerMobile ? (
                               <div className="text-xs text-emerald-400 font-mono font-semibold flex items-center gap-1 mt-0.5 break-all">
-                                <span>📞</span>
+                                <span></span>
                                 <span>{grp.customerMobile}</span>
                               </div>
                             ) : (
@@ -1977,7 +1956,7 @@ Thank you.`;
                     <div className="p-4 bg-zinc-950/90 w-full max-w-full">
                       <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <span className="flex items-center gap-2 flex-wrap">
-                          <span>📦 Assigned Deliverables</span>
+                          <span> Assigned Deliverables</span>
                           <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px]">
                             {grp.deliverables.length} {grp.deliverables.length === 1 ? 'Deliverable' : 'Deliverables'}
                           </span>
@@ -1990,9 +1969,9 @@ Thank you.`;
 
                       {/* DESKTOP LAYOUT (Table view, visible on all screens) */}
                       <div className="block overflow-x-auto w-full">
-                        <table className="w-full text-left border-collapse min-w-max block sm:table">
-                          <thead className="hidden sm:table-header-group">
-                            <tr className="hidden sm:table-row bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                        <table className="w-full text-left border-collapse min-w-max">
+                          <thead>
+                            <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                               <th className="px-3.5 py-2.5 font-bold">Order ID</th>
                               <th className="px-3.5 py-2.5 font-bold">Customer Name</th>
                               <th className="px-3.5 py-2.5 font-bold">Event Name</th>
@@ -2006,7 +1985,7 @@ Thank you.`;
                               <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
                             </tr>
                           </thead>
-                          <tbody className="block sm:table-row-group divide-y divide-zinc-900/80 sm:divide-y text-xs font-sans">
+                          <tbody className="divide-y divide-zinc-900/80 text-xs font-sans">
                             {grp.deliverables.map((delivItem: any) => {
                               const delivBadge = getStatusBadge(delivItem.status);
                               const isDelivLocked = ['Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'].includes(delivItem.status) || grp.orderObj?.current_stage === 'Business Owner Review';
@@ -2017,25 +1996,25 @@ Thank you.`;
                               const effectiveRawFootageLink = delivItem.rawFootageLink || grp.rawFootageLink;
 
                               return (
-                                <tr key={delivItem.assignmentId} className="block sm:table-row hover:bg-zinc-900/40 transition-colors p-4 sm:p-0 border-b border-zinc-900 sm:border-0 relative space-y-2 sm:space-y-0">
+                                <tr key={delivItem.assignmentId} className="hover:bg-zinc-900/40 transition-colors">
                                   {/* 1. Order ID */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-mono font-bold text-violet-400 whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Order ID</span>
+                                  <td className="px-3.5 py-3 font-mono font-bold text-violet-400 whitespace-nowrap">
                                     {delivItem.orderId}
                                   </td>
 
                                   {/* 2. Customer Name */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-bold text-white whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Customer Name</span>
+                                  <td className="px-3.5 py-3 font-bold text-white whitespace-nowrap">
                                     <div>{delivItem.customerName}</div>
                                     {delivItem.customerMobile && (
                                       <div className="text-[10px] text-emerald-400 font-mono font-normal flex items-center gap-1 mt-0.5">
-                                        <span>📞</span>
+                                        <span></span>
                                         <span>{delivItem.customerMobile}</span>
                                       </div>
                                     )}
                                   </td>
 
                                   {/* 3. Event Name */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-semibold text-purple-300"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Event Name</span>
+                                  <td className="px-3.5 py-3 font-semibold text-purple-300">
                                     <div className="flex items-center gap-2">
                                       <span className="text-zinc-200 font-bold">{delivItem.eventName || 'N/A'}</span>
                                     </div>
@@ -2045,9 +2024,9 @@ Thank you.`;
                                   </td>
 
                                   {/* 4. Assigned Task (Deliverable) */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-bold text-zinc-300"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Assigned Task</span>
+                                  <td className="px-3.5 py-3 font-bold text-zinc-300">
                                     <div className="flex items-center gap-1.5">
-                                      <span>🎯 {delivName}</span>
+                                      <span> {delivName}</span>
                                       {delivQty > 1 && (
                                         <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 font-mono text-[10px] border border-zinc-800">
                                           x{delivQty}
@@ -2058,12 +2037,12 @@ Thank you.`;
                                   </td>
 
                                   {/* 5. Target Delivery Date */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-mono text-xs text-zinc-200 font-bold whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Target Delivery Date</span>
+                                  <td className="px-3.5 py-3 font-mono text-xs text-zinc-200 font-bold whitespace-nowrap">
                                     {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
                                   </td>
 
                                   {/* 6. Note */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-mono whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Note</span>
+                                  <td className="px-3.5 py-3 font-mono whitespace-nowrap">
                                      {delivItem.prodObj?.project_notes ? (
                                        <button
                                          onClick={() => setSelectedNote(delivItem.prodObj?.project_notes)}
@@ -2080,14 +2059,14 @@ Thank you.`;
                                   </td>
 
                                   {/* 7. Current Status */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Current Status</span>
+                                  <td className="px-3.5 py-3 whitespace-nowrap">
                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${delivBadge.color}`}>
                                       {delivBadge.label}
                                     </span>
                                   </td>
 
                                   {/* 8. Edited Drive Link */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-mono"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Raw Footage</span>
+                                  <td className="px-3.5 py-3 font-mono">
                                     {delivItem.editedDriveLink && (delivItem.editedDriveLink.startsWith('http://') || delivItem.editedDriveLink.startsWith('https://')) ? (
                                       <a
                                         href={delivItem.editedDriveLink.startsWith('http') ? delivItem.editedDriveLink : `https://${delivItem.editedDriveLink}`}
@@ -2209,14 +2188,14 @@ Thank you.`;
                                     })()}
                                     {Boolean(delivItem.serverUploadFolderName) && (
                                       <div className="text-[9px] font-mono text-zinc-400 mt-1 flex items-center gap-1" title={`Server Folder: ${delivItem.serverUploadFolderName} (Event Date: ${delivItem.serverUploadEventDate || 'N/A'})`}>
-                                        <span className="text-emerald-400">📁</span>
+                                        <span className="text-emerald-400"></span>
                                         <span className="truncate max-w-[120px]">{delivItem.serverUploadFolderName}</span>
                                       </div>
                                     )}
                                   </td>
 
                                   {/* Row Footage */}
-                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Current Status</span>
+                                  <td className="px-3.5 py-3 whitespace-nowrap">
                                     {effectiveRawFootageLink && (
                                       effectiveRawFootageLink.startsWith('http') || effectiveRawFootageLink.includes('drive.google.com') 
                                     ) ? (
@@ -2226,7 +2205,7 @@ Thank you.`;
                                         rel="noopener noreferrer"
                                         className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1 cursor-pointer"
                                       >
-                                        View Row Footage ↗
+                                        View Row Footage 
                                       </a>
                                     ) : (
                                       <span className="text-zinc-500 italic text-[11px]">Pending</span>
@@ -2243,7 +2222,7 @@ Thank you.`;
                                       buttonClassName="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer mx-auto"
                                       buttonContent={
                                         <>
-                                          <span>⚡ Action</span>
+                                          <span> Action</span>
                                           <ChevronDown className="w-3.5 h-3.5" />
                                         </>
                                       }
@@ -2439,7 +2418,7 @@ Thank you.`;
                                 <div className="space-y-1 min-w-0">
                                   <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Assigned Task</div>
                                   <div className="text-xs font-bold text-purple-300 break-words flex items-start gap-1.5">
-                                    <span className="shrink-0 mt-0.5">🎯</span>
+                                    <span className="shrink-0 mt-0.5"></span>
                                     <span className="flex-1">{delivName}</span>
                                   </div>
                                   <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">{delivItem.assignmentId}</span>
@@ -2627,7 +2606,7 @@ Thank you.`;
                                   {Boolean(delivItem.serverUploadFolderName) && (
                                     <div className="text-[10px] font-mono text-zinc-300 bg-zinc-950/80 px-2.5 py-1.5 rounded-lg border border-zinc-800 flex items-center justify-between gap-2 mt-1">
                                       <span className="flex items-center gap-1.5 truncate">
-                                        <span className="text-emerald-400">📁</span>
+                                        <span className="text-emerald-400"></span>
                                         <span className="truncate">{delivItem.serverUploadFolderName}</span>
                                       </span>
                                       {delivItem.serverUploadEventDate && (
@@ -2648,7 +2627,7 @@ Thank you.`;
                                   buttonClassName="w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
                                   buttonContent={
                                     <>
-                                      <span>⚡ Action Menu</span>
+                                      <span> Action Menu</span>
                                       <ChevronDown className="w-4 h-4" />
                                     </>
                                   }
@@ -2910,7 +2889,7 @@ Thank you.`;
                   <h3 className="text-base font-bold text-white">Customer Review & Server Checklist</h3>
                 </div>
                 <button 
-                  onClick={closeCustomerReviewModal}
+                  onClick={() => setCustomerReviewModal(null)}
                   className="text-zinc-400 hover:text-white p-1 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -2951,7 +2930,7 @@ Thank you.`;
                   <div className="space-y-3 pt-2 border-t border-zinc-800">
                     <div className="flex items-center justify-between">
                       <label className="block text-xs font-mono font-bold text-zinc-200 uppercase flex items-center gap-1.5">
-                        <span>📁</span>
+                        <span></span>
                         <span>Server Upload Confirmation</span>
                       </label>
                       <span className="text-[10px] text-zinc-500 font-mono">Server Checklist</span>
@@ -2983,7 +2962,7 @@ Thank you.`;
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm">
                                       <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                                      <span>✓ Edited Folder Uploaded in Server</span>
+                                      <span>v Edited Folder Uploaded in Server</span>
                                     </div>
                                     <button
                                       type="button"
@@ -3157,7 +3136,7 @@ Thank you.`;
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
                 <button
                   type="button"
-                  onClick={closeCustomerReviewModal}
+                  onClick={() => setCustomerReviewModal(null)}
                   className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
                 >
                   Cancel
@@ -3283,7 +3262,7 @@ Thank you.`;
                   <h3 className="text-base font-bold text-white">Upload Confirmation / Proof</h3>
                 </div>
                 <button 
-                  onClick={closeEditingCompletedModal}
+                  onClick={() => setEditingCompletedModal(null)}
                   className="text-zinc-400 hover:text-white p-1 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -3362,7 +3341,7 @@ Thank you.`;
                     <div className="p-4 bg-zinc-950 border border-indigo-500/30 rounded-xl space-y-4 animate-in fade-in duration-200">
                       <div className="text-[11px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
-                          <span className="text-emerald-400">📁</span>
+                          <span className="text-emerald-400"></span>
                           <span>Server Upload Confirmation</span>
                         </span>
                         <span className="text-[10px] text-rose-400 font-normal">* Mandatory Checklist</span>
@@ -3515,7 +3494,7 @@ Thank you.`;
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
                 <button
                   type="button"
-                  onClick={closeEditingCompletedModal}
+                  onClick={() => setEditingCompletedModal(null)}
                   className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
                 >
                   Cancel
@@ -3531,7 +3510,7 @@ Thank you.`;
                   }
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-indigo-600/20"
                 >
-                  {isSubmitting ? 'Uploading Proof & Saving...' : 'Submit & Confirm Server Upload 🎯'}
+                  {isSubmitting ? 'Uploading Proof & Saving...' : 'Submit & Confirm Server Upload '}
                 </button>
               </div>
             </div>

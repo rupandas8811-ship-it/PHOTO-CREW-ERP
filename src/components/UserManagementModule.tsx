@@ -253,7 +253,7 @@ export const UserManagementModule: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-101 flex items-center gap-2">
-            <span>🛡️</span> Personnel & Access Administration
+            <span></span> Personnel & Access Administration
           </h2>
           <p className="text-xs text-slate-400 mt-0.5">
             Register employees, assign role isolation boundaries, deactivate accounts, and view overall credentials index.
@@ -323,7 +323,7 @@ export const UserManagementModule: React.FC = () => {
               onClick={() => setShowDiagnosticModal(true)}
               className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold tracking-wide uppercase mt-2 underline flex items-center gap-1 cursor-pointer select-none bg-transparent border-none p-0"
             >
-              Live Handshake HUD ›
+              Live Handshake HUD &rarr;
             </button>
           </div>
           <button 
@@ -345,7 +345,7 @@ export const UserManagementModule: React.FC = () => {
         <div className="lg:col-span-12 bg-slate-850 border border-slate-800 rounded-xl overflow-hidden shadow-md">
           <div className="p-4 bg-slate-900/30 border-b border-slate-800 flex items-center justify-between">
             <h3 className="text-xs font-semibold text-slate-350 uppercase tracking-widest flex items-center gap-1.5">
-              <span>👥</span> Database Directory Users
+              <span></span> Database Directory Users
             </h3>
             <span className="text-[9px] bg-indigo-650/15 text-indigo-400 font-mono px-2 py-0.5 rounded border border-indigo-500/20 uppercase font-semibold">
               RBAC Boundaries Enforcement
@@ -1106,11 +1106,11 @@ export const UserManagementModule: React.FC = () => {
                   </span>
                   <span>
                     {localReport.connection === 'connected' ? (
-                      <span className="text-emerald-400 font-bold">🟢 ONLINE</span>
+                      <span className="text-emerald-400 font-bold"> ONLINE</span>
                     ) : localReport.connection === 'checking' ? (
-                      <span className="text-amber-400 font-bold animate-pulse">🟡 TESTING...</span>
+                      <span className="text-amber-400 font-bold animate-pulse"> TESTING...</span>
                     ) : (
-                      <span className="text-rose-400 font-bold">🔴 OFFLINE</span>
+                      <span className="text-rose-400 font-bold"> OFFLINE</span>
                     )}
                   </span>
                 </div>
@@ -1123,11 +1123,11 @@ export const UserManagementModule: React.FC = () => {
                   </span>
                   <span>
                     {localReport.read === 'ok' ? (
-                      <span className="text-emerald-400 font-bold">🟢 GRANTED</span>
+                      <span className="text-emerald-400 font-bold"> GRANTED</span>
                     ) : localReport.read === 'fail' ? (
-                      <span className="text-rose-400 font-bold">🔴 DENIED</span>
+                      <span className="text-rose-400 font-bold"> DENIED</span>
                     ) : (
-                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                      <span className="text-slate-500 font-bold"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -1140,11 +1140,11 @@ export const UserManagementModule: React.FC = () => {
                   </span>
                   <span>
                     {localReport.insert === 'ok' ? (
-                      <span className="text-emerald-400 font-bold">🟢 GRANTED</span>
+                      <span className="text-emerald-400 font-bold"> GRANTED</span>
                     ) : localReport.insert === 'fail' ? (
-                      <span className="text-rose-400 font-bold">🔴 DENIED</span>
+                      <span className="text-rose-400 font-bold"> DENIED</span>
                     ) : (
-                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                      <span className="text-slate-500 font-bold"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -1157,11 +1157,11 @@ export const UserManagementModule: React.FC = () => {
                   </span>
                   <span>
                     {localReport.update === 'ok' ? (
-                      <span className="text-emerald-400 font-bold">🟢 GRANTED</span>
+                      <span className="text-emerald-400 font-bold"> GRANTED</span>
                     ) : localReport.update === 'fail' ? (
-                      <span className="text-rose-400 font-bold">🔴 DENIED</span>
+                      <span className="text-rose-400 font-bold"> DENIED</span>
                     ) : (
-                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                      <span className="text-slate-500 font-bold"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -1174,11 +1174,11 @@ export const UserManagementModule: React.FC = () => {
                   </span>
                   <span>
                     {localReport.delete === 'ok' ? (
-                      <span className="text-emerald-400 font-bold">🟢 GRANTED</span>
+                      <span className="text-emerald-400 font-bold"> GRANTED</span>
                     ) : localReport.delete === 'fail' ? (
-                      <span className="text-rose-400 font-bold">🔴 DENIED</span>
+                      <span className="text-rose-400 font-bold"> DENIED</span>
                     ) : (
-                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                      <span className="text-slate-500 font-bold"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -1191,11 +1191,11 @@ export const UserManagementModule: React.FC = () => {
                   </span>
                   <span>
                     {localReport.realtime === 'ok' ? (
-                      <span className="text-emerald-400 font-bold">🟢 SUBSCRIBED</span>
+                      <span className="text-emerald-400 font-bold"> SUBSCRIBED</span>
                     ) : localReport.realtime === 'fail' ? (
-                      <span className="text-rose-400 font-bold">🔴 FAILURE</span>
+                      <span className="text-rose-400 font-bold"> FAILURE</span>
                     ) : (
-                      <span className="text-slate-500 font-bold">⚪ UNTESTED</span>
+                      <span className="text-slate-500 font-bold"> UNTESTED</span>
                     )}
                   </span>
                 </div>
@@ -1212,7 +1212,7 @@ export const UserManagementModule: React.FC = () => {
                     {localReport.errorMessage}
                   </pre>
                   <p className="text-[9.5px]/1.4 text-slate-450 italic mt-1 font-sans">
-                    💡 Hint: This usually happens if the active personnel does not have writing role permissions in your project schema RLS controls. Use the role switcher to test with elevated credentials.
+                     Hint: This usually happens if the active personnel does not have writing role permissions in your project schema RLS controls. Use the role switcher to test with elevated credentials.
                   </p>
                 </div>
               )}

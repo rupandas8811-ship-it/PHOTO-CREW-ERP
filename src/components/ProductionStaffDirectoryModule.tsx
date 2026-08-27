@@ -225,7 +225,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
           ...payload,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
-        showToast('success', '✅ Production staff saved successfully.');
+        showToast('success', ' Production staff saved successfully.');
       } else {
         // New Staff Mode
         // 1. Create auth user
@@ -268,13 +268,13 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
           ...payload,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
-        showToast('success', '✅ Production staff saved successfully.');
+        showToast('success', ' Production staff saved successfully.');
       }
       setIsFormOpen(false);
       setEditingStaff(null);
     } catch (err: any) {
       console.warn("Failed saving staff", err?.message || err);
-      showToast('error', '❌ Failed to save Production Staff.');
+      showToast('error', ' Failed to save Production Staff.');
     } finally {
       setIsSaving(false);
     }
@@ -708,7 +708,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                           </div>
                           <div className="text-[10px] font-mono mt-0.5 text-zinc-550 flex items-center gap-1.5 flex-wrap">
                             <span className="text-zinc-450">{employeeIdClean}</span>
-                            <span>•</span>
+                            <span>*</span>
                             <span className="flex items-center gap-0.5 text-zinc-500">
                               <MapPin className="w-2.5 h-2.5" /> {cityClean}
                             </span>
@@ -874,7 +874,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       </label>
                       {editingStaff && (
                         <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                          🔒 Locked (Permanent)
+                           Locked (Permanent)
                         </span>
                       )}
                     </div>
@@ -914,7 +914,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       </label>
                       {editingStaff && (
                         <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                          🔒 Locked (Permanent)
+                           Locked (Permanent)
                         </span>
                       )}
                     </div>
@@ -1095,9 +1095,9 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       
                       <div className="text-[10px] text-zinc-500 font-mono mt-1.5 flex items-center gap-3.5 flex-wrap">
                         <span>Staff ID: <strong className="text-zinc-300">{empIdClean}</strong></span>
-                        <span>•</span>
+                        <span>*</span>
                         <span>Base: <strong className="text-zinc-300">{cityClean}</strong></span>
-                        <span>•</span>
+                        <span>*</span>
                         <span>Joined: <strong className="text-zinc-300">{viewingStaff.joining_date}</strong></span>
                       </div>
                     </div>
@@ -1232,7 +1232,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                             </div>
                             <div className="text-[10px] text-zinc-550 mt-1 flex items-center gap-3">
                               <span>Work ID: <strong className="text-zinc-400">{assign.production_id}</strong></span>
-                              <span>•</span>
+                              <span>*</span>
                               <span>Target Delivery: <strong className="text-zinc-400">{assign.due_date}</strong></span>
                             </div>
                           </div>
@@ -1247,7 +1247,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
                       {stats.currentAssignmentsList.length === 0 && (
                         <div className="text-center py-8 text-zinc-550 uppercase text-[10px] tracking-widest">
-                          👍 No active assignments on hand. Editor is ready for new projects!
+                           No active assignments on hand. Editor is ready for new projects!
                         </div>
                       )}
                     </div>

@@ -307,7 +307,7 @@ export const CameraLensStatsCard: React.FC<CameraLensStatsCardProps> = ({
             ) : onClick ? (
               <span className="inline-flex items-center gap-0.5 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-900/90 border border-zinc-800 text-zinc-400 group-hover/card:text-white group-hover/card:border-zinc-600 group-hover/card:bg-zinc-850 transition-all shadow-sm shrink-0 mt-0.5">
                 <span>View</span>
-                <span className="text-[10px] leading-none transition-transform group-hover/card:translate-x-0.5 group-hover/card:-translate-y-0.5">↗</span>
+                <span className="text-[10px] leading-none transition-transform group-hover/card:translate-x-0.5 group-hover/card:-translate-y-0.5"></span>
               </span>
             ) : null}
           </div>

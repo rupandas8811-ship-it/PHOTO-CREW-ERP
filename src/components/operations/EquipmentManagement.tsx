@@ -240,11 +240,11 @@ export const EquipmentManagement: React.FC = () => {
 
         if (error) {
           console.error('Failed to add equipment:', error);
-          showToast('error', '❌ Failed to add equipment.');
+          showToast('error', ' Failed to add equipment.');
           return;
         }
 
-        showToast('success', '✅ Equipment added successfully.');
+        showToast('success', ' Equipment added successfully.');
         refreshData();
         handleCancelEdit();
       }
@@ -805,7 +805,7 @@ export const EquipmentManagement: React.FC = () => {
                   className={`w-full bg-zinc-955 border ${formErrors.includes('equipment_name') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
                 />
                 {formErrors.includes('equipment_name') && (
-                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                  <p className="text-rose-500 text-[10px] mt-1 font-mono"> Please fill all required fields.</p>
                 )}
               </div>
 
@@ -824,7 +824,7 @@ export const EquipmentManagement: React.FC = () => {
                   className={`w-full bg-zinc-955 border ${formErrors.includes('brand') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
                 />
                 {formErrors.includes('brand') && (
-                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                  <p className="text-rose-500 text-[10px] mt-1 font-mono"> Please fill all required fields.</p>
                 )}
               </div>
 
@@ -846,7 +846,7 @@ export const EquipmentManagement: React.FC = () => {
                   ))}
                 </select>
                 {formErrors.includes('equipment_type') && (
-                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                  <p className="text-rose-500 text-[10px] mt-1 font-mono"> Please fill all required fields.</p>
                 )}
               </div>
 
@@ -867,7 +867,7 @@ export const EquipmentManagement: React.FC = () => {
                   <option value="Inactive">Inactive</option>
                 </select>
                 {formErrors.includes('status') && (
-                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                  <p className="text-rose-500 text-[10px] mt-1 font-mono"> Please fill all required fields.</p>
                 )}
               </div>
             </fieldset>
@@ -890,7 +890,7 @@ export const EquipmentManagement: React.FC = () => {
               </div>
             ) : (
               <div className="bg-zinc-950/40 border border-zinc-850 p-3 rounded-lg text-[10px] text-zinc-500 font-mono mt-4">
-                🔒 Read-only mode access.
+                 Read-only mode access.
               </div>
             )}
           </form>
@@ -937,12 +937,12 @@ export const EquipmentManagement: React.FC = () => {
 
                         {/* Brand */}
                         <td className="p-3.5 font-mono text-zinc-300 font-medium">
-                          {eq.brand || '—'}
+                          {eq.brand || '-'}
                         </td>
 
                         {/* Category */}
                         <td className="p-3.5 font-mono text-zinc-400 text-[11px]">
-                          {eq.equipment_type || (eq as any).Equipment_Category || '—'}
+                          {eq.equipment_type || (eq as any).Equipment_Category || '-'}
                         </td>
 
                         {/* Status */}
@@ -1212,7 +1212,7 @@ export const EquipmentManagement: React.FC = () => {
                     <div className="space-y-1">
                       <span className="text-zinc-500 font-mono text-[10px] block uppercase">Purchase Price</span>
                       <span className="text-white font-bold font-mono">
-                        {selectedEq.purchase_price ? `₹${selectedEq.purchase_price.toLocaleString('en-IN')}` : 'N/A'}
+                        {selectedEq.purchase_price ? `Rs. ${selectedEq.purchase_price.toLocaleString('en-IN')}` : 'N/A'}
                       </span>
                     </div>
 
@@ -1298,7 +1298,7 @@ export const EquipmentManagement: React.FC = () => {
                 </div>
                 <h4 className="text-lg font-bold text-white mt-1.5">{busyEquipment.equipment.equipment_name}</h4>
                 <p className="text-xs text-zinc-400 mt-0.5 font-mono">
-                  Brand: <span className="text-zinc-300 font-medium">{busyEquipment.equipment.brand || '—'}</span>
+                  Brand: <span className="text-zinc-300 font-medium">{busyEquipment.equipment.brand || '-'}</span>
                   {busyEquipment.equipment.model && <span> | Model: <span className="text-zinc-300 font-medium">{busyEquipment.equipment.model}</span></span>}
                   {busyEquipment.equipment.serial_number && <span> | S/N: <span className="text-zinc-300 font-mono font-medium">{busyEquipment.equipment.serial_number}</span></span>}
                 </p>
@@ -1342,7 +1342,7 @@ export const EquipmentManagement: React.FC = () => {
                             </div>
                           </td>
                           <td className="p-3.5 font-mono text-[11px] text-zinc-400">
-                            {task.orderId || task.leadId || '—'}
+                            {task.orderId || task.leadId || '-'}
                           </td>
                           <td className="p-3.5 text-right">
                             <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border bg-amber-500/10 text-amber-400 border-amber-500/20">
