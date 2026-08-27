@@ -670,26 +670,21 @@ export const ProductionStaffModule: React.FC = () => {
         });
 
         const existingConfirmed = Boolean(
-          savedVerif?.consent_proof_verified ||
           item.serverUploadConfirmed ||
           item.assignmentObj?.server_upload_confirmed ||
-          item.assignmentObj?.edited_folder_uploaded_to_server ||
-          item.prodObj?.server_upload_confirmed
+          item.assignmentObj?.edited_folder_uploaded_to_server
         );
         const rawDate = (
           item.serverUploadEventDate ||
           item.assignmentObj?.server_upload_event_date ||
-          item.prodObj?.server_upload_event_date ||
           item.eventDate ||
           grp.eventDate ||
           ''
         ).trim();
         const existingEventDate = formatDateToDDMMYY(rawDate) || rawDate;
         const existingFolderName = (
-          savedVerif?.folder_name ||
           item.serverUploadFolderName ||
           item.assignmentObj?.server_upload_folder_name ||
-          item.prodObj?.server_upload_folder_name ||
           ''
         ).trim();
 
@@ -724,13 +719,11 @@ export const ProductionStaffModule: React.FC = () => {
       return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
     });
 
-    const existingImage = (savedTargetVerif?.client_communication_consent_proof || delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
+    const existingImage = (delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
     const existingEditedLink = (
-      savedTargetVerif?.upload_link_path ||
       delivItem.editedDriveLink || 
       delivItem.assignmentObj?.edited_drive_link || 
       delivItem.assignmentObj?.Edited_Drive_Link || 
-      delivItem.prodObj?.edited_drive_link || 
       ''
     ).trim();
 
@@ -797,25 +790,20 @@ export const ProductionStaffModule: React.FC = () => {
         });
 
         const existingConfirmed = Boolean(
-          savedVerif?.consent_proof_verified ||
           item.serverUploadConfirmed ||
           item.assignmentObj?.server_upload_confirmed ||
-          item.assignmentObj?.edited_folder_uploaded_to_server ||
-          item.prodObj?.server_upload_confirmed
+          item.assignmentObj?.edited_folder_uploaded_to_server
         );
         const existingEventDate = (
           item.serverUploadEventDate ||
           item.assignmentObj?.server_upload_event_date ||
-          item.prodObj?.server_upload_event_date ||
           item.eventDate ||
           grp.eventDate ||
           ''
         ).trim();
         const existingFolderName = (
-          savedVerif?.folder_name ||
           item.serverUploadFolderName ||
           item.assignmentObj?.server_upload_folder_name ||
-          item.prodObj?.server_upload_folder_name ||
           ''
         ).trim();
 
@@ -846,7 +834,7 @@ export const ProductionStaffModule: React.FC = () => {
       return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
     });
 
-    const existingProof = (savedTargetVerif?.client_communication_consent_proof || delivItem.confirmationProof || '').trim();
+    const existingProof = (delivItem.confirmationProof || delivItem.assignmentObj?.confirmation_proof || '').trim();
 
     setEditingCompletedModal({ group: grp, actionItem: delivItem });
     setEditingCompletedForm({
