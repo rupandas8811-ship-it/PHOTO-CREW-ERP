@@ -1,4 +1,4 @@
-ï»¿import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AddNoteModal } from "./AddNoteModal";
 import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
@@ -11660,85 +11660,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {[
               { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
 
-{ label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 18, 15, 22, 19, 24, 21], trendText: 'Quotation' },              { label: 'Quote Follow-up', val: statQuoteFollowups, theme: 'gold' as CameraLensTheme, filterValue: 'Quote Follow-up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Scheduled CRM' },
-              { label: 'Confirm Order', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Confirm Order', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'To Operations' },
-              { label: 'Lead Lost', val: statLeadLost, theme: 'red' as CameraLensTheme, filterValue: 'Lead Lost', chartPoints: [4, 6, 3, 7, 5, 8, 4], trendText: 'Opportunity Closed' },
-            ].map((card, idx) => (
-              <CameraLensStatsCard
-                key={idx}
-                label={card.label}
-                val={card.val}
-                theme={card.theme}
-                onClick={() => setFilterStatus(card.filterValue as any)}
-                isActive={filterStatus === card.filterValue}
-                chartPoints={card.chartPoints}
-                trendText={card.trendText}
-              />
-            ))}
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl mt-4">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300 whitespace-nowrap">
-                <thead className="bg-slate-950/50 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Lead ID</th>
-                    <th className="px-4 py-3 font-medium">Customer</th>
-                    <th className="px-4 py-3 font-medium">Events</th>
-                    <th className="px-4 py-3 font-medium">Phone</th>
-                    <th className="px-4 py-3 font-medium">Stage</th>
-                    <th className="px-4 py-3 font-medium">Amount</th>
-                    <th className="px-4 py-3 font-medium text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {filteredLeads.map((lead) => (
-                    <tr key={lead.lead_id || lead.id} className="hover:bg-slate-800/20 transition-colors group">
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-xs text-slate-500">#{(lead.lead_id || lead.id || '').slice(0, 6)}</span>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-slate-100">
-                        {lead.customer_name}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-xs bg-slate-800 px-2 py-0.5 rounded text-slate-300 truncate max-w-[150px]">
-                          {lead.event_type || 'N/A'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">{lead.mobile || '-'}</td>
-                      <td className="px-4 py-3">
-                        <StatusText status={lead.current_status || lead.status} />
-                      </td>
-                      <td className="px-4 py-3 font-mono text-slate-300">
-                        {(lead.total_amount || lead.quotation_amount) > 0 ? `$${(lead.total_amount || lead.quotation_amount).toLocaleString()}` : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setSelectedLead(lead)}
-                          className="p-1.5 bg-slate-800/50 hover:bg-slate-700 text-slate-400 hover:text-white rounded transition-colors cursor-pointer"
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredLeads.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                        No leads found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-      </div>
-    </div>
-  );
-};
-
-export default SalesModule;
+              { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sxœ¬Wëoâ8ÿŞ¿bÔ[- ^…m·[zªØ]é¤^»w­öËªêšÄ«ÆÎÅcùßoì$4äÚ£Hg<™ß¼<P¡kMp}êo’	­ÎáG·×„î~Mè™õG|öñÛ}h‚©ğîéRŸCí¯Hj¢™5Ø4`ç³NÆ”'\¾JÎåÂ‰T7'HWxÔnÅ;Q P¸OgL%÷j@ŒÈŒ†äš
+uo¶š0a\Óğ;á-½‹0	–n'ÆÒíçpÜ¹>õ"N=ııç^,#)&,œÁmèÑ0‹$Ù İÉ@qWD¼J^ò.‚éği¢“Gr/á6@5&(j/’kJ<¸–JgQ¢¡=›Ò"+m×rÌ4ö¤	§MØPäm¾êH0½‚—ÊhÌşĞš‘ ^wIè5yË/¡ÃvñlãbQ#äÎ± <ÑÕp6…ë˜áÚèhÙu‘ı”0àª¸m}–0Øu‘EŠgîÓp]·Õ_­Á‘² [ÏÏ±j1uåj6Gu“Œ ‡R<œ‰Pbn†R‚+VŠ-}Ï³¶/w»/Ú›_e)H —¥n0rÃãñÔù—	×ùØéÀXš:H1ùÉ¡Œ„G=§·ä ç4œ˜Â÷™çQÊ'¾™­™vúÇ»Æä•mO/i™ãF~MÆœfO,œIÄ9hîp:ÑñJÍâ§5ñM\øLS—:B.BDá¾)˜2ìƒN{ÂwÆX]KQ€eîE1:Ä}bbê,˜ñØ³1ƒN§DµQ–‘­UY“‚¥Ó‡`åœÀD
+í`ocÑìøÒ–úŸ/ÚÚ?DÌ(RZb½*çËœbÒ*å›/=TÖàô`!W3Lq}˜”8	B6õ5
+tíeP%é%é`¸1Îe™;–Ş*kÖ&³‚d‘¦*¦qiú%‹z&‘TÜØ9.K{zª4Œ·ák™ŸGæÁ¯_`ß™·ÉÚã›Ê>OëÉÒë˜"ŠG8®ä2T0ÅVRVš©F¯ÔË•ğÖ¼ÈŠ"…Üm®6[×+ ™e­Öh)¼,h/üÍEÛ(¨4¸­K¢µL1e¬mİŠ¾‘„Ïšè&Õû(HÙ5÷ÿmzƒS·fb(¨guZƒô²ÈõgFÂ%86ÎÈÒY8?ºƒN°|Ø£7ÅLM§yÔ«€ÚğÜ´¯jUÈö7Ö3Œ¾‰PlÔLrj›·öx<U˜«Ş‡‘¦áCãŒ˜¸MÜøu“ŸÄ«£4ûr4®+ÿNø#±ukã?é–d£—Ğßáç»w¯:†l×Ò%œŞéoßzcóÎmŞ<æI#¯Ó8ÒZŠ=	\;ï(§®›pÜ~«svlsºXZÙöŠãÊnÏ=Mç”4Y“}K³ãÑsiú2¦–’¡˜Y”†Ç{ŒÒLs4è;£øL5a\U³ï+ï‹/«Ü ×Èê<6ÑŒşúL/¿póÓrúÉİ–œŠ) fÌïÀû÷Õ÷åŞL“ü›Óp}º)Ëº³8x.5xÁ<n¤-…åŠ¡m½[Š^AV3„&ö¶Ùscü¯£’°óºÕ•¡n—OG›OGÿ  ÿÿ ÆÚ
