@@ -11659,14 +11659,3 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-2">
             {[
               { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
-
-              { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue:xœ¬Wmoâ8þÞ_1ê­o…m·[zªØ]é¤^»wTûeUuMbˆUcçb§À±ü÷;	yAíQ$ˆ3ÏÌ3o öW$5…1ºÖ×'¡þ&™Ðê~t{MèžáwÐ„žYÄg¿Ýû&è
-ïŽ.õ9XD3)j°iÁÎgœL(O¸(|•œË…¨î‰ ]áQ»ïDBá>S<2“Ü«Q0"s’k*ÔÙjÂ”qMÃï„G´Tô.`À$XºK·ŸÃ1v}êEœz0úûÏ½XFRLY8‡ÛÐ£aI²A=»“â®ˆx	”¼ä] )Ó3(>àÓD'äNÂm€jLPÔ^$×”xp-•Î¢0DC{6?¤/
-DVÚ®å˜7hìIN›0°¡ÈÛ|2Ô‘`z#.•Ñ˜3ü¾5'A½î’Ðkó–^B=‡íâÙÆ1bQ#äÎ± <ÒÕp6…ë˜áÚèhÙu‘ý”0àª¸m}–0Øu‘EŠgîãp]·Õ_­Á‘² [ÏÏ±j1uåjö„ê¦0!/¤x8¡ÄÜ¥W¬[úžgm_î;v_´=öty”¥ \N”ºÁÈ'3ç_&\çc§iê yÄä3$‡2õœÞ’ƒ|¢áÔ¾Ï<
-P>ñðÍlÍµÓ?Þ5&¯l{zéHË7òk2á4{báL#ÎA#p‡Ó©ŽWj?­‰'hâÂgšª€¸Ôr’  Ú÷MÁ”atÚƒ¾3)8ÀêZ*ˆ,s—(ŠÑ!î#3gÁŒÇžt:%ªò°Œl­Êš,>+ç¦Rh{‹æÇ—¶Ôÿø|ÑÖþ!bF‘ÒëõP9_žð
-S‡JùæKA‚58;XÈÕS\&%N‚Í|]{TIDzI:nŒsYæN¤·ÊZ€u…‰ç¬ Y¤©Ši\š~IÃ¢žI$7vŽËÒžž*ãÆmøZæçyðëØwæm²öø¦²ÏÓz2†ô:¦H„bÆŽ+¹Ì°•”•fªÑ+õrå<‚5/²‡â€H!·E›«ÍßÖõ
-@fY«5Z
-/ZÇÿCcsÑ6
-*në’híSLk[·¢o$á³&ºIõ>RvÍý›^ãàÔ­™X
-êAÖ ½,rýY‡‘p	Žs²tÎî ,ï÷èM1SÓiô* 6<7í«ZrƒýÍ£õ£o"5—ÆcƒœÚæ­=Oæª·ãa¤†iøÃÐ8#&n7~Ýäç€qçê(ä¾ëJã¿þ@lCÝÚøOúŸ%ÙhÀ%tàwøùîÝ«Ž!Ûµt	§câí[ol~Â¹Â›Ç<iäÕašDZK±'‹cç˜rêê¸	Çí·:—aÇ6§‹¥•m¯8®ìöÜÓtNI“5Ù·4;=—f¡/cj):™Eix¼Ç(Í4Gƒ¾3º€ÏTÆU5û¾ò¾ø²Êz}ðq€¬ÎcÍØé¯Ïôò7?-§ŸÜmÉ©˜á `Æü¼_}_îÍ4ÉÇØœ†ëÓMYÖÅÁs©	ÀæÉøs#m¡(,WmëíÜRô
-²š!¤0±·íÈžûã•„×­®u»l|:Ú|:ú  ÿÿ ä¢

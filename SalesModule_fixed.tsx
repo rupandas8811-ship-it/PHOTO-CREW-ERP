@@ -2229,7 +2229,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           </table>
 </div>
           <div class="footer">Confidential Systems Report | ERP Sales Desk</div>
-        </body>
+        </tbody>
       </html>
     `);
     printWindow.document.close();
@@ -11659,14 +11659,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-2">
             {[
               { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
-
-              { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue:xœ¬Wmoâ8şŞ_1ê­o…m·[zªØ]é¤^»wTûeUuMbˆUcçb§À±ü÷;	yAíQ$ˆ3ÏÌ3o öW$5…1ºÖ×'¡ş&™Ğê~t{MèáwĞ„YÄg¿İû&è
-ï.õ9XD3)j°iÁÎgœL(O¸(|•œË…¨î‰ ]áQ»ïDBá>S<2“Ü«Q0"s’k*ÔÙjÂ”qMÃï„G´Tô.`À$XºK·ŸÃ1v}êEœz0úûÏ½XFRLY8‡ÛĞ£aI²A=»“â®ˆx	”¼ä] )Ó3(>àÓD'äNÂm€jLPÔ^$×”xp-•Î¢0DC{6?¤/
-DVÚ®å˜7hìIN›0°¡ÈÛ|2Ô‘`z#.•Ñ˜3ü¾5'A½î’Ğkó–^B=‡íâÙÆ1bQ#äÎ± <ÒÕp6…ë˜áÚèhÙu‘ı”0àª¸m}–0Øu‘EŠgîãp]·Õ_­Á‘² [ÏÏ±j1uåjö„ê¦0!/¤x8¡ÄÜ¥W¬[úgm_î;v_´=öty”¥ \N”ºÁÈ'3ç_&\çc§iê yÄä3$‡2õœŞ’ƒ|¢áÔ¾Ï<
-P>ñğÍlÍµÓ?Ş5&¯l{zéHË7òk2á4{báL#ÎA#p‡Ó©Wj?­‰'hâÂgšª€¸Ôr’  Ú÷MÁ”atÚƒ¾3)8ÀêZ*ˆ,s—(ŠÑ!î#3gÁŒÇt:%ªò°Œl­Êš,>+ç¦Rh{‹æÇ—¶Ôÿø|ÑÖş!bF‘ÒëõP9_ğ
-S‡JùæKA‚58;XÈÕS\&%N‚Í|]{TIDzI:nŒsYæN¤·ÊZ€u…‰ç¬ Y¤©Ši\š~IÃ¢I$7vËÒ*ãÆmøZæçyğëØwæm²öø¦²ÏÓz2†ô:¦H„bÆ+¹Ì°•”•fªÑ+õrå<‚5/²‡â€H!·E›«ÍßÖõ
-@fY«5Z
-/ZÇÿCcsÑ6
-*në’híSLk[·¢o$á³&ºIõ>RvÍı›^ãàÔ­™X
-êAÖ ½,rıY‡‘p	s²tÎî ,ï÷èM1SÓiô* 6<7í«ZrƒıÍ£õ£o"5—ÆcƒœÚæ­=Oæª·ãa¤†iøÃĞ8#&n7~İäç€qçê(ä¾ëJã¿ş@lCİÚøOúŸ%ÙhÀ%tàwøùîİ«!Ûµt	§câí[ol~Â¹Â›Ç<iäÕašDZK±'‹cç˜rêê¸	Çí·:—aÇ6§‹¥•m¯8®ìöÜÓtNI“5Ù·4;=—f¡/cj):™Eix¼Ç(Í4Gƒ¾3º€ÏTÆU5û¾ò¾ø²Êz}ğq€¬ÎcÍØé¯Ïôò7?-§ŸÜmÉ©˜á `Æü¼_}_îÍ4ÉÇØœ†ëÓMYÖÅÁs©	ÀæÉøs#m¡(,WmëíÜRô
-²š!¤0±·íÈûã•„×­®u»l|:Ú|:ú  ÿÿ ä¢
+              { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue:xœÌXÛnÛF}ÏWüI¨‹/iâX9)
+8—ÆF^ÃX‘k‘Èr—].e)Š^úWı~Ig–¤D‘m8AQ‚–{™™3÷%´şH”ápÁ¥iuÁõ™6ŸT M|WÃı._àï¨û4~‰ÿ‡ø^wÁh.½K>7Ç`i0(Ù‚U÷	l=KlÂE¶‹Ã;%„ºs’ÙÍÎÇxÔ.¥+I#qŸ‡L•ğZÀb³kvÎe|IK]¸„áú	¯%½˜Ëpb–p\¸>÷Á=~ßˆe¬äm Cø¨=®‹H²îÙ•wÁäC ”)oÉ ˜}BñÿÉ:e$—
+>FÈ†Œ7"9çÌƒs›"
+š¤¹øš?ÈEjÛ’£ß °]ø¥GÖe™?F‘Ò&‘YÀX¨˜8–¿î…,j·]¦½.Ş¼£Sh—°ld¼@,ñw—¶ |å‹Ñ)¬*+V1£%ñèÙquê)Û€£ê²ÕY¶Á«[‚ø‚îî–Ì5ÁŒ¿³z„Ñhö`A¯ÕãJEà~-ÛV>“È(Ø…v™D§J£`LÖÂL¨ÜR9°ü½¼µº5ÑÙb}Ò÷‚YqÃ²ÿÈibøM<ëoíÆÍà
+ÇĞ¤£½ÉÔùH×y9ô0Q#Ù_ºòâh Z%Òã³? f\ßRR˜;,1
+bŸyô&ö¶¥<1l"x‘×s›:‚ßšœ‹I†E1‡0Î²y‰óQy–æõ.4G9g²g0€[%*©Ra®†ƒh~íCÜ“Dí.C±Œfî×@N» ©TdËä+ÊÍCˆÎAÊ)æa0Á¼»Ö£¤Ê½ÓßÏNúÆ<Á½Óq…±	´ïG‰½aÍ‚3nX â%ökˆ`ôá¼#–ZÆEáHı”’oc	mÚ2ĞÁÔ7(¸kS|=œÕçì×zç‰™(oQc=ÈY@6Èı}µÆ«–i²Éë^Op9Ep”Îğº’£S–áò0Ì."&GËç«:÷‹j.ÃQ5`â°6
+èù @Øä2ã¢)­É©R,àê ÿÖ«—²ojb¼^é˜á¸V	%µQyS”Ò—µ<]4µˆ-BsílÃ÷ïpuİÁ”/½vD¢M#7˜TÉjıÚyÕ@šy3&]NQ€äsF¯×ŒzÙ†›ˆv Óò¼æ.Çjf×zĞÄnÂ:K8ˆæ}äKãÑ)
+TOHs“hY«[k£w¬d=ÀF1Õš·vã€>U”ã<uS8(çÊ8 Á©<(ÃC6"Š•v"*©˜vÒ/•ó˜›¼; ÒØ.Øn—Œ»<¦š³3&ì¡Rá-EÔ<Nÿï|«“*ÆNÏ%¸±u©¢™F¶˜Fbš6â> õ•s;Y„ÆôîPò;8c†£U\Íqàİ0CŞŞjuzF+—	N.ŒÆ2ÜŞi²àØ•b²ÕŸgYîI˜gË‚‚ö˜ëÑ&nV¸o$Z=Nû¹Ó¬5ot"]T&ß9vRWÃ#2åÇC,ê¤TÕ‹|%¹Õ/&k¼l—[÷‰ğ(®Šé 1¹,
+Á7â åÆ,¢AÚÿÜ+ıx(¥ì=Òñk(8îf¾Öe©ÙÀBÂñµããí,öñr†·:-ğM&è‹ïÎtaV”ô[—oÎZÿoÇÏUZJm¹%÷Nÿùëïeµ$­õµï{¹,ÕSl‡>İY®dÍ²WI^NW]áÙdû ¶Å=‚W¬Š«YÂû@7œœq·Ûê&C§-÷æM¹ı˜‘ÄTåÓÑª|=ıY‚eíx“\“Ä%ÕZ¤ïìC¡Í€uã‘U×ç”A·rO¡§…9¿6ˆiM‡òĞŞ„MÂ;»›ÓÍÃQÛ*ú¤UÄ¦6xÚ;šÎÍÓĞó4]59js(œŒ}>ÓJ~&ÛmßıÁw÷šœ…Ü%µèãªşš@O-àU§z¥(#G’t‰+}ÙèÛOÅÉRğn½vVö“Ì[éAú-/À6ıK€µ#ÿ4³Şr®^=ásújX1X"\`
+‰ß+úŠúêÉ¿   ÿÿ ¬ïæU
