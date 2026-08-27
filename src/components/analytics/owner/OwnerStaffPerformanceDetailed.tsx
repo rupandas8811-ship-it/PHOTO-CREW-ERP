@@ -1713,8 +1713,8 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
             </div>
 
             {/* Individual Task Table */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-              <div className="border border-zinc-800 rounded-xl overflow-hidden hidden md:block">
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="border border-zinc-800 rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse min-w-max">
                     <thead>
@@ -1756,47 +1756,6 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-              </div>
-
-              {/* Mobile Card List */}
-              <div className="md:hidden space-y-3">
-                {selectedStaffDetail.tasks.map((task, idx) => (
-                  <div key={idx} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3.5 space-y-2 text-xs">
-                    <div className="flex items-start justify-between gap-2 border-b border-zinc-800 pb-2">
-                      <div>
-                        <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Order ID</span>
-                        <span className="font-mono font-bold text-amber-400 text-xs">{task.orderId}</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-zinc-900 border border-zinc-700 text-zinc-300">
-                        {task.currentStatus}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="font-bold text-zinc-100">{task.customerName}</div>
-                      <div className="text-zinc-300 font-medium">{task.eventName}</div>
-                      <div className="text-[11px] text-amber-300/80 font-mono mt-0.5">{task.taskDeliverable}</div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-1.5 bg-zinc-950/80 border border-zinc-850 rounded-lg p-2 font-mono text-[10px]">
-                      <div>
-                        <span className="text-zinc-500 block">Assigned</span>
-                        <span className="text-zinc-300">{task.assignedDate}</span>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500 block">Target</span>
-                        <span className="text-pink-400">{task.targetDate}</span>
-                      </div>
-                      <div>
-                        <span className="text-zinc-500 block">Done</span>
-                        <span className="text-emerald-400">{task.completedDate}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {selectedStaffDetail.tasks.length === 0 && (
-                  <div className="p-6 text-center text-zinc-500 font-mono text-xs bg-zinc-900/30 rounded-xl border border-zinc-850">
-                    No individual tasks assigned to this staff member in selected date range.
-                  </div>
-                )}
               </div>
             </div>
 

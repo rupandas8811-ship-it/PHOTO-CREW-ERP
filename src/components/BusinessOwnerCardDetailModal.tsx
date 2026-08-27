@@ -1,20 +1,20 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Search, Calendar, Info, ArrowLeft, Table as TableIcon } from 'lucide-react';
+import { X, Search, Calendar, Info } from 'lucide-react';
 import { formatINR } from '../utils';
 
-export interface ColumnDefinition {
+interface ColumnDefinition {
   key: string;
   label: string;
   render?: (item: any) => React.ReactNode;
 }
 
-export interface BusinessOwnerCardDetailModalProps {
+interface BusinessOwnerCardDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   subtitle?: string;
-  accentColor?: 'emerald' | 'blue' | 'amber' | 'rose' | 'purple' | 'pink' | 'cyan' | 'indigo' | 'gold';
+  accentColor?: 'emerald' | 'blue' | 'amber' | 'rose' | 'purple' | 'pink';
   data: any[];
   columns: ColumnDefinition[];
   totalLabel?: string;
@@ -36,13 +36,6 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Reset search query when modal opens or dataset changes
-  useEffect(() => {
-    if (isOpen) {
-      setSearchTerm('');
-    }
-  }, [isOpen, title]);
-
   // Search filter inside the modal for ease of review
   const filteredData = useMemo(() => {
     if (!searchTerm.trim()) return data;
@@ -50,40 +43,28 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
     return data.filter(item => {
       return Object.values(item).some(val => {
         if (val === null || val === undefined) return false;
-        if (typeof val === 'object') {
-          return JSON.stringify(val).toLowerCase().includes(lowerSearch);
-        }
         return String(val).toLowerCase().includes(lowerSearch);
       });
     });
   }, [data, searchTerm]);
 
-  // Lock scroll on background while modal is mounted
   useEffect(() => {
     if (!isOpen) return;
-    const originalBodyOverflow = document.body.style.overflow;
-    const originalHtmlOverflow = document.documentElement.style.overflow;
-
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
-
     return () => {
-      document.body.style.overflow = originalBodyOverflow;
-      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.body.style.overflow = '';
+      document.body.style.height = '';
+      document.body.style.minHeight = '';
+      document.body.style.position = '';
+      document.body.style.padding = '';
+      document.body.style.margin = '';
+      document.body.style.width = '';
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.height = '';
+      document.documentElement.style.minHeight = '';
     };
   }, [isOpen]);
-
-  // Handle escape key to close
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   if (!isOpen || typeof document === 'undefined') return null;
 
@@ -110,13 +91,6 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
       badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
       dot: 'bg-amber-500'
     },
-    gold: {
-      border: 'border-amber-500/30',
-      bg: 'from-amber-950/20 to-zinc-950',
-      text: 'text-amber-400',
-      badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-      dot: 'bg-amber-500'
-    },
     rose: {
       border: 'border-rose-500/30',
       bg: 'from-rose-950/20 to-zinc-950',
@@ -137,20 +111,6 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
       text: 'text-pink-400',
       badge: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
       dot: 'bg-pink-500'
-    },
-    cyan: {
-      border: 'border-cyan-500/30',
-      bg: 'from-cyan-950/20 to-zinc-950',
-      text: 'text-cyan-400',
-      badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-      dot: 'bg-cyan-500'
-    },
-    indigo: {
-      border: 'border-indigo-500/30',
-      bg: 'from-indigo-950/20 to-zinc-950',
-      text: 'text-indigo-400',
-      badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
-      dot: 'bg-indigo-500'
     }
   };
 
@@ -158,77 +118,57 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
 
   return createPortal(
     <div 
-      className="fixed inset-0 bg-black/85 z-[150] flex items-center justify-center p-2 sm:p-4 backdrop-blur-md"
+      className="fixed inset-0 bg-black/85 z-[150] flex items-center justify-center p-4 backdrop-blur-md"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="card-detail-modal-title"
     >
       <div 
-        className={`bg-zinc-950 border ${activeColors.border} rounded-2xl w-full max-w-6xl h-[94vh] sm:h-auto sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-zinc-100 animate-in fade-in zoom-in-95 duration-200`}
+        className={`bg-zinc-950 border ${activeColors.border} rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-zinc-100 animate-in fade-in zoom-in-95 duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header with Clear Close / Back Button */}
-        <div className="p-4 sm:p-5 border-b border-zinc-900 flex items-center justify-between gap-3 bg-zinc-950/90">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <button
-              onClick={onClose}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-mono shrink-0"
-              title="Return to Business Owner Dashboard"
-              aria-label="Return to Business Owner Dashboard"
-            >
-              <ArrowLeft className="w-4 h-4 text-zinc-400" />
-              <span className="hidden sm:inline font-bold">Back</span>
-            </button>
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${activeColors.dot} shrink-0`} />
-                <h2 
-                  id="card-detail-modal-title"
-                  className="text-xs sm:text-sm md:text-base font-black uppercase tracking-wider text-white font-mono truncate"
-                >
-                  {title}
-                </h2>
-              </div>
-              {subtitle && (
-                <p className="text-[11px] sm:text-xs text-zinc-400 flex items-center gap-1.5 font-sans truncate mt-0.5">
-                  <Calendar className="w-3 h-3 text-zinc-500 shrink-0" />
-                  <span className="truncate">{subtitle}</span>
-                </p>
-              )}
+        {/* Header */}
+        <div className="p-6 border-b border-zinc-900 flex items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <div className={`w-2.5 h-2.5 rounded-full ${activeColors.dot}`} />
+              <h2 className="text-base font-black uppercase tracking-wider text-white font-mono">
+                {title}
+              </h2>
             </div>
+            {subtitle && (
+              <p className="text-xs text-zinc-400 flex items-center gap-1.5 font-sans">
+                <Calendar className="w-3.5 h-3.5 text-zinc-500" />
+                <span>{subtitle}</span>
+              </p>
+            )}
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 sm:p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer shrink-0"
-            aria-label="Close Modal"
-            title="Close"
+            className="p-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Info & Metrics Bar */}
-        <div className="px-4 py-3 sm:px-6 sm:py-3.5 bg-zinc-900/40 border-b border-zinc-900/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="px-6 py-4 bg-zinc-900/40 border-b border-zinc-900/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             {/* Card Value representation */}
-            <div className="px-3 py-1.5 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center gap-2 sm:gap-2.5 shadow-sm">
-              <span className="text-[11px] sm:text-xs font-mono text-zinc-400">{totalLabel}:</span>
-              <span className={`text-xs sm:text-sm md:text-base font-black font-mono ${activeColors.text}`}>
+            <div className="px-4 py-2 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center gap-3">
+              <span className="text-xs font-mono text-zinc-400">{totalLabel}:</span>
+              <span className={`text-sm sm:text-base font-black font-mono ${activeColors.text}`}>
                 {totalValue}
               </span>
             </div>
 
             {/* Record count representation */}
-            <div className="px-3 py-1.5 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center gap-2 sm:gap-2.5 shadow-sm">
-              <TableIcon className="w-3.5 h-3.5 text-zinc-500" />
-              <span className="text-[11px] sm:text-xs font-mono text-zinc-400">Records:</span>
-              <span className="text-xs sm:text-sm md:text-base font-black font-mono text-zinc-200">
-                {filteredData.length} {filteredData.length === 1 ? 'Row' : 'Rows'}
+            <div className="px-4 py-2 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center gap-3">
+              <span className="text-xs font-mono text-zinc-400">Records Count:</span>
+              <span className="text-sm sm:text-base font-black font-mono text-zinc-200">
+                {data.length} {data.length === 1 ? 'Record' : 'Records'}
               </span>
             </div>
           </div>
@@ -238,81 +178,98 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
             <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search table rows..."
+              placeholder="Search table..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8.5 pr-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono placeholder:text-zinc-600"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8.5 pr-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 font-mono"
             />
           </div>
         </div>
 
-        {/* Content Table Container - Responsive Table Format across Mobile & Desktop */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 space-y-3">
+        {/* Content Table Container */}
+        <div className="flex-1 overflow-y-auto p-6">
           {filterDescription && (
-            <div className="p-3 bg-zinc-900/60 border border-zinc-850 rounded-xl flex items-start gap-2.5 text-xs text-zinc-400">
-              <Info className={`w-4 h-4 ${activeColors.text} mt-0.5 shrink-0`} />
+            <div className="mb-4 p-3 bg-zinc-900/60 border border-zinc-850 rounded-xl flex items-start gap-2.5 text-xs text-zinc-400">
+              <Info className={`w-4 h-4 ${activeColors.text} mt-0.5 flex-shrink-0`} />
               <span>{filterDescription}</span>
             </div>
           )}
 
           {filteredData.length === 0 ? (
-            <div className="py-12 sm:py-16 text-center space-y-2 border border-dashed border-zinc-850 rounded-2xl bg-zinc-950/30">
-              <p className="text-sm text-zinc-400 font-bold">No matching records found</p>
-              <p className="text-xs text-zinc-500 max-w-sm mx-auto px-4">
-                {searchTerm 
-                  ? `No records match your search query "${searchTerm}". Try a different filter or clear the search.`
-                  : 'There are no active records for this metric in the selected date range.'}
+            <div className="py-12 text-center space-y-2 border border-dashed border-zinc-850 rounded-2xl">
+              <p className="text-sm text-zinc-400 font-bold">No records found</p>
+              <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                There are no matching items for the current active filters or search terms.
               </p>
             </div>
           ) : (
-            /* Responsive Table Container with Horizontal Scrolling */
-            <div className="border border-zinc-850 rounded-xl overflow-hidden bg-zinc-950 shadow-inner">
-              <div className="overflow-x-auto w-full min-w-full">
-                <table className="w-full text-left border-collapse min-w-max text-xs">
-                  <thead>
-                    <tr className="bg-zinc-900/90 border-b border-zinc-850 text-[10px] sm:text-[11px] font-mono text-zinc-400 uppercase tracking-wider sticky top-0 z-10 backdrop-blur">
-                      {columns.map(col => (
-                        <th key={col.key} className="py-3 px-3 sm:px-4 font-bold whitespace-nowrap">
-                          {col.label}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-850/80 bg-zinc-950 text-xs">
-                    {filteredData.map((item, idx) => (
-                      <tr 
-                        key={item.id || item.order_id || item.lead_id || item.orderId || idx} 
-                        className="hover:bg-zinc-900/60 transition-colors"
-                      >
+            <div className="space-y-4">
+              {/* Desktop Table View */}
+              <div className="hidden md:block border border-zinc-900 rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-zinc-950/80 border-b border-zinc-900 text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
                         {columns.map(col => (
-                          <td key={col.key} className="py-3 px-3 sm:px-4 text-zinc-300 font-sans whitespace-nowrap">
-                            {col.render ? col.render(item) : String(item[col.key] ?? 'N/A')}
-                          </td>
+                          <th key={col.key} className="py-3 px-4 font-bold">
+                            {col.label}
+                          </th>
                         ))}
                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-900 bg-zinc-950/20 text-xs">
+                      {filteredData.map((item, idx) => (
+                        <tr 
+                          key={item.id || item.order_id || item.lead_id || idx} 
+                          className="hover:bg-zinc-900/40 transition-colors"
+                        >
+                          {columns.map(col => (
+                            <td key={col.key} className="py-3 px-4 text-zinc-300 font-sans">
+                              {col.render ? col.render(item) : String(item[col.key] || 'N/A')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Mobile Card-Stack View */}
+              <div className="md:hidden space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                {filteredData.map((item, idx) => (
+                  <div 
+                    key={item.id || item.order_id || item.lead_id || idx} 
+                    className="bg-zinc-900/30 border border-zinc-850/80 p-4 rounded-xl space-y-2.5 shadow-inner"
+                  >
+                    {columns.map(col => (
+                      <div 
+                        key={col.key} 
+                        className="flex flex-col gap-1 border-b border-zinc-900/40 pb-2 last:border-0 last:pb-0"
+                      >
+                        <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider">
+                          {col.label}
+                        </span>
+                        <div className="text-xs text-zinc-250 font-sans break-words">
+                          {col.render ? col.render(item) : String(item[col.key] || 'N/A')}
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+                ))}
               </div>
             </div>
           )}
         </div>
 
-        {/* Footer with Clear Back / Close Action */}
-        <div className="p-3 sm:p-4 bg-zinc-950 border-t border-zinc-900 flex items-center justify-between gap-3">
-          <div className="text-[11px] font-mono text-zinc-500 hidden xs:block truncate">
-            Showing {filteredData.length} of {data.length} total entries
-          </div>
-
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 font-mono font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-sm"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Dashboard</span>
-            </button>
-          </div>
+        {/* Footer */}
+        <div className="p-4 bg-zinc-950 border-t border-zinc-900 flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 font-mono transition-colors cursor-pointer"
+          >
+            Close Detail View
+          </button>
         </div>
       </div>
     </div>,

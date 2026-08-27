@@ -727,7 +727,6 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           { key: 'event_status', label: 'Event Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">{item.status || 'Completed'}</span> },
           { key: 'order_status', label: 'Order Status', render: (item: any) => <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono text-[10px]">{item.rawOrder?.current_stage || 'Closed'}</span> },
           { key: 'completed_date', label: 'Completion Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.rawOrder?.updated_at ? item.rawOrder.updated_at.replace('T', ' ').substring(0, 16) : 'N/A'}</span> },
-          { key: 'order_closed_date', label: 'Order Closed Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.rawOrder?.updated_at ? item.rawOrder.updated_at.replace('T', ' ').substring(0, 16) : 'N/A'}</span> },
           actionCol
         ];
       }
@@ -1226,7 +1225,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             {/* SALES PERFORMANCE */}
             <div className="space-y-3">
               <h3 className="text-xs font-black font-mono tracking-wider text-amber-400 uppercase">Sales Performance</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <CameraLensStatsCard
                   label="Total Leads"
                   val={boCardsData.salesTotalLeads.length}
@@ -1269,7 +1268,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             {/* OPERATIONS PERFORMANCE */}
             <div className="space-y-3">
               <h3 className="text-xs font-black font-mono tracking-wider text-blue-400 uppercase">Operations Performance</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <CameraLensStatsCard
                   label="Total New Projects"
                   val={boCardsData.opsNew.length}
@@ -1312,7 +1311,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
             {/* PRODUCTION PERFORMANCE */}
             <div className="space-y-3">
               <h3 className="text-xs font-black font-mono tracking-wider text-pink-400 uppercase">Production Performance</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <CameraLensStatsCard
                   label="Total New Projects"
                   val={boCardsData.prodNew.length}
@@ -1570,192 +1569,8 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 </div>
               </div>
 
-              {/* Unlock Requests - Desktop Table */}
-              <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl hidden md:block">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse min-w-max">
-                    <thead>
-                      <tr className="bg-zinc-900/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                        <th className="py-3 px-4">Order ID</th>
-                        <th className="py-3 px-4">Lead ID</th>
-                        <th className="py-3 px-4">Customer Name</th>
-                        <th className="py-3 px-4">Sales Staff</th>
-                        <th className="py-3 px-4">Reason / Notes</th>
-                        <th className="py-3 px-4">Date</th>
-                        <th className="py-3 px-4">Status</th>
-                        <th className="py-3 px-4 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-850">
-                      {unlockRequests.map(request => {
-                        const orderDetails = orders.find(o => o.order_id === request.order_id || o.lead_id === request.lead_id);
-                        const leadDetails = leads.find(l => l.lead_id === request.lead_id || (request.order_id && l.lead_id === request.order_id));
-
-                        const customerName = 
-                          request.customer_name || 
-                          leadDetails?.customer_name || 
-                          orderDetails?.customer_name || 
-                          (request.action_url ? (() => { try { return JSON.parse(request.action_url).customer_name; } catch(e) { return null; } })() : null) || 
-                          '-';
-
-                        const orderId = request.order_id || orderDetails?.order_id || '-';
-                        const leadId = request.lead_id || leadDetails?.lead_id || '-';
-
-                        const staffName = 
-                          request.sales_staff_name || 
-                          request.requested_by_name || 
-                          leadDetails?.sales_person || 
-                          orderDetails?.sales_person || 
-                          (request.action_url ? (() => { try { return JSON.parse(request.action_url).sales_staff_name; } catch(e) { return null; } })() : null) || 
-                          'Sales Staff';
-
-                        const staffMobile = 
-                          request.sales_staff_mobile || 
-                          leadDetails?.sales_staff_mobile || 
-                          leadDetails?.mobile || 
-                          (request.action_url ? (() => { try { return JSON.parse(request.action_url).sales_staff_mobile; } catch(e) { return null; } })() : null) || 
-                          '-';
-
-                        const reqReason = request.reason || request.request_reason || request.title || 'Quotation unlock requested';
-                        const reqStatus = request.status || request.request_status || 'Pending';
-                        const reqDate = (request.requested_at || request.created_at) ? new Date(request.requested_at || request.created_at).toLocaleDateString() : '-';
-
-                        return (
-                          <tr key={request.request_id || request.order_id} className="hover:bg-zinc-900/50 transition-colors">
-                            <td className="py-3 px-4 font-mono font-bold text-amber-400">{orderId}</td>
-                            <td className="py-3 px-4 font-mono text-xs text-indigo-400 font-semibold">{leadId}</td>
-                            <td className="py-3 px-4 text-zinc-100 font-bold text-sm">{customerName}</td>
-                            <td className="py-3 px-4 text-zinc-300">
-                              <div className="font-semibold text-zinc-200">{staffName}</div>
-                              <div className="text-[10px] text-zinc-400 font-mono mt-0.5">{staffMobile}</div>
-                            </td>
-                            <td className="py-3 px-4 text-zinc-300">
-                              <div className="font-medium text-amber-200/90">{reqReason}</div>
-                              {request.custom_reason && <div className="text-[10px] text-zinc-400 mt-0.5">{request.custom_reason}</div>}
-                            </td>
-                            <td className="py-3 px-4 text-zinc-400 font-mono text-xs">{reqDate}</td>
-                            <td className="py-3 px-4">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
-                                {reqStatus}
-                              </span>
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <button
-                                onClick={() => setUnlockRequestModal({
-                                  ...request,
-                                  customer_name: customerName,
-                                  lead_id: leadId,
-                                  order_id: orderId,
-                                  sales_staff_name: staffName,
-                                  sales_staff_mobile: staffMobile,
-                                  reason: reqReason
-                                })}
-                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded shadow text-xs font-bold transition-colors cursor-pointer"
-                              >
-                                Review
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Unlock Requests - Mobile Card Stack View */}
-              <div className="md:hidden space-y-3">
-                {unlockRequests.map(request => {
-                  const orderDetails = orders.find(o => o.order_id === request.order_id || o.lead_id === request.lead_id);
-                  const leadDetails = leads.find(l => l.lead_id === request.lead_id || (request.order_id && l.lead_id === request.order_id));
-                  const customerName = request.customer_name || leadDetails?.customer_name || orderDetails?.customer_name || '-';
-                  const orderId = request.order_id || orderDetails?.order_id || '-';
-                  const leadId = request.lead_id || leadDetails?.lead_id || '-';
-                  const staffName = request.sales_staff_name || request.requested_by_name || leadDetails?.sales_person || orderDetails?.sales_person || 'Sales Staff';
-                  const staffMobile = request.sales_staff_mobile || leadDetails?.sales_staff_mobile || leadDetails?.mobile || '-';
-                  const reqReason = request.reason || request.request_reason || request.title || 'Quotation unlock requested';
-                  const reqStatus = request.status || request.request_status || 'Pending';
-                  const reqDate = (request.requested_at || request.created_at) ? new Date(request.requested_at || request.created_at).toLocaleDateString() : '-';
-
-                  return (
-                    <div key={request.request_id || request.order_id} className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 space-y-3 shadow-lg">
-                      <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2.5">
-                        <div>
-                          <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Order / Lead ID</span>
-                          <span className="font-mono font-bold text-amber-400 text-xs">{orderId}</span>
-                          {leadId !== '-' && <span className="text-indigo-400 font-mono text-[10px] ml-1.5">({leadId})</span>}
-                        </div>
-                        <span className="px-2 py-0.5 rounded text-[9px] font-mono uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold shrink-0">
-                          {reqStatus}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-[10px] font-mono uppercase text-zinc-500 block">Customer</span>
-                          <span className="font-bold text-zinc-100">{customerName}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-mono uppercase text-zinc-500 block">Sales Staff</span>
-                          <span className="text-zinc-200 font-medium">{staffName}</span>
-                          {staffMobile !== '-' && <span className="text-[10px] text-zinc-400 font-mono block">{staffMobile}</span>}
-                        </div>
-                      </div>
-
-                      <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 text-xs">
-                        <span className="text-[10px] font-mono text-zinc-400 block mb-0.5">Reason:</span>
-                        <span className="text-amber-200/90 font-medium">{reqReason}</span>
-                        {request.custom_reason && (
-                          <span className="text-[11px] text-zinc-300 block mt-1 border-t border-zinc-800 pt-1">{request.custom_reason}</span>
-                        )}
-                        <span className="text-[10px] font-mono text-zinc-500 block mt-1.5">Date: {reqDate}</span>
-                      </div>
-
-                      <button
-                        onClick={() => setUnlockRequestModal({
-                          ...request,
-                          customer_name: customerName,
-                          lead_id: leadId,
-                          order_id: orderId,
-                          sales_staff_name: staffName,
-                          sales_staff_mobile: staffMobile,
-                          reason: reqReason
-                        })}
-                        className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl shadow text-xs font-bold transition-colors cursor-pointer text-center"
-                      >
-                        Review Quotation Unlock
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-          
-          {/* SECTION 3: ORDERS AWAITING FINAL APPROVAL */}
-          {waitingApprovalOrders.length > 0 && (
-            <div className="space-y-4">
-              <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
-                <div>
-                  <h2 className="text-sm font-black uppercase tracking-wider text-emerald-400 font-mono flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>ORDERS AWAITING FINAL APPROVAL</span>
-                  </h2>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    Projects with Client Acceptance status waiting for final Business Owner approval and closure.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-zinc-400">Total Pending:</span>
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-mono font-bold">
-                    {waitingApprovalOrders.length} Projects
-                  </span>
-                </div>
-              </div>
-
-              {/* Waiting Approval - Desktop Table */}
-              <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl hidden md:block">
+              {/* Waiting Approval Table */}
+              <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse min-w-max">
                     <thead>
@@ -1845,90 +1660,6 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                     </tbody>
                   </table>
                 </div>
-              </div>
-
-              {/* Waiting Approval - Mobile Card Stack View */}
-              <div className="md:hidden space-y-3">
-                {waitingApprovalOrders.map(order => {
-                  const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id || p.order_id === order.order_id || p.production_id === order.order_id || p.production_id === order.lead_id);
-                  const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
-                  const lead = leads.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
-                  
-                  const totalQuotation = order.quotation_amount || lead?.quotation_amount || 0;
-                  const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
-                  const balanceDue = pay ? pay.balance_due : (order.balance_amount || Math.max(0, totalQuotation - paymentReceived));
-                  const payStatus = pay ? pay.payment_status : (balanceDue <= 0 ? 'Fully Paid' : (paymentReceived > 0 ? 'Partially Paid' : 'Pending'));
-                  const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
-
-                  return (
-                    <div key={order.order_id} className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 space-y-3 shadow-lg">
-                      <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2.5">
-                        <div>
-                          <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Order ID</span>
-                          <span className="font-mono font-bold text-amber-400 text-xs">{order.order_id}</span>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono uppercase font-bold border ${
-                          payStatus === 'Fully Paid'
-                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                            : payStatus === 'Partially Paid'
-                            ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
-                            : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        }`}>
-                          {payStatus}
-                        </span>
-                      </div>
-
-                      <div className="space-y-1 text-xs">
-                        <div className="font-bold text-zinc-100 text-sm">{order.customer_name}</div>
-                        {customerMobile !== 'N/A' && (
-                          <div className="text-[11px] text-zinc-400 font-mono">{customerMobile}</div>
-                        )}
-                        <div className="text-zinc-300 font-medium pt-1">
-                          {order.custom_event_name || order.event_type || 'Photography & Videography'}
-                          {order.event_date && <span className="text-zinc-500 font-mono text-[10px] ml-1.5">• {order.event_date}</span>}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 text-xs">
-                        <div>
-                          <span className="text-[10px] font-mono text-zinc-500 block uppercase">Quotation</span>
-                          <span className="font-mono font-bold text-zinc-200">{formatINR(totalQuotation)}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-mono text-zinc-500 block uppercase">Balance Due</span>
-                          <span className={`font-mono font-bold ${balanceDue <= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {formatINR(balanceDue)}
-                          </span>
-                        </div>
-                        <div className="col-span-2 pt-1 border-t border-zinc-800/60 flex items-center justify-between">
-                          <span className="text-[10px] font-mono text-zinc-500 uppercase">Workflow Stage</span>
-                          <span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-mono text-[9px] font-bold">
-                            {prod?.editing_status || order.current_stage || 'Client Acceptance'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedHistoryOrder(order)}
-                          className="py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                        >
-                          <History className="w-3.5 h-3.5" />
-                          <span>History</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReviewModalOrder(order)}
-                          className="py-2 rounded-xl bg-amber-500 text-black font-black hover:bg-amber-400 transition-all cursor-pointer text-xs flex items-center justify-center gap-1.5 shadow-md"
-                        >
-                          <ShieldCheck className="w-3.5 h-3.5" />
-                          <span>Review</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             </div>
           )}
@@ -2753,8 +2484,8 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         </div>
       )}
 
-      {/* Desktop Table View */}
-      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl hidden md:block">
+      {/* Table */}
+      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse min-w-max">
             <thead>
@@ -2790,7 +2521,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                     <td className="py-3.5 px-4">
                       <button
                         onClick={() => setSelectedPaymentHistoryOrder(r)}
-                        className="text-emerald-400 font-bold hover:text-emerald-300 hover:underline transition-colors focus:outline-none cursor-pointer"
+                        className="text-emerald-400 font-bold hover:text-emerald-300 hover:underline transition-colors focus:outline-none"
                       >
                         {formatINR(r.paymentReceived)}
                       </button>
@@ -2832,83 +2563,6 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* Mobile Card Stack View */}
-      <div className="md:hidden space-y-3">
-        {filtered.length === 0 ? (
-          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-6 text-center text-zinc-500 text-xs font-mono">
-            No matching revenue records found for selected query and date range.
-          </div>
-        ) : (
-          filtered.map(r => (
-            <div key={r.orderId} className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 space-y-3 shadow-lg">
-              <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2.5">
-                <div>
-                  <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Order ID</span>
-                  <span className="font-mono font-bold text-amber-400 text-xs">{r.orderId}</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
-                  r.paymentStatus === 'Fully Paid'
-                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                    : r.paymentStatus === 'Partially Paid'
-                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                    : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
-                }`}>
-                  {r.paymentStatus}
-                </span>
-              </div>
-
-              <div className="space-y-1 text-xs">
-                <div className="font-bold text-zinc-100 text-sm">{r.customerName}</div>
-                <div className="text-zinc-300 font-medium pt-0.5">
-                  {r.eventName}
-                  {r.eventDate && <span className="text-zinc-500 font-mono text-[10px] ml-1.5">• {r.eventDate}</span>}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 bg-zinc-900/60 border border-zinc-800/80 rounded-xl p-2.5 text-xs font-mono">
-                <div>
-                  <span className="text-[9px] text-zinc-500 block uppercase">Total Rev</span>
-                  <span className="font-bold text-white text-[11px]">{formatINR(r.totalRevenue)}</span>
-                </div>
-                <div>
-                  <span className="text-[9px] text-zinc-500 block uppercase">Received</span>
-                  <button
-                    onClick={() => setSelectedPaymentHistoryOrder(r)}
-                    className="font-bold text-emerald-400 text-[11px] underline text-left cursor-pointer"
-                  >
-                    {formatINR(r.paymentReceived)}
-                  </button>
-                </div>
-                <div>
-                  <span className="text-[9px] text-zinc-500 block uppercase">Balance</span>
-                  <span className={`font-bold text-[11px] ${r.outstanding > 0 ? 'text-rose-400' : 'text-zinc-400'}`}>
-                    {formatINR(r.outstanding)}
-                  </span>
-                </div>
-                <div className="col-span-3 pt-1.5 border-t border-zinc-800/60 flex items-center justify-between font-sans">
-                  <span className="text-[10px] font-mono text-zinc-500 uppercase">Workflow Stage</span>
-                  <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[10px]">
-                    {r.currentStage}
-                  </span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
-                  setSelectedHistoryOrder(fullOrder);
-                }}
-                className="w-full py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-sm"
-              >
-                <History className="w-3.5 h-3.5" />
-                <span>View Project History & Timeline</span>
-              </button>
-            </div>
-          ))
-        )}
       </div>
 
       {/* CARD DETAIL POPUP/MODAL */}
@@ -3738,8 +3392,8 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Read-Only Desktop Table */}
-        <div className="overflow-y-auto flex-1 hidden md:block">
+        {/* Read-Only Table */}
+        <div className="overflow-y-auto flex-1">
           <div className="overflow-x-auto w-full border border-zinc-850 rounded-xl bg-zinc-900/40">
             <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
@@ -3792,46 +3446,6 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
               </tbody>
             </table>
           </div>
-        </div>
-
-        {/* Read-Only Mobile Card List */}
-        <div className="overflow-y-auto flex-1 md:hidden space-y-3">
-          {eventList.map((ev, idx) => {
-            const evName = ev.eventName || ev.rawOrder?.custom_event_name || ev.title || 'Event';
-            const evDate = ev.eventDate || ev.rawOrder?.event_date || dateStr;
-            const evTime = ev.rawOrder?.event_time || '10:00 AM';
-            const custName = ev.customerName || ev.rawOrder?.customer_name || '—';
-            const status = ev.currentStatus || ev.rawOrder?.current_stage || 'Active';
-            const targetDel = ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || '—';
-
-            return (
-              <div key={ev.id || idx} className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3.5 space-y-2 text-xs">
-                <div className="flex items-start justify-between gap-2 border-b border-zinc-800 pb-2">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase text-zinc-500 block">Event</span>
-                    <span className="font-bold text-zinc-100 text-sm">{evName}</span>
-                  </div>
-                  <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-zinc-800 text-amber-400 border border-zinc-700 shrink-0">
-                    {status}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase text-zinc-500 block">Customer</span>
-                    <span className="text-zinc-200 font-medium">{custName}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] font-mono uppercase text-zinc-500 block">Date & Time</span>
-                    <span className="text-zinc-300 font-mono text-[11px]">{evDate} • {formatTime12Hour(evTime)}</span>
-                  </div>
-                </div>
-                <div className="bg-zinc-950/80 border border-zinc-850 rounded-lg p-2 flex items-center justify-between font-mono text-[11px]">
-                  <span className="text-zinc-400 text-[10px]">Target Delivery:</span>
-                  <span className="font-bold text-pink-400">{targetDel}</span>
-                </div>
-              </div>
-            );
-          })}
         </div>
 
         {/* Modal Footer */}
