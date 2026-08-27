@@ -1,5 +1,4 @@
 // -*- coding: utf-8 -*-
-// UTF-8 validation: Ã¤Ã¶Ã¼ â‚¬ 
 import React, { useState, useEffect, useRef } from 'react';
 import { AddNoteModal } from "./AddNoteModal";
 import { createPortal } from 'react-dom';
@@ -4179,9 +4178,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       triggerAutoScrollAndFocus('#confirm_booking_modal', 150);
       if (selectedLead) {
          initEventsReporting(selectedLead);
+         const effectiveAmt = (selectedLead.Final_Package_Amount !== null && selectedLead.Final_Package_Amount !== undefined && !isNaN(Number(selectedLead.Final_Package_Amount)) && Number(selectedLead.Final_Package_Amount) > 0)
+           ? Number(selectedLead.Final_Package_Amount)
+           : (Number((selectedLead as any).final_package_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(wizardLeadData.final_amount) || Number(wizardLeadData.final_quoted_amount) || Number(wizardLeadData.budget) || Number(selectedLead.budget) || Number(selectedLead.final_amount) || 0);
          setConfirmForm(prev => ({
             ...prev,
-            quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.final_amount) || 0
+            quotation_amount: prev.quotation_amount > 0 ? prev.quotation_amount : effectiveAmt
          }));
       }
     }
@@ -5894,11 +5896,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       booking_status: fullLead.booking_status || 'Pending',
     });
 
+    const effectiveFinalAmt = (fullLead.Final_Package_Amount !== null && fullLead.Final_Package_Amount !== undefined && !isNaN(Number(fullLead.Final_Package_Amount)) && Number(fullLead.Final_Package_Amount) > 0)
+      ? Number(fullLead.Final_Package_Amount)
+      : (Number(fullLead.final_package_amount) || Number(fullLead.Final_Quotation_Amount) || Number(latestQuote?.final_amount) || (primaryLP ? Number(primaryLP.final_amount) : 0) || (Number((fullLead as any).final_amount) > 0 ? Number((fullLead as any).final_amount) : 0) || cleanPkgPrice || Number(fullLead.budget) || 0);
+
     setFollowUpForm({
       call_notes: lead.follow_up_notes || '',
       next_follow_up_date: '',
       status: lead.status,
-      quotation_amount: 0,
+      quotation_amount: effectiveFinalAmt,
       negotiation_notes: '',
       event_date: lead.event_date || '',
       event_time: lead.event_time || '',
@@ -5908,7 +5914,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     });
     setConfirmForm({
       package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
-      quotation_amount: Number(fullLead.Final_Package_Amount) || Number((fullLead as any).final_package_amount) || Number(fullLead.Final_Quotation_Amount) || Number((fullLead as any).final_amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0),
+      quotation_amount: effectiveFinalAmt,
       advance_received: 0,
       event_date: lead.event_date || '',
       event_time: lead.event_time || '',
@@ -9791,8 +9797,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       )}
 
       {/* Main Sandbox Area */}
-      {false && selectedLead && (
-        <div className="hidden lg:grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {selectedLead && (
+        <div id="lead_details_workspace" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-fade-in">
           
           {/* Column A: Lead Details & Meta */}
           <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-5 space-y-4">
@@ -9909,10 +9915,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
                     const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(selectedLead.advance_collected) || Number(wizardLeadData.advance_received) || 0));
                     
+                    const effectiveFinalAmt = (selectedLead.Final_Package_Amount !== null && selectedLead.Final_Package_Amount !== undefined && !isNaN(Number(selectedLead.Final_Package_Amount)) && Number(selectedLead.Final_Package_Amount) > 0)
+                      ? Number(selectedLead.Final_Package_Amount)
+                      : (Number((selectedLead as any).final_package_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(wizardLeadData.final_amount) || Number(wizardLeadData.final_quoted_amount) || Number(wizardLeadData.budget) || Number(selectedLead.budget) || Number((selectedLead as any).final_amount) || 0);
+
                     setConfirmForm({
                       ...confirmForm,
                       package_name: packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || '',
-                      quotation_amount: Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || Number(wizardLeadData.final_amount) || 0,
+                      quotation_amount: effectiveFinalAmt,
                       advance_received: calcAdvance,
                       event_date: selectedLead.event_date || today,
                       event_time: selectedLead.event_time || ''
@@ -11575,37 +11585,33 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <button
                     type="button"
                     onClick={() => setWizardStep(wizardStep - 1)}
-                    className="px-4.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer border border-slate-850 hover:border-slate-700 transition-colors"
-                  >
-                    &larr; Back Step
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => { resetForm(); setActiveTab('list'); }}
-                    className="px-4.5 py-2 text-xs font-semibold bg-slate-805 hover:bg-slate-800 text-slate-300 rounded-xl cursor-pointer border border-slate-800 hover:border-slate-700/50 transition-colors"
-                  >
-                    Back
-                  </button>
-                )}
-                {wizardStep === 2 && (!createdLeadId || leads.find(l => l.lead_id === createdLeadId)?.status === 'New Lead') && (
-                  <div />
-                )}
-              </div>
-
-              {/* Next or Save */}
-              <button
-                type="button"
-                onClick={handleWizardNext}
-                disabled={isSaving}
-                className={`px-5.5 py-2 text-xs font-bold text-white rounded-xl shadow-lg border transition-all ${
-                  isSaving
-                    ? 'bg-slate-800 text-slate-500 border-slate-850 cursor-not-allowed opacity-50 shadow-none'
-                    : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-500/30 cursor-pointer'
-                }`}
-              >
-                {isSavinxœJçRÀ ö
-êEùÉ©ÅÅ™yézzzêXÔX)”gV%¥—¤(Ø(cQ6È/µ¢›~	êÁ‰e©
-j
-Îùy%™y¥©êµh
-mô“JKJòóì¸PES2Ë…Ğ4Fç•æäÀLC’†35­¹j­¹    ÿÿ "æ3‹
+                    className="px-4.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer border border-slate-850 hovxœì][sÛF–~Ï¯è°R9e’¢$Ë±"ÑK‘ÔF5²¤ˆœxSŞ”M+À  )F¯ó¾µÿpÉÓKèÆ…¢=öNP};—>ç;§[Ô=šØ®Nİ¦gj>m¾Şİ%¾«Yá¶ÕœÚ¦ízµïHæêJòÂÔ\÷'rªMïÈÈ§¤Ğq{²ò}ÛÊVĞ G¤.û‚ mĞpèIu“Ûê›Æôîä±Ş ']òH\êQÿÌv—õÆOn{SßøDÇÚ¤¾c¿OŸ¤UMMÍó.µ%´èÜ7Z¯ˆóĞÜ#>½÷›÷™Ù–ßôèÒ˜Ø¦N&ó`JÜ}Eö'
+3?Úå_ñŸûğÓµW–Nõæ½I¦+×³İ¦c–O]ÂéCdÂ
+‚:SÔk¿z‘rÕˆ–ªÇµñ7ÍÕ‘şäää„ì‘/Hıû©K¡úÕôsüıïÄ„;¯53,½n"iÌ>¹5töU¢xãmËó5å±W;—tMğÅNƒU-ë°n|"íİ=nCÉîw©§í?‘K ±]2Ò>Qò§væCWæsdÄÍÒMúÍ¶”Fİğ´‰Iõ“GÃƒ>Ö<[&æÈÇÀ’¯¤,ÉØ‘=Y/ŸŠ¬æ-4İ^7ÍyÈeëh¦I~x”ÌmØ)½%;*6?“\¼0»eûØ ½¦:±mjøP>ìŸe[tGÚÜk.©«™zó0‹ø¡Ğ¬ğ¨½¿›´lOÓ3e¨ÇœÙ€¹¸ví)õ<xßjµdC8"‚´“}Õ¤"(§€±èÒjÖŠîd™\&¾ëç<àWZ/ƒlœ<ãJÖÿ®w~IF½‹áˆz£ŸO¯z7R¿8É¯çÃ÷0ªëóëáÅùåÎo†ıñÕÍodÏé¶8¨5-ï'ÒæCóh–±D–i:mV-9K¨.:­¸§¾>'£qo<"}Î(£=ÒíÌ]Pzøêkä×[Å?÷‰9~¾"sÍ‡XnjiŠ÷5äójy#Pš^Ø+CTS›Pó¤jRÉñI3W WPïö¹.şeeÃĞYEä/(dú I”	=¹àí]4/‡ï³%|—ZúXü¤Ö[k ¬9ÁÖh¶¨á&ˆ+*Æ»	+ï)ÿv™l‘hñÈ"e+  |^w\ú	Ÿ7ÒöâWÂ"ò»ƒrš(YŠ2ËUB²:=2¢–ŸKJ^‹)‰²1·È8^séˆMß&0£Ò>åÓ‘u“fs2Å¤j‹h!<Û.%Î-rfãRÖü‹SL
+^tåxJrhË	u¨qvu‘/U—tnû††‚µ)‚!­œíÑ#®2E”øÅv)ëãÌp—TÏWva©+´Ôt	Œ‰Êô/ÏŞåRšƒÅ—uª@Õñ~ÖM…®cïH4¢í¨¼L»ñ»t{‚êK|µ]º^Ø_bÃXTIQ×ö$N‚œW£|µ×7¡´ÉÀµ§:U±“{© h4Ö­Ğ2Ùšğ<j%¦`\¶ˆz2Ÿ
+M¤½{7ıŸ_’³ó‹ñğ¬»^|~uIúW—ã›«‹_]]œön
+M¦ØÉxµ«r‘Û?Æ~õx;`,¡Õä€	;>¡'±£RMÎLzOğ´ÃÈR?b÷®½&àU-½¦làOø†?˜RæÀÿ×ÊóÙCsBı5¥7ß2­ñ)QÍ…*N5Wârf»äR«Æ?ëJ‡,«¹n~Ø;Øuî—45-•hÏ6W wM:ó›ûàCú¶Óì´÷H“¹ƒl:Øƒ5Ìàş¼ºp¯ªI?Áˆ=æ®ÕdŞ74oXÎÊÏr°f9H2‰_VÔ}£4 à\Ï¡h&å€}T§-_sçÔo±
+%ø^	\± Ç™ºhÊ°)›<€Çèù6è%bÁÌ½$K{b˜ğÄ-Èùà%Âèº‚¯'ƒ0ëëælvÄÇo€_ßÈYù5°øÌ†¶C´Ílæ×
+®¼c6;@	·ù†A HÅ  –çôZŠtë İâQ
+>:oÊ^ù¦aQFÌ, ›”Ú"±THM>¾WáS+>Nğ¬Â’Ğ#’×˜/@ÔB ÓÀAááGMªÑø†oR\I€í`,È{ò¢r&ô?’Œ†"½ÀB™‡ïI>9hÆ5ØN9eÕydlÛæ¤¤2cú5¡9™V[»šÃtæ^èòsKu6Ï	Ïç&ú!m~ËÀ20İy°²{Ã{GC¹¬o¤)XQò‹	^v:pì„øîIsÀgA/È½Æ,ÅùğÊô?c•Ä¿í•;¥ÂoÍ¤Ş5|
+ó5ÇOP‡¯\€^pülhéøDÑ…S•^»óŠ¤ô`û  Ùƒıİ]9R†×QŸD!Î¿~•‚)_óbIÀ^ŞB1ÄK!s|f+‹*,V7 Êq›ı’|¬&:)A÷¨{É1íÁˆö"–W=F*Ô!´æ¬L’¥ÙÜÍ½T|bí¥P
+{m™6¬Ñ7Ô±]ßûÒj!l?h^TŠWßœšPŒ£@¦9Ô”’jáa(×Á£oE²#~ÛH¶ƒ)Ì“íãş‚~rmJ0´‚mˆtd·3|ï•tBz¸ˆî‚aøã.ó÷v`È
+#¾HŞFP5÷ôÃuøËH¶Ëš­{á÷g‘¶ÿĞÚÅÛ£èi¡¬ÕòE	šDÌ–¶ewT7VË„¸•åÔ"†İ²õØÕp	k¿|™óğ£š ì–üï?ş‡áŠÑ~ş÷Î“šåYî—° v¨ø‚Š>7±€³Ë¥”Ñë%Â¼eâ¢y¡`yÌ4€Õ[[ù6ê¸Wàškl”Ôe@s„§ÊğOö$è©Î
+èÛ¦©91ñ}«­©ÌÇyÌšÏRÓ)í	9èóïg3?RáÂN2\¸—áÂT“s
+">JW*03U!BŠˆiGZ+”g­øëÇ‡NÇ¹ÿ]àã•ãPwªyz˜ŞÖ¼¹6˜’T}‘¢­uywÛ¬ÃP“NåğS
+`âµ©p5Æ`­¥@¦"<è`PfEJ­YŒ§"Ä`;L¿ò9«Õº=è;;ğ·%?£¢µ®ø‹´IE­Xgİ«uãû*‰¢QaMÑƒªãC 0Pñ'Œ4ŠšT¬6Âåkİè¶bW°4è+ad^­›}–_)è^&\rí+Ç‹¸a½¼ÒoEÙ}ŞšÆaµm qØwÿšG CU­sny¾6wµe­İV¬âØobÛwµnxW±‚·m4³{:È[|_±’:£.˜hµnxW±‚÷t¨Şà¦âçÃ'ï5óeF%WÕDşu#ûßçÒ7ğ"Ã{:]±ØÙ·¢sx¿9R·5¥ƒhøãMõ“â¤BÉ}ìx>´f®½¬[`ØŒ¨_ÿ ´Z­VÌ)—a·~o´8Éê+$ÂªåÚ .˜sÍ»1¦Ú’…ñÅW§+ÆëyäjmaŞEk©9aÃl¼Ìm¥h‡Íã§A¢¶‡-Ş:hÏ5\Œ‡Fğ
+êlvËZ»}jC¯4«¡hğ÷o¡ÎC«c5ÊÓã>œ<O!WãÇO]ş¿"j4\º¹faxù
+aø9yA†–şõkÖïS”¦ÿ©0b`Š!äÆÿñâ¨‹®É?Ã+ 4bSÍfZ¥o$êK…aãªm¨7­×~Êÿ¸—
+”ÿ\á•Ğ™€Ş‚Ê4ç¨2÷PevÂT€“6TœŠ ¼21¡Ô¦€@e×º¾zîùü¼µnÆ9Aˆí¾QîF(ÒÁ7ˆÂFĞÜ$ÿİ0BšÔ<‰'¨í£ÏXöIN°4³ ,¦¶ÙDà ^ôë€eBD‰dZq|åBQ”QS.§&pç3p*ã¦€İ`YéâÜÓ-]\0O‹¿Iéı
+ °Ï,¥?	uBîåô@Â8Æt×tüˆ=Ãıˆ(î.ŠnÉ¤%+’@ Ñ\æ‘P6U¼›“Š”£ÔYJ™r¨~&Y ŞW…S·ó‡a»O$î²ÄVÁÊ‡ö‹¸TÂªÊUP‚½[ÈØ.§Š¥Í*©0·äğ‚í>ô9n/”İpTærÊ^ú,ëDÍÄ¼qÜ–8Î|gª×2©5÷O<zD„UGÃpX-@c¡ ¹¸f¬IÀ!lÅ ÜÍ Åk)…ÁÙlq”¼Pf3³»Œ¤9‹Ì“6ùVØP’ú£_K€[H~IlS•ÄßS,ªÇ'än£»’y²H„Œ7`ae4“FµÁç¦–äëßÏEöáı”šÍ1,tä¸¨_ÖÎ<ú‡áùJ,À&›Ô[÷¦×øŠxáÚ…ÙâZıN`3ÌfD™#ÊûÇö–¢?«´ù‰×ƒ³MI¯XcTö–¤Lâ`û-r1ìFdÜ;½’ú`8úóøêº»ÚÙêú»«Óó‹aã³lBÊÏ0Ê¹0tZa.Ì½™Yü°¯?ƒ`B¥kÃ_€‚+>Ø+˜YÉ!Um-qRĞëIÖ2LØ»’%ºR·'7Qÿàn¶$Û	;
+ãÅ¾Ìúö¡HÁNICPÊ¯Ì#×†C™ÓY‰Rö]ìK»-…©>tp/UÔù„B!`;Êó›YbënrÒRL•ÛÛ-¤Âö”>fø‡%Üá>¾pŸ'Ù7È o©&¨’¥ìÄ.t¢„3Ôìj:`ĞÈı)åÅ¬ñóş“&D,6jé~.ïyúZŸTYÀÙtëæ!ôáP%JÓ\â-©„dûsióÃs ŒUåI¼Ÿd\½¥ ¶Œ=ŸóøN®mmQ,VxÚ‰t¨Àû…™fŞ”Ìº„t·ÜiWü«C§¸{
+ı5öQøJ•=~5é…îšù@0KnA‰(•aÖ
+©	‡5<â@Óu¢èı5L<m)ÄLêÎ…8ävg7yÜö;56X¬„VB«c‚ÁJx`e4°¨DSÇ—å¦Ç‹Ur%‹ŒdqÙR,hû*Ë8›8\Í,æ;#õû"OÜlccªœô\ºcUÚì€zw¾í1ŞE~5@-” ÆçR?š˜6è™È*ÍÕÌÇ>k'›X¡€Cq°“ªÃ õ4]†û	¤¤ú:³o!Ş%‘³æ&X:ÇºœàoDM‘ÉƒL½óğ	
+ÎqÛ_lVO?Üú= ¾f˜Şæ5q—<9·föæu\Ã,is<ô«·Dßcóš’YE÷'4¼Ã,ìÍ*
+¸…¸Öíql4¿.xë*ù¸ËÈÇşÄÖÄ~€@×5Hp;Œ‡*+¯”éË²XĞ–(›Max~hp„§|9eG•ôÅÇ¼¾¼x¯‹]ßÍq8P“Ã¹$8dÑa‡ğ´‚‡á9‹øEkÄèÛ€«n¯XŞLãmTóiÂ#å…ñí—¼Ù)î.ôK3{KúÊFØ:ÃQÕœ·É÷ĞMU4ù¥pµ:y æ{ÈzY¿\!@¢®¾Á¥ÂR¤KvU¹Küz[\Iî÷°Ê°¢Œ*6I·!)´ ;0ßÙæ¢OQ¯ãb²J#{UUíd¥;²Ç»À~9ıw©¿r­œŒ-¼`åÈ}Ox>k:8T×ä—¸€fNYeH3ÜÌ§d\3¼R/,¹$ °rùÌïkBÄ+Ê…V+…á ^Ç¾.×¤šiÌ­&"¹ëfPIù°Un‡HPq]NovÌ"«‰­ùÊÄF•fâTÛÄşşÌ¡¶Åã‚9­ÂJj$S.eº‰Ó‘v°ıf§Ø‘u:8 ÷–…
+ßÜÁ«1_a0x÷î·ßê™BæÆ¶{R×3=Îœàm\È×¥i6‰¾bô<em…mIQ>d¢º4Ü©ÂE&K²åsø+<ˆ­“[šı
+Ù–j»Zy—ÎñõûI†ø†ò$$¦5$ªã{9ë[º¡Y¬q…ág(5röşn4ya?çà¡TÅå¦;-ße=¡¡wšsm¤É`A½œİ®™jøäFã|â·xÒê‹/ÉÂ“§|OÙi.=Ñ‹^5ûE_‰‰â„É8`ÅÀD»E@-8÷µà.øº 7ny©„xÃ¾Gûšz>Uû—Ö9i“ÉD/½Ö÷Áÿ´t-ã|¶Òf(w‹°õ“™]ãÓAIIĞÚ *‚Æ)Èy®uÿ-P‹cø ³÷³½rë©j"¸5êŠÓ‘°¡zÌ1y|weMqypáCç°‚v”õ±xş	ê*Á|%J+eˆo¢º‚õúò¦úç…³¶±‚Q°ÑŒÔ§Zf† à _Úµ/æÀÉf5şã"Â!4¯ì&/@HïóbÔ_,èt[zÔp¦ÓU”sá<ÛºÆ*©š>Z¶7_§nJÂ±ÿ,6,>7I>‘5'øJe6°”³:ø¼°$ş‡eN0¬âä«T-[ÕÜ½eDÀÑèŠob¢àØÎµk;Úœ-¯õÆÓ6,Cq{JÑ>ÀDÍ»UÄ«ÜÎñÚp^É êÏ-ìd¹5DÀ¶pÈc¤ÉÀéap˜R0&£šó•MM#?æëÊ¡éß¼#ïm÷Ye>/§,ÃºK©Ç¼4Óäõ(€ehA+UŒ…Kg'¾ïxGíöZk-iûMç±Ù–KÙÁÉõöÚó—Ï–(»ø¶¾“ÚíÄÔ¬»rÔBpİ<©Y¶Ëx(Kä$Ã†Œ*$‹ÂÇûŠ£Â0ø¿eş¾˜tğœíŞ/4ßë9N¥Wîër\‡è
+õ<°ËG]inÊ*<R,S[[+Sp[ö1_,
+J(ã¬'9[Ä”½„J1ªÊfÕwb¾ãBŠ¹Á«’±Ô‚TögrÓ 7¾n+ğú]ÿŸ\Ÿlıv­…AV”¥íP)ºúlËI–•ÿ†gß«ş¨¥x¤S×¡ø£µÅó<“ŞCY€7Ş ©ì]nvŠÚÔõØ–oÙ_ôçÒ'+-TÿyèÃ¬²¨íæ.S¥8j9ä4•õ¬Ù…éĞK¶QpËÛö¨pöKû®E^ë®ÚkUïH)$Áó=ÖÂ9P¯æª9ÊüİBşgr6ÚâRõ–çü4«°›I‘ğ7HYVC"nÇBOG%ù6§ú½Ê`Ûæq¢Í£A%Ç©Æ¥Aæ’àìó3…£+–õrêà30·Åi‘†—,µ®¼6ÁSîšôqˆ´ocê«k¡›ê|ĞJÏÔ:%O(ı,—±íeMµp+(aup¦0óYA™ê€Ì`LˆÃ!®dÀ™ô+n¡Ìº5`¤(RÊ(	úV|·ö&Ş}ó
+ØmvŒxğ~Ê’½÷*²xòKâªå0Õ²Úx£×
+ÔDC)÷”—ÛP®|G·ĞÃ§Ÿ¾û?   ÿÿ A(¿&
