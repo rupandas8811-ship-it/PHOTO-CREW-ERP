@@ -2344,8 +2344,28 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               finalStatus = 'Follow Up';
             }
             const teamData = l.Team_member || l.Team_Members || l.team_members || l.Team_members || l.team_member || '';
-            const finalQuoteAmt = l.Final_Quotation_Amount ?? l.final_quotation_amount ?? l.final_amount ?? null;
-            const finalPkgAmt = l.Final_Package_Amount ?? l.final_package_amount ?? finalQuoteAmt;
+            const linkedQuote = (dbQuotations || []).find((q: any) => String(q.lead_id || '').trim() === String(l.lead_id || '').trim());
+            const quoteFinalAmt = linkedQuote ? (linkedQuote.final_amount ?? linkedQuote.final_quotation_amount ?? linkedQuote.quotation_amount ?? null) : null;
+            const linkedLeadPkg = (dbLeadPackages || []).find((lp: any) => String(lp.lead_id || '').trim() === String(l.lead_id || '').trim());
+            const pkgFinalAmt = linkedLeadPkg ? (linkedLeadPkg.final_amount ?? linkedLeadPkg.total_amount ?? null) : null;
+
+            const finalQuoteAmt = (l.Final_Quotation_Amount !== null && l.Final_Quotation_Amount !== undefined && !isNaN(Number(l.Final_Quotation_Amount)) && Number(l.Final_Quotation_Amount) > 0)
+              ? Number(l.Final_Quotation_Amount)
+              : (l.final_quotation_amount !== null && l.final_quotation_amount !== undefined && !isNaN(Number(l.final_quotation_amount)) && Number(l.final_quotation_amount) > 0)
+                ? Number(l.final_quotation_amount)
+                : (l.final_amount !== null && l.final_amount !== undefined && !isNaN(Number(l.final_amount)) && Number(l.final_amount) > 0)
+                  ? Number(l.final_amount)
+                  : (quoteFinalAmt !== null && quoteFinalAmt !== undefined && !isNaN(Number(quoteFinalAmt)) && Number(quoteFinalAmt) > 0)
+                    ? Number(quoteFinalAmt)
+                    : (pkgFinalAmt !== null && pkgFinalAmt !== undefined && !isNaN(Number(pkgFinalAmt)) && Number(pkgFinalAmt) > 0)
+                      ? Number(pkgFinalAmt)
+                      : null;
+
+            const finalPkgAmt = (l.Final_Package_Amount !== null && l.Final_Package_Amount !== undefined && !isNaN(Number(l.Final_Package_Amount)) && Number(l.Final_Package_Amount) > 0)
+              ? Number(l.Final_Package_Amount)
+              : (l.final_package_amount !== null && l.final_package_amount !== undefined && !isNaN(Number(l.final_package_amount)) && Number(l.final_package_amount) > 0)
+                ? Number(l.final_package_amount)
+                : finalQuoteAmt;
             const cleanLostReason = l.Lost_Reason || l.lost_reason || l.LostReason || l.lostReason || '';
             const cleanLostNotes = l.Lost_Notes || l.lost_notes || l.LostNotes || l.lostNotes || '';
             return { 
@@ -2354,9 +2374,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               lost_reason: cleanLostReason,
               Lost_Notes: cleanLostNotes,
               lost_notes: cleanLostNotes,
-              Final_Quotation_Amount: finalQuoteAmt !== null && finalQuoteAmt !== undefined && !isNaN(Number(finalQuoteAmt)) ? Number(finalQuoteAmt) : null,
-              Final_Package_Amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : null,
-              final_package_amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : undefined,
+              Final_Quotation_Amount: finalQuoteAmt,
+              final_quotation_amount: finalQuoteAmt,
+              Final_Package_Amount: finalPkgAmt,
+              final_package_amount: finalPkgAmt !== null ? finalPkgAmt : undefined,
               Team_member: teamData, 
               Team_Members: teamData, 
               team_members: teamData,
@@ -2713,12 +2734,37 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                   if (finalEvents.length === 0) {
                     finalEvents = deserializeLeadEvents(mappedItem.notes_special_customizations).events || [];
                   }
+                  const rawFinalQuote = mappedItem.Final_Quotation_Amount ?? mappedItem.final_quotation_amount ?? mappedItem.final_amount ?? existingLead?.Final_Quotation_Amount ?? existingLead?.final_quotation_amount ?? existingLead?.final_amount ?? null;
+                  const rawFinalPkg = mappedItem.Final_Package_Amount ?? mappedItem.final_package_amount ?? rawFinalQuote ?? existingLead?.Final_Package_Amount ?? existingLead?.final_package_amount;
+                  const finalQuoteAmt = rawFinalQuote !== null && rawFinalQuote !== undefined && !isNaN(Number(rawFinalQuote)) && Number(rawFinalQuote) > 0 ? Number(rawFinalQuote) : null;
+                  const finalPkgAmt = rawFinalPkg !== null && rawFinalPkg !== undefined && !isNaN(Number(rawFinalPkg)) && Number(rawFinalPkg) > 0 ? Number(rawFinalPkg) : finalQuoteAmt;
                   mappedItem = { 
                     ...mappedItem, 
+                    Final_Quotation_Amount: finalQuoteAmt,
+                    final_quotation_amount: finalQuoteAmt,
+                    Final_Package_Amount: finalPkgAmt,
+                    final_package_amount: finalPkgAmt || undefined,
                     status: mappedItem.current_status || mappedItem.status || 'New Lead', 
                     current_status: mappedItem.current_status || mappedItem.status || 'New Lead',
                     events: finalEvents
                   };
+                }
+                if (table === 'quotations') {
+                  const qFinalAmt = Number(mappedItem.final_amount ?? mappedItem.final_quotation_amount ?? mappedItem.quotation_amount ?? 0);
+                  if (qFinalAmt > 0 && mappedItem.lead_id) {
+                    setLeads((prevLeads) => prevLeads.map((ld) => {
+                      if (String(ld.lead_id).trim() === String(mappedItem.lead_id).trim()) {
+                        return {
+                          ...ld,
+                          Final_Quotation_Amount: qFinalAmt,
+                          final_quotation_amount: qFinalAmt,
+                          Final_Package_Amount: qFinalAmt,
+                          final_package_amount: qFinalAmt
+                        };
+                      }
+                      return ld;
+                    }));
+                  }
                 }
                 if (table === 'orders') mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
                 if (table === 'operations_staff') {
@@ -6737,6 +6783,22 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           return next;
         });
 
+        const syncFinalAmt = Number(newQuote.final_amount ?? newQuote.final_quotation_amount ?? newQuote.quotation_amount ?? 0);
+        if (syncFinalAmt > 0 && newQuote.lead_id) {
+          setLeads((prevLeads) => prevLeads.map((ld) => {
+            if (String(ld.lead_id).trim() === String(newQuote.lead_id).trim()) {
+              return {
+                ...ld,
+                Final_Quotation_Amount: syncFinalAmt,
+                final_quotation_amount: syncFinalAmt,
+                Final_Package_Amount: syncFinalAmt,
+                final_package_amount: syncFinalAmt
+              };
+            }
+            return ld;
+          }));
+        }
+
         logActivity(
           `${action === 'UPDATE' ? 'Updated' : 'Generated'} Quotation: ${finalQuoteNum}`, 
           'Sales', 
@@ -6831,6 +6893,22 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         return next;
       });
 
+      const syncFinalAmt = Number(newQuote.final_amount ?? newQuote.final_quotation_amount ?? newQuote.quotation_amount ?? 0);
+      if (syncFinalAmt > 0 && newQuote.lead_id) {
+        setLeads((prevLeads) => prevLeads.map((ld) => {
+          if (String(ld.lead_id).trim() === String(newQuote.lead_id).trim()) {
+            return {
+              ...ld,
+              Final_Quotation_Amount: syncFinalAmt,
+              final_quotation_amount: syncFinalAmt,
+              Final_Package_Amount: syncFinalAmt,
+              final_package_amount: syncFinalAmt
+            };
+          }
+          return ld;
+        }));
+      }
+
       logActivity(`Updated Quotation: ${dbExisting.quotation_number}`, 'Sales', newQuote.lead_id, 'N/A', 'Quotation Updated');
       return dbExisting.quotation_number;
     } else {
@@ -6882,6 +6960,22 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         return next;
       });
 
+      const syncFinalAmt = Number(newQuote.final_amount ?? newQuote.final_quotation_amount ?? newQuote.quotation_amount ?? 0);
+      if (syncFinalAmt > 0 && newQuote.lead_id) {
+        setLeads((prevLeads) => prevLeads.map((ld) => {
+          if (String(ld.lead_id).trim() === String(newQuote.lead_id).trim()) {
+            return {
+              ...ld,
+              Final_Quotation_Amount: syncFinalAmt,
+              final_quotation_amount: syncFinalAmt,
+              Final_Package_Amount: syncFinalAmt,
+              final_package_amount: syncFinalAmt
+            };
+          }
+          return ld;
+        }));
+      }
+
       logActivity(`Generated Quotation: ${newQuote.quotation_number}`, 'Sales', newQuote.lead_id, 'N/A', 'Quotation Generated');
       return newQuote.quotation_number;
     }
@@ -6901,6 +6995,24 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       localStorage.setItem('erp_quotations', JSON.stringify(next));
       return next;
     });
+
+    if (updates.final_amount !== undefined || (updates as any).final_quotation_amount !== undefined || updates.quotation_amount !== undefined) {
+      setLeads((prevLeads) => prevLeads.map((ld) => {
+        if (updatedQuote && String(ld.lead_id).trim() === String(updatedQuote.lead_id).trim()) {
+          const syncFinalAmt = Number(updatedQuote.final_amount ?? (updatedQuote as any).final_quotation_amount ?? updatedQuote.quotation_amount ?? 0);
+          if (syncFinalAmt > 0) {
+            return {
+              ...ld,
+              Final_Quotation_Amount: syncFinalAmt,
+              final_quotation_amount: syncFinalAmt,
+              Final_Package_Amount: syncFinalAmt,
+              final_package_amount: syncFinalAmt
+            };
+          }
+        }
+        return ld;
+      }));
+    }
 
     setTimeout(async () => {
       if (!updatedQuote) return;

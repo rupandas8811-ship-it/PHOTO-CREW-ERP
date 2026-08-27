@@ -718,15 +718,21 @@ export const ProductionStaffModule: React.FC = () => {
       confirmedAt: ''
     };
 
-    const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
-      const vOrd = String(v.order_id || '').trim().toLowerCase();
-      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
-      return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
-    });
-
-    const existingImage = (savedTargetVerif?.client_communication_consent_proof || delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
+    const targetAssignment = (editorAssignments || []).find((ea: any) => ea.assignment_id === delivItem.assignmentId) || delivItem.assignmentObj;
+    const existingImage = (
+      targetAssignment?.customer_review_image ||
+      targetAssignment?.confirmation_proof ||
+      targetAssignment?.customer_communication_proof ||
+      targetAssignment?.client_communication_proof ||
+      targetAssignment?.proof_url ||
+      targetAssignment?.proof_image ||
+      targetAssignment?.uploaded_proof ||
+      delivItem.confirmationProof ||
+      ''
+    ).trim();
     const existingEditedLink = (
-      savedTargetVerif?.upload_link_path ||
+      targetAssignment?.Edited_Drive_Link ||
+      targetAssignment?.edited_drive_link ||
       delivItem.editedDriveLink || 
       delivItem.assignmentObj?.edited_drive_link || 
       delivItem.assignmentObj?.Edited_Drive_Link || 
@@ -743,6 +749,19 @@ export const ProductionStaffModule: React.FC = () => {
       server_upload_event_date: currentCfg.eventDate,
       server_upload_folder_name: currentCfg.folderName || '',
       event_configs: eventConfigs
+    });
+  };
+
+  const closeCustomerReviewModal = () => {
+    setCustomerReviewModal(null);
+    setCustomerReviewForm({
+      edited_drive_link: '',
+      customer_review_image: '',
+      selectedIds: [],
+      server_upload_confirmed: false,
+      server_upload_event_date: '',
+      server_upload_folder_name: '',
+      event_configs: {}
     });
   };
 
@@ -840,13 +859,19 @@ export const ProductionStaffModule: React.FC = () => {
       confirmed: false
     };
 
-    const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
-      const vOrd = String(v.order_id || '').trim().toLowerCase();
-      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
-      return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
-    });
-
-    const existingProof = (savedTargetVerif?.client_communication_consent_proof || delivItem.confirmationProof || '').trim();
+    // Strictly task-specific proof: Retrieve exclusively from this assignment's own record
+    const targetAssignment = (editorAssignments || []).find((ea: any) => ea.assignment_id === delivItem.assignmentId) || delivItem.assignmentObj;
+    const existingProof = (
+      targetAssignment?.confirmation_proof ||
+      targetAssignment?.customer_review_image ||
+      targetAssignment?.customer_communication_proof ||
+      targetAssignment?.client_communication_proof ||
+      targetAssignment?.proof_url ||
+      targetAssignment?.proof_image ||
+      targetAssignment?.uploaded_proof ||
+      delivItem.confirmationProof ||
+      ''
+    ).trim();
 
     setEditingCompletedModal({ group: grp, actionItem: delivItem });
     setEditingCompletedForm({
@@ -856,6 +881,18 @@ export const ProductionStaffModule: React.FC = () => {
       server_upload_event_date: currentCfg.eventDate,
       server_upload_folder_name: currentCfg.folderName,
       event_configs: eventConfigs
+    });
+  };
+
+  const closeEditingCompletedModal = () => {
+    setEditingCompletedModal(null);
+    setEditingCompletedForm({
+      confirmation_proof: '',
+      selectedIds: [],
+      server_upload_confirmed: false,
+      server_upload_event_date: '',
+      server_upload_folder_name: '',
+      event_configs: {}
     });
   };
 
@@ -1001,6 +1038,7 @@ export const ProductionStaffModule: React.FC = () => {
         // Customer Confirmation Image / Proof resolution
         const confirmationProof = (
           assignment.confirmation_proof ||
+          (assignment as any).customer_review_image ||
           assignment.customer_communication_proof ||
           assignment.client_communication_proof ||
           assignment.proof_url ||
@@ -2889,7 +2927,7 @@ Thank you.`;
                   <h3 className="text-base font-bold text-white">Customer Review & Server Checklist</h3>
                 </div>
                 <button 
-                  onClick={() => setCustomerReviewModal(null)}
+                  onClick={closeCustomerReviewModal}
                   className="text-zinc-400 hover:text-white p-1 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -3136,7 +3174,7 @@ Thank you.`;
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setCustomerReviewModal(null)}
+                  onClick={closeCustomerReviewModal}
                   className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
                 >
                   Cancel
@@ -3262,7 +3300,7 @@ Thank you.`;
                   <h3 className="text-base font-bold text-white">Upload Confirmation / Proof</h3>
                 </div>
                 <button 
-                  onClick={() => setEditingCompletedModal(null)}
+                  onClick={closeEditingCompletedModal}
                   className="text-zinc-400 hover:text-white p-1 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
@@ -3494,7 +3532,7 @@ Thank you.`;
               <div className="flex justify-end gap-2 pt-3 border-t border-zinc-800 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setEditingCompletedModal(null)}
+                  onClick={closeEditingCompletedModal}
                   className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-bold rounded-xl cursor-pointer"
                 >
                   Cancel
