@@ -325,7 +325,7 @@ export const OperationsAnalytics: React.FC = () => {
             Active Matches Count: ${filteredOrders.length}
           </div>
           <div className="overflow-x-auto w-full max-w-full">
-<table>
+<table className="w-full text-left border-collapse min-w-max text-xs">
             <thead>
               <tr>
                 <th>Order ID</th>

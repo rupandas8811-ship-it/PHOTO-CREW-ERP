@@ -662,7 +662,7 @@ export const ProductionStaffModule: React.FC = () => {
           const vOrd = String(v.order_id || '').trim().toLowerCase();
           const vEvt = String(v.event_id || 'default').trim().toLowerCase();
           if (cleanOrdId && vOrd === cleanOrdId) {
-            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase())) {
+            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase()) || vEvt === String(item.assignmentId).trim().toLowerCase()) {
               return true;
             }
           }
@@ -727,7 +727,6 @@ export const ProductionStaffModule: React.FC = () => {
       targetAssignment?.proof_url ||
       targetAssignment?.proof_image ||
       targetAssignment?.uploaded_proof ||
-      delivItem.confirmationProof ||
       ''
     ).trim();
     const existingEditedLink = (
@@ -808,7 +807,7 @@ export const ProductionStaffModule: React.FC = () => {
           const vOrd = String(v.order_id || '').trim().toLowerCase();
           const vEvt = String(v.event_id || 'default').trim().toLowerCase();
           if (cleanOrdId && vOrd === cleanOrdId) {
-            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase())) {
+            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase()) || vEvt === String(item.assignmentId).trim().toLowerCase()) {
               return true;
             }
           }
@@ -869,7 +868,6 @@ export const ProductionStaffModule: React.FC = () => {
       targetAssignment?.proof_url ||
       targetAssignment?.proof_image ||
       targetAssignment?.uploaded_proof ||
-      delivItem.confirmationProof ||
       ''
     ).trim();
 
@@ -1035,15 +1033,16 @@ export const ProductionStaffModule: React.FC = () => {
         // Edited Drive Link resolution
         const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
 
-        // Customer Confirmation Image / Proof resolution
+        // Customer Confirmation Image / Proof resolution (strictly per task/assignment)
+        const targetAssign = (editorAssignments || []).find((ea: any) => ea.assignment_id === assignment.assignment_id) || assignment;
         const confirmationProof = (
-          assignment.confirmation_proof ||
-          (assignment as any).customer_review_image ||
-          assignment.customer_communication_proof ||
-          assignment.client_communication_proof ||
-          assignment.proof_url ||
-          assignment.proof_image ||
-          assignment.uploaded_proof ||
+          targetAssign?.confirmation_proof ||
+          (targetAssign as any)?.customer_review_image ||
+          targetAssign?.customer_communication_proof ||
+          targetAssign?.client_communication_proof ||
+          targetAssign?.proof_url ||
+          targetAssign?.proof_image ||
+          targetAssign?.uploaded_proof ||
           ''
         ).trim();
 
@@ -1116,7 +1115,6 @@ export const ProductionStaffModule: React.FC = () => {
           eventDate: item.eventDate,
           targetFinishDate: item.targetFinishDate,
           rawFootageLink: item.rawFootageLink,
-          confirmationProof: item.confirmationProof,
           serverUploadConfirmed: item.serverUploadConfirmed,
           serverUploadEventDate: item.serverUploadEventDate,
           serverUploadFolderName: item.serverUploadFolderName,
@@ -1132,9 +1130,6 @@ export const ProductionStaffModule: React.FC = () => {
       grp.deliverables.push(item);
       if (!grp.rawFootageLink && item.rawFootageLink) {
         grp.rawFootageLink = item.rawFootageLink;
-      }
-      if (!grp.confirmationProof && item.confirmationProof) {
-        grp.confirmationProof = item.confirmationProof;
       }
       if (!grp.serverUploadConfirmed && item.serverUploadConfirmed) {
         grp.serverUploadConfirmed = item.serverUploadConfirmed;
@@ -1375,10 +1370,6 @@ export const ProductionStaffModule: React.FC = () => {
         if (customerReviewForm.edited_drive_link?.trim()) {
           prodUpdate.edited_drive_link = customerReviewForm.edited_drive_link.trim();
         }
-        if (imgUrl) {
-          prodUpdate.client_communication_proof = imgUrl;
-          prodUpdate.customer_communication_proof = imgUrl;
-        }
         await updateProduction(prodId, prodUpdate);
       }
 
@@ -1490,11 +1481,6 @@ export const ProductionStaffModule: React.FC = () => {
           remarks: `Customer Review updated by ${staffName} on ${new Date().toLocaleDateString()}`
         };
 
-        if (imgUrl) {
-          prodPayload.client_communication_proof = imgUrl;
-          prodPayload.customer_communication_proof = imgUrl;
-        }
-
         if (cfg.confirmed && cfg.eventDate && cfg.folderName) {
           prodPayload.server_upload_confirmed = true;
           prodPayload.server_upload_event_date = cfg.eventDate.trim();
@@ -1527,7 +1513,7 @@ export const ProductionStaffModule: React.FC = () => {
           if (orderId) {
             await saveClientAcceptanceVerification({
               order_id: orderId,
-              event_id: deliv.eventId || evtKey || 'default',
+              event_id: deliv.assignmentId || deliv.eventId || evtKey || 'default',
               folder_name: fName,
               upload_link_path: lPath,
               client_communication_consent_proof: imgUrl || '',
@@ -1701,9 +1687,6 @@ Thank you.`;
           server_upload_confirmed: true,
           server_upload_event_date: serverEventDate,
           server_upload_folder_name: serverFolderName,
-          client_communication_proof: mainProofUrl || proofInput,
-          customer_communication_proof: mainProofUrl || proofInput,
-          proof_url: mainProofUrl || proofInput,
           remarks: `Editing Completed & Customer Review Proof (${mainProofUrl || proofInput}) uploaded. Server Folder: "${serverFolderName}" (Event Date: ${serverEventDate}) by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }
@@ -1732,7 +1715,7 @@ Thank you.`;
           if (orderId) {
             await saveClientAcceptanceVerification({
               order_id: orderId,
-              event_id: deliv.eventId || evtKey || 'default',
+              event_id: deliv.assignmentId || deliv.eventId || evtKey || 'default',
               folder_name: fName,
               upload_link_path: lPath,
               client_communication_consent_proof: mainProofUrl || proofInput,
@@ -2007,9 +1990,9 @@ Thank you.`;
 
                       {/* DESKTOP LAYOUT (Table view, visible on all screens) */}
                       <div className="block overflow-x-auto w-full">
-                        <table className="w-full text-left border-collapse min-w-max">
-                          <thead>
-                            <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                        <table className="w-full text-left border-collapse min-w-max block sm:table">
+                          <thead className="hidden sm:table-header-group">
+                            <tr className="hidden sm:table-row bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
                               <th className="px-3.5 py-2.5 font-bold">Order ID</th>
                               <th className="px-3.5 py-2.5 font-bold">Customer Name</th>
                               <th className="px-3.5 py-2.5 font-bold">Event Name</th>
@@ -2023,7 +2006,7 @@ Thank you.`;
                               <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-900/80 text-xs font-sans">
+                          <tbody className="block sm:table-row-group divide-y divide-zinc-900/80 sm:divide-y text-xs font-sans">
                             {grp.deliverables.map((delivItem: any) => {
                               const delivBadge = getStatusBadge(delivItem.status);
                               const isDelivLocked = ['Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'].includes(delivItem.status) || grp.orderObj?.current_stage === 'Business Owner Review';
@@ -2034,14 +2017,14 @@ Thank you.`;
                               const effectiveRawFootageLink = delivItem.rawFootageLink || grp.rawFootageLink;
 
                               return (
-                                <tr key={delivItem.assignmentId} className="hover:bg-zinc-900/40 transition-colors">
+                                <tr key={delivItem.assignmentId} className="block sm:table-row hover:bg-zinc-900/40 transition-colors p-4 sm:p-0 border-b border-zinc-900 sm:border-0 relative space-y-2 sm:space-y-0">
                                   {/* 1. Order ID */}
-                                  <td className="px-3.5 py-3 font-mono font-bold text-violet-400 whitespace-nowrap">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-mono font-bold text-violet-400 whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Order ID</span>
                                     {delivItem.orderId}
                                   </td>
 
                                   {/* 2. Customer Name */}
-                                  <td className="px-3.5 py-3 font-bold text-white whitespace-nowrap">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-bold text-white whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Customer Name</span>
                                     <div>{delivItem.customerName}</div>
                                     {delivItem.customerMobile && (
                                       <div className="text-[10px] text-emerald-400 font-mono font-normal flex items-center gap-1 mt-0.5">
@@ -2052,7 +2035,7 @@ Thank you.`;
                                   </td>
 
                                   {/* 3. Event Name */}
-                                  <td className="px-3.5 py-3 font-semibold text-purple-300">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-semibold text-purple-300"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Event Name</span>
                                     <div className="flex items-center gap-2">
                                       <span className="text-zinc-200 font-bold">{delivItem.eventName || 'N/A'}</span>
                                     </div>
@@ -2062,7 +2045,7 @@ Thank you.`;
                                   </td>
 
                                   {/* 4. Assigned Task (Deliverable) */}
-                                  <td className="px-3.5 py-3 font-bold text-zinc-300">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-bold text-zinc-300"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Assigned Task</span>
                                     <div className="flex items-center gap-1.5">
                                       <span>🎯 {delivName}</span>
                                       {delivQty > 1 && (
@@ -2075,12 +2058,12 @@ Thank you.`;
                                   </td>
 
                                   {/* 5. Target Delivery Date */}
-                                  <td className="px-3.5 py-3 font-mono text-xs text-zinc-200 font-bold whitespace-nowrap">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-mono text-xs text-zinc-200 font-bold whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Target Delivery Date</span>
                                     {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
                                   </td>
 
                                   {/* 6. Note */}
-                                  <td className="px-3.5 py-3 font-mono whitespace-nowrap">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-mono whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Note</span>
                                      {delivItem.prodObj?.project_notes ? (
                                        <button
                                          onClick={() => setSelectedNote(delivItem.prodObj?.project_notes)}
@@ -2097,14 +2080,14 @@ Thank you.`;
                                   </td>
 
                                   {/* 7. Current Status */}
-                                  <td className="px-3.5 py-3 whitespace-nowrap">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Current Status</span>
                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${delivBadge.color}`}>
                                       {delivBadge.label}
                                     </span>
                                   </td>
 
                                   {/* 8. Edited Drive Link */}
-                                  <td className="px-3.5 py-3 font-mono">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 font-mono"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Raw Footage</span>
                                     {delivItem.editedDriveLink && (delivItem.editedDriveLink.startsWith('http://') || delivItem.editedDriveLink.startsWith('https://')) ? (
                                       <a
                                         href={delivItem.editedDriveLink.startsWith('http') ? delivItem.editedDriveLink : `https://${delivItem.editedDriveLink}`}
@@ -2233,7 +2216,7 @@ Thank you.`;
                                   </td>
 
                                   {/* Row Footage */}
-                                  <td className="px-3.5 py-3 whitespace-nowrap">
+                                  <td className="block sm:table-cell px-0 sm:px-3.5 py-1 sm:py-3 whitespace-nowrap"><span className="sm:hidden font-mono text-[9px] text-zinc-500 uppercase block mb-0.5">Current Status</span>
                                     {effectiveRawFootageLink && (
                                       effectiveRawFootageLink.startsWith('http') || effectiveRawFootageLink.includes('drive.google.com') 
                                     ) ? (
