@@ -11592,23 +11592,5 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   <div />
                 )}
               </div>
-
-{/* Next or Save */}
-<button
-  type="button"
-  onClick={handleWizardNext}
-  disabled={isSaving}
-  className={`px-5.5 py-2 text-xs font-bold text-white rounded-xl shadow-lg border transition-all ${
-    isSaving
-      ? 'bg-slate-800 text-slate-500 border-slate-850 cursor-not-allowed opacity-50 shadow-none'
-      : 'bg-emerald-600 hover:bg-emerald-500 border-emerald-500/30 cursor-pointer'
-  }`}
->
-  {isSaving
-    ? 'Processing...'
-    : wizardStep < 3
-      ? 'Next'
-      : 'Save & Continue'}
-</button>
             </div>
 </div>
