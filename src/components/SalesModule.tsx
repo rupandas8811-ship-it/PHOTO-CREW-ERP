@@ -11613,7 +11613,4 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
           </div>
         ) : (
-          <div classNxœd‹A
-Â0D÷ÿŸîºVÁUÕèÆ„d
-4¿4¿1.zwAAÎjxoÆ87ŠªÆ!)ffà7ÉÑ*Ì±ëx¤f”$Qss!Şä&l†.Îˆp
-¿Ùœv>”ß©]ékÛÓJ„:É¬ì1Ø%*ßmD¾Š_"zz  ÿÿ Ì3’
+          <div classNxï¿½dï¿½A
