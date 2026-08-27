@@ -4,8 +4,7 @@ import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
-  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw, Download, Printer, FileSpreadsheet,
-  MessageSquare, User, AlertTriangle, Lock, Film, Flame, ArrowLeft, Folder, Sparkles, HelpCircle, Scale, Tag, Camera, Gift, Timer, Clipboard, HeartOff
+  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
@@ -154,23 +153,23 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 2. Check for dimension / size specifications at the start of the string:
-  // e.g. "16\u00D76", "16x6", "12\u00D78 Album", "16\u00D76 Frame", "16 \u00D7 6", "12 x 18", "8x24", "8*12", "12\u00D736"
-  // If the string starts with a dimension (digits x/x digits), it is deliverable text, NOT a leading quantity!
-  const isLeadingDimension = /^\d+\s*[\*xX]\s*\d+/.test(text);
+  // e.g. "16Ã—6", "16x6", "12Ã—8 Album", "16Ã—6 Frame", "16 Ã— 6", "12 x 18", "8x24", "8*12", "12Ã—36"
+  // If the string starts with a dimension (digits x/Ã— digits), it is deliverable text, NOT a leading quantity!
+  const isLeadingDimension = /^\d+\s*[\*xXÃ—]\s*\d+/.test(text);
   if (isLeadingDimension) {
     return { qty: 1, text };
   }
 
   // 3. Check for technical specifications / units starting with numbers:
-  // e.g. "4K Cinematic Video", "8K Video", "20 Pages \u00D7 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
+  // e.g. "4K Cinematic Video", "8K Video", "20 Pages Ã— 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
   const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
   if (isUnitOrSpec) {
     return { qty: 1, text };
   }
 
   // 4. Check for leading quantity with explicit multiplier:
-  // e.g. "2 x Traditional Photos", "2 \u00D7 Cinematic Video", "2 * Album", "2 x 16\u00D76 Frame", "2 \u00D7 16\u00D76"
-  const multiplierMatch = text.match(/^(\d+)\s*[xX\*]\s+(.+)$/);
+  // e.g. "2 x Traditional Photos", "2 Ã— Cinematic Video", "2 * Album", "2 x 16Ã—6 Frame", "2 Ã— 16Ã—6"
+  const multiplierMatch = text.match(/^(\d+)\s*[xXÃ—\*]\s+(.+)$/);
   if (multiplierMatch) {
     const parsedQty = parseInt(multiplierMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
@@ -179,8 +178,8 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 5. Check for leading quantity followed by dimension:
-  // e.g. "2 16\u00D76", "3 12\u00D78 Album", "2 16\u00D76 Frame"
-  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX]\s*\d+.*)$/);
+  // e.g. "2 16Ã—6", "3 12Ã—8 Album", "2 16Ã—6 Frame"
+  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xXÃ—]\s*\d+.*)$/);
   if (qtyDimensionMatch) {
     const parsedQty = parseInt(qtyDimensionMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
@@ -189,7 +188,7 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 6. Check for leading quantity with space followed by item name:
-  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12\u00D718)"
+  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12Ã—18)"
   const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
   if (wordMatch) {
     const parsedQty = parseInt(wordMatch[1], 10);
@@ -662,7 +661,7 @@ const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
           onClick={onDelete}
           className={`w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1 text-[16px] sm:text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 rounded-md transition-all flex items-center justify-center gap-1 border border-rose-500/20 ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
         >
-          <span className="sm:hidden">&bull;</span>
+          <span className="sm:hidden">ğŸ—‘</span>
           <span className="hidden sm:inline">Delete</span>
         </button>
       </div>
@@ -837,7 +836,7 @@ const generateQuotationPDF = (
   const shootTypeStr = lead.desired_event_shoot_type || lead.shoot_type || '';
   const shootTypes = shootTypeStr ? shootTypeStr.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
   const wrapShootType = shootTypes.length > 0 
-    ? shootTypes.map((st: string) => `\u2022 ${st}`) 
+    ? shootTypes.map((st: string) => `â€¢ ${st}`) 
     : ['N/A'];  // Resolve dynamic services
   let services = [...quoteServices];
 
@@ -896,9 +895,9 @@ const generateQuotationPDF = (
       .replace(/\u00fe\u00ff/g, '')
       .replace(/\u00ff\u00fe/g, '')
       .replace(/\uFEFF/g, '')
-      .replace(/\uFFFD/g, '');
-    cleaned = cleaned.replace(/^[\sundefined\-\*undefinedundefined\x95\x96undefinedundefined\s]+/g, '');
-    cleaned = cleaned.replace(/[\u20B9]/g, 'Rs.');
+      .replace(/\uFFFE/g, '');
+    cleaned = cleaned.replace(/^[\sâ€¢\-\*\u2022\u0095\x95\x96\u2013\u2014\s]+/g, '');
+    cleaned = cleaned.replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.');
     return cleaned.trim();
   };
 
@@ -1014,7 +1013,7 @@ const generateQuotationPDF = (
     'Payments are non-refundable.',
     'Crew food arrangements from client side.',
     '50% advance payment before the event.',
-    'If duration exceeds 1 hour, additional charges of \u20B91,500 per hour will be applicable.',
+    'If duration exceeds 1 hour, additional charges of â‚¹1,500 per hour will be applicable.',
     '50% full payment on event day.',
     'Pendrive and Hard Disk are not included.',
     'Edited data will be shared via Google Drive link.'
@@ -1123,7 +1122,7 @@ const generateQuotationPDF = (
 
       while (simTermsIndex < termsToRender.length) {
         const term = termsToRender[simTermsIndex];
-        const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[\u20B9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
+        const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
         const wrapped = doc.splitTextToSize(cleanTerm, 163);
         const termH = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
 
@@ -1632,8 +1631,8 @@ const generateQuotationPDF = (
     doc.setFontSize(10);
     doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
     const eventHeading = eventsToRender.length === 1
-      ? `EVENT \u2014 ${evObj.eventName.toUpperCase()}`
-      : `EVENT ${idx + 1} \u2014 ${evObj.eventName.toUpperCase()}`;
+      ? `EVENT â€” ${evObj.eventName.toUpperCase()}`
+      : `EVENT ${idx + 1} â€” ${evObj.eventName.toUpperCase()}`;
     doc.text(eventHeading, 15, currentY);
     currentY += 4.5;
 
@@ -1823,7 +1822,7 @@ const generateQuotationPDF = (
 
     while (termsIndex < termsToRender.length) {
       const term = termsToRender[termsIndex];
-      const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[\u20B9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
+      const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
       const prefix = `${termsIndex + 1}. `;
       const wrapped = doc.splitTextToSize(cleanTerm, 163); // fits beautifully inside 180mm box with margins and padding
       const termHeight = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
@@ -2276,7 +2275,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const { error } = await supabaseClient.from('packages').select('category').limit(0);
         if (error && (error.code === '42703' || error.message?.toLowerCase().includes('column') || error.message?.toLowerCase().includes('does not exist'))) {
           setDbCategoryError(
-            `\u274C Database Schema Alert: The 'category' column is missing from the 'packages' table in Supabase. Although the app is safely resolving categories using automated description serialization, categories are not stored as a dedicated column at the database level.`
+            `âŒ Database Schema Alert: The 'category' column is missing from the 'packages' table in Supabase. Although the app is safely resolving categories using automated description serialization, categories are not stored as a dedicated column at the database level.`
           );
         }
       } catch (e) {
@@ -2669,7 +2668,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   } | null>(null);
 
   const showErrorHelper = (title: string, reason: string, failedFunction: string, leadId: string, suggestedFix: string, err?: any) => {
-    console.error(`\u274C ${title}\nReason: ${reason}\nFunction: ${failedFunction}\n`, err);
+    console.error(`âŒ ${title}\nReason: ${reason}\nFunction: ${failedFunction}\n`, err);
     setErrorDetails({
       title,
       reason: err?.message || reason,
@@ -3261,7 +3260,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     "1. Payments are non-refundable.\n" +
     "2. Crew food arrangements from client side.\n" +
     "3. 50% advance payment before the event.\n" +
-    "4. If duration exceeds 1 hour, additional charges of \u20B91,500 per hour will be applicable.\n" +
+    "4. If duration exceeds 1 hour, additional charges of â‚¹1,500 per hour will be applicable.\n" +
     "5. 50% full payment on event day.\n" +
     "6. Pendrive and Hard Disk are not included.\n" +
     "7. Edited data will be shared via Google Drive link."
@@ -4320,7 +4319,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleGenerateQuote = async (isEdit: boolean): Promise<string | null> => {
     setIsSaving(true);
-    console.log("\u2714 Starting quotation generation...");
+    console.log("âœ” Starting quotation generation...");
     try {
       const effName = getEffectiveSalesStaffName();
       const effMobile = getEffectiveSalesStaffMobile();
@@ -4330,7 +4329,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const leadObj = getLeadInfoForQuote(isEdit);
       const leadIdForError = leadObj?.lead_id || createdLeadId || 'UNKNOWN';
 
-      console.log("\u2714 Validating form...");
+      console.log("âœ” Validating form...");
       const activePkgs = getSelectedPkgsInfo(isEdit);
 
       const missingFields = validateLeadForQuotation(leadObj, activePkgs);
@@ -4370,7 +4369,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const generatedQuotNum = existingQuotation ? existingQuotation.quotation_number : `QT-${dateStr}-${randomFour}`;
       const quotNum = activeQuoteNum || generatedQuotNum;
       
-      console.log(`\u2714 Creating/Updating quotation ${quotNum}...`);
+      console.log(`âœ” Creating/Updating quotation ${quotNum}...`);
       const qId = existingQuotation ? existingQuotation.quotation_id : ('QT-' + Math.random().toString(36).substring(2, 9).toUpperCase());
       
       const activePkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
@@ -4433,9 +4432,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         editableDeliverables: editableDeliverables
       };
 
-      console.log("\u2714 Saving to Supabase...");
+      console.log("âœ” Saving to Supabase...");
       const finalQuoteNum = await addQuotation(standardQuotation);
-      console.log(`\u2714 Quotation saved successfully. Confirmed Quotation Number: ${finalQuoteNum}`);
+      console.log(`âœ” Quotation saved successfully. Confirmed Quotation Number: ${finalQuoteNum}`);
       setActiveQuoteNum(finalQuoteNum);
 
       if (isEdit) {
@@ -4566,7 +4565,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         });
       }
 
-      console.log("\u2714 Process completed");
+      console.log("âœ” Process completed");
       return finalQuoteNum;
     } catch (err: any) {
       showErrorHelper(
@@ -4635,7 +4634,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleDownloadQuotePDF = async (isEdit: boolean) => {
     try {
-      console.log("\u2714 Generating PDF...");
+      console.log("âœ” Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
       
@@ -4653,7 +4652,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         quoteServices
       );
       
-      console.log("\u2714 PDF generated");
+      console.log("âœ” PDF generated");
       const pdfFileName = generateQuotationPdfFileName(leadObj);
       doc.save(pdfFileName);
       
@@ -4672,7 +4671,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   const handleSendWhatsAppQuote = async (isEdit: boolean) => {
     try {
-      console.log("\u2714 Generating PDF...");
+      console.log("âœ” Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
       const activePkgs = getSelectedPkgsInfo(isEdit);
       const finalAmt = dynamicFinalAmt;
@@ -4691,7 +4690,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         quoteServices
       );
       
-      console.log("\u2714 PDF generated");
+      console.log("âœ” PDF generated");
       const pdfBlob = doc.output('blob');
       const blobUrl = URL.createObjectURL(pdfBlob);
       setGeneratedPDFBlobUrl(blobUrl);
@@ -4700,7 +4699,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const pdfFileName = generateQuotationPdfFileName(leadObj);
       doc.save(pdfFileName);
 
-      console.log("\u2714 Opening WhatsApp...");
+      console.log("âœ” Opening WhatsApp...");
       const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
       const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
       
@@ -4713,20 +4712,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           const eName = ev.event_name || ev.event_type || 'Event';
           const eDate = ev.event_date || 'N/A';
           const eTime = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '';
-          return `\uD83C\uDF89 ${eName}\n\uD83D\uDCC5 Date: ${eDate}${eTime ? ` | Time: ${eTime}` : ''}`;
+          return `ğŸ‰ ${eName}\nğŸ“… Date: ${eDate}${eTime ? ` | Time: ${eTime}` : ''}`;
         }).join('\n\n') + '\n';
       } else {
         const safeEventType = String(leadObj.event_type || 'Event');
         const safeEventDate = String(leadObj.event_date || 'N/A');
-        eventDetailsStr = `\uD83C\uDF89 Event: ${safeEventType}\n\uD83D\uDCC5 Event Date: ${safeEventDate}\n`;
+        eventDetailsStr = `ğŸ‰ Event: ${safeEventType}\nğŸ“… Event Date: ${safeEventDate}\n`;
       }
 
       const message = `Hello *${safeCustomerName}*,\n\n` +
         `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
         `Please find your quotation details below:\n\n` +
         eventDetailsStr +
-        `\uD83D\uDCCD Event Address: ${safeEventLocation}\n` +
-        `\uD83D\uDCB0 Final Amount: \u20B9${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `ğŸ“ Event Address: ${safeEventLocation}\n` +
+        `ğŸ’° Final Amount: â‚¹${finalAmt.toLocaleString('en-IN')}\n\n` +
         `Thank you.\nPhotoCrew Pictures`;
 
       const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
@@ -4745,7 +4744,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
 
       showToastMsg("Quotation downloaded and WhatsApp prepared!", "success");
-      console.log("\u2714 Process completed");
+      console.log("âœ” Process completed");
     } catch (err: any) {
       showErrorHelper(
         "WhatsApp Redirect Failed",
@@ -4854,14 +4853,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         {/* Quotation Details */}
         <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
           <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
-            <Clipboard className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Quotation Details
+            <span>ğŸ“‹</span> Quotation Details
           </h4>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Package Amount (Editable Package Base Price) */}
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5 font-mono">
-                <DollarSign className="w-3.5 h-3.5 text-amber-500 shrink-0" /> Package Base Price (\u20B9)
+                <span>ğŸ’°</span> Package Base Price (â‚¹)
               </label>
               <input
                 type="number"
@@ -4892,7 +4891,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* Discount */}
             <div>
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Quotation Discount (Rs.)
+                Quotation Discount (â‚¹)
               </label>
               <input
                 type="number"
@@ -4912,7 +4911,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {/* Additional Services Cost - Hidden per user request */}
             <div className="hidden">
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                Additional Services Cost (Rs.)
+                Additional Services Cost (â‚¹)
               </label>
               <input
                 type="number"
@@ -4937,11 +4936,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between shadow-inner mt-2">
             <div className="space-y-0.5">
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
-              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (\u20B9{basePkgSum}) - Disc (\u20B9{quoteDiscount || 0})</p>
+              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (â‚¹{basePkgSum}) - Disc (â‚¹{quoteDiscount || 0})</p>
             </div>
             <div className="text-right">
               <span className="text-lg font-extrabold text-amber-500 font-mono">
-                \u20B9{finalAmt.toLocaleString('en-IN')}
+                â‚¹{finalAmt.toLocaleString('en-IN')}
               </span>
             </div>
           </div>
@@ -4955,7 +4954,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               disabled={isSaving}
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg transition-all border border-red-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <FileText className="w-3.5 h-3.5 shrink-0" /> {isSaving ? 'Processing...' : 'Download PDF Document'}
+              <span>ğŸ“„</span> {isSaving ? 'Processing...' : 'Download PDF Document'}
             </button>
 
             {/* Send WhatsApp */}
@@ -4965,7 +4964,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               disabled={isSaving}
               className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <MessageSquare className="w-3.5 h-3.5 shrink-0" /> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
+              <span>ğŸ’¬</span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
             </button>
           </div>
         </div>
@@ -5009,7 +5008,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             {step3AutoSaveStatus === 'saved' && (
               <span className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                Saved undefined
+                Saved âœ“
               </span>
             )}
             {step3AutoSaveStatus === 'error' && (
@@ -5035,7 +5034,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   const pId = String(p.package_id || '');
                   const pName = String(p.package_name || '');
                   if (pId === 'Custom Package' || pId === 'custom_package' || pName === 'Custom Package') return false;
-                  if (pName.toLowerCase().includes('legacy') || pName.toLowerCase().includes('\u20B90')) return false;
+                  if (pName.toLowerCase().includes('legacy') || pName.toLowerCase().includes('â‚¹0')) return false;
                   return true;
                 });
                 if (currentPkgId && currentPkgId !== 'Custom Package' && currentPkgId !== 'custom_package' && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
@@ -5046,7 +5045,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 }
                 return activePkgs.map((pkg) => (
                   <option key={pkg.package_id} value={pkg.package_id}>
-                    {pkg.package_name} (\u20B9{Number(pkg.price).toLocaleString('en-IN')})
+                    {pkg.package_name} (â‚¹{Number(pkg.price).toLocaleString('en-IN')})
                   </option>
                 ));
               })()}
@@ -5056,7 +5055,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           {/* Sales Executive Details */}
           <div className="hidden bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
             <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
-              <User className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Sales Executive Details
+              <span>ğŸ‘¤</span> Sales Executive Details
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
@@ -5090,10 +5089,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             </div>
           </div>
 
-          {/* Single Package Base Price (\u20B9) Field (Hidden visually per request, keeping value intact internally) */}
+          {/* Single Package Base Price (â‚¹) Field (Hidden visually per request, keeping value intact internally) */}
           <div className="hidden" style={{ display: 'none' }}>
             <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
-              <DollarSign className="w-3.5 h-3.5 text-amber-500 shrink-0" /> Package Base Price (\u20B9) *
+              <span>ğŸ’°</span> Package Base Price (â‚¹) *
             </label>
             <input
               type="number"
@@ -5182,13 +5181,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </span>
                         {(endDateRaw || endTimeStr !== 'N/A') && (
                           <>
-                            <span className="text-slate-500">&bull;</span>
+                            <span className="text-slate-500">â€¢</span>
                             <span>
                               End: <span className="text-slate-100 font-semibold">{endDateStr !== 'N/A' ? endDateStr : startDateStr}{endTimeStr !== 'N/A' ? ` | ${endTimeStr}` : ''}</span>
                             </span>
                           </>
                         )}
-                        <span className="text-slate-500">&bull;</span>
+                        <span className="text-slate-500">â€¢</span>
                         <span>
                           Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
                         </span>
@@ -6018,7 +6017,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
     if (!pkgId || pkgId.trim() === '') {
       showValidationError("select_package_option", "Please select a package before continuing.");
-      showToastMsg("\u274C Please complete all required fields before saving the package.", "error");
+      showToastMsg("âŒ Please complete all required fields before saving the package.", "error");
       return false;
     }
 
@@ -6036,18 +6035,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (wizardLeadData.status === 'Order Confirmed') {
         if (!wizardLeadData.confirmed_event_date) {
           showValidationError("input_confirmed_event_date", "Please provide Confirmed Event Date.");
-          showToastMsg("\u274C Please complete all required fields before saving.", "error");
+          showToastMsg("âŒ Please complete all required fields before saving.", "error");
           return false;
         }
 
         if (wizardLeadData.final_amount === undefined || wizardLeadData.final_amount === null || isNaN(wizardLeadData.final_amount) || wizardLeadData.final_amount <= 0) {
           showValidationError("input_final_amount", "Please provide Final Amount.");
-          showToastMsg("\u274C Please complete all required fields before saving.", "error");
+          showToastMsg("âŒ Please complete all required fields before saving.", "error");
           return false;
         }
         if (wizardLeadData.advance_received === undefined || wizardLeadData.advance_received === null || isNaN(wizardLeadData.advance_received)) {
           showValidationError("input_advance_received", "Please provide Advance Payment Received.");
-          showToastMsg("\u274C Please complete all required fields before saving.", "error");
+          showToastMsg("âŒ Please complete all required fields before saving.", "error");
           return false;
         }
 
@@ -6056,12 +6055,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             const rDate = ev.reporting_date || ev.event_date || wizardLeadData.confirmed_event_date;
             if (!rDate) {
               showValidationError(`reporting_date_${ev.id}`, "Reporting Date is required.");
-              showToastMsg("\u274C Please complete all required fields before saving.", "error");
+              showToastMsg("âŒ Please complete all required fields before saving.", "error");
               return false;
             }
             if (!ev.reporting_time) {
               showValidationError(`reporting_time_${ev.id}`, "Reporting Time is required.");
-              showToastMsg("\u274C Please complete all required fields before saving.", "error");
+              showToastMsg("âŒ Please complete all required fields before saving.", "error");
               return false;
             }
           }
@@ -6377,7 +6376,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       console.error("Save package only failed:", err);
       setSaveErrorPopup({
         title: "Failed to save package",
-        message: "\u274C Failed to save package.\nPlease try again."
+        message: "âŒ Failed to save package.\nPlease try again."
       });
     } finally {
       setIsSaving(false);
@@ -6797,7 +6796,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         }
 
         await completeApprovedUnlockRequest(selectedLead.lead_id);
-        showToastMsg(`\u2705 Quotation & CRM changes saved.`, "success");
+        showToastMsg(`âœ… Quotation & CRM changes saved.`, "success");
         setStep3FollowUpDate(selectedLead?.next_follow_up_date || '');
         setStep3FollowUpTime((selectedLead as any)?.next_follow_up_time || '');
         setStep3FollowUpNotes(selectedLead?.follow_up_notes || '');
@@ -7034,7 +7033,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setCrmWizardStep(3);
       }
 
-      showToastMsg("\u2705 Event Details Saved Successfully", "success");
+      showToastMsg("âœ… Event Details Saved Successfully", "success");
     } catch (err: any) {
       console.error("Step 2 direct save failed:", err);
       showToastMsg(`Failed to save event details: ${err.message || err}`, "error");
@@ -7098,7 +7097,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setActiveTab('list');
       }
 
-      showToastMsg("\u2705 Quotation & Follow-up saved! Status updated to Quote Sent.", "success");
+      showToastMsg("âœ… Quotation & Follow-up saved! Status updated to Quote Sent.", "success");
       setShowStep3Popup(false);
     } catch (err: any) {
       console.error("Failed to save Step 3 follow-up:", err);
@@ -7285,7 +7284,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         setCrmWizardStep(3);
       }
 
-      showToastMsg("\u2705 Event Details Saved Successfully", "success");
+      showToastMsg("âœ… Event Details Saved Successfully", "success");
       setShowStep2Popup(false);
     } catch (err: any) {
       console.error("Step 2 Follow-up save failed:", err);
@@ -7675,7 +7674,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const p = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
         if (p) {
           result += `Package: ${p.name}\n`;
-          result += `  Custom Price: \u20B9${(pkgPrices[id] !== undefined ? pkgPrices[id] : p.cost).toLocaleString('en-IN')}\n`;
+          result += `  Custom Price: â‚¹${(pkgPrices[id] !== undefined ? pkgPrices[id] : p.cost).toLocaleString('en-IN')}\n`;
           result += `  Deliverables: ${pkgDeliverables[id] || 'N/A'}\n`;
           result += `  Notes: ${pkgNotes[id] || 'N/A'}\n`;
         }
@@ -7997,7 +7996,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const endParts = parseDateParts(effectiveEndDate);
     if (!endParts) return null;
 
-    // Rule 3 undefined Check if End Date is earlier than Start Date
+    // Rule 3 â€“ Check if End Date is earlier than Start Date
     if (
       startParts.year > endParts.year ||
       (startParts.year === endParts.year && startParts.month > endParts.month) ||
@@ -8011,7 +8010,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       startParts.month === endParts.month &&
       startParts.day === endParts.day;
 
-    // Rule 1 undefined If Start Date and End Date are the same date
+    // Rule 1 â€“ If Start Date and End Date are the same date
     if (isSameDate) {
       const startT = parseTimeParts(startTime);
       const endT = parseTimeParts(endTime);
@@ -8024,7 +8023,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    // Rule 2 undefined Different Start Date & End Date (End Date > Start Date): any End Time allowed
+    // Rule 2 â€“ Different Start Date & End Date (End Date > Start Date): any End Time allowed
     return null;
   };
 
@@ -8273,11 +8272,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 const staffPaxVal = ev.staff_pax !== '' && ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : 'N/A';
 
                 const dateTimeSummary = (() => {
-                  const startPart = `${startDateStr} \u2022 ${startTimeStr}`;
+                  const startPart = `${startDateStr} â€¢ ${startTimeStr}`;
                   if (endDateRaw && endDateStr !== 'N/A') {
-                    return `${startPart} \u2192 ${endDateStr} \u2022 ${endTimeStr}`;
+                    return `${startPart} â†’ ${endDateStr} â€¢ ${endTimeStr}`;
                   } else if (endTimeStr !== 'N/A') {
-                    return `${startPart} \u2192 ${endTimeStr}`;
+                    return `${startPart} â†’ ${endTimeStr}`;
                   }
                   return startPart;
                 })();
@@ -8986,7 +8985,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             follow_up_notes: internalNotes || null,
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
       });
-      showToastMsg("\u2705 Quotation created successfully.", "success");
+      showToastMsg("âœ… Quotation created successfully.", "success");
       setStep3FollowUpDate(followUpDate || '');
       setStep3FollowUpTime('');
       setStep3FollowUpNotes(internalNotes || '');
@@ -9604,7 +9603,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         <div className="fixed inset-0 bg-slate-955/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-red-500/40 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="bg-red-500/10 border-b border-red-500/20 px-6 py-4 flex items-center gap-3">
-              <span className="p-2.5 bg-red-500/20 text-red-400 rounded-xl text-lg"><AlertTriangle className="w-5 h-5 text-red-500" /></span>
+              <span className="p-2.5 bg-red-500/20 text-red-400 rounded-xl text-lg">âš ï¸</span>
               <div>
                 <h3 className="font-bold text-slate-100 text-sm font-sans">{statusError.title || 'Status Update Failed'}</h3>
                 <p className="text-[10px] text-red-400 font-mono tracking-wider">DATABASE SCHEMA / INTEGRITY EXCEPTION</p>
@@ -9666,7 +9665,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <Users className="w-4 h-4 text-slate-400 shrink-0" /> Customer Profiles
+              ğŸ‘¥ Customer Profiles
             </button>
 
             <button
@@ -9847,14 +9846,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           {/* Column B: Follow-up Activity Logger */}
           <div className="lg:col-span-8 bg-slate-850 rounded-xl border border-slate-800 p-5">
             <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-1.5 pb-2.5 border-b border-slate-800 mb-4">
-              <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Log Lead Follow-up activity & CRM notes
+              <span>ğŸ“</span> Log Lead Follow-up activity & CRM notes
             </h3>
 
             {selectedLead && isLeadLocked && (
               <div className="p-4 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-left animate-fade-in relative z-10">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider font-mono">
-                    <span className="animate-pulse"><Lock className="w-3.5 h-3.5 text-rose-400" /></span> Stage-Locked: Order Confirmed
+                    <span className="animate-pulse">ğŸ”’</span> Stage-Locked: Order Confirmed
                   </div>
                   <p className="text-[11px] text-slate-350 leading-relaxed font-sans">
                     This lead is lock-protected due to having officially transitioned to operations. Only payment schedules are editable.
@@ -9869,7 +9868,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     }}
                     className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer font-mono font-extrabold uppercase tracking-wide border border-amber-500/20 shadow-lg"
                   >
-                    <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" /> Owner Override
+                    ğŸ”“ Owner Override
                   </button>
                 )}
               </div>
@@ -9910,7 +9909,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {selectedLead.events.map(ev => (
                               <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex flex-col">
-                                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-1"><Film className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> {ev.event_name || ev.event_type || 'Event'}</span>
+                                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-1">ğŸ¬ {ev.event_name || ev.event_type || 'Event'}</span>
                                 <div className="flex items-center gap-3">
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-[10px] text-slate-500 font-mono">Date:</span>
@@ -9964,7 +9963,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Final Amount (\u20B9) *
+                            Final Amount (â‚¹) *
                           </label>
                           <input
                             type="number"
@@ -9976,7 +9975,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Advance Amount Received (\u20B9)
+                            Advance Amount Received (â‚¹)
                           </label>
                           <input
                             type="number"
@@ -10036,7 +10035,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         {/* Proposed budget */}
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1">
-                            Negotiated Quotation Amount (\u20B9) *
+                            Negotiated Quotation Amount (â‚¹) *
                           </label>
                           <input
                             type="number"
@@ -10098,7 +10097,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       : 'bg-indigo-650 hover:bg-indigo-550 text-white border-indigo-500/10 cursor-pointer text-shadow'
                     }`}
                   >
-                    {isSaving ? 'Saving...' : (isLeadLocked ? '\uD83D\uDD12 Locked' : followUpForm.status === 'Order Confirmed' ? '\uD83D\uDC8D Confirm Order booking' : 'Save Follow-up Notes')}
+                    {isSaving ? 'Saving...' : (isLeadLocked ? 'ğŸ”’ Locked' : followUpForm.status === 'Order Confirmed' ? 'ğŸ’ Confirm Order booking' : 'Save Follow-up Notes')}
                   </button>
                 </div>
               </form>
@@ -10126,7 +10125,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-4 space-y-4 text-left">
               <div className="border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 font-mono">
-                  <Users className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
+                  <span>ğŸ‘¥</span> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Unified customer profiles compiled via CRM phone & email graphs.
@@ -10193,7 +10192,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </span>
                           {cust.totalOrders >= 2 && (
                             <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-black uppercase">
-                              <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0 animate-pulse" /> REPEAT ({cust.totalOrders})
+                              ğŸ”¥ REPEAT ({cust.totalOrders})
                             </span>
                           )}
                         </div>
@@ -10291,7 +10290,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <div className="bg-slate-900 border border-indigo-500/20 p-4 rounded-xl space-y-4 animate-fade-in-up">
                         <div className="border-b border-slate-800 pb-2">
                           <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest font-mono">
-                            <Edit className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> CONFIGURE REPEAT SHOOT CONTRACT
+                            âœï¸ CONFIGURE REPEAT SHOOT CONTRACT
                           </h4>
                           <p className="text-[10px] text-slate-400">
                             Book a new independent contract project. This generates a new Lead and verified Order ID, keeping customer ID intact.
@@ -10362,7 +10361,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Quotation Contract Sum (\u20B9)</label>
+                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Quotation Contract Sum (â‚¹)</label>
                             <input
                               type="number"
                               value={reorderForm.quotation_amount}
@@ -10372,7 +10371,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </div>
 
                           <div>
-                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Advance Deposited (\u20B9)</label>
+                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Advance Deposited (â‚¹)</label>
                             <input
                               type="number"
                               value={reorderForm.advance_received}
@@ -10460,7 +10459,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     {ld.events && ld.events.length > 0 ? ld.events.map((ev, evIdx) => (
                                       <div key={ev.id || evIdx} className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
                                         <div className="flex items-center gap-2 mb-1">
-                                          <span className="text-[10px] text-slate-500 font-mono"><Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> {ev.event_name || ev.event_type || 'Event'}</span>
+                                          <span className="text-[10px] text-slate-500 font-mono">ğŸ“… {ev.event_name || ev.event_type || 'Event'}</span>
                                         </div>
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
                                           <span className="text-slate-300">Date: {ev.event_date || 'N/A'}</span>
@@ -10470,7 +10469,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     )) : (
                                       <div className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
                                         <div className="flex items-center gap-2 mb-1">
-                                          <span className="text-[10px] text-slate-500 font-mono"><Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> {ld.event_type || 'Event'}</span>
+                                          <span className="text-[10px] text-slate-500 font-mono">ğŸ“… {ld.event_type || 'Event'}</span>
                                         </div>
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
                                           <span className="text-slate-300">Date: {ld.event_date || 'N/A'}</span>
@@ -10521,7 +10520,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                       return ordLead.events.map((ev, evIdx) => (
                                         <div key={ev.id || evIdx} className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
                                           <div className="flex items-center gap-2 mb-1">
-                                            <span className="text-[10px] text-slate-500 font-mono"><Calendar className="w-3.5 h-3.5 text-indigo-400 shrink-0" /> {ev.event_name || ev.event_type || 'Event'}</span>
+                                            <span className="text-[10px] text-slate-500 font-mono">ğŸ“… {ev.event_name || ev.event_type || 'Event'}</span>
                                           </div>
                                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
                                             <span className="text-slate-300">Date: {ev.event_date || 'N/A'}</span>
@@ -10708,7 +10707,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
             {dbCategoryError && (
               <div id="db_category_error_banner" className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-4 text-xs text-amber-400 font-medium space-y-1">
-                <span className="font-bold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" /> Database Schema Notice</span>
+                <span className="font-bold flex items-center gap-1">âš ï¸ Database Schema Notice</span>
                 <p>{dbCategoryError}</p>
               </div>
             )}
@@ -10720,7 +10719,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {/* Modal Header */}
                   <div className="border-b border-slate-800 p-4 sm:p-6 flex items-center justify-between shrink-0">
                     <h4 className="text-sm sm:text-base font-bold text-slate-100 font-mono tracking-wide flex items-center gap-2">
-                      <span>{editingPackage ? '\u270F\uFE0F Edit Service Package' : '\u2728 Define New Service Package'}</span>
+                      <span>{editingPackage ? 'âœï¸ Edit Service Package' : 'âœ¨ Define New Service Package'}</span>
                     </h4>
                     <button
                       type="button"
@@ -10788,7 +10787,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             {categoriesList.filter(c => c !== 'CUSTOM_CATEGORY').map(cat => (
                               <option key={cat} value={cat}>{cat}</option>
                             ))}
-                            <option value="CUSTOM_CATEGORY"><Plus className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Create Custom Category...</option>
+                            <option value="CUSTOM_CATEGORY">â• Create Custom Category...</option>
                           </select>
                           {pkgForm.category === 'CUSTOM_CATEGORY' && (
                             <div className="animate-slide-down mt-2">
@@ -10810,7 +10809,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             Package Price (INR) <span className="text-rose-400">*</span>
                           </label>
                           <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">Rs.</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">â‚¹</span>
                             <input
                               type="number"
                               placeholder="e.g. 25000"
@@ -11191,7 +11190,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
                           <div className="flex flex-col gap-3 pt-2.5 border-t border-slate-900/80">
                             <div className="flex items-center justify-between">
-                              <span className="font-mono text-xs font-bold text-emerald-400">\u20B9{pkg.price.toLocaleString('en-IN')}</span>
+                              <span className="font-mono text-xs font-bold text-emerald-400">â‚¹{pkg.price.toLocaleString('en-IN')}</span>
                             </div>
                             
                             {canEdit && (
@@ -11282,7 +11281,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   ? 'bg-emerald-950/90 border border-emerald-500/20 text-emerald-400' 
                   : 'bg-red-950/90 border border-red-500/20 text-red-400'
               }`}>
-                <span>{crmToast.type === 'success' ? '\u26A1' : '\u26A0\uFE0F'}</span>
+                <span>{crmToast.type === 'success' ? 'âš¡' : 'âš ï¸'}</span>
                 <span className="text-[11px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
               </div>
             )}
@@ -11307,7 +11306,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               ? 'bg-emerald-500 text-slate-955' 
                               : 'bg-slate-800 text-slate-500'
                         }`}>
-                          {isCompleted ? '\u2713' : item.step}
+                          {isCompleted ? 'âœ“' : item.step}
                         </span>
                         <div className={`hidden sm:block flex-1 h-0.5 rounded transition-all duration-300 ${
                           isCompleted ? 'bg-emerald-500' : 'bg-slate-800'
@@ -11495,7 +11494,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     onClick={() => setWizardStep(wizardStep - 1)}
                     className="px-4.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer border border-slate-850 hover:border-slate-700 transition-colors"
                   >
-                    <ArrowLeft className="w-3.5 h-3.5 text-slate-400 shrink-0" /> Back Step
+                    â† Back Step
                   </button>
                 ) : (
                   <button
@@ -11523,7 +11522,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       : 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-500/10 cursor-pointer'
                   }`}
                 >
-                  {isSaving ? 'Processing...' : 'Save & Continue \u2192'}
+                  {isSaving ? 'Processing...' : 'Save & Continue â†’'}
                 </button>
               ) : (
                 <button
@@ -11538,7 +11537,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   disabled={isSaving}
                   className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '\uD83C\uDF89 Confirm Order & Transition' : '\u270D\uFE0F Create Quotation'}
+                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? 'ğŸ‰ Confirm Order & Transition' : 'âœï¸ Create Quotation'}
                 </button>
               )}
             </div>
@@ -11587,139 +11586,141 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 {/* Leads Directory Title & Control Buttons Bar */}
                 <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl space-y-3">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <divxœì}û[Ü8²èïç¯P8s‡f–nšW’a|È÷äµ@fv¿l.1İ|Òİîµİ†å¿U%Ù–lI–İÙh¿Ğ¶¬g©ŞUb½Ço½¡¿5w6ğ¿² ñ‡q»ç?bçŞ¸½2·ı_L[6ã±7bR‰ÿ5iÌmo¾
-}ø^zwÕ^gğªŒúÁyØ^ëvY|£/íî[ÚŞ\ÂİõƒKÓ;x{±ZJ<dgá(iŸ¼ŞŞóÕLMÆc?êy±Ï’^£óöU€¦êÃpÎm¿ö½~Ìö‚Èï%at½¹t±jé}\êüãrwüõïõ`ÔÃÙÎmï‡QÂ¼^\úlŒıA0òYäŸ1¬xÌ&1Œ†Å‰‡µF}æÃÿÏ‚¾Û\×fÉ¸8–WúúPUC»jŸM7®ÚŞ$	Vl_EŞØ07K?±#œş»ûM‹½œ$I8b?-İš&÷Ö¿\zƒ‰¿uÃjè–…£İot}ª)/mÿ—e({áÕhz}vèã¦Ä#9¥F0H®Ç°b¼Òœ±VĞ‡:Éè$	ÏÏşI_ã$âÃ0Ó½/[7­¶µÍ`®q:	1€/€¿ßz˜^-˜fÇ¤m¿ùLÛ¹ŒûKB Ó2,üï$N‚³k4Æ_Û«u6¾†¿9NˆÅA´À¢p‚Ã DÁNC8„£8H‚pÔö ¤z“ö¶=j3¾ğ`‰ğ0ÿpc9¬ªi¾–o{ÁæOÏÛŞğÔÚëİîÒJ—˜?YÅÇ(UYë¦CÊŸ-wç­İlP7„~^ï²‹ğÒ6²'İ®„&¤>é÷ónV_zú¬kéñö³i‹-,;
-ÒÆ}¼ ÿJËRÄÛæF	ŸÏ™ÍÃÙ4n%lWË²Î›»şe>Œ'1´»ğÔi.°‰.ãĞ­İ§Ä ^ïF”´ÄÑÓqÄ³cÂ8ßÏ	*V½‰‘Ëh­ğèO‹Î
-ódÿş·`ø‹]è7aÛ¬ë€ßü¡yƒ¾‚áÒg¾‘«åXN~ú'Às‚‰°ĞtÆ5ñÜ«”M«@oÚ]d?şhG/Ef[İViaqáeTb’—9$w;+ä'q¾Ö.Ş|ş;Ù×ÂrxoÊ'`&Ø_ŞÜ?ş×¿50ÿâ…æÒ‹İp0ğÆqp
-Ä¢Ä%¿#j‹Ù{oäD„„íˆdœ|ı"¶ìO"~ ~ğADa±N3¶4sÆÕ¬ˆ}·£ğ*†cr}báØëÉu{º'íÕ7%E$µô´;onyCi¹+·írĞö/¼ÄDƒôÈMØ[\×… o_ı¾?2Kï:9/“át,Ë²;T1®lƒÄ€P×øïá|$|om¸¦0—FÄ°#{±w n9w)Ø~ÖuDI_ŠŒçvşÁ¶nI`ö´^làÃ™å"%é|ìmÛş&5XA3õ’ãcá›g†+Ãòèì@…€(¿%ÌeTB@œôaïL"zIC°òïÃìLp§ Z6 èöQZ:ğı¯=ğ@-ãŸÖ´Ñò±x¡ÚöÂ÷§º£¼•Fr‚L«óu]p€Æou»G¿=˜“ìä`íP5ïß¤&8„ÆÈ®‰ÍÀğÂ$Me‰¿M 3m”Y€0‰³Ê"¦a­*†áu{Õ(ÌB$Ğ	Úıi$¿’ÎêÒS´’«¸ŠÇO¨Š Bä<nÛj¯YA»a4BÒ§|×à¨t½èKlÓMëÆá`’øÀä¢2ğÏ²N-Ó	Âÿ%¹^ße‘¿+úŒ‚ó‹ªN£ÙuzÂ±ZçzzsÍºµL÷ÔeºÓ§“Ó1aCú¹BÄeUÔ·ˆ¦dxô½¨wÁş5ñ£kx•ÇİBmTdµW­Ú±Íw
-M>Iƒ0µ<m\nzÎ4n-,(ˆN­71+4V³%¶Ô7„gØ»U-G#µÎ¥°
-é¹®Ï¦BÌÖ HÖT–i½»Î2È"8^¥Ã´jÕ‚QÁh<1Ë’¼p®{´‘v,ã×ó/È]akî`o‘`Ğ‹,ŒØøq§Ó©jA˜£¹yão^6
-Kn®nù©©ãUşyËï$^tî'jÚ¢#åEYkRæÊ,•cKf‹ñ ı3GE-‡E$qgaoo -EÁıÑ£½'–å²Zš@;"m_Eë[éµığ‡“¨ç7>öfúr6Ç>†æ»{:ğ|VSóØø=ûyR œwj‡I3€ó¯ëA¸¾ùjı\’øógë
-ópI!
-xóÚ ßK?wmZ’BR‰‹uš›ÛŞ1ò™Æ›Küe…UåõşÎŞÉÑ»‡»ûG¡7nÅbaílF¹÷/ş5:ÅĞîä>2ôs;ıÃm4ÖÙ\â 3å‰L¼d³ü{0òç9™;Üµ‹æußG“Ö´ñÑ¤¯äÑÌÉHÑšn$KeösÖç7Øõxïìü¶rt¼óËşÉ/‡ï>¼ç§¼uK1^dAÿë‚ëY§Oøi‡ÏnÁÑÖ=îĞ[EPÎwVşQPíb­ÛÚ?ßÚ§ASáßóYÇ4	øÛeìòJÒèáodº’İ)¹ã&u„JåÁÜ6UçvÛ,vÜFc\JùA`É(a{°{")Mªµùğoß¬$uÃ”Õ2—úĞ™ˆOÒ`ë£Ô=åû‡‡T•­,¢PÛ
-Ù¼` zÔÿ³s6¥‡Ì0Ô)@¾şÈX‘ÍC/˜¦p¼Ìr‡x˜ÙU¢ğ
-]ÙsaA±C}¥•ÈİNTrÃ´9)bÙß'T‡ĞÒR±çÂ_› S€ŸßÖ…A7£“üëv%Ë”¬İàYö¶Ë0	g[D77Bef(\§kn8×Şœ«¥¦¬¨ªÊXşí!OÖšÍÏ» š¢†¨õ	j}âüø½›<ªõ·
-|FÍ£»}R:âµ>KuåGws˜ÑË2£<ÏåÃœ-1Ê¸ğœÕGv­æ¦æ
-çoo±å*â”÷CV‘aK•îóUçššê¼[±³7'W>T€év¡ìˆô ©ô±‡fçËÀ¿*j›ÉsÅÉäY0­¦&ĞŒTFi´É~¥¸¹eßLhĞeX'€C[IÆ
-‰1õ¸‰İgÃ`Ô¾j½¯va3¹ğ½¾v’H»ëİ¥g]Å$µ.»m,~ÙÂTñÚjÈ¥É$(6¤1À´×y`&;ØÛ\J.Ü¿Ûæ1‡õ¿Slju?~°—o'èY÷ã}ô	¨?Ü(‚Ï„~µö×\‚!£Ş·ÂMÃhKZgW O	$¨ä\³©exé°r7“Ó°-NÀTûš‰?²#ı´«…3¡7õûìÛø£s˜Fc˜BÔH…‡¶V~¥r÷ÇJï-¶ 6K°Ô‰>òFzÙç¾®™sß¥• æJêƒq(ĞÚîÖ›§7óöv@Îúâ÷ùÁÚb„âÎY LE+¤	;8š“ Omâßéã#?™D#‹2±•…Š‘fQîéÖV[‚’ëÙÒj1\I¥íİ¾’¾±É’cĞe<‘;‚UÅé(k`%û‰–*X¬+ı}„?!åI6öÊ±J€ôB«Ğ›»´373)ÈkNKÛtáø™9"ßÀŞGa<ö{É<úÍÃĞËÜõäìSáÚ UŞè=:<pREX¤3$êU¡æn0VõTå.V˜£à…	$‹{Q8ÆÀù]#,?ô·UõG[éğBÈ›üÔcú“DØâf?¦;ÍaÓ÷Ô¯àI+>ëÄ ¯y<¿ğ±ûéÎ¯ó×—wuô@ºi¹iRRøÆÑÛ†ïFƒëŒ@œ2×ùE6ÿ
-lÉdœÿ`èÇ.l†×ƒå£´’ìo“0ñóß}z@óŸ:°[ƒIßçÔwW)HËTşLa_,uÉà``¿YÊŸ)ÓxëŸ‡IÀ‡Å'rDCšpl,ÃüôCÇ¨d…yxRÍ<§%ú ³9yƒØÿ+[Zb{AŒQŸ‘&?òÿ5	"ˆ<. /l„Pğ}âÎ¾ãDZC’+ğÎÿåÛoÚ2§P'F8ôC9ü€¾&òïª3ÖáLg«m0otMĞ9+Ü‘–LPü‘It”ªk,í$gfÑ·ûÉ?*7¡¯¸`3}ˆÉ`Ú–VË£©,²Ó|J#8p¤%:ÍP’—à¨N;_ªìÉÜÜBxßã`èÃaoçŸz…O=û§ˆä\¡ô½DrtÎ÷6Q³µ/:± '<âƒyìU[YíD÷‘ë¨ıÿõı¸+ı¢Ş¸²¯œqÕx
-—†0ú¯3àSŸÃu¿JèÑ7‚8'‰&>ÅĞW.@:²z}UâÕ¨g¬U(KiÑèYa‡éYc.TÒ;Ñ*/&ï_®oMU¬v§k¥=;A^Ü-y	úèê’ŒN<N$Oa8ùA•„Œ)#Š%7FøNüD^€‹JÂ1cïœà´UIá¥y l„c”y¤Aù¹ÆxHÿ®Ôfk4jŒì–ùxNëôË‘fPàw£pÌ-Èğÿ—(.Á€•ö1Ú¶—ÔYª´ıxìõü—>2e[ì
-$äğ
-höÈ~õ‰ÅlÓ:<~¡aó;§p.¡yj	v·~3À±LÄ€¶ØÏİ:Ô¨
-¢7úÑo°Éqìß ” Sv:t¾ì/l­Î °Uş¥®áyTcW††Âó mğ¦¼€î¥ÍÙ– ¡Şñ`¸d&ÂÄ²X¯¹à®H
-K=<	Î!0mqë§¾ÈCz6”9üô“‹t
-ô~1ìm­CªG>NÊÀrq]˜
-Cb^dOÉ«öêSvÑ~nPÀÕÍôŒÈÅl¢<õ“+ß¡qq…âÙÑ‚”xÚóC©¥ÈMÔØb¼åR‹L3ª¤É+åÅ[µåE)—2¿Sëà•3[-#ÔnÒèå§«¹­t(0gµ¾O§@¹äñgÉ²ÁgUò‘gê;MÒ•ûa¬áÏÓ¨kşs5«!9´Íä®Cpe¿Ü¸Ê4ñ–óüoŠçvàŸ“½ç«{ğßWûËÂ«k^œjÕ¥jäª{«kRUéùrÖ„+ªªJ¦¥YSVÚá İë4è¬@.7<,Òo.®¿£Ä¸&4cr)]‘S_AZ¼j¯=Wpy•OâónW²î³?Ú†ò‰ñÔÄt´¹—HêŞŒ@¨íÓ¿„á£Ğ^Ï£Ó—ÓFÆ|!°´ûbµÚÈá¸Š=@^“ë¯ÎöõòŞ‘‰{á•BÒKoSJï
-›îg°(ˆ¥‰8ˆ¥¹‡e*)ËL„.,<cÇ…`+v¯®8o#–²ã	²DŠnÃ„X%2"yúê½l0ı€É2¥§æÖ\Ü@xÿºàŸ£OJT§IÂÄ¿¡£Òîá›z˜¾6rÆ¢!…®ø—z¬}Š›ŸcÆúÂPë£ºpÌáôgt
-ä.=íšaU|Ç¹38
-¨…	qx…ö
-‘ä™52­Xê &¥¤½­€ÕòlkBo
-¿¿{pNGçd˜áì“7¨ËnÇjYĞ3l §#M3 N3$OµÈVk6T‹JÕ?ß©¬§ªìa)½Y-z%5CnC÷B²j#ƒı~à”L¯ÁÉ§¦3»ó}ùïÜRfxÀñV:İ)rmÆ†Š¦kÛ¡ïQxDæf›l™×ïÓòÈ ô0×tuĞAU¼Ÿ´×Fí]„WJ›oÂ>H¯h|X/ãhŠ*¼©xóœßy¸˜î¥gÌÁ=%¢ÌÅı¢:wÆH,:Öî‡½	úÑtĞÚé§T¤ëÉÚª:*·UÂ7£«<³¶ƒ× õ‰Ef³>#Ç¬É¸¡±º)±™‚ÈL£“pÄzêù]É3E47Dã¥·@Œ”¡ºô1 ª4*E<²â»RÄO¡éL>…¼¨“Ø8ªkTÅ5qÆˆM•î˜o6È¡Ut(:+¢Fz˜$®—çôà€ô'¤¤5TØ‡°„À²Ì-NÛ!;|_.9æ¤Dzµr]U¡¦)äªÔáıûì|÷Õùî«óà|u–Ÿ}wÖq,ßuªÊwg]½†Î:&ğ.uV§sÓQuÔµİt
-^,Zï–U&S›Œ¹ßˆÛÅnuBÁ°÷mFnôŞ+Ï–×i2¼Áx…ÇÆÊÓÔ3$¿ıî…!†òİC*ÍÃ5JN.ih…daï¢—şu8ê£È1(cÄ.’š>Î)fs‹ x©føˆb;ÙQïÂïOÊ#L<#?Èe.x´;cø«YtnŠ/‡Ás6—G×agjt]úDŠ®ÃGRtİ‡Å
-ól±'Æí€cıDšHuTJ©¿ø"¼Úé÷ßâä¶4½S(Š¾÷œ;t&B1ß˜»“æÓ¤TRœß]u GæP'S¶‡J–tALK]£áú†¼lÖÓ“óÌ;Ë°Ãxl9ò-È°Wq3ª¾41÷ñÒÜèÇK®Õè÷OF0Æj¹LkPäefE^fh\ÌÄÍ&SÚtR‡©U:>Ølıú"j¥¨Ymğ+¾ÿÔÂ‰\P«œb3„ib†ä¥¦1’—º&ÉÓÁÄO}¬2!‚?änVô=¨g•ÌÚ¸7Á´ÔÅXœï6T×£¶ÍRôFFŠë[,E+µí–¼,Têê‹éÇJ‡¥†¦ô#¥•~`Úº“Ş!¬rù³Óé¤Ór/xğÏá4–FHÉÙB™­ÅTè¯©ouÖÊ½¢?EXf-ÌMC^µ¹(j¿3ÅĞrIDy¬¸1îç\ÚwY]¾1Ve˜ÊçwŸMbŸy,"VJ‚¡·s&!#§x–\ølˆœ,>¢Ãß">±8NPˆËBæ"5TSNJÓ¥>æ#i “‹Ûiµö ³gVtë _Æ0j}æU>Šûd~†Í}úÜp}…ùMô^×¨¦Ø«ã(8?1Ïƒ»<Úä§Ğ‘ Y×~€æ&@LĞïÈ÷&¹zº¼@Hn^-’í…¡ş·;íšKLœ"ºŞ>
-Ï#?ªu¦œ÷E³¡—ô.|Ş…ÿ5ˆ	æ‚,q³“5í¬	†‚¯Ùr·ûp¹ÉÅ^ğd÷ø§3s´lNÑ ¤ås*Æ$³ÑÜöæÑØ‹¾ C“íÎèœ…”]^›²?)¥ ÛÇÁK­vX–Î­)Ó”)+Ã4€	œƒÄÑöwÉ­Á4îaZîšBÓ(ßQŠfÔ6ƒ:¡xªVÄiÁË½(Ê›¡ŞüIWŸ|Ã…&¥Üg</Ğøßg!&ZaÚÇAÖ:Lâè‡ÜnùX©Ãfğ]ÙèX™²1şr]bÉé™Äãïzh/máq°á.±¯ÊJL…sœòĞ`½nêtPÇ÷“®ãqÄRØš³†;]¨KfxÖË7ÆêÍ‘®’ın¦)NQ]wjÖÌrãŠ:«î¢«À`ö›ôwY;¾Õ¥–6§9Ø4w@—.„ƒ#X®­›åå[õ†å¾²j‰ûØ®[¯‘Øä·ª{ı<?(#à: ›1‡ür3¼?wÅºÙzéôÌ®¹ ñ½¹zU²ùiÇpHUËUatÍÎ£ ßaÇğWä§6qƒ^ÇGæm5m©J *R§òvt·[á~¸"á)<(üÌzSo©•Œ†Ü›ñMjGywvôÀ×ìuxÎ ‹²—aøkãUl‰$õl
-—;ú6ë1ˆ‘{ŞºÉ~Fùœ‘€œŞÚYrH¢ôîÒˆı–šãü¸Ô wÔ’;äOò*=É—Jª'»X¥•—ò%’¬Ÿ|u0&IÒï¨â[ÑÁ½äÂŒ`®€ÛÈƒÉë}Yz¾NnéëŸªõ¹cñu¸1n¯á}¿ãöSv
-m 8ºûDía¿tÅ DDò¨Ü›}¥« ó(Ğ}hŞ <—Ÿ{QàµÉŠ'-šø¥wt=õÀïŸ^oÍ¥FÖS 8@'ôİ	İL™§@n)& òÏ¶nD;/y3´ô‡ş™zj€%Ñ÷7§6¨^T(BL÷w®«79×sè}m_¡`Àÿ†JB¢’BÔ‹š±âìr÷òâ^s4çr€J¯±‘¦¥"<Ê¿8ÂtÚìš—°ãp\ÒOc‚«#˜Š·6æ± >®@~m¯ã­§«ôãZ%ãò’—/®¼X3o£ e´ºK×³¨Œxˆàîot¤AŠÌ®wé(˜ÈP³i [d2°¬­[kb\)÷MF=¼¾}[
-wÿ˜#çWa4Ô7»¹t±VzÆ9Ÿ²±ß.!.^*]U–°xZŠ‹Êw±Àòò‡+eÄ‡J:]òáÍÁ£¸Èöfà8 wQ+¿:—¨RùmåD¦İšuñkÍÎş]"†GÏ“ê.šÇÓÿîí>;:xûËkøg÷ğİë×;/áÏİwowŞî²WïÙñ¯ûlÿíñÁá>{ÿîı‡÷ôT"‰
-Ü%İG+ğ"j’uBd€äé+Ğ'@k‚ò¶ãP˜Á©Çµ;ÆVœ0Ş,€u49ÉÖ—Ş”‹KèÂ›¦Q\k©ä¥9Ë¥œó¡pé°,“ÔÁˆßn‡Û¹ëE}À¦û_á ¿8ò@'–è*H.ØÛwŒÂhY>-*Ø4%îç‡§ ‘õá¸±­Ôƒs—â"Ó!K—êo˜y¡ûÊÈVÓÕ¤ş%Ö¿ä•ùE…ÿşwş ‘‚ù:›ôÚ)8À²,ÿÎeoÍ¢K¤ÊÃ¤ğÕ<Ånéc?7t«Å¿¤xÈìe}QøœÃé‰:ssl„¼ód-ÃÌ'¸ ¿ÈªùÑÜHD.ıÜ5+rÄYàoŒ¢\•bÉMT&qzöğèñ³æ÷[Oís‹p]Vp”(ùæj>§|W6çüaPä8V´)ğI1^Iˆ¬·¹×|õNví|>Z.ûı`2d9'aQUèP¢EsaW³¸›øÒ¥b9ÛeS¶¤qÛ:HÂèí_ƒ¾OñÚÈ¹¸Di›Û²kf7w/üË(}[½o²yW¨ºªÓX¦î…WFG¢z]š^•j¤"úÜ´¦V³hñ¥Gı”ÿ“Ğ	¸.)!½Ì€¥eÌ½ ‚ˆ´Dx´c€VàvòŸ+Â(á¿€t
-7bT]
-[èÌ,™¾ÓÊ)ùR¾tœ(÷ÓÜ6OÍ#.ªwÑ•nÆ	 Ö¹¡Çåìr^k.=|ïKû
-UosÛ7ªš^‹Œ$‘n…ñPWëVmƒùFKû†®Bfüvä™..©8mËŒW™_Ì|«‡ÎC§gàÖz§ßGWŞoÂœ¥ƒ±daá÷ºÊˆñìøîö…˜é6!×’¸l‚,<Íj±+*X_è¤ñY‡Û´"«È*È@äı‚¾„/Ûì °Má>:	tÓĞõ&)4ñ!Ohc~ñv§á)’X4¥Ã|/†‰­³ŸtCX¢1hGŒÆ“DÛ<5p@z ¤«¡}i½‚W¤ºgT£uÄRg¤Iü_€¨;ê·Zcd(UZkœUÇ~(‚Š
-®àæè±:'ïÆˆ2^”úªşŠgŸXêuš.»á(#ĞÏJ*¥çÕªñÁ¹ä;”Kª!c‰³èûF8IÈîŒrOvÅóuİ%’„”ªÔIÓ¢ÛmÓªSaÁÄóÀàµÏìG86ã0"+ßŸxÁ †%¤Œ>w}ŒrÇ‘ƒlJ³«Ès9Épğ¸Ä³¹ëüQß‹Œšh)§—ğô£4ëÊ×*Ö®ÓO6oM_¥£&#/_9ò1—dÚzñÛÚ#ÿÊÜŸ…X´#F}ˆ¤2{Wl
-5ãªaévà…³ŞÎ":ê>D]Ë¿\dA…÷W-~ñ¯11çe‡§¤øì_üpÜ~6;1¤=ÇpF<úûÍ à#´ø	›²ùíd{xÒ‡UİÀşÕG”8Ã¿ÌÒf–ŞfêÆÒƒ“:e•5*7£àİ¬»ò`4¬\új~Şæc–7…àZ˜*Ap±õòëy³‚òÖ’¨Gâr >BÛÅ55{{oŞüJË°jÊêZ<Z¤.0Ø‘wQh“fñ«^úP-\^ù5œDÅ±Ö‚IªoÁP[™?~¹g»…P fÔğ´rÌiêË’.Tôƒß`O{A<xtâò®_°Ï?ÜÈKxËş9Yé.¯²nòj·Ÿ¡+¹–eã|	óÁQİºÿÜêqàzwé™" “zÄ„®Ù>¥÷ÙX˜QrÛXM©W«SøæV`4›¢9¯}ôíZQ^4²Ÿ„Ô—qÓ÷C»`[ö¶LÛ;Ïííï¼>ª¼ÁÓUŠ²Û‚®@ğcxs0*Å»¹QUÍ¤X`õM”2Õ"—ˆËë<Ò°zõräp†¹!DYTõjhÃd&kfb•f¬".ê"1Œ‹&°KgaeÌG=ÅáªğJPxp|²[¤ÇpØ7Ö§Š¢¼ú¤4T‡U+$ÎW€àd<ö£ùb¤À8·/­³{¦¥ã•’ª@UØm™’Î1M«“Ó÷YcÜ»Yc©«™	ù."û»_Ä"1»…tÅx’œW	õÍëqsÉ
-7×t]¼S¬…U×ÓEÚŠ|ÿ ‚"ºÓí…åÓé»
-C5‹®…Šf]˜Z¸f¹z—ˆ¼5-ˆœnHŠ1!j$¨y§ÉÃÑî…7:÷k†Ä~²¯Ê¡­qÄUZ®a‚N¿q"Aw£F"´OƒÊ%ä’p8?ÏnÜÓ”ÄèNÂ/Ö ÍplÆ-œêvább´úEGåâJj£^
-‚‘oI±È¡ÊĞôƒ3ıë]‡ğ•Ê gÒõ8GíßYáÑ¸/d•k\¾#+3²âØ¦1²Š°ïÈê± «ií¡ÆİĞÆ¦Ù½—Ì*û»QWİ¿ªê¾ÔTŠ²Éº¹URÆcS1İL§Gªte¬¦P’:‚MøB…tP¥1z¸Ú¢fø7ÑM£!rğ!Ÿµ¯x•Oø/şM´Lø†;(ªÑø·ßLWuTs-JÁ f0ìıYÖÓU35…joföºé—ÜóærÍŠ!ño-…Uµü÷md¿ZJ*'™ÏIŞsWL9ÊyBÆ+º'Ì÷ı3o2Hæ?½¨2óß‘·@•ÔÑ@ªœV¢¬!MŠås•%392_÷©U_S«½ªå>	²Rz|Ì’£Ujt¢{µ9¨´fÚ\ÔXwÚœ}Œ¾ã¥)µ\Sk¸¾ã¥»ÄKÖ×–—Z‡}c}Ä™³:¯ñWP×Q9uïajTL¿ãõ/½QOo„mÂÇêıXÍ¸ıî¢{Œ@ÔM§¼C—8°ºÉ½üyÁ€È­ÜŠ¸ùæñ[ÎMğXª­Ú0‚¥7Fx|z <0¬¥:ÓZd^ş|-¤ÚZ&•‚à³4€À+}¦ë$»ÅRî¦%>¸
-şğ"ªNFŞ~Ú.w\v©¹ÁºÆĞÑ™¡*%!KC@©AQ)şÊ‚ºš =`h”Y,ı6§iG`
-ÌoÁBÒ£ô’æ(Lvù=?¸ôû&ğ(q$Àoìæí´nÌK/²bË)ˆª´zíƒI=Ù”Ã4r¥LmÈ4<6ĞkÌ“Š©lĞ(ıy,,ì`óæy˜!obXe¶‚de2±w7óü)”¼,NÇ¾îGdÌ»Ã,Xşì‡Üj‘},G¢‚“42€!—·'}x0·ÿa­_`g—Ş_@—ïı…Í%^Í±•]/¾˜ÛÆÿ²_EÃt 5[xé¾àÙÅg€B·éçÛWÇK‡Ç¿-¼yT{DQFŒK,íù§ABIŒê¶rÜíĞ¿lŸ8Hìl.q²„Ô–Ø¡&hÅ±›æhÕJfs<ğzşLÓ¶æüÎy‡ÿıíòÊêÚúÓgÏkĞ]ÊLãQ€£¸¢Ø¬¨\ÔÖ+zù÷¥7 v­«„r…+	E'‡SeÄKËÅ¥’_®(±y~J
-*òK?F!ı´z@DO›M¾ÅD(‡şĞè’¶tö{ÃäiÈ ß¦S(ê’Bšâ7¹åğàíaë—\t†Ş×Vw‘Ye¸6³ñµÕ‚)GHÂC¼wxxòKÊ¨£·mi=Zêm´?êg¦.cN	4‚a\ì01ƒ%aXu²°)²Kb)#˜øÏ]HIK1)S2HÒy=[/y©HÇ§ÓKö^N&%ĞÖMZ—»S- ™3–W¯}L‰õkùXåûRmuÓt
-[7A|ä]Â‘rCÎ#¯‰ÚIØØY³SşqzØN|o@óSª¬ç9DEE|’r#ùÓ½•Tš„/¤®›&¿”n”òP†XúK¾æp%§M…\ı@$ËsÆ7 3›½ÂÇğè4¥8Û#Xé”DŞv³üÍ“¬Ñd›;Q^ç¦[Q0o€é™`UK07—«Oke<Ïó§ òäêÅrƒ÷áx"çG¦\ßT9«ëšòÛ!Ïwó|?ë:åùæI•­é½y"VóÒHğğr\n°9±›¦B0§Á^Ñæ¾N]/»uS]¯”’¤Ii­ï8µHU[È ©ÍWíœÚ–ƒ³~d˜ŞÙOâM‡né¨KY‘aèÁ¨œ‡)/HcÖJû,Õ]ÉÒgÏmo¢ñÔœ9$o®2wõ¶áÜİwfjÉPğšÃ.Ø
-®x³£á20‰®´mUi¯—µùEåİ®Ì3*¶™PU{J½UèÇ%ûõ°Y¢k¤ëu]ËJ¸o hıræ+}.iuÃ5Ù¤é¦øëiš·ÿÙ:æí/æÀ.fµ.Ú›†©œµ9aìÙ`ú_+’Lû—"¡Ë™²¸~)?ŒÑ@¾¨uæÑêTÅ”’‚º3'¥ Wæu—ÔÅYæo£¦§*Oƒ=ÇèÅºÕKx5åå$÷ÙQ?’DSsôÀsŠpJTìô–»‡ş÷ åŸ¨vj¿X7½5jnL‹n˜á[Şr(°Ö+ä~úÉÅ‚Å)³HÕ9wa‹à¸CE!–|
-–Å«ğ%ªô#ªÖb©°:cÉ|‡*SX‚t:¹ån‘9ªd½\I$M¸²ÒÎ¼4F¿»Çp
-¨+j^8şã“T¾7±k™ÑUµoİ]C;“WÂæAçà?çà=çêì ùeØwõÉ}dÀnu“ªr’z à%Ÿ­{²jÍF@&%ASĞ¬£ßåì¹aâÕB€Â¢ô{Ô/=›)zæ‘uk”LùÛâhFŠIÎßrM}Å±ªÖqß˜ÛÁç9;Tšä"öó£³S¾*I8­¯š–N§SŒ«¾’Ó#s(şbE »µ·j6”òâ€1ŒöR~ÔKú£5Tªâ€iÔìôªbûÑ’³)NbŠ¯ĞYl@à0¦”7”è÷	LídO5õ¢X¡ íHã¾H¥p±].ŞSUh5ß©©úúAƒşƒãì¦ BØüc&Bºh•ïD¨X¦äkk½ÒŞùPx¤O’bM2+Åicı]-İİ]Šš:»»õås‰±d~¨¸Id*54ÿˆ`ÍPŠ)uu³ÔÓÙHïİ*Pts„µ‚¨ºp’•\¤ÆãğmlŞ#‚p#Q±ÑŒo[Š¹Y@˜e›Âfı§†°j;KÜÌÕow|<jI<*·û@ÈÒ8.Ë¿=]Ší”ÌBæ©/ïdãÒuJÓhâlĞŸKøyp4ªá!¬Ğ¶=P¾¨¬Nû%M°¾934cìîÂ=2ì^WÅõ»Wğ‡N5‹Xx@‘KäÙ¹ÁvÉ•0H™UÔzr|â8à×,·İ>×æ`4ÇÄTEÄ¸Å¸¨·‘“;9PeÛœ‡¬(Úƒ&/}éá³ê9’OõK˜)Åä Wo5ä¤à6ì÷Â³]½¯åÓ*åèşW™¿ü²—¸;™¢H4ĞY q9Jü1[e¯B$yíÉXÄ‰ğPB´Ö]åïÑ—T‰Ë·öØ;å©d{À#$şüB³ ’uöG{İæ*…ãFôq"1şäŒ&:ÛÂD¯WGá£D†}Mªª3=tó ‘™FœjrNÔ
-øˆ‡†pe9ÜCİ¡¿²5¬*¤·µÒE­9¤r¥¨7ÿ•Ø–Ò91†X”T+ÂBDSä‡Á›©OA+Eí©Œ›[HCı@
-h©ˆ`…»Rğ-ØC·åP™Ö‹šeHgìıÀGçò¸wá÷'Ÿ%»˜î=IíIÈüƒ?|–…+Sş0Ø#
-3Â[&“IŒ5ETõ6æòÙ¬dœÜ©½ Ùı¸Å´qRØ·†îköÊ<r9KY<…x.4¹’ÍÉ#çF½…15=·ık
-f|Áød’Œ’€]´´pÿ©8‰‡ÏäŞw¢µUëøù£â‡Å,IL@éµ5`œ¯.[C,ó¤F^k“5hN¹N	úp ‘$N[ÊnL³İâ7À{ƒ™£I ÕAÜ±Á;¢âğÃï÷@ î-€ønAÛjíé\xoİ¬êv_É}s4½IŞkŞ`š 6ü3+G=?^dş×1Ïx×÷{AŒ¤a·w‘…á4AìpnZ–FĞM_>fğ
-¨Â|–Y¤"¯ˆC®ßÍÉD3«E™~M’éÍyCÊ·ÛhóK¤h$ãiU^×Mª6$±¤[˜~y -
-í
-Äë–¯¬8A¡8ˆw£ák@i>ÉÈOœ8˜Døæ{¡I"©\à!Á~1cˆòYÂª÷Í†!£‰‚…tY‰¬d¡'Ó*U§àØ"À¿iâ’*ÅÇ×éÛÆÊ‘€õÓkTëGÜ’e kNV5l­N’Ç›¯?5HÙõÉ®ÁeÈ"¡a†œ:´şw«Æ^/ê;pé$A2(¡ŒZÙ$Êb_ê€§ypUe²9p|QÊÕPÒX8g@0Šİ™ªJèo§rÿ¡ïÅáh#úÑëÛÍ¥q)±R/'Q<ı¥¶è¡±mşµ]\Yµâü×ï¿šŒxæ3µ“Wô’¥o½©8ô
-â¸GÉ[ÔşöÄccGéw] .æ _è€ôÆ{ÆöùG­Ç“óskÿUğUŸå t{ÚTDNA¢ƒèR¼ZÄwüŠğR’Eït Gİ¥p‘ŒÁÈÌà!_G²\¬Q7c«ã.;oßííŸì¿ı=A=<¼éOæqqÔ® õ—,sÃ–—%£”/„'Y³Üvèë®G)
-a:Ú_A³Us@8d{+2õe,3#µrMDìÄ˜sœüüzÊC!Õø¶L~Õ
-gJ“SG¹l|`aª^ãİ„2,*¬4Ã,f³7BÁJ%'ˆØ¾ÛŸ¾¡ıéWß‹’wggvnuá%vì}aémn³åÅd ‰ai½dXJ·Ÿ”$&¹ë™•\¶)¥/*JXÍfM"”À<8+#`_ÂèšqÆ¬FƒğœkÍĞ^d1!á=dã‘‚ÎUnİ¨%ôÊyd&Û~j(=yÿ«í:ˆyç®
-È×Ù÷¦xD´2¥êÑ’Ğ_ËGª©êç¶ÛmÆ“ò¥[ÕnÛ2ÕğOú°L˜`×d0·]zT£¹İÌ·Ç>ˆ¥a„9ôÕ'5ã\Å‡bÎù8ÃböÓû_µ/ktñ6„U£‹<|hák‚k×hvÏ¸¹YõÃÈ»öõisÛ¦75§”ç¶éÖ:û= ®Î_xe¹ÀÁt?^‰->åh£X ÷qcéDw)$Ğ9Y}T-ş©U¡V¿TÅl³O$–‡22\XA`†˜†¸æ¯­hPß©º`Ãˆ%~M3`óurêÃ\bÈªİáä&Å†tÓf,4Ã«‘Ë“ä>ãõz)<¦E´Â–2‚¿« öíC„èZ†Â×é’LÿÇ«e¢}¹×»¹WÀI>yˆ&B\Dİ­ƒO$Ò‹ÙeÌ”øI@,dŸ£Îk° ¢ØôtÌ‡$öâß’ù^Ë¶C^iÖ¶Ãû0–ï
- ‰^óÚ(‘Íİ¿÷åè_@Ò–« œ¡n¶ÆÆ#"]Hxü8Ñ«ÅxQ¥¤ão§Ó’İ¹5ò»Nìub/Uo(%~.¶¢
-,µìFUƒ³×„•áö?P%–-~Y)–¿ªP‹ñŠ+úp¡ã‹ &N7õ*@®5eÀ&!ñ/'€/i²wW#JğF¬xƒ|-;_Gt×UÌÜãe2J€÷ä•ı¾ƒªL›ÇÿR€áV§P[ËØµû×Ÿ}3ÕÙD^–z:´åO%—ŞH™¶+²¥ïã­ãı€»|"_ÓÃ[Ïæ¶İêÕQ›•7YãMÁYĞ££¤íYWqº®)“ëlÄÚ>•Óu–øŞ}ºyÒÖ¥¦Şt÷ıA T YUkÇšz5:~=d3{aù=ùùÛ¶¼l¨œ™şOƒBŠ"«Ó¡êÏMë§¬<‡Çºú¿¦&¾kÕj3ĞÄè’¤ÍZSƒçıÏTÉÌ6t]^3ƒJäzAh‰G7¬œNA’yÁ×¿ªJ¿a¸H\áÅë¯›[19B#:ÛéöÇã`¤Uuğ¢8bë¢ıv!÷ÙN…ËoOz´LÜÀÊE­f…WõòĞøF:”¦F:İ…Qa‘{"¡R†Ÿİ}zW>Iñğ»ş¥Jÿ²3ğ£ä8
-€¾LjÆ‚6æŞ=“ÊĞşŸ¦Ñûs
-Âãü³¤´½;‘Ï®Ã	‹'â+kW†¸g	ê_ÒÆ½¨=¬Ù˜•f™¡¨ÜõmÕYÎ,w˜z:ÏÔ«ÇU]|ÙôF$öÆ´–™Á&[ÊÌ½±‰	§±…¦¼¾Ö™`¤«ÕD3[Oã
-§a©ÁŒˆö¹Ç6PÏÓ`à§DTª©ÒÓÿİ]Åÿ}rºŠ¸L7ó;î{a™àF>4\ú
-M©i†¤›xU
-–ï•º”ùµÄì(`-ß?zóäãü.åû!«€?¿ÈÄï~n&À‡oı+¢QóŸ:Á¨7˜ôı¸"*>ÚD˜ßäˆÜ-•äB:DŞ|şí÷x£4ú¼g´¾š-ˆùÔ`¬ğöjT¶+Œ`ı”Ş²Êw1•¼A`°½hø{ğ‡õ)¿*SV¾Ós‡á&YlDv—V»óJ¢û¼ZÆˆÍ:¿ı|«9Wêˆ!è„jŠ“	„ü,I7/VKTsu7”b~dcç(DÄtñ¨1¿áæÑğÇÀ­\•tÅ©ÂVíçAŒ?—ß°ßÃèñ­ìÇS8še»Ü“æekmz.Vë¤MB ¢b¦ºâ ™‹¶İ<æCZÅ­Ïmï†}£p{,!¶ o½Jµ8x8_1:_í²çC´D³‰Ip~‘èN/Òù’’|¡7=X-G­*§ËĞz	û*
-â
-Ñ#Àh^@1Ì8s³nê1¼ƒ•#|š$şr­—á#­5ƒ!¼—BÊøÆ“h<ğ•QˆGåHumcÁfÿ "‘G‹Ñ¯r{ôøY·„yÑ"G^h~ÈÈ •!.®\½VõOwlL»Qşnšİ ÂÛQÍÔ]tC¢Oıµ3îô°’
-–vZFhG«éì­º‰Ê®ÑŞH|Ü
-<².2¦{Ü`ï…!‘´s¡]©Ê7*Ócº]¼ŠÊ5 I¦;3ê&çÒó¶»/§ˆûÈ^¿;:f¯÷wöØ'ÓºX–Vã&8Ö(KMŠ­¼.-SÜ©Ao¾\• ¦,ª—ˆCQq—Ó3%¹Œñ´4LøJ° Ä,7µûKâ]C"ñ4Úê¢­
-å-øpzp´H5X–¹€ÁçïMÂJ¨P©`-G §€QVPÒÅ¥aÂ¹Eú¯dÛË{ÔèmãA@´Éwå©Ek£ÒIuèŠ(â6âI•ó:`æ4ÍK4èSDº
-:é»¤ÏÖ{jÚäÄ’”Ú“Âå\ N¡ÁíÛa:ÿœ¬<İY&´Nvÿ9yµß}5odÅ­ØU‡¥ÌğãÈ,ÖF¤ÁĞŸ#ü‡x¡ËØK/b?²Mzo—À¸$ÆÇ7µ%ê•n.ï»ˆÖšú¹Œ}+¶s}Bº©ö€®Ä–$ãnîXs®ÖTĞ\u|@)«ÙgÖå ÄÕŠÓuaZ¶Iä¯rJcä˜0§ê9a5Iˆåí‘Px)YQs^+ÂÍÌ5¤janYxÜ—–²y×ZK’)¸kDlRÊ	T–­YÛb'*—ÌÀè™VV©Óm°^¢`X4Ÿs$Es¥®ã&Ş”'‰øÎg¾ciw“[ş~¿—ÛU|<Ÿ»XgZ'ÃEà\ŸCÿ¹’A‹ätİNfÙ9´°ÖwÄ‘5ÁÀ9öƒ³s?´ymˆuìâ8{Üµm8°^ŸhºšC>Ó¼§óšqM¸Ô5	âz7£x¹f±•a4qr=€‘Ü°+¼õtƒ}şá¦¥v±ÄVØOl¹Û½ı?ŸÙ­¾!ÛM—ïš‚ÎEdj.4•Ä&â*f#2•I@Ñ#ñ)„5¢?&vYÊæ-VZustUYÈ‚å ßæT2ØO.`µ£à|4`ctõë™ÖT¼º¢#Ò{Q8èÅ¬ád˜äš3[c²X!s©3ÇWñj:¬@!üDıpúHröøB­m ….ÒÛüAó¡Èè,­©¾¥ÜÉ™Ô!şŸîPÑçô2Z#Å2¥TY3›=Íæ¡bÈÍ=È~­¨«Ù+ó²Y½ôrÖU‘bS~oY¹‡Ç`:2ª™)Ç÷ö²öJØ.òAUß™Maôvl’cUıÿ0ÁÉÎm¿ñF¨Ä¡ìtòz	œKø$×‹ƒ‘Üã|ô1qö¢HõÃƒ'à„GĞ¬yÜÑä~Ì‡m»­­ÁuË(Sâ¿Y.K+ˆš½í³÷ö<ê]kuô¿×&S/X³İÆ.˜œ İz1Ğ~9–êûÆy¾óí"ÅÀL•šÛÃ-W¾aÑ9Óÿ®´Ù¢‹ÙÔ~™ÒQù"6ËmkXlşöËçİªËÖ{›k~HxÇ¶ÊFßŠ³ğP õùâ°·Š!úé! (wj™&ã^Zz˜¾	»e[xÄ«1F¥µôñÿı³ÿiéøæù…NÌ¬ßê.3¿ğ×ŠÆŸŞâ¶¢QƒìMÇvFÖïõŒØ.¾KåÅ•ÿHı~á%ñÎx,ÕC8RW8$o<>ñs~‡X¿ĞÕcÆûn0ıØÁuŸx¿»áQˆ¯l°œ!½C0¥fœáNœŠä8Ü ¶¼RK•Äu/`{0:Å¥î† #è“ç—wccŒ©ò¢‡MrùéíïB¥n5-ºÀÓ²·á¿CÍ%jq`l[\
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">ğŸ“</span>
+                      <div>
+                        <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
+                        <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                      {/* Sort Order Filter Button */}
+                      <ListSortFilter value={sortOrder} onChange={setSortOrder} />
 
-Ç¼ m –³oà€iÛÓƒæåñ'Gï>îîu†Ş¸% öÕd3(æ‹½u#®:È.˜â?·o²+\F³`Sp»2lWF¶+ĞEA½Ôî‡W#TGØQµär§{Á¢Yp*VéŸÒRLŸ)Iî¦Ş³±VãªVM/±¸òxX/Jä½ß9ï°—Á`pŠ>Ø‹Œ[×^®u!´Å¢Ç†b	Oøàó¾„'oXšbÉŠîkcN,µ¨|î²l½€­”`¨ašE§ûİÓb¡şT*X f0:}m{k~WNG@E£ô^±à¤Yj½g©ö¾O½÷+¾WªßBó­Xğ+¿²ë½õŠïe­â{6¸Ó®/róa}Bä„«ôÚäxPjzÙ<^ı7’„0
-Îƒ‘Uñ]qLÏo"V9Úç&'Z¢#ô¦•DÆ\$39@6?‡’¯™Ã	*¹_Ë¾+åk
-$9ŒoL³dè[3:g™Ç™N~œ´J£6øÃ»uXÅƒû³kOºÉeÔìÏ®øX¨6šBÆÖãnÜÚfáVÄCYuÆ.ÇŸiqŒ£³¾vUgå±ï‘6•Ï>ş;î‹å®Ø3“aGªyÒ…£Ùî[ñ&+“sî£TaQ´ŞJRa‘¬Tóİ“ÂDÜ‡‘´p}Ÿ“ªÄIWB^¼Ş‰È¾wÂeØ
-.U/V¤®HY[][>xbN'bN."GIŞàiDK{Q8F‰•×qK–¶N~¨¯T)hRŒ¡lYyÒr]/·Õ—ıÃ^èÓå›+‘]+è2Œ“ãŸS¤œR4”Ú¨Õ’ˆ§½a³/ •*kÑAõä¨²,i¥³6Šİ´ZNvOaøìqo¿÷_ÎúlËqÓİ\•TŒ"»ŞÆÃ0Z¢?ºã7ı»3ğGçÉÛf]tåÏªl°ƒ·Ç;¯OŞïìşÏÎ/ûG®½ö0ÛƒèRBç,ÀyjI‰÷dÜYÁœÒ¿;Iø:¼ò£]@±-ÛËœ'7É£åôÖ¸“/İ¿TRh–ÄrÍÛ+s‰tıõ•Ñ™Bßv¥šg¬¥À æËÏ¦‡CŸ/ƒvŒ8mñBneaa¡ Óm Ù%.ÍŒúMº®œ3ŸµèÖi L‚•Îd_gIÖ€C·ÌÀÙnÚ“ÓwŒå«³¡œëÅzŸsßœÏ)WğÃÜÖ-k½öÏ½ŞõÂg×f£ Íœ‘vÖC–ºDG^#op’1ò';CLŒõº½Æ""z~‡ŸI—¯n1O7ºvÚÑª*•"?™D£Jc
-B¥ÜH€ƒVˆÖøËù‚‹"íE¶EÀ·ÒaËl…ÇNã¢±É"|ıs²Ò}ùó÷ˆhQ„”B¬=oà‹Ã=ïÚoçnøš‡äÅn.ÉÛÔeIN±lêÛ—ş®1 }NGu„Àx»Ğ²ÏÁÅæÃnJ|á¤ß& ª¬µãjŒõnQ°6uw’“*œÆ“YĞu±ö¯¶LÙ­Sÿ,ŒˆK‚ÑSjUiÍÍZ@,.:s‹öÁ…¥»FêÈ¿ZV„±Ÿd4úó`íù†'r·K$Ïn¬ß³Â˜oÌ4»@U&mKÇÂº–+Â< /g@ˆ½#ï.Ê‰àãR}ù%ÖŸ›[Ìhõ§Õs!¶o†ëqà”V› Súı¢£‚¤]VáÍQ¨TŒéƒ^ğs‹ùı Á©d/>*]~Â–?~ªnY^–BÛ{Ò+Cë–æ¸gãX%FÅĞ JôÄö¿ú½	eÓFŒR Põ8D° œU}Éè«²*Y]Ò^ÍräR¤ÏÇ‘šè£u
-£Q“×Ê–¥…’ld†à0YWkŒ¶›Fcşc}‹æ6W*ª[Ã¦U/’&3nõÆº„y¬:¹k8èRóš®JÕ,\£Xu¾¢G‰wvææ9"éæ?"*»y‘ğ‚ÚXªãĞNb‘—jG^êx£ğâì“ÂKêú„ã£•Ã…sâĞ™Ş_äHi©¦Ö6+êUóÎ"û¿ŞIè¼t3v¿sñµkt—„š	QJwZËË„—já†¹8œ¤Á9/„Î<ÈÏƒMî‘çk8›CÏÛšá±ÿùù³§ëk«+ËÚ m]yÄ?µ~ÓƒïTM9S±sĞ©¼ó95¼^ÊORì†l³Ö¯œù¼â	LüšóÛ®ó²sy®ˆ~€]o°yÜ—yvë N«Àl:Ş”;
-NÉšº1b{á`àEGÁùÈÊî`°mI5&uÆ¢Î”c>²äöz£µ"£‰ïœF²´TUÆÜ ±Ûªm°–*ÕÒÊ‘@ë„èjLòb›tPgßÃêşFMPC¨¯À<n]˜”PÃsm<Ó…ZbÚÒ;šOĞ—¿q´00y(v³î‡B£ÂÁõãÓI–ºîWgdPÁ»Fış‰GÖ”´	§nÌjPbïÒ'ïÜ‚Cß ãd«¬'YÔê7g¨?\ósxET-/šë2…1"-ÚOãµuj™[ ßûÖ(‡7°ÚÕ¦s™…3¯WÉ¸SprŒmÿÄ…¼,ŒRê®>w£ÕÕ”f©óX¤â?$mºñ1µäŸ’‘¹?òAÿkm$Lşhôó7Š†ğöä‡zİ	ú·Ÿkaf Íª6é¿YÎù¥çDôa„¯û|Óæqu'–£½¾5ı'•º:âÅÖ&¬iE¬`a\ú³º¨è/Vš8¯ }Ş`?!V®» 2¾5©™gµ¨úFë/«ÒNåÂêkÛ–¶¤~o°¸? äíÖ°®˜LÊKööŞ¼ù”–|:¨æI³´Î>s$´bGGHıCï
-·Rj	^d=ğÎSç†-ÁÉ>TØü´Ê}òiJxQšsön)|»´S«Z¦c`DO¥DÖz…Ú—xÿ[¸¼òk8‰4Kf  .¯C÷iµFŸ£¨ùŞûÊ9dŞ,=fè+w÷"0İï”#SxŸÓiœî.,TH$&÷’”&eğtOÉ…¦˜|VŒaôKO»t­£”ş<·]¡™Uy¦ü’º‚Æoû‡ÿ`Gov^¿f»ïŞ¼ßÙ=fû¿í¿=fGŞ¼ÙwÕEaÎÚ‰­ÓèM{ÖUÜÉì\á6*|å< [®aLg­‹:©¥h£ ¬m²ÚÊ|Ù£½h9“Ï<ŞL°- jì/l¹Âƒ·<¡êğûhˆ'ªvŒ)w\O’…Ì—Î×™r^Ö^}Æ>–¦|ëJî³ù6Xhg•.ïÀÙ’ >Ğ]d)Çæk±ùÍ2U'‹oÏe×uÔ²IÃª¿NtSL¢¿¨Š'P˜Gæ¶odææöF¡ÌDˆh 9ùÌşÇL~}û™Gì5ÙÕFGNâ:ˆºä<¨‹Zy0õƒm‘×ñxñKĞšL3k¾şgŒëW$®OŞqéñS¡D·ôŒä/§Z†Fß9x^*¥†¹Ó­o´í¿ ‡Ç€™¬¿ñzO§¸&‚vSI™¼cß²7>*ÀbvÀS`÷kqv5ÒÒJRâS‡Ü'Å6ê[€r»¶KL vajÙ¨Ó‘Ö%³‚]ÊÕ"²”îª[“`c½×Ì¬÷ó.“9îôÚX[Èx}NIãÿœje)cjuñîÌ 7·ıv	we(vÅë#¬^û‰5û€±gÃ]Ë•Å~se)¤w5Ê(Eq9~’;Np¬—æÆóf;ãI|Ñš›sÔÅhG9÷)ïşV³©’9Jc7iÖV®|ÛçÙ´µT©¦4Ö¤­ÛFûÉ~ieZbÁ›í™Şn%šÔ«štädg*›ä!yJˆ§™a§p[b)ßBv‹Bé\‘u`9Ã†Ã¢´¨~b½¡6ÒhÀÜş…íôû‚~ÕÆŒÆ›*>«KèL—gZ{1øh»zg¨¥DjÉ…$n‘ÂUw„4ÊİpKş–\@c‡áU#CJBGƒÓÂ2OœM³xüV¼%BêŞx1@ïag¾Y{Šáøõ@ašõa³lIæG-Èåâõ;Ùa„x.›5$ù„Œü+´¡7¦Øì‰6SèöG€™OĞ<uãgC¿ÙlI8›5g³$äLGËÿ?   ÿÿì=kWÛH²ß÷WôäîÍN0ïy0$9Èg“ÀÉì=³sa	¬ÛòHrÃòßoU?¤n©»Õ’e Ï9cµZ­êªêz—ãgÇ9¹µ4;Ô	R<;Hƒ™$br«ôÕK&´ú=Ù3²Òxk	¬Ñç‘Àê|jøğã˜®|´Ş4aÆ>™¤µg|æ¦Š:™YW'í¨ëäv™ÓLJ;ydKl©Ş§á¹ÿpõyÒH¥'³iõ¤±bOšèönªsîÔ½JÌßnôã4Yâé<ŒY÷èyÑn·é+‘Ÿûè-É¼%J‘‰Go‰Vö’Qç«ó—(9%EÔ’a3Ÿ‰.×g†Ç´í1	FğîC¿(b‰Ÿ-2–R²äß]¥¬Â=÷Äm"¡Æ£ïÄøÑ½Şé£õÈàjß‰"ÍŞ÷„Óç½wŸÌ~Š“/ÅÒÂ™N‚)¥½óÜÒOî·¥m»ÏN”G"³|$‘=ºQî½¥uu/)¬Éòy¬éÁ+úd6Êê>yØN•ZÃIÂ¡¾½«íÃlË¿Ålj©ÚÚŒÉ6µ|K³ú•¾Œ›zøz­–™ÁSto½Dw“OÓH¶œA¨œUš4‰‘*~Ô—![[ÛŠ»)ÔYŸI´«/Óµs1uÅ·‡SSäiôÒ@0«wœÔuÁ´ç~)d-ø]Zğ¹4÷·Ìäki3Kå2TZÉNiÏµ2¯£´ìOiÇ–Òb@j›g#ihòh?rôv¢F˜9ÚpqÜ®·à×xDvÍçÁ {İ’,uk²ÌÅÅĞÔ½0›k¡·Â-1…Y|	ì@óy0ìà¡ª‰¤‰U†‰f†üúUôêé˜®¶á:ÅŸ$“´1²ÿZ¥o#Ó¡¦ÑºX”ùÑlİVbÃ×b¶.bÈWa¸1ÎáŞ˜®Û‰C˜{ B›¦ë¯<ä ‘ıºaÁ×lÄ.lfìvÓæ™*ĞNšÀüíØ³Ÿä¾[²g¼gú|k¡{·¶wÏlÙmãû}´f?"¼qÎûˆğölçÏíÙ­3†{eÑ~d	Æ9ï#KxĞú#inØnªş5X·[Zùd7ƒzÉ.®“òäfåv?rê2Ù±Ê–?%pCöÁxxå²	~˜ Òù İ&p{8¾p¹K‚ÜºèÀ*äwËz*eŒàr º´l­—Z>åÀĞĞ;–›…%Ï.e"î£êšz}¯f/¼M¼~˜^Á¢òß8ñ£yAt8¨¾.è›—¼$öÎ¸6†Á=Ş‡N5ì]Éİ±ß,„ ĞM£”ö’İûx¤¬Ã	vÓxTPT%]Z›…®evëÌö÷£°“½C²Aößìı|´}²·Kº;Go6±ET:MÈ{z*’%r@ÚSÛ;¢Sh7H½p˜/%¯NNŞ’èœ dÈšÅf2¡­oĞçrîùÁb8–ZÜcùÎÂBJv„•;'/ª2ÕmÖêu¬ãdª§¤
-ÆWjÃ3¡mÚxÓ¶’£ºèóíÜJœµ\wéºÃ:	)Û]}ÛÖÒ`Í²vl7c@¶ãV°]ÿÖyƒMï±ówçéà¿¡à¿¿³ø„Çb+qöÿı//^z)ıŞ•/ˆv©/{\>Ív:ètÑU˜ÀMâÀK¢ñ&Â"è÷xãgXi°ŸßáWü•Ü€fp¤ÇiöÓ7ÙÀ}èeR«c‹Nº1¡ÿü	.ä»Øñ×=eÂñiÂ8Ş“‚5æD]-:QéDŞµeÙ:Y\Ã¦–|ßñ» } {AşEÑş…‰‰Ï»x/®:õ#¬âÙªVGhÉ£»5X7‰öŒi=á®§kPıòÊùH=ÌÅİé°õKàÅéÁù¹Úq? ÿÏ—„ÒG2ˆÃñÇÅå'déÉHìYkßĞIJ±î3}gËycKy¯òU¢dÆ4Tp\:^f w#c’›9HœÀàÖøÌ5„¥ˆÛqèüŠt	htˆÙ–ÒÓ“anì®j÷M‰EYÎÔYÁ`
-@É÷‚u—¥e|®NÇ8[d‡)¬C–Y“]½”xE)Üšø¹V™½›Îç¬ò¹G>İ‡Åƒëö•]_ºHtTncgĞ$XsÖú=‡¯ÕCå‚wFåP=Ë²³Lâèpu¿ç ½Ğ7¯‰ ­sd4PSA‡úoE[¨”ÆÚ/÷?*?a¿Pùtb£ƒˆş„\_G y]ÀúAø‰E ƒª(İZ>Ş~|
-ƒKyŒ˜Ê&ŸEHDÙ¯tù,Šğø""F¨uràøo¾¡Èš¼ìƒßPrŒzTĞ.7¨3ò+•n]íJéŠ{a|/:º¸M÷ë5%µ¼˜ÆÁi_<ü”>Ö$¥
-ûŠVP•Í÷JV-Ún«ØlfwaT69;È£O^lO¼ø#ÆÚJISUDJ³-ÁYh,GLjO¦QÊZjŸx!/†—À)cÿ©Ğç&tà!Ãõ0!5ÎãhDÇƒîãDÜB,9rmÌ„¾ïª‡„ãÉ4å†R„È£'ejã):kß.®xdNtê°NçFkaÊñÍ›TY÷xŠaì†•Ó-<0‹à©7zMËoğšÊw§ÛÙ¸ÂÛ°éòi–oå%<ÿ“7î#²Ÿ5+cb~öÍ¶ºÖ´Œd´™ÿ¹z?•Ñ”²Æ˜zWK>MÒ8£È‹$~*&ÏNH˜ŸŞÔ¢pçÀLÊ[
-;·ˆoÊ63ûk5;êVIü„ë~<¢¢CB>%Ù"ZÿE­Xıüv|ÚD#‹Ü$Œ¢j†GÒ—§¡Á§^èßë"m¨±ş C˜Ôj“Áÿ! é÷8º¤Ä°ÎÍ5	Š§xU¶ŞÔ
-ÇĞxdÏĞq¹8ò>×ñ0X]$òÌ”†$iÁèl”ÄÄG %ß’•f­âµK…M›ÚB¥,ÜUva>d‘ÙÈ†™V¶´İi°ú>`İ~Q”¨»EMê£Ùøã5Ùã“¯˜|@vœúé9$Û¼5I—¤Ë|;3©Bì3ë”–P¿ĞÜ=ıI8ºĞSÎuŠá2À¹AÚûÄéI´²úK4»šQ¨ùßê6ÍµZ_u>:¬Fú@=œš“ #4yÚ¹ìhÅØ±]Ë`XB£8Æıá¥äïÊeÄÍˆnõq­8…çÜ¹ıÕ}ï©2”¥p2U¨a—	
-ëBP`|ä?ÓÕåW?^¿£ÂZ÷vu·…^½‰úŞ0@ßéø¢Û	Æ‹ûï:µ°Åİ{×»ÍTDØÚ«QĞÎÊ!Ç]m¬Ì>´íâÛDŞF~=gHmÆ;aO:Á“šIQ_TO0¶Í£†_²¿Û2\]}A]ü™ÜK“zyàA:b`B7åõ–4_4ªÃ”|auŸ †<é1“87»w›Ùå_æ³”–ÙîuK¢kwsZº=\ã(æ+•Q7b-Ô-›Ásé^ãß,qëQ‘½™z)¹÷æ‰=æ¸DváTV ²rœƒ=	~oR›)gî×l˜Œ%3úRˆ£Ã‡¾?Ü’¯d£®qN1¨Õ²¡Ù,hvëğzfnfi«a6q$÷z–˜ö¨­×ápÔÈ5VaÉªmÀª«$×nà;ÈÌˆÍNÕ†¹Øš¾PP“(Ng°òÕw,˜üqÄìı[Fû`ìËû@)ï–qºËì–N_”WğüU…‰Â­/•ËÅ«›B8|€›ÜĞ¦;¡Q£ÚmÑU[#[åd7õÛJD¡‹<²±\+ÖQÖœ·Ü€–E´TãXŸ¼Øñ†ıé¦ @ÄlÅ((QKHél"s†’‡ÌqD)nxêŞ=‘,’–M^f›×İéÊ_tkÅT% ¾’~%pº~(éÕÅìƒ
-R&AN‡îèî€ªxËBê¸¢É–ßV“P^ó_O‡Ã+rè…~—uIül)Ì™ÂÕ:äë
-DWêıBİÛ–‡fñÀÔ§Däv¸yÌ-,µnP*.>HŠ:íÇ‡¶8³‡‹Tr›Ä‘?e¶m`ñUœ`İGoñÊy8`ìÈÇIV¦™„ç4tµÏbâãàÏ)@ E£—HVÇäè¥İ0™½+xı¡Zœ°7ğ@äÕµtÛ2ö™KWİ[ÖU”ØÕíæÌo× ŠÄDïéÈ şåf:eukÖë£¦ÃàS[6Ã²-p5?=*ãîZª½k­›¯‘°:”nnFDªÒMm§ƒY)7u¹\İºSnS×¯µé¢5±ÙP•h¤ÄÍ¦ÑWú'®¨¨íjÒ¡Õ8Y?¬²YÜ½Ú4œÜı˜):nş{7ÏØ¸»2ï8«¶ÍœÚà€ì(ıBÓuO‰@R’ ş³iƒ$!Ãè"ìƒF›"‚Ê^¹ rÛû}§³ä5‘tVªÂVu²ùGa†Ì	»Pù¢£OuÉHnEÉX–ûxÇã˜ÕuÉŠÈ~şmùw™ÛoŠ,ÓcÎ°”Pßn¤¿*í^cÕ@uñÏˆnõ›$èóºÒ}erãhšRä•sĞòIuÒö†š´ÍÊdM>ƒ¡ôB(ÔÃrÙ°–S¢î”®¨&JX'7¯u™]taş&›íêPÏ›¶Ê©ys%ùq›ä­—@ñùÜ]~F@¡M‚ıqÚU)c[1ïh"q%rZ
-Â8p©lâN[•Ãî”´
-á³Y•[¤®¢ûv)LŸb:W*+>òK£4m|ôAkwygÌ8ıòCò¤ šƒó˜…Íµ"4+,“½±OEíçävtœ‹(;¦Ë?ÍÃ×n/Ñõ×ïcta£œ×š™ùœåj0[­ƒ[^SÚkZ˜ğ<¿şCn;ı;ÇÓ?j×—4ÓÚ+áç¼c¬]ç¦öJç~ƒöÅ*ø>ˆŒpfú¥Çó(0Q¡‚^yFÔW,+®À‘èÈ&õãAœÙËj^‡ş¦>€ï—­|„ØRójõÁø8PÊyw<HÈ wË‡rù¤>!Ä b`™öº÷)İ¿Ş-m×Fs;.}g$BìêB‡:C“ÒêÊçÁQº„îöœG÷ÎÌô…“´sÎg¡¾_Í±oôx¬?Àc½^É·ıs3İm•¹¥;Ö¤t²uºÆ¢—R$æ‹>k$º1/ƒÕ,Õòvàv5¡¡AÌ¯ç®k¹Z"m&?fª*4Mcsyó
-ÇoúíÊc^4•™ŞE¶,ÛŸàÚÎÖ©çGe;šÙÎÔ¼¦}ÚÖÒy}8ªË÷Àµ(×<@Ç18+J(_Ñ.A	v»	ûË¡ªEÌ -Óh/§d´	ÿn¤H›0dEŸX_&	[ÄY‹-.“¿Wrû9óúı8š,§ğœQ	ÇÜ¢µt¥ĞÍ¼6´{Ï²bH°õèªîÊUhïÈ„°ü¹]u‹dÅ€…j_­5ÑÊ.çrW-öÓ÷ËE¥Kj­ÇD§Íi›le-wlñ´,ãûå]–u Ò“Í+Øv-u˜:\™ø]Û{w,ù ºcew«Én•V FÔVË>k…wƒƒ®uD—;(÷ù³£Étbë‡&7ÒâáècàWáÍõ2âÌ´ñ¬ÊÑ7©¶ÒÂ°ú‚§…Sºl­!R¿<ş¬q4h;ÑÌFiú—õÜ‘P»€|qïÒÊFG»ô›ÓWŸxØµJk•Ğc°­·M4Ö+>æx{Ú}£Éa…°6„ÇøŒ³t|š`ÿXÒ•ÅÊ9ÑˆÇÎI÷¥÷„štXzlef÷ârŸèf¡6[°Øm¢I0.Îò6ò½¡2Å3òäp !õùˆ7öi™|Zòw“³ D²@ÄŠ0V
-´­K²ı½Mb(32¥°î+òœŒƒKjiï¢Âµ|Àµ­Ú½=ívN:¿-;>³¹† e>ã¤ÏI:YY	,—%é¹òÀ—.Å»¤²xØãÙk4h }åô¼°ì`§übĞeÉ·¤0N$³ÒeÅÜM1\¼¡ü§ép“&¸œ	L#øÈ
-Mœ7Çğ3
-§•_ƒ¦Ñ5ÓS¯'¢q ¹ù¶H FÇû¦øKlwwBÙÇÛIOÆÆ­çŠmj8ŒNóáÅÄì“ÒNyÕÏÓƒ	…X¬M^&±ºñÜÌôl†ÃŸYŠ¸ˆ±Ôí8K'33S¼éÚ&ÚTuªÈ–y˜f%ÅÄv×µH“/›aR†“(Ö|›­­¬YõïS.Y5³±kfÉİ	&m$-!!2ò`‡•õ7Ú¨—{/ãrd)C™¾qÃßêQ= µQ—‘]ÇT¡ ›®·'™|s³ÇLq^Ş¢PkxÆÜv£é;™Œæîïj|2ìë4ôÖ‹÷jQ ƒ„_CßÚıÇN±é‘>Vì‰ÉyÃZíî‘ƒw¯÷ŞîYJªÖÒnÍ"y•@.ÄqÿOQ¥r¹n`AÏ»¾—­LZúvã8&5d^¸¯]ê=eDÕlhŞLè¶w§ÙkÎ/1®ÄÃ@¿Û˜’øÍÆ“t³êxä4cª¿Sò}Èá««â]^^%eQ,Xø^¨]ÔAI&áøÉ3£Ú’Öİ@o’Wßaß@ÀGó¡pÌö‡=ò”¼>xóæà×Å÷‡ÔÒƒ¼~|ğ5çûš¸¦Ù‹aü!Oz½FÆ¸ÇQLMqª]$«XC¹g€£N'8L)Ps~tÇ ½¡×AöQü°QğB “økñ·ï—·x;øŸè!û$ŠÕèSjmî8ƒÃR*”³úyHxhÅÈû¼x‰Î^N0«ÔQ÷ì¨Ë²ŠÕAŠ‹¸\\Y…ÿY¼©
-RVBdôyÑ›¦¢¡ğPïTÕaƒ¡ÊI¹ÚÂÖ`­ìc#ËAËQH‹)ÛâTtë¥a:Ê¦ÀÁZieåR9"…†hêWÃq@ĞÔ‚K‹ƒ¡hê°¤Q$À±Ë‹šTĞ˜ITÑ˜Á•'ê}!åÀŸ	Ö¥áÈ¤š„ƒ’ÈXê>m;ĞÑº]8Ó³ó:;ÜU¹©Æa”ğ”¹UdÊŸÈ’şö7tµ¾=Øİ~³Iö>‡	kÆT°‹–CV‹ ÜYåŞ×ëôÆìzÆÊ|úKàgSèÙÛ5ÍÓ€?ğ´ÏGŸúbBg~Wôº2~÷İÜùİEhÉEi´xFûJ,~3EŒñÃ½Š%‚H,i)áÄBŞ(˜I±¤îäöèŒ“†ƒ” EªÒaî%ÑpŠî: á2ÁwGz¹¸şpSø_.‘à¢[î-¯ı®òQ
-x€9F²pùd‘š&*Q%Æºi«X7¾’¾î•‹k“3¾ğA¼Öë®9Ükp^sZ½z+%¹jÂÜ¬|Å%åhuYî]&”)µN®“óşğÍşÎöÉşÁ;òëöÑ»ıw?[ÔEzaïßûÇ'0ì¼?>9xšæîŞÉŞÎ‰YÑÔ#†¢kyQşBkYÙµŠïXWm2 ¼àô£˜`eµ!’œİ ƒ7Ä¸ô+ §I‚Å= ğØøÄë÷Ñä×Ó,¿TqMÃO²aºè[ö5•OvÏ½a,ü„Wwü’M?é,múP¤uç½¨qk¶äßêq·¤®16è%`çĞ$ò¬«ÄYÀ•Ÿƒú´È$­2í²Ryå³9cÔ‚.Ğó [‡Øúnn¥@-ê§±Q²-€½pä3*ÌÎzC€<Ye «z³³CÇn-¥ƒÙ§<¤„ÃÌâíÌHMê;´"¢H¦icÚiÓ6÷¼ã¯~Nø=Ö±!Ãön¥g‘UkÛYÜ—ŠµÆ­õ_OÎ“¸.ŠL½LBÇ(§©Që?W/=o…Ãöd°{”ŸC¢Ù9­İb]Î<ÌY™‚^¯g˜‘¶XæV²{‡=VÛ3OË^^è])¦°t¬Şk›šÖÓ·°ÏØXDì92í&L¢8ív=ŞúLô3+ĞÉb>Ò³oìÙÿĞhŒüEÇGàg<¬ÜÂ[·™^Å×¤RJ7·²¢r0öY@¡B¥>è•ÉXëd¢«zo²ûÛ­şñ4V)H?Ş éoS¹îÄ;ëv† QêjØå)a—_Í„{ìãF±R¨><QÉ
-*ø”
-ê¿±.IûX8ŸQPû
-6µÁfÉêxÌÔqÙŒ‰¿¾Ï¶S³±¼!„è(¿oCV¥Ìİ/íí)ÇÓÀ¸«ê¯E–Reæaß$SÏ+Qàğàr?¦i8G— ­ 3Ie[Ï”^‡#ï(èŠïûV³Nâƒ#%`è)»uFó5Ø}µç°‚^Uæx*sN•yÛÅN“/¦©™F^Áí™l,ÿı7Şä@êm^äÍ„+u,7¿¾Û;"ööw÷ªŒ6ïß½9Øù'9ÚÛ>>xÿüëışQË›\v²× ;ù'G‘°Ïò¢Òˆ0æÀJëOâˆ„òÂøÇ-iŞ\+$åWgìvĞÕÌÄ^zæ)cØ©&Fv¾H#æl€§g£05¦˜½ILÇnpîM‡i·t†³ V`Ç•ç|³ÅŸy]Ğ'¦% ‚¸./ÎOƒ­¥é¹«_UÈ
-Hg3ñC_ \Ì&YRuO'6êCŸ‹Û*VŠ¨Ó-•ÏĞÛİy&¤ô0#šÆ•ğÍ4ĞŒ¼…;8¨ØÓù[!=Nû}Îi?˜s4·ú!ºm¾)Îpsãb¬Íëíå)¤F%…J\¢RE¯Ôg‹í'ª–u±ğYr ”#ã¸ùS2·Øbq)š¹yaËuº©®|£²­…Œö$÷’ËÅ’«Æú(«Ëxô§Éf4MÑLÅ	şSQ%*ëÚ³,b‘ÊHO
-˜K«şË?l-±ñSe6Õ#ÖoE²²ò_jL¶í@ÆèuJå¿kLD9!õøé`fäŒjÁ<íÅ‡bá×k#Öæç”„PU¼ÖËIwG¯„»®’F™^-Klõay%X³>¹ÈZ/T©w´GåM~)ËíõzúÉ!s½MËÌ9”“Ã´TEÇA˜ˆ.A†ßıµ%7æ)Ú¢'Z1±Ü@«é”¬l˜ë˜æApC›dã//¥qˆíJ¯3ÍJ¾?³qÌdNS{}8$Zk™- ºjk*ë¶¦
-6LıS‰2ĞnjÕ¶ !
-	¸%ö
-F
-—,ÌÕi¢'2Æ
-[+šÊ%|ËmÜ@¯`ˆæ¼Ú(ËbQ	wË×Ïo^m¿a°c²½³³w|¼ÿêÍÙ9:8>^<Ù~%Y¼¤ûVzäçatæQúó±Ğù¢G‚§UÒ¬‚Ù±jÖâíá£8…ßAËÅÍÆŞkTçè] "aB‡%˜{÷1 Çpo0&«Ü¡JXâ©d‰ûO†İ=ü(CYèü«ÜLQT«ËËÎ†·Ì‘ÅB&†8™"¨­cé»å¦Á¥eYµdy¥YÔ”Ögõïª¾›oJ[ &ê•cªí¾+`¯h}‘L‘²×¯ÑW¬YûÌƒ%XûV'ŞFEï$A<(W Io(1³HÃFû‘¦wdÙÇ »Bã¨ĞûH±w¥Ä“
-ãèš8Z"Q3ÁñÉâ=Íù– ì‚~&Y%¤MaQøĞ3DCÌlŸşè[.¶vVá}(â¹,‡ö4Qò˜6tyLŠÓ"ß9ğ”P=QOÓRÔ)…;§	Äz§ÒÒÙÇ•`óÚ^ &ƒ`çZ¢5.] ?iÄ#ê| Ÿ“îäãw5®6IB=õ'OQxğ;{~>cÂR*Y°Ë ŞÓµlè“PÒç“óv&)ı€.x¦¡MQ%}Í ö|àµı¬ù9)¾ÆË½Ö]êşÇÿö?É·h¼	|øÂfı/şúíËüoP/Â‘2da)Ôzôpü¹¢8‚X‡!—ï@p÷Âq8õƒ¤ËŞFîJ³puàåMØû'ÈAÒ£@ä9	¼ÑÛ Åœ¤´³†ìV	’äy>#ÏÿNdJÔµ¾PÅØªA}oì‡~Ç”Ÿí‚ººÁ:6Ãïé§ğ/öÉ/áÅ`ñ ¹G…ì†!
-2‡l4ŞÚríD{ÑøoÄ^FĞñZT Wl¸ÒE«®õµWS¬–9˜$¢b#ºÀc˜Ajf”ËlıŸdG<Ÿ"‹Qÿ@_².¶¾ƒ|Ÿ-×o€’ dk`¤^F)¼¢½@ÿrP-óñJ-âÄ–™Ğ²¡zlÀgâ!+sTèÇÓ{™ÂE?ô@öÍÛ"ÖEkö„X4Å‹¯HõC•\¬,Ãº‹m	u½á};GÔÃËzEõ.àË„ºÒšå/k9Œù{·ˆßù¡
-ÿë£°ÎQ²M}Ë¨s9Ô`{t¼şœõÆŸ¼/H&“ŞÄ*g±—jVÈ¯	öŸO–Ğ	 ‡ÓîœË­7hù'»W0ÊÛıø
-ôUiÉ·€¡ÙKÛ¥n~*ÏT?D¥t>Š† íŒNG/¹¾F¾%øï[£VØ†F—KmÉ4R¸ùéÓ’ ‹±lhğ@MZ\…«Œ?ññ	é® ÎÂCŸ‘r’O»P{^CËe˜âS‰Ç‡qt$	{c¶`åEfYms`*km=nk(Zè$’!`Ah÷|&ƒŠO
-z=yIşøûµPòW~¿¡jåİºÉÂl¿2ÓFä0t›ÅI	­OpLaq&6õ)ÕÄöAÏˆ>°Ub+½‚Em&u4ìjôÏõ=ùEIWVgz93ì+­õˆW^­ãñÑ÷Òà"Š¯^VÚ »¾Ñ[Cª–»Lº9…\ê¥âz•;„µâå«HÏ±
-3Í‰áåô‚ô0'ÄbŒ§@ëÎFÃ!&İ·élI}è ¨³Rş„JsÁ(œÈ¶ï/Fcİ|•:@:U!­¡×I·”!EM+z‹Å$ü)Ë=yc@7ZúƒqØdxÿÉvöxWèñ2§qpù–óº#	¯[¬ÍÙíöc/Ğ`ù<oRœİG0×e‹ˆÏî}AÖò×_Z%Çğ}B’7²ùûë¢•è“©…;°.Ğ‡óO9âNC‘yõOØğÄfX¦pr¦6O/‰jÑ4¶i³E)/kÓhÕ¦dE©ö
-õ…Q¬½Èé©šˆÖ0`ƒĞVäF~¡opçz O>Š¦	8Bºï'¸Ş•U¶Èú\ò5ºàw½+ÒıN´l¨Š=²•;İ
-TŞN‡iÈòc$°æXÚá¯ü5í~““ö­)œö”'5 z£-@‚•ÀMS?2 tv­
-D{Ÿá–Tc6ØMäçeõğZ]œ•àÂ±qáù}U+McÙ÷éTh—
-ˆ±rµOÓ©FğÛQ€Ü”"Gİmıåê]w_Eé@<å•7şs¤p†PıG@0^z‹‡Ád¾¼ÿàü4Œ8„pïrBƒ½á)û‘òîº1‡aÙì ³/ßàmï˜lÈ¡@/èö&7Gñ ,JË¾`Üf­EVRëËşªW0³  í7œÇAP‰ÛF ˜¥²IÒ²óôX¦ß1³Ş$„±/àlÀğ°z®dŸ‚iP'£¤·]m¬0Ã£ßÜT*–÷CıÕ‰•Ñæí|yİ•EŒégªiZŸÇgÒğsíÊæÄíÉdx5?ÚgÑ¨8¬‰˜é–‚Ùåá&ú¤.æÎ¯7£ĞÏHkõ&äYı|Ô#To>îD2¤±Q¿I½	…¯Å¶-\¥Î&ÎlÚæ]ÉÌ–½©7­jÑOKUrÇù¸únØ¡69N&i¹@R% ›MQq´3r¥A¿<&hÖ˜MH¦úéP «1“ßï)±l>éD×Î–°úÅ)‡ó¬…#«´XÎ¢4‰DÚBÄKÿ ¿ôëŸğ»l©"Ñ\NB·'»M‰‡üZ1ª¶Xö«ÔKUÎı"óYÔèŒõ25<ıİMM˜wO-~İ>»7áø£¡¦M³ô™4Äî&#–„|–e_åij4oÉ™g¤h±¼åÍ2C€8'•Ø]Ë[ê‚†Ùã¾6ïÄÈï/`­íµc•CS38Kø76‰ ¤'¹«xcny ÊšKı²êr†N/658`©WšReY´J+Ô€ãÌ“ŞüqSi80]8,¥ı~ª[ág¦@oö)Ô•(dO
-ÓêäuˆŒ)UæµÓ‚ĞÏŸĞÈn–ËbkŞ ×JÙxcö»j [s«n<I@Uè£ô]Ğv„u´î±óñrJ;ş3Øà…ùŸ«”%¬—zÂÊİ¿?M¹mœ<rkÌº¤J!×¢P…Rî¢ÍO6?Ãª'ä¡]‚T›¶ğtì]~=â‘7ÿ
-Ä“Ê¢Df>^0ß·bByïÿ±>s‚gI¿;¢E0ëƒUfÌÅ¾ ´(?¢-Ç+ï®9d©VüRs¬Ğ+¦.èöªyvæÚŒ…dÃ3¹÷Çç‘Š¯5èÅca=åëş4öD+4‹¬Å-/¦æ•uYÈe!kYHNb†İĞì»ã;ˆ÷0£Uí,Ú© %}7£føÆšÕ}ÑmËXÍÈ&ğÃ)P‰V¾Cek¢n<È5ÏÌpí¾nÀ._àüÁ/@q{À/’ò½İ„Wä5V7˜ÿ.a2—İ0ŞS.¸@‡7Å@ÓÂ$ßÁâoËŸ¿—r'±¦ã
-ûĞ“F¶Ãzã`h8al9É´œ‘cOhz¼ÄÚE.ïªÅ ßß’:i®F®v‡)Z 6’j#Áâ+õÊâñ5á§¬ªÔ@´WöAD7ÓæEèW+Îª,m9	Ø+ùÆš»z=®`*¦¼»a@Îg*ì´Ì{åÀl‰§d•7^\g~…Ù˜ÇWv)×Ø7J¬œ»^^8Nø™“n^ĞnªGàK §‰Ls¹ğä=‚\9uÏÍ3oçl@·™nŒú?“Ëhb0ìÌt4Şd1’Oó,WÍTWY}ç¤§¾eùïË” aÕï„bM	=ÀÙTHUò_3=ÂE:´—%*qëL®<àGu·MD93Èd:N«YBSØ(*‘…x…JÖPÉ‘ï1<•\•9Á³¨ñUÃ“¥`ÀE/æQ£òUƒ2K;˜å Ù!é" ØÎfqä‹baçólçó‡¦ºt¶Ü~ØÚÙ\Ç:S+ˆÃ¤L¶«-íz‘hÔÀ}–æ03ezÄ‰0·yp·{HÖ•ëcRòl§0³0¿¯š<Ë`‰§ül˜<Èñv‹Z—ìnféŠåa4-šc…Ç>à¹²²¡oÍ›í«él©àwuN—b(F“ã%%z¾˜ı¿ÃÉN÷‹5C«ÏáÈ ®’’}¤ÃîZèzk¬n·å%íHÚ‚4÷äÅ±ÈI¡à¨<6m18kÛ¼+\A–vš»Hì”Ñ 8ò–KEh›ƒ¤!§9	âQB-XcVO ·É…Øµê*û´Ò1"¸`4+"µ&«»¸Q7$Ê©E<õu8N°OmQtŒH§@;¬ı¬33åd¦ÚÁªÄÁ‡Æ`^èÕrllŠğÀBÓX}[z¹5cL 6!Å×=Í_#—,JÉd¬ßöIBí]»Ä'‹n£& ’°ôÈ$ˆ?a@ÙÅ4ÄâHã !&2m’åÿ%ÿ	«îÓ^A}Vü†}<#kÿ‹eĞYV­ï]=£Ñš+ğ«?ÅÀ3ÂK-]õÈF³ÌZ<9¨Lú¬XEkE[	Mgö©«`'lVøıu¥ÔPDSH]iÛ\S½ĞaéÙØcÂÜĞ÷ÆX½ƒ]<Ñ•bqbè÷Â; hs¨{–õñ‚</‡ãék5°O¤{¬—00µÕPİ!»¦~Å£®mE„Èi	›¤X±à™õ^İÊîÙï¡q˜›y¦}4‹gÃÙwûx¹„Ùf©F4ËáµÏ WIc3”ë¦U¬YÉŞ4æW­Ce„b-eöX5SÈæPƒF«î±lšR@iÕÅø+»²H5:“e¢+s’Â
-(¾©ş¢¼D£ÜN'–[³¿ä£ÍÕÖ›†çwŠçÿ+½Úûxğwáy"Yìšü™¥Ä=øçaä÷h…¾›Ÿà-É&ùY×;ró»óûïÃJPÊ C•Ş„IÚÍ ş<hØßVºŸlû>ò¸ƒI0¶ôd–n1$¬˜ïÒ¶â°/·.@Q´F{ RÈQ•†İìİ˜… lXµY¢'©İöiÏg1IÖSÖåŒ9íÈ¼Qy—‰e]—	¥_‘¶Ë„}3òÚÖm1m
-KVÂü@“ĞoŞƒ°·UJV*6·\èª¡«ÚÖC9ç÷£şµÎŞYä_ñ_qş•  ?aÙ‘De²D½ó ½";ƒ T0&k¢l)î÷ñæ\ğá=¹‹²–,Y	ÙÏàÀ‰œWŠbiV	
-´é*ÊW‚W!nI)ÀìYaò9š6Ùjöq@éY?•†"ÿ£µ0¬U£hïWKñ¨¥%ìâÄ ‰õ*“Òs¦°äı1½†OÒ/0=°Ú^úKYŠåµQX+G~_5=åouz0ÉåÓZå9E>éóç^ê-´VH>"“<ÕM	ÛÃ$J€¯Ğ1D¼\ö·›I2ü-†%c›Ê«t­j7ë¼äªØéM£Ô+äÌàëı™ÿ%¿şß¯¨AÑÑ¦WÖeÍ;ÿ´ÎMz³ÜÖUVŞÊ\vè¯	èàál‚<»ˆPØ7âìt7Bœ^nsøô2#€i5”ıú/aäËƒ‡†ôş}¿6‘ QÇ¶•[ïØf·¤ÕïÙï2cË¶:á¤³×Ğõ[s«!`ğÊëM¯Ÿ‡O^lÄ^2X5÷eYö²mÔlç4Ûñ·k¥äerƒ/ëGÿBW¶–k†iËıÚä¶¿yéZ.ƒvıMy(›è‚50¥Ø¿1˜õŒâœöçëoÂdW;L†0›x^-œ;¿ZN Ê³ÇQl×¼Ä-²àd»Ã §¼ÈjaŞwqE–ìu¥	ré¾£¸º¹œI¶¯SIÀ,å—C3l¿{·6Ø<‡W®a¨x±¦¸grò][ÎÒyenÍªØ˜Kü5#{OGÉ±âĞÓÑ¨còšª/E0DÑä5è¢Èa°ÌoM^hö¢’/g^s¥Ü§³n¹†ÏåÍÅæ=@U^—“A(5Jˆ7aÁ¿‚sï<ˆ±÷	m1|ä ğ3v|N¸ÊòŒÉ‡ğ/`2­zäÿ¢)éÚøu`_Ù0E±"E¥†æIèĞ	<;â°Ÿ?-ÑùYLûRÛÇ±VÑCÛœK1»ñÄ4ãùÏ¯KG‚É\âìÑhÀÖë3v‹	ÎÔ;Ôl~[Ö›ßêYu29Ñ”2SÓÊ£oİŸŠ2wŠ^r5î“*eİ˜ö—q«Î ßŒ/ÔS K¾ÃFçšÉiUVíµƒË·s%ÊT7“}ôèİÙò†aŞ{w·‡{ˆİv'qÔ€u]†é€Û}¢q¯\›Nş0eÉb€6^Iã«ªõï·µ›ÆÓJ#y}¢&Ä»ô€Û*§[×v—ç»ó~}<í?OŞ&İ¬Ä[–Ovu°«Šm	OÂQMÓnfv.?®ëÙÀ¬–-DOi@ºAÓ‚ÄMğîíà±ø>€Ó¼‚üjç9Ç®(Uî^ÖæÖTPTğ™æ7›õ]ğéÜ
-/øİfÄ¦ s/×ãÕe>‰èÄO½^¯ƒ¥„Øîª	52ÚëD>l1=/ÑnuÑn;ÈÈbÉ”¹ÄL¿’Tı^º‹]šŸ4»á\ÁÈV*…¡
-cÑd:D{Aİê‰GÁ9ÈœƒKUQÁ`—ı¿˜?™„c[!9ªÂˆwÍNó8ßK=´f ò5*SåV¨äQÈıâ…\¹‰ ›?efvú(ú>Š¾¢oéù¢ï£è{¢¯%¿rv¡Ø´mÍ2‰L(0¹ŠKt"EdªèÆéô’¶æAYgÆ°ì–uúÒ˜bä>vGr}+¡@È³Ú#Ç¡,]-â¿ÓZ¼8L¢±¸Ã‡‡	¿JÃ´hAB½?¸oğò­{ƒÛõoĞ¬–™œÁÊ–R9ë¹ŒõØ95utû9.ÒĞŸa˜Z´Ø`ë«İS’Ş©$ş(Ô¥ö‰­{‰“ğ Ü›,ô-4¬£ÜF@ËNL"¶]¸.Çjî«Œ€®eVhÎ÷½O­Gş­	LĞœ9zî­sÄ²ZÙ&şŒiœ'´»j…fLë3cZî²ôƒ’‡[¨¾\&Ó”>\yKÆ‘Â1F§xŸÅ „Co’–,»­t ÜFK
-i¬°I#/õşö?Ë¯W¾_İşİd) İ¢àŸÎ¶KA
-‰ÑäHó‡Ì£­·[(´H=,–bNk:0ä&(ãã»¡oUë±†¾QF5Ä°ê»ÙÈ`ÿ\ªìßÔ„ÿJv–@» %0[*ŠËÅ‹5åj:ì³ûô™æ4¿SŠ÷şqCÓ:äuŒçODµ¼¥
-ù¡¬‚½¾ßÈ4P¢b­€:åÆrz•¥¹}W—Âƒm$CqãF)0Zaşå‡İu1<ùN”šğ—òmsº,õ(Å¿­¬â†YÓÚÅ‡7È;ı½Ì3Îš6p…oeÏ(Åâ‹ÏvÏa¢X§8ñVŠR¾îÉô`âØE¢KSn§##Gª.É¼<‘#gdğ~‘Á¨¶Ëk·²–
-¾ˆŞ…É2oÍÏæÀXk¼;gÿİ7rt3L×KìZ’Š¥ª,ó³•Z‘F:+xÒæÏÁ„…>ÍûÑˆ´¤"ğ<(JÙE0>/ÆMæò`Ö0æ‘d\=+İä'ÜË6¸Û!! Mµşƒ!$mÇc'ŠÕ®ºÄ$?¶$gPQ¯0Ö9ÁN„Ú ˜ê1‰ƒE,’Ç8;a§ŞËRm‚’œ¬­hòäÅ»(eG.¦yİ8›ØZ-’ŞÑ+eÑk*F;’<Öí>
-şœ†t£É=7Âº“7#¶bWbË*áÄ‚ê*·‘ºG©ZiíÖÏáyÚ„®2€Ñz,i‰²²Bs”U(nóô©®äLy‡MÓ¹ Z¸¾éFxúÁËê=İ'dõqE“¹‡C‚*7¡ÁToÂQ˜>’à,‡›0”°êg‡ –şø¾ÓáesóË²I÷¥š\ŞµšºdEi§ìU”?/IgÃ}7Xè.r7ÿ€FúN»Şéş°¸²ÌîZ¸:êq?šyIË‡CÕºêG+¢Ü#M·AÓ/%ú£M;:5©öS£»°X5©ï€ú‹µ|ú„­­’Ú3yúít˜†‹TÃéÒæ.Kt†{BùîålUâÿBè»iiÚ2X‰ÜÕUÑ¶ÂÕUÄ-©°¾62İÎßmøÙŠeÅÒlk¹J]®Fé¦VË†²Œ!ôyÙcO‡¢Òî½3ni~ÕùUág4ëÕ
-:‰ \äx:a¥ğªÀ 2s¾òıª÷»1æÃ¥° µ)`2Ú¤ßãèÒ^6†v"®,?Sˆ1XB­¤Ì³b˜€TraçàíáöÑşñÁ;²óşíû7Û'ûöÈñû·Æ˜¿Šfrı–?yñ*Jyp4ÜpŠqõ>‹?Ä@óß=?LúØ·ëŒ¼1Üƒá×1°ÂáV5Hü_hµµI3&I$(b@LQlWÖGêé6!¦İ3Ş] Y»ÄìÛA‹ÙŸ·ğÉaM¢^øƒ7œ›Î¯r€±š¬N÷t%Ó³Ákòm
-Şk f"C^âz»¯?î­q³˜‡ùoe
-¹»0ÊÉçE¸´ÚF­ËÏJ5K5Û ‹`n%j¨‚YÆVù2ç‹¥MuºlX»R¹Îˆ›Ÿşö·¥%ôbc5’€œMC€@0	ü´¾‰-V€Üñ=ÏÃÏ´*ü·`Ád]á“hø8H¢á'VÖÄ'IH+Ù°|æ»üíÿ  ÿÿ 1{}@
+                      {/* Download Reports Button */}
+                      <button
+                        type="button"
+                        id="btn_toggle_download_reports"
+                        onClick={() => setIsDownloadReportsExpanded(!isDownloadReportsExpanded)}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                          isDownloadReportsExpanded
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
+                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span>ğŸ“¥</span>
+                   xœì}ÛrÜHvàû~E6İÛ,ö°ŠÅ›¤æHTP$ÕÍµDiHªÛZ-@VU¡@‰ds1áØ}ÙX‡cÇ³~pØ1kÇ>ì£öÁØ¯Ñì|Âs2$€ÌDU¤ÈnÂ—¼û-ƒëq4r†ë[ÁÙ°8.ÛóFAGèö¿cšëÒ’OÄÛçğë¹ì)ki?ƒî6O½a0|3b½¾E»ÎÀ{2sÖ^î¬²SúoìÇmgpä…í•n—úí.ÜNCø¡İaúQÍ±5«ÎqèÆîô‡½ú½_i=^8Çq Ë©yáráköÜïÇ^±ƒàä¤ï±gôûzAÛ(oS;šøb3ã/Íhßò]x'ÆÔëá1„şı`¸Ù÷{\¶æØ“uyñN$F @ë¿xK»2LÚ…Ë÷Ç}ï¼½È¢Áı5†Ã¿˜{ƒ¨İó†Ğ(ûËqûÇÉÏgÔ^b£sÚ¼ÑüM;x±ã`·‚¾ËÂ`ŒÃhŸ÷ÙQºğU:ÃÈı`Øvú}Ö‡Q¶GOmF§œµ£ûòÒ N¥y²ßş–9½Øÿèñ›ĞoÌÖY×Ğ„™=:i{/tún{µÛ]XêòI$÷–ùÀs¯­t“‘Êw»³ÆîÖ¨;‚ğoV»ì4øè…kénWÂ ©_úı¨›¾/İ}Ø5ôxõ^·÷zDzÌWÏˆ¡ÉŒI­°“Ó9±a•äM¹‹ì«¯Ìä•GßViaqáé×ÛÅîèü Õ¾Óû€¼È!¹ÛYJ!÷xPJo‚a0£¹zôzüCêd^ò^–1`*Ô_ŞÜŸıW?uıªGââ	ò‹Í ßwF‘Ì¢È½Ù«’¶ˆ½v†^_ÃDCëL9"™&Ÿ„¾[¤–î8tèÒÏ‰¼¶?lãXO-õÒ‚v5*bßí08‹ MÃw,9=?¾h/B·£¸½œĞ¦¸H¤tgõ-¯åZîÊ-C»œ´½À^"âAjâ¦&lš-Æ¥–àIèqèö©ïºŞP‹ÎÅïˆo<Q-
+>·Ô¡Jh°$Aàö±ï½üˆùŞšhMa.˜=QG`÷:foÁÜ2éRˆ9øYU19d}	1îŸ˜åÓºÅ~Ü‡ÙÓz±¾8Òª±8`#gdúØDô9wûÓÿîÿ¿ıAÑï„ïŠ$ŒÄ	¯{h2CS üœÀ”’Jş­ç0‰pàÄ“ÁÓßşç˜ÒN é;LÉÀ·Ï{^ÿ€S*ü¬Ş*ˆ¢åcÑ(šzŞ¤€õ_Àâ·:çıè|Î²>mîàÇºşIpÛ¬;öûŞ„Pó	Ô@{©Vâ®Æ5·K÷‹ú¯Æ O©G/–ë„òi‹äeÅM³Vbøà¢½¬µ§!h«Älåş4±‹_IÈ„Ö•%–2ÃQ—„^½¾ƒj7µW´"8‡‹pˆÖ§ïñ]¼è8á‡Èdñ+Ö9Š‚ş8ö@tDÑ¿ïÇğÏÑSúoQ?ê«­H­¶¢ÏĞ?9­ê4œ^§G õÀ8×£k˜kÚ­aºG6Óµì˜œ0§ô#à#wMú¹DœbYğoè>„·}Ï	{§ì7c/¼0€WyĞ-ôØF‚Û^6Úœ÷# h2&õ iÙÆ5vÓÒ”Ù±$ÆV0»ÕX¼Ä¬^ 
+µÀ6•°à{7»h¤Æ¹V!ÁëŠñ<Ê™•V HVòbİjw•¥Ep¼LÈ´l´-Qşp4Ö+rüâ"öhâÓxúNÏ;…µ÷Â'3;[ólƒgAÈF§@Œ;NUşwü
+ÁË$á‚ˆT'ğQËKÏ³Ï[^'vÂ/îPÓË#¿rkM&RY>ÒPlÉ0ê·¿a£°(ne°ˆ,î8è£5à¥}è	Qn’zÈ)ı½Ú0ió*÷Ü ¨HÍÈŒÃ×í—ní#@0Ïï	áù¬&ÄóÈë{=3>å œwj†I=€ó¯ëA¸¾ùj}Sïùı‡«9Ià:U)ràÍßø^ø¦k‚Ğ
+’¡Y¬ÓÌÌúŒ‘Ï4z¼ÀVø*^lolî¿z³·¹½ß8£VÄ!ÖÎdÊ—{ÿà]<¹äŸ]%[&~®'ØfÎ¸! {ÈLˆ‘±#Ö‚O F~:˜¹A^'FóºiÔ¤5mŒšôõ­DÍŒ}ÔZ¶T?§ß¸Á¶è½±y°óıöáşÁÆ·Û‡ßî½zóšcyë–b4Ï|÷|Î×éíğÙ#8zrI·;ôã*§(g;+ÿ¥x(7ñ­«Úß_™§ASáßóYG4	øÛfìòJÒèáod)¹’îHEàpv
+‚>ê-ºı™uzOØnğ2Ó6ãB²È·‚J†1Û‚İû	QHiR­ÍĞƒ]½ÅÓRVë\#p¡3³$* _ÜC:Iƒ­OR·rßß>¢šÛÊ"	5­)¶Ä ·‡îOœÓ)İ~`†¡N Êğõ= ã…€ŒbÆ–4…ãE–…1ÀÍÔIghèJïwˆê+]>öNŸRp£)ô/€Ñ¨ï{.‘:„–VzÎıÒº	 ±|p£âó«º0hçbRÔÚƒ®äf’­<Ë1l)%áb‹€èæ¥Ô§„ëtÁÉ—Ú›KµÔ”‘TUy±??äÉV³ÙY@Ë™!j}ÂÕ£ZŸ8}/zíÁ&k}G(`÷AAÎ¨ùRt»OJ(^ë³­+?ºdÆØÅ”ó<’‘9c:Jf”¡¸ˆG•1= l…âÌúl¹Š9¥ø¾çÁ*2l©2(½
+ß©©‰ğİhˆ¾;¹òf˜®æZ H7K8èvşè{gFmry.Y¹<®ÕÄ
+_xµÖ'{ŞvÆq9ŠùqLƒ.Ã:úJRQHŒ©Ç]ìøÃöY{àœ+Ä…Çñ©ç¸Ê]ˆCåR¬vvs.©U9£àñK¦JÖé}@?Á™ßé\ÒqÎ‡4âyı6BdúŞÙz¼ŸÚ;³şŠv±şw9ŸZİ_G>ìåîC-ë~¼1õ‡†ğ™°¯Öşšk0$`ÔûV¢k}I«ì`à•\jÖµ÷C5Ğ@îãø(p/ä‘ ¦Lµ/˜ø#Eé]%œ	»©ç"LE¾7<©aƒ.€?ÿ™ğ0|Õ(¯ô@OàQ®Âèı„…-ˆÍ¢5¤ã¼‘^úÁ‰§jæÄ³iÅ¸‘zgH
+4”o÷É6KOfÍí€õÁs9b=aD¢Î±BE+ 	:8šCß¥6ñïä†v„¡Ã¡Á˜ˆÔÊÀÅÈ²(÷tez[‚RÙÂr1	(ÏÛÆpÅ®š°É’SĞE…>‘…µUe¿äÖÀÈöc%W0X=Vúû£ô½˜Œ'éØ+Ç*ÒS¬:T@klvwacözfRĞ×¬–¶'øÂ!pœÙ¡ÜÀ^‡A4òzñ,ÆÍÂĞË\÷$1$USáÑÑ; UÎğ5<pVET¤3 îUaæn0Ö<Ve!^˜7Cÿ•	d‹[a0qk¸é`„ƒåHUIP´•/D¼`J,¢?ùH„/núãiºÓ9?Dû
+bZñ^'}ÔÈƒÙ¹·İw×†t²B&_ôyğ¨eÒeËÎz°Â—Î˜Şf8x5ì_¤úíì.èÈ\gçÙìs°a$ãQöƒ½¡›°N–~ĞJ²_ƒØË~»tƒ"gßu`·úc×ãÜwW©HË\şL`_,uÉö1°ß´¿Üå¦±ë±Ï‡Å'rì‡Fdopj,nÃüÔCÇ\ßœğğEµğPœ–èƒ:Lçtìô#ï—lamù*D.#K~èıfì‡Ş e\ ^Ø ?,ûÄ}D±´†¤Wà=œ=şË·_·eV¡!Šßqè{0rø}åßU#f¬Ã…ÎV+\cÎğ‚ ;ÔJV¸#-™¡~õ“ø(½®`°´“\˜Å@uì'û¨Ü„úÅ9“ëCL&
+Â¸Õrh*óì(›Ò¬DG)IrbÕQ'äK•Ş™™™ë€ì{à<@övö©SøÔ1ŠDÎJ_{À$‡'|/a[û´	pB$Ìb¯Ê—ÅĞUÙjÏûKÉı°’/ê+ıÊšVF!pi`£¿I(Ó!Şõ8,ªøUBº¤9q8ö(3½r’‘Õ[€ô«*¯&Ì?f­"@ÁXJ‹F÷
+;L÷Ês®’ßY¨VÙ¥‹şåöÖÄÄjºÎµgá'È.{Avù.†ºÄÃC‡3ÉCÁ¿ÌkBÚBÅ+sFxVòDv#PFÎ	Ái«’ÃKó ØFŞ0aòÈƒvúsñ%şU©ÍÖpÜï×ÙóOëôË‰AğÀëAá€{áÏP]€•ö0Õµ×Yª¤ıhäô¼g
+eOØhÈÁğì¡~ç‘ˆÙ¦txşBÃæ7 /¡yj	v·~3 ±ŒÅ€°oºu¨ñ*¨ŞG¿Æ†¤Ç±ß‚R‚AÙÉĞù"°_°•:ÀVù—ª†gÑŒ]ÉNñAÚàÇò:¹—6g]„zèÁpÉM„‰e16^sÁm‰^õè@ª8 ´E­Kœú<OéYËÍáßO“)Ğóùd²WµTM|¬ŒåËva*‰Ù%GJµ—°Óö#®nı$H(zå‘ŸyŞ‹KT^=Hi•sÕ¥üU”&jl¯»ÄkAğÂIÅê©e4{i)­ˆ”İ[6U)_key§â•ëE-SÇ5aÒèå»Ë£T(gµ¾O¦@…äñ§•ÒÁ§¯d#OoÕvRú*‹Ã*xÃ%)Ôüçrú†ĞRt“ÛÁVü²“*“Œhëù_ñvàOüã?‰h®YPòWş9÷JaÛé•?üéüıûä·-)ª*A¥˜z)LZø]}[üôwÿ·N›ÅäëÒBLEÍ5ò× ö;}İƒ†¢­Ê¤ºä’ş9(„gí•G9r]vø¨Û•øìÇöÛoàzÇx)’+Ú<$‰àğ‡ ·ºôïA0ÀDóoV³ôÅ‰È_/t’¶+V«BŒ­f4¾èºä’›ãà™å¸véiÂÌmÁÓÍêi{x5Ñøğj®¤á5‘¢†×Tô*¼x…}ÊÀVÌ^\Õe½x•cKPêÉEÙ6¬$UâR0¯:+˜å¨² Å«|q„µ{ Ş¾(„àdµñ¬Êà)š$Jü=Æ"mî½¬Gìkg¼ÜÎ–şRµ±¸93æ
++­êÂ1‡ÓoĞå wáAW«â;.€éÀQ@í0ˆˆƒ3tIˆ:ÉgÅ«Pa5GÚÛ
+X-Ï¶&ô&ğûƒx
+j?ú^¸¤äôëÂ²]lqşšSËf· 'cMS`NSdO5Ï–k6T‹KÕÇïDË±ªôf©´X-~%5C‘A7Â²jƒm×§Ì·Ì§¦S×òMáü=‚®)"84Å±;!®ÍÄPÑTÎ¡¶ç9”‘FÒ¦>Yæ¸.áÓG ‡Eš«ó
+ªúãı$½6joÿ48Ëµù2pA{E'ãí¢x©DS´ÒM$›gòÎí¥tÏmñê		.n–ÔÙ‰0bŞòm7è1T¦ƒ‘ÒVßX¤¢"OÚVª\U)3ÜSÖ™¶«»Ó¨Ï,R·ô1Å^GıÑM™ÍLf›„%ÕËãïRæ{)’¹Ñ8õ©‚R¤”Ô%·P%‰'â–‘Ş•’z
+íLæÕ)Ô1-xulÀÆÒ\ka¢(®‰5Elj¬°§|Ó"ùT´7;CUo*"FÀƒTg@mòía¤(¼©Ëx*uxó!3÷¡2÷¡2·.Tfñá}¬Œåu+SuİÇÊ¨Şk+£“×®3Nfy²(™¼ı¸v”L!ˆD\²¬°2*k!×	Û°;­Ì êœnŸ7^ãRdñéşÀÈÄ¼KQŸş>	Íˆf¯îÃ#²¡Ü‡GH×]ÀÂ‹¶áºl7¨(…V¼n.´"Ó\÷pãl¬àõS	Ô€†pÏÈ<w.¶FÉØ\–œõ4Ë¹¢¤.en<©mã–ûM¬òH ZåDåIf+^ßd~­,Gı±—øÿS&Êoò úŠnÔ³˜§mÜÎh–ç~ß£e+{Q2ÿF.	Y»‰  ¤K–X©n;!Å2D‡½	R’ğú©Òûˆ·ÛF#¬ÍÉéÜo} Ğ‡åKs¹o;èÃ@‰*¸>šî	Ë&4I€&šFàTâS/œ°ü£UÉÒ×‘€-4D¸VbI¹(9bÉï”µ§•I7€P‹’ıÅµÄ§„ê†hãJ‡ñê'wAzĞHïå'qİrù)úpQÒ³è¤fáïzT!iá–
+P±—¹™7"Æ6§¶ïÿœB¬cìi_]š7`¡f®1ekNˆ¬Ğ}ˆâ²ŠÄ¹¾ğ fŠœ-ù©*NuMİ˜
+Ò©KÌ;¾RUüÑ‡¦?Öw@µğ‚ş>,×“ËÅÅ«|a¼Eqô¢ ){ÕXİï1/ŸßëG¢½1€kŸ,ğšÓx¬É’q³Õî³ç
+Õi|»Ğª÷N1Î!$^ˆÀ@qb\›Â:ÎµÃà¯«‘óL"^Ø¼c†#ı¶ê¶T%ğ*r§riq*¹](Û]d<……ŸioùÃCøIÇT‰ˆWä#ıÁ¼:>ö{>Pö"8a@EÙ³ ø€oc…ìX’Ço¸njUO{ô#”$Ÿ\e{{6gd D%‡)”óTuKZ£>‰¢Rs\6•ä
+¹C~'{¥'ù¤÷dCòrvğeª­X#¾:«"©üTÖ+[÷‚ï³äİô‡0W mdÙwz­’Çrõ]õi#^ˆc°6j¯à1,£övm oÍâa{à–*¿KÌ@$üeÎ¥ü¹saĞ§2ÕN?8‘ï;¡ï VÁäÓ@·/=£Sƒú{tñd&©luàtHßÒÙw9È-¹‹CïøÉ¥hço†–~Ï;Îcˆ$êşfòæëÇ¯±îX…Õ|ıâzœóö
+ÿ°üoxIh’:~¾x
+»ÜıxúÏc'2gëÆ%ÕE¥iå	¢òw 06{N æÄì •4çb¬hudK±˜~ævk… ò¼½Š‡Q,Ó‹<——¼|ÀéŠ~ØäF«:+uØG wQ]¦•ØÈKºª8˜šÉP³I ©X´ş§?şş¯u\¢ÜV8öğ„¬uày:üUFhŸá@İìã…Ó•Ò=.Å”Ã/ÌÒ~álaÑ“É^‰"'Wq²ÓÉ$ñ•ß\Bˆ!™RÒ¡Uõ]2’E'A–ÎÕLAkĞI¡<W~:	q˜òÓŒb‰W˜rhÖÅ¯;[0¶Ñiâ
+áE-_ªÎòBL~µ»Íöwv¿}ÿlî½zñbãü¹ùj÷`cgw{=µÇ¾ÛfÛ»;{Ûìõ«×o^Óc¸Q‰ğ)EtH:òCĞ8´œNƒˆ¬æx öŠà¢í¨Ü¢äpk†âºÇX¼ k|4ğã'—\ËÕ†¤'993	ÖYI´(^–np)†¡RÌi&ßÎÇíÜtB(ãö9 È~CôioÎüø”í¾b*É²i©¦êÍâ„`pÚ•{ èÆ°–,)t<¬q[:ßA]Äó©ê+­ˆL§?xq´ŞGş2¯ÿÛßf7(è+†&•}=@ü^üKÀË&¦:½åaRGBåÑÕñ}kªÕâ_RSòrèCŸ>çpz˜Ÿ¹şt„¼ıdÃÌ&8§®³j´â(ıIãŞğ”a­òŸÎ‚¬¢UËªŒDv¦¡2ÓØ‰ÜCÔã¸æ¹­/|å}ƒ¢\6è
+’$eàj™¥|çùŞÀ/JKÊ*cd®dD	Æ³jh±ji%=Ù+-Ws=×X&IÌ*’h°B˜M&¶ã.VZª[(f‰P&ÃI›«‚$ŒĞıÎw=
+ËEÉÅ&Wß–ÙÊúxóÔûÃ7#+?ï
+³Uu¤Ã­àL›T\¯KÃ¡ f
+OnMs:r©ÕáKPıˆÿZ—ˆ^ê°Q
+ú^ĞØCDí ¤ìç0j7ø/BÑÁªs7Šg«jµŒÂwJ#C¡âKèDù}3ë<ıJœfc÷|Å X'šÓlóTv=çCûÍh3ë—
+®šœ<ƒ,‘é€ñPWëVíOùLK[8+mŠ‹›ñ¬Yf<Í©°Èüì›X]@Šìpkƒ²<ÕµŞpİĞ‹¢ÏÂ\¤ƒ±pÕá¦W)™ŞİĞ> 3Ù&dˆ6› +OÓZìŠŒ5|RûÂES:÷“_¨²¾wÜ‹¨¼ĞgNô²Íö ÛxÚR}¬;«Ôt´¼Iø]ÇÈk’J†ùZ[g_«† ?<Şph<W5p@j ÄÅÕP>4–åÇËÃ"šÑ:b©SÖ$~GOÅ¹€#Rdö)¶5J_Ç,mTAÅƒ­à®åC±:‡¯FH2ææ–úªşŠŸXT˜,»¦L¯*ğå›\ÆÔÂ#»£ìÓX™LËÈ;Õ8•(ŸbŸ–|´ª*2(iH‰yœ,-ªİV­ºÃîHÕæ§h3
+BòØmy±ã÷#XBJÜºn4ÊHG#İ”,fg¡3âz’îY"¼úãßş>ÓH9Ë¯MÚ˜f¨âCTAÚØ÷0Û?é+ö?Î*ôÎôı™€Á¶¡µfH‘ğ,p³¤0.k.ÇÌŸZ[İŠŸêC:]Õû8ÏüŠ8nüà]`é„õŞûxøå¥õ^NÔ\„;ô-ö›BÀ[hñ6eŠ I÷ÎÏ[Ãşó·(uËû˜&ní•¦ÆÂÒ[OoçÖ¨ÜLj¦İ•£Ä’G³³¦h¯¬)×ÂT	‚‹­—ÏêÍ‹W†ƒ“Dy‰äôy`xDÙY¶¶^¾ü5\-ÍªåV×["u‡ƒñ.
+mÒ,â«=x-X\ú.‡Åñ­9Sİ‚æMleöàÙ–)^œÛºŠQÃİÊ1'ïP_†‚¢ü{Úò£Qß!ŒËº~ÊŞy)/áûô»¿e_^fï\½‡~äW»n’GdÎü…ÿ\©	 ?Ç\C‘{Ë\É  ~KÕ‡NÏÑ‹JÇÈ$%J½csT|3sÆæ_·¨D¤PÛ$Š¾ˆ;¾ı=ºÄ€Ô²_°EÚŞY~kkû`cçÅ~åù¶
+ÓÔ|!Já¹*hÏîfşĞ|®{AJ×±ÉÄ ,"Ş.®b§6«—Q†Ó È|¹EÍ?BãjOeÍt’]n„©”‡‹:O²Ş<CÔdşğ8¨L
+¨gó[Á9ñŸ\	\-²>ÈÙ¸«1¥¡%«Z¯—„V‚ãÑÈ{‘ ãÌz¶´ÖQ’†—JZ~^»7»!%ç™e-«Øë[²Æ¸×³ÆRW—²ò\DÄûë_Ä¢1½…´¥x’’WÔm‰ôM—êqOÇ÷´tm¼UÊƒQ“VóEÚŠlÿ ‚ÚµUqÂÂò©LU…¡êõÖÂ‹z3VşâF-ém+Ä¡Ñ6‡K›–P
+êÓ¬ÕyNÁpóÔx5³0"/ŞÎ+¡­QÈcLZ¶™jN¿±ÍÛ!-w­F´OƒÊÔã’f8;Ë®æl Ğ¡;1¯{H›aÙŒ]6ÛÕÜ5¥¦(Mƒ–vÁ¥Ä½2¼”‹"#oÉ&Èo¡µÈô#=¯/*s=¬Y×İ Vœ´6b…¨qSÄ*3·Ü+=±âÔ¦1±V°{buWˆÕ¤®Lín(SÄÌGz{ıõ˜«nŞTuSfªœ±É¸¹UZÆ]31]NfGªŒB¬Ğ¦P“Ú‡Mê{Â„´Se1º½Ö¢f
+øg±Mb!²ÿv˜wU8÷·Ş«â2Öma¨&ãŸ3mÍQÍ­(ï—Æ«÷SYO[ËÔ¦½©9ë&_rÊ›é5;¨†DS$¼µVÕúßçÑıj©¬t>+}ÏŞ0e©ç	¯›0ëzÇÎ¸Ï¾{Zåã¿¦P*­£V9©FYC›Ëg«K¦zd¶î›¾&6{Uë}d¥öx—5G£ÖhÅ÷n7i³0iM›´Ù˜±®ƒ´YİÓ¥	­\[¸îéÒuÒ%ãcÃCe¬½ö}NÎ‹dWUÀwI*¨cœD½÷°ø%VÁqÜÎ°§vÂ6‘cÕA¬zÚ~}şŒ=÷ñ¨ÛdÊ<ğ–µ>ıÕ¿Íi¨¸‘z©6ß9~•+è´13@şÿ›äÌÔC‡Ï`‚'tµò!Ã´it>_ˆ9ém¥„JIğYøï”>Su’ã*wÓœù?:!½NŞ~Ò.Y¶ysuµ)ŸS£S¹ô´ A¤‚>%Ä+Mè*’Ô€¡¤Nzôó Ò† X—‚'r},Rà a‡¡×óü«ƒ’,’ÆfÖNë¼Ôğ<+¶¼–ÀgKÏ‹½e ©f˜Ò™X’9¦6Xjnk8Î*Åú3û“ü<>¶³……ë,Q7
+†ò¹„e<²¾sÓúIò&yY`'½ö(2âİa*ozè!·Z”\ï
+JTÈZÑ/à9n|­gŞ¼Ş™Y‡ÿ°Ö·°³¯O¡Ë×ŞÜãşše+›Nt:³ÿeßp†5<j¶ğÌ~@ÜFÇxö-ıÜ}~°°wğíşÂÎË×ûµGº0"ZüxaË;òcª<T·•S}<h‡şe[ òD~lnäñ‡ñ»ÀKDmíyÇ‚W\“¬©O1­”4G}§çÂ4½ğÉŒ×9é°ƒ¿Ø]\Z^Y}ğğQ¾KådøqréÙXÓ#.ùÖï*yù÷™Ó'YÍ…UB¥Â–…bxCáxÍÅâRÎä”R³‘”	
+ì—~úiŒ} ÿ‡š7ë¢ŠÕKö¼ãõ’Ùo½5Cn§&Á_>GTeJTUeÔ¥mrŸáÎî^ë¥ŸvÎy«;ÏŒ
+\›™äÚ9QAWXÀ$üÀE~Ş'{FepÔ^-e,K½ö†nêäÒ‚@÷¦Ãb0ª|UWøš $$^e¢?ã©j(Vòb¹²…\WKñ)ú
+q©rÕËÕ»¤
+ÖªI«áraª¯$}Éğêµ¨ú¡zí± *VÚOŠ¢šŞMj <¹ô£}ç# ô„r:.–jÇA;dÇa0H±üÒô {NŸşæ;–{e5+ü)^Ä;É ×}?Ù[É˜Y<¹núRP*6@%Zé¯d„Â¶”ñ¦B±üF ’'ã€åÈ^‡AÏ‹"ø|šê’‰C…A§ËUÒ6;ä/¿Hıê+öx#ƒ³=:’\]+©‰V•óñãüİZ%Ç³¢'H<¹a±\¼àu0ËŠ©Ø6½œ¾k[sÛ¢Ğvm?ìZÚæUõµyõÔå¥‘ òrû[æªE©›V@Ğ×¡^RŸN‚.»ukM/•*›Iu¥¯¹´¨/[({©,m]ÚTKu¤!X_ÅO’Mvõ K¥ŒaèşĞõO‚D¤1ˆ[+¥}–Ş]JëWÏ¬ú›1–‘^×`ÓM‰V¹ …” @a!,¨üjÅ3ô4çM)\n¥Í¨ª@½¨,õ)ïaeÉO±yDXèå‘¢.[ETl
+QšÕœFÚ¿Z·æ´|«„ñ(N›rËE¨Ôeó®(ìŒ¤4¡J’røW±~±u±Àt	/VUVx1—vqÏ+ê={Eu–ãÜ
+àú½¥b/Z‡÷¼28G…ÕUƒ©Äu§/2A¡É«6U„Ó"ÜZûMUİs¹ÏÓU—¨e"¡Iá(rà}()œúl€G”`U3Ø¢ş,÷ü³K ª'Q¤~ºª{ªµÇèÃ*ƒ3¶¸&ÕD`­çÈûğİøtÎdYäÕ\f0ed\£ù¯l
+†Å«ˆªŒª¶üáUáHÆ+ª,a`ğQYÚ»E‘§RÌYÛJÆ	-õØÊ¦8ıÒhã@ÌÀ	 .­åK´ñûX¤ *‘½‰·JO®ªcå®Ú™¼¦ˆ8‹x8‹h8Û0_È/Ã¾mŒívcØSUĞÓ-/·nÈª.™TÑ,Gf-ã(6°gG‰—×
+	óÒïí¡[º7UòÌ3åV¨®ñç¥ÑŒÌ\¾åö÷
+´ª‘¦qÓ”Û"†9E*E±3ş¨¼ÏKNëR'«&W§Ó)+FóU_	Íi‘““¾"!]™[Õ»?ùeA1´^Pê%«ÖÇ)½bAiò…âóæê;ËÎ&ÀÄ„^İ"\lÀà°°¥T”ø÷!LípK•õ´øBÁÚ‘T¹}šhá˜2»X<2ªĞZæî¹işñ­ı['ÙMÀ„°ù»Ì„TÙ'÷L¨xM(×Öz¤<~¡pK]ôÄXîdZ†ÓÆö»Z¶»ëT5+lv×¡g“ìa¨äPqF‘¨<ªiş1ÀšÙÚê¦i§3±Şë5 XØæ*kSµ‘$+¥H=Œ[æÕ›Ä¼;áZ¦bâŸ¶,sÓ€0³È6„M!½ù'aÕvš&¸©›ß®=ji<–&·› ÈÚ@…çß\şÄ„%ÓĞyêë;éx…¶cœÒ$–8“ôÓR~njˆ„Ö¶[*•Íi?[Öt[ë³CS¦î62Ğ£îuM\÷Ô½B>´º­XÄÂÊG¢ÈÎ5¶I¡l@AÊ¢¢2>»é‹‡	qÅpğì#eME}¦KU‹]æJş`p
+§´¨t›³D”\ü5ÃTÈtóau"ŠœŸ—K˜)e”d  î|"I!lØ6›…W¯8çåSåœşW’o¿¼r”¸‚:érCĞYÎ±OÙ½[fÏdyíñHdğB¾»ÌŸc,i.÷h,ßÚçˆ—†íŒ{³sÍÒBVÙíUSx¨”RÌQgD8úÃcšèxdJşx´Z[«Íı¸ŠÔ4U§vèæiSÍí8RT’¨•Æ4I‹r‡.gƒÎP‘ºøqK§3ı’d‘ğkó&J½ÔJ›)„kÓ(Õub¥»¼4f—§P?»`8õJİì#0•òdLy1˜e-çgÈ\¼Y_Æ^÷=Œz§;î{,>Å4ÃdïIµïÿè±4³˜Š|ÁQF#|S$@¯c½&íÃJ¦yÄÚ`[¬í&eh+˜¹b¯ÌÓ
+EÔÂøzEAc}…ÇŞ¨ÍÃ ¢¦gÖ¿f­=!aÏi³™tB¾V¼7ë‹‘>ÑéøLŞà¡$J´JHß/~X,hT!¹:]»¦¦äª
++Ô(¨ IDù$ie]–«,›·I4ÕÕÆJ5ë-~ÂºÓŸ:0ê´LÄhB*!?¼‡¸[q»À ¢ë9l¸µ£"rÁYôärYµû¹25ûãÁÀ	‘µáÉã½>fô³Qèƒ²8ìyÑ<óÎG¼2ëõüYÂ2nï<B6Äi‚.aÜ´, ›¾¼Ëà=Pk5ô´HE	•Ø[¡“ëë~4V‹ŠúŠ¤¨ëK|” Q–‚HÈH*Óæe];UYSÇÃPaòUäÙ±¨‰ç ^µ|ekjº~´^ IóHñıÂJ‚)@€o¶Šê’n‚fë‹{H ŸÖö ÷>{m"d4±š*–-'tgRKIãjÛaô7©‘Q²xø8yÚØâñ¨e%Œj£‡]]ÍÉ•bcÛ€­UÙ6²$òÕ[cÛ(Ç3™m¸iz3ÌSSBkÍøôÿ-1fä`¡ûq¿DjÕ(Sÿm©^˜ÁÖNQ¨¿À‰A©ºBµ9âÓ?ü:†‡Ü-ÚZ•ª”îÑz¢÷ïyN×R¥¿°ö!=¾z¼0*U+È½ã°GáûRÛûtSÛ6ÿ†Ú..~şÅcø¯ç>y‘²|'Ïé!Kj{Ë7bÑ+¨ãÕYÉ÷·%nk;J¾³èm1;n¡2ïliÛçY´ON<`¬îsÿ\]º tÄ:JDù?âƒ'¼\¤wüIà%,‹©@ºKà"ƒ‘éÁC¾ŠeÙ¸˜.G¼\UÇ~ìì¾ÚÚ>ÜŞı}Æuxâ	fqqò]ÇÀê/Y[-/KÊ¨¯²b8’Py†IQ	Sñşòš­šÁ!‡ZQ¨/S™)™•kÒj+Áœ“mçW²Éh›7İ«¦ğTû¦·ª^àD2n'|iŠÇ¦ïY‚•Š‘°İ;•>¿Sé÷Hä°—Nø%gA MWÛ—As*î¢Õ’»(ÙT2}è´©Ïä,B‰Yé)JT¸‰ğ5“ˆ9€CJ‚ğ‚qq|Aıà„ÛÂĞdpáİf—PHçÅt­Ñ“ˆ&—|™ìÑ©aÊÔŞ¯öÖ ±ãÛš_¤_Ü˜9‰Å„ECE}¥t˜¯?³Şn3^?/ÙªvÛT*¾XìÂ2a9R€]ˆÁÌzéVæ6O±İf0y !±Ïß©ÑOà†;T^€yGñÓM^U>¬ÑÅn «F'ixĞÂ·0ÖWŞ®Ñì–!psgé›¡ó„2´’Í¬ëÔhœÎ.Y§Xkäõ€g2À¿àÌp‚‚î€ µiZÂ¾ÜùËZa_9î)Ò"Æ’‰nRö=q2†“BI«²!¤9gÌ6±XuÈpaƒÑ¸WR
+àš¿0’A5!|•ÿĞ†ŞBz(IaŠëOrËßÌô€ôµ›aœÜQØoš\€z¸³õr-‘‚b¼s§—Àcâ'D l)#ø;ó#ÏìDˆ®åş{‘|p'ÙôÏÆíW­s½~(½^Oa+ıä6:şpQ5´÷ù}!±^,£çÄ_Ä\ú¹U^Z_Õ¦«ä¤À.ü[r
+ÒcÙ#È_š¶Gğ&\€åbı¤Ñe^™ĞñxóÔë}ØÿÍˆ´¡¿5ÔM×…øfH¬ÅjcG¼R²zñ§“Ù¾®İÇxoéºfK×³|Œ“°ïğV3µà<µô<SƒÓ·„•áöghK¿lËU˜Åø‹KêÌƒS?"I7õÌG©-e ÆÉÏÆ@/h²WgCªÅF'œ8ı|-‡T‡tØTÄú<e<ŒAöä/{®…©LYrÿÊÃ•Ê ¶’Šk7o?ûl¦³±¼,õlhoÊŸŞI)½‘1mSJ ßÃ¿]Ÿr¢\ÓÃcÇfÖíŞ«c6+7(Î‘ÆC!üc¿G¨¤ìYõâd]SÑÖ#Øˆ”}æŞ˜¬³ØslàÑÑ¦.ïMÖ±ëõ}à(ª;V¼W£ã×¡ßC1³„¡×ôãïÌºáaC{àÔì
+r[ÜœvMvV¿ÜÊsx¬kÿ{£kâŞ˜m
+–U=³i[bjÈ¼?O“Ìt³Ìå5ã0˜K2/X©ãš•SHÒØöúIUÙ74'©‰+<xàyoK³„„ÛÉöG#¨4uğ+^­ˆòÛ¹,;Q.?_î:ÙA8Ğ2q*Wm”–ş¢x/ËbodCi?¤²]hY|†õhøéá£×iîí/V‘FŸşşş¿ı›Œ5*ÃïÏÍÂ¢ç<Çí{ÇqiÃ6B]cÅg·—pÏb´¨ô¥{Z{XÓqM³ŒA3P¹î Ó‚Uö0µXÏÄ«ÇW|ÙÔn!E·–©&]JºÓ4M«±Ï¥¼¾ş–_cFªÑé2İˆàŠà^©Á”-º<²øá‘ß÷¶(½™çoÿ¬»Œÿ÷Îêtß2'ÌïezĞŒÿÑKIhÂSê$n›çIÙ^å—2;éwíÇ ¬åÃ?/¿x;»IÅvÈÎïÍÎ3ñÛÍÿxs×;#5û®ã{ı±ëE-P:ñÖæ8Ä:$û@™«ì37§2*hàå{‡Np‡4clzÊ½«}Ä§ƒ¨„B£ù<':ÕNAûü ¿,üéG8TŠï€ÁöÂÁşNèRq#4,#|'x‡i!iCŠŠË]‚ù\•ùìµT´š-t~õşJWù!|!† ù«…"ÎN$Bğ3Tô{|º\âšX(k°–K q6GlÌÒ¥rèNıÔLÃ²ÿ:•¶ü?ñœKï{/ÙAø¤Köéw`›<ØåY ‹§QLN—5Wfÿ‹t”‰p^äÚg7K¶–%¥Ó3ë›ë­Îb%Jå»ÆƒI‹ƒ”:Ç´ø|—¥bŠ]‰é8zªğKB	3äC¯éÆr9]4‡.šÖKDåÄËÓn³Üwú^4+óå]™WÚÄcx+G2Hôá"7ü]†ä­)áµ”ËÅ‡0‡£¾—…¸Uˆô®i,Øì@õ³4-úUnn?ì–è¿”Ô_4¿5)dĞJ3|¸V.ˆÚğù“Cİn”¿›d7€“ÃvT3øº‹®)›©>ÄÅÁU²µÒNç´ÚÑjF{›ßÄÜ®ÑŞH‚ÙÜ2.2O\c¯…¯4®a ©Ê—y)FwVw—k ’L…3
+î&çQ¦“$K	ZoÙ‹WûìÅöÆ{§›­aÁ”«ƒN…•RgQªÕÆèÒ85ëÅªz+eºœ¢/@½â¼£‡¹Z-ZhX•vXhCvöîg$bÄ ¢IÌÄE'ªE"ãà p a6ú^—U#ÃùsƒŠ$¼Ôñ-Pê† NAÍšj5ƒ˜Ë€ô_É©–éß:Ê¦0˜F}ŸşhSĞ&ª=K9Ë©QÛI&Õ¡c”H†ˆÆ=ÔİgUÀÌ9•7 A§ïR‚wt’'2ÍHî­ MT´ÉYÕ)µ'åÿÉ¥5¬'N$.M3„é|úû"JÍm°³Z¹ÚH*UôM*š>
+=Á²Ñ` @ç5ıY‚-ˆ{'!†h=sBöÛE£‡ùQ	zKJ¶°G|yY[ß]êfÚ¸â«x?Ó€¯$Gr¦í§›èötZ´¤·~yyÍv
+˜sµæªbê¥ÚäYJèOåªÍº“´”2¨eUdF+ş`N”{¹ª_5'ˆäí‘(xåj‹f‚S¦Që%'j(o#¹bÁ1ˆRJ†®Dk-Ij~rÉ<‰°#(Xºz[ˆF7¨\2|S”@Y¥•JµÁjõ€¤YÑ|&ˆİƒªf´›xY$m;›Æj%µÍu:iùû%ü^œûVññlÒœÚ4g<X€s}qû›Ji{$J¼u;˜¥xh“¯I*Ö"‘‚4ÁÀ9õÜ9…Êê0ÄŠŠpñà%ô'êN­qú”÷TYSa	—º&C\í¦/3ó!µÒŒ&Š/ú0’Kv†‚®±÷_^¶ò],°å9ö5[ìv¯şı{v¥nÈt¤åíëæ <0hJÍu¥’¶DRÅt4¥2(úÏ¤5¥F¥F³
+eŠÎ*­º>›©¬[ÁrP,q¢ìÇ§°Ú¡ÿ#Şê³†VOÔBk¢UŠ´£^ôûjí*!8)%¹àÂÖˆüI(\ªœåU²šJ+$,ˆ¸L¯’>²œ-~ØNkN™° ÊìÄ6}¯ïbıÙ?œU·”•¡:ÀÿÑñ"êÊXF«åXº&+z§¤ŞySLq1…ã˜OÜ´uJ¥Ñ:&Ÿ”ZBN»*rìQ"ï-æ¨Ñø´6cª”½¾hâ½Ò Ö‹rPÕwz¿=éôØ¼1ãdgÖ_:C´HŠÔqÂ¼^x	¿üøbaòOŸG¸cAËOÏ‹Ò:<Y0<„Î`Í£¢‚b6lÓAfN"FÿM+BATİ>7W#ï«‘c¼»²$yÑı™î6vÁä2ãÆ3Óh€æsÓğª>Š›_"V“]äXïQq°¶á44¼TÁë?äÚlÑ™eù~æY®£òe†ƒÈğ2Å·kBu«Î!ËE´›Bá“ü;¢;¦UÖÆÔVàÂmÔ—)ÃvÇ”³óõm P¼Ó2uºäêa¹$ì–=)À#ˆ9!­…·ÿé?ºïN@nëD Ìz­î<ós¿¬hÜ-øôÖhWjt‡t:&Y½Q1!_•g:Ş}”úáÔ‰£ÑH Õm@©3’39_#Õ/tu—é¾Lßupİ&Ùïzd’+› ,H¯L©ƒéçm$¸“gNs¬XŞF­¥Jãº°İáR‰ÀA€!ôÉ«´Û‰1ÚÔıìRÃ&Åï‰"ñ×¡R7wšˆÔiÙÛğßâ¨Ãüe!,˜¶¸”„=³şé¿ƒÿx	°à%Á€şÄ”Ñ]—h?Üõfos{¿3pF-°»:ÏAqH¼‹'—âØ€ô°&şsı2=NÀf4sF`Ğ¥”çæc€ğÊ|ò\g¢Q02µİàlˆF	3¡–l=/ø5q¢ƒ*+Tr‹VJPAú»îôt¬ÕÔ†^«æšxÙJzxY ¿rùî^ç¤Ãùış†UÏ3îc{Ş¿P%®/5MKxÈ—ğïò%<Üµ43àÕ”VVt_›~âU‹×gQÈÆÃÌJe}7´: =¹2 ]‚ Ó8­¾6=Õ?+ Kaú^2Ğ¤iÚ¾§iü¾Ië÷5›¿—ªÍßÂşóãW~e¶~«Íß‹Jó÷"æ`ğ8\OTÄÀ \"“„n«äâhHjr;µ	+8²„ ôOü¡Ñü]ºû—¡«nsÇ-Ñ>/5ÓŠCm© )Ú¡qfA¥ˆj9‚¥|8€È"§Ú(Z–Ü}+Ú-ı8Sää¸hªUµ&*®€ìÆa=QWbº.^T¢‹´"Q1e‚„LŒè®İÚfFÂCY¶¦.ŠğŸIiŒeü½rU§„o•d6Q¾´†ucñÅ"V¬²^t0“JAéHÎtOÔ•™4?ªğOø¨ğ6VšğnÈ"Î–H2O¸-ÏÊbe¡şŞ¡¨dwÈ5Ó
+ÙS­,$aFi[>œZT)xbN‡bN6ŠDI‹à	ı¢¥­0¡Êß±+¶•^Šøk•VPß`R°’hsÎÒë‹–ízÙ­¾ûõTİ˜ªv[áR°Î•‚])­vQÂ%]J[îRğ_­ÅJb‰æ†õq~tUQN³}©'g€¥5 ëXšØe«eåÙ®Íç{ıádÇeO,·Şñª\ bé)0†ÑıÑY¸Éß¾7<‰OÙ:ëb°~úÊÛÙİ9ØÙxqøzcóÏ7¾İŞ·íµ‡ÕD—¹!tı>`UkDº/Fq4Ì)ù»/‚3/ÜBÛ©¸¼ÁY
+„ÜQo:ÙÒÍñÃ…ÕH,×¬ùe‘¬¿úe—P·]é‚fş1kå` +ĞgÓ‰‚Ç—A9Fœ¶x ·277W€É6€^€Ú”b†n“®+çÌg-ºµ(“`¥3F§şqœ6`Ñßóú€ŞM{²ú±luÖrx=_ïs}ó>‘¾¼”Ûºb­Ş‰Ó»˜{oÛlè£C¢@3’Îz(.—¸ÉsèôS!ıpc€¥wñ½®e¯‘H`İà8ióÕÖ©q†V;ZõJå¡Ãa¥ù.mQ¿Üu)zZ£'s6†¤ÙÏ ßJÈ–ú
+·­ÆEc“?Dø0úôWÿvÉZôÁd¨jÏé{³g½a{gwvîÊB” IØ1I~™ı Y›ª¢Ã	‰MB÷’ß5 .‘˜a$^ÍµÌs°qæ°Ë’h8ß×fÈ£*›ã¸}bµ[Ôm@ÒE£œ¤Ê$–¤Ñ¸¯×`mÜ8<ı³t`d"uyÇAH"YìÇXÖªÊ*®·òáec7XlÄº›¦®Yˆü¥aEë{qÊ7 ïé	Æ^QvøBî3†äïÙ¥ñ{Vó¥oXr^P{¢a]Ë/…Â,Í.B­¾%/ïÎËåÕ£ÒûòC|ff>å×3œ_Ï¤ÌØ¼FâÇSZm‚Né÷ÓN$Íú
+o¢"¬øóÂ‡ŸO˜çú1Ne'}ğ6×å;lùí»ê–åe)´½%=Ò´nhŞJÒ°v~UVL ¢ÚLlûÜë©¢pR”Ò}ªÇ!RåZåÚˆ”U4È†“örZy–òx±…h€LE“SM¾$¬ì9*0*É¦I“m±Úü`³›ĞbÄ™uö¿ÿ¯Ä:«ÙêÙ+ÊÎVï˜M–Æ²Uœ……¹4{ÓÖnš&rÛŸMP¾øŠîÇÎñ±]È‡¤]à‡xÙ.üƒ_hp¥÷#Úa„C#¾Q¡Á¯:a$ü²&áW³„ã£•Ã…³’À™:Ğc?×RMÃlzåOvèœtæÙp†€$õÒM9zÎ&T®ÑÑùª„R-ÑZá!üªV^˜M¤HòâÀóBæË­Dx+r{Q¯át·5E´ÿæÑÃ«+ËK‹ÊüjÕu‡?q~VÄ·zM}–Qñ"©æ
+š(2ÏPÃÓ˜<²6Í±ç˜nÍZßq‘ò£aÖl”5×XBÉê<¸~Ğu±ÆfqSfÙ•…¡¬‚¬©$NŞ7¡ÀYK¢üı¿$¥v‰«É¢5I´&‡œŒñô!V;™sZ,:SµÈ'Rõ2Ö© ½Úô(ğyİ“–ÔN+ªU;y‘_úF3wú=¬î÷Ô5„V,¥Ö…I	.Ü·±›3UÚ#–P Kµ¥£#zñK_ “·ò(ë~(ì|l?>»°Ôu¿:&×³é¹‡ù=’&¬Z¸²r€Á9=Š–Á-Øóœ>†/¶ÊÖŒy¥b~ŠV¾y1?«Wd¸òKqZ[jÖEŠEû©=²-MƒÇËg5ÊŒá,w•å»lfa-¸U²w{vLá©íü¨PÚ–aÂªó÷íxo5çÀ°Uê<åœøÉæ­=@+eŸ’GÂçyTğ{^›Ó‡î] }ÿåeÎwuøå%=îøîÕûZ”@³ªMúoZ¿A¾G2‘½âc—oÚ,¡îÄ2’¡¶Š&³—ç®–tñ©±IËF€+Z+X—ºÇô]4Ç+)bW°¯±·ï*×]P™ŞêŒÁÓZTu£õ—5×NåÂªß6-mÉHŞ`q)ŠØ:™a]±°“om½|ùk¸Z2vĞ›‡.VL+àŞ³d´bG‡È½=ç·Rj	¤=ğÎ“0„-Áá6¼°%^°ˆ¨*÷É§)àiiÎé3:¡owa£V?´L >ˆJ+ˆ¢ô
+oÃŞÅÁâÒwÁ8T,5¾Øh0õ py-ºO^kÔù	ª¯s.!óféCç<0‹"·TOHqĞ<Ë¡Láy:L«qÚ›ĞE*.‚$<)…à{¹ºd9ÇÌ’6¥}áA—4”*g&tÆ ]NWëQu¡€ñıöŞ¯ÙşË/Øæ«—¯76Øö÷Û»lÿÍË—ğ¬Z (ÌY9±U½nb»¹bs²8W8·‰§@YÈT÷KK«r?j7E'Ê\cz™lƒÒth¾”’É{õ%Ä 5ö¶Xq[Puˆy4$UG±”;®ÈêÈ”ƒBJëótõ'k¯>coKS¾²e÷é|,´µ}–w`í¨|”3ı²5Ç½ìÈ–*ÌâÄëÊu-­fÒ°ê¯Á‚ê¯ª"
+_ÇÌú¥,Ü\]æ831"dÀNŞ³ßšÉ¯Şó¼¹&»Úå$©ƒ¸KÆÁÓÚ“•SL‹¼ŠèõéwÿÜdiÛõ?cä¾úÛ/‰|òvK·×XDTëHöpğ ehôEŒdîªE^®oßíù·(Û1#ëïº$€ŞşÖ$ÍvF#éBñîÀsì¥‡¦¯ˆíğBÔn-™®†_Yú WøÈ¢öH±ú¾œÌ=m“½§\˜Z®æd¤u¬”2ƒˆ¬ŸÛZÕä˜„î½Ğı¨ËdY;9ZÕ”²]_FR„)'öXª€ö\<‹ÒïÍ¬ïÂ.á®Ä®8.Âê…³ÿµ=kÎ#®¼ÌW^…bì¶î˜Ü•	qŒo;NpŒ‘úÆ³f;£qtÚš™±´Â(G9¹TışI³©’#Já1iÖVfv[“çÙ´µÄœ–k¬I[W8òâíÒÊ´Ä‚7Û3µÇJ4©vS5éÈÊÃT¸L:‡*7 î¦.Â„¥zéY¥£eEÖÿbJE=1ÿ‰ñ ‚ÚD£dû¶áº‚Õ¦ŒÚó
+*>«ËètçQ{ÑÄPÛÆYä¯«%²¸yæïSİÒ(7ƒ,şU|±íg(™a°…¥18›fğ4«è‰H{{éD ½{à|³ör.ã´ IíA†Í²Yµô—/§‡ÒÉfĞBŒßC¼lÖ2ôÎĞ{Ş˜c³kfÚ,Ç·ßÌ¼ƒæù¨78şÍ¦ËÂÙ´¹8›&#gMy9»vÎnŒ£³fL!–Aß^ìM$³Å¯N4¢ô€fól±ñÖÜ#X£ëÁê\5­{xY&mç.¥-1xC—âÚn3ÑrSEM¬«³é¨ëìf‰ÓDJ;»'K÷d©ŞÕïÿ|õyÖH¥g“iõ¬±bÏšèö>ªÃwê¶Ş\´ß–õBŸ×YY"€9÷Ş½3d½Éºİ¤¯Dî÷Ş[’zKrE î½%JÙKŸœ¿$—Mrï1É‰ZòÚ\‡ÏD•å3A7Óö˜x˜{ß-ŠXÉmƒŒ•¼R²äû¶RVá›[â6‘@ãŞw¢½¬÷Ş{"]Jï‰¼\Ów¢H­OÇ{"ğóÖ»O&çâì®8P¦ÀÓÙÏÁ”2=şÎnˆÅ³ÛíB™6]¯åÿ  ÿÿì}ÛrÜF–à»¿"­íqÛªâİZƒ")›ÑI“”<@BU…2€E³ù0ó:»İáé‰İˆ‰Øğ¾Ì<íÃîÓôü`ü	{N^€D"3‘¨I‰¤#,H$'Ï9yîgŒŸ{"sû¹“DvïF¹õn”©3¨[éH¹gM–Ÿ;Éšî¼¢O&ó§L î“»íT©5Ü‘$ÊĞ»Ú>Ì¶ükÌ£–Š¦M˜lSË·4©_éıH°©‡¯—Å¢!xŠn­—èfòiÆ’-'*'•&Mbd?êËS§ 5N+îF©ƒ>‘hW_¦›r\Ì5ÄÔßîfLM‘gÜ —1³zÇI]ÌôÜ/êA6¿Ë|.ãû[&òµL3Kå2T¦’2=×Ê¬B2eÊtl)SHæÙHÆ4yL?rôz¢FÇ0sLÃÅq=¸>¿Æ=²k~î²×­ÇR· ËL\ãº&s-LÁ­pMLa_Â=;ĞüÜvpWÕD2U‚‰ñùõëçÕÓ1]mÃuŠ?I&icdÿµJ_G¦CM£µZùŞl=­Ä†Ål­bÈa¸0ÎáÖ˜®§‡0ó „iš®?ğƒ±ì×c|ÈFìÒÁvoÆnºÀ,S¦“&0{;öäg#¹í–ìÉ#o™>?µĞ½ëÛ»e¶ìiãûm´fß#¼qÎÛˆğ÷ölçŸÚ³§În•Eû%ç¼,áNëd|Ãöø¡ê‚u{ŠC+ßìfP/Ù³ÓÖ
+)@nVn÷#§î!“+ lù½àX7dïz.›à‡	"Úm‡ƒ3—§$È É­ˆŞ«A~¶ §RÆÎ» KËÖz©ÙSÎ­¹c¹MXÒõüè\&âª®‰¡k÷RöÁkÑĞë„é,*¿Æ‰¥È¢óÀAõuAß¸d4ØopÆ5°+î™ğ>4ªaïJîfá €~;ŠRÚEvcàã‘²r&üÙLãQPAQ•ti9v®æš–Ù­3Û¿:Â¶÷É*ÙÙ=Úşú`ãh{‹47^Ì­as¨t”—ôT$ód´›.6vD§ĞVza/!^Jîí½ Ñ)AÈe‹ÍdB[!Ş ì£ÏåÔóƒV8šÛcùÌÂBJv„”{&/ª2Õ=ê.×ëUÇÉTOIŒ¯Ô†gH´ñvm%GµêóÜJœ5\qéºÃ:	¶»ú±GóİeË~Ø±İŒÙ[ÁvùºñÛİcÏïÆCÒÀ	^¡à¿ß³ø„Gµ‰8ûÎ?ş‘o­K×›òÑ(u½Íåáã|`£1‡şG]…	ü—$¼$¬‘,ò€ş~_ü +vyÅ«ä
+4ƒ³ =Lã°“>Ï îCÇÖY!µ:6ç¤úàB±ÿÜc&'Œã=P¼¨q”0'ê’êD¥wy—dÿé°µŒí,ù¾ãï‚öìùÿE}ø&&>ïßİZrêDXÅ²U-	0%î£îŠI´gL£ç	w=]CÑ/_8¿©¥§¹¸;ÿöË?ı3'm’Ù°V½¡“ì„¿â	}§Ê/y£Jyrp jcÆT[\:Xf uc}k9HœÀàÖÎÌ50EÅØ³8ô	şµô4Üo¤“üLä“^º+ê¾"L2%•Æ%˜ÂJò½`İb)d÷ªÓÎ¯a
+Ö¥^Ö4·ˆ^…¾vªlíMü¹,²p7MÎY‘sgº;‹ÇÑí+»¿$4&Ó¨4ÆN–a°f«õ{_b<íw#Œµ¡Ú“×c'6ÆÑ[àÕ~ÛA'¡_^¦2ÌaU|@ıİä¯  ²k§|Øéş¨W¸„-@åèšF·½„YŸE OÀ:Aø–E ƒ(=º;>~¼ƒsyŒ˜Ê&ŸDôC‰®tû$ŠğP‚Æ5ràø?¦Èš¬·OA6oF(Fm*>ÇŠ3ò;ss•ákMíJéÔ½0~­nÓíúLIòìà+ÏFqpÜ/?¦¯5ÉÂj¢?e#æ­’@U‹lµZšÍì.bÊ†d)ó
+ˆÿİ¢è;Ë~åpFíZ=ít}Ô`]^këÂaáÎçö´áãYÃı0!l‡Oã¨OÇƒbâÀ‡¹Å?:2ÖÚÜ}ßUIÃQÊ­˜‘"tFO‘Ô S¢WÖU]ÜSX]N;ÅaÆ•tÂ4×«+7eaİƒÆ˜VN·ğxÈÌuÇ^È.-Á3:*³ªodã”¯aÓåÓ,\ËGxş[oĞA>Ôc—5+cb~„M¶º©)I-ÿsévê«.&eŒ!1-­–˜™¤qr‚Ê‹$¶(&Ï:˜Ÿ>4EÍ™”·v®…_Ê63ûk);±–HäËNÜ§@‚İî³?D(ı“Zôùã4`1x»†2³¸FEÕŒ]¤Oãƒ·íĞ¿2-Z-âƒ*`Ò¨Áÿ‡4€ ¤¿ÇÑ9%†nK¡mêñ®lZ©+¡¾ÈŞÛÙá¼Õ÷ŞÕŒ¿0O$òÌ”†¤Cßè	”Ä¤@Œî$Ÿ’Åñú¸k—z—6ï„
+K¸«ìÂ"yÈ"³È†™r5¿Ñc=õ´ºı¢(Qw‹Æ)^fã_Öd<eòÙr²Øë¤çló–%­ZóíÌ¤
+±{Î¬SZBı*p·ôGaÿf@O9×1Æ² çiïm§GÑâÒ7Ñ(njF¡­Û4ÓRzÕ5òè°±ıõpjF‚LĞä“±ËVŒÛµ†%Ä0ŠcÜ^J~WRqõ¢[}\«N±37nFuß{ªeù•Lš†°Ë…!(0>òë?üÇå.•Ôš×«¸ÍµÓèyÔñzz5gÍF0híì6æj¡Š»õ¦wuƒé‡°¯ı`:*u\¶tl5ö®íß#ò"òëy3j³Ü!{ÓqŞ4üôş@õCÎ<j¹%;[S†««3§i?3t{IWc/ÜK»ALã>è¦¡„Q|$Í¿­â0%ŸD˜Í‡¨ÛÌ¦ÍíæÍñëëù,¥¥gÆwİ’èÚ£Og†–.æ:á³“Ç¨°ê–à¹\¯qP–8Hô¨ÂƒÆLİŒÜıóÄó<"»pÊö¯çH¬ç`I‚ëãT§¦±Ã™?Æuã»«&3É„Îâè±¡ßO'ä%Y­k–+˜ÒjYÏl¶3»]x%³gc«a0q$÷z6˜1,Q¿ıò§ÿC*ÌQµ­Pu5İÚ-rgÃÜ˜-pLÛQµõb&£÷ÔÁ0ŠÓ	LuµÁ‹7f ¿ß±ÛÿšÑ>øò>PÊ;†eoñ‹ÍÒAŠBß"¥E¹@yt½p[½»&ä¼;¸Écf' 4j».ºªc(«c)«œìª¾wºİç"Z¬.TGcgÖqgíÆ6 åêªŠ–Å˜ÒO6½^gÔ£I¾ûÀ1§bÙ“¨%¤„1‘›BÉCD×8¢š7c$-2eÓ•Ùvus:ïİZU™ _Èn­ä…ìe5 ‚…i¡;õ¹»*¾RÉÌ.h¤å¯Õäk×üâg£^ï‚ì{¡_ãc]ò*§oLájòaE„Î*tæÑ ›úyŒı„ûØ&·V¹Å‡ÖåïÅIáŸ8ğĞ4æaN]¯E¥¯aù#fjj/Úä¨ë>xwNÃ^ cû^8H²bÆ$<¥1¤c? 	éĞğ½Ä%¤Ô1…xş÷d+L†=ï‚^§K¨f L~è@«Õg§e{3¥_.¹7v«(D«ÛÍ˜ß.Å«4AŸI» şå¦‹:ÅgÇŠš¬`G-yÁÛi™ğÊ¦¹¥ü¨€›R…ZkÛlmvÕ1m.6=ª—Ñı+ÈL÷ù¥dÌedXu-¹M]¿¸¤‹Ã`¼ZÔi‘¨ÖÆhÒ¿qQycA‹.æãYm…õCÇ-»UûvŒÛ±EœÍ~ïfovSÖ§aÕ&™‰Óå›oh
+á	]AÄor2JÂA$¤…Ğ1ÓnCPœÇ;gT{¹ãTt’¼›q„–ÅªPPXB~_G.¡ sÂ.T‡èèc]‚[.–ùâ>çÆ8&5]2²Ë¯¾—¹ıšHÀl8¦ÓJy6õš&Aú]a¡ÍK,“W\üC¢[ı	ÚÀ¼Î‚´M?™\9‹$|:o‚ŞMªó™W‹ùÌ¬.¨ùË™]SW ÊeÃ¦œft£tE•JÂ"#¹Á«ùë?üÇÜìÉK¶¢Õ!+P6a•sİfJ	òëÖÈ/í‚ó®¹ğ€bš;ƒ´Y$‹9nT¼Ô¡	m•Èiu¨ğ‡qàRñÃ°*‡İ(])!©Yöıu‘–jR¾^òÒ'lÎ”ÄÔW¾od¦8~/í£ÙŒù›ï˜›Í2aÀ3“¹?f5Ôâ`¸=ğ©ı˜Ü‚‹†s½`ÇlùÏø¡}Ë×ÚçŒú€ë3Ø+´¦Ue6gr1@¬Ö,¯iŞ5ÍDx4_şP;şG¹jW¶–ÔËÚ+áG¶cüZãªöJGø…×ÕÚí
+KÃ¶;83ı¥ÍÃ÷)0—Pù€ŞyHŠŸXÖ>¹Ğ‘ãT=ÉdS,küêéWõ|»táÂ@j~S­îÊÃ#o‰ãüfùP.jÔ'„¤,.^÷¹BÏªİùÚhn§ÀùÏŒDˆ].]èPç4§ xáçÎQúunöœGÍÄô…“LçœÏÂg?˜c¿èşX¿ƒÇz½ZnûçfºÙî3ôv¬¹èd¶tï.¥Ì ¾{Òèn¶­V:Õ«ƒêFN»E»ÚÁßÓÀ`‡Ïs	µÜ­;6Ó³óTUQ¦ñ®¼ß‚cÙ3ıvåQ+šzE»‘­mÈÆ[ø‡v`ujSQÙAe²)5ïißöhş4z>œÓågà^÷Õëšè˜/†W`¹d åSÚØ&Á-açM9nTÅÚå‹¶Júkğïª@Štn\P&VHÂqÁ¢ú­òSÈ5éçxx7~['½¼§_Â1·x+] 4%3ïm8ó„,lm¥ªI)	™–¿·Y\E‹,°°Ø
+jYt_ËÀù…ÜŠ]ú|uAÕ¸¤npLn*Ñœ¶/TÖ%ÆÖÃMË2>_ÈĞeA =Ù<…m×R‡©)“‰ßM{ï%[~s rìın³[e )ÔˆÊÑRÙ·b-_np´MºÑù&Ê==şîıh8ÚZxÉ½ß€øA8zøUxsùƒŒ8m<ëİ†BôïLz­´0¬LSÀSå”.›jˆÔâ¿kÚvMtj)ô©=YdNÁN>xv~qµ¡]ú•‚ÇôÓ‡6ZÒš$ôlkÜRõZ9ø¶–ç°BXÂcœÅI:8N°å)O“Ê¢İœhÄˆc§¤ùq¡å÷hšXú lefôârŸhÕPì_5g1ÚDÃ` Îò"ò½^aŠ‡äÁ~/@Bêğ7oàÓâñ4À´ä·&'ˆdˆ¨hm[c_ûw›ÄPfaJaİä1çÔÌŞD…kçpk[s´áxÚl5æ^/›³¹z e>ã¤IRYy(—%éqá…ë.…­¤²xØãÙk5h ªôXY6]+\1è²äS¢ŒÉ¶¬¬—šÕº&†‹/”ÿ4½Ò¤×–³kiDY¡‰óàãæ.£pÊPùhM3=µÛ"~šûE‹¤dôº¯‰¿Äv7‡”]p¼¶Å`Ü`Üz~CíÁÂatœW“ÛLJ;æµ0÷†xb!3y=šdå±çfvg3~ÌÒ®E ¤nÇYŠ¶˜™ÙäM×öÔ¦[PE¶ìÈÃ4+Q“Å]×"M¾`†I9ªM¢Xócr¼uaÍEç>å’U³0»f–Ü—`bÑFÒ"#vÈPÙPÿ€¡ów¹]0.G–Ò0$éc7ü­ÕRë7Ù5L5Ùtez’iß7÷'Ìô'áÕ¸áSjï˜ÙnŒûM&‹¹û·ßÌû:=¨õâ}1ÑŞ á×ãmvƒÎ›ÃGØ
+¨àsBMª‹ÿ`òÜ°—{[Ûdso÷ÙÎÁ‹mK¹ÑZÚ­Y$¯È…8òÿ1
+¢T.×T„ğ¼QyÙÊ¤¥o7cRCf…ûÚ¥ŞRFTÍ†fÍ„®{wÆûÌ™ñ%Æ•xsëÏV%¦$®Ùx’nVïÑ1¹ï¼ŞíRò}H,I€bIüB——Wi‰ßu ‹Ú"É0<xbfTB[ÒºèCòêì7ğÑ|£C(³ñj›|Bí=¾÷]ëå>µô ¯‹» _sÆ®‰kš½ÆyÚê%2Æí8bjŠ+ÚE²*0”{8êxˆÃ
+E_NÃw€ná ¤7ô:È>Š/V/0‰ŸZ¯?_øŞâíàm=éf›;Îà°”ŠÏ,½ëWÑ÷ŞµÎÑÓË	f‰:ê>“uYö€ZªC]Äykq	Pşgñ¦²"ıw-o”Šn¹=½SUA_ÿ×³c†¹"I¹œÂ£îrÙÙWÈ½KG˜×ZÂÆv¦½ l)ì.—VV.k#b\h8¦ôs/-1¸´8èy€ÅKêI½¼¨a	š$•¼ğF½«¤4Ä2×Šã $Q–:/ÛÎ{4~+G~vœggQ¬RÁ¸Ù‹’@O™™) +ü‰ë£ĞûbokãùÙ~&¬-I²0YI*pk/Ë³—	¨•ÙıŒÓùôJàgSè¹_Ñã€¿ğ¸ÃGûbBgv¨:e;ülæìğ,4Ç¢4jĞæ‡„k¦h2~öWqL@‰c"-¥!hÈ:3QkvàNnôOhá§^xÖM	¬*ıéŞIõFèÍ.üvd±ç­•/€ÙÂÿrız¡½°ü}‘ÍRÀÌ1Ğ…‹/-j¹H¨€Duë¤­b-ìJnz%«+—æ†'˜%àƒîz­S^sö×à¼æt³zUJb×ya%øŠóŒ_Z)·ÒØ¥¹á—Ğ%¤:¹ÎËıç;›G;{»ä»ƒİİ¯-Ú$½±ı·;‡G0l¾<<Ú{ŠèÖöÑöæ‘YÕ#†iyÕşAËY‰´ŠöæXmØ¼àô£˜`´’v	İ ƒ×Ã˜õ §a‚Õ; ğØ3ÄëtĞ"ØÖ,¿TM0ÃO²İZu=	ó[‘O6O½^Ì}…w·~É¦¯t†8}¤ÒŠÆ1¯*äš-ùÛâq·‚¤®±EèdcÑ$ò¬‰S)À•Ÿ‚vÕb‚X™vYY»òÙœ1jAè˜€­Î£lÍ*¥]@-ê§±QğUÀ®ùŒ
+³³Şo.2€%½ŠÉ‚Ù!ŠcÍ§İÉ§Ü§„Ã¬æÓ™‘ZÜ7iõB‘h3i7GqL[¼ó6¹ú9áz¬cC†í}”DşE­mgaaE¬5n­ïøyrÅ¥*2µ3iıB »¦ZD­ÿ>^å»ô¾~tö¦ÿ"ƒY¤ü~ÔğÈîÈÙëãsæ€Îª´ÛmÃŒ´;I/oN’=Ûk³:œyöõÂ\û,H1½¥977gunÛìÓ´p˜¸S ûL€m5@ÉÓ(#Ñ¦aÂ$ŠÓfÓãM•O4@?±´ò‘}{`Ìî‰±6ÁÈ_t|.ãaåıºÁô*v¼&•Rº¹ÿ³•ƒÏâu*õ1±LÆZ!C]•y“[Àîp·±JAúñ¹H?xƒÊuGŞI³ÑRWÂÀ.O	³ıR&<ØC#WÕªúèÅBÆârRÔcù‘2ö±h?£ ölê›%«ã1SÇe+{$şú<ÛNyÌêÂª¢£ü¹UY”v2÷ÎLoOah8Æ]-^UYJ•™‡ı&™zŠ
+†{çXøËMÑ9¼m= ™a*ÛzFô>yAP|Ç·šu¯$HCÙ£Z·Än«='k\o5çÀgT™sª¬ß.vš|1ãšiä\ŸÉÆ¢ñß~ãMt¡Şæ…ÜL¸RÇr³÷İîöÙ{µ}p°³µ]e´y¹û|oóä`{ãpoşùöåÎÁ”6¹ìd¯vò O<"a‡¥M¥aÌ•ÁÆ;å„ñk2Ò¼T\!åwgl6ĞÌÄ^zæÆ°SMŒl¼—FLé NúajL?ÚÃ˜2­àÔõÒfég1¯4ş*ùf‹?óæ³ OŒJ q]¯ÎOc±¥éy$€.è	Æfé‡¾@¹˜½%L²„ë¶NlÔGF«Û*VŠ¨Ó,•Ñİx(¤ô2#šÆ•ğÍ4ĞŒ¼ÊTìíü«GÈ
+§´Ë)š[ıİ6«3\]¹X kóz{é
+©7ˆRpKT±h—úZ1£]Á‰ªe],º–ìeÆÈÂ8nş^Ã”…/±°ÍÜ¼h„Œå:İTW¥±°­JE{„’{¹ƒµÜÁ’±vÊÒQ²RôSq‚_RU¢²®¡=Ë"ÈÌ€ô@Á\ZÖ_¾ğhw˜*³©°Ş(’••_©1Ù†ßS Ö"•ÿ®1å„pÔã?¤y„-˜3ª9ó\p´S3ŠÊÕK#Ö¦ï”„Ğ¢x­—“n^	w]+’F™^-Kle`y•X³>÷ÈZ´Pi›Ê›ü4*,·İnë'/p™ûëmZfÎQ89øÇ”
+¦è8Ñ%Èğ§?£¶ä±yŠ¶ ŠVL,·Ğj:%+¦B¦yŒœÆĞ&ÙøËK;÷F¥×‰Œf%ßŸÙ8f2§›y8$Zk™-^ºjk*ë¶¦
+6Lı+e¡İÔª­!
+	x$ö”£—,ÕÅÕi¢npüí—ş‹Hoæö"g jÃ)Õêî6¬¯Ÿï=İxÎLY‡dcssûğpçéóm²y°wxØ:Úx*Ù®¤çÛäë^tâõPó[XÎ¼
+Ñ·Àó'izÁ4Ø!5Pñ¦lûQœÂuĞWqÛ°ãÕ^‡$:Eg†+Òa	&Ù½	È!<Èw–a*ÙÔŞÂ›aŸößˆPV²9¡b_›(jiaÁÙ„–¹ä/Xl¤Ñ¤&ã6µZÌ¶0niYê,ÙĞDèhÿ¤5©Y=µE/ÌÇ¥-(fä•ƒ§í^+`/h!‘L%²ªÑ—¦Y~ÇÃXÂú*|İ¯ÿò¿ÿó¯6Zw4ÍËV2¬EÀ>}ƒ#QJ<©ª®¢%N4ë<Á ŞP—ƒàt2¹'!h‹Â—àè$êaZj„ÜpBß¼pj')Ó+Ì55´¼¾„´ªKB*¸ò}ÃB9 ‹üŞñ¬+Å„R¹sešı«wùÌÏ“\	ö.¡5şcÒzpê$ZÓÏz{z@1¢Î+Z+ğ1ißœqGğ›àb$Ônp1ñür€²íç3&,’U÷:âM8ûÊf(1	%g>‰štë0IéšŸà˜ş4ìFi”4ô	ÿìıÀ?;]Xóc¢~Æz›ŞkÎ7ÿÎÿôï’OÑ´øğ›õxõÓõüoşÃ~aÈÜ|¨õ·áù{Ee±C">>àn‡ƒNoäI“}«‘¦ĞêÀÇ›Ê°ïOÑF!€Èsxı
+!Iig©©$Éã|F¼))î¨õƒ*ÆVêx?ô¦äölŠ{ ¬c3ü™Æa
+¯ñbŸ|u[ ÈmŠ(d+<Q8Ùgû ñ¥–«°MóFìÕ`¯EzÇ†+Pã°dZG{7ÅRñûƒI *9¢›óÀR£\`+ ›âıÉXù+ú‘u±uNğ¶\”Á¹W#Åğ2Jáí¤öûƒjùw˜ÇˆOš"N `‰	-ªÇ|'²2GE!}0ê³Qnú¡šªoŞ±.Zp'ÄŠ'^|A’¨z¨ àb…`Ö]ì”P×ëĞ¯sD]1¼Œ¡'QôFà¾¼G¨+}¡yPş±–Ã˜÷ñ;?TáÖÙ1J6è¢¯uNc ‡l×Ÿ³Şà­÷ÉdÒ—Xå,öQSD€EòÆi=Ã÷“y4Â+È>Å´çr‹ä9ÚåÉÖÌ ‡òF'¾ }UZò5`höäüFé«¯Ôñ™ê‡¨4¢!H;ıã>ÃK®¯‘OIşûÔ¨NC£Ë¥6G‚dš Qşä“’ ‹‘fhğ@Mº0¸
+%–âãÒ\Dœ…—>$‹ä(Ÿv®ö:}†–Ë0Å§÷ãè4HöÅlÁ…™dµã³ ±©­ÇmªU€N"æ„vÏg2¨øDÑëÉ:ùáw—BÉ_üşŠZßÖLæ~ÀPøÅ‰6"‡¡Û,NJh}‚c
+‹3±ßRMl¯¤ñŒØè§Jl¥O°¨Í¤†]ş¹¾'(iÊªàDg†}¥õ ñÊë¯µ`<>:^œEñÅz¥°ëc½5¤j¹¤™SÈ¡'®W¹CØÀP+>¾ŠôüKØ8Óœ^Ş@/ˆAsB¼ Æh´^áld?ì`ÒÌñ0pƒÎ–Ô‡€:«ÃO¨4ôÃQŸlø~+èæ«Ôé Ò	¨
+i½Nz¤)jZÑ[,†qäXfPß z¸ÑBĞéÂ Ã3,×O6²×»B×(ƒó\˜×IxßbmÎ·{i„ËÇy§àì98²€¹.XD|öì²<—şü9„ß‡äòœB6ÿ~A´}2µpÖº`/bş)GÜSdŞDı6|±–)œ‚©ÍÒKb§šn4ŠmÚ¬ª3ÅAë<ğ±rŒVmJºQ”jïPÿXÅÚ›œª‰hİû«„ö¢"‡ø2òı‚×yjP4JˆÀÒ|9Äõ..±EÖç’ÏĞ­¾å]æt¢óDUì‘eÔØé©@åÅ¨—†,{EË~E ~Ç£¦Àç¤}á…
+§íÂ›Æ z£-@‚•ÀR?2 tv¯
+DÛïà‘Tc6öØCä9çeõğº¸8+Á…ãÂóçªVşŒFšïĞ©Ğ.cÙiŸ¦#?ŒàÚA€Ü”"Gİmıæâ»M7ŸFiW¼å©7øq¤p†P}G@0˜‡Áp¶¼ïô4Œ	8„pïrBCø¼Ş1»Hyw]ˆ˜Ã‚°lv‰Ù/ãc»L6äP 7t{“›£ˆxÖû¤EY0îsÊ{"¬jRëÈşªO0•Y öNã ¨Äm#PÌRÙ0iÍxz,Óß1ïİ$„±OàlÀ¯z®dŸ‚iQ'£¤·] m,2Ã£?¾©T,ï‹ú«+{öúbyÍÅFÜ3OÕæ(­Ïã3iOø¹¶dsâÆpØ»˜í³è‰WTÖDÌ4Kjóp}Êsç×›Q„ èg¤µzr¬~>êª7w"’Ì¨ß¤Ş„Â×bÛ®Rgg6mó®dæËŞÔ›¶hÑOKUrÇù¸únØ¡69N&i¹@R% ›­ âhgäJƒ~yLĞ¬1›LõÓ¡@Vc2&¿¾ScÙ|Ò‰®-?`õ‹+>Î³*GVi±œEiÒ|´U„çO¾	<ÒU«“ğ§l‰"\N·§„Ò®Miü)«å*uA•33¤¸y–£Ô?a]Ho#dgkMºİ.V®nŸİópğÆPq†&nYšDbw“>K>Ér£ò$€b4og™ç¤h±|İo¿üåmŸ—YÄayXàµ|ª.r˜İ1nîø½ùó
+jĞêìYCU;4U³œ|c›BÊp’Â±¢4æ¦¢0¹Ô¡ +  ®•KÈ£M-
+ØÔí¬P'Y4;Sª8‹qæI¯~¸2ci80]8,Æ¤K1ü©n"†?E{³¥ôƒ’à¤”–WRúóRAÆ¬'óÚiÍæÇhx7KR15ok±€l¼1AŠİ5­¹Ó6' /tP„Ç>f›ÂD	ª÷ÀùŒ9CÍÿ‡	ì0ÄüÏ%ÊVJ]]åæİïz¦tÅi?rsLŒ¤§Š’p¡Š”›`óã'ƒÍ×°êayh— •UŞ­Ç/QÜ÷záOxSYÈlÈsÆòùVL(ïã?Ö#hFğ,)y´Ne}°ÊŒYíìAë¶ğsÚrÆbƒsÍ	KõâuÍ™Bï˜š˜Û«ÚÙ9ë˜4,di½38ì$|©Á-Ş×
+óÜá|(ß÷G±':™Y¤-n{™3õ¬Ë?–)ÿX“äôeØÍ¾K€0~ƒø3NUÎ‚ œ
+r)¤×fÄÃLßX“ º­¹mKÍ~8±‚ÃÊtè«l=Ğ§¸æ®İÖØâœ=ø(®ø*)ßÚMøCpAaõÙï‚
+“™ì†ñ™rA:|9Ô,Lİí¶^¯.¼í~_Ê,Æš(ì‡4²%vß=Ã	cË4¦­ÜŒ{HI¬]dè.Y¬ úı-é’æjáÅî-ªÂ`%Y¥V,R¯lûÍşßâp¨"x<½ÌPñ}©ò¬J¤–óÄÙñ»˜ï’¹Ã¶ĞÈã’š•î¶9Ó¨°Ğšêi”sJ"+sñä2sLÆ	>0°ÓÀ·é}µÄ—¹'åèÊÙÈÀÏ|n³‚¾ğ:İ_9ÍKšÈ…cîäÈ©¿{vh9/'ºÍcTæ™u@ó|agFıÁyü$¨r•·LEŒ‹ï¢³ó3ãÔ×,Ì½Ÿâ
+t?ÿ+FAô3€VsUâÜx2¾‹°g/TbÖ™\IúËâæ™ü|rŞ
+`ıhVSx¯ª
+MPIé•öÃ³I2#x*a4<Y‚ÄÜôÒhf$4(³¤€YAQŸ™’.ç½í¨'¸(åuÜNxÜşå¯9P¹¥nj'mÓI­¸ş…e"\š	®¨$P’g)Ó™Ò-M„”Í‚Wİ@²ş|X_’‚”g~¸¨õ€™…Ô}ĞĞäıó<Ô_àç´É
+¯‡õ×ºewè²¨BĞúöƒøé Ğ<Ä O‰ÅU}“Úl_M'E¿«sV¨ãù'ÑÓÂˆ„¿ıò§¿Ïb	2øÂ/ÉbºaŸ,Nù1t°eV‹Ú¼\»ÛlRÖƒ'‡"“ƒ‚£ò ´­,kLàR„mÙ©ç ±YFƒñÀ‘·R¡¡†’1yÆQ÷j(°,ü|#.—«+ÇÓš¿ˆà‚e,ŠØÍšLCìâjİ"§¶T@ü™eªytt @ÔÉ@413(œ—T_’øjïÌMæ…]*×vÆømX>kJK Z6Äiù)~îqş±¹cqäŠcË°Cj³w•?Yh5³„%&AüªÎF!–	ñ0•g¬.üñü·Xö²é°’æ4ìá!Y^ı,îÍòJ}ïâ!U\„«ş¯/6tÑ&ÛwÍrKñ r)ét±f­–l9Ş5eŒÙO]_½HY9ógQ”RcM¢t¥Ss¥p¥Ò¦±‚É¹ßñX¿ƒ=<Ñ»“—^b‡jbèGÂ;‹ˆ`sœw–ôæŒ<.‡£é«°Ÿ$H·Y³$.-`r§¡¾AöLı,ŠûMÛŠ‘cò×ˆš³ÿĞú¬ídÏ‰¿ìÏĞ8Äµ<Ñ>š³áìwûx¹ˆ×Z©J2ËbµÏ ×	c3”+‡U¬¹9»fÌ¦­ZG‘Šµ”ÙcÕLy0›£4Yõ´ˆåâĞ”*«TãŠØ•EjÑ™,]Yñœ“Ö ñMåt šÂãtb¹uø:mş°Ş)<ÃQ¼ÿÛôbcàÁ1Ô„÷‰t©Kòc
+”·áŸ‡„‘[Ü¦5ê®¾‚¯$kä5³(î7äê{çïß
+za”A G÷<“´™½@
+¼<hØ¿Vº“lø>ò¸½a0°ô–1dk˜ŸÒ¶¯á°/ïG±²FûšR”N•†İkìİ‚…PkXµY¢'©İ"iOæ0IÖSÖåŒ8çÆ¼QyŸ…]Ÿ…B?mŸûfä-­ÛbÚ–©ƒÉq&¡ß¼aïQ)SGm¾8×,†njêäœß:#Ô ÛØÊ_Å	ø¯< 3 ø	CÇ¦$*“yrèéÙì N1YeKñ¼ç‚ï­ÊZ²d%d?V>vˆ‡rf%
+ˆ¥Y%(Ğ¦ (_	^…¸%%Á²w…ÉKväh]d«ÙÁ¥w}UŠüVƒ°ÖM¢½I-å“æç±7$VlLJïÁ’wô¾©GéÕ¶“¨Ğ+e)–Wa­ùsmÖÔò˜ÕñŞ0—Lk•ç…,ø¤3x¡Õ2ò˜ä©®J@Øè%¨P|…6hˆ!âã²¿°–!Ã¿¢WB0¶ù¨¼J÷ªv³ÎG.‰şv¥j?0€Ÿ÷cş—üqx90~ŸªAÑÑ¦OÖeÍ%ÿ¸ÎCz³<Ö,.¬¼sÍÙ¡¿, ¿‡‡³	òì&B=b¿Ég§»âôöô1‡O/3˜VC	ÙÕo#Xş<4¤×ğ—è»iŒcõ![¼ö>dvKZıNdğ-6"«cp®3{õ]1·z×v÷Ê½O~ûåşlé:f³²?ê.—¦ÌKäæXÖıIQ Ñ7«§ÓÖ+å h	ˆ¼s}ŞñŒÖu(¨¹ş•ÁPgĞ´—/?“­¢ a2mÙîjqÛÑœ•Ğ9 U¾˜í8b».%‘E!ÛÍËà­-æÉó~°­EYV×eÚçòz'êEquÃ4“´^'1Ş,·—TCûe¿{·ÆË<+U.ç`(à°\pä5–²U™ÿ²Ê,æJoJ¿ª÷ 9ÈÅä§,±äYgÈÄ3Ğ1Â`?4|¢ï4È¸œwÉÕˆrÈºÁÑŞ•·È¦úiª|#GİPj†“¯Gº§ÓicÚŞ4x&HÕpû'\±xÈ¤8ø°“	@smò_£é *ø5ÙcOÓ0ÅÃ?EÕƒfóèv	¼;â°“¿-ÑyCLûRÛ±\Ñ‰Ùœ$0¹‰Ã4¶ù/KlŞdÔpö;ŒÁªë3k‹¡ÌÔãÒl$[ĞÉêÙ^2iÎ”RÓ£o ?5Nn9¼äbĞ!U("Ê1-7µ<.šì}3¾P£Iy,M_j&§µ>YUÒ,?ÎUS}Gö£GïÆÎà­×ó±;[mÜCì
+;Œ£N ¬ë<L»Ü:ÚåjòSi,fbã4¾¨Zÿº­Í4Uš²ë5!Ş¹Ü¶pº5`wy¿;àOñÑ‡£ğóäErÖÌª€±eù$a÷PSº¨Ø˜ğ(ìÑ(mfÆáòèº’U¬jÙBôgvº¤Ä1-œ;ŞÁ³í>¼¿pš×Y«6p^‘Ópàa±âÚˆRåô0áemnM…¿‚™<+6™\ğéÜV.øİZÄ¦ kšËã1®¤¬+­“†¸Ôn·Xğ†í¡æÍX¦uÈ‡­g%Ú-M ÚmÄ¹ Y,ñ_Î1§ä/F…$•D¿uw±KsI³Îuv,!™R§0éG=´Ô-ğwœ‚ÌÙİ</jp’Ò¥ÿó'Ãp`«uFUñ­ÙÉsG}â{©‡
+@¾±Š)¹•Ó¸rß{!Wç	GĞÍß21;½}ïEß{Ñ·ôş{Ñ÷^ô½Ñ×’i8¹Pl	­¶f™D&˜\Å%:QAdªèÆéô’¶æE[Æàé))ÅéKcÔø}„ä .ì`¸ÍR›†~Ğ:¹há¿I¼8L¢^Ã‡‡	¿Kƒ©hÙ<½×v:>Û…k÷ÙN×c»JóH&rÙş°ÔÆ#²cWï]Q!|Qíµ“ã"Ğé…‰1…ŞPº~ŠÕêı—ÿñŸıs‘ZŠ¥èeâi^fâFŸ$<ö*8Ë½9+(W®×²“Èl–Ë’;EÂæ‡e™µ™s_¯Á›ªÙsÅ‹ŠøªæÑsc³”U1È6ñkL„<¢]=«(.cBï2p‹ù/
+9©JÍß2Ù¥ôå…¯d&`Lˆ÷N¼@Øó†I`ÉS{”v{h¤4.°=#o€õ¾ş/Ï?_ÚøŞ¤ùƒ® øsìRjAb9ƒ8o­|‘yõvˆ-’}«\¥˜švA
+…bTz3ô­*`İĞÑĞ7Êœ†ÈQı`cìo‚P}ı«šğ_Ì·hW´fKE´¸UQü¬¦>{NŸuM3$¥(ë/W5İ*@şÆmŞdC”uËQJÉ°dEÓõ-.¾¤ÁkÔ)×²—“š,ıè·ºè®j#Ôë§Àh…9—^—jPğœ(«5á/e¬ætY*E¯­¯—pÃ¬‰áâkÒçíåÖó$¯qëÎ»·²‚‰a”ÂßÅÏ•vÃa¢X'çØğ£Evİ›é©ÄQ‹Dç¦tJG.$­œÇ¼êÄfäî¾Ê]Š†H…¯[ùJÓÇ ¿?ÿ;Ê\âãvÚóëÆy¹{öìÙ£•ï•DV©Üˆb¶’ÒP[CZû: µ[èÍ¼c‘ŠõE—»…ùÿôé‡‹¶!÷ˆïzY±Ÿ:ëÓ<u®‡
+ û×Š…Ôï-üåß@+‹‹mRïIB:l%5*ÎU`7–íÀÆ	„*÷L¦ÆA«\ä¾Nµ3Ø	´^Jµ/	 ÚìF)«Ÿq6Ê‹“ÙDÂjqïº¨·P9÷îPïÏÿÊŠ0?Bºg÷”›İ)•ÑZ`Â•n²š58ñz ŞÉ~nÅñV¬çu—häOŸ<­úq¾•¨$+Mæ@%J	•O>ÑV¡»Øœš‚Êı57âZÅC	ÎAVUè6Ñ«*ZyİrúõÏÿ­Ùw?ûazOO“œ:Â0À
+fíƒè÷]àû""I3„×?ÍoËöÈõb>r[”÷i6’n¥²KLşY'eŒ=]eÅ~º0ÒüÔ·gè1Ùò.Hó‹Öâ{jîv(t‡häï‰‚N÷ïä7›à:§Aë%Ñ®¹šô÷v¬§°qR5Ñn‚²ˆ…\:„­­’n3‘õÅ¨—†-ªD4i÷Œy:Ã-¡a÷º¤E2~o(õgÍ'Ş¬«ùÅ^ãßÙü¢â‰T·\l€ÌÏV^b¶ßX1.ÛZ®–Ë
+ºi¡²‰(#î¯_KâQO”L½ufÍU·.£A«v ÉQà"‡£~Ë7WÅš°(ŒÓÅÏ—¼ïai'Eš¢%ı5ú{ÛëĞ–ª•uD” ƒĞZ?_JNR=ÏRVşæŞ‹ıƒÃ½]²ùòÅËçG;¯¶ÉáËÆ°°ŠZúrÙ…Š<y¥İ<^Ë‹‘6ÂĞkŸ…¨a,r›ï&lò‚©ï}o Ï`„n¬°w‰ïi7€ëğ-›5Œ£Ó°$Hü ¦(6D´êƒ¿ŒîIÒÃÁm¤FU¡jå<ÛA+ŒŸ ·ğÉ~£>ø•×kÎ¯ràH½ì±àzj’ÑIŠ°5ùf%È5à2Ñ /T¼ÑÑŸÛÖ¸JÌ’Âü¨2yÜ\XŞğ]‹Â,M£bá»BMÂb4º«nî¡h¨eXFV¿0gŠ¥Muâ³aáQ8 ®¾úè£ùytÁbµŠ€œŒB€@01ƒC¹´“W + ¯$µ»ã ‰zo‘]ÄñˆÖ!ûèÿ  ÿÿ 5Eæ´
