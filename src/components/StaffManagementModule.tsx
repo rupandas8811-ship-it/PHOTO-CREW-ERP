@@ -548,15 +548,15 @@ export const StaffManagementModule: React.FC = () => {
                       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-zinc-400 font-sans">
                         <span className="flex items-center gap-1">
                           <Award className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
-                          <span>{(Array.isArray(member.Skill) && member.Skill.length > 0) ? member.Skill.join(' * ') : 'No Skills Defined'}</span>
+                          <span>{(Array.isArray(member.Skill) && member.Skill.length > 0) ? member.Skill.join(' • ') : 'No Skills Defined'}</span>
                         </span>
                         {member.experience && (
                           <>
-                            <span className="text-zinc-650">*</span>
+                            <span className="text-zinc-650">•</span>
                             <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 rounded">Exp: {member.experience}</span>
                           </>
                         )}
-                        <span className="text-zinc-650">*</span>
+                        <span className="text-zinc-650">•</span>
                         <span className="bg-zinc-900 px-1.5 py-0.5 text-[10px] font-mono leading-none rounded text-zinc-300">
                           {member.department}
                         </span>
@@ -589,7 +589,7 @@ export const StaffManagementModule: React.FC = () => {
                         className="font-mono font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 break-words" 
                         title={member.whatsapp_number || member.mobile}
                       >
-                        <span className="text-emerald-450 text-[11px] font-bold shrink-0"></span>
+                        <span className="text-emerald-450 text-[11px] font-bold shrink-0">💬</span>
                         <span className="break-words">{member.whatsapp_number || member.mobile}</span>
                       </a>
                     </div>
@@ -609,7 +609,7 @@ export const StaffManagementModule: React.FC = () => {
                         <Calendar className="w-3.5 h-3.5 text-zinc-500" />
                         <span>Joined {member.joining_date}</span>
                       </span>
-                      <span>*</span>
+                      <span>•</span>
                       <span className="font-bold text-white">
                         {stats.pending} Active
                       </span>
@@ -708,7 +708,7 @@ export const StaffManagementModule: React.FC = () => {
                 </label>
                 {editingStaffId && (
                   <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                     Locked (Permanent)
+                    🔒 Locked (Permanent)
                   </span>
                 )}
               </div>
@@ -735,7 +735,7 @@ export const StaffManagementModule: React.FC = () => {
                 </label>
                 {editingStaffId && (
                   <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
-                     Locked (Permanent)
+                    🔒 Locked (Permanent)
                   </span>
                 )}
               </div>
@@ -906,9 +906,9 @@ export const StaffManagementModule: React.FC = () => {
                   </div>
                   <div>You can use these curated custom-styled production and designer avatars:</div>
                   <div className="space-y-1">
-                    <div>* <strong>FTE Editor</strong>: <code>https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200</code></div>
-                    <div>* <strong>Videographer</strong>: <code>https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200</code></div>
-                    <div>* <strong>Lead Manager</strong>: <code>https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200</code></div>
+                    <div>• <strong>FTE Editor</strong>: <code>https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200</code></div>
+                    <div>• <strong>Videographer</strong>: <code>https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200</code></div>
+                    <div>• <strong>Lead Manager</strong>: <code>https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=200</code></div>
                   </div>
                   <button
                     type="button"

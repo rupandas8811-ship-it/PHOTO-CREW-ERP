@@ -378,7 +378,7 @@ export const Dashboard: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-3.5 text-right font-mono font-bold text-xs text-zinc-100">
-                        Rs. {Number(balanceDue).toLocaleString("en-IN")}
+                        ₹{Number(balanceDue).toLocaleString("en-IN")}
                       </td>
                       <td className="p-3.5 text-right pr-5">
                         <button
@@ -456,7 +456,7 @@ export const Dashboard: React.FC = () => {
                 <span>SHUTTER: <strong className="text-amber-400">1/250s</strong></span>
               </div>
               <span className="text-zinc-850">|</span>
-              <div>APERTURE: <strong className="text-amber-400">f/2.8</strong></div>
+              <div>APERTURE: <strong className="text-amber-400">ƒ/2.8</strong></div>
               <span className="text-zinc-850">|</span>
               <div>ISO: <strong className="text-emerald-400">800</strong></div>
             </div>
@@ -494,7 +494,7 @@ export const Dashboard: React.FC = () => {
           {/* Column 1: REVENUE ANALYTICS (8 cols) */}
           <div className="lg:col-span-8 space-y-4">
             <h3 className="text-[10.5px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono flex items-center gap-2">
-              <span className="text-emerald-450"></span>
+              <span className="text-emerald-450">💰</span>
               <span>Revenue Analytics</span>
             </h3>
 
@@ -562,7 +562,7 @@ export const Dashboard: React.FC = () => {
           {/* Column 2: LEADS ANALYTICS (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
             <h3 className="text-[10.5px] font-extrabold uppercase tracking-widest text-zinc-400 font-mono flex items-center gap-2">
-              <span className="text-amber-500"></span>
+              <span className="text-amber-500">📈</span>
               <span>Leads Analytics</span>
             </h3>
 
@@ -574,7 +574,7 @@ export const Dashboard: React.FC = () => {
                   <span className="text-[9px] font-mono tracking-widest text-zinc-500 uppercase block">Total Leads</span>
                   <div className="text-2xl font-black text-white font-mono">{executiveAnalytics.totalLeadsCount}</div>
                 </div>
-                <span className="text-2xl"></span>
+                <span className="text-2xl">👥</span>
               </div>
 
               {/* Today's Leads */}
@@ -797,7 +797,7 @@ export const Dashboard: React.FC = () => {
             {/* Leaderboard */}
             <div className="space-y-3 relative z-10">
               <div className="text-[10px] font-bold text-zinc-400 tracking-widest font-mono uppercase text-left">
-                 HIGH RETENTION CUSTOMER LEADERBOARD
+                👥 HIGH RETENTION CUSTOMER LEADERBOARD
               </div>
               <div className="overflow-x-auto rounded-xl border border-zinc-900 bg-zinc-950/20">
                 <table className="w-full text-left border-collapse text-xs min-w-max">
@@ -932,7 +932,7 @@ export const Dashboard: React.FC = () => {
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-amber-500"></span>
+                <span className="text-amber-500">📸</span>
                 <h3 className="text-xs font-bold text-zinc-100 uppercase tracking-widest font-mono">
                   FOCAL RANGE WORKFLOW PIPELINE
                 </h3>
@@ -1028,7 +1028,7 @@ export const Dashboard: React.FC = () => {
                 <th className="p-3">Ops / Crew Assignments</th>
                 <th className="p-3">Post-production edits</th>
                 <th className="p-3">billings status</th>
-                <th className="p-3">Revenue (Rs. )</th>
+                <th className="p-3">Revenue (₹)</th>
                 <th className="p-3 text-right pr-5">action</th>
               </tr>
             </thead>

@@ -2208,9 +2208,9 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       'Customer Name': r.customerName,
       'Event Name': r.eventName,
       'Event Date': r.eventDate,
-      'Total Revenue (Rs. )': r.totalRevenue,
-      'Payment Received (Rs. )': r.paymentReceived,
-      'Outstanding Balance (Rs. )': r.outstanding,
+      'Total Revenue (₹)': r.totalRevenue,
+      'Payment Received (₹)': r.paymentReceived,
+      'Outstanding Balance (₹)': r.outstanding,
       'Payment Status': r.paymentStatus,
       'Current Status': r.currentStage
     }));
@@ -3339,9 +3339,9 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
                   const evName = ev.eventName || ev.rawOrder?.custom_event_name || ev.title || 'Event';
                   const evDate = ev.eventDate || ev.rawOrder?.event_date || dateStr;
                   const evTime = ev.rawOrder?.event_time || '10:00 AM';
-                  const custName = ev.customerName || ev.rawOrder?.customer_name || '-';
+                  const custName = ev.customerName || ev.rawOrder?.customer_name || '—';
                   const status = ev.currentStatus || ev.rawOrder?.current_stage || 'Active';
-                  const targetDel = ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || '-';
+                  const targetDel = ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || '—';
 
                   return (
                     <tr 

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
-  X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink
+  X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';
@@ -75,7 +75,7 @@ const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId
           }}
           className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 focus:ring-2 focus:ring-indigo-500/40 active:scale-95 text-white rounded-xl text-xs font-sans font-black border border-indigo-500/25 shadow-lg shadow-indigo-500/20 cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none action-button-trigger"
         >
-           Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}></span>
+          🎯 Actions <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
         </button>
       </div>
     </div>
@@ -144,12 +144,12 @@ const EquipmentAssignedCell = ({ equipmentList, equipmentStatusText }: { equipme
             }}
           >
             <div className="px-3 py-2 bg-zinc-800/50 border-b border-zinc-700/60">
-              <h4 className="text-xs font-bold text-zinc-300 text-left">Equipment Assigned - {equipmentList.length}</h4>
+              <h4 className="text-xs font-bold text-zinc-300 text-left">Equipment Assigned — {equipmentList.length}</h4>
             </div>
             <div className="max-h-48 overflow-y-auto p-2 space-y-1">
               {equipmentList.map((gear, idx) => (
                 <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded bg-zinc-800/30">
-                  <span className="text-emerald-400 font-bold shrink-0">v</span>
+                  <span className="text-emerald-400 font-bold shrink-0">✓</span>
                   <span className="text-xs font-mono text-zinc-300 whitespace-normal text-left leading-tight break-words">{gear}</span>
                 </div>
               ))}
@@ -157,7 +157,7 @@ const EquipmentAssignedCell = ({ equipmentList, equipmentStatusText }: { equipme
             <div className="px-3 py-2 bg-zinc-800/80 border-t border-zinc-700/60 text-left flex items-center gap-2">
               <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold shrink-0">Status:</div>
               <div className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                <span className="text-emerald-400 font-bold">v</span> <span className="whitespace-normal break-words">{equipmentStatusText.replace(' ', '')}</span>
+                <span className="text-emerald-400 font-bold">✓</span> <span className="whitespace-normal break-words">{equipmentStatusText.replace('✅ ', '')}</span>
               </div>
             </div>
           </div>
@@ -269,18 +269,6 @@ export const OperationsLeads: React.FC = () => {
   const [imagePreviewModal, setImagePreviewModal] = useState<{ url: string, date: string, time: string, staffName: string, stage: string } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ left: number, top: number, width: number, maxHeight: number, openUpward: boolean }>({ left: 0, top: 0, width: 220, maxHeight: 280, openUpward: false });
-
-  // Escape key handler for Image Preview Modal
-  useEffect(() => {
-    if (!imagePreviewModal) return;
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setImagePreviewModal(null);
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => window.removeEventListener('keydown', handleEsc);
-  }, [imagePreviewModal]);
 
   useEffect(() => {
     const handleStaffUpdate = () => {
@@ -414,7 +402,7 @@ export const OperationsLeads: React.FC = () => {
 
   const packageDetailsString = useMemo(() => {
     return selectedLeadPkgs.length > 0 
-      ? selectedLeadPkgs.map((lp) => `${lp.package_name || 'Generic Package'} (Qty: ${lp.quantity || 1}, Cost: Rs. ${(lp.final_amount ?? lp.total_amount ?? 0).toLocaleString('en-IN')})`).join('\n')
+      ? selectedLeadPkgs.map((lp) => `${lp.package_name || 'Generic Package'} (Qty: ${lp.quantity || 1}, Cost: ₹${(lp.final_amount ?? lp.total_amount ?? 0).toLocaleString('en-IN')})`).join('\n')
       : 'No packages listed';
   }, [selectedLeadPkgs]);
 
@@ -512,55 +500,9 @@ export const OperationsLeads: React.FC = () => {
   const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
   const [openEquipmentDropdownKey, setOpenEquipmentDropdownKey] = useState<string | null>(null);
 
-  const assignModalBodyRef = React.useRef<HTMLDivElement>(null);
-  const footageModalBodyRef = React.useRef<HTMLDivElement>(null);
-  const viewingStaffModalBodyRef = React.useRef<HTMLDivElement>(null);
-  const whatsappModalBodyRef = React.useRef<HTMLDivElement>(null);
-
-  const isAnyModalOpen = Boolean(
-    assigningOrderId ||
-    selectedEquipmentStatus ||
-    selectedEventImages ||
-    receivingFootageOrderId ||
-    successModalData ||
-    whatsappShareModalData ||
-    viewingStaffOrderId ||
-    busyRosterStaff ||
-    imagePreviewModal ||
-    projectDossierId ||
-    closingOrderId ||
-    schedulingOrderId
-  );
-
-  // Lock background scroll when any modal is open
-  useEffect(() => {
-    if (isAnyModalOpen) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
-  }, [isAnyModalOpen]);
-
-  useEffect(() => {
-    if (assigningOrderId && assignModalBodyRef.current) {
-      assignModalBodyRef.current.scrollTop = 0;
-    }
-  }, [assigningOrderId]);
-
-  useEffect(() => {
-    if (receivingFootageOrderId && footageModalBodyRef.current) {
-      footageModalBodyRef.current.scrollTop = 0;
-    }
-  }, [receivingFootageOrderId]);
-
   useEffect(() => {
     if (viewingStaffOrderId) {
       refreshData();
-      if (viewingStaffModalBodyRef.current) {
-        viewingStaffModalBodyRef.current.scrollTop = 0;
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingStaffOrderId]);
@@ -1072,12 +1014,7 @@ export const OperationsLeads: React.FC = () => {
           (s.order_id === ord.order_id || (ord.lead_id && s.order_id === ord.lead_id)) && 
           (s.staff_name || '').trim().toLowerCase() === normName &&
           s.assignment_status !== 'Cancelled' &&
-          (
-            (ev?.id && s.event_id === ev.id) ||
-            (!ev?.id && !s.event_id) ||
-            (s.event_name && ev?.event_name && s.event_name.trim().toLowerCase() === ev.event_name.trim().toLowerCase()) ||
-            (s.event_name && ev?.event_type && s.event_name.trim().toLowerCase() === ev.event_type.trim().toLowerCase())
-          )
+          (!ev?.id || !s.event_id || s.event_id === ev.id)
         );
         matchingSAs.forEach(s => {
           const sEq = s.equipment || s.assigned_equipment;
@@ -1101,6 +1038,23 @@ export const OperationsLeads: React.FC = () => {
               } catch(e) {
                 sEq.split(',').forEach((item: string) => { if (item.trim()) eqList.push(item.trim()); });
               }
+            }
+          }
+        });
+      }
+
+      // 4. Check leadEquipmentHistory ONLY if strictly linked to this specific staff member
+      if (eqList.length === 0 && leadEquipmentHistory) {
+        const hist = leadEquipmentHistory.filter(h => 
+          (h.order_id === ord.order_id || (ord.lead_id && h.lead_id === ord.lead_id))
+        );
+        hist.forEach(h => {
+          let parsed: any = {};
+          if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
+          const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+          if (staffMatch && (staffMatch === normName || staffMatch.includes(normName) || normName.includes(staffMatch))) {
+            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection' && !h.equipment_name.includes('Footage')) {
+              eqList.push(h.equipment_name);
             }
           }
         });
@@ -1167,17 +1121,7 @@ export const OperationsLeads: React.FC = () => {
 
           names.forEach((name, nameIdx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
-            const saMatch = staffAssignments?.find(sa => 
-              sa.order_id === ord.order_id && 
-              sa.staff_name?.toLowerCase() === name.toLowerCase() &&
-              (
-                (ev?.id && sa.event_id === ev.id) ||
-                (!ev?.id && !sa.event_id) ||
-                (!sa.event_id && totalEvents === 1) ||
-                (sa.event_name && ev?.event_name && sa.event_name.trim().toLowerCase() === ev.event_name.trim().toLowerCase()) ||
-                (sa.event_name && ev?.event_type && sa.event_name.trim().toLowerCase() === ev.event_type.trim().toLowerCase())
-              )
-            );
+            const saMatch = staffAssignments?.find(sa => sa.order_id === ord.order_id && sa.staff_name?.toLowerCase() === name.toLowerCase());
             const historyMatch = leadStaffAssignmentHistory?.find(h => (h.order_id === ord.order_id || h.lead_id === ord.lead_id) && h.assigned_staff?.toLowerCase().includes(name.toLowerCase()));
 
             const assignedTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
@@ -2200,10 +2144,10 @@ export const OperationsLeads: React.FC = () => {
   };
 
   const renderSortIndicator = (field: 'event_date' | 'customer_name' | 'status' | 'assignment_date') => {
-    if (sortBy !== field) return <span className="text-zinc-500 ml-1 select-none"></span>;
+    if (sortBy !== field) return <span className="text-zinc-500 ml-1 select-none">↕</span>;
     return sortOrder === 'asc' 
-      ? <span className="text-amber-500 ml-1 select-none"></span> 
-      : <span className="text-amber-500 ml-1 select-none"></span>;
+      ? <span className="text-amber-500 ml-1 select-none">▲</span> 
+      : <span className="text-amber-500 ml-1 select-none">▼</span>;
   };
 
   const getCompletionDate = (o: Order) => {
@@ -2211,7 +2155,7 @@ export const OperationsLeads: React.FC = () => {
     if (rf && rf.created_at) {
       return rf.created_at.split('T')[0];
     }
-    return o.updated_at ? o.updated_at.split('T')[0] : o.event_date || '-';
+    return o.updated_at ? o.updated_at.split('T')[0] : o.event_date || '—';
   };
 
   return (
@@ -2259,9 +2203,9 @@ export const OperationsLeads: React.FC = () => {
           className="md:hidden p-4 flex justify-between items-center cursor-pointer border-b border-zinc-800/50"
           onClick={() => setIsMobileFiltersExpanded(!isMobileFiltersExpanded)}
         >
-          <span className="text-xs font-bold text-zinc-300 flex items-center gap-2"> LEADS DIRECTORY</span>
+          <span className="text-xs font-bold text-zinc-300 flex items-center gap-2">📁 LEADS DIRECTORY</span>
           <button className="text-[10px] uppercase font-mono font-bold text-zinc-400 hover:text-zinc-200 transition-colors">
-            {isMobileFiltersExpanded ? ' Hide Filters' : ' Show Filters'}
+            {isMobileFiltersExpanded ? '▲ Hide Filters' : '▼ Show Filters'}
           </button>
         </div>
 
@@ -2338,7 +2282,7 @@ export const OperationsLeads: React.FC = () => {
                 onChange={(e) => setCustomStartDate(e.target.value)}
                 className="bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 px-2.5 py-1.5 rounded-lg font-mono focus:outline-none focus:border-amber-500/40"
               />
-              <span className="text-zinc-650">-</span>
+              <span className="text-zinc-650">—</span>
               <input
                 type="date"
                 value={customEndDate}
@@ -2478,7 +2422,7 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
-                      {op?.reporting_time ? formatTime12Hour(op.reporting_time) : <span className="text-zinc-600 italic">-</span>}
+                      {op?.reporting_time ? formatTime12Hour(op.reporting_time) : <span className="text-zinc-600 italic">—</span>}
                     </td>
                     <td className="p-4 text-xs font-mono text-zinc-300">
                       {(() => {
@@ -2489,10 +2433,10 @@ export const OperationsLeads: React.FC = () => {
                             onClick={() => setViewingStaffOrderId(ord.order_id)}
                             className="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/20 hover:border-indigo-500/45 rounded-xl font-bold font-mono text-xs transition-all flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
                           >
-                             {assignedStaffNames.length}
+                            👥 {assignedStaffNames.length}
                           </button>
                         ) : (
-                          <span className="text-zinc-500 font-mono text-[10.5px]"> Unassigned</span>
+                          <span className="text-zinc-500 font-mono text-[10.5px]">✅ Unassigned</span>
                         );
                       })()}
                     </td>
@@ -2560,7 +2504,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="px-2 py-1 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 rounded-full text-[10px] font-mono font-bold cursor-pointer transition-all uppercase"
                           >
-                            <option value=""> UPDATE STATUS</option>
+                            <option value="">▼ UPDATE STATUS</option>
                             <option value="Event Scheduled">Event Scheduled</option>
                             {/* Staff updates status automatically, but if admin needs override */}
                             <option value="Event Cancelled">Event Cancelled</option>
@@ -2771,29 +2715,26 @@ export const OperationsLeads: React.FC = () => {
       </div>    </div>
 
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
-      {assigningOrderId && createPortal(
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto"
-          onClick={(e) => { if (e.target === e.currentTarget) setAssigningOrderId(null); }}
-        >
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto animate-in zoom-in duration-200 overflow-hidden">
-            <div className="p-3.5 sm:p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40 shrink-0">
-              <div className="flex items-center gap-2 min-w-0 pr-2">
-                <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono shrink-0">Operations</span>
-                <h3 className="text-xs sm:text-sm font-sans font-black text-white truncate">
+      {assigningOrderId && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-[96vw] sm:w-full sm:max-w-4xl h-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
+            <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
+              <div className="flex items-center gap-2">
+                <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
+                <h3 className="text-sm font-sans font-black text-white">
                   Project Staffing & Handover Dossier ~ {assigningOrderId}
                 </h3>
               </div>
               <button 
                 onClick={() => setAssigningOrderId(null)}
-                className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1 shrink-0"
+                className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
                 type="button"
               >
-                x
+                ✕
               </button>
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div ref={assignModalBodyRef} className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-6">
+              <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-6">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -2803,13 +2744,13 @@ export const OperationsLeads: React.FC = () => {
                     className="w-full p-4 flex items-center justify-between text-left hover:bg-zinc-900/20 transition-colors focus:outline-none"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-xs"></span>
+                      <span className="text-xs">👤</span>
                       <h4 className="text-[11px] sm:text-xs font-mono font-bold uppercase text-amber-500 tracking-wider">
                         Customer Details
                       </h4>
                     </div>
                     <span className={`text-zinc-500 text-xs transition-transform duration-300 ${collapsedCustomerDetails ? '' : 'rotate-180'}`}>
-                      
+                      ▼
                     </span>
                   </button>
 
@@ -2928,7 +2869,7 @@ export const OperationsLeads: React.FC = () => {
                         > 
                            <div className="flex items-center gap-3">
                               <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 select-none uppercase font-bold font-mono">
-                                 EVENT {index + 1}
+                                🎥 EVENT {index + 1}
                               </span>
                               <h4 className="text-sm font-sans font-bold text-white uppercase tracking-wide">
                                 {eventNameDisplay}
@@ -2937,14 +2878,14 @@ export const OperationsLeads: React.FC = () => {
                            <div className="flex items-center gap-4">
                               {includedRoles.length > 0 ? (
                                 <span className={`text-[10px] font-mono px-2 py-1 border rounded-md ${isEvFullyAssigned ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
-                                  {evTotalAssigned} / {evTotalRequired} Assigned &rarr; {isEvFullyAssigned ? 'Assigned' : 'Pending'}
+                                  {evTotalAssigned} / {evTotalRequired} Assigned → {isEvFullyAssigned ? 'Assigned' : 'Pending'}
                                 </span>
                               ) : allocStaff.length > 0 ? (
                                 <span className="text-[10px] font-mono px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md">
                                   {allocStaff.length} Staff Assigned
                                 </span>
                               ) : null}
-                              <span className={`text-zinc-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}></span>
+                              <span className={`text-zinc-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}>▼</span>
                            </div>
                         </div>
 
@@ -3051,7 +2992,7 @@ export const OperationsLeads: React.FC = () => {
                                 <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10 border border-zinc-900 rounded-xl">
                                   {loadError ? (
                                     <div className="text-red-400 space-y-1 p-4">
-                                      <div> Failed to load Team Members Included.</div>
+                                      <div>❌ Failed to load Team Members Included.</div>
                                       <div className="text-[10px]">Reason: {loadError}</div>
                                     </div>
                                   ) : (
@@ -3080,7 +3021,7 @@ export const OperationsLeads: React.FC = () => {
                                   {/* Task Header */}
                                   <div className="bg-zinc-900/80 px-3.5 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2">
                                     <div className="flex items-center gap-2">
-                                      <span className="text-sky-400 text-xs">v</span>
+                                      <span className="text-sky-400 text-xs">✔</span>
                                       <span className="text-xs font-bold text-zinc-100 font-sans uppercase tracking-wide">
                                         {task.roleName}
                                       </span>
@@ -3193,12 +3134,12 @@ export const OperationsLeads: React.FC = () => {
 
                                                   return (
                                                     <>
-                                                      <option value=""> Select Staff</option>
+                                                      <option value="">▼ Select Staff</option>
                                                       {availableStaff.map(st => {
                                                         const isBusy = isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '');
                                                         return (
                                                           <option key={st.staff_id} value={st.name}>
-                                                            {st.name} {isBusy ? ' Busy' : ' Available'} - {st.role}
+                                                            {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'} - {st.role}
                                                           </option>
                                                         );
                                                       })}
@@ -3216,11 +3157,11 @@ export const OperationsLeads: React.FC = () => {
                                                       onClick={() => setBusyRosterStaff(slot.staff_name)}
                                                       className="text-[9px] px-2 py-1 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0"
                                                     >
-                                                       Busy
+                                                      🔴 Busy
                                                     </button>
                                                   ) : (
                                                     <span className="text-[9px] px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">
-                                                       Available
+                                                      🟢 Available
                                                     </span>
                                                   )
                                                 )}
@@ -3244,7 +3185,7 @@ export const OperationsLeads: React.FC = () => {
                                                   className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded border border-rose-500/20 transition-colors cursor-pointer font-medium ml-auto sm:ml-0"
                                                   title="Remove this staff assignment slot"
                                                 >
-                                                  x <span className="hidden sm:inline">Remove</span>
+                                                  ✕ <span className="hidden sm:inline">Remove</span>
                                                 </button>
                                               </div>
                                             </div>
@@ -3361,7 +3302,7 @@ export const OperationsLeads: React.FC = () => {
                                    <div className="text-center py-6 text-zinc-500 text-xs italic font-mono bg-zinc-900/10">
                                      {loadError ? (
                                        <div className="text-red-400 space-y-1 p-4">
-                                         <div> Failed to load Team Members Included.</div>
+                                         <div>❌ Failed to load Team Members Included.</div>
                                          <div className="text-[10px]">Reason: {loadError}</div>
                                        </div>
                                      ) : (
@@ -3391,7 +3332,7 @@ export const OperationsLeads: React.FC = () => {
                                              className="text-xs font-bold text-zinc-200 truncate pr-2 select-none"
                                              title={roleStr as string}
                                            >
-                                             v {formatQtyItem(roleStr as string)}
+                                             ✔ {formatQtyItem(roleStr as string)}
                                            </div>
                                          </div>
                                        </div>
@@ -3514,12 +3455,12 @@ export const OperationsLeads: React.FC = () => {
                                                       
                                                       return (
                                                         <>
-                                                          <option value=""> Select Staff</option>
+                                                          <option value="">▼ Select Staff</option>
                                                           {availableStaff.map(st => {
                                                             const isBusy = isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '');
                                                             return (
                                                               <option key={st.staff_id} value={st.name}>
-                                                                {st.name} {isBusy ? ' Busy' : ' Available'} - {st.role}
+                                                                {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'} - {st.role}
                                                               </option>
                                                             );
                                                           })}
@@ -3535,11 +3476,11 @@ export const OperationsLeads: React.FC = () => {
                                                            onClick={() => setBusyRosterStaff(assignedStaff.staff_name)}
                                                            className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 font-mono uppercase border border-red-500/20 cursor-pointer hover:bg-red-500/20 transition-colors shrink-0"
                                                         >
-                                                           Busy
+                                                          🔴 Busy
                                                         </button>
                                                       ) : (
                                                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono uppercase border border-emerald-500/20 shrink-0">
-                                                           Available
+                                                          🟢 Available
                                                         </span>
                                                       )
                                                     )}
@@ -3577,7 +3518,7 @@ export const OperationsLeads: React.FC = () => {
                                                     className="text-zinc-600 hover:text-rose-400 transition-colors p-1 cursor-pointer text-xs font-bold shrink-0 ml-auto sm:ml-0"
                                                     title="Remove staff assignment row"
                                                   >
-                                                    x
+                                                    ✕
                                                   </button>
                                                   </div>
                                                 </div>
@@ -3648,7 +3589,7 @@ export const OperationsLeads: React.FC = () => {
                                               {validationAttempted && isEmpty && (
                                                 <div className="pt-0.5">
                                                   <span className="text-[10px] text-rose-500 font-mono italic">
-                                                     Required: Assign at least one staff
+                                                    ⚠️ Required: Assign at least one staff
                                                   </span>
                                                 </div>
                                               )}
@@ -3764,7 +3705,7 @@ export const OperationsLeads: React.FC = () => {
                                      {/* Header */}
                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                                        <div>
-                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block"> Staff Name</span>
+                                         <span className="text-[10px] text-zinc-500 uppercase font-mono block">👤 Staff Name</span>
                                          <span className="text-sm font-bold text-white font-sans">{staffName}</span>
                                          <span className="text-[10px] text-zinc-400 font-mono block mt-0.5">{memberInfo.role}</span>
                                        </div>
@@ -3772,11 +3713,11 @@ export const OperationsLeads: React.FC = () => {
                                          <span className="text-[10px] text-zinc-500 uppercase font-mono block">Status</span>
                                          {hasConflict ? (
                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20">
-                                              Busy
+                                             🔴 Busy
                                            </span>
                                          ) : (
                                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                              Available
+                                             🟢 Available
                                            </span>
                                          )}
                                        </div>
@@ -3811,7 +3752,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="flex items-center gap-2 px-3 py-1.5 bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/30 text-[#25D366] text-[10px] font-mono font-bold rounded cursor-pointer transition-all uppercase"
                           >
-                            <span></span> Share via WhatsApp
+                            <span>📱</span> Share via WhatsApp
                           </button>
                         </div>
                       )}
@@ -3826,255 +3767,242 @@ export const OperationsLeads: React.FC = () => {
               
               {assignValidationError && (
                  <div className="p-4 mx-6 my-4 bg-red-500/10 border border-red-500/50 rounded-xl flex items-start gap-3 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-                    <span className="text-red-400 font-bold text-lg leading-none mt-0.5"></span>
+                    <span className="text-red-400 font-bold text-lg leading-none mt-0.5">❌</span>
                     <div className="text-[13px] text-red-200 font-sans whitespace-pre-wrap flex-1 leading-relaxed">
                        {assignValidationError}
                     </div>
                  </div>
               )}
-              <div className="sticky bottom-0 z-50 p-3 sm:p-4 border-t border-zinc-800 flex flex-col-reverse sm:flex-row justify-end gap-2.5 sm:gap-3 bg-zinc-950/95 backdrop-blur-md shrink-0">
+                            <div className="sticky bottom-0 z-50 p-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/90 backdrop-blur-md">
                 <button
                   type="button"
                   onClick={() => setAssigningOrderId(null)}
-                  className="px-4 py-2.5 sm:py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto bg-zinc-900 sm:bg-transparent rounded-xl sm:rounded-lg border border-zinc-800 sm:border-none"
+                  className="px-4 py-3 sm:py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto bg-zinc-900 sm:bg-transparent rounded-xl sm:rounded-none border border-zinc-800 sm:border-none"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2.5 sm:py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl sm:rounded-lg transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                  className="px-6 py-3 sm:py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl sm:rounded-lg transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]"
                 >
                   {isSaving ? 'Saving Assignments...' : 'Save All Assignments'}
                 </button>
               </div>
             </form>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
 
 
       {/* Equipment Status Modal */}
-      {selectedEquipmentStatus && createPortal(
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
-          onClick={(e) => { if (e.target === e.currentTarget) setSelectedEquipmentStatus(null); }}
-        >
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/50 shrink-0">
-              <div className="min-w-0 pr-2">
-                <h3 className="text-xs sm:text-sm font-bold text-indigo-400 font-mono uppercase truncate">
-                  Equipment Verification * {selectedEquipmentStatus.staffName}
+      {selectedEquipmentStatus && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
+            <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
+                  Equipment Verification • {selectedEquipmentStatus.staffName}
                 </h3>
                 {selectedEquipmentStatus.assignedEquipment && selectedEquipmentStatus.assignedEquipment.length > 0 && (
-                  <div className="text-[11px] text-zinc-400 mt-0.5 truncate">
+                  <div className="text-[11px] text-zinc-400 mt-0.5">
                     Assigned: <span className="text-zinc-200 font-medium">{selectedEquipmentStatus.assignedEquipment.join(', ')}</span>
                   </div>
                 )}
               </div>
               <button
                 onClick={() => setSelectedEquipmentStatus(null)}
-                className="text-zinc-400 hover:text-white font-bold cursor-pointer p-1 shrink-0"
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer"
               >
-                x
+                ✕
               </button>
             </div>
 
-            <div className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-4">
-              <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-1">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
-                      <th className="py-2.5 px-3 font-bold">Verification Stage</th>
-                      <th className="py-2.5 px-3 font-bold text-center">Image</th>
-                      <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
-                      <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800/60">
-                    {(() => {
-                      const findHistoryForModal = (stages: string[]) => {
-                        const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
-                        const orderId = selectedEquipmentStatus.orderId;
-                        const eventId = selectedEquipmentStatus.eventId;
+            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-3 font-bold">Verification Stage</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Image</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
+                    <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {(() => {
+                    const findHistoryForModal = (stages: string[]) => {
+                      const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
+                      const orderId = selectedEquipmentStatus.orderId;
+                      const eventId = selectedEquipmentStatus.eventId;
+                      
+                      if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
+                      const matches = leadEquipmentHistory.filter(h => {
+                        if (orderId && h.order_id && h.order_id !== orderId) return false;
+                        let parsed: any = {};
+                        if (h.remarks) {
+                          try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                        }
+                        const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+                        if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
+                        if (eventId && parsed.event_id && eventId !== 'gen' && parsed.event_id !== 'gen' && parsed.event_id !== eventId) return false;
                         
-                        if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
-                        const matches = leadEquipmentHistory.filter(h => {
-                          if (orderId && h.order_id && h.order_id !== orderId) return false;
-                          let parsed: any = {};
-                          if (h.remarks) {
-                            try { parsed = JSON.parse(h.remarks); } catch(e) {}
-                          }
-                          const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-                          if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
-                          if (eventId && parsed.event_id && eventId !== 'gen' && parsed.event_id !== 'gen' && parsed.event_id !== eventId) return false;
-                          
-                          const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
-                          const eqName = (h.equipment_name || '').toLowerCase();
-                          return stages.some(s => {
-                            const sNorm = s.toLowerCase();
-                            return eqStatus.includes(sNorm) || eqName.includes(sNorm);
-                          });
+                        const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
+                        const eqName = (h.equipment_name || '').toLowerCase();
+                        return stages.some(s => {
+                          const sNorm = s.toLowerCase();
+                          return eqStatus.includes(sNorm) || eqName.includes(sNorm);
                         });
-                        
-                        const withPhoto = matches.find(m => {
-                          const meta = getRecordMeta(m);
-                          return !!meta.url;
-                        });
-                        return withPhoto || matches[0] || null;
-                      };
+                      });
+                      
+                      const withPhoto = matches.find(m => {
+                        const meta = getRecordMeta(m);
+                        return !!meta.url;
+                      });
+                      return withPhoto || matches[0] || null;
+                    };
 
-                      const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received']);
-                      const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return']);
-                      const recMeta = getRecordMeta(recRecord);
-                      const handMeta = getRecordMeta(handRecord);
-                      return (
-                        <>
-                          <tr className="hover:bg-zinc-800/20">
-                            <td className="py-3 px-3 text-white font-bold">Equipment Received</td>
-                            <td className="py-3 px-3 text-center">
-                              {recMeta.url ? (
-                                <button
-                                  onClick={() => setImagePreviewModal({ url: recMeta.url, date: recMeta.date, time: recMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
-                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                                >
-                                  View Image
-                                </button>
-                              ) : (
-                                <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 text-center font-mono text-zinc-300">{recMeta.date}</td>
-                            <td className="py-3 px-3 text-right font-mono text-zinc-300">{recMeta.time}</td>
-                          </tr>
-                          <tr className="hover:bg-zinc-800/20">
-                            <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
-                            <td className="py-3 px-3 text-center">
-                              {handMeta.url ? (
-                                <button
-                                  onClick={() => setImagePreviewModal({ url: handMeta.url, date: handMeta.date, time: handMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
-                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                                >
-                                  View Image
-                                </button>
-                              ) : (
-                                <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 text-center font-mono text-zinc-300">{handMeta.date}</td>
-                            <td className="py-3 px-3 text-right font-mono text-zinc-300">{handMeta.time}</td>
-                          </tr>
-                        </>
-                      );
-                    })()}
-                  </tbody>
-                </table>
-              </div>
+                    const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received']);
+                    const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return']);
+                    const recMeta = getRecordMeta(recRecord);
+                    const handMeta = getRecordMeta(handRecord);
+                    return (
+                      <>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Equipment Received</td>
+                          <td className="py-3 px-3 text-center">
+                            {recMeta.url ? (
+                              <button
+                                onClick={() => setImagePreviewModal({ url: recMeta.url, date: recMeta.date, time: recMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recMeta.time}</td>
+                        </tr>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
+                          <td className="py-3 px-3 text-center">
+                            {handMeta.url ? (
+                              <button
+                                onClick={() => setImagePreviewModal({ url: handMeta.url, date: handMeta.date, time: handMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handMeta.time}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
             </div>
 
-            <div className="flex justify-end p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/50 shrink-0">
+            <div className="flex justify-end pt-2 border-t border-zinc-800">
               <button
                 onClick={() => setSelectedEquipmentStatus(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer w-full sm:w-auto"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
 
       {/* Event Images Modal */}
-      {selectedEventImages && createPortal(
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
-          onClick={(e) => { if (e.target === e.currentTarget) setSelectedEventImages(null); }}
-        >
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-lg max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/50 shrink-0">
-              <h3 className="text-xs sm:text-sm font-bold text-indigo-400 font-mono uppercase truncate pr-2">
-                Event Images * {selectedEventImages.staffName}
+      {selectedEventImages && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl relative p-5">
+            <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
+              <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
+                Event Images • {selectedEventImages.staffName}
               </h3>
               <button
                 onClick={() => setSelectedEventImages(null)}
-                className="text-zinc-400 hover:text-white font-bold cursor-pointer p-1 shrink-0"
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer"
               >
-                x
+                ✕
               </button>
             </div>
 
-            <div className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-4">
-              <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-1">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
-                      <th className="py-2.5 px-3 font-bold">Event Stage</th>
-                      <th className="py-2.5 px-3 font-bold text-center">Image</th>
-                      <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
-                      <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-800/60">
-                    {(() => {
-                      const startMeta = getRecordMeta(selectedEventImages.evStart);
-                      const endMeta = getRecordMeta(selectedEventImages.evEnd);
-                      return (
-                        <>
-                          <tr className="hover:bg-zinc-800/20">
-                            <td className="py-3 px-3 text-white font-bold">Event Start</td>
-                            <td className="py-3 px-3 text-center">
-                              {startMeta.url ? (
-                                <button
-                                  onClick={() => setImagePreviewModal({ url: startMeta.url, date: startMeta.date, time: startMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Start' })}
-                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                                >
-                                  View Image
-                                </button>
-                              ) : (
-                                <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 text-center font-mono text-zinc-300">{startMeta.date}</td>
-                            <td className="py-3 px-3 text-right font-mono text-zinc-300">{startMeta.time}</td>
-                          </tr>
-                          <tr className="hover:bg-zinc-800/20">
-                            <td className="py-3 px-3 text-white font-bold">Event Complete</td>
-                            <td className="py-3 px-3 text-center">
-                              {endMeta.url ? (
-                                <button
-                                  onClick={() => setImagePreviewModal({ url: endMeta.url, date: endMeta.date, time: endMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Complete' })}
-                                  className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
-                                >
-                                  View Image
-                                </button>
-                              ) : (
-                                <span className="text-zinc-600 italic text-[11px]">Pending</span>
-                              )}
-                            </td>
-                            <td className="py-3 px-3 text-center font-mono text-zinc-300">{endMeta.date}</td>
-                            <td className="py-3 px-3 text-right font-mono text-zinc-300">{endMeta.time}</td>
-                          </tr>
-                        </>
-                      );
-                    })()}
-                  </tbody>
-                </table>
-              </div>
+            <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
+                    <th className="py-2.5 px-3 font-bold">Event Stage</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Image</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Upload Date</th>
+                    <th className="py-2.5 px-3 font-bold text-right">Upload Time</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {(() => {
+                    const startMeta = getRecordMeta(selectedEventImages.evStart);
+                    const endMeta = getRecordMeta(selectedEventImages.evEnd);
+                    return (
+                      <>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Event Start</td>
+                          <td className="py-3 px-3 text-center">
+                            {startMeta.url ? (
+                              <button
+                                onClick={() => setImagePreviewModal({ url: startMeta.url, date: startMeta.date, time: startMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Start' })}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{startMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{startMeta.time}</td>
+                        </tr>
+                        <tr className="hover:bg-zinc-800/20">
+                          <td className="py-3 px-3 text-white font-bold">Event Complete</td>
+                          <td className="py-3 px-3 text-center">
+                            {endMeta.url ? (
+                              <button
+                                onClick={() => setImagePreviewModal({ url: endMeta.url, date: endMeta.date, time: endMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Complete' })}
+                                className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+                              >
+                                View Image
+                              </button>
+                            ) : (
+                              <span className="text-zinc-600 italic text-[11px]">Pending</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{endMeta.date}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{endMeta.time}</td>
+                        </tr>
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
             </div>
 
-            <div className="flex justify-end p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/50 shrink-0">
+            <div className="flex justify-end pt-2 border-t border-zinc-800">
               <button
                 onClick={() => setSelectedEventImages(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer w-full sm:w-auto"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold rounded-xl transition-all cursor-pointer"
               >
                 Close
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
 
       {/* Verify Raw Footage Modal */}
@@ -4215,25 +4143,17 @@ export const OperationsLeads: React.FC = () => {
           ? assignedCrewList.every(c => !!(c.raw_footage_link && c.raw_footage_link.trim())) 
           : true;
 
-        return createPortal(
-          <div 
-            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-in fade-in duration-200"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setReceivingFootageOrderId(null);
-                setConsolidatedDriveLink('');
-              }
-            }}
-          >
-            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl relative my-auto overflow-hidden animate-in zoom-in-95 duration-200">
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div id="raw_footage_modal" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-2xl shadow-2xl relative p-6 max-h-[90vh] overflow-y-auto space-y-5 scrollbar-thin">
               
               {/* Header */}
-              <div className="border-b border-zinc-800 p-4 bg-zinc-950/40 flex justify-between items-start shrink-0">
-                <div className="min-w-0 pr-2">
-                  <h3 className="text-sm sm:text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2 truncate">
-                    <span></span> Final Consolidated Raw Footage
+              <div className="border-b border-zinc-800 pb-3 flex justify-between items-start">
+                <div>
+                  <h3 className="text-base font-bold text-purple-400 font-mono uppercase flex items-center gap-2">
+                    <span>🎬</span> Final Consolidated Raw Footage
                   </h3>
-                  <p className="text-xs text-zinc-400 mt-1 truncate">
+                  <p className="text-xs text-zinc-400 mt-1">
                     Order ID: <strong className="text-zinc-200">{receivingFootageOrderId}</strong> | Customer: <strong className="text-zinc-200">{currentOrder?.customer_name || currentLead?.customer_name || 'N/A'}</strong>
                   </p>
                 </div>
@@ -4242,13 +4162,11 @@ export const OperationsLeads: React.FC = () => {
                     setReceivingFootageOrderId(null);
                     setConsolidatedDriveLink('');
                   }}
-                  className="text-zinc-400 hover:text-white p-1.5 rounded-lg bg-zinc-800 text-xs cursor-pointer shrink-0"
+                  className="text-zinc-400 hover:text-white p-1 rounded-lg bg-zinc-800 text-xs cursor-pointer"
                 >
-                  x
+                  ✕
                 </button>
               </div>
-
-              <div ref={footageModalBodyRef} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar flex-1 min-h-0 space-y-5">
 
               {/* Review description banner - Hidden per UI requirement */}
               {false && (
@@ -4261,7 +4179,7 @@ export const OperationsLeads: React.FC = () => {
               <div className="space-y-3 bg-zinc-950 p-4 rounded-xl border border-zinc-800">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <span></span> Assigned Team Members & Raw Footage Links
+                    <span>👥</span> Assigned Team Members & Raw Footage Links
                   </h4>
                   <span className="text-[11px] font-mono font-semibold px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
                     Uploaded: {assignedCrewList.filter(c => c.raw_footage_link).length} / {assignedCrewList.length}
@@ -4296,7 +4214,7 @@ export const OperationsLeads: React.FC = () => {
                                     rel="noreferrer"
                                     className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 underline font-mono text-[11px]"
                                   >
-                                    Open Drive Link 
+                                    Open Drive Link ↗
                                   </a>
                                 ) : (
                                   <span className="text-amber-500/80 italic text-[11px]">Not Uploaded Yet</span>
@@ -4305,11 +4223,11 @@ export const OperationsLeads: React.FC = () => {
                               <td className="py-2.5 px-3 text-right">
                                 {hasLink ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">
-                                     Uploaded
+                                    ✅ Uploaded
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">
-                                     Missing
+                                    ❌ Missing
                                   </span>
                                 )}
                               </td>
@@ -4326,7 +4244,7 @@ export const OperationsLeads: React.FC = () => {
               {false && (
                 <div className="space-y-4">
                   <h4 className="text-xs font-mono font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-1">
-                     Staff Uploaded Proofs & Link Review
+                    📷 Staff Uploaded Proofs & Link Review
                   </h4>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4342,7 +4260,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {assetCollectionProof.photoUrl ? (
-                        <SafeProofImage url={assetCollectionProof.photoUrl} alt="Asset Collection" label="View Full Photo " />
+                        <SafeProofImage url={assetCollectionProof.photoUrl} alt="Asset Collection" label="View Full Photo ↗" />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -4361,7 +4279,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {eventStartProof.photoUrl ? (
-                        <SafeProofImage url={eventStartProof.photoUrl} alt="Event Start" label="View Full Photo " />
+                        <SafeProofImage url={eventStartProof.photoUrl} alt="Event Start" label="View Full Photo ↗" />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -4380,7 +4298,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {eventCompletionProof.photoUrl ? (
-                        <SafeProofImage url={eventCompletionProof.photoUrl} alt="Event Completion" label="View Full Photo " />
+                        <SafeProofImage url={eventCompletionProof.photoUrl} alt="Event Completion" label="View Full Photo ↗" />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex items-center justify-center text-[11px] text-zinc-500 italic">
                           No proof photo found
@@ -4399,7 +4317,7 @@ export const OperationsLeads: React.FC = () => {
                         )}
                       </div>
                       {equipmentHandoverProof.photoUrl ? (
-                        <SafeProofImage url={equipmentHandoverProof.photoUrl} alt="Equipment Handover" label="View Full Photo " />
+                        <SafeProofImage url={equipmentHandoverProof.photoUrl} alt="Equipment Handover" label="View Full Photo ↗" />
                       ) : (
                         <div className="h-20 bg-zinc-900/50 border border-dashed border-zinc-800 rounded-lg flex flex-col items-center justify-center text-[11px] text-zinc-500 p-2 text-center">
                           <span>Equipment Not Handover</span>
@@ -4415,7 +4333,7 @@ export const OperationsLeads: React.FC = () => {
               {/* UPLOAD FINAL CONSOLIDATED RAW FOOTAGE STEP */}
               {!allCrewVerified ? (
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-amber-300 text-xs flex items-center gap-2">
-                  <span></span> Please verify each assigned crew member's Raw Footage link before uploading the final raw footage.
+                  <span>⚠️</span> Please verify each assigned crew member's Raw Footage link before uploading the final raw footage.
                 </div>
               ) : (
                 <form onSubmit={async (e) => {
@@ -4472,7 +4390,7 @@ export const OperationsLeads: React.FC = () => {
                     setFootageForm({ footage_link: '', storage_type: 'Google Drive', upload_notes: '' });
                     
                     await refreshData();
-                    alert(" Raw Footage Verified Successfully! Order transferred to Production Dashboard.");
+                    alert("✅ Raw Footage Verified Successfully! Order transferred to Production Dashboard.");
                   } catch (err: any) {
                     console.error("Failed to verify raw footage:", err);
                     alert("Failed to verify raw footage: " + (err.message || "Please try again."));
@@ -4483,7 +4401,7 @@ export const OperationsLeads: React.FC = () => {
 
                   <div className="bg-purple-500/10 border border-purple-500/20 rounded-xl p-4 space-y-3">
                     <div className="flex items-center gap-2 text-xs font-bold text-purple-300">
-                      <span></span> Upload Final Consolidated Raw Footage
+                      <span>🎬</span> Upload Final Consolidated Raw Footage
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-zinc-300 uppercase font-mono mb-1.5 flex items-center justify-between">
@@ -4516,7 +4434,7 @@ export const OperationsLeads: React.FC = () => {
                         disabled={isSaving || !consolidatedDriveLink.trim()}
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white text-xs font-bold rounded-lg cursor-pointer shadow-lg shadow-purple-600/20 flex items-center gap-2"
                       >
-                        {isSaving ? 'Saving & Transferring...' : 'Upload Final Raw Footage & Move to Production '}
+                        {isSaving ? 'Saving & Transferring...' : 'Upload Final Raw Footage & Move to Production 🚀'}
                       </button>
                     </div>
                   </div>
@@ -4525,10 +4443,8 @@ export const OperationsLeads: React.FC = () => {
 
             </div>
           </div>
-        </div>,
-        document.body
-      );
-    })()}
+        );
+      })()}
 
       {/* Staff Assignment Success Modal */}
       {successModalData && (
@@ -4539,14 +4455,14 @@ export const OperationsLeads: React.FC = () => {
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
               type="button"
             >
-              x
+              ✕
             </button>
             <div className="text-center space-y-4">
               <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/25 rounded-full flex items-center justify-center mx-auto text-emerald-400 text-xl font-bold">
-                v
+                ✓
               </div>
               <h3 className="text-base font-bold text-white">
-                 Staff assigned successfully.
+                ✅ Staff assigned successfully.
               </h3>
               <p className="text-xs text-zinc-400">
                 Roster updated for order <span className="font-mono text-indigo-400 font-bold">{successModalData.orderId}</span>.
@@ -4555,7 +4471,7 @@ export const OperationsLeads: React.FC = () => {
               {/* Share via WhatsApp section */}
               <div className="bg-zinc-950/50 border border-zinc-850 rounded-2xl p-4 text-left space-y-3">
                 <h4 className="text-[10px] font-mono font-bold uppercase text-emerald-400 tracking-wider">
-                   Share via WhatsApp
+                  📱 Share via WhatsApp
                 </h4>
                 
                 {(() => {
@@ -4619,11 +4535,11 @@ export const OperationsLeads: React.FC = () => {
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
               type="button"
             >
-              x
+              ✕
             </button>
             
             <div className="flex items-center gap-2.5 mb-4 border-b border-zinc-800 pb-3">
-              <span className="text-xl"></span>
+              <span className="text-xl">📱</span>
               <div className="text-left">
                 <h3 className="text-base font-bold text-white">
                   Personalized WhatsApp Share
@@ -4672,7 +4588,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="text-lg text-indigo-400 hover:text-indigo-300 transition-all active:scale-90 cursor-pointer pt-0.5"
                           >
-                            {isSelected ? '' : ''}
+                            {isSelected ? '☑️' : '⬛'}
                           </button>
                           
                           <div>
@@ -4686,7 +4602,7 @@ export const OperationsLeads: React.FC = () => {
                             </div>
                             {stObj?.mobile && (
                               <div className="text-[10px] text-zinc-400 font-mono flex items-center gap-1 mt-0.5">
-                                 {stObj.mobile}
+                                📱 {stObj.mobile}
                               </div>
                             )}
                           </div>
@@ -4704,7 +4620,7 @@ export const OperationsLeads: React.FC = () => {
                             }}
                             className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] active:scale-95 text-black font-extrabold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md shadow-[#25D366]/10 hover:shadow-[#25D366]/25 transition-all cursor-pointer"
                           >
-                            <span className="text-xs"></span> Share on WhatsApp
+                            <span className="text-xs">📲</span> Share on WhatsApp
                           </button>
                         )}
                       </div>
@@ -4712,7 +4628,7 @@ export const OperationsLeads: React.FC = () => {
                       {isSelected && (
                         <div className="space-y-1.5">
                           <label className="text-[9.5px] font-mono uppercase tracking-wider text-zinc-500 font-bold block">
-                             Edit Message Preview:
+                            📝 Edit Message Preview:
                           </label>
                           <textarea
                             value={msgText}
@@ -4772,17 +4688,17 @@ export const OperationsLeads: React.FC = () => {
                 className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
                 type="button"
               >
-                x
+                ✕
               </button>
               
               <div className="flex items-center gap-2 mb-4 border-b border-zinc-800 pb-3">
-                <span className="text-xl"></span>
+                <span className="text-xl">👥</span>
                 <div className="text-left">
                   <h3 className="text-base font-bold text-white font-sans">
                     Assigned Team Members
                   </h3>
                   <p className="text-[11px] text-zinc-400">
-                    Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> * {ord.customer_name}
+                    Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • {ord.customer_name}
                   </p>
                 </div>
               </div>
@@ -4799,7 +4715,7 @@ export const OperationsLeads: React.FC = () => {
                       <div key={evIdx} className="bg-zinc-950/40 border border-zinc-850/60 rounded-2xl p-4 space-y-3">
                         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                           <h4 className="text-xs font-bold text-indigo-400 font-sans flex items-center gap-1.5">
-                             {evName}
+                            🎬 {evName}
                           </h4>
                           {members[0] && (
                             <span className="text-[10px] font-mono text-zinc-500">
@@ -4945,18 +4861,18 @@ export const OperationsLeads: React.FC = () => {
                                   );
 
                                   if (isHandoverDone) {
-                                    equipmentStatusText = hasHandoverPhoto ? ' Handed Over' : 'Assigned / Handed Over';
+                                    equipmentStatusText = hasHandoverPhoto ? '✅ Handed Over' : 'Assigned / Handed Over';
                                   } else if (isReceivedDone) {
-                                    equipmentStatusText = hasReceivedPhoto ? ' Received' : 'Assigned / Received';
+                                    equipmentStatusText = hasReceivedPhoto ? '✅ Received' : 'Assigned / Received';
                                   } else {
                                     equipmentStatusText = 'Assigned';
                                   }
                                 }
 
                                 // 3. Event Image Status Text
-                                let eventImageStatusText = ' Pending';
-                                if (evEnd && getRecordMeta(evEnd).url) eventImageStatusText = ' Event End';
-                                else if (evStart && getRecordMeta(evStart).url) eventImageStatusText = ' Event Start';
+                                let eventImageStatusText = '❌ Pending';
+                                if (evEnd && getRecordMeta(evEnd).url) eventImageStatusText = '✅ Event End';
+                                else if (evStart && getRecordMeta(evStart).url) eventImageStatusText = '✅ Event Start';
 
                                 // 4. Raw Footage Link
                                 let rawFootageLink: string | null = null;
@@ -5094,16 +5010,16 @@ export const OperationsLeads: React.FC = () => {
                                             rel="noopener noreferrer"
                                             className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 underline font-bold text-xs font-mono"
                                           >
-                                             Uploaded 
+                                            ✅ Uploaded ↗
                                           </a>
                                           <div className="flex items-center gap-2">
                                              {verificationStatus === "Verified" && (
-                                               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"> Verified</span>
+                                               <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">✅ Verified</span>
                                              )}
                                           </div>
                                         </div>
                                       ) : (
-                                        <span className="text-zinc-600 font-bold text-[11px]"> Pending</span>
+                                        <span className="text-zinc-600 font-bold text-[11px]">❌ Pending</span>
                                       )}
                                     </td>
                                   </tr>
@@ -5202,7 +5118,7 @@ export const OperationsLeads: React.FC = () => {
                   onClick={() => setBusyRosterStaff(null)}
                   className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
                 >
-                  x
+                  ✕
                 </button>
               </div>
               <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
@@ -5257,13 +5173,13 @@ export const OperationsLeads: React.FC = () => {
         >
           <div className="px-3 py-1.5 border-b border-zinc-800/60 mb-1.5 flex justify-between items-center flex-shrink-0">
             <span className="text-[10px] font-mono uppercase tracking-widest text-indigo-400 font-extrabold flex items-center gap-1.5">
-              <span></span> Available Actions
+              <span>🎯</span> Available Actions
             </span>
             <button
               onClick={() => setActiveMenuOrderId(null)}
               className="text-zinc-500 hover:text-white text-xs p-0.5 rounded cursor-pointer"
             >
-              x
+              ✕
             </button>
           </div>
           <div className="overflow-y-auto space-y-1 pr-0.5" style={{ maxHeight: `${(menuCoords.maxHeight || 280) - 40}px` }}>
@@ -5288,115 +5204,44 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Image Preview Modal */}
       {imagePreviewModal && createPortal(
-        <div 
-          className="fixed inset-0 bg-black/90 backdrop-blur-md z-[1000000] flex flex-col items-center justify-center p-3 sm:p-5 md:p-6 overflow-y-auto animate-in fade-in duration-200"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setImagePreviewModal(null);
-            }
-          }}
-        >
-          <div 
-            className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl max-h-[92vh] max-h-[92dvh] sm:max-h-[88vh] overflow-hidden flex flex-col shadow-2xl relative my-auto animate-in zoom-in-95 duration-200"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between p-3.5 sm:p-4 border-b border-zinc-800 bg-zinc-950/70 shrink-0">
-              <div className="min-w-0 pr-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-                    {imagePreviewModal.stage}
-                  </span>
-                  <h3 className="text-xs sm:text-sm font-bold text-white font-mono truncate">
-                    Equipment Proof Image
-                  </h3>
-                </div>
-                <p className="text-[11px] text-zinc-400 mt-1 truncate">
-                  Uploaded by <strong className="text-indigo-400">{imagePreviewModal.staffName}</strong> * {imagePreviewModal.date} {imagePreviewModal.time}
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
+            <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{imagePreviewModal.stage}</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Uploaded by <strong className="text-indigo-400">{imagePreviewModal.staffName}</strong> • {imagePreviewModal.date} {imagePreviewModal.time}
                 </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {imagePreviewModal.url && (
-                  <a
-                    href={imagePreviewModal.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    referrerPolicy="no-referrer"
-                    className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-mono font-semibold transition-colors cursor-pointer border border-zinc-700/50"
-                    title="Open full resolution in new tab"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Full Image</span>
-                  </a>
-                )}
-                <button 
-                  type="button"
-                  onClick={() => setImagePreviewModal(null)}
-                  className="w-8 h-8 flex items-center justify-center rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors cursor-pointer"
-                  title="Close image viewer (Esc)"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+              <button 
+                onClick={() => setImagePreviewModal(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-white transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
             </div>
-
-            {/* Image Viewport */}
-            <div className="flex-1 bg-zinc-950/90 relative min-h-[260px] sm:min-h-[380px] flex items-center justify-center p-3 sm:p-5 overflow-hidden">
+            <div className="flex-1 bg-zinc-950 overflow-hidden relative min-h-[300px] flex items-center justify-center">
               {imagePreviewModal.url ? (
-                <>
-                  <img 
-                    src={imagePreviewModal.url} 
-                    alt={imagePreviewModal.stage} 
-                    referrerPolicy="no-referrer"
-                    className="max-w-full max-h-[66vh] max-h-[66dvh] sm:max-h-[70vh] w-auto h-auto object-contain rounded-xl shadow-2xl select-none"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement;
-                      target.style.display = 'none';
-                      const fallback = target.parentElement?.querySelector('.img-error-fallback');
-                      if (fallback) (fallback as HTMLElement).style.display = 'flex';
-                    }}
-                  />
-                  <div className="img-error-fallback hidden flex-col items-center justify-center p-8 text-center space-y-2">
-                    <span className="text-3xl"></span>
-                    <p className="text-zinc-300 font-mono text-xs sm:text-sm font-semibold">Image could not be loaded</p>
-                    <p className="text-zinc-500 font-mono text-[11px]">Please verify the uploaded image URL or file status.</p>
-                  </div>
-                </>
+                <img 
+                  src={imagePreviewModal.url} 
+                  alt={imagePreviewModal.stage} 
+                  className="max-w-full max-h-full object-contain"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.style.display = 'none';
+                    target.parentElement?.classList.add('flex', 'items-center', 'justify-center');
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'text-center p-8';
+                    errDiv.innerHTML = '<span class="text-3xl mb-2 block">⚠️</span><p class="text-zinc-400 font-mono text-sm">Image not found. Please verify the uploaded image URL.</p>';
+                    target.parentElement?.appendChild(errDiv);
+                  }}
+                />
               ) : (
-                <div className="flex flex-col items-center justify-center p-8 text-center space-y-2">
-                  <span className="text-3xl"></span>
-                  <p className="text-zinc-300 font-mono text-xs sm:text-sm font-semibold">No image URL provided</p>
-                  <p className="text-zinc-500 font-mono text-[11px]">Verification image has not been uploaded yet.</p>
+                <div className="text-center p-8">
+                  <span className="text-3xl mb-2 block">⚠️</span>
+                  <p className="text-zinc-400 font-mono text-sm">Image not found. Please verify the uploaded image URL.</p>
                 </div>
               )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-between p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/70 shrink-0">
-              <span className="text-[11px] text-zinc-500 font-mono hidden sm:inline">
-                Press <kbd className="px-1.5 py-0.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-300 text-[10px]">Esc</kbd> or click backdrop to exit
-              </span>
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                {imagePreviewModal.url && (
-                  <a
-                    href={imagePreviewModal.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    referrerPolicy="no-referrer"
-                    className="sm:hidden inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-mono font-semibold transition-colors cursor-pointer border border-zinc-700/50 flex-1"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    <span>Full Image</span>
-                  </a>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setImagePreviewModal(null)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer shadow-lg shadow-indigo-600/20 w-full sm:w-auto"
-                >
-                  Close Image Viewer
-                </button>
-              </div>
             </div>
           </div>
         </div>

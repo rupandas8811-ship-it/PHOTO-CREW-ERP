@@ -477,7 +477,7 @@ const MainAppContent: React.FC = () => {
           className="absolute -top-1 -right-1 lg:hidden p-2 text-zinc-400 hover:text-white bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-850 rounded-xl cursor-pointer flex items-center justify-center transition-all shadow-md h-8 w-8 select-none"
           title="Close Navigation"
         >
-          x
+          ✕
         </button>
       </div>
 
@@ -531,7 +531,7 @@ const MainAppContent: React.FC = () => {
               }}
               className="w-full flex items-center gap-2 px-3.5 py-2.5 text-[10px] font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all duration-200 border cursor-pointer border-zinc-800 text-zinc-400 hover:bg-zinc-900/50 hover:text-white"
             >
-              <span>&larr;</span>
+              <span>←</span>
               <span>Back to Studio Desks</span>
             </button>
           )}
@@ -574,7 +574,7 @@ const MainAppContent: React.FC = () => {
                     </span>
                   </div>
                   {isSelected && (
-                    <span className="text-[10px] text-amber-500">*</span>
+                    <span className="text-[10px] text-amber-500">●</span>
                   )}
                 </button>
               );
@@ -605,7 +605,7 @@ const MainAppContent: React.FC = () => {
               }}
               className="w-full flex items-center gap-2 px-3.5 py-2.5 text-[10px] font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all duration-200 border cursor-pointer border-zinc-800 text-zinc-450 hover:bg-zinc-900/50 hover:text-white"
             >
-              <span>&larr;</span>
+              <span>←</span>
               <span>Back to Studio Desks</span>
             </button>
           )}
@@ -667,7 +667,7 @@ const MainAppContent: React.FC = () => {
                     </span>
                   </div>
                   {isSelected && (
-                    <span className="text-[10px] text-purple-400">*</span>
+                    <span className="text-[10px] text-purple-400">●</span>
                   )}
                 </button>
               );
@@ -692,7 +692,7 @@ const MainAppContent: React.FC = () => {
               }}
               className="w-full flex items-center gap-2 px-3.5 py-2.5 text-[10px] font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all duration-200 border cursor-pointer border-zinc-800 text-zinc-400 hover:bg-zinc-900/50 hover:text-white"
             >
-              <span>&larr;</span>
+              <span>←</span>
               <span>Back to Studio Desks</span>
             </button>
           )}
@@ -780,7 +780,7 @@ const MainAppContent: React.FC = () => {
               { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
               { id: 'owner_approval', label: '3. Waiting Approval', icon: ShieldCheck, color: 'text-emerald-400', badge: pendingApprovalCount > 0 ? pendingApprovalCount : null },
               { id: 'owner_summary', label: '4. Revenue Summary', icon: FileText, color: 'text-blue-400' },
-              { id: 'owner_staff_performance', label: ' 5. Staff Performance', icon: BarChart3, color: 'text-pink-400' },
+              { id: 'owner_staff_performance', label: '📊 5. Staff Performance', icon: BarChart3, color: 'text-pink-400' },
               { id: 'sales_staff_management', label: '6. Sales Staff Management', icon: Users, color: 'text-indigo-400' }
             ].map((tab) => {
               const IconComponent = tab.icon;
@@ -1021,7 +1021,7 @@ const MainAppContent: React.FC = () => {
 const ChevronRightIcon: React.FC<{ active: boolean }> = ({ active }) => {
   return (
     <span className={`text-[10px] text-zinc-650 transition-transform duration-200 ${active ? 'translate-x-0.5 text-amber-400' : 'group-hover:translate-x-0.5'}`}>
-      active ? "*" : "&gt;"
+      {active ? '●' : '›'}
     </span>
   );
 };

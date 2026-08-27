@@ -246,10 +246,10 @@ export const PaymentsModule: React.FC = () => {
                     {/* Commit Input */}
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
-                        Amount to Collect (Rs. ) *
+                        Amount to Collect (₹) *
                       </label>
                       <div className="relative">
-                        <span className="text-rose-455 absolute left-3.5 top-2.5 font-sans font-bold text-base select-none">Rs. </span>
+                        <span className="text-rose-455 absolute left-3.5 top-2.5 font-sans font-bold text-base select-none">₹</span>
                         <input
                           type="number"
                           required
@@ -402,10 +402,10 @@ export const PaymentsModule: React.FC = () => {
                     {/* Commit Input */}
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-1.5 font-mono">
-                        Amount to Collect (Rs. ) *
+                        Amount to Collect (₹) *
                       </label>
                       <div className="relative">
-                        <span className="text-rose-455 absolute left-3.5 top-2.5 font-sans font-bold text-base select-none">Rs. </span>
+                        <span className="text-rose-455 absolute left-3.5 top-2.5 font-sans font-bold text-base select-none">₹</span>
                         <input
                           type="number"
                           required

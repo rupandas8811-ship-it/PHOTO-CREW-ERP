@@ -56,21 +56,6 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   } = useRole();
 
   const [isCustomerDetailsOpen, setIsCustomerDetailsOpen] = useState(true);
-  const modalBodyRef = React.useRef<HTMLDivElement>(null);
-
-  // Lock background scrolling and handle auto-scroll when modal is opened
-  useEffect(() => {
-    if (isOpen) {
-      const originalOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      if (modalBodyRef.current) {
-        modalBodyRef.current.scrollTop = 0;
-      }
-      return () => {
-        document.body.style.overflow = originalOverflow;
-      };
-    }
-  }, [isOpen]);
 
   // Auto-refresh when modal is opened to ensure real-time accuracy
   useEffect(() => {
@@ -427,45 +412,41 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   const isStaff = isStaffView || currentRole === 'Staff' || currentRole === 'Operation Staff';
 
   return createPortal(
-    <div 
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/70 shrink-0">
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-base sm:text-lg shrink-0">
-              
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/70 sticky top-0 z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-lg shrink-0">
+              📋
             </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <h3 className="text-sm sm:text-base md:text-lg font-black text-white font-mono tracking-tight truncate">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base sm:text-lg font-black text-white font-mono tracking-tight">
                   Order ID: <span className="text-amber-400">{finalOrderId}</span>
                 </h3>
                 {order?.order_status && (
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 uppercase shrink-0">
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 uppercase">
                     {order.order_status}
                   </span>
                 )}
               </div>
-              <p className="text-[11px] sm:text-xs text-zinc-400 font-sans truncate">
+              <p className="text-xs text-zinc-400 font-sans">
                 {isStaff ? 'Assigned Operations Event Details & Team Roster' : 'Comprehensive Operations & Staff Assignment Dossier'}
               </p>
             </div>
           </div>
           <button 
             onClick={onClose} 
-            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center font-bold cursor-pointer transition-colors shrink-0"
-            title="Close"
+            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center font-bold cursor-pointer transition-colors"
           >
-            <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Scroll Content */}
-        <div ref={modalBodyRef} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-6 text-zinc-300 flex-1 min-h-0">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 text-zinc-300">
           
           {/* Section 1: Customer Details */}
           <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-3">
@@ -623,7 +604,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                           >
                             <MapPin className="w-3.5 h-3.5 shrink-0 text-sky-400" />
                             <span>View on Google Maps</span>
-                            <span className="text-[11px] leading-none"></span>
+                            <span className="text-[11px] leading-none">↗</span>
                           </a>
                         ) : (
                           <span className="text-xs text-zinc-500 font-mono italic">
@@ -643,7 +624,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                 <div className="space-y-2 pt-2">
                   <div className="flex items-center justify-between">
                     <h5 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5" /> Team Members Included &rarr; Assigned Staff
+                      <Users className="w-3.5 h-3.5" /> Team Members Included → Assigned Staff
                     </h5>
                     <span className="text-[10px] font-mono text-zinc-400 bg-zinc-950 px-2 py-0.5 rounded border border-zinc-800">
                       {group.mappings.filter(m => m.assignedStaffName !== 'Unassigned').length} / {group.mappings.length} Allocated
@@ -684,7 +665,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                                 </div>
                                 {mapping.mobile && (
                                   <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
-                                     {mapping.mobile}
+                                    📞 {mapping.mobile}
                                   </span>
                                 )}
 
@@ -703,7 +684,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                                               : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
                                           }`}
                                         >
-                                          <span> {eqName}</span>
+                                          <span>⚙️ {eqName}</span>
                                           {isRet ? (
                                             <span className="text-emerald-400 font-bold flex items-center gap-0.5 ml-1">
                                               <Check className="w-3 h-3" /> Returned
@@ -786,10 +767,10 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                                 <span className="text-zinc-500">ID: {item.assetId}</span>
                               )}
                               {item.assignedStaff && (
-                                <span className="text-sky-400"> {item.assignedStaff}</span>
+                                <span className="text-sky-400">👤 {item.assignedStaff}</span>
                               )}
                               {item.eventName && (
-                                <span className="text-zinc-500"> {item.eventName}</span>
+                                <span className="text-zinc-500">📍 {item.eventName}</span>
                               )}
                             </div>
                           </div>
@@ -863,7 +844,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                                 {item.name}
                               </span>
                               {item.isReturned && (
-                                <span className="text-emerald-400 font-bold text-xs">v</span>
+                                <span className="text-emerald-400 font-bold text-xs">✓</span>
                               )}
                             </div>
                             
@@ -871,7 +852,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                               <div className="text-[10px] font-mono text-emerald-400/90 mt-0.5 space-y-0.5">
                                 <div>
                                   Returned by: <span className="text-emerald-300 font-semibold">{item.returnedBy || 'Staff'}</span>
-                                  {item.returnDate && ` * ${item.returnDate}`}
+                                  {item.returnDate && ` • ${item.returnDate}`}
                                 </div>
                                 {item.notes && (
                                   <div className="text-zinc-400 italic">Notes: "{item.notes}"</div>
@@ -890,7 +871,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' 
                             : 'bg-amber-500/10 text-amber-400/90 border-amber-500/20'
                         }`}>
-                          {item.isReturned ? 'Returned v' : 'Pending'}
+                          {item.isReturned ? 'Returned ✓' : 'Pending'}
                         </span>
                       </div>
                     ))
@@ -912,7 +893,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                       : 'text-amber-400'
                 }`}>
                   {returnedEquipmentList.length === givenEquipmentList.length && givenEquipmentList.length > 0
-                    ? 'All Returned v'
+                    ? 'All Returned ✓'
                     : `${pendingEquipmentList.length} Pending / Not Returned`}
                 </span>
               </div>
@@ -934,7 +915,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="block text-[11px] font-bold text-white">{rec.equipmentName}</span>
-                          <span className="text-[10px] text-zinc-400">By: {rec.uploadedBy} * {rec.uploadedAt}</span>
+                          <span className="text-[10px] text-zinc-400">By: {rec.uploadedBy} • {rec.uploadedAt}</span>
                         </div>
                         <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
                           {rec.status}
