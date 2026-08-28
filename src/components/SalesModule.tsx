@@ -11619,4 +11619,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         ) : (
                           <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
                         )}
- </button>
+</button>
+</div>
+</div>
+)}
