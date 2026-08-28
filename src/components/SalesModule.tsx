@@ -9572,7 +9572,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }).sort((a, b) => {
     const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
     const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
-    return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
+    return sortOrder === 'latest' ? timeB - timeA : timeA - timeB; 
   });
 
   return (
@@ -11581,11 +11581,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         type="button"
                         id="btn_toggle_download_reports"
                         onClick={() => setIsDownloadReportsExpanded(!isDownloadReportsExpanded)}
-                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                        className={'flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ' + (
                           isDownloadReportsExpanded
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
                             : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
-                        }`}
+                        )}
                       >
                         <span>ğŸ“¥</span>
                         <span>Download Reports</span>
@@ -11601,11 +11601,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         type="button"
                         id="btn_toggle_filters"
                         onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
-                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                        className={'flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ' + (
                           isFiltersExpanded || activeFilterCount > 0
                             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/10'
                             : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
-                        }`}
+                        )}
                       >
                         <Filter className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span>Filters</span>
@@ -11619,7 +11619,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         ) : (
                           <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
                         )}
-</button>
-</div>
-</div>
-})()}
+                  xœì[rÛ8ò?§Àê#–g‡’üÊ&åTÆJ¦\•8;ÙÙ©Ô–"!‰kŠà€¤eÇ?{…Ùÿ9Á`¯³'˜#l7@R|€/ÙNœÚ°*–D ßİh0„²×‡AÀİıGDsíõ-ûB÷(z yrİÿ†ŒøÂu8µÈ	ó¸|rL]æoú7º¶·š¿ºô¨k1‹<~LºúyÁèÄt¨ïÑ9v¼ÀØ"c.,&Œ şò‹íšÆÓÁ ÿt@&»”Œ… ±6÷“¹dJ=c³·C¨kÏiÀÛ%jÉO+4°¹kl=Š`2>L7=›€]Æ¥Oä§œÅö ¦ÀİÀsÇ"sal¨æ±ÑÛ)FJ›malÁägò¯‘ÎÇ°z²Cúå° É€kòšX´¿[¶¶>.®tåŠwJÇ®<˜ jÔ)mÅİÇ6Ï‡×3 ºÃâ5œşUÇ.êJÓşhï]!êHŒù%®ÇÓ„ÈŒ_0±ßùÜYRL‘íg±P†“d{A]ß–ar‡¿œŒÄ…Ï…áq[ŞögÔâÃŸ—!¢‚ì¯m‡½‡©V’}ì„¬–ê	vKI^¥î™è¯.Mæ|%»B4’ıÔŒZşŒ±jê³9Ô±š3€Ä4éö.ı!qÂ± Ä)Cğ•š%J Fı½PxN½üKP¤OG¯#ã¼íKı‚õ›2Ÿ ˜Öà“î8Ôóí±ÃêÜ‚¨Ë=¸Sa[òÒÑkìÏw—?7‰3MıÜ¹µ‡€ë?eT˜3òCÈÄUÉ’uKÌø¬Ê+ˆ@W±‡\ü°0ûÜ	F6	ä¢.WÉ6{¶ë…e¬‚—uª\Ğ	ñj²È%ÃN4kÔÛ· -~ÀA…}K¼wY¯×«‚sAÁÖ¯'’?$FËU…T0 Z¦Ğ¡ËÖÉpŸø,x½ìÚe½€Š)zìz¨Š'¡ãÀ’Œ§ÄEë™g;:yšR8—NN¥ğ´¤Ü„’vy8¶Ë°İŠÀÆ Úöwåè+%s¹Oòğ 9å¡0Y$Ï5œ\ÁQ>s˜YÅR"«AW£²ê{K2_JY¹#oµ&gÎœ”S·ã€sî¡ªŠ0Ûéì¿„•¥hêïõU‹@]? SAçıäë
+`^Ã9?ïìÇßV ò=çS°*}ò#ƒ™™¿³Ğ6a(ÑÙ¿­ dd`vò#uÎÁhtö³¿W ø.˜ìËúîÅIi»­ä4ıO-ùrĞ%_öı*ùzÉ?¥ó#¢®$ûš€'ñCÈQÖÒ¿H÷ˆ-$Ó¬¯ W8º³¿ü¾2 ×àq‚ëz1´äÆ*kæîÄsòI‹Nÿ\œ”«7Ü‡•&_?…<T'(5È "há‘–„<Uj3ïÑ‚95ğú°™œ¹šø¯¿êyÍ,ùÖJY\W4&¨JF™ñòÊäy]÷—¹ÉµpÓ^U}>EUEºÀ˜§¢Ø¨’ÎUQˆ6Ñš8ÈÑ’;ûFuÖòŞò•k¥Ø~İ#3ôUY1šØÿ3#"¥VdÃzİzÂ ×I¾ãÖŠµzG &×4	—JÃu›qb:‚^[«g¾L,Ö¢ƒráštÈ)êV]Pœšt(hób¹«éÒVÖ”˜É4èêùÏ­ä¹¼·˜¦åQ—İi–ıGèöäª:?º¢[!™`şì`‘K~aê+»ıV™ŞŠLËşÃ¨ˆ%·ÖˆÔeÇËr¤ÕéÓ’¶…û‘Ge*ó=Åt*ŸH—[¯sòÚ&ÑÇ 3·õ*yg©’7=&è8ÏlËbnœÒ¾t´ú)?^ÒûÒ aÀIÄ¾szi¨¯%Zn/k+2¾$/f1—&FMŞTæò”éDÍÔª l ´˜Ú‘¹ãh”±.¯¬Ùñs—“Ğó˜0©ÏT‹ïòï(=æ¹íN…-ƒ‰*ş2ù]ú-)ò H‰°G!D_Z¶½~0»=Àƒ(-Kİ	¿¯.@¨íøwòĞH!’yL¾-phîª"”ÒY}e…î®°§3ù^š¨:kàÂSQ®c*Yy/së*='Jà5ãŠD_bAï?)ß½ ]£R1Ì’ê¥ç0w
+K‡d@^”ìÉÄ3({ÜÀ" °§ j‡×OnrøÛØLÓ!»•Q)/´Î¿’5 0`­Ú¬…_l¡Füã÷ßş]gA0^fšYVñç9C¶Äå¦	šyPÎ{}¯íÅú”'÷½¸"Ô’¨p§ä
+<52‰œX.À‘Û5ğsî7³Âú-›J¸šñÁT’İJÎË²ìœzİ.b­sk‚HèŸDùÎ!‚`B!€A"—TB«öı$jâÔ{ûõ˜úõøqúg,XûdPƒİén5mwÉÇêõªË¶vPüsf[ß6è#Ç?s©vS:Ãá5¹æµæ°cRóîˆgºã£ÛùuÀæİnÊàˆøf-”›¿?/‹)Õ%X
+·’åñBß¥v°sv5¼Nû¦¾OJd	´[ºP`
+Î£×ØÏ¯\ªŠBNeºeP‰]Uˆ„W½FL65Gà7¨ÜµÊ	TDìËKš-½©§=u€{ˆÆH%>cŞ¹¢®ò*WHdF”F)Kş¦–ª‘^×/,ãøfòvË%ÏcĞxj¦¢œuP‹YÎˆdŞ¾ıé§n¡Úµ£şËµz"7^­²dx.ãQ? V[2˜¤ÇÆ3X\×!Ä'd³,›mkØ¬lMWyŒ…*Õyän&l÷Ü¨K@¤ +ô)N>t-›ºr¨£ëzCÏùØvØú} TÑÍ!<+/¸*@o,ì]eUş7ÊF­$?3É&bÜbùµ¦e9¼T¾ª†YS°ğ¦§‰7lWfÄÇàfœ£RØP;Õƒ^7}|†ÈÕÙ”(±“IfåE_‰ùõ¦ÓÕ!
+ƒÆ5Y¶°–x¿§3!ú:SºñÍò™JŸá2†~qWOşÜzYñ«îJ{È~mERúj.¨wË«-,S&1sg–)–óM)ç”{§v¼X¨âîÑ©ô”»ë7ôÙ×`Rg=‚î_¸Ìq”7î¯Óa×±}Yî0¼Änšèâ¨Ë' €]×¹éñ6>ÖÄv©sö3ÖNXgtšCn»ËgcµàØó:<:é6ì#±ÿşó?ƒ»ôÄšš¢m)ÚnoŠ‚Txr±ÁÙ;Uâğ™ã3ù›QãÎÄ9½;aV³”G\|ùuxä_	kL	@œMd}ÏYè©¨à–^LÎ„fXaÒMx³}¯6.ÎŞ4êÿrSu×kçà¤İÉ|`¤AW§ò³Ùª(q~Çl­²òwÇÕµûû1‹0×JöE“CŠMãÚ
+€ôÕ´ }µªH_>@ÿ¿åuĞí:TÙ›8ëP“<-ƒ$Kíl×—ˆCp¤J·¥®:-¹]t.÷¯ÜèO_iî•<N»<í‡;’Û©}us€»9Ù3å{û…ÃN	ŒíLN‚g¥=ÒÔ”‹¢Ê›—–EgÍº5Vr5'$›ß5›ú¹ÖŸZöVË†ÆWöÔ\\ÕLÒ)“LåˆL9>“›ƒKS7SÛİIb²9É.O#>mÀc¥©š»e"iöŞR¼µ66z¾‚/NĞ|hB÷Â|­<ÅÚ65›´ÕõJåt)gÂ¸3]V#K>*^;Ğè¶æff7ëİÔü2­“ûÙâô<¾wø˜:Dª|¾‘M>M{"Øj£GbE§š¦ïÁ“Äj$ãÛ>áµ›¶'Ëé¡à>ÓÙà‚šÀÌ²VHcˆsÖ³-5¡™v)£æÈ‘RKRC§¥J/ZİY61S¥Ú¥Ç÷3tÚìÉZzµÇ“'Áµ?ã|¬@€ êéÕnq6`(xqö%³ˆí:ŒùÅÀrV´¼åÉê ø´ÀUD;*pó¾60ğŒíŒ«WZ¨U_8‹UZ*˜[q•gìĞe&3®Œí¸fj³şÂù>a¨œóÙÜ•³`Á˜[R%KğÆ ²Ú¨VW’±÷]6#º€EÎàŸrèAdd©ˆNïÍ¶
+ÁÒ+›3Q–LSÉÕK!ÎQ?:¸1Ûj …Êı†j!ç ¦Ù8’û¢ÊÍº¹||Êh'… K»Ÿ„‹Ó`_ƒo½mÓ7æy!fŞ­eÅŸ–4ssè˜9e»Cºí/™÷–q÷|Œyy©BNõ¹K¾ÙëKxšqJO´E'@u
+ŠÎ êÎ¯½Iz49½¦­À—'’7‹õ÷úÔ~åyäºúûDÎ
+sÓñì¨(ez€µ2‚Úxè«p«êHTá€ÖÜclpAf0/iånµ §²âÇ@–Õ•Ô5™ã°¤–Qû°ÅGàú
+æß¾ÀÃªßÃ$„_ö¤ğösh6—åFomT¾9Ã³¬šÛ-À¦ÏŸFRŞ»ì¸š¾´9%-ùİ¢b¯ì¨éíE?Ú6"é%Vè€ÊCEuoGˆÔÇ¡ŞTê
+½¶x—íØìÀkæe¯ÔF¤[E DHPúù>\}£=¸£µÁÅ7•Ü«A×ÙG0OQaMğ9ôWÛ	°9‘š°F†1FÌ7…=fd1»"ÁÌö	÷ğµ1¡kWd‰‰UòÆ‹ıáõÖ—e´4ÎK5šx.õ	ßMâğGÿªÍNûçs/Á³Ë¦Œóó%’"MÆ%½êKeMy’·ÆM”Z£ƒn}!–ícf"VÜN¾°İéí¦‚ÀäÅ'é3Z1w¦ù;
+Şœiü-nÔß$sÛåà/ƒlµ¯(â;YyAÖ>xÅJpì5Üªº'auaG³ÒÇ/½‘Ï¼¤‚ø­ùàJMŠş
+ƒqµ‘¼j5)„ôêéCìqî4Ïí á8ù+³„›¯áãğ_{c,ãó?~ÿ×oeyÜ[ÿ1CFü9à7½[¸øˆÏ(JÀ×l@an·vä¢  Ä8&û-rašdí’Š]¿„,*šX5MNµnĞÕX®ĞÇCÄ”8JW,oÔ&•C½© X-éE…^s  hpıÔ¨•íZ<²}SVL	æ²)lYv€¯Òİo•øâ)¼Ã'À6æ/L`}j0YYú‡ù’úV$W ‘¢Ï™4Pœği²™¥«Ûæ>”¸mAÍíAç*´Q«$‚¦Í®èH|éÑ¡/ğ"’î-àSÜ—‰ø†¬ù’V÷ó©`$õ©;qüµzÈ‡±O£˜o»GF`–TUG§´uÅ ĞÂÆ0á¨õágòîbû®‰ßZGhJ³,·E³ÿ%A uË{AıÙfC¯^ÆZÔÓEcºÜZÍiuY¿şR0<£Nü0ú² à¥œ@ˆ6§.,Ú¹"–š‹Ì[F>ÙòQåß˜Ôu9¨X&ËÂ¶¯ª¿ïMMòßuQjôVñ%–Å×=+œÒ)ì‡šÂ£ş•k’ò*U{Bº*è‹õèhµ®Æ‰.¨D\uèèz–ªØZSÚvéCıëœ¢²º¶¶B‰ö½dı2÷ G7Ï=bê¿(±Ø„†N ŞW
+ú?tØóGÿ  ÿÿ W€â
