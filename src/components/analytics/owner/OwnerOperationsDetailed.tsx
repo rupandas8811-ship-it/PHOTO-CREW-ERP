@@ -9,6 +9,7 @@ import {
   CartesianGrid, Legend, BarChart, Bar, Cell, PieChart, Pie
 } from 'recharts';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
+import { formatDateDDMMYY } from '../../../utils';
 
 export const OwnerOperationsDetailed: React.FC = () => {
   const { orders, operations, staff } = useRole();
@@ -237,7 +238,7 @@ export const OwnerOperationsDetailed: React.FC = () => {
                 const op = operations.find(ops => ops.order_id === o.order_id);
                 return (
                   <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
-                    <td className="p-4 text-zinc-400 font-mono">{new Date(o.event_date).toLocaleDateString()}</td>
+                    <td className="p-4 text-zinc-400 font-mono">{formatDateDDMMYY(o.event_date)}</td>
                     <td className="p-4 font-bold text-zinc-100">{o.customer_name}</td>
                     <td className="p-4 text-zinc-400 italic truncate max-w-[200px]">{o.event_location || 'N/A'}</td>
                     <td className="p-4 text-zinc-300">{o.event_type}</td>

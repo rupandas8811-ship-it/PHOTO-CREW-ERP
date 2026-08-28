@@ -270,6 +270,8 @@ export interface Lead {
   next_follow_up_date?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
+  lost_reason?: string;
+  lost_notes?: string;
   lead_score?: number;
   booking_status?: string;
   google_maps_link?: string;
@@ -357,6 +359,8 @@ export interface Order {
   next_follow_up_date?: string;
   Lost_Reason?: string;
   Lost_Notes?: string;
+  lost_reason?: string;
+  lost_notes?: string;
   lead_score?: number;
   booking_status?: string;
 }
@@ -444,6 +448,17 @@ export interface Production {
   server_upload_event_date?: string;
   server_upload_folder_name?: string;
   server_path?: string;
+  checklist_customer_acceptance?: boolean;
+  checklist_content_usage?: boolean;
+  checklist_footage_deleted_7_days?: boolean;
+  checklist_payment_from_sales?: boolean;
+  checklist_edited_files_uploaded?: boolean;
+  server_upload_validated?: boolean;
+  validated_server_uploads?: Record<string, boolean>;
+  checklist_client_communication_proof?: boolean;
+  upload_name?: string;
+  proof_name?: string;
+  client_communication_proof_name?: string;
 }
 
 export interface Payment {
@@ -545,6 +560,23 @@ export interface EditorAssignment {
   server_upload_confirmed_at?: string;
   server_upload_confirmed_by?: string;
   edited_folder_uploaded_to_server?: boolean;
+  server_upload_validated?: boolean;
+  server_upload_validated_at?: string;
+  server_upload_validated_by?: string;
+}
+
+export interface ClientAcceptanceVerification {
+  id?: string;
+  order_id: string;
+  event_id: string;
+  client_communication_consent_proof?: string;
+  folder_name?: string;
+  upload_link_path?: string;
+  proof_file_name?: string;
+  proof_storage_path?: string;
+  consent_proof_verified?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface StaffAssignment {

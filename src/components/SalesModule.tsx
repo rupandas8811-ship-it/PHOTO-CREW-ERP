@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { AddNoteModal } from "./AddNoteModal";
 import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { 
-  Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw
+  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
@@ -11,6 +12,7 @@ import { EventDropdownCell } from './EventDropdownCell';
 import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
+import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
 
 export const SHOOT_TYPES = [
   "CANDID PHOTOGRAPHY",
@@ -24,7 +26,7 @@ export const SHOOT_TYPES = [
   "STANDARD PHOTOGRAPHY",
   "STANDARD VIDEOGRAPHY"
 ];
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList } from '../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
 import { CustomPackageMaster } from './CustomPackageMaster';
 import { AddressAutocomplete } from './AddressAutocomplete';
@@ -123,14 +125,15 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
     const q = Number(raw.qty || raw.quantity || raw.count || 1);
     qty = isNaN(q) || q < 1 ? 1 : q;
     text = String(raw.name || raw.text || raw.deliverable || raw.title || raw.role || raw.member_name || "").trim();
+    return { qty, text };
   } else {
     text = String(raw).trim();
   }
 
   if (!text) return { qty: 1, text: "" };
 
+  // 1. Check for explicit (Qty: X), (quantity: X), (count: X), (Qty X) anywhere in the string
   let foundQtyFromPattern: number | null = null;
-  // 1. Extract any (Qty X), (quantity X), (Qty: X) occurrences anywhere in text
   const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
   let match;
   while ((match = qtyPatterns.exec(text)) !== null) {
@@ -144,40 +147,67 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
     }
   }
 
-  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns completely from text
-  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+  if (foundQtyFromPattern !== null) {
+    text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+    return { qty: foundQtyFromPattern, text };
+  }
 
-  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 Ã— Traditional Photos"
-  const leadingMatch = text.match(/^(\d+)\s*[\*xXÃ—\-â€“â€”]?\s*(.*)$/);
-  if (leadingMatch) {
-    const parsedQty = parseInt(leadingMatch[1], 10);
+  // 2. Check for dimension / size specifications at the start of the string:
+  // e.g. "16Ã—6", "16x6", "12Ã—8 Album", "16Ã—6 Frame", "16 Ã— 6", "12 x 18", "8x24", "8*12", "12Ã—36"
+  // If the string starts with a dimension (digits x/Ã— digits), it is deliverable text, NOT a leading quantity!
+  const isLeadingDimension = /^\d+\s*[\*xXÃ—]\s*\d+/.test(text);
+  if (isLeadingDimension) {
+    return { qty: 1, text };
+  }
+
+  // 3. Check for technical specifications / units starting with numbers:
+  // e.g. "4K Cinematic Video", "8K Video", "20 Pages Ã— 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
+  const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
+  if (isUnitOrSpec) {
+    return { qty: 1, text };
+  }
+
+  // 4. Check for leading quantity with explicit multiplier:
+  // e.g. "2 x Traditional Photos", "2 Ã— Cinematic Video", "2 * Album", "2 x 16Ã—6 Frame", "2 Ã— 16Ã—6"
+  const multiplierMatch = text.match(/^(\d+)\s*[xXÃ—\*]\s+(.+)$/);
+  if (multiplierMatch) {
+    const parsedQty = parseInt(multiplierMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
-      if (typeof raw !== "object" && foundQtyFromPattern === null) {
-        qty = parsedQty;
-      }
+      return { qty: parsedQty, text: multiplierMatch[2].trim() };
     }
-    text = leadingMatch[2] ? leadingMatch[2].trim() : "";
-    text = text.replace(/^[xXÃ—\*\-â€“â€”]\s*/, "").trim();
   }
 
-  if (typeof raw !== "object" && foundQtyFromPattern !== null) {
-    qty = foundQtyFromPattern;
+  // 5. Check for leading quantity followed by dimension:
+  // e.g. "2 16Ã—6", "3 12Ã—8 Album", "2 16Ã—6 Frame"
+  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xXÃ—]\s*\d+.*)$/);
+  if (qtyDimensionMatch) {
+    const parsedQty = parseInt(qtyDimensionMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      return { qty: parsedQty, text: qtyDimensionMatch[2].trim() };
+    }
   }
 
-  // Clean any leftover (Qty X) or trailing/leading punctuation
-  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
-  text = text.replace(/^[\*\-â€¢xXÃ—]\s*/, "").trim();
-  text = text.replace(/[\(\[\-â€“â€”:]+$/, "").trim();
+  // 6. Check for leading quantity with space followed by item name:
+  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12Ã—18)"
+  const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
+  if (wordMatch) {
+    const parsedQty = parseInt(wordMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      return { qty: parsedQty, text: wordMatch[2].trim() };
+    }
+  }
 
-  return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
+  return { qty: 1, text };
 }
 
 function combineQtyAndText(qty: number | string, text: string): string {
-  const parsed = parseQtyAndText(text);
   const qNum = parseInt(String(qty), 10);
-  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : parsed.qty;
-  const cleanText = parsed.text;
+  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : 1;
+  const cleanText = (text || "").trim();
   if (!cleanText) return validQty > 1 ? `${validQty}` : "";
+  if (validQty <= 1) {
+    return cleanText;
+  }
   return `${validQty} ${cleanText}`.trim();
 }
 
@@ -717,6 +747,27 @@ const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: nu
   });
 };
 
+const generateQuotationPdfFileName = (leadObj: any): string => {
+  const customerName = (leadObj?.customer_name || 'Customer').trim();
+  const leadId = (leadObj?.lead_id || leadObj?.id || 'QUOTE').trim();
+
+  // Sanitize customer name and lead ID for file system safety:
+  // Replace invalid filename characters (/ \ : * ? " < > |) with underscores
+  const sanitizedCustomer = customerName
+    .replace(/[/\\:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'Customer';
+
+  const sanitizedLeadId = leadId
+    .replace(/[/\\:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'QUOTE';
+
+  return `${sanitizedCustomer}_${sanitizedLeadId}_quote.pdf`;
+};
+
 const generateQuotationPDF = (
   lead: any,
   activePkgs: any[],
@@ -745,16 +796,7 @@ const generateQuotationPDF = (
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
-    try {
-      const parts = dateStr.split('-');
-      if (parts.length === 3) {
-        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-      }
-      return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    } catch {
-      return dateStr;
-    }
+    return formatDateDDMMYY(dateStr) || dateStr;
   };
 
   // Dynamic layout configuration options (Default vs Compact to optimize page count and avoid sparse pages)
@@ -850,8 +892,8 @@ const generateQuotationPDF = (
   const cleanText = (text: string) => {
     if (!text) return '';
     let cleaned = text
-      .replace(/\u00fe\u00ff/g, '')
-      .replace(/\u00ff\u00fe/g, '')
+      .replace(/Ã¾Ã¿/g, '')
+      .replace(/Ã¿Ã¾/g, '')
       .replace(/\uFEFF/g, '')
       .replace(/\uFFFE/g, '');
     cleaned = cleaned.replace(/^[\sâ€¢\-\*\u2022\u0095\x95\x96\u2013\u2014\s]+/g, '');
@@ -899,6 +941,8 @@ const generateQuotationPDF = (
     eventName: string;
     eventDate: string;
     eventTime: string;
+    eventEndDate: string;
+    eventEndTime: string;
     eventLocation: string;
     guestPax: string;
     members: string[];
@@ -930,6 +974,8 @@ const generateQuotationPDF = (
         eventName,
         eventDate: event.event_start_date || event.event_date || "",
         eventTime: event.event_time || event.event_start_time || "",
+        eventEndDate: event.event_end_date || "",
+        eventEndTime: event.event_end_time || "",
         eventLocation: event.event_location || "N/A",
         guestPax: event.guest_pax !== undefined && event.guest_pax !== null && event.guest_pax !== '' ? String(event.guest_pax) : (lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A')),
         members: (eventInclusions || []).filter(Boolean),
@@ -951,6 +997,8 @@ const generateQuotationPDF = (
       eventName: displayEventType,
       eventDate: lead.event_date || "",
       eventTime: lead.event_time || "",
+      eventEndDate: lead.event_end_date || "",
+      eventEndTime: lead.event_end_time || "",
       eventLocation: lead.event_location || "N/A",
       guestPax: lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A'),
       members: (inclusionsList || []).filter(Boolean),
@@ -964,9 +1012,9 @@ const generateQuotationPDF = (
   const defaultTerms = [
     'Payments are non-refundable.',
     'Crew food arrangements from client side.',
-    '50% advance and remaining 50% before collecting the raw data.',
-    'If the duration extends, Rs. 3,000 per service per hour additional charges are applicable.',
-    'We expect 90% of the payment once the event is completed and the remaining 10% before the final deliverables are ready.',
+    '50% advance payment before the event.',
+    'If duration exceeds 1 hour, additional charges of â‚¹1,500 per hour will be applicable.',
+    '50% full payment on event day.',
     'Pendrive and Hard Disk are not included.',
     'Edited data will be shared via Google Drive link.'
   ];
@@ -1018,14 +1066,14 @@ const generateQuotationPDF = (
       }
       simY += 26 + cfg.secSpacing;
 
-      // Team members table (hide header)
+      // Team members table (with header)
       if (evObj.members.length > 0) {
-        simTable(evObj.members.length, true);
+        simTable(evObj.members.length, false);
       }
 
-      // Deliverables table (show header)
+      // Deliverables table (with header)
       if (evObj.deliverables.length > 0) {
-        simTable(evObj.deliverables.length, true);
+        simTable(evObj.deliverables.length, false);
       }
     });
 
@@ -1264,15 +1312,50 @@ const generateQuotationPDF = (
 
   let currentY = 49;
 
-  const drawTeamMembersTable = (title: string, members: string[]) => {
-    if (members.length === 0) return;
+  const parsePdfItem = (raw: any): { name: string; qty: number } => {
+    if (raw === null || raw === undefined) return { name: '', qty: 1 };
+    if (typeof raw === 'object') {
+      const rawName = String(raw.name || raw.role || raw.member_name || raw.text || raw.deliverable || raw.title || '').trim();
+      const parsed = parseQtyAndText(rawName);
+      const q = Number(raw.qty || raw.quantity || raw.count || parsed.qty || 1);
+      const qty = isNaN(q) || q < 1 ? 1 : q;
+      let name = parsed.text || rawName;
+      name = cleanText(name);
+      name = name.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
+      name = name.replace(/^TEAM MEMBERS?\s*(?:INCLUDED)?\s*[:-]?\s*/i, '');
+      name = name.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, '').trim();
+      return { name, qty };
+    }
+    if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed) return { name: '', qty: 1 };
+      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+        try {
+          const parsedObj = JSON.parse(trimmed);
+          return parsePdfItem(parsedObj);
+        } catch (e) {}
+      }
+      const parsed = parseQtyAndText(trimmed);
+      let name = parsed.text || trimmed;
+      name = cleanText(name);
+      name = name.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
+      name = name.replace(/^TEAM MEMBERS?\s*(?:INCLUDED)?\s*[:-]?\s*/i, '');
+      name = name.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, '').trim();
+      const qty = parsed.qty >= 1 ? parsed.qty : 1;
+      return { name, qty };
+    }
+    return { name: cleanText(String(raw)), qty: 1 };
+  };
 
-    let tableH = 4; // Title spacing
-    const mapped = members.map((m, i) => ({ id: String(i), name: m, qty: 1, price: 0 }));
+  const drawTeamMembersTable = (title: string, members: any[]) => {
+    if (!members || members.length === 0) return;
 
+    const mapped = members.map(m => parsePdfItem(m)).filter(m => m.name.length > 0);
+    if (mapped.length === 0) return;
+
+    let tableH = 4 + 7.5; // Title spacing + Header row
     mapped.forEach((item) => {
-      const cleanedItemName = cleanText(item.name || '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const wrappedName = doc.splitTextToSize(item.name, 154);
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
 
@@ -1289,21 +1372,43 @@ const generateQuotationPDF = (
     doc.text(title, 15, currentY);
     currentY += 4;
 
+    if (currentY + 7.5 > 250) {
+      currentY = createNewPage();
+    }
+
+    // Header Row (Slate-800)
+    doc.setFillColor(30, 41, 59);
+    doc.rect(15, currentY, 180, 7.5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    // Narrow QTY column: from 15 to 35 (width 20mm), centered at 25
+    doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
+    // Main column: from 35 to 195 (width 160mm), text start at 38
+    doc.text('TEAM MEMBER', 38, currentY + 4.8);
+
+    currentY += 7.5;
+
     doc.setDrawColor(203, 213, 225); 
     doc.setLineWidth(0.2);
 
-    // Draw top border line since we removed the header row
-    doc.line(15, currentY, 195, currentY);
-
     mapped.forEach((item, index) => {
-      const cleanedItemName = cleanText(item.name || '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const wrappedName = doc.splitTextToSize(item.name, 154);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
       if (currentY + rowHeight > 250) {
         doc.line(15, currentY, 195, currentY);
         currentY = createNewPage();
-        doc.line(15, currentY, 195, currentY);
+
+        doc.setFillColor(30, 41, 59);
+        doc.rect(15, currentY, 180, 7.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
+        doc.text('TEAM MEMBER (CONTINUED)', 38, currentY + 4.8);
+        currentY += 7.5;
       }
 
       if (index % 2 === 1) {
@@ -1311,20 +1416,26 @@ const generateQuotationPDF = (
         doc.rect(15, currentY, 180, rowHeight, 'F');
       }
 
+      // Vertical table border lines
       doc.line(15, currentY, 15, currentY + rowHeight);
+      doc.line(35, currentY, 35, currentY + rowHeight);
       doc.line(195, currentY, 195, currentY + rowHeight);
 
+      // Qty value (centered in 15..35)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(String(item.qty || 1), 25, currentY + 4.3, { align: 'center' });
+
+      // Member Name in main column (at 38)
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
-
-      doc.setFillColor(51, 65, 85);
-      doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
-
       wrappedName.forEach((line: string, i: number) => {
-        doc.text(line, 23, currentY + 4.3 + (i * cfg.rowTextHeight));
+        doc.text(line, 38, currentY + 4.3 + (i * cfg.rowTextHeight));
       });
 
+      // Horizontal row bottom line
       doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
       currentY += rowHeight;
     });
@@ -1332,16 +1443,15 @@ const generateQuotationPDF = (
     currentY += cfg.tableSpacing; 
   };
 
-  const drawEventDeliverablesTable = (title: string, deliverables: string[]) => {
-    if (deliverables.length === 0) return;
+  const drawEventDeliverablesTable = (title: string, deliverables: any[]) => {
+    if (!deliverables || deliverables.length === 0) return;
 
-    let tableH = 4; // Title spacing
-    const mapped = deliverables.map((d, i) => ({ id: String(i), name: d }));
+    const mapped = deliverables.map(d => parsePdfItem(d)).filter(d => d.name.length > 0);
+    if (mapped.length === 0) return;
 
+    let tableH = 4 + 7.5; // Title spacing + Header row
     mapped.forEach((item) => {
-      let cleanedItemName = cleanText(item.name || '');
-      cleanedItemName = cleanedItemName.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const wrappedName = doc.splitTextToSize(item.name, 154);
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
 
@@ -1358,22 +1468,43 @@ const generateQuotationPDF = (
     doc.text(title, 15, currentY);
     currentY += 4;
 
+    if (currentY + 7.5 > 250) {
+      currentY = createNewPage();
+    }
+
+    // Header Row (Slate-800)
+    doc.setFillColor(30, 41, 59);
+    doc.rect(15, currentY, 180, 7.5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(255, 255, 255);
+    // Narrow QTY column: from 15 to 35 (width 20mm), centered at 25
+    doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
+    // Main column: from 35 to 195 (width 160mm), text start at 38
+    doc.text('DELIVERABLE', 38, currentY + 4.8);
+
+    currentY += 7.5;
+
     doc.setDrawColor(203, 213, 225); 
     doc.setLineWidth(0.2);
 
-    // Draw top border line since we removed the header row
-    doc.line(15, currentY, 195, currentY);
-
     mapped.forEach((item, index) => {
-      let cleanedItemName = cleanText(item.name || '');
-      cleanedItemName = cleanedItemName.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
+      const wrappedName = doc.splitTextToSize(item.name, 154);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
       if (currentY + rowHeight > 250) {
         doc.line(15, currentY, 195, currentY);
         currentY = createNewPage();
-        doc.line(15, currentY, 195, currentY);
+
+        doc.setFillColor(30, 41, 59);
+        doc.rect(15, currentY, 180, 7.5, 'F');
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(255, 255, 255);
+        doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
+        doc.text('DELIVERABLE (CONTINUED)', 38, currentY + 4.8);
+        currentY += 7.5;
       }
 
       if (index % 2 === 1) {
@@ -1381,20 +1512,26 @@ const generateQuotationPDF = (
         doc.rect(15, currentY, 180, rowHeight, 'F');
       }
 
+      // Vertical table border lines
       doc.line(15, currentY, 15, currentY + rowHeight);
+      doc.line(35, currentY, 35, currentY + rowHeight);
       doc.line(195, currentY, 195, currentY + rowHeight);
 
+      // Qty value (centered in 15..35)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(51, 65, 85);
+      doc.text(String(item.qty || 1), 25, currentY + 4.3, { align: 'center' });
+
+      // Deliverable Name in main column (at 38)
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(7.5);
       doc.setTextColor(51, 65, 85);
-
-      doc.setFillColor(51, 65, 85);
-      doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
-
       wrappedName.forEach((line: string, i: number) => {
-        doc.text(line, 23, currentY + 4.3 + (i * cfg.rowTextHeight));
+        doc.text(line, 38, currentY + 4.3 + (i * cfg.rowTextHeight));
       });
 
+      // Horizontal row bottom line
       doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
       currentY += rowHeight;
     });
@@ -1502,9 +1639,19 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(slateGray[0], slateGray[1], slateGray[2]);
+    
     const formattedEvDate = formatDate(evObj.eventDate);
-    const metaDetailsStr = `Event Date: ${formattedEvDate}   |   Event Time: ${evObj.eventTime || 'N/A'}   |   Event Location: ${evObj.eventLocation || 'N/A'}`;
-    doc.text(metaDetailsStr, 15, currentY);
+    const formattedEvTime = evObj.eventTime ? formatTime12Hour(evObj.eventTime) : 'N/A';
+    const formattedEndDate = formatDate(evObj.eventEndDate);
+    const formattedEndTime = evObj.eventEndTime ? formatTime12Hour(evObj.eventEndTime) : 'N/A';
+    
+    const startStr = `Start: ${formattedEvDate} | ${formattedEvTime}`;
+    const endStr = `End: ${formattedEndDate} | ${formattedEndTime}`;
+    const locStr = `Location: ${evObj.eventLocation || 'N/A'}`;
+    
+    doc.text(`${startStr}`, 15, currentY);
+    doc.text(`${endStr}`, 70, currentY);
+    doc.text(`${locStr}`, 125, currentY);
     currentY += 6;
 
     // 2. CUSTOMER DETAILS CARD
@@ -1822,8 +1969,37 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     users
   } = useRole();
 
+  const loggedInSalesPersonName = useMemo(() => {
+    if (currentUser) {
+      const fn = (currentUser.full_name || currentUser.name || '').trim();
+      if (fn && !['Sales', 'Sales Team', 'Admin', 'Admin User', 'User'].includes(fn)) {
+        return fn;
+      }
+      if (users && users.length > 0) {
+        const matched = users.find(u => 
+          u.id === currentUser.id ||
+          (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+          (u.mobile && currentUser.mobile && u.mobile === currentUser.mobile)
+        );
+        if (matched) {
+          const dbFn = (matched.full_name || matched.name || '').trim();
+          if (dbFn && !['Sales', 'Sales Team', 'Admin', 'Admin User', 'User'].includes(dbFn)) {
+            return dbFn;
+          }
+        }
+      }
+      if (fn) return fn;
+    }
+    return currentUser?.name || currentUser?.full_name || 'Sales Executive';
+  }, [currentUser, users]);
+
   const leads = currentRole === 'Sales Team' 
-    ? allLeads.filter(l => l.sales_staff_id === currentUser?.id || l.sales_person === currentUser?.name) 
+    ? allLeads.filter(l => 
+        l.sales_staff_id === currentUser?.id || 
+        l.sales_person === currentUser?.name || 
+        l.sales_person === loggedInSalesPersonName ||
+        (currentUser?.full_name && l.sales_person === currentUser.full_name)
+      ) 
     : allLeads;
   const orders = currentRole === 'Sales Team' 
     ? allOrders.filter(o => leads.some(l => l.lead_id === o.lead_id)) 
@@ -2380,6 +2556,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [statusError, setStatusError] = useState<{ title: string; reason: string; suggestedFix: string } | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [noteModalOpen, setNoteModalOpen] = useState(false);
+  const [noteModalLeadId, setNoteModalLeadId] = useState("");
+  const [noteModalOrderId, setNoteModalOrderId] = useState("");
+  const [noteModalCustomerName, setNoteModalCustomerName] = useState("");
 
   const [unlockingRecordId, setUnlockingRecordId] = useState<string | null>(null);
   const [unlockReason, setUnlockReason] = useState('Data Correction');
@@ -2405,91 +2585,103 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [unlockRequestCustomReason, setUnlockRequestCustomReason] = useState('');
   const [selectedUnlockLead, setSelectedUnlockLead] = useState<Lead | null>(null);
 
-  // Helper function to resolve Lost Reason and Notes strictly from fields
+  // Helper function to resolve Lost Reason and Notes strictly and cleanly from fields
   const getStrictLostReasonAndNotes = (lead: Lead | null) => {
     if (!lead) return { reason: '', notes: '' };
+
+    let rawReason = (lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason || '').trim();
+    let rawNotes = (lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes || '').trim();
+
+    // Check if string contains internal generated activity/update text or metadata
+    const isDirty = (str: string) => {
+      if (!str) return false;
+      return /\[Update|\bNeg Notes:|\bNext follow-up:|\bWhatsApp:|^Lost Reason:/i.test(str);
+    };
+
+    let cleanReason = rawReason;
+    let cleanNotes = rawNotes;
+
+    const parseComposite = (text: string) => {
+      let r = '';
+      let n = '';
+      if (!text) return { r, n };
+
+      // Pattern 1: "Lost Reason: <reason>. Notes: <notes>"
+      const explicitMatch = text.match(/Lost Reason:\s*([^.\n]+?)(?:\.\s*Notes:\s*([\s\S]*?))?(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
+      if (explicitMatch) {
+        if (explicitMatch[1]) r = explicitMatch[1].trim();
+        if (explicitMatch[2]) n = explicitMatch[2].trim();
+      }
+
+      // Pattern 2: "[Update YYYY-MM-DD]: <reason>. Neg Notes: <notes>. Next follow-up:"
+      if (!r) {
+        const updateMatch = text.match(/\[Update[^\]]*\]:\s*([^.]+?)(?:\.\s*(?:Neg Notes|Notes):\s*([\s\S]*?))?(?:\.\s*Next follow-up:|$|\n)/i);
+        if (updateMatch) {
+          if (updateMatch[1]) r = updateMatch[1].trim();
+          if (updateMatch[2]) n = updateMatch[2].trim();
+        }
+      }
+
+      // Standalone notes match
+      if (!n) {
+        const negMatch = text.match(/(?:Neg Notes|Notes):\s*([^.\n]+?)(?:\.\s*Next follow-up:|$|\n)/i);
+        if (negMatch && negMatch[1]) {
+          n = negMatch[1].trim();
+        }
+      }
+      return { r, n };
+    };
+
+    if (isDirty(cleanReason)) {
+      const parsed = parseComposite(cleanReason);
+      if (parsed.r) cleanReason = parsed.r;
+      if (parsed.n && !cleanNotes) cleanNotes = parsed.n;
+    }
+
+    if (isDirty(cleanNotes)) {
+      const parsed = parseComposite(cleanNotes);
+      if (parsed.n) cleanNotes = parsed.n;
+      else {
+        cleanNotes = cleanNotes
+          .replace(/^Neg Notes:\s*/i, '')
+          .replace(/\.?\s*Next follow-up:.*$/i, '')
+          .replace(/^Notes:\s*/i, '')
+          .trim();
+      }
+    }
+
+    // If reason is still empty or dirty, check remarks field
+    if ((!cleanReason || cleanReason === 'N/A' || cleanReason === 'NULL' || isDirty(cleanReason)) && lead.remarks) {
+      const parsed = parseComposite(lead.remarks);
+      if (parsed.r) cleanReason = parsed.r;
+      if (parsed.n && !cleanNotes) cleanNotes = parsed.n;
+    }
+
+    // Final clean-up of any stray prefix/suffix
+    cleanReason = cleanReason
+      .replace(/^WhatsApp:\s*\d+\s*/i, '')
+      .replace(/^\[Update[^\]]*\]:\s*/i, '')
+      .replace(/\.?\s*Neg Notes:.*$/i, '')
+      .replace(/\.?\s*Next follow-up:.*$/i, '')
+      .replace(/[,;]+$/, '')
+      .trim();
+
+    cleanNotes = cleanNotes
+      .replace(/\.?\s*Next follow-up:.*$/i, '')
+      .replace(/^Neg Notes:\s*/i, '')
+      .replace(/^Notes:\s*/i, '')
+      .replace(/[,;]+$/, '')
+      .trim();
+
     return {
-      reason: lead.Lost_Reason || '',
-      notes: lead.Lost_Notes || ''
+      reason: cleanReason || 'No reason provided.',
+      notes: cleanNotes || ''
     };
   };
 
-  // Helper function to resolve Lost Reason and Notes from all possible sources
-  const getLostReasonAndNotes = (lead: Lead | null, historyList?: any[]) => {
-    if (!lead) return { reason: '', notes: '' };
-
-    // 1. Direct fields on lead (check casing variations)
-    let reason = lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason;
-    let notes = lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes;
-
-    // 2. Extract from remarks field if missing
-    if (lead.remarks) {
-      if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
-        const matchReason = lead.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
-        if (matchReason && matchReason[1] && matchReason[1].trim()) {
-          reason = matchReason[1].trim();
-        }
-      }
-      if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
-        const matchNotes = lead.remarks.match(/Notes:\s*([\s\S]*?)(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
-        if (matchNotes && matchNotes[1] && matchNotes[1].trim()) {
-          notes = matchNotes[1].trim();
-        }
-      }
-    }
-
-    // 3. Check statusHistory array (ONLY specific regex)
-    if (((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') || (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null')) && historyList && historyList.length > 0) {
-      const lostHistItems = [...historyList]
-        .filter(h => String(h.lead_id) === String(lead.lead_id) && ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''))
-        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-      
-      const lostHist = lostHistItems[0];
-      if (lostHist) {
-        if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
-          if (lostHist.remarks) {
-            const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
-            if (matchR && matchR[1] && matchR[1].trim()) {
-              reason = matchR[1].trim();
-            }
-          }
-        }
-        if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
-          if (lostHist.remarks) {
-            const matchN = lostHist.remarks.match(/Notes:\s*([\s\S]*?)(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
-            if (matchN && matchN[1] && matchN[1].trim()) {
-              notes = matchN[1].trim();
-            }
-          }
-        }
-      }
-    }
-
-    // Sanitize reason
-    if (reason && typeof reason === 'string') {
-      if (reason.includes('---EVENTS_JSON---')) reason = reason.split('---EVENTS_JSON---')[0].trim();
-      if (reason.includes('Notes:')) reason = reason.split('Notes:')[0].trim();
-      if (reason.includes('[{')) reason = reason.split('[{')[0].trim();
-    }
-    // Sanitize notes
-    if (notes && typeof notes === 'string') {
-      if (notes.includes('---EVENTS_JSON---')) notes = notes.split('---EVENTS_JSON---')[0].trim();
-      if (notes.includes('[{')) notes = notes.split('[{')[0].trim();
-    }
-
-    if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
-      reason = 'No reason provided.';
-    } else {
-      reason = reason.replace(/[,;]+$/, '').trim();
-    }
-
-    if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null' || notes.trim() === '') {
-      notes = '';
-    } else {
-      notes = notes.replace(/[,;]+$/, '').trim();
-    }
-
-    return { reason, notes };
+  // Helper function to resolve Lost Reason and Notes
+  const getLostReasonAndNotes = (lead: Lead | null, _historyList?: any[]) => {
+    return getStrictLostReasonAndNotes(lead);
   };
 
   const [showCancelConfirmPopup, setShowCancelConfirmPopup] = useState(false);
@@ -2538,14 +2730,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
        })) && selectedLead.quotation_locked !== true
     : false;
 
-  const isCrmLocked = isLeadConfirmed && !isApprovedUnlocked;
-  const isLeadLocked = isCrmLocked;
+  const isCrmLocked = false;
+  const isLeadLocked = false;
+  const isLeadLost = Boolean(
+    selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(
+      selectedLead.status || (selectedLead as any).current_status || wizardLeadData.status || ''
+    )
+  );
 
-  // When Business Owner approves Unlock Request, ALL steps (Step 1, Step 2, Step 3) become editable.
-  // When locked, ALL steps remain locked in Read Only mode.
-  const isStep1Locked = isCrmLocked;
-  const isStep2Locked = isCrmLocked;
-  const isStep3Locked = isCrmLocked;
+  // No longer locking steps so Sales can update/add required services
+  const isStep1Locked = false;
+  const isStep2Locked = false;
+  const isStep3Locked = false;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
@@ -2587,6 +2783,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Filter & Collapse States
   const [filterQuery, setFilterQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
   const [isDownloadReportsExpanded, setIsDownloadReportsExpanded] = useState(false);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [filterSource, setFilterSource] = useState('');
@@ -3091,9 +3288,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [quotationTerms, setQuotationTerms] = useState(
     "1. Payments are non-refundable.\n" +
     "2. Crew food arrangements from client side.\n" +
-    "3. 50% advance and remaining 50% before collecting the raw data.\n" +
-    "4. If the duration extends, â‚¹3,000 per service per hour additional charges are applicable.\n" +
-    "5. We expect 90% of the payment once the event is completed and the remaining 10% before the final deliverables are ready.\n" +
+    "3. 50% advance payment before the event.\n" +
+    "4. If duration exceeds 1 hour, additional charges of â‚¹1,500 per hour will be applicable.\n" +
+    "5. 50% full payment on event day.\n" +
     "6. Pendrive and Hard Disk are not included.\n" +
     "7. Edited data will be shared via Google Drive link."
   );
@@ -3361,6 +3558,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const getEffectiveSalesStaffName = (): string => {
     if (salesStaffName && String(salesStaffName).trim()) {
       return String(salesStaffName).trim();
+    }
+    if (loggedInSalesPersonName && String(loggedInSalesPersonName).trim()) {
+      return String(loggedInSalesPersonName).trim();
+    }
+    if (currentUser?.full_name && String(currentUser.full_name).trim()) {
+      return String(currentUser.full_name).trim();
     }
     if (currentUser?.name && String(currentUser.name).trim()) {
       return String(currentUser.name).trim();
@@ -4485,7 +4688,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       );
       
       console.log("âœ” PDF generated");
-      doc.save(`Quotation.pdf`);
+      const pdfFileName = generateQuotationPdfFileName(leadObj);
+      doc.save(pdfFileName);
       
       showToastMsg("Quotation successfully generated!", "success");
     } catch (err: any) {
@@ -4527,7 +4731,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       setGeneratedPDFBlobUrl(blobUrl);
 
       // Download the PDF automatically as requested
-      doc.save(`Quotation.pdf`);
+      const pdfFileName = generateQuotationPdfFileName(leadObj);
+      doc.save(pdfFileName);
 
       console.log("âœ” Opening WhatsApp...");
       const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
@@ -5442,16 +5647,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   // Handle lead select
   useEffect(() => {
     const handler = (e: any) => {
-      if (e.detail.role === 'sales' || e.detail.role === 'owner') {
-        const targetLead = leads.find(l => l.lead_id === e.detail.leadId || l.order_id === e.detail.orderId);
+      if (e.detail?.role === 'sales' || e.detail?.role === 'owner' || !e.detail?.role) {
+        const leadId = e.detail?.leadId || e.detail?.lead_id;
+        const orderId = e.detail?.orderId || e.detail?.order_id;
+        const targetLead = leads.find(
+          l => (leadId && (l.lead_id === leadId || l.order_id === leadId)) ||
+               (orderId && (l.lead_id === orderId || l.order_id === orderId)) ||
+               (l.events && l.events.some(ev => ev.id === leadId || ev.id === orderId))
+        );
         if (targetLead) {
-          if (externalSetActiveTab) externalSetActiveTab('list'); else setInternalTab('list');
           handleSelectLead(targetLead);
         }
       }
     };
     window.addEventListener('calendar-action-click-deferred', handler);
-    return () => window.removeEventListener('calendar-action-click-deferred', handler);
+    window.addEventListener('calendar-action-click', handler);
+    return () => {
+      window.removeEventListener('calendar-action-click-deferred', handler);
+      window.removeEventListener('calendar-action-click', handler);
+    };
   }, [leads]);
   
   const handleSelectLead = async (lead: Lead, targetStep?: number) => {
@@ -5465,11 +5679,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           .maybeSingle();
         
         if (!dbLeadErr && dbLead) {
+          const directLostReason = dbLead.Lost_Reason || dbLead.lost_reason || lead.Lost_Reason || (lead as any).lost_reason || '';
+          const directLostNotes = dbLead.Lost_Notes || dbLead.lost_notes || lead.Lost_Notes || (lead as any).lost_notes || '';
           fullLead = {
             ...lead,
             ...dbLead,
-            Lost_Reason: dbLead.Lost_Reason || dbLead.lost_reason || lead.Lost_Reason || (lead as any).lost_reason,
-            Lost_Notes: dbLead.Lost_Notes || dbLead.lost_notes || lead.Lost_Notes || (lead as any).lost_notes
+            Lost_Reason: directLostReason,
+            lost_reason: directLostReason,
+            Lost_Notes: directLostNotes,
+            lost_notes: directLostNotes
           };
         }
       } catch (err) {
@@ -5477,35 +5695,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       }
     }
 
-    // If lost lead and reason is missing, attempt to fetch from lead_status_history
+    // If lost lead, ensure clean reason and notes without dirty metadata
     if (['Lost Lead', 'Lead Lost', 'Lost'].includes(fullLead.status || (fullLead as any).current_status || '')) {
-      const currentR = fullLead.Lost_Reason || (fullLead as any).lost_reason;
-      if (!currentR || currentR === 'N/A' || currentR === 'NULL') {
-        if (supabaseClient && fullLead.lead_id) {
-          try {
-            const { data: histData } = await supabaseClient
-              .from('lead_status_history')
-              .select('*')
-              .eq('lead_id', fullLead.lead_id)
-              .order('created_at', { ascending: false });
-            if (histData && histData.length > 0) {
-              const lostHist = histData.find((h: any) => ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''));
-              if (lostHist) {
-                if (lostHist.remarks) {
-                  const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
-                  fullLead.Lost_Reason = matchR && matchR[1] ? matchR[1].trim() : lostHist.remarks.trim();
-                  const matchN = lostHist.remarks.match(/Notes:\s*(.*)/i);
-                  if (matchN && matchN[1]) fullLead.Lost_Notes = matchN[1].trim();
-                } else if (lostHist.call_notes) {
-                  fullLead.Lost_Reason = lostHist.call_notes.trim();
-                }
-              }
-            }
-          } catch (e) {
-            console.warn("Failed to load status history for lost lead reason", e);
-          }
-        }
-      }
+      const { reason: cleanR, notes: cleanN } = getStrictLostReasonAndNotes(fullLead);
+      fullLead.Lost_Reason = cleanR;
+      fullLead.lost_reason = cleanR;
+      fullLead.Lost_Notes = cleanN;
+      fullLead.lost_notes = cleanN;
     }
 
     setSelectedLead(fullLead);
@@ -6540,7 +6736,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           };
         });
 
-        if (wizardLeadData.status === 'Order Confirmed') {
+        if (wizardLeadData.status === 'Order Confirmed' && !isLeadConfirmed) {
           if (!wizardLeadData.confirmed_event_date) {
              showToastMsg("Please provide Confirmed Event Date.", "error");
              setIsSaving(false); return;
@@ -6636,10 +6832,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         await completeApprovedUnlockRequest(selectedLead.lead_id);
         showToastMsg(`âœ… Quotation & CRM changes saved.`, "success");
-        if (isLeadConfirmed) {
-          setIsSaving(false);
-          return;
-        }
         setStep3FollowUpDate(selectedLead?.next_follow_up_date || '');
         setStep3FollowUpTime((selectedLead as any)?.next_follow_up_time || '');
         setStep3FollowUpNotes(selectedLead?.follow_up_notes || '');
@@ -7359,6 +7551,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         remarks: `Lost Reason: ${finalReason}. Notes: ${cancellationNotes}`,
         "Lost_Reason": finalReason,
         "Lost_Notes": cancellationNotes,
+        lost_reason: finalReason,
+        lost_notes: cancellationNotes,
         
         client_residence_address: createForm.client_residence_address || existingLead?.client_residence_address || '',
         city: createForm.city || existingLead?.city || '',
@@ -9435,7 +9629,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }).sort((a, b) => {
     const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
     const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
-    return timeB - timeA;
+    return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
   });
 
   return (
@@ -9486,12 +9680,22 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           style={activeTab === 'calendar' ? { display: 'none' } : undefined}
         >
           <div>
-            <h2 className="text-xl font-black text-white flex items-center gap-2">
-              <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
-              <span>Sales & Lead Desk</span>
-            </h2>
-            <p className="text-xs text-zinc-400 mt-0.5">
-              Collect potential inbound queries, log CRM call reports, propose quotations and confirm contracts.
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-xl font-black text-white flex items-center gap-2">
+                <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
+                <span>Sales Dashboard</span>
+              </h2>
+              {/* Authenticated Sales Person Full Name Badge */}
+              <div id="sales_dashboard_person_badge" className="inline-flex items-center gap-2 px-3 py-1 rounded-xl bg-zinc-900 border border-emerald-500/30 shadow-sm">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">Sales Person:</span>
+                <span id="sales_dashboard_person_fullname" className="text-xs font-black text-emerald-300 font-sans tracking-wide">
+                  {loggedInSalesPersonName}
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-zinc-400 mt-1">
+              Logged in as <strong className="text-white font-semibold">{loggedInSalesPersonName}</strong> â€” Collect potential inbound queries, log CRM call reports, propose quotations and confirm contracts.
             </p>
           </div>
 
@@ -9732,7 +9936,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <option value="Quote Sent">Quote Sent</option>
                         <option value="Quote Follow-up">Quote Follow-up</option>
                         <option value="Confirm Order">Confirm Order</option>
-                        {followUpForm.status && !['Quote Sent', 'Quote Follow-up', 'Confirm Order', 'Order Confirmed', 'Quotation Sent', 'Follow Up'].includes(followUpForm.status) && (
+                        {isLeadConfirmed && (
+                          <option value="Order Confirmed">Order Confirmed</option>
+                        )}
+                        {followUpForm.status && !['Quote Sent', 'Quote Follow-up', 'Confirm Order', 'Order Confirmed'].includes(followUpForm.status) && (
                           <option value={followUpForm.status}>{followUpForm.status}</option>
                         )}
                       </select>
@@ -9938,7 +10145,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       : 'bg-indigo-650 hover:bg-indigo-550 text-white border-indigo-500/10 cursor-pointer text-shadow'
                     }`}
                   >
-                    {isSaving ? 'Saving...' : (isLeadLocked ? 'ğŸ”’ Locked' : isLeadConfirmed ? 'Save' : followUpForm.status === 'Order Confirmed' ? 'ğŸ’ Confirm Order booking' : 'Save Follow-up Notes')}
+                    {isSaving ? 'Saving...' : (isLeadLocked ? 'ğŸ”’ Locked' : followUpForm.status === 'Order Confirmed' ? 'ğŸ’ Confirm Order booking' : 'Save Follow-up Notes')}
                   </button>
                 </div>
               </form>
@@ -9958,7 +10165,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       {/* Main Sandbox Area & Mobile Base view */}
       <div className="space-y-6">
         {selectedLead ? null : activeTab === 'calendar' ? (
-          <SalesCalendar />
+          <SalesCalendar onSelectLead={(lead) => handleSelectLead(lead)} />
         ) : activeTab === 'profiles' ? (
           /* NEW SCREEN: Customer Profiles & History Timeline sub-tab */
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -11369,7 +11576,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <button
                   type="button"
                   onClick={(e) => {
-                    if (salesStatus === 'Order Confirmed') {
+                    if (salesStatus === 'Order Confirmed' && !isLeadConfirmed) {
                       handleOrderConfirmedSubmit(e);
                     } else {
                       handleStatusSave();
@@ -11378,7 +11585,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   disabled={isSaving}
                   className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? 'ğŸ‰ Confirm Order & Transition' : 'âœï¸ Create Quotation'}
+                  {isSaving ? 'Saving...' : (salesStatus === 'Order Confirmed' && !isLeadConfirmed) ? 'ğŸ‰ Confirm Order & Transition' : 'âœï¸ Create Quotation'}
                 </button>
               )}
             </div>
@@ -11406,143 +11613,132 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 chartPoints={card.chartPoints}
                 activeFilterValue={filterStatus}
                 currentFilterValue={card.filterValue}
-                onClick={() => setFilterStatus(filterStatus === card.filterValue ? '' : card.filterValue)}
-                lensLabel={card.label.slice(0, 10).toUpperCase()}
-              />
-            ))}
-          </div>
-          
-          {/* Leads Directory Header Bar & Collapsible Utilities */}
-          {(() => {
-            const activeFilterCount = [
-              Boolean(filterQuery.trim()),
-              Boolean(filterSource),
-              Boolean(filterStatus),
-              Boolean(dateRangeStart || appliedStartDate),
-              Boolean(dateRangeEnd || appliedEndDate)
-            ].filter(Boolean).length;
+                onClick={() => setFilterStatus(filterStatus === card.filterValue ? '' : card.filterxœì}[oäÈzØ»E­¼Yu¯Õ­ÖmgV+i ‘4»Bf4sFšsll&ZªYRó›ä’l]¶-À1’— †Ÿ?6N @óÈ¯Ù?àóò}U¼Éªb±»¥‘f›öÙQ“ÅªbÕw¿Õ¯-wDÛ·BJ—K½è¥uFİíqß
+í®‹w#×éÓVo‰¬ôÚİØ4Ü³"Úªô°¼S¸Ñ.4ØZ¶K±ğçxùKò’ZvDööc?¼!ßÁo’çVH¾ {¾ëZAäœ¹”¼‹×‰‘/—ÅÆ­V›lïqa}ß‹bbõcç’¾pÜæî¼˜l“ïK³îû.µ¼Ö9kõ«oºqè[íö’¶é±?
+û´®QlÅ£HÙÈ¶búÖò.(´cò—I¬ pj³ßûğ´şÕÏ^„_ìµÂ[ï»|6­äåvöü"|ó'…f!G¡GZ¥·`Ißµ¢èÈÒí…(°ú´sÓY[Ø©À’lKOœöwÓ‹Cß%ÏGqÛÃö¸¸—òñÎ.:?9^¿óu¯·üUuÂfÚÔî¬^»äÌbø?¼åÓ‰–í_u n¾ÕÑÎ]zMğ?>Ì5n²¿Cÿ
+ÿvb:Œ:}êÁb’ß¢Ø9¿éœÑøŠR\XbÅ(…ŞğíUÅÛğ>|„'vÓë>naçøİÚZÆÇÊwKXz:X«ôÉ9lVçÌµú»u5€Ù’R>P‡ğÈñ.:W®>k>ô=a§´ı[Ëƒ5ÍèAeğïWzÁõ{>*ÛÍõ^oaçà:ğÃ£IàÔu<
+ {áD°|E01<² %(üC}´µ(×¦LŒM³Åäªs>rd]u¬Qìs`»
+­@¹ûˆUÇøù¯¨s‚–à‘…’½„µÁ÷’.‘l#¸Ã:º%¾·7@7)k™Ü’®™Ê¾å¹¾e“·7%2˜Ék¡ƒø&@Dg”­ÚÄŞiì_\¸ôÔN¦qòi¨_„Ïnöa{ÌY|ëa”~Dò _’”Ögê‘„u¦W¾íãØv®d”ÃóL«°h×µî	nàoàQ‚ˆ¾kgD/§y€„^LÑ÷:€TÂŞvßa}&ùó±ræ°ªªïÕ¼CÈ3²tÙÍİ Â¼Úã3æwÖz½” çMÖ3¢œß[é-j‡ÙdÃpòD}à_ÒpS`™ÆäL —µî>éiF¼ıAµÅ
+ÆH/Páÿ¥§ÂiË2òÔ½5VîìA™U†ÛĞËĞ÷ŞHìƒ°û¯°a@cÉĞíôàn4ïC§·PìÄ«;c28N];|Já›®¤3Ëœ†hÉ§†9adä#¯„55£YÉÌEZUºõÉÒ¨Òw2‰·"İïÑ¢CZ®] [é=ˆˆÍrÒ%ŞıˆW"è04ıbDR#ìätîE*{Õ7é.’/¾Ğ“—²8\ÜVaaqáE±Rk’W8$÷º«ä2áLgµ;\½ÿ:é×Bƒ¼ã*Ì„ú‹›ûIÑùS…DŸ<<A~!Z!*¢ïë I[DŞXuL„iÒ‰4ù"tì2µ´G¡Å~ }  wu¯ãb5µTKÊÕªˆc£šœ‡ï‰*³ßtV`Ø î¬¥´).)PÈÕ=ozî‰=C¿œtè%°—ˆñ 9q“63=Iè¹t{àØ6õÔúµÒ
+€Š™LƒeYÑP‡:¡ÁTlĞÔl—¾üˆùŞêhMé[&böŒ:»W1{æ–K—
+3M•É!ëK‰±{¡—të£Ùi{­q)à,×	¨Üè^ÖıTŞÿûÿıoÿò·	E'|¾+jĞ'¼æĞ¤‡¦Ğ
+ø1)#ÿ	(Y@ø÷_ÀG„C+~÷ŸS`Ê®0¥?¸îS÷€S&ül<(ˆbËG¢ DCê€Òië¿¦€Å;nu¯İèºm Y‚öıàÇñlçÂh	ÖßtJ¨ù§j ¿‰©Ğ$æuÅ•Œ^–Ğ5xÊl<j±\%”ÏZ$¯*nŠµªÃ‡75¥¨=A[&f›8ÌÌDlSo½×Ì¡R×ân ÎºÖg²ç‡Z7,×9ã»xĞ1´Âe?²n²ÖYä»£˜‚èˆ¢¿KÏcæÈYaº,ş·¬¹r+’F«­3t.uƒ†³ôÌ´j¿õì¾5Vó¹g&Ÿk80Cp†9}ß€íMáç*÷é&¼„z¶Fác>:j…ıùƒ4àU#và*]ÈÉ›,:£€I®Ÿ:iWî¥ÍìXc+™]Î´j,^ÉW¡_—,“=`¥>,8ÁÑµÆ.6Sí·”V!Åëšùl%*˜•ÖHÖ‹bİFoƒdÅàx!ÓšÖ¶ÄFp¼`¤VäøÅEQÇ§ñ
+\«O°ö4Ü^8Ü_"Lz‰ø!	@Œ»İn]‰çVˆQÑ‰GxåİM/ò×[´[á»—Š¨ âUXkf"å#ÅœÛùšaYÜÊaYÜ¹ßE›ÀKÑµŸˆrìVˆ+âÑØË@;&­_Eíká±ùY<ĞÄh¯ı`oÎí#@0jŠ÷áùWM‰çui_OçƒêaRàüíf.…o¾Z_WÄ{~ÿÉFA’¸ÎTŠxóÖ ßË_÷tZC’|fhNÖiaagæÈ¿4ÚZæk|/v÷O_¿{»wpÜZA+âk§3å‹£ 7?Âv''a?wÒ?ÌfÓÖnèd¦ÄH|GZğïÀÈ§ƒ™»<
+Š}×}£&[Ó‰Q“½ı Q3g#eµ’-UÅÏYã7n°)zïîşúàôød÷ÛƒÓoß¾~÷†cyë–"X"}İ6Åuö
+Çvxí–¸<<˜İæñÁ·E9ßXùÏ“v€@~¸‡­nshÿáVÿìSøûü«#öğ·ÉÜÅ•d³‡¿9eäJ¸S<ä1lªZtİ…Öœ°Ù6à¥§mlËé"?*Æƒ†?!
+)|Tk/¤ğ¯­¶xšQÊz€k˜­—DH,7'©û…÷Q-le™„êVH[b Ğÿ‰söI˜aªS€2¼=d¼QÌÃØ’Iáx…¨“ ]v?q‡è¡¾Öåcîô©7êBÿğÙ-åÅ”RgÚßw‘dÈhj^¿m
+ƒf("D­}ÕÜL¢u#Ïj[FI¸Ø’@ôä¥Ì§„ëtÃÉ—Ú'—jYWZRUçÅşø'ZÍM ­`†hô
+W½b¹4zCa“½Fï10{¡$g4|	)ºÙ+oôZŠÖµ/İ2cìbÆyŠÈœ3)3ÊQ<‰G•'A­å~ãšjËs†ØssÊğı-…U$ØSmPz¾³®¦Âw­!vöîäÚ›`ºmcö«p¹ô‰…nçK‡^•µÎå¹jäò,¹VSè*æıf©ôÉ^³³
+gßŠÙ¤«°Î }%™(”Ì©Ï]ì”¯sÕZ×qa+PË–îBJ—b£·ü¤WpImˆ1%_¶0u²v1;Qå’>¤€ç5¸ÃH÷·–ãù»;<=¯ù{ŸZÓ—_ùgìåÑC-›¾|€1Í§†ğZb_mü6×`˜€Ñìİ$]ÃèKÚ W _1  ’KÍªá~(£
+ÈİŠÏ|ûFœ	`ÀTç†$©ÉR8Kì¦Ôfy±Iâ5ËqPğ_`&<_ÕÊ+<ß›%FïmölV"Z°Tü‘wÒÏ^¸ ²n.¨I/NÄÔ‡“P £b¿ÛÛd‘=YÔ÷zÖjsÄÚ&ŒDİs„Š–ÏVÄïâlN›õ‰§7”3Tä¹çR+c–Eq¤[]kv*qdËkå$ "oŸ0†+¶å„M¤œ‚®Hô‰<¬­.û¥°Z¶K¹‚vÂò¹²¿/ß¥13ds¯« HÏD°ê2 B Ú$‹GË»‹wó%%}Íhiû	_8Å€3‡ŞÊäMèGíÇ‹7¶S¯¾p×;’'çë?…GGTYŞxà¬ŠQ‘îq¯3÷s-bU"Pã…yç9ç¨L [Üı sÌ÷(F8Yô·u‘Íg[ğÂˆ÷	|8€?ùL_Üìç3éNsäüıí+ˆiå{İô5P#OÛß÷ŞßÒÈ
+¹|}éğàQÃ$yÍ™ê•²ÂW–Lo/¾öÜ›ŒA¿x:2×Å%²øl˜É(ÈwìÖM±ú°|ì[Iò«‘Óü·Ín°ÇÅ÷]Ø-wdSÎí“
+4uŠ´ÈµáÏö…É²!É1 ›W¸CIá3è…;|ZüCÎpÈ«XàN“Ûğ}ò©c®oAxø¬^x(V20û¦sËè7dy™ì;*D6a–üş8rB:DˆvÂ'˜È†câÎ¾ô£XXC¦Wà=üzü—o¿jËŒB3B¿ópêoaæğÆ‰¿ëfLHZ ¨nË»aĞ*%+Ü‘–ÈP¿ø‚|”5—0X¶“\˜Å@u'©Ú…¼a[çúH>+œ´Zû”%r–’Ç¬DgI²XÙ¥³nÈ—*»³°Ğî‚ì{â) {'Õ*½jé_E"g
+¥o(0Iï‚ï%l¢dkŸu£œ	’qTiãdj§²—Lgõ–ş–"ù1ŸVúF³yeoÓª „Cı1¥L§x—rXb¨ÎÀ¯zä Í‰Ãe™éµÎ¬ÙdoÕx=i Î9i•
+æRY4v¯´Ãì^•b¶kùj•_ªè_noMM¬ú ëB~‚ü2÷ä—cc¨KìZœI&Œáôó¢&¤,ÄP¾rg5’'ò¤¨Ø@	¬§­Z/|À†P/eòÈƒ%úsƒù0KüëJŸ-oäºfvK(âi“q91Àbc@ h7N¸ş÷Õ%ÀXiŠ©®ı¸ÉR¥ı³rÏ)
+eÛä
+4dÿ
+x¶GÃï(1;l]¿0a÷»g€—Ğ=ë	v·y7 ±Œ’	m“¯{M:hĞToŒ£ß$ÓãÈ_‚R‚AÙéÔù"?#ëM&€½ò7e/¢»–1LøAˆÂo‰ëä^Øœš¡Á%›èCH²,ZÀÃÎ.¸)‘Â«Èg„¶¨5ÆO_â)=›…oøcÇƒôØó¥ôco!©œø«—éÂÔ8óKŒ”¼ê¬}E§
+\ÓúIÇQÔ.Ê´8epİYeåUĞƒ”UYÑW]*^ei¢Áö”‹Å­TªCd–ÑBE¹J	¹5]µ‘êµY•w!^µ^ÔJ9u\¶!Ì^¼»VS1Jö%á¬Ñûé'°Â	âü³J
+Ùä³&ùÌ³[M§–¾Êã°JŞğ§i
+5ÿ¹–µZÊnrÓ)˜Š_fRešmüıã2Àüñøç$škQ”¼Éÿ,4)m;kòûÿ+4Áß—ş6%Eu%¨$Ÿ®*Ğ:t1lñç¿ÿMú4(. ^c1Y4×Èß€Úo¹&º›Š²*“ìK8× ^uÖŸÈu]ØáÓ^Opà“Ÿ:ß×{ÂK¤EŠñï4‚Ãñ@oµÙ¿?ùşÍ¿ŞÈĞWR$bşúD'éØÉjuPˆ1Õl€ƒÆ7.ğ§1—ììïŠü»ô¨Àµ+OSfn
+Ğã#m›¡Ñ‘áÒÆI–¯fÚ"^“hŒxM®äá5•¢‡×Lô²¤#\ìW¾m¹Ó	XåŞ˜áĞ(LLİIC8Úª:Ã¦™,_m?ú0†y¼ª8("B’•IÎÜËµÁÒ	kå7y‘tö»±.ã­Bøs‘Te}¬—]Ñ•¬(EykNâÌÄåy¹JÊÜ`Š’‚FÕ%ı2–’“f<Ò,ˆµxÍ©Tùš•âu„Y^ö¢U‘]wŠ¸æõòÌq6Š{ 8{pCï]—{o_M®ÓÈô¦R&±1OÇ„Ø‰/³ÑKMá˜ÃiÂŠ‹ìG	«É{\ÍTcµ#ûWèxMª=Ñ¦Ø–¯&@…5kÙŞÖÀjõkBo
+¿¿± O½æaæú å6…åI˜O[®>\€5Í€9Í=)ÔYkØQ#.Õ¿S£UUe7+ñ+¡ÿx/,«118°Y‹™)æ³®³ šûÂù9‚k®"8¤Ã°;%®“‰¡IW…°·Ôby^Y¾@yB,Ûf8d¹( ô±}Smº:'u¢şşU¡O¦R7W§ïœâeMÙ1•lË;—Ò=·”%ú§$t‰pq¿¤ÎÜÉ^åãõT—í÷GØÅ|£wŒ&RSw,ë«UnÍ•ÙÅ£…Š‹÷î“¸0…"
+r{vÃ`¬ç)æe>Ä8¡yXOéš‡õÌÃzæa=åkÖc0è£ëA™i5ê™êD´&=k•xZƒQ¸Ü;´&³émEÓêä–T¢Mä×Â[fü¯Y\ÅÏÿFFÔ&y}›€×<6áaÅ&Ì½vóØÓéÍcŠŸr[PwMJ¥²¼™s–:
+&N˜ÁëS¡y<Ra6b¤’”úyxäÀ l¡üù)ŒÁ´ı/ÉÜÉšòdvÉËÕiPL·<ôË=X«çÜº9·n6ìÿZ7WÖææMÃknŞ¬»ææMY»	³†}³Q¾b1Æ­ÁÆTóşVi~k’H(é©tMèxòÜ¡Â¥Àà›97–¥»ıü¿',
+xL–å³	¦àÅÛ¹18ŸÊÜ,\Í<OT3¼™1Ë†ELyÄ~#\u§üîtgo1&$/ J>‡Œ¼ØqóRbs[ôÜ­¼~q¶h$’©!ìaÉ¹-[v=p[ö<ëîQfİ±Ü…’¡„2¤UáxÅJÛA;ÁœJ5•hÔ	7Æ °Üí¼*gdÿÃã×ÇÌô¿
+E†›MS]xş¯<ïOXw¾~¸7Ö«:[¨Ÿ
+úrÀï§pIÁU´Jºî$Y¶¿k_Z\šŞ3¬â*ŞéZ¼å)À:u@ÓÇ’½6ù3RjÓ·ÜÓäsJ­Y’Rñ»ÅŸª1à%± xÚ
+,aI8í¤÷†pPŸŸ~8l5ÍIêv»ıüuS·[zıÁº L¢ßL¥»ß
+H@=è¦q¿’l58²¾IšpÚn?ëŠ#°"¥ÊÖøtq±éäT­!&#mq“^00HÇÙe-Ø>%Š¥S á­­Jk¡Ë,ÕÄ°Óò4ëÚ­
+J%[ø(IûBÚö,{ò,íïÊùÉ
+ÙC XV©ÃMeÔ¦]ÆŠMs›vF±î=«Ò(ßÀÉ1ª;YŸ±3,ö‰78h5ê¯™…¸²çÄ¬šô–~§˜Ñœb&[B&Ìa»S÷“ËØm$›îhÿÃñ#+¼±· ‡Ş“ì›Õ‡$r¯ó=eTo.óŠlaBÚƒ 0i.~J< á”}àëh52:²ò6Oìá!RNVæ²@6ù¼V¦	ÁL;x ÔòÏï„FfôjÊ&ôu/™»²fg˜Û<¹W~ÍÃßæáo•kş6S_óğ7Y»Gİ}¸©äd°{BBşÖÅ…åíç½â5âšqÉ¯yÖÃÂšGQÍ£¨”×/.Šjõ0ãÌ{¸S20•è¨¤bÜAWşÜâvO‘PsgÎÃ@ğ¹3gîÌyp$nîÌÑ^Ë™3÷©È®¹O¥tÍ}*ó‚©s—Jùš»T»TæSÕ¯Ïİ+xÍİ+s÷Ê£·DÌİ+æ=Ìİ+f×Ü½¢ëzî^™»WæS×¼`êG3L¶¿5±¥íok9¶ÕİÀÓPõT`·mÉmõ1ƒ[ê¶b›ô}÷6s{¼²r+ˆÓ«h8æNJ&‚o üh>	¸¾P€È§¹ÊéÑà‹½áu­dxÖYÕ‚¤\…J	ÁĞ÷|Ş9«Áæw½Zq€Ö›•:‹@a%ñ€îWóÃr:v—œÀ_!jÉO…eÓºz(Wo«jK%PMhË­á6#\¼]ÇÒÒÏl´ä~òK¨ìÀX
+a¢h+äõù¹ÓwX¥—ş(O6yîû°5lW?rà¶@DÈÄÂlD'Bf³=öD1ÿfä…~ºQ‹±ÂŠdyn¹ÖÈeÜJè³/¡C..‹ò;y“¾ íD9m¼œ/QTJ7e8Áùˆ¿s\+ë¿×ñà[¹½ãÌµú–Ÿn0­uã½„[¤–“ä'°$âÃÍ ³N†6üó9ƒ>P?D!5ìm‚Œì„•ÎÀ±mê‰*9¼9WvW{ÓHèƒ¶º`Ã¶ûâ}+t,À*øxÀ4ù+Ï\ëŒº.µÏn¶Òªg .€@§ì½ÓØ‰]á½äVL!=ß'ı<çİ°¥KÏ‹Xò™|¼…b‡Â.d…§r‹Â“üØl4)”×sh]w®P,€àC£D0,l3ñ? ©ì¥ìrïrğo8™3µHà„Ÿ“¸òE‚€¨ü€#|N‡¼` fÅäÄ*ÙªeV½Á.Uƒª¦ÂÖ@^w6Hpƒv=øqS6Ä%¯pŠ­Áºz°)Ì6õ”m¢!N€ëyVD•ë%Ä CXí«ŒƒÉ™ë6  S®vşø‡¿û—¨ö¼>L}a'ğ"ş"'´X¶BŞíÖò`½rËVUeJ¯åªIJ+YöeŠœ^åâ;R’©ùÍU„fŒ¤ë<*ƒ*dòøaT–«3Ğº )T¿¡f{q˜êÓœb%MˆtØW—ß–ìlÉí¿¢ÍºDx‘K½EvÌ/Ää×GäøğèÛ—ğÏŞÛ×/_î>‡?÷^ì¼%/^¿%'ßƒ£“Ã·äÍë7ïŞ°Çp£á3Š–Ğ¡ì÷uJãP¹J8"6²škà5€Øë	íD}àî™Å•4Z—?ø  ëxt6tâí1×“%f¼™?)È™©Áv=Uí$xY¹Á¥×µ‚ÈA‰d§2z8¾{Vhe<¸DÙÏ³b ¯(Ş\9ñ€½&ÌDòÏ’%ù[-¥æTëñ‡gGí@7²MZ¢¤ÀnDe"¹İu©wSÙ!=™HÅ%o)EäîĞ
+ZôgK/“Ri™ìù`¬.û¶ =@üò4xÙZ\"‹¬tJušl Vd„• ‘WÙ”­½‹,ŞJ]¤äYéu§§Å/W·ÈfÈ‡Q¬fšù*ªi£NÊh*ú>–¿îIüqv\’U”jYÍÌ^Ve‡QŠ{ˆz×¨İúÌ‘Ş×(ÊU›OB’€¡\/³ä>œ‚nÑ¡S–V{=	bãZFÄ ¡ãù„Ñğ«+—V_–fËÕ\j;£!É%	ÙAF5V½AÇtŞ¤$$~ÎôsŠ_‹P:ÃIZÃ\IXÉü;Ç¦¬|9J.&uËÕ}éXãæ2ô½wÊÌVüîãšÚVSpß¿RßlH5âÕ™9jÍª5-èÈ•^K„/Eõ3şOÌ0 ¡uq…èe©° =Ìâƒ¨´‚´“ÿ\e ŒÚşDG\á5­ÅK6˜ZË(½'Õ9r* ¾€N,qa‡Ç”|ÕÌ*»Å XŠWÒ‹ThéYH­+4£-ìŒ%\5q02–x´¼Ëğ‘U³nõfÖ´´¯ü3dK^Bn¦‹ËÌ•ºe1µ¼ÈC>›»_]@
+À‡~.àÀ=­õ®m‡42«¹æ"ÌÅÊê.Şç*#ÅÓÓ»{ÚTb¦Û„¼ ³É&ˆÊÓ¬»¦ö±‚O*ß‘¸h¸?Hª²¾	}{ÔÓª¢„ÑËyØÁòARtK1ô3hÔ‡<,]'ü®¡ßåY¬šÒi&EBs!_Ê¦°Ìæ ã£XÚ=W5pBr ÄÆÕ>´]#òC.-wD3;2šÑ*ÅV'+èZ Æ…]ëßb„†‹O$MoJ—}QŠ2ßø×…¨¹å§õfn÷Bp§çZFÑ©Æ©Ä¹ü}ÓÅ,Öõ’x:O7RíÈócdZşÌ_ĞRó8³´Èv["´Êdx!1U›U&_¬ª(Ù§±å¸,a_Y­q†h”“8Fº)³˜]…VÀõ$âqçøİá_I¿òKÖ†šÊx‡Ê!HÇSÒ±X‰XĞ1"ôJ= hlJk†`ğÏ7K&FÂ5ÅÂ‹õM­nÅOö"Ú×Zôr‰85Á<Ü0øb™tzÙuX½ìèåéçcçöuØLšH`•bön¡zî÷Ğã{ìJF”íaRKÆ/Şb”éeV]ùmåif,¬Üˆb+ÌoÖ¨ÚMjfÃU'#ÄÒGúâ×yW¼ÄqáSÓ"Ç…Ş«55o5eË“œ\¤FÀ&`»¸eÿÕ«¿€«¥XµÂêjb¨„!N`²|ˆRŸì+aÓK
+Íü•ÕïüQX[µUVLyŠ–ØËâÉó}]€*Ÿ7õlÉ¬áníœÓ6l,MšJ2¾ƒ#í;Qà²ƒ	„¡Ÿ‘>‹KxK~ş«ß‘ÏÇy›Û`±‰f×RÙ<İÃnåp£·üDI‘{‹\É`BıV•[aôÙ8zQétR¢0ª66GÆ7sg,z<Ñ×¹rl½A“_µM è+¸ã¿F—Zògd…mï"¿µp²{øòX!X	ßc¨ i8mIÍOD)¹VÑİËı¡Å|‡’”®b“©8‰Lø~e5Y½œ2|?÷aµø«~<“5SIv…fR.ê“õ–¢&q¼s¿¶w3›ßZPŸğ™Ë!EÃ¡­DÖ¯
+6îzL™Ğ’U¯×Bk‚£  aŸ…D¤À¸°“/­i§nàÕŠ–_ÔîõnHÁyfxæ¨QHæYcÜ»Yca¨±(|‚‹ˆx÷‹X–!f·¦OPòÊº-#}³¥zÜÓ±Ê=-=oT¢A«IËù"ÛŠ|ÿK ‚ÚµQ¡„ÒòÉLU¥©ªõÖRCµ«xq£Šô&1ş!ıqä„FG‘&6­D)”¨O‹µ¼/ßÛXŞm˜ŠÑÊ.AÈcLŒÏeêv»øi8?Ór7¤Ê@ÿlR¹z\ÑÉmÛüôœŠİy1¶†İ˜%¼Ü¶ÒhŒÒgêMƒ†vÁÕÔ½2¼ #"oÅ&Èo¡µÈğƒı=ƒŒìÚŒcÖõ8ˆ'íX!jÜ±ÊÍ-sb¥&VœÚLL¬+ØœX=b5­+S¹Ò1}à‘Ú^7æªû7Uİ—™ª`lÒnn–ñØLLãéìHµQˆ5ÚjRÇ°I.MLH‡u£‡k-šLÿ(V¢i,Dáß³ó®çş–zxä"IÂºŒõdüão¦©9jr+JÉû¥ğê}*ëij™šÂ´73gİôKnBys½æÕh†„·‘Áª^ÿû8º_##•‘Îg¤ï™¦õ¼DÇ+Ç&,ÚôÜ¹ñâûgu>ş;
+¨Ó:&Ğ*§Õ(h“Éò™ê’™™¯ûÔ¦¯©Í^õzŸY«=>fÍQ«5ñ½‡MÚLZ³&m&f¬» mÆFsº4¥•kj×œ.İ%]Ò>Ö<”ÆÚ+ÛsŠà|’ì*ø®HMcŒÓ¨÷>–áÇ*8–}iy}¹v9VÄª¦íwèOÈÇU7ıäİ!ÀaLZ?ÿõ¿¶T\K½µT›ï¯«­Æ:­Í†ÿÿ8òc–Òsjño˜à	]­bÈ0[ˆ,:Ÿ/D[h-•PY¼–ş[•×dƒü*›“0L+yáÊùÉ
+YsæAáı§ıòe“–›¤§Lùœ*¤dYDJèSJ¼²ä$y@Rê¤ÖI?*í&dëRğD†G‹$xĞ°Óö©sImlTd4öò~ZcdğBÇK¤Üóf
+ŸE.İûÀ RÎ0é­6«N—›cƒ¥â¶‚ãÜ`ıB¬?ƒ±?éÏ“Äç@÷±p…%êß‹ğ ’Ud(£¡G\ë>ë“äMâ²L€Eœôš£HÀ‡Ã2Ttvè!öZ–\JÔÈJÑÏç9n|­Ş½9\ØÿÖ·°³Ëo0äÚŞZæÍ{Ù³¢ÁÂş—|ÂÖğhØÃsËû€¸åEç@BwØÏ£'ËoO¾=^>|õæ¸ñŒBfR‹/ïÓ3'f•‡šö2 Ñ‡B?ì_²*OäÄúN¶–9Œ?îX!jËä-=OxÅÉšêÓZI3p­>ÀgÒp{v/ºääÏVV×Ö7¾zò´ßeådø‘§<LmhN\Š½?Vòò8îsËe²š«„J…)Åğ†³ÂŒ—WÊK%>\-¤4æ"Y&(°_öÃóÙOmìóÈy³*ª¡\½ä-Z‡¨—~ışˆnjr;	şé÷­÷*Õ,ºP¬Ê¨JÛä>ÃÃ£·­WV<è­ëVo‰h¸ÑÉµm…QAUX@$üĞ~âyÎÊàÈ½ZÒX–fM=;sr)A ûÓa‡±
+4U¾ê+|MQ¯*Q¿âYÕP¬äE
+eK5¸lTâSô)â’åªW«w	¬e-‡Ë=„)W
+HêBæõk±ê‡òµÇ‚¨xì@ZU×6­°=v¢cëPzÊ¹-Ëub¿’óĞfXşÒt¿SËeó+4ÙÈ&ñN:ÉÍTßO÷V0f–ª=OªT#­R#”`%ZÙ_é1„m5çM¥
+şHVœŒo –#{ú}Eğø4«K¶!ÙöE±’¶Ş!?ş,ëô‹/ÈÖnúWoÙAkòB`XùKNôT°*e˜[ËHŒ‹w•Ï‹ ñä†Åjñ‚7~0³bÛ¬qÖÖ´æ¶A¡íÚ~Ò3*´Í«këkóê©ÊËf‚ÈËío¹«")J=iuêUiñé4è²×´Öôj¥²™PWúI'õeKe/¥£ëAëŠ@c©,¤ëË£øÉdÓ¡Y=èJ)c˜ºãÙÎ…ŸÊ‚lÉ­õÊ>mW³úÕ;?ÿíÿÑ–‘ŞQ`Ó}‰–¹ )A‚Â‰° ó«•OóVI#q¹U6£®õŠ´Ô§¸‡µ%?“Íc„…5,<àµ–¨˜¢NVsiÿFÓšÓâ­
+Æ£8lÊ®¡’—u.n¸¤°3’Ò”*}•–Ã²åğËå¨Ë¦+¨8°ª²´À‹¾´‹}]Sï™^&ÕYÎ+€ë÷=+ö¢tx/IƒsdøQ_5˜•˜`Ã©‹L°Ğä“*ÂYn¥ı¦®î‚¾Üç`CCÀj™JhB8Šx
 
-            return (
-              <div className="space-y-3">
-                {/* Leads Directory Title & Control Buttons Bar */}
-                <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xl">ğŸ“</span>
-                      <div>
-                        <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
-                        <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                      {/* Download Reports Button */}
-                      <button
-                        type="button"
-                        id="btn_toggle_download_reports"
-                        onClick={() => setIsDownloadReportsExpanded(!isDownloadReportsExpanded)}
-                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
-                          isDownloadReportsExpanded
-                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
-                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
-                        }`}
-                      >
-                        <span>ğŸ“¥</span>
-                        <span>Download Reports</span>
-                        {isDownloadReportsExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5 text-amber-400 ml-0.5 shrink-0" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
-                        )}
-                      </button>
-
-                      {/* Filters Toggle Button */}
-                      <button
-                        type="button"
-                        id="btn_toggle_filters"
-                        onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
-                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
-                          isFiltersExpanded || activeFilterCount > 0
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/10'
-                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
-                        }`}
-                      >
-                        <Filter className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>Filters</span>
-                        {activeFilterCount > 0 && (
-                          <span className="bg-emerald-500 text-zinc-950 text-[10px] font-black px-1.5 py-0.2 rounded-full font-mono">
-                            {activeFilterCount}
-                          </span>
-                        )}
-                        {isFiltersExpanded ? (
-                          <ChevronUp className="w-3.5 h-3.5 text-emerald-400 ml-0.5 shrink-0" />
-                        ) : (
-                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Collapsible Download Reports Options Panel */}
-                  <div 
-                    className={`grid transition-all duration-300 ease-in-out ${
-                      isDownloadReportsExpanded 
-                        ? 'grid-rows-[1fr] opacity-100 pt-3 border-t border-zinc-800/60' 
-                        : 'grid-rows-[0fr] opacity-0 pointer-events-none'
-                    }`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={handlePrintReport}
-                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
-                          title="Print lead report to paper"
-                        >
-                          <span>ğŸ–¨ï¸</span> Print Report
-                        </button>
-                        
-                        <button
-                          type="button"
-                          onClick={handlePrintReport}
-                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-rose-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
-                          title="Download report as PDF format"
-                        >
-                          <span>ğŸ“„</span> Download PDF
-                        </button>
-                        
-                        <button
-                          type="button"
-                          onClick={handleDownloadExcel}
-                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-emerald-450 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
-                          title="Download report as Excel spreadsheet"
-                        >
-                          <span>ğŸ“Š</span> Excel (.xlsx)
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleDownloadCSV}
-                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-indigo-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
-                          title="Download report as CSV file"
-                        >
-                          <span>ğŸ“</span> CSV
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Collapsible Quick Filters Panel */}
-                <div 
-                  className={`grid transition-all duration-300 ease-in-out ${
-                    isFiltersExpanded 
-                      ? 'grid-rows-[1fr] opacity-100 my-3' 
-                      : 'grid-rows-[0fr] opacity-0 pointer-events-none'
-                  }`}
-                >
-                  <div className="overflow-hidden">
-                    <div className="bg-zinc-900/40 rounded-2xl border border-zinc-850 shadow-xl relative p-4">
-                      {/* Corner calibration tick marks */}
-                      <div className="absolute ">
-                      </div>
+§:à)Ë0ªlP–‡{şé ƒÕ“¨Rl¨*í1ªEÇ°JÿŠ¬l
+5Hëò~vpm[dYæÕ\fĞedÜ¡ù¯ü4‹WTToùÃ«Æ‘ŒWT[Â@à#³´­ôÊ"O­8X°¶UŒ;ZHê±UMqê¥QÆè#€S@]İ,–hã?±HA]"û$Ş*5¹ª•»kh'âJè"ââá¢áLÃ| ¿
+û¦1¶ØµaOuAO¼DÜº' «¸œÈ„Šf2kGù‹=3J¼¶YJ8X~xvåŞLÉ3Ï”[gu?.&ÌÜÈå[n¯A«i÷M¹b˜3¤’ÑãÌûø¢¢á´Æu‡öv»İªb´T÷V¢9mæääÓ_ªIH ·ú^ÕîO~P¥”£zÅª£ôq
+M(M±P|Ñ\ıhÙÙ˜˜Ò«„‹08,l)eüû>ít_–õ¬Ü díH«Ü>KµpL™])Uê-í97->~Ğ ÿà$»)˜vÿ˜™,ûdÎ„Ê×”rm£GÒãJ·äEO´åNfe8Ø~×Èvw—ªfÍîn#ôL’=4•jÎ(J**ºD°avÄ”¶ºYÚét¬÷n(¶¹ÆZÃTM$ÉZ)Rã†yõ:1ïA¸’©èxÆG†-ÃÜ, L/²Ma3Hoş¤!¬ÀÎÒ7sóÛ£G#ÇĞäv¹F»IĞEâù×—?ÑaÉ,tæúN6ßDÛÑ~Ò4–8ôi)?GMˆ„5Ö¶*UÍi¿XÖôPë£C3¦î&2Ğ#£îMM\sê^#İ–,béËGb‘›d…²©ŠŠÒøìR¤{!$ÄuÍÁ³O¥5Õ™.uy.f™+ÅƒÁY8K‹Ê¶9OD)Ä_L…¼¤ÂÍ'õ‰(b~^1.`¦’Q’O€pIJaÃ¦Ù,¼zåĞº®®˜Ô¨(æœğ¿Ò|øE«Qâê¤Ê‘@g5/Ä<	ä8¦Y#/|dyQdğR¶]ãÏ1–´û4–oí‰uÆKÃöAFˆéb{²´òSgC*$…”³AäÙÎşôœ}è(Ğ%<İ¨Ï­Uæ~mIêšª3;ôäi3Íí8“T’h”ÆI+b‡*gƒ¡šDê
+àÇ-Ö0ø†É"àWæMTFi”6‘¤Hä®L£”×‰ìŠÒ˜YBóì‚uàÔëM³´ÀTÉ“ÑåÅ`–µ˜Ÿ!2ğ¤e|	yãRŒúj\Jâ¦¦{ÏTñØçQûÎO”d™Å¬ÈìËÂ£ ãQ„-“è¬×DÉ1¬d–GÜm¼ Ù	¶åÚnB†¶„™KöJ_áq%«ğXF-Œ¯—4VWx,á<Ñ<ô#ÖõÂÎ—¤õ6‘°ÛÊl&•¯ïõú¢F¤OuDD:ş%ïğP©Z&¤—_,4ª‘\:İ¸¦¦äÊ
++4(¨ HDÅ$ii]	–Ë,›™©««•jvZü„uË90ª´LÄ(Bj!_œCÜ¸#` Ñİ‚öÜÚ’9ÿ*Ú¯Év¿P¦æx4Z!²6<y¼ïbF?	BzÊ¢×§Ñ¡×¯LgÓ¾!ëCXÆí]"~H<üLĞ%L›-ËDĞÍŞ|Ìà=P+5ô¬HM	™Ø[£“«ë~L,¬–õuAQW—ø¨A#-‘’‘L¦-Êºfª²¢‡¦2Âô«È³cQ/@¼lùªÖÔth/¾’F™âû™‘S‚( ß|/$Õ=;
+ÜÍ––‹{ ŸÕö`í>zm2dLb5aªX´œ°;ÓZJ&®–q†@ÓûÅÇéÓ‰-ßÕ3¬„Qoô0«k¢9s¥˜Ø6`ke¶<‰|ãÁØ6ªñLzÛ.C–Şß©(O¡´füüOÿ-5f`¡;±[¡ê?T©ÿ0 /Ì`j§(Õ_àÄ R]¡Şñó?ş÷&†‡Â-•ÚY•ê”î`'ÕûßR+ò½ÍLé/­}Èßn-•j…v‘?
+û,|_èû˜İTöÍßa}—¿ØğşKí#)+ò‚=$éSåhÅNFuÜbuVŠãí'·•¥ï¶˜C»4 3î+ûç/ô..(0Vû…s-/]P9b
+%Iù?Æ1Nx­Lïø“"ÁKY{&96\
+éÄÌLÂôe,ËÄÅ4x¹ª.õ.»G¯÷N~M>Cã:<±GqqŠCÇÀš/Y[-.KÆX^!d]s$¡ô“²&ãıÕ/˜lÕs¨•…ú*•™‘Y¹!­6Ì9Ùy~#•!ËŒ¶y]Ñ½z
+ÏjßLFãÍ…ª—x€#·6šaÁ±Ù{–`¥âS$ls§ÒÇw*ıİïS9ì•~ éYD³ÂEĞœ‰»h£â.J7•™>TÚÔGr¡Ä,õ¥jÜDØLç#bˆN,À „?¼!\œc¾ ×¿à¶0ôiC¸AÙ%T ÒE1]iôdD“K¾Dôè40e*ï×{kØñÁMÍŠ/³7îÍœˆÄbJƒ¢¦¢¾T:,ÖŠ_Øét¯Ÿ—nU§£+_®€?²a™°)À®Ä`a§r«Aw{,d·ç
+ú¨bûâñä	n¸Cåe˜w°˜vzôªôaƒ!|X5v’…¾…¹ÆØ¹ôvƒn÷i„ÀÍ¥ï<ë„2´’-ì¨4èœ]¼°Ãş!­ã€ögÀ?ÿJs‚‚ê€ ¹iZÀ¾ÂùËJa_:ïÒ"BÒİcÙ{æÄINª	%­ËJÔ†œ1ŒÅò¬C‚›0…{%£€>®ùK-”Â×ÅM¨á¤‡‚&™°ú$·âÍ\ÈšİãäÂ	ù¦Î¨†;Sï ×YP½¶ú)<¦~BôÂ–WNDõ~@„èFî¿—é’MÿbÜ~õ:GÙë‡Òëİö7ÒO¢ãUCsŸßgëÅB0jNüY‰A´³×•è(óÒ*ü‚¨6}µÁœ‚,°ÿœ‚ì±èäfí¼`µX?Óèe^šĞ±µ7 ıÇ?€HkjñCİl]ˆï<ÆºñĞ(–»x›¤IÅêÅŸNgûºsãÜÒuÇ–®çÅ§Ä¾Ã{ÍÕV€óÔ²óLœ½%¬
+·¿@“X¶øU£Xş¨Æ,Æ®Ê3{NNÄ$MÜÔ+¥.´”pûLn|>z	D“¼¾òX-nX0vÂ‰åvám1¤:d‡MEÄåq,#/Ù“7¦¶©LZrÿ* Ã­Ì ¶‰k÷o?ûh¦³‘¸,Ílhïª¯>J)}"cÚ^R(…|Š~ÛäD¹¦Ç-ì˜µkb6«v˜œ#‡B8çNŸ¡’tdYÃé†fE?HŸÁF$³ĞbºÁbjÉ²£uCJÚM7°M]¸ ŠªÚ%íü&tú(föı0¤ı„rü]ØÑ<œĞ83ûŸ„„<C 7§=BÓŸ™Õ¯°ò›ÚÿŞ©º˜[‹Íf`‰‘Õ3›µ%¦ÌûË4ÉÌ6Ë\\3ƒ…$ó’%P“:®X9™$‹mo~T}Cqrœ¸Âƒ—>÷¶ª0kaÈp;İş(p<©©ƒ_…ğjùD¤ï¶óHìT¹üx¹ëÌÂ–$G rÕFjYá“vyûD6”Iã‡d¶¥Á"/ÂĞ¢>›~vøè]EEÃ¹ıÅ(Òèçøÿö/{±FUøı¥YXäñáœ'ğ¸}zW6l7¤äÆ‘h”üqeq{É÷,F‹Š+lÜ³ÆÓš£h–e&•»> :+XeSG¾ğL½zÜxÅ—Mî2XTk™¹`²¥dw&MÓšØçR]ßË_`FªÖé2Ûˆàšà^¡ÃŒ-Ú<²øá™ãÒ”-
+-‹òû?í­áÿ½7:İ·Ê	ócãû~•…†ºq.iFBSş˜Q'ápÛ"OÊ÷ª¸”ùI¿›ä8`­ş9şìûÅ=Vl‡ÙùéâI~Û¹áoÑ+Æ£ßw¯ïlµ@éÄ[{£ë³ ÊBeŸv[fT(ÑÀñI:ƒ{<¤cÓ3î]Ïè#şi1ˆJx 4šÏ¢Pıh ÚçxüyõàO'Â©²ø˜l?şÆùÉ
+mVÜÍ#kß)ŞaZH–Ã¡âòZÁ|¡Ê|Ş,­Kƒßşp+Á«â>K¦ ùë…"ÎNBğÓTôÛ¬U¸&ÊnR˜8[ 6ziˆ¥r¨NıTÌÂ²ÿ&•ö'ñœKïo_‘ßøá&]’Ÿÿê÷d»<÷añŠÉ`MñáÒìÿ$eªc œW¸öÙË“-„eÉèôÂÎoÓÍÒY¬ŒR9¶ö`Òòä¥®1-¾8d%Á†1É®Äì8z	ªğK@3ÄC¯Ùµjºh]½WˆÊ-Òn³<¶\-&(øÎŠ®L+mê9¼†•c2›Hôá¦0ü]…´Õ¦ğFÈåâSFaàÒÂ,’[Õ‰musÁnªŸ§i±_ÕşØí'½
+ã—”Úñ‹}ß&Š"he>H\kDnøüäĞFµÕ÷¦Ùàä°õ¾é¢+ÊfÊq1gpµl­²Óí‚íh=£‚½-nba×ØŞ‚Ù*ÜÒ.2OÜ$o_Ó¸.HcP¥ÕYİu\n$2œ‘p7±8\XĞ$YIĞú¼|}|B^ìî“÷ª¯Õ,˜rUĞ)±Rªì/RµZÀU§Â`½RWo¥ªQWSôP¯9ïèI¡V‹&,ŠÊv8Ñ†ÌìİÏ™ˆé3Mc&.;‰P-J2N|f×¥a\U@çÏU:*’Ğ¨c+Pê<P'=g„fˆZÍ0æ2 û¯àTËõoe“L#×atXĞ&ª=«Ë©VÛI?ªËQb2D4ê£î¾(fÎ©è×f	ŞEĞIŸˆ4#½·4QÒ'ga¬vH¥?!ÿO,­a¤8q"1Ö}!|ÎÏÿğÏŒRsì¢R®Ö’J}Š¦!M¸Q>›!L è¼b<C°qï"Ä­çVH¾ ‡ hô1¿1ª@oEÉNìŸë»«½\7Q|%ísøVp$çÚ~±©nÏN‹ôÖÏÇwl§€o®·#°o•1õJmæÙ JèÏÊÔ›1T'iIe ¤
+”Q‘¥ø“ sªÜ‹Uıê9A$n@qŒÀ«P[4œrZ-9±Š6’[âŸƒ(%eèJA´Ñ’dæçDÎa2O*ì$,[µ-D¡Ô.™B¾)K ¤ÖJ%Û`¹z@JÒlÒ}.ˆ”İƒ²n”›8®~$m»˜Åj¥µÍU:iõıU|?9÷­æåÅ<¤9³)Îx0 çæâö×µÒv”xëus0ËğP#'ß‘T¬D"	i‚‰sê¸3€Òê0Œ•-àÉ?€{<”lèjOTZ!âô€T’Y3a	—º!CÜèe/7ó!µRÌ&Šo\˜É˜\á ›ä‡ÏÇ­âËd­M¾$+½Şí¿ûÜÊ;Òixû®9¨4šÒäºRE[bRÅl4¥*(ú¤5eF%G½
+¥‹Îª¬º:›©ª[Ár°XâT!Ø°Ú¡óŞrI€¡ÕŞ…\hMµª+†"¨ú®+×®R‚“Q’.lÌŸ„Â¥ÌY^'«Éd°RÂB—I» é#ËÙç‡í´ÚÒ„Yf'öéP×Æú#¢8+*ï)*C!uˆÿcÇ‹È+c)­’c©J˜¬«’jçM9ÅE£?qÓÔ)•Eëè|Rr	9ªÌ±ƒTŞ[)Q£ğ)mÆ¬RöÎŠ÷
+Ø)ËAuï©ıZìi Òc‹ÆüaŒ»°óÊòĞ"™¤3ÌëÇ€—ğË‰o–&ÿ¸<ÂjØX~z))­Ã“ ÃCÖ<êJ*(æÓÖd6ÁIÄ¨Sâ¿YEH-ˆª£Û³çújä=m5rŒw—–$/»?³İÆ!ˆXf\{f› şÜ4¼êâæW«ÎÉ.r¬÷(9X[s^²àõßúl±3ËŠã,‘Â@Õ3Ê4‘á¥‹oW„4>íÕCVˆh×…Â§ùwŒîèVYS[ƒR_±Hr4b9;_> åÁ;A¦ÊS—^},—„Ã’í<â)˜ÒZşş?şûıòÈÍ‹ínÂ,mõ–@˜oSÓ¹!ZğÏÛd³¸­éT¡;dŸ£Ã‘{ÅİñâU{¦ããG©ß¬8Ú‚©J]á”¬ 8õ8ß!Õ/õ˜é¾L?vp=`²ßİÈ(L®œ`¹@z‡`Ê˜-p>D‚;p4Çá&ˆåÔZê4®{ÛCï—*	ğ`L^¥İLŒQ¦îç—6Yü^R$ş!TæQÑr€:[öüw(9ê°xº-®$a/ìüüû¿‚ÿxñ±à%ƒfø]Fw~ÑzüúİÛ½ƒãîĞ
+Z	8Àîª<å)} 7ÛãäØ€ì°&şsgœ'`2›¶T)å…ïÑ@xm>ya°Ñ(™:¶å¡QBO@XO&‡—üš¥8Ña*½ÊE+¨`ú»êôl®õÔ†5«çšx™Jzx ¿
+ùî´{Ñ%Ï×=Ã°ê%Â}l/ÜYâjù’ÓÄd	OùâıS¾„§G†f¼&¥•5Ã7¦Ÿx5âõy²ö0³JYŸ	‹€^€]5‚ Q8ŞÖ=U?«`—Äô½ª¡I³´}ÏÒø}ŸÖï;6¯Ö›¿ûwÁ_û–Şú-7¯HÍß+˜ƒÁãpiRg“°Ù`1Iè¶J –€¤¦§±ãQ‹QbG–à‡Î…ãiÍß5Ø º?)¬rxÀOl‰y©™V*+€ÌtÑ•ˆ3ªDT‹,ÕÃ„@1Õ.`Ñ²Ìİ·®ÑRÏ3CN‹¡Z•Y+¢âJÈ®VÑóu)¦«âEÕ!ê…H+F#jæ#Méİ•[;YÆƒ–ğ°Y3¦.’ğŸiiŒaü½tUg„o”d6U¾°†Mcñ“E¬Yeµè '•	IdGrf{ª¥†¤Ê¤yüQ·P{ÂG·±Ö„wOÆäl‰4ó„ÛòŒÌ FvÁÁÛ&•ìN¹fZ#{Ê•…4Ì(ëËa§–U
+>^òM§É7™(-‚'ô'=í‡~€z(ocVl+»$ñ×2­ ¹Á¤d%Qæœe×g-Óõ2[}1öë™¼3Yí¶Ò%aë%»RVí §„«ª”¶Â%á¿J‹•Àõ«ãüØUG9õö¥¾˜–Õ€lbi"ãVËÈ³™¸6û<ïÍ‡‹C›ln½9âÕ¹@“Yd¦À<"˜F+…›şİu©wÈéa°~Öd“î¾<}³»÷ïw¿=86µÕ’!Sè;.`U+`ºÏ‚nr4|Súw7ö_úW4ÜBÛJRqy‡‹,ò8F¼tó¥kóÃ«Q²\‹úÆ<&"]yc—÷]ë‚&Î9i` +ĞçÓü!åË #~vò@ì¥İn×`º  6%ÙÏdèÚoæ_k4Q"ÀJwäEç<Î:0ï–PĞ{Ò‘ŒŞ#$_Í^/5{GßüÊŸÅ¾nIë%½°ú7íL»tH”hF:XÅå
+7yáx–{š	é§»C,½‹íz†£FIóâ.ÇI“·n±Nåİíh]“Ú!G¡Wkş‡KYÔ¯pÀAC+øpÑ6q0¤£ˆ~xW@¶ÌßPºm4/67ñE„/ £Ÿÿú_Ç<à¡Å"˜´Uí[.M0{‘zÃ£Åö­(Á>ÂŒIòKïÉû”NIlº—şn0y‰Äâk ñ¶İÒƒ‰3‡Œ+¢á|_™ Îªjãö‰^Y·Ir‚*“Z’‚‘«Ö`MÜ8<ı³r`d*uÑs?d"Yìx#,kUgW[ùğ2±‰k¬&bİıSw,D~£YB\g|Æ ¡e‡ÏÄa1chôÿ  ÿÿì}ÛnÜH–à{E”¶¦”ê’R÷º¨l²$WiÚ²\’ìš†Ç©$¥$œ™Ì"™–Õj;óº»İ¨îÁ.0À¢‹yÚ‡Ù§™ùúéOØsâBFÁ 3S–meee’Fœˆs¿IÏ“+ëó¤0ç+3ß.°dUP»¯®å›ŠBaf—¡Nß‘—/ÍËåÕ“ÒıòE¼ff>ã×3Œ_ÏdÌØ¾VâÇ§mz:¥ï›mõHÚõ6MˆJ°âÏã¾Ş'¦¸”½ìÂå•/qä/«G–ÁR{Gºdİ2¼“¤áìüª$¬˜ Dk3‘İ·AgD+Úq'E)İ§z<%P®U¾hŒHYGãl8YXÍ*ÏÒ| Vl!é#SÑçäf£–„•=GF%ùÀ)`²-Ö˜lw:Ì8·Îşô„uÖ°Õ«×”­Ş1—,U§8si~§«İ4KävïMPş0ˆ¥ŞÙ™[ÈŸ¤[à¿Ù-üƒ}ĞàJï?Ipj'	Nòêö©FÂ>ÎÁ$ì#b–p~r8'	œè=”‘jf³ÚÙ¡}Ş'í I"gĞM8zÎ%T®Qëµ*¡TK´VxûT+/Ä%RDÜøày!óåV"<Ë¹½(Ï`8¤gcMí¿şêË/Ö×VW–µùÕºÏ{ŒøÂ-øNßé6}/£â‡J°VÀP¡È<D»1ÔÚ4Gaº5i}ÇDÊ7a2‚U_’aŞj®±„:“×yğÃN×å™ÅM™%×†²
+²¦“8Yxß˜g-‰òOÿ"$J#ˆ«É¢3It&‡ŒŒ±ô!—3¬w2+Z,:SÏ µ¨O¤êf¬Szµí6PàUİ“‚ªNT«vò"û˜SÌÜÙó İçt:Z°”Ú,ŠÛpáw»9Ñ¥=b	j©vtt`D/>ãè ò6Ğ<Êºr»‚ëÃ§#@]÷©3êúÀ>›âQ¿‡Âi„k'|ïM@£ep¯‡á‹­²5c^k…˜Ÿ •o¯Ïiâ®ì£éÖ–™u‘bÑı4¶lS?“àñrÏ³F™1l€Õ%mù.—U8n•ìİÓğÔ…Â¤PÚ–D±`Õêïn¼·šs`Ø*}yÂË9±/’ÍÛØ@KıäRgQÁ{şÛÚD˜>ø›àÈè«O¯;ŞõÉ§Wôr;ô¯_Õ¢Ìp4«Æ¤ÿÏê7È¿Ñ
+™Èƒğ²Ï6m§Pwa9ÉĞ[EÅê_ªÜÕ‘.nZ‡tX°fÁÂ¼ôoÌîEs|ñ`‰"vñyñ©r]€ÊôÖdPõƒÖ«2N%`õwÛ@[2’7 .âv„Nf€+vòÒııßÂ§%c½óÄÇŠi¼Áß-ßÑrÀàĞ»À­”F‚ÙØËEB›‚àdnØá78DT•ßÉ–)M`³´æìíĞ÷dq«Ö{(˜A|ào*AEx+Ü{—GË+ßE£Xj¼±Ñ`ú	 x^/nkôòsTŸzo™„Ì†¥¿0ô–fÑÈ-İª8®)(S¸MÓiîÁ&ôCU\"xRvşï)uÉÇÌŠ1¥}ñ‹%ÚÒPª@{˜Ğƒv9S­GİŒç»‡¿%Gû[“íƒı§[ÛÇd÷ùî“crôl®U…5k¶NgoZØ—KJ±9Yœ+ômb)PÎ²ÕıÅÒÒºÜZÆMşm.‚5½L¶A™Ú?ZÉäËúâb5ò9Y®ˆ¸-/¨:	Ä>*UG±”_\‘Õ‘+…*”ÎıLõ'kCŸ¥%_»²ûl½ ílŸe/pvğt-åL¿æ˜¡—·l©Â,¶A¬®Ü’£ÕLšV}8Ñ,1¨şúCUÄ@îë˜yp%7×W
+g¦Œ™°“Wä÷€fòåëW,o®É®6B9Iê Ü%çàÙD]‚ÉÊ“©6 ¯#zıòŸÿw“5fc×Œûêo¿$òÉÛ-ı¼AÔ#¢ƒ{v@ò‹ã
+†FÏ9ÄH*ŸZäezûŞhÏ¿EÙ€Y×%ô†ğ·&iv3Iï¯Oö4}%d¢ökÉt5üÊÒJiàS‡Ú#Å1êûrr÷´Kö0µ\Íb¦u,”rƒˆ¬Ÿ»ZÕä	Ø„î5³ĞıÕ‘emÑZÕ–²]_FÒ„){,­€ö\ìEvf<]Â]éó]ñ|<«—AjÍş7¾ÙĞ¸òcoX\ù)cwuÇ(%$˜Ç1¾h·Û…ƒcˆ4Û’nkfÆÑ
+£åhèÓê÷÷›-•:¢4“fcåf·yMGæ4e°&c]7p¤»%È´8À›í™ŞcÅ‡Ô»©š¼ÈÉÃTøØt)2Tj7ÀÍ\:…„¥zY/ƒRkYõ¿œQÃ~QOT±6"¨M4H¶Ÿ“-ßçü«6e4ö+¨x¬.£3õ£´¾ÅCíg¡~J¬–ú ÅÍ“{ŸêÎÎr;êÃÄÒïÓË=ì0ºhDa¨yæÑ [Hƒ«i6 K³Jîó´·}/Ó{Î7Oq£(µ	KeyÔÑw\şx”N¶£^cüâe³¤hApŞóÆ›L™i…o¿€3ó†g³n<àdø7™,'“æâd’Œœ4ååd*ìœÜG'Í˜:A,ƒwi0–DLn¿ÚÉÖ 4›'Ë·æÁ}î¬Î§¦u?IÛÊGëGæ`à“aZÛmÆGnª¨“±uu2uÜ,qKi'wdé,Õû4äû¯>O©ôd<­4VìIİ¾ÑCuøNİÑÑÛ¡DûíI'Yİ‘EeÁ˜•ûîœ!šÀí&}%ò{ï¼%™·D)qç-ÑÊ^òÑùàü%J6ÉÇDµdØLÃg¢Ëòã5“ö˜}X{Ï/ŠXâg‹Œ%n)
+Yòï®RVá™[â6‘ÆïÄøÑ°Ş;ï‰ôÑzOdpMŞ‰">ï	ÇÏ[ï>Ÿ‹“÷Å2N>SÊäø;¹!On·eÒ8v›(wHfù|”HvçF¹õn”‰¨[éH¹#M–ÏGIš>zEŸŒçOCİ'·S¥Öí(áP†ŞÕöa¶åß`µT4mÌd›Z¾¥qıJïG‚M½óz¥ÃStk½Dï&Ÿ¦‘l9†P9®4i#ÕóQ_†œˆğ8©qRq7…:èc‰võeº	ÇÅÜ@@L]ñíã©)ò4zi ˜Õc'u]0“s¿Ùü.ğ¹4÷·Œåk™d–Êd¨L$;er®•i±B2aÊdl)H$o$M“½™¨ÑfI¸8næ¬OÀ¯qwØ5Ÿæ°×­ÇR· ËT\Mİã¹&àV¸!¢0/áh>9øXÕDÒÄª?F†D3C~ıúyõtLWÛpâO’IÚÙÿ‘Z¥o"Ó¡¦ÑºXùÎl=©Ä†Ål]<!„ázÌ8‡[cºLÂÔ&iºşÀCÙ¯|ÈFìc»3cO6]`š©“I˜¾{|ŞHn»%{üˆÀ[¦ÏO,tï&Âön™-{Òçı6Z³ï¼qÌÛxàïìÙÎŸ)Ú³'Nn•Eû$Ç¼$á£ÖIsÃvóPõÁº=Á[+ßìfP/Ù³Ó…5Rf@nVnw–S—Édl”-¿Ià†ìƒAïÒeü0ÁCçƒv›ÀãáàÜå)	2€rk¢÷ª„_,é±”‚‹.èÒ²µ^jö”S CkîXn–t=?º‘¸ƒªkbèÚ½’-x#z0½„Iå¿qäD)Ò‚è"pP}]o\²IfÙ_Àãf±+î™ğ>ÌVÃŞİ;Í#€~?ŠRÚEvkà#KY;†	_[i<
+*0ª/-lçz®eİ:²}}Ôv¼û”¬“½'Ç»ßnïîÖöáşÜ6‡JG	yF¹"Y$”9ĞnºØØB;Aê…½„x)yxp||°O¢3‚!«šÉ„¶F¼AØGŸË™çá@jn„å	)9v;-÷LZTeª»×]­×«£©“*_©Ï6hãíÚJê¢Ï[4r+QÖpÍ¥ëë$¤lwõc÷»«–ı°Ÿvó	ÈvÜ
+¶«³±İ=öü'³ø/Á_èü÷%‹_ñAx,6gëüıï‰xñÒ¦ô{K¾ ¥n¶¹<|’ß8;;‡şG]…	üW$¼$lLòş}+'@Jƒ„ıüÿÄ_É5hçAz”Æa'}œ=Ô‡Ş£Ì³BjulÎI7&ôïÏàDN°_î	OFñf
+^Ô8J˜u¥èD¥Wğğ®.ÉşÓáÂ*¶³äûÜ´èÿ»(êÃ¿00ñyÿî…§N„Uô ›ÕŠ òèŞë®™D{F4zp×Ó9¨~y…'RKOqqw:0ÿËÏúÚ$C ²7`­zC'ÙÍ	úN•_óF•òäà@ÕÆ|~Pmqé`™Ô8Œômä qƒ[;3×À”â‰=CŸàÿPPK@OÃıF<Éy"gLnçÒ](î›a²”)©4.ÁV’ïëK!Ë¨W>p¶xS°†,õ²¦¹êñRúÚekGhâçJ%ánšœ³"çÏtvÙÑ;ÚWv}EhL §QiŒq–a°f«õ{_©¬¹ı“cm¨öäõÇ&Ã8z´Úo;è$tå5ÀDns¸É*> şnò³ŠPÙ‹µS>êtÔS~Â òèšF·ı	;²>Š@Ÿ:€0t‚ğ¿
+ ô4èîøøağ&.ä{Ä€ô¦lğqD?”èJ—O£™²ü0îl6ŞÿÉ'ô°&›í3Í[ÊƒQ›ŠO@ÅñuD~en®2|­¥)Bq/Œë¢w·év-S’<;øÊóQœtÄËOèkM²§°šhÅOÙˆy«$Ğ¢E¶Z-ÍFv1eC²ƒ”9ƒâ³(úÎ²_9œQË`@«§®»ÌË‹an]`6!Ğ×ğw ÜùÜ¾€6|äÕ1\Âvø,úô~PL¼SX˜[ü£#a­½ÁİĞ÷]•„p0¥ÜŠ‰™¡3zŒ¤˜¾²®êâZÔå¸£Ş6;{-0ÍõúÚÍG©Ì{0ÂsÃÌé™¹îÄëÚ¥å<¢weVµ“­ì¾ÂjØpù0K7²Ïã:H‡zìgÍÌÄ=1gaãÍnbÊBÒßÈ¿®ÜNİaİEÂ¤ä$¦¥Õ3“4@N(Ò"‰,ŠÁ3FãÓ‡&(£9“ò–ÂÎ-àJÙffßV2µBj$\uâ>• ìvŸ}¡ôjÒçÓ€ÅàÍZÈhÌâaU3v‘.ÆoÚ¡m,Z´®âƒ*`Ò¨Áÿ‡8€ ¤ÇÑE†5nK¡mêñªlZ©+¡¾ÈŞÛÙáb¡ï½­a0H(ä!˜)ILßè	˜Ä¤@Œî$Ÿ“åf}ÜµS½K›wB…%ÜUÆ†°H’Èì$ÃL¹ZÜšm0ŸúZİ~Ñ#Qw‹š/³ÑÇ¯k’Ç™™|@vœ,öú	é)$Û¼UI«–„Ä|;3©Bì3é”¦P¿
+Ü-ıqØ7 §”ëcY€rƒ´÷&ˆÓãhyå»h·4w¡£Û4ÕRzÕ5òèm5bûë©)	:2B“Ï.û±bäØ®e°SBwñ÷ÊKÉ§Ê-Ê×¯ğ¸Õ?k5NSìÌ;7£ºï=U†²üJ¦
+MBØe‚Âšùåïÿıê	•ÔZ7«¸ÍµÓèqÔñzz5ç­Ù`°°÷dv®ÖQq·¢¾ë]İbú!ìëe?˜Ì†ÊF—-m¬Æ~l{Å÷ˆìG~=oFm’;do:éÃ›šÉOïT1äÌ£–[²·3a¸º:sZø3C·—t56ñòi7ˆiÜİ4”0ÔGÒ|½h‡!ù Âl>DİxØf6mn7o53¬oæ£”¦ßuS¢swŒ>Ú±t1wÔ	o˜<Fı€µnÙ Ëõe‰B€D*<hÌÔÍÈİ0Nì1Ï#’§lÿzÄÊû,Iğ{“êÔ4v8óÇ¸n|wİd&ÓB=6tığtH^’õºf9Å”VËzf³ÙíÂk™]¸™­†ÁÄİëÙ`X¢şòóş/©0GÕ¶BÕÕtk·Èqc¶À†¶£jëÅTFï)¨ƒa§c˜êjƒ;oÌ@~·bvşû`àËû@1ï¦q²Ãl•)
+}ËÈJU¹ ğè¦r¹xuCÈyá&74ÌhÔ2vSxUÇPVÇRV9Øu}ï´İç"Z¬/UGcgÖq§íÆ6Ëõõâ±TcJgl{½Î¨G“|ŸÀƒ9Ë„-q %Œ‰ÜŠ"ºÆñH¡©õnŒ‚dLØte¶]½;÷‚n­ˆªL€ÀW²›Ä.äJör1 …i#¡;ö¹»*VYÈÌV4Òòj5ùÚ5WühÔë]’§^è×X¬K^å„â)\­·|X¡ÓŠz4è¶€~#Å#D?#Â>¶Í­Unñ¡u£Cù{ñERøg'<4y˜S×[ Ò×0ü35¶Ç—mrÜ…yîã•³°À½}/$Y1cÑÒ‹1ƒG „„thø^âRê˜B¼øk²&ÃwI¯Ó%T3 "?ôà€«Õg'e{3¥_®¸7v«(D«ÛÍSß.Åq‚>+’v³s ç/7]Ô)>Û(j²v€µäo&eÂ+›æVr&P 7¡
+µÖ ·éÚìªcÚ\lzT/£ûÓ(ÈL·üR2æ*¬º…–Ü†®_\ÒE‰a0^WuZDª¦Mú7.Ş¨hÑj>ÕVX?T±YhÙ­Ú´cÜı+âlú{7Íx³wemqº­Ú$3vº€ÃaGùæ;šCx‚EBWñ›€œ’p$	éEçatÌ´Á-(Îã•s*‚=Ûs*º?NŞM¡e¹*T'–_×‘K(ÀœNªCôî]‚[.–ùâ~?ÏqL0j¹dd?¿Xz)Sû‘€9ë˜N+åÙÔkšéÊD[WX&Oü<ÑÍ~ƒm ^çAÚ¦K&×Æ"é<],œŞMªó™×Õ|fV
+ÔüÕÌ®©+ å²aN3z§xE•JÂ"#¹Á«õËßÿûÜôÑK¶¢ÕA+P6b•sİ¦Š	òë6È¾—vAyÛZš' ˜&ÁŞ m©h1ÇŠ· ;4¡­Òrš*üa¸TüpG¬ÊÛŞ)^BR³ìû›B­¢IùfÑKŸ°9U+¾ò}C3mÀñ{hï0šÍ˜¿ùş‡¹IÑ,c¼13™kñcVC-†»Ÿ
+Ù÷É-ˆ°˜u®ìXƒ-ÿ4í[½¹Ğ>ç£g}Ê{’AkZU¦Ã“Õ ±Z<XÓ¼kš‰5_½RÆN>åGîUíÊÖ’zY{&œe;Æ¯Í^×~A‰…7(¼^¬İ^ iØvG¦´yø>&Ğ*Ğ+óD]bYûâBïlRõ$“m1­æÕÓ¯ëøvéÂÊGH 5×T«{Ã‡@òğÈwGƒ;·t(5ê#BÒ¯ûœÒ³êÉâVícnÇÀÅ/ŒHˆ].]ğPç4hR\ù|tX†~wËçÑG36~á “áóYøìÃÖqEwlı#dëõjY¸íŸ›èİvÿ˜j ·cÍE'³¥k|w)í`
+ñİãFwÓ°íb¥Smpñ¦º‘ÓîAÑ®vğ÷40Øay.!°–«ÕaÇfÜcvª*Ê4Ş•÷[p,{¦ß®<jES¯èIdk²õş¡XÚTTvP¯GJÍkÚ·İ[<ƒ|ºü\‹â~ñwÍtÄÃ+°\2€ò!ml“`ƒ–°óº7Z<´Ëm?”ô7àßuq(Ò&ÔXQ&Ö–HÂ&qÁ¤úKäw€®I(Çkøvêu^ûq4\8íà=ıÒs‹·Ò•@S2ó¾Ğ†3È²!!ÁÖVªº‘T¡#!“Àò÷¶ÔY,eÃ)T[A­Šîk8¿’A±Ÿ¾\_*j\R78&7•pNÛ*ëcëá¦%_.eÇeI =Ú<„m×b‡©)“‰ŞMzï$[~k rìİn5Ù­2Ğ
+ØˆÊÑJÙ·b-_np´Müt£‹m”{züİO£áhhká%÷~äáèuàW›«WòÁkãYï6¢?5éµÒÄ°2rN\ºlª!R‹7ş®A4hÛ5Ñ©EéS'z²È
+\átòqÄ³‹Ëë³Ú©_Î1]úĞÃFKZ“„şÛ·Ô8Æz­ÇüN[K4aVˆ «xà?	œvB8$ÀØ‹Ótp’`T:•EÀ9áñÜ‘Ö'J*îå4)µôØŞÌÆeAÑ¾Aíi5g1äDÃ`Pe?ò½2Ä<™yÚ¹:üÄø´ <:-ù²Éi bZ "Ep*ZÛÖì×¾n“hÊ¬N)Ìû’Ü'ƒà‚šŞ[¨„ípl6!O[³Ç³s/–Œ‹ÙX=¼ŸQ×û¤N]©¬d”Ë„ât_yá¦K±+éì
+ Èí¯­´#Â—î&‚Ø”_ú-ùœî	¸¬ÔW1ÓuCÜ.V(5½Ò¤Ü–3ni”¿³B;çAÆÍ1üŒ+;Ê@ûh™ñ©İ1½x£¹‡´HTFOü†ø&¶»5¤ä‚ŸÛa[ÜŒŒ[Ï/û²pä· ÛLr;áõ1O†È±¸™<Msã±™-Ú‡³Tl<©Ûq–¶-Ff¶!yÓµ½µ)á–£"[{äÛ43)&»ÎE|É“r¤›„±æÇäleÎªÃŸRÉªQ˜Ñ]3Jî_0‘h#j	©‘¡c2T^Ô?`è^n!ŒÓ‘%7SúÄíüVßÕTë·ÚÍšêäÕµÉI«}ßÜ³0ÓQœZã†OPĞ5¼cj»ÑtM&+ºûZofÂ~¾Ôz‘_M¾7Hı5dû{Ûİ óúèÇ¶RüP¨]uñÿ3&oëzyp¸³{H¶<Ú;Üßµ” ­¥ñšEò*\ˆã œ  Jårİ!<o^^¶<iñÛâT“©}íTo)!ª&CÓ&B7½;Í–95ºÄ¨oxıÅºD”Äo6š¤UG{tÄ@îE¯wÅ”ü!I XĞéåÕHÄ„…?†:ÕE½‘df˜	•Ğ–´.ú<ûYöøhÒÑ(¼gëù.ùŒ<:xüøà‡…gO©õiüøàkÎâ5QM³gÃøCÊz…„q7£˜šçT»HV†RÏ ï:âmJ!˜³ğ-·p Òz"d¿ÅWëÏ‰ß-¼øré¥ÅÂ¿m}êÓÍEgpbJiVŞöµè{o.ĞûËf…:ï¾wYFA±|GqË+pDá«r(+!Ò»àRÑA·§w´Ç/ÿó¿ÚO†¹JI¹ÄÂ½îjÙ-Ù/•3|3–“0ÏµtÛi˜ö‚²õ°»ZšY¹Ôˆ{¡!šrĞ½p´ÄàÔâ çÁ)v˜R?H èåI+PĞ$Éh,çÊõî“r ĞëÊğ³¦Z‘ƒ’DYêÆlã÷h/°üŒg¼_«Š`ÜîEIP O™˜@¦|EŠõ«_¡wvÿ`gëñÙ}&¬9- I²0Y™*p[ Z–;l¯P+³ë¥óé/Ÿ¡§~}TDOşÂ“¿ûÄ:“Ã¢£–‘Ã/¦NÏc8æ˜W”F§´¡§D!á7S„çıUˆD1—Ò’NALŠu<p'·ú§´T/<ï¦V•>vï4‰z#ôğ—®IìÅÂÚW@lá¹À‚“~±Ô^Z}©’Y
+x€9¿pñeZ.* QÇ:i«X[»’ë¾é•KsÃSÖğA¾ÖQ¯áı5(¯9­^‘•’Ø5dY	¾‚ŸñŸÖJüVºweIn&t	)«N.óìéã½í­ã½ƒ'ä‡­Ã'{O¾µh“ôÂîßìÃ}dûÙÑñÁ>(¢;»Ç»ÛÇf=TÇGEÓòJ.|A«YÙ´Š–çXmØ…sÁèG1ÁÊh=(9ìº ¯‡qì—€OÃ+z à±¯ÓA‹`[3ıRÅ4mç:e»uÑõ$Ìo*ly½$˜û¯îè%cMßèqúè¥5³¾¨k¶äoTv·†¨®±Eèd³Ñ$ò¬©ÈYŒ3À™ŸvµÀ±2î²RweŞœjè˜€­Î#l,ï¥]8Ú£ŸÆFÁ· öËgX˜ñzCL¼Y% +z3&Š÷Ş[L»ãù”"³šOfDjqß¦EòÍ$†İÅ1mûÎ[çêÇ„ßc2lï½ô4ò/km;SO­qk}ÇåÉyWE‘©ICèİ5ÕÔúïã•¿KïëG§aoò/2˜EÊïG!Ñ	ìŠœÑn1>gè¬BA»İ6ŒH;–ôò†%Ù³½6«Í™gd/ÍµÏƒS^ZsssVç¶Í>M‹‰é;°OØXDhìÃQ†¢-Ã€I§­–Ç-Ÿj€~j:YÈïôìÛ{`vO4Ú#}ÑÑø™•[DìÓ«{M*¥tsOh!*ŸÅğ*Têãd™ŒµF†ºÊó&·€İ)ànc•‚ô÷ä"ıÍ[T®;öN[³=Ğ(ueìò”0Û¯dÂƒ=\r½XéSÑ¨d\NõßX’¤|úX QPû 6µÁfÉêxÌÔqÙÊ‰o_fÛ)ß³¾´.„è(n]V¥Ì½3“ÛS¸5Œã®ª¿IJ•™‡ı%™zŠª†˜ø³MÛ9¼m= ™a*ÛzFô:°¼Ã G|Ï·šu¯$H·°GÇ´nŠİV{NÖÌŞjÎeT™sª¬ß.vš|2MÍ4ònÎdcÑøo¿ñ&ºPoóân¦³RÇrsğÃ“İCrğ|÷ğpog·ÊhóìÉãƒíßÃİ­£ƒ'ğÏ÷Ïö'l°É5`'{“7 yâñ#vX*UFXiüa1î@(ı Œ~Ü‘æY‘Àµ°8R~…QÆÖ,z¢XƒØKyrãjâÎÙ÷Òˆƒi^  £Ñi?L)éA{SÂ±œy£^Ú*ñpóJãï8S¹Ï7[|ÍÒ‚>1*Äuùşâø4[Gè‚®á02»…™û¡/\ÌŞ&Yv['6ê#£‹Û*fŠG§Uâ•óèŒ†=;/¤ô2ã)4İW:o¦Í‡·ğ{;_âã¨ÓYáŒ¶e9Cs«¢Ûæ“â××.ÀÚ´Ş^ÎBêR(Â%*[´K½®˜ÑNq¢jI‹®%€™1’0~6­!J†b÷XØŠfl^HB>å:İTW¹QÙÖBíE{„’{	„¥b	„c=••%dQ²RôSq‚ÿTT‰Êº†–—E,™i¦pri©ù‡{‹ì~‡¡2›ê!ë—"YYù/5Ûòû cŠãõIåï5¢”X=şCZÇØöY9¡š3¬1S,üze¤ÂÚô’ªŠ×z9éİá+á®ë‚¤QÆWÆ[iX^9æ¬Ï=²–
+Uê#íRy“s#eºív[?¸B1dê¯·i™)‡Â9èÇ„Š¨è(Ñ%Èğ§¿ ¶äÆ4E[$E+&–[h5’•Ó#Ó<FNch“lüå©4À}§ÒëXF³’ïÏl3™ÓÔNœDk-³ÅKWmMBecİÖTÁ†©J Q¦ÚMM Ú D!Ä^!ÂH¡’¥Z¹:MÔùùş,R¹½È¨ÚpÊbE	wÖ·n=f¦¬#²µ½½{t´÷ğñ.Ù><8:Z8Şz(Ù®¤ç–ÛäÛ^têõPó°Äy¢oçOÒô‚©±Cj âÚFq
+¿ƒ¾ŠÛ†]Ğ¨ö:$Ñ:3DXÁŞ–`’İë€Á³Á€¬p×(a¦’Mí¼öéék‘ÊÊ8ç/,Ø×ÆŠ‡ZYZr6¡e.ùKi4©Ég›Z-¿XjEZ–:K64:šÅ?iMjVO­ê…ù¤´jF^9xÚî•±ö’ÉT"{ñ}¹šÕ·<ì%±¯Ãê~ùÇÿõÿöG£uGÓ`±l%cÀZ¦Ñlùè¤'r¥Ä“*İèZ$ZâD3±næíğ…pt9˜A'“{Ò‰F0)|é)ŞD=LKÚÁ™Ğ74œ'dz^<æ:ZZ¯$!­ë’—B¾rX( Jïy])&”BÈ*Óì_½Ëgq‘ìáL°Ÿ	­û“nĞ®“hM?çèíéBÆxtÓú÷Ikøúœ;‚_—$¡~tƒ‹‰ç—<ø“m?1aù¬â×Eoï+›¡Ä ù Å¤[‡AJ? ù	Àô§a7J£dVŸğÏŞô³Ó…9ß'Åel¶éµÖbëoıÏÿ6ùM+°Q¿~¾™á?ì+·Ì-†ZÎ‘¿WT6ó0$âãîv8èôF~´ØÚh\¨ˆ4…Vw,ŞTî€­?ABr… ãÀëï(„$¥5¤¦J$÷óyòv¢¦DİQë‚*î­º©ãüĞŸ5%·g» îîf™áÏÌ¥ğ/öÉwáywá ¹K
+Ù	ÏCN²}ĞøRË••Ó‹¦yãéÕœz¿ö(Ğ+¶³Ò5Ë¨u´WS,u¿?'IDÅMÇ­ ó¤Æ>rù[ûÙï§‡ŒE?§‹¬{ZŸ ßcÓõIœ{5N¤¸½|¤ğŠöBÒ	ûı9jù:Ì÷ˆ%MğL"`‰	-ª?øNd²2EE!}0ê³Å.ú¡šªoŞ1/Zp'ÄŠ'^|I’¨z¨ àd…`Öì„®×;¥«s<ºâöò	=¢×z†çå=:ºÒ
+Í7å‹µ0c¾î	ïœ©Âÿ:(¬36J¶è¤oøèœÅ€5È½_Ïg½Áï=’É¤•Xå,¶¨	€eòÆi=Â÷“E4Â+ÈSzÒŞ9•[&Ñ.Ov.a`Ê[øôUiÊ7pB³'·J\S¼?Sığ(M@ç£Ç¤şIŸK®¯‘ÏÉ,ü÷¹Q+œ„F—KmÉ4Rxø³ÏJ‚.Fš¡Á5iåæª#±Âè¿?!­e<³ğÒy²Lóaçj^§eh©S|*ÏñÓ8:’„­˜MXYÈ8³mLb›ÛŠV:ˆd˜Ú=É â“‚^O6É«O¯„’¿üòšZ•µµ’¹W
+¿<ÖFä0tÅI	­pLaqF6õ-ÕÈö\ºŸ!}áD‘­´‹ÚLêhØÕÇ?×÷ä…’–¬
+µ83ì+­õW­	#ûèxipÅ—›•v ,zª·†TMw‰´r¹$ÔóÄõ*wjÅâ«PÏ±„3Î‰ÛËè1èaN/ˆ1Ú­W8yö@0iåçNà-© uV›ŸPi.è‡£>Ùòı…h ¯R§H' *¤5ô:é‘2¤¨iEo±Æ‘?b™A}o ÇÃ‚Nwvà0<Âşd+{½+ôxÒ8¸ØçÂ¼%áu‹µ9{ÜÎöÒ–÷óîÁÙsÀ²€¸.YD|öì²:—/q…ÁßCòyL!›¯_g­<>™Z¸ó]°1ÿ”ãÙi(2o£ş	>†ØÓNAÔ¦é%±cM7Å6m¶¨3ÅÁÂEàcå­Ú”t£(Õ^¡ş±0Šµ9>U#Ñ*º÷×	íOEğeä;º‚w®òÔ h”qFHëÙç»¼Â&YŸJ>B·úwIZ_Ñ–ÌU‘G–ARc§'•ıQ/YöŠ–§ù)íğş5í~N»ï…
+§]åMÀ„Şh a%0D£ÔG:»V¢İ·ğHª1ì!ò˜Ó²zçZœáÂqâùsU3D#Í÷èPh—ˆ±ì´OÒ‘FğÛa€Ü˜"Gİmıîò;P·FiW¼å¡7øq¤ÀC¨¾÷‘§KûÎÎ@ÃƒòG8 ÷.'4„Ïë°)í®k cX,DböÇ'øØ&r(Ğº½ÉÍQD¼ë}Ò¢,÷€9å=VÕ Õ:² j	fƒca ¤ı³8*Ï¶(f©l‡´f<eËôoÌ{7	aìÀ0ä«+É§ šÇÔÉ(ém—€ËÌğè77•Šé}UvbfÂ^_L¯µ¼€÷ÌSµ=JëÓøLÚ~®Ùœ¸5ö.§‡û,zâ9‡53­R€Ú|n¢O¹bîüz#Š ıˆÔ±Vo@î‘ÕG=BõÆãN$C’õ›ÔPøZlÛÂUêlàÌ¦mŞ•Ì|aÙ›zÃªVı°T%w«ï†j“ã`’–k $U²ÑG;"WôÓc‚fÑ„dª²ƒ1ùÍ°NÁÆ²ñ$®-g°úÉ)ÌÇyÔË*M–“(Mš¶Šğâ¯Éw‡AºÅê$ü)[¢„H—SÄí)á†´kSZ ¿VŒ”-å*uF•33¤¸y–£Ô?eIo#dogCºİV+WÏ
+ŸİãpğÚPq†&nYGbw“>K>Ír£ò$ 5š7Ï³ÌsR´XV÷—Ÿÿü_lËË¬‚Y)¼–¥ê"‡Ùãæ6ï¯ÈŸ/Z=k²*ŸMÕß,'ßØæ2œä&q¬(¹i(L.u(È
+ˆßÊ%ä»M-
+ØGê€¦ÔIĞ
+UœÅ}æA¯_]›OæĞp`àqá°hˆ	–bø©n"†Ÿ±¢½Ù§Pú¡àT(-_HéÏK³Ìs§5›ïÏĞğn–¤bº×¼A®Å²û	RìªmÍİ·‘€¾ĞAû˜m%¨Şgsš;ş3.Ø ˆù×JÖJ^å†Şo{¦tÅI°¹¹ &FR®RH¸(Š”csö“Áæ[˜õ°=´SÊÇŞíÈ¯QÜ÷záïñ¦²<‘ÙçŒåó­'¡¼wŒşXYĞ”àYRòiÊú`•	s±³­ÛÂù´…ÇbÓs‡¥zñ¦†§Ğ+¦ÆæöªvvÊÚ‡…lÃ3­÷g‘…¯4g‹÷µÂ<wàåëş(öD'3‹´Åm/s¦Ş“uéÇ*¥«éG_†İĞì»ãÄ:Ìgªq–âT ‹’^›!3}cM‚êVç¶i¬d8øáPÄ
++Ñ¡¯²õE7rqÍ;³³v[7`‡Opúà ¸9àQùÖnÂo‚Kò«LŠ0™ÊnŸ)D ·7‘Ã@ÍÂÔİîÂ‹õ¥7İ—¥Ìâa¬éˆÂ>”ÓÈ–Ø§Ş è8Œ-Ó˜¶r3Rì!mx$‘v‘¡»b±è÷·¤Kš«…«İ[Š6ƒ•dZI°8J½²uìšı?<Ã
+PE0p3½ÌPñ}¥’V%RËyâŒı.ç»dîº-4²‚q©˜•î¶9Ñ¨°Ğšêi”sB"+sñà*sŒG	>0°ÓÀ·É}½D—¹'åèŞÈÀÏ|nÓ‚¾ğ:İ_9ÍKšÈ…cîäÈ©¿{zÇ<s^t›Æ¨Ì3!ëæùÂÎŒúƒòøYQå*o™Š«ï¢£ó3ãĞ7,Ì½Ÿâ
+t?ıFAô3€VsUâ\3ßEØ³*ëH®(ıµºy&?Ÿœ·§~4H«1¼Ç×‹
+^!š Ó+	ì-†§’I2%xÂ(>hx²‰¸è¥ÑÔ *"H>hPfIÓ‚¢>3>$]ø½Õ
+.Jyİ±Û1ÙíŸÿ-*·ÔMŒÓÖ1ÔŠ»á+,#áÊPp­ˆj<K)Ï
+İÒDHÙ4hÕ­$ëÏ‡õ%)Hyæ‡‹úQ˜YHİMÑ¿ÈCıÅùœ40y@áÍşZ—ì]UZßÓ ~mb&ÁCK,¯ë›Ôfûjâô®¯(F<4aù’(·0Â¿üü‡¿Ëb	2ø)á—dOºaŸ,Nù:Ø*«Em®İm6	)kæÁ‘Èä à¨d€¶ •U	\Š°­@0;öÜ $¶ËÇ 8ò6BEhÃƒ›ƒ¤!Í8â~BE–…_ƒnäÂåjuåxZó¸ Ë"v³&Ñ»¸^7†È©í b™j^'u2M~I%ğ‰®öÎĞd^Ø•rmglÑ‰kÃòÉXSZÕª1 NëÈOq¹'ùb1rÇâÈWŠcË°C
+Øfï*%>Yh5³„%&AüªÎG!–	ñ0•gƒ¬/ıñü7Xö²é°’æ4ìa¬®ÿ÷fy¥¾w9OC—áW„W„ºl“]Œ»f¹¥È¨\J:]¬ÙD«%[Ø»¦Œ1ûÔõÕÛ‘”•3E)5ÆĞ$JW<5W
+/t@@Ü4ö@09÷;Ş ë—b°‡'zwòÒKŒ©&†~$|²Óˆ6ÇygiA¯ÏÉır8š¾Zû$AºËš%qi“;õ²'`èGQÜoÙfDˆ“¿AŠ9ûóÖgEh'{N|³?Cã7ò,Dûİ,ø›İÎş¶ß/ñÚ(UIfY¬öä:al„rå°Š9+™³ÆlÚªy¨„PÌ¥L«FÊƒáØjĞdÕÓ"–‹CS
+¨¬z²¤®,R‹dèÚzÎ9JaßTPŞ@¤Q§Ë­Ã7ùËhóï„õNáâıß§—[ÿØPŞ'Ò¥®È)`JÜ†æ	C·¸MkÔ]«$ä¿gY\Ÿ%×/×¿ôÆ(Â(ƒ@îy&i+{øó4 a_9Ìt/Ùò}¤qÃ``é,=bÈÖ0?¥m_Ãa_.Şbeö5¥(*)»×Ø»¡Ö0k³D9©İ"iOæ0IV.ëÂcÇÎ¹1oTŞgaI×gAé§£í³`ßŒ¼Å³u[L›Â2u09Î$ô›÷Ã ìİ+eê›/ÎµÔĞMmCœòûQg„d[Ùó_q ş'À ~ÂĞ±-‰Êd‘ygAzI¶»¨SLÖDÙR<ïãÃ¹àÃ{Fe-Y²²+;Ä‡rf%
+ˆ¥Q%(Ğ¦ (_	Z…gKJ‚eï
+“gŒåh]d³ÙÃJïú¦t+Ò?ZÂZ7‰ö&µ”OZ\ÄŞDX±1)½gSŞĞkø¦ı†RÛN¢~@)K±¼:k5ÈŸk³¦–'|U'Ã\.0ÍUS²àƒŞ¿Ïà¥>B«eäwd`’‡º.a«—D B	0ğÚ !n‹Ë¾+°–!ÃWÑ+0¶ù¨¼J×ªv³Î"WÄN?ŠR¯h˜ß€Ëû1ÿ&/Œë+jPônÓ’µ÷²æ’Rç!ı³<ÖR'VŞÊXsvè¯
+è s6A]D¨Gì/âŒ»!N/OşäğáeB Ãj0!ûõ{åÀÈË_ƒLCz‰¾™ÆHĞ¨Ùò÷!³[Òêw"ƒµŒÙˆ¬ÁE¸ÎìÕt]ÄÜè]Ûİ3(÷füåçÿñ“¥ë˜ÍÊ~¯»Z2/e›cYôª ¢oVO‡56¬/”ƒ % òÎõyÇ3Z×AQsıkƒ¡Î( i¾ú$LvTAÂdÚ²	ÜÕâ¶£9+¡%r ª|2»qÅv]J<"‹B¶'š—Á[«æÉó~°Ë²¬®Ë´ÏåõNÔ‹âê†i&i½Nb¼Yn/©0†öË~	ön—yVª\ÎÁPÀaUqä5V—²U™ş²Ê,æJoJ¿ª÷ 9ÈÅä§T‘Xò¬³ÃÄ#Ğ1Â`?¿7| ï$Ğ¸œwÅÕˆrÈºÁÑÚ•·ÈVôÓTùF»¡Ô'!^Xº	Üé,ˆ±Gmo¼Äjøû'\±˜gRü§“	@smòÛhD:pü€šì±§i˜"óOQõ Ù|º]ïN£8ìäoKtŞÓ¾ÔöD¬Vtb6'	ŒoâğÃmşı«™75œıHu}bm1”™z\šdKz#Y=ÛK&Í™rAjÚbô ñSQãä/¹tHÕåÇ˜–›Zî«&{ß|^¨Ñ¤< –&‡FgšÁi­OV•to,?ÎUS}GöÑïÙ½Á¯æ=b÷vÚ¸‡ØvG H×E˜v¹u&´Ë5ÔäSi,fbã•4¾¬šÿ^q[[i<ª4e×GjB¼¨­ÂİZF°»¼ß>ğ§øİG£Ğód?9oeUÀØ´|’°k¨)]Vlxöƒh”¶2ãpùt^ódk…Z¶ı™.iqLç69wğl»¯ÅõÀ™æuVàW8¯ÉY8ğ°XqíƒRåô0ËÚÔš
+Š™<+6\ĞéÜV.èİFÈ¦ kšËãÇWRÖ•6É¬ø©İnÏbÁ¶{†š7Lë:‘[!OK´[C´ÛŠr	²X2â\`NÈ_I*‰~›îb—æ'Ín8×Ù±„dJ!œÂ¤3õĞP·Àßap2gwûBÕà0$¥Kÿ/ÆO†áÀVëŒª0b­ç9‹£>ñ½ÔC¾FÅ”ÜÊiÜ	¹ï½«ó7tó·ŒMNïDß;Ñ÷Nô-½ÿNô½}o@ôµd/[B«­™G&‘	&Wq‰¤ˆLÂ}À8œ^ÒÖ¼¨"cË<=!…@¾tO1¾Fa#9¨•€·Yi“£ĞN/ğ_‚‰$^&Ñ@
+¯á·‡	¿Jƒ©hÙ<½×v2>Û¥÷ÙNÖc»NóHÆrÙ*_,µñ¤AÖsìê½«S*„/ª½vò³HtzabL¡7”®Ÿ`µú_şñ¿ÿÇ¿ıQÅµ½Œ<­«L\Àè“„‡Â^gg™ 7§!åÊõZò`™íÂr9BrOElÎ,Ë¤ÍœûzŞTÍ¼¨¨¯kxˆëœ¥¬ŠA¶‰ßb"ä1íêY…qzËˆZ,~¥ä¤jş–Ñ.¥/WVÉ(L8À˜ï­x€°ç“À’§v/íõĞ²¤4VÈ‘6À|_ü§¥GË_®l½4iş +|È9v)µ œ@\,¬}•yõvÉS«\¥˜švAÅ¨ôVè[UÀº¡£¡o”9‘£ú›]Td°¿.Aõõ¯kÂ9cn%Ğ®#h	Œ–Š*hñBEñ³šøì9}Ö5Í”¢¬¿^×t« ù#´y“QÖ-?R…KV4]ßââkÌP1W8:åZörR“¥Ÿ]«K€îº62¡¸qı­0çræuU
+¾²^şRÆj—¥RôÖúby7Ìš.>X“>o/·™'y5­;ï
+ÜÊJ&‚Q
+Ÿkí†Ã@±NÎ7á{)Šìº7S®Ä9Œ.Lé”TQºÀyÕ)ˆÍHİı"uQ‘ºn¥+Dƒşşø¯(s‰Åì´üëÓròìÉ³Fk%Ú+‰¬R¹‘‚mØŠzˆs€mqíÛ`€ØnÁ7ó~4BÃÑ\>®“ÿ§¡mCî¾+'²~Ît6'Éunàôo¨…Ô?\øó?ƒV«mRïPBâ¶’ü (°Ëv`ãB•{&Óã`«\ä¾Nµ3Ú,¥Ú—Pm™O¢”ÕÏ8åÅÉl"aµ¸wSØ«TÎıx°÷§bE˜ƒG!İ³;ÌÍî˜Êğ¦X`Âo²š58 ñz ŞÉ~n{Sëy}L8ò‡¿ËO«~Üñ·–d¥É°¤PBå³Ït…Uh`ÅlNÍÁÂõ7äZG¦|UºMøÄj£ŠV^:ıòÇÿ‡VƒlİÃ~˜ŞáÓ8\GXÁ¬§ úıø¾ˆHÒÜÂëŸæ—e{ä¦šÜå}Z³I7ŠÒÙ²KLşl’ÙUŒ=]gÅ~gua¤ùÔ·Gè1Ùñ.Ië«…å%öÔÜíPè:Ñ0È+~4(
+:İ¿’#Ül‚;ìœvnJ˜D»"ÌÎÕÄ¿7ÂÆIÕH»Ê"ré6·J¼ÍDÖıQ/¨Ñ¢İ3é·‡İë’ªhüŞ`êOš%Ş!¬«ùÅ^ãßÙüR<'Rİrm°z2¿X/Ğ³ıÆzâ²­åh¹¬ ›*›ˆ2äîğúµ$õDÉÔ[gÖÑüªóÖÁÏhĞªhr¸ÈÑ¨ßÇòÍU±&,
+ãlùËï¥1,#ã¤Hµ!ZÒß ÇÑ…½şm©ZYG¤``°ZëçKÉIEÏ³”•¿}°ÿtëpïèà	Ù~¶ÿìñÖñŞó]rôlßVQK_.ÛQÀâ™£´›Çkyq@#ÒFzí³5ŒEnóİóÃ¤ƒM^0õ½ïàŒĞö.1ñ=íğ;üAËfãè,ì$	’¿ )Š­úà/c§{’tãpğZ©QU¨ºÀÄvĞ
+ã§@-|ò4†Q~îõFÁ†3ä«8R/{,ø‚šdtš"lM¾C	r¸L8Èouô|ÛW‰YR˜UFw–7|»@aV&Q±ğ­R“PF/Äª›{(j–«_˜ÅÒ¦ºñ5¬@¨<
+âú›_ı   ÿÿ &‹‘°

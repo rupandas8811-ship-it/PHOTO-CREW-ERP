@@ -2914,7 +2914,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
                     </div>
                     <div>
                       <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Time</span>
-                      <span className="text-zinc-200 font-mono">{ev.eventTime}</span>
+                      <span className="text-zinc-200 font-mono">{formatTime12Hour(ev.eventTime)}</span>
                     </div>
                     <div className="sm:col-span-2 md:col-span-3">
                       <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold mb-1">Event Location / Google Maps Link</span>
@@ -3355,7 +3355,7 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
                         {evDate}
                       </td>
                       <td className="p-3.5 font-mono text-zinc-300">
-                        {evTime}
+                        {formatTime12Hour(evTime)}
                       </td>
                       <td className="p-3.5 text-zinc-200 font-medium">
                         {custName}

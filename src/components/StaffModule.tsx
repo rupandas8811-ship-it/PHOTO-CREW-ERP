@@ -6,29 +6,12 @@ import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../t
 import { supabaseClient } from '../supabaseClient';
 import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } from '../utils/orderStageCalculator';
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
+import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
+import { formatDateDDMMYY, formatTime12Hour } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
   if (!dateStr || dateStr === '—') return '—';
-  try {
-    const raw = dateStr.split('T')[0];
-    const parts = raw.split('-');
-    if (parts.length === 3) {
-      const year = parts[0];
-      const month = parts[1];
-      const day = parts[2];
-      return `${day}/${month}/${year}`;
-    }
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
-  } catch (e) {
-    // fallback
-  }
-  return dateStr;
+  return formatDateDDMMYY(dateStr) || '—';
 };
 
 const StaffActionDropdown: React.FC<{
@@ -69,26 +52,26 @@ const StaffActionDropdown: React.FC<{
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
-      const dropdownWidth = Math.min(220, viewportWidth - 24);
+      const dropdownWidth = Math.min(240, viewportWidth - 24);
       const spaceBelow = viewportHeight - rect.bottom;
       const spaceAbove = rect.top;
-      const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow;
+      const openUpward = spaceBelow < 220 && spaceAbove > spaceBelow;
 
       const calculatedLeft = Math.min(
         Math.max(12, rect.right - dropdownWidth),
         viewportWidth - dropdownWidth - 12
       );
 
-      const calculatedTop = openUpward ? rect.top - 6 : rect.bottom + 6;
+      const calculatedTop = openUpward ? Math.max(12, rect.top - 6) : Math.min(viewportHeight - 12, rect.bottom + 6);
       const maxHeight = openUpward
-        ? Math.min(280, rect.top - 16)
-        : Math.min(280, viewportHeight - rect.bottom - 16);
+        ? Math.min(280, rect.top - 20)
+        : Math.min(280, viewportHeight - rect.bottom - 20);
 
       setMenuPosition({
         top: calculatedTop,
         left: calculatedLeft,
         openUpward,
-        maxHeight,
+        maxHeight: Math.max(160, maxHeight),
         width: dropdownWidth,
       });
       setIsOpen(true);
@@ -361,6 +344,24 @@ const sortBookingsLatestFirst = (a: any, b: any): number => {
   return String(b.orderId || b.key || '').localeCompare(String(a.orderId || a.key || ''));
 };
 
+// Sort comparator to strictly sort Oldest -> Latest
+const sortBookingsOldestFirst = (a: any, b: any): number => {
+  const timeA = getBookingTimestamp(a);
+  const timeB = getBookingTimestamp(b);
+
+  if (timeA !== timeB) {
+    return timeA - timeB; // Oldest (lower timestamp) on top
+  }
+
+  const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+  if (createdA !== createdB) {
+    return createdA - createdB;
+  }
+
+  return String(a.orderId || a.key || '').localeCompare(String(b.orderId || b.key || ''));
+};
+
 // Utility for image compression before storage
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -474,6 +475,8 @@ const getBookingProofStatus = (
     }
   });
 
+  const hasEquipment = Boolean(b.equipmentItems && b.equipmentItems.length > 0);
+
   const assetImageUploaded = hasAssetInHistory || 
     (proofObj.equipmentReceivedProofs && proofObj.equipmentReceivedProofs.length > 0) ||
     (proofObj.eventStartProofs && proofObj.eventStartProofs.some(p => (p.equipmentName || '').toLowerCase().includes('asset collection') || (p.equipmentName || '').toLowerCase().includes('equipment received')));
@@ -481,7 +484,9 @@ const getBookingProofStatus = (
   const eventStartImageUploaded = hasStartInHistory ||
     (proofObj.eventStartProofs && proofObj.eventStartProofs.some(p => (p.equipmentName || '').toLowerCase().includes('event start')));
 
-  const isEventStartComplete = Boolean(assetImageUploaded && eventStartImageUploaded);
+  const isEventStartComplete = hasEquipment 
+    ? Boolean(assetImageUploaded && eventStartImageUploaded) 
+    : Boolean(eventStartImageUploaded);
   const isEventComplete = Boolean(hasCompleteInHistory || (proofObj.completeProofs && proofObj.completeProofs.length > 0));
   const isHandoverComplete = Boolean(hasHandoverInHistory || (proofObj.equipmentHandoverProofs && proofObj.equipmentHandoverProofs.length > 0));
 
@@ -493,6 +498,173 @@ const getBookingProofStatus = (
     isHandoverComplete
   };
 };
+
+
+const StaffEventDetailsCell = ({ b }: { b: any }) => {
+  return (
+    <div className="relative">
+      <div className="font-bold text-zinc-100">{b.eventName}</div>
+      <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+        <span>{formatDateDDMMYY(b.eventDate)}</span>
+        {b.eventStartTime && b.eventStartTime !== 'N/A' && (
+          <>
+            <span className="text-zinc-600">•</span>
+            <span className="text-zinc-400">{formatTime12Hour(b.eventStartTime)}</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const StaffEquipmentDetailsCell = ({ b, proofStatus }: { b: any, proofStatus: any }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, openUpward: false });
+
+  const hasEquipment = b.equipmentItems && b.equipmentItems.length > 0;
+  
+  if (!hasEquipment) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-800/80 text-zinc-400 border border-zinc-700 text-xs font-bold font-mono">
+        Not Assigned
+      </span>
+    );
+  }
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const popupWidth = 320;
+      const left = Math.min(
+        Math.max(12, rect.left + rect.width / 2 - popupWidth / 2),
+        window.innerWidth - popupWidth - 12
+      );
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const openUpward = spaceBelow < 280 && spaceAbove > spaceBelow;
+      
+      setCoords({
+        left,
+        top: openUpward ? rect.top - 6 : rect.bottom + 6,
+        openUpward
+      });
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        buttonRef.current &&
+        !buttonRef.current.contains(target) &&
+        !target.closest(`.staff-equipment-details-popup-${b.orderId || b.key}`)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    const handleScrollOrResize = (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target && target.closest && target.closest(`.staff-equipment-details-popup-${b.orderId || b.key}`)) {
+        return;
+      }
+      setIsOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('touchstart', handleOutside);
+    window.addEventListener('scroll', handleScrollOrResize, { capture: true, passive: true });
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('touchstart', handleOutside);
+      window.removeEventListener('scroll', handleScrollOrResize, { capture: true });
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [isOpen, b.orderId, b.key]);
+
+  const eqStatusText = proofStatus.isHandoverComplete ? 'Handed Over' : proofStatus.assetImageUploaded ? 'Received' : 'Assigned';
+
+  return (
+    <div className="relative">
+      <button 
+        ref={buttonRef}
+        type="button"
+        onClick={handleToggle}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-700/50 bg-zinc-800/40 text-[11px] text-zinc-300 hover:text-white hover:bg-zinc-700/80 hover:border-zinc-600 transition-all font-semibold tracking-wider"
+      >
+        {b.equipmentItems.length} Equipment Assigned 
+        <span className={`transition-transform duration-200 flex items-center justify-center ${isOpen ? 'rotate-180' : ''}`}>▾</span>
+      </button>
+
+      {isOpen && createPortal(
+        <div 
+          className={`staff-equipment-details-popup-${b.orderId || b.key} fixed z-[110] w-[320px] max-w-[95vw] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/80 overflow-hidden transform origin-${coords.openUpward ? 'bottom' : 'top'} animate-in fade-in zoom-in-95 duration-200 flex flex-col`}
+          style={{ 
+            left: coords.left, 
+            ...(coords.openUpward ? { bottom: window.innerHeight - coords.top } : { top: coords.top }),
+            maxHeight: '300px'
+          }}
+        >
+          <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-700/60 flex items-center justify-between shrink-0">
+            <h4 className="text-[11px] font-bold text-white uppercase tracking-wider">Equipment Details</h4>
+            <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-zinc-700/50">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          
+          <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
+            <div className="space-y-2">
+              {b.equipmentItems.map((e: any, eIdx: number) => (
+                <div key={eIdx} className="flex items-start gap-2 text-sm">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span className="font-mono font-medium text-white break-words">{e.name}</span>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-4 pt-3 border-t border-zinc-800/60">
+              <span className="block text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1.5">Equipment Status</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold font-mono">
+                ✓ {eqStatusText}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+const StaffReportingDetailsCell = ({ b }: { b: any }) => {
+  const repDate = b.reportingDate || 'N/A';
+  const repTime = b.reportingTime || 'N/A';
+
+  return (
+    <div className="relative">
+      <div className="text-[11px] text-zinc-300 font-mono flex items-center gap-1.5 flex-wrap">
+        {repDate !== 'N/A' ? (
+          <>
+            <span className="font-bold">{formatDateDDMMYY(repDate)}</span>
+            {repTime !== 'N/A' && (
+              <>
+                <span className="text-zinc-600">•</span>
+                <span className="text-zinc-400 font-medium">{formatTime12Hour(repTime)}</span>
+              </>
+            )}
+          </>
+        ) : (
+          <span className="text-zinc-600">Not set</span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export const StaffModule: React.FC = () => {
   const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead, pushInsert, pushUpdate } = useRole();
@@ -507,6 +679,7 @@ export const StaffModule: React.FC = () => {
 
   // Local state for assignments
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
   // Local storage cache for individual staff task statuses & photo proofs
   const [staffStatuses, setStaffStatuses] = useState<Record<string, string>>(() => {
@@ -658,6 +831,10 @@ export const StaffModule: React.FC = () => {
     booking: any;
     stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete';
   } | null>(null);
+  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
+  const [calendarModalEvents, setCalendarModalEvents] = useState<any[]>([]);
 
   // Photos attached in modal & raw footage link
   const [modalPhotos, setModalPhotos] = useState<Record<string, string>>({});
@@ -665,14 +842,223 @@ export const StaffModule: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Refs for responsive auto-scrolling & viewport positioning
+  const photoModalBodyRef = useRef<HTMLDivElement>(null);
+  const photoModalSubmitBtnRef = useRef<HTMLButtonElement>(null);
+  const calendarModalBodyRef = useRef<HTMLDivElement>(null);
+  const footageLinkInputRef = useRef<HTMLInputElement>(null);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Lock body scroll when any modal is open
+  useEffect(() => {
+    if (photoModalData || calendarModalDate || selectedBookingDetails) {
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = prevOverflow;
+      };
+    }
+  }, [photoModalData, calendarModalDate, selectedBookingDetails]);
+
+  // Auto-scroll photo modal to top on open
+  useEffect(() => {
+    if (photoModalData) {
+      const timer = setTimeout(() => {
+        photoModalBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 60);
+      return () => clearTimeout(timer);
+    }
+  }, [photoModalData?.stage]);
+
   // Build assigned bookings list for logged in staff
   useEffect(() => {
     if (!staffName) return;
+
+    // Robust equipment resolution for staff tasks strictly isolated to this task and event
+    const resolveAssignedEqListForStaff = (
+      targetStaffName: string, 
+      saObj: any, 
+      evObj: any, 
+      staffIdx: number, 
+      orderIdStr: string, 
+      leadIdStr?: string, 
+      opObj?: any
+    ): { name: string; assetId: string }[] => {
+      const normName = (targetStaffName || '').trim().toLowerCase();
+      if (!normName) return [];
+
+      let eqNames: string[] = [];
+
+      // 1. Direct staff assignment equipment
+      if (saObj) {
+        const saEqRaw = saObj.equipment || saObj.assigned_equipment;
+        if (saEqRaw !== undefined && saEqRaw !== null) {
+          if (Array.isArray(saEqRaw)) {
+            saEqRaw.forEach((item: any) => {
+              if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
+              else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
+                eqNames.push(item.equipment_name || item.name);
+              }
+            });
+            const cleanList = eqNames.filter(item => 
+              item && item.trim() && 
+              item.trim().toLowerCase() !== 'none' && 
+              item.trim().toLowerCase() !== 'not assigned' &&
+              item.trim().toLowerCase() !== 'null' &&
+              item.trim().toLowerCase() !== 'undefined'
+            );
+            const uniqueList = Array.from(new Set(cleanList));
+            return uniqueList.map(eqStr => {
+              const match = equipment?.find(e => 
+                e.equipment_name?.toLowerCase() === eqStr.toLowerCase() || 
+                e.model?.toLowerCase() === eqStr.toLowerCase()
+              );
+              return {
+                name: eqStr,
+                assetId: match?.equipment_id || match?.serial_number || ('EQ-ASSET-' + Math.floor(1000 + Math.random() * 9000))
+              };
+            });
+          } else if (typeof saEqRaw === 'string') {
+            const str = saEqRaw.trim();
+            if (str) {
+              try {
+                const parsed = JSON.parse(str);
+                if (Array.isArray(parsed)) {
+                  parsed.forEach((item: any) => {
+                    if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
+                    else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
+                      eqNames.push(item.equipment_name || item.name);
+                    }
+                  });
+                } else if (parsed && typeof parsed === 'object') {
+                  const name = parsed.equipment_name || parsed.name || parsed.model;
+                  if (name) eqNames.push(name);
+                } else {
+                  str.split(',').forEach((s: string) => { if (s.trim()) eqNames.push(s.trim()); });
+                }
+              } catch(e) {
+                str.split(',').forEach((s: string) => { if (s.trim()) eqNames.push(s.trim()); });
+              }
+              const cleanList = eqNames.filter(item => 
+                item && item.trim() && 
+                item.trim().toLowerCase() !== 'none' && 
+                item.trim().toLowerCase() !== 'not assigned' &&
+                item.trim().toLowerCase() !== 'null' &&
+                item.trim().toLowerCase() !== 'undefined'
+              );
+              const uniqueList = Array.from(new Set(cleanList));
+              return uniqueList.map(eqStr => {
+                const match = equipment?.find(e => 
+                  e.equipment_name?.toLowerCase() === eqStr.toLowerCase() || 
+                  e.model?.toLowerCase() === eqStr.toLowerCase()
+                );
+                return {
+                  name: eqStr,
+                  assetId: match?.equipment_id || match?.serial_number || ('EQ-ASSET-' + Math.floor(1000 + Math.random() * 9000))
+                };
+              });
+            }
+          }
+        }
+      }
+
+      // 2. Check other staffAssignments strictly for this staff and event
+      if (eqNames.length === 0 && staffAssignments && staffAssignments.length > 0) {
+        const matchedSAs = staffAssignments.filter(s => 
+          (s.order_id === orderIdStr || (leadIdStr && s.lead_id === leadIdStr)) &&
+          s.staff_name && s.staff_name.trim().toLowerCase() === normName &&
+          s.assignment_status !== 'Cancelled' &&
+          (
+            (evObj?.id && s.event_id === evObj.id) ||
+            (!evObj?.id && !s.event_id) ||
+            (s.event_name && evObj?.event_name && s.event_name.trim().toLowerCase() === evObj.event_name.trim().toLowerCase()) ||
+            (s.event_name && evObj?.event_type && s.event_name.trim().toLowerCase() === evObj.event_type.trim().toLowerCase())
+          )
+        );
+        matchedSAs.forEach(s => {
+          const sEq = s.equipment || s.assigned_equipment;
+          if (sEq) {
+            if (Array.isArray(sEq)) {
+              sEq.forEach((item: any) => {
+                if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
+                else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
+                  eqNames.push(item.equipment_name || item.name);
+                }
+              });
+            } else if (typeof sEq === 'string') {
+              try {
+                const p = JSON.parse(sEq);
+                if (Array.isArray(p)) {
+                  p.forEach((item: any) => {
+                    if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
+                    else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
+                      eqNames.push(item.equipment_name || item.name);
+                    }
+                  });
+                } else {
+                  sEq.split(',').forEach((str: string) => { if (str.trim()) eqNames.push(str.trim()); });
+                }
+              } catch(e) {
+                sEq.split(',').forEach((str: string) => { if (str.trim()) eqNames.push(str.trim()); });
+              }
+            }
+          }
+        });
+      }
+
+      // 3. Check mobilesRaw encoded equipment
+      if (eqNames.length === 0 && evObj?.assigned_staff_mobiles) {
+        const mobilesRaw = evObj.assigned_staff_mobiles;
+        const assignedNames = evObj.assigned_staff_names ? evObj.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+        const resolvedIdx = staffIdx >= 0 ? staffIdx : assignedNames.indexOf(normName);
+
+        if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
+          try {
+            const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
+            const staffEqs = JSON.parse(parts[1]);
+            if (staffEqs && resolvedIdx >= 0 && staffEqs[resolvedIdx] && Array.isArray(staffEqs[resolvedIdx])) {
+              staffEqs[resolvedIdx].forEach((eqStr: string) => {
+                if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim());
+              });
+            }
+          } catch(e) {}
+        } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
+          if (assignedNames.length === 1 && (resolvedIdx === 0 || resolvedIdx === -1)) {
+            const parts = mobilesRaw.split(' || EQUIPMENT: ');
+            if (parts[1]) {
+              parts[1].split(',').forEach((s: string) => {
+                if (s.trim()) eqNames.push(s.trim());
+              });
+            }
+          }
+        }
+      }
+
+      // Filter invalid placeholders
+      const cleanNames = eqNames.filter(item => 
+        item && item.trim() && 
+        item.trim().toLowerCase() !== 'none' && 
+        item.trim().toLowerCase() !== 'not assigned' &&
+        item.trim().toLowerCase() !== 'null' &&
+        item.trim().toLowerCase() !== 'undefined'
+      );
+
+      const uniqueNames = Array.from(new Set(cleanNames));
+      return uniqueNames.map(eqStr => {
+        const match = equipment?.find(e => 
+          e.equipment_name?.toLowerCase() === eqStr.toLowerCase() || 
+          e.model?.toLowerCase() === eqStr.toLowerCase()
+        );
+        return {
+          name: eqStr,
+          assetId: match?.equipment_id || match?.serial_number || ('EQ-ASSET-' + Math.floor(1000 + Math.random() * 9000))
+        };
+      });
+    };
 
     const bookings: any[] = [];
 
@@ -728,57 +1114,7 @@ export const StaffModule: React.FC = () => {
               }
               return true;
             });
-            let assignedEqItems: { name: string; assetId: string }[] = [];
-            const mobilesRaw = ev.assigned_staff_mobiles || '';
-
-            if (sa && sa.equipment) {
-              const eqList = Array.isArray(sa.equipment) 
-                ? sa.equipment 
-                : (typeof sa.equipment === 'string' ? (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })() : []);
-              
-              assignedEqItems = eqList.filter(Boolean).map((eqStr: string) => {
-                const match = equipment.find(e => 
-                  e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
-                  e.model.toLowerCase() === eqStr.toLowerCase()
-                );
-                return {
-                  name: eqStr,
-                  assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
-                };
-              });
-            } else if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
-              try {
-                const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
-                const staffEqs = JSON.parse(parts[1]);
-                if (staffEqs[staffIdx] && Array.isArray(staffEqs[staffIdx]) && staffEqs[staffIdx].length > 0) {
-                  assignedEqItems = staffEqs[staffIdx].map((eqStr: string) => {
-                    const match = equipment.find(e => 
-                      e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
-                      e.model.toLowerCase() === eqStr.toLowerCase()
-                    );
-                    return {
-                      name: eqStr,
-                      assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
-                    };
-                  });
-                }
-              } catch(e) {}
-            } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-              if (staffIdx === 0) {
-                const parts = mobilesRaw.split(' || EQUIPMENT: ');
-                const eqList = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-                assignedEqItems = eqList.map(eqStr => {
-                  const match = equipment.find(e => 
-                    e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
-                    e.model.toLowerCase() === eqStr.toLowerCase()
-                  );
-                  return {
-                    name: eqStr,
-                    assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
-                  };
-                });
-              }
-            }
+            const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, staffIdx, orderId, lead.lead_id, op);
 
             // Role
             const staffObj = staff?.find(s => s.name.toLowerCase() === staffName.toLowerCase());
@@ -815,6 +1151,7 @@ export const StaffModule: React.FC = () => {
                 assignedRole: assignedRole,
                 eventDate: ev.event_date || lead.event_date || 'N/A',
                 eventStartTime: ev.event_start_time || lead.event_time || 'N/A',
+                eventEndDate: ev.event_end_date || ev.event_date || lead.event_date || 'N/A',
                 eventEndTime: ev.event_end_time || 'N/A',
                 reportingDate: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || 'N/A',
                 reportingTime: ev.reporting_time || lead.reporting_time || 'N/A',
@@ -859,23 +1196,7 @@ export const StaffModule: React.FC = () => {
             assignedRole = sa.staff_role;
           }
 
-          let assignedEqItems: { name: string; assetId: string }[] = [];
-          if (sa && sa.equipment) {
-            const eqList = Array.isArray(sa.equipment) 
-              ? sa.equipment 
-              : (typeof sa.equipment === 'string' ? (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })() : []);
-            
-            assignedEqItems = eqList.filter(Boolean).map((eqStr: string) => {
-              const match = equipment.find(e => 
-                e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
-                e.model.toLowerCase() === eqStr.toLowerCase()
-              );
-              return {
-                name: eqStr,
-                assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
-              };
-            });
-          }
+          const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, null, -1, orderId, lead.lead_id, op);
 
           const uniqueKey = `${orderId}_gen_${staffName.toLowerCase()}`;
           const fallbackStatus = op?.event_status || 'Assigned Crew';
@@ -903,7 +1224,8 @@ export const StaffModule: React.FC = () => {
               assignedRole: assignedRole,
               eventDate: lead.event_date || 'N/A',
               eventStartTime: lead.event_time || 'N/A',
-              eventEndTime: 'N/A',
+              eventEndDate: lead.event_end_date || lead.event_date || 'N/A',
+              eventEndTime: lead.event_end_time || 'N/A',
               reportingDate: lead.Reporting_date || lead.event_date || 'N/A',
               reportingTime: lead.reporting_time || 'N/A',
               venue: lead.event_location || 'N/A',
@@ -959,53 +1281,52 @@ export const StaffModule: React.FC = () => {
       }
       
       // 2. Fallback to client-side direct upload
-      console.log("[UploadProof] Using client-side Supabase upload as fallback...");
-      
-      // Convert base64 to Blob
-      const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, '');
-      const byteCharacters = atob(base64Data);
-      const byteArrays = [];
-      
-      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-        const slice = byteCharacters.slice(offset, offset + 512);
-        const byteNumbers = new Array(slice.length);
-        for (let i = 0; i < slice.length; i++) {
-          byteNumbers[i] = slice.charCodeAt(i);
+      if (supabaseClient) {
+        try {
+          // Convert base64 to Blob
+          const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, '');
+          const byteCharacters = atob(base64Data);
+          const byteArrays = [];
+          
+          for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+            const slice = byteCharacters.slice(offset, offset + 512);
+            const byteNumbers = new Array(slice.length);
+            for (let i = 0; i < slice.length; i++) {
+              byteNumbers[i] = slice.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            byteArrays.push(byteArray);
+          }
+          
+          const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+
+          const { data, error } = await supabaseClient.storage
+            .from('img')
+            .upload(fileName, blob, {
+              contentType: 'image/jpeg',
+              upsert: true
+            });
+
+          if (!error) {
+            const { data: publicData } = supabaseClient.storage
+              .from('img')
+              .getPublicUrl(fileName);
+
+            if (publicData && publicData.publicUrl) {
+              return publicData.publicUrl;
+            }
+          }
+        } catch (storageErr) {
+          console.warn("[UploadProof] Client storage upload failed, using direct base64 image", storageErr);
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        byteArrays.push(byteArray);
-      }
-      
-      const blob = new Blob(byteArrays, { type: 'image/jpeg' });
-
-      // Upload directly to Supabase storage
-      if (!supabaseClient) throw new Error("Supabase client is not initialized.");
-      
-      const { data, error } = await supabaseClient.storage
-        .from('img')
-        .upload(fileName, blob, {
-          contentType: 'image/jpeg',
-          upsert: true
-        });
-
-      if (error) {
-        throw new Error("Supabase Storage Error: " + (error.message || JSON.stringify(error)));
       }
 
-      // Get public URL
-      const { data: publicData } = supabaseClient.storage
-        .from('img')
-        .getPublicUrl(fileName);
-
-      if (!publicData || !publicData.publicUrl) {
-        throw new Error("Failed to generate public URL for uploaded proof.");
-      }
-
-      return publicData.publicUrl;
+      // Fallback: return base64 URL directly (compressed to <50KB)
+      return base64Url;
 
     } catch (err: any) {
-      console.error("[UploadProof] Upload exception:", err);
-      throw new Error(err.message || String(err));
+      console.warn("[UploadProof] Upload exception fallback to base64:", err);
+      return base64Url;
     }
   };
 
@@ -1136,14 +1457,12 @@ export const StaffModule: React.FC = () => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
 
-    // Enforce Event Start ordering rule: Must have Asset Collection image before Event Start image
-    if (photoModalData?.stage === 'Event Start' && (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image')) {
+    const hasEquipment = Boolean(photoModalData?.booking?.equipmentItems && photoModalData.booking.equipmentItems.length > 0);
+
+    // Enforce Event Start ordering rule ONLY if staff has equipment assigned: Must have Asset Collection image before Event Start image
+    if (hasEquipment && photoModalData?.stage === 'Event Start' && (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image')) {
       const hasAssetColl = !!modalPhotos['Asset Collection Photo Proof'] || 
-        !!modalPhotos['Equipment Received / Asset Picture'] ||
-        (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.some((eq: any) => {
-          const k = photoModalData.booking.equipmentItems.length > 1 ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof';
-          return !!modalPhotos[k];
-        }));
+        !!modalPhotos['Equipment Received / Asset Picture'];
 
       if (!hasAssetColl) {
         e.target.value = '';
@@ -1167,6 +1486,21 @@ export const StaffModule: React.FC = () => {
         }
         return next;
       });
+
+      // Auto-scroll to the next required section or to the submit button
+      setTimeout(() => {
+        if (!photoModalBodyRef.current) return;
+        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:')) {
+          const eventStartCard = photoModalBodyRef.current.querySelector('[data-card="event-start"]') as HTMLElement;
+          if (eventStartCard) {
+            eventStartCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            return;
+          }
+        }
+        // If all uploaded or last photo captured, scroll smoothly to the action button
+        photoModalSubmitBtnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 120);
+
     } catch (err) {
       console.error('Error processing photo:', err);
       showToast('❌ Failed to process photo. Please try again.');
@@ -1180,32 +1514,46 @@ export const StaffModule: React.FC = () => {
 
     // --- EVENT START WORKFLOW ---
     if (stage === 'Event Start') {
-      const isMultiEq = booking.equipmentItems && booking.equipmentItems.length > 1;
-      const assetKeys = booking.equipmentItems && booking.equipmentItems.length > 0
-        ? booking.equipmentItems.map((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof')
-        : ['Asset Collection Photo Proof'];
-
-      const hasAssetColl = assetKeys.every((k: string) => !!modalPhotos[k] || !!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture']);
+      const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
+      const isMultiEq = hasEquipment && booking.equipmentItems.length > 1;
+      const assetKeys = hasEquipment ? booking.equipmentItems.map((eq: any) => eq.name) : [];
+      const hasAssetColl = hasEquipment
+        ? (!!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture'])
+        : true;
       const hasEventStart = !!modalPhotos['Event Start Photo Proof'] || !!modalPhotos['Event Start Image'];
 
-      if (!hasAssetColl && hasEventStart) {
-        alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-        showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-        return;
-      }
+      if (hasEquipment) {
+        if (!hasAssetColl && hasEventStart) {
+          const assetCard = photoModalBodyRef.current?.querySelector('[data-card="asset-collection"]') as HTMLElement;
+          assetCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
+          showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
+          return;
+        }
 
-      if (!hasAssetColl && !hasEventStart) {
-        alert("Please upload at least the Equipment Received / Asset Picture.");
-        showToast("⚠️ Please upload at least the Equipment Received / Asset Picture.");
-        return;
+        if (!hasAssetColl && !hasEventStart) {
+          const assetCard = photoModalBodyRef.current?.querySelector('[data-card="asset-collection"]') as HTMLElement;
+          assetCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          alert("Please upload at least the Equipment Received / Asset Picture.");
+          showToast("⚠️ Please upload at least the Equipment Received / Asset Picture.");
+          return;
+        }
+      } else {
+        if (!hasEventStart) {
+          const eventStartCard = photoModalBodyRef.current?.querySelector('[data-card="event-start"]') as HTMLElement;
+          eventStartCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          alert("Please upload the Event Start Image.");
+          showToast("⚠️ Please upload the Event Start Image.");
+          return;
+        }
       }
 
       try {
         setIsSubmitting(true);
         const timestamp = new Date().toISOString();
 
-        // 1. FIRST IMAGE ONLY: Asset / Equipment Received Image is provided
-        if (hasAssetColl && !hasEventStart) {
+        // 1. FIRST IMAGE ONLY (Applicable only if staff has equipment): Asset / Equipment Received Image is provided
+        if (hasEquipment && hasAssetColl && !hasEventStart) {
           const assetProofsToSave: EquipmentProofItem[] = [];
 
           for (const itemKey of assetKeys) {
@@ -1216,7 +1564,7 @@ export const StaffModule: React.FC = () => {
             const finalUrl = await safeUploadImage(rawUrl, fileName);
 
             const eqName = itemKey;
-            const assetId = booking.equipmentItems?.find((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` === itemKey : true)?.assetId || 'Asset Collection';
+            const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
 
             assetProofsToSave.push({
               equipmentName: eqName,
@@ -1294,7 +1642,7 @@ export const StaffModule: React.FC = () => {
             const finalUrl = await safeUploadImage(rawUrl, fileName);
 
             const eqName = itemKey;
-            const assetId = booking.equipmentItems?.find((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` === itemKey : true)?.assetId || 'Asset Collection';
+            const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
 
             allProofsToSave.push({
               equipmentName: eqName,
@@ -1471,19 +1819,32 @@ export const StaffModule: React.FC = () => {
 
     // --- OTHER STAGES (Event Complete, Equipment Handover, Equipment Received) ---
     let reqItems: { name: string; assetId: string; optional?: boolean }[] = [];
+    const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
+
     if (stage === 'Event Complete') {
       reqItems = [{ name: 'Event Completion Photo Proof', assetId: 'Event Completion' }];
     } else if (stage === 'Equipment Handover') {
-      reqItems = [{ name: 'Equipment Handover Photo Proof', assetId: 'Equipment Handover', optional: true }];
+      if (hasEquipment) {
+        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: true }));
+      } else {
+        reqItems = [];
+      }
     } else if (stage === 'Equipment Received') {
-      reqItems = [{ name: 'Asset Collection Photo Proof', assetId: 'Asset Collection' }];
+      if (hasEquipment) {
+        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: false }));
+      } else {
+        reqItems = [];
+      }
     }
 
     // Validate mandatory photo proofs
     for (const item of reqItems) {
-      if (!item.optional && !modalPhotos[item.name]) {
-        showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
-        return;
+      if (!item.optional) {
+        const hasPhoto = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
+        if (!hasPhoto) {
+          showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
+          return;
+        }
       }
     }
 
@@ -1499,12 +1860,13 @@ export const StaffModule: React.FC = () => {
       const timestamp = new Date().toISOString();
       const uploadedProofs: EquipmentProofItem[] = [];
 
-      const hasHandoverPhoto = stage === 'Equipment Handover' && (
-        !!modalPhotos['Equipment Handover Photo Proof'] || !!modalPhotos['Asset Return Photo Proof']
+      const hasHandoverPhoto = stage === 'Equipment Handover' && hasEquipment && (
+        !!modalPhotos['Equipment Handover Photo Proof'] || !!modalPhotos['Asset Return Photo Proof'] ||
+        (booking.equipmentItems && booking.equipmentItems.some((eq: any) => !!modalPhotos[`Equipment Handover: ${eq.name}`]))
       );
 
       for (const item of reqItems) {
-        const rawUrl = modalPhotos[item.name] || (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
+        const rawUrl = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
         if (rawUrl) {
           const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
           const finalUrl = await safeUploadImage(rawUrl, fileName);
@@ -1520,7 +1882,7 @@ export const StaffModule: React.FC = () => {
 
       const effectiveEquipmentStatus = 
         stage === 'Event Complete' ? 'Event Ended' :
-        stage === 'Equipment Handover' ? (hasHandoverPhoto ? 'Equipment Handover Completed' : 'Equipment Not Handover') : stage;
+        stage === 'Equipment Handover' ? (hasEquipment ? (hasHandoverPhoto ? 'Equipment Handover Completed' : 'Equipment Not Handover') : 'Footage Handover Completed') : stage;
 
       let nextStatus = staffStatuses[booking.key] || 'Assigned Crew';
       if (stage === 'Event Complete') {
@@ -1560,31 +1922,59 @@ export const StaffModule: React.FC = () => {
           await pushInsert('lead_equipment_history', historyRecord);
         }
       } else if (stage === 'Equipment Handover') {
-        // Record Equipment Not Handover when photo was not uploaded
-        const historyRecord = {
-          lead_id: booking.leadId || null,
-          order_id: booking.orderId || null,
-          equipment_name: 'Equipment Handover Photo Proof',
-          equipment_status: 'Equipment Not Handover',
-          returned_by: staffName,
-          returned_at: timestamp,
-          remarks: JSON.stringify({
-            asset_id: 'Equipment Handover',
-            proof_type: 'Equipment Handover',
-            staff_name: staffName,
-            photo_url: null,
-            event_id: booking.eventId,
-            event_name: booking.eventName,
-            order_id: booking.orderId,
-            lead_id: booking.leadId,
-            raw_footage_link: modalRawFootageLink || null,
-            uploaded_at: timestamp,
-            uploaded_by: staffName,
-            current_status: nextStatus
-          })
-        };
+        if (hasEquipment) {
+          // Record Equipment Not Handover when photo was not uploaded for assigned equipment
+          const historyRecord = {
+            lead_id: booking.leadId || null,
+            order_id: booking.orderId || null,
+            equipment_name: 'Equipment Handover Photo Proof',
+            equipment_status: 'Equipment Not Handover',
+            returned_by: staffName,
+            returned_at: timestamp,
+            remarks: JSON.stringify({
+              asset_id: 'Equipment Handover',
+              proof_type: 'Equipment Handover',
+              staff_name: staffName,
+              photo_url: null,
+              event_id: booking.eventId,
+              event_name: booking.eventName,
+              order_id: booking.orderId,
+              lead_id: booking.leadId,
+              raw_footage_link: modalRawFootageLink || null,
+              uploaded_at: timestamp,
+              uploaded_by: staffName,
+              current_status: nextStatus
+            })
+          };
 
-        await pushInsert('lead_equipment_history', historyRecord);
+          await pushInsert('lead_equipment_history', historyRecord);
+        } else {
+          // Staff has NO equipment assigned -> Record Footage Handover
+          const historyRecord = {
+            lead_id: booking.leadId || null,
+            order_id: booking.orderId || null,
+            equipment_name: 'Footage Handover',
+            equipment_status: 'Footage Handover Completed',
+            returned_by: staffName,
+            returned_at: timestamp,
+            remarks: JSON.stringify({
+              asset_id: 'Footage Handover',
+              proof_type: 'Footage Handover',
+              staff_name: staffName,
+              photo_url: null,
+              event_id: booking.eventId,
+              event_name: booking.eventName,
+              order_id: booking.orderId,
+              lead_id: booking.leadId,
+              raw_footage_link: modalRawFootageLink || null,
+              uploaded_at: timestamp,
+              uploaded_by: staffName,
+              current_status: nextStatus
+            })
+          };
+
+          await pushInsert('lead_equipment_history', historyRecord);
+        }
       }
 
       // If stage is Equipment Handover, explicitly mark every assigned equipment item as returned
@@ -1754,11 +2144,6 @@ export const StaffModule: React.FC = () => {
       setIsSubmitting(false);
     }
   };
-  // Calendar View & Navigation state
-  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
-  const [calendarModalEvents, setCalendarModalEvents] = useState<any[]>([]);
 
   const handlePrevMonth = () => {
     setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -1995,92 +2380,109 @@ export const StaffModule: React.FC = () => {
             })}
           </div>
 
-          {/* Selected Date Events Section below Calendar Grid */}
-          <div className="mt-6 pt-5 border-t border-zinc-800 space-y-4">
-            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-              <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
-                  EVENT DETAILS
-                </span>
-                <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
-                  {calendarModalDate || 'Select a date'}
-                </h4>
-              </div>
-              {calendarModalDate && (
-                <span className="text-xs font-mono text-zinc-400">
-                  {calendarModalEvents.length} Event(s) Scheduled
-                </span>
-              )}
-            </div>
-
-            {!calendarModalDate ? (
-              <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
-                Click or tap any date on the calendar above to view scheduled events.
-              </div>
-            ) : calendarModalEvents.length === 0 ? (
-              <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
-                No events assigned on {calendarModalDate}.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {/* Responsive Read-Only Table */}
-                <div className="overflow-x-auto w-full border border-zinc-800 rounded-2xl bg-zinc-950/60 shadow-inner">
-                  <table className="w-full text-left border-collapse min-w-[700px]">
-                    <thead>
-                      <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
-                        <th className="p-3.5 pl-4">Event Name</th>
-                        <th className="p-3.5">Event Date</th>
-                        <th className="p-3.5">Event Time</th>
-                        <th className="p-3.5">Customer</th>
-                        <th className="p-3.5">Status</th>
-                        <th className="p-3.5 pr-4">Target Delivery Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
-                      {calendarModalEvents.map((ev, idx) => (
-                        <tr key={ev.key || idx} className="bg-zinc-950/30 select-text">
-                          <td className="p-3.5 pl-4 font-bold text-zinc-100">
-                            {ev.eventName || 'Photography Event'}
-                          </td>
-                          <td className="p-3.5 font-mono text-zinc-300">
-                            {formatDateDMY(ev.eventDate || calendarModalDate)}
-                          </td>
-                          <td className="p-3.5 font-mono text-zinc-300">
-                            {ev.eventStartTime || '10:00 AM'}
-                          </td>
-                          <td className="p-3.5 text-zinc-200 font-medium">
-                            {ev.customerName || '—'}
-                          </td>
-                          <td className="p-3.5">
-                            <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
-                              {ev.status || 'Active'}
-                            </span>
-                          </td>
-                          <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
-                            {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+          {/* Selected Date Events Popup (Rendered as Modal via createPortal) */}
+          {calendarModalDate && createPortal(
+            <div 
+              className="fixed inset-0 z-[120] flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-zinc-950/85 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 overflow-y-auto"
+              onClick={() => setCalendarModalDate(null)}
+            >
+              <div 
+                className="bg-zinc-900 border border-zinc-800 w-full max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl relative flex flex-col max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] overflow-hidden my-auto" 
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between p-4 sm:p-6 border-b border-zinc-800/80 shrink-0 bg-zinc-950/60">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
+                      EVENT DETAILS
+                    </span>
+                    <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
+                      {calendarModalDate}
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono text-zinc-400">
+                      {calendarModalEvents.length} Event(s) Scheduled
+                    </span>
+                    <button
+                      onClick={() => setCalendarModalDate(null)}
+                      className="p-2 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition cursor-pointer"
+                      title="Close"
+                      type="button"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                
+                <div ref={calendarModalBodyRef} className="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar min-h-0">
+                  {calendarModalEvents.length === 0 ? (
+                    <div className="p-6 sm:p-10 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
+                      No events assigned on {calendarModalDate}.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="overflow-x-auto w-full max-w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
+                        <table className="w-full text-left border-collapse min-w-[650px]">
+                          <thead>
+                            <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+                              <th className="p-3 sm:p-3.5 pl-4">Event Name</th>
+                              <th className="p-3 sm:p-3.5">Event Date</th>
+                              <th className="p-3 sm:p-3.5">Event Time</th>
+                              <th className="p-3 sm:p-3.5">Customer</th>
+                              <th className="p-3 sm:p-3.5">Status</th>
+                              <th className="p-3 sm:p-3.5 pr-4">Target Delivery Date</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
+                            {calendarModalEvents.map((ev, idx) => (
+                              <tr key={ev.key || idx} className="bg-zinc-950/30 select-text hover:bg-zinc-900/40 transition-colors">
+                                <td className="p-3 sm:p-3.5 pl-4 font-bold text-zinc-100">
+                                  {ev.eventName || 'Photography Event'}
+                                </td>
+                                <td className="p-3 sm:p-3.5 font-mono text-zinc-300">
+                                  {formatDateDMY(ev.eventDate || calendarModalDate)}
+                                </td>
+                                <td className="p-3 sm:p-3.5 font-mono text-zinc-300">
+                                  {formatTime12Hour(ev.eventStartTime || '10:00 AM')}
+                                </td>
+                                <td className="p-3 sm:p-3.5 text-zinc-200 font-medium">
+                                  {ev.customerName || '—'}
+                                </td>
+                                <td className="p-3 sm:p-3.5">
+                                  <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
+                                    {ev.status || 'Active'}
+                                  </span>
+                                </td>
+                                <td className="p-3 sm:p-3.5 pr-4 font-mono font-bold text-pink-400">
+                                  {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
+            </div>,
+            document.body
+          )}
         </div>
       )}
 
       {/* Assigned Orders & Tasks Table/Cards */}
       {activeTab === 'tasks' && (
         <div className="bg-zinc-900/80 border border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
-          <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+          <div className="p-4 sm:p-6 border-b border-zinc-800 flex flex-wrap justify-between items-center gap-3">
             <div>
-              <h3 className="text-lg font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
                 <Briefcase className="w-5 h-5 text-amber-500" />
                 Assigned Orders & Tasks
               </h3>
               <p className="text-zinc-400 text-xs mt-0.5">Showing orders & equipment assigned specifically to you</p>
             </div>
+            <ListSortFilter value={sortOrder} onChange={setSortOrder} />
           </div>
 
           {activeBookings.length === 0 ? (
@@ -2101,6 +2503,7 @@ export const StaffModule: React.FC = () => {
                     <th className="py-4 px-6">Order ID</th>
                     <th className="py-4 px-6">Customer Name</th>
                     <th className="py-4 px-6">Event Name & Shoot</th>
+                    <th className="py-4 px-6 whitespace-nowrap">Reporting Date & Time</th>
                     <th className="py-4 px-6">Assigned Role</th>
                     <th className="py-4 px-6">Equipment Status</th>
                     <th className="py-4 px-6">Status</th>
@@ -2108,7 +2511,7 @@ export const StaffModule: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-sm">
-                  {[...activeBookings].sort(sortBookingsLatestFirst).map((b) => {
+                  {[...activeBookings].sort(sortOrder === 'latest' ? sortBookingsLatestFirst : sortBookingsOldestFirst).map((b) => {
                     const proofStatus = getBookingProofStatus(b, leadEquipmentHistory, staffProofs, staffName, staffMember?.id || currentUser?.id);
                     const isStarted = (b.taskStatus === 'Event Started' || b.taskStatus === 'Event Start') && proofStatus.isEventStartComplete;
                     const isCompleted = b.taskStatus === 'Event Completed' || b.taskStatus === 'Event Complete' || proofStatus.isEventComplete;
@@ -2122,39 +2525,18 @@ export const StaffModule: React.FC = () => {
                         <td className="py-4 px-6 font-mono font-bold text-amber-400">{b.orderId}</td>
                         <td className="py-4 px-6 font-bold text-white">{b.customerName}</td>
                         <td className="py-4 px-6">
-                          <div className="font-bold text-zinc-100">{b.eventName}</div>
-                          <div className="text-xs text-zinc-400 font-mono mt-0.5 flex items-center gap-1 flex-wrap">
-                            <span>{b.eventDate}</span>
-                            {b.eventStartTime && b.eventStartTime !== 'N/A' && (
-                              <span className="text-zinc-500">• {b.eventStartTime}</span>
-                            )}
-                          </div>
-                          {b.shootType && b.shootType !== 'N/A' && (
-                            <div className="text-[10px] font-mono uppercase text-zinc-500 mt-0.5">
-                              {b.shootType}
-                            </div>
-                          )}
+                          <StaffEventDetailsCell b={b} />
                         </td>
                         <td className="py-4 px-6">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold">
+                          <StaffReportingDetailsCell b={b} />
+                        </td>
+                        <td className="py-4 px-6">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold whitespace-nowrap">
                             {b.assignedRole}
                           </span>
                         </td>
                         <td className="py-4 px-6">
-                          {b.equipmentItems && b.equipmentItems.length > 0 ? (
-                            <div className="flex flex-col gap-1">
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold font-mono">
-                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Assigned ({b.equipmentItems.length})
-                              </span>
-                              <span className="text-[10px] text-zinc-400 max-w-[150px] truncate font-mono" title={b.equipmentItems.map((e: any) => e.name).join(', ')}>
-                                {b.equipmentItems.map((e: any) => e.name).join(', ')}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-800/80 text-zinc-400 border border-zinc-700 text-xs font-bold font-mono">
-                              Not Assigned
-                            </span>
-                          )}
+                          <StaffEquipmentDetailsCell b={b} proofStatus={proofStatus} />
                         </td>
                         <td className="py-4 px-6 flex flex-col gap-2 items-start">
                           {b.taskStatus === 'Footage Handover' || b.taskStatus === 'Verified Footage' ? (
@@ -2211,105 +2593,114 @@ export const StaffModule: React.FC = () => {
       <ViewDetailsModal
         isOpen={!!selectedBookingDetails}
         onClose={() => setSelectedBookingDetails(null)}
-        orderId={selectedBookingDetails?.orderId || selectedBookingDetails?.key}
-        booking={selectedBookingDetails}
+        orderId={selectedBookingDetails?.orderId || selectedBookingDetails?.key || ''}
         isStaffView={true}
+        staffName={staffName}
       />
 
       {/* EQUIPMENT PHOTO PROOF VERIFICATION MODAL (EVENT START / EVENT COMPLETE) */}
-      {photoModalData && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
-              <div>
-                <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
+      {photoModalData && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 md:p-6 z-[130] animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] my-auto">
+            <div className="p-4 sm:p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start shrink-0">
+              <div className="pr-2">
+                <span className="text-[10px] sm:text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
                   {photoModalData.stage === 'Event Complete' ? 'Event End Workflow' : photoModalData.stage === 'Equipment Handover' ? 'Footage Handover Workflow' : `Verification • ${photoModalData.stage}`}
                 </span>
-                <h3 className="text-xl font-black text-white">{photoModalData.booking.eventName}</h3>
+                <h3 className="text-lg sm:text-xl font-black text-white leading-tight">{photoModalData.booking.eventName}</h3>
                 <p className="text-zinc-400 text-xs mt-0.5">Order ID: {photoModalData.booking.orderId} | Staff: <strong className="text-white">{staffName}</strong></p>
               </div>
               <button
                 onClick={() => setPhotoModalData(null)}
-                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors"
+                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-xl sm:rounded-full transition-colors shrink-0"
+                title="Close"
+                type="button"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5">
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-300 flex items-start gap-3">
+            <div ref={photoModalBodyRef} className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1 custom-scrollbar min-h-0">
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 text-xs text-amber-300 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
                 <div>
                   {photoModalData.stage === 'Event Complete' ? (
                     <span><strong>Event Completion Proof Required:</strong> Please upload or capture the <strong>Event Completion Photo Proof</strong> to complete the Event End stage.</span>
                   ) : photoModalData.stage === 'Equipment Handover' ? (
-                    <span><strong>Footage Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong>. Equipment Handover Photo Proof is optional.</span>
+                    photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 ? (
+                      <span><strong>Footage & Equipment Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong> and capture/upload Equipment Handover Photo Proof.</span>
+                    ) : (
+                      <span><strong>Footage Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong> to complete footage handover.</span>
+                    )
                   ) : photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 ? (
-                    <span><strong>Equipment Inspection Required:</strong> Please capture or upload a clear photo of each assigned equipment item to verify condition at <span className="font-bold underline">{photoModalData.stage}</span>.</span>
+                    <span><strong>Equipment Inspection Required:</strong> Please capture or upload a clear photo of each assigned equipment item (Equipment Received / Asset Picture) and <strong>Event Start Image</strong> to start the event.</span>
                   ) : (
-                    <span><strong>Event Start Proof Required:</strong> Please capture or upload a clear photo for <strong>Event Start Photo Proof</strong>.</span>
+                    <span><strong>Event Start Proof Required:</strong> Please capture or upload a clear photo for <strong>Event Start Image</strong>.</span>
                   )}
                 </div>
               </div>
 
               {/* Equipment / Proof Items list with photo inputs */}
-              <div className="space-y-4">
+              <div className="space-y-3.5 sm:space-y-4">
                 {(photoModalData.stage === 'Event Start'
-                  ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 1 
+                  ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
                       ? [
-                          ...photoModalData.booking.equipmentItems.map((eq: any, eqIdx: number) => ({
-                            name: `Asset Collection: ${eq.name}`,
-                            displayName: `1.${eqIdx + 1} Equipment Received / Asset Picture (${eq.name})`,
-                            assetId: eq.assetId || eq.name,
+                          {
+                            name: 'Asset Collection Photo Proof',
+                            cardKey: 'asset-collection',
+                            displayName: '1. Equipment Received / Asset Picture',
+                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
                             optional: false,
                             isAsset: true
-                          })),
-                          { 
-                            name: 'Event Start Photo Proof', 
-                            displayName: '2. Event Start Image', 
-                            assetId: 'Event Start', 
+                          },
+                          {
+                            name: 'Event Start Photo Proof',
+                            cardKey: 'event-start',
+                            displayName: '2. Event Start Image',
+                            assetId: 'Event Start',
                             optional: false,
-                            isEventStart: true 
+                            isEventStart: true
                           }
                         ]
                       : [
                           { 
-                            name: 'Asset Collection Photo Proof', 
-                            displayName: '1. Equipment Received / Asset Picture', 
-                            assetId: photoModalData.booking.equipmentItems?.[0]?.assetId || 'Asset Collection', 
-                            optional: false,
-                            isAsset: true 
-                          },
-                          { 
                             name: 'Event Start Photo Proof', 
-                            displayName: '2. Event Start Image', 
+                            cardKey: 'event-start',
+                            displayName: 'Event Start Image', 
                             assetId: 'Event Start', 
-                            optional: false,
+                            optional: false, 
                             isEventStart: true 
                           }
                         ])
                   : photoModalData.stage === 'Event Complete'
                   ? [
-                      { name: 'Event Completion Photo Proof', displayName: 'Event Completion Photo Proof', assetId: 'Event Completion', optional: false }
+                      { name: 'Event Completion Photo Proof', cardKey: 'Event Completion Photo Proof', displayName: 'Event Completion Photo Proof', assetId: 'Event Complete', optional: false }
                     ]
                   : photoModalData.stage === 'Equipment Handover'
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
-                      ? photoModalData.booking.equipmentItems.map((eq: any) => ({
-                          name: photoModalData.booking.equipmentItems.length > 1 ? `Equipment Handover: ${eq.name}` : 'Equipment Handover Photo Proof',
-                          displayName: `Equipment Handover: ${eq.name}`,
-                          assetId: eq.assetId || eq.name,
-                          optional: true
-                        }))
-                      : [{ name: 'Equipment Handover Photo Proof', displayName: 'Equipment Handover Photo Proof', assetId: 'Handover', optional: true }]
+                      ? [
+                          {
+                            name: 'Asset Return Photo Proof',
+                            cardKey: 'Asset Return Photo Proof',
+                            displayName: 'Equipment Handover Photo Proof',
+                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Equipment Handover',
+                            optional: true
+                          }
+                        ]
+                      : []
                     )
                   : (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
-                      ? photoModalData.booking.equipmentItems.map((eq: any) => ({
-                          name: photoModalData.booking.equipmentItems.length > 1 ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof',
-                          displayName: `Asset Collection: ${eq.name}`,
-                          assetId: eq.assetId || eq.name,
-                          optional: false
-                        }))
-                      : [{ name: 'Asset Collection Photo Proof', displayName: 'Asset Collection Photo Proof', assetId: 'Asset Collection', optional: false }]
+                      ? [
+                          {
+                            name: 'Asset Collection Photo Proof',
+                            cardKey: 'asset-collection',
+                            displayName: 'Equipment Received / Asset Picture',
+                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
+                            optional: false,
+                            isAsset: true
+                          }
+                        ]
+                      : []
                     )
                 ).map((item: any, idx: number) => {
                   const currentPhoto = modalPhotos[item.name] || 
@@ -2318,25 +2709,29 @@ export const StaffModule: React.FC = () => {
                     (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
 
                   return (
-                    <div key={idx} className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                      <div className="flex justify-between items-center">
+                    <div 
+                      key={idx} 
+                      data-card={item.cardKey || item.name}
+                      className="bg-zinc-950/80 border border-zinc-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 space-y-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                         <div>
-                          <div className="font-bold text-white text-sm flex items-center gap-2">
-                            <Camera className="w-4 h-4 text-amber-500" />
-                            {item.displayName || item.name} {item.optional ? <span className="text-zinc-500 text-xs font-normal">(Optional)</span> : <span className="text-rose-400 text-xs font-normal">(Required)</span>}
+                          <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
+                            <Camera className="w-4 h-4 text-amber-500 shrink-0" />
+                            <span>{item.displayName || item.name} {item.optional ? <span className="text-zinc-500 text-xs font-normal">(Optional)</span> : <span className="text-rose-400 text-xs font-normal">(Required)</span>}</span>
                           </div>
-                          <div className="text-[10px] font-mono text-zinc-400">Asset ID: {item.assetId}</div>
+                          <div className="text-[10px] font-mono text-zinc-400 mt-0.5">Asset ID: {item.assetId}</div>
                         </div>
                         {currentPhoto ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-                            <CheckCircle className="w-3.5 h-3.5" /> Previously Uploaded Image ✓
+                          <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                            <CheckCircle className="w-3.5 h-3.5" /> Photo Attached ✓
                           </span>
                         ) : item.optional ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-zinc-400 bg-zinc-800/80 px-2.5 py-1 rounded-full border border-zinc-700">
+                          <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-zinc-400 bg-zinc-800/80 px-2.5 py-1 rounded-full border border-zinc-700">
                             Photo Optional
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                          <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
                             <AlertCircle className="w-3.5 h-3.5" /> Photo Required
                           </span>
                         )}
@@ -2344,32 +2739,32 @@ export const StaffModule: React.FC = () => {
 
                       {currentPhoto ? (
                         <div className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900">
-                          <img src={currentPhoto} alt={item.name} className="w-full h-40 object-cover" />
+                          <img src={currentPhoto} alt={item.name} className="w-full h-36 sm:h-44 object-cover" />
                           <label className="absolute bottom-2 right-2 bg-zinc-900/90 hover:bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-700 cursor-pointer flex items-center gap-1.5 shadow-lg">
                             <Upload className="w-3.5 h-3.5" /> Change Photo
                             <input
                               type="file"
                               accept="image/*"
-                              
-                              onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
+                              onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
+                              onChange={(e) => handlePhotoCapture(item.name, e)}
                               className="hidden"
                             />
                           </label>
                         </div>
                       ) : (
-                        <label className="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 bg-zinc-900/50 hover:bg-zinc-900 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group">
+                        <label className="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 bg-zinc-900/50 hover:bg-zinc-900 rounded-xl sm:rounded-2xl p-4 sm:p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group">
                           <div className="w-10 h-10 rounded-full bg-zinc-800 group-hover:bg-amber-500/20 text-zinc-400 group-hover:text-amber-400 flex items-center justify-center transition-colors">
                             <Camera className="w-5 h-5" />
                           </div>
-                          <span className="text-xs font-bold text-zinc-300 group-hover:text-amber-400 transition-colors">
+                          <span className="text-xs font-bold text-zinc-300 group-hover:text-amber-400 transition-colors text-center">
                             Capture or Upload {item.displayName || item.name}
                           </span>
-                          <span className="text-[10px] text-zinc-500 font-mono">Use phone camera or choose file</span>
+                          <span className="text-[10px] text-zinc-500 font-mono text-center">Use device camera or choose photo file</span>
                           <input
                             type="file"
                             accept="image/*"
-                            
-                            onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
+                            onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
+                            onChange={(e) => handlePhotoCapture(item.name, e)}
                             className="hidden"
                           />
                         </label>
@@ -2380,26 +2775,27 @@ export const StaffModule: React.FC = () => {
 
                 {/* Raw Footage Link Input for Footage Handover stage */}
                 {photoModalData.stage === 'Equipment Handover' && (
-                  <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                    <div className="flex justify-between items-center">
+                  <div data-card="raw-footage" className="bg-zinc-950/80 border border-zinc-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
                       <div>
-                        <div className="font-bold text-white text-sm flex items-center gap-2">
-                          <Video className="w-4 h-4 text-indigo-400" />
-                          Raw Footage Drive Link <span className="text-rose-400 text-xs font-normal">(Required)</span>
+                        <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
+                          <Video className="w-4 h-4 text-indigo-400 shrink-0" />
+                          <span>Raw Footage Drive Link <span className="text-rose-400 text-xs font-normal">(Required)</span></span>
                         </div>
-                        <div className="text-[10px] font-mono text-zinc-400">Google Drive / Cloud folder URL for raw footage handover</div>
+                        <div className="text-[10px] font-mono text-zinc-400 mt-0.5">Google Drive / Cloud folder URL for raw footage handover</div>
                       </div>
                       {modalRawFootageLink.trim() ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                        <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
                           <CheckCircle className="w-3.5 h-3.5" /> Link Provided
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                        <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
                           <AlertCircle className="w-3.5 h-3.5" /> Link Required
                         </span>
                       )}
                     </div>
                     <input
+                      ref={footageLinkInputRef}
                       type="url"
                       value={modalRawFootageLink}
                       onChange={(e) => setModalRawFootageLink(e.target.value)}
@@ -2411,19 +2807,22 @@ export const StaffModule: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-between items-center">
+            <div className="p-3.5 sm:p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-between items-center shrink-0">
               <button
                 onClick={() => setPhotoModalData(null)}
                 disabled={isSubmitting}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors"
+                className="px-3.5 sm:px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors"
+                type="button"
               >
                 Cancel
               </button>
 
               <button
+                ref={photoModalSubmitBtnRef}
                 onClick={handleConfirmStatusUpdate}
                 disabled={isSubmitting}
-                className={`px-6 py-2.5 font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-lg ${
+                type="button"
+                className={`px-4 sm:px-6 py-2 sm:py-2.5 font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-lg cursor-pointer ${
                   photoModalData.stage === 'Event Start'
                     ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-amber-500/20'
                     : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
@@ -2434,9 +2833,11 @@ export const StaffModule: React.FC = () => {
                 ) : photoModalData.stage === 'Event Start' ? (
                   <>
                     <CheckCircle className="w-4 h-4" />
-                    {(modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image']) 
-                      ? 'Confirm Event Start' 
-                      : 'Save Equipment / Asset Image'}
+                    {!(photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0)
+                      ? 'Confirm Event Start'
+                      : (modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image']) 
+                        ? 'Confirm Event Start' 
+                        : 'Save Equipment / Asset Image'}
                   </>
                 ) : photoModalData.stage === 'Event Complete' ? (
                   <>
@@ -2457,7 +2858,8 @@ export const StaffModule: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Inline Selected Date Event Details are rendered directly below calendar grid */}

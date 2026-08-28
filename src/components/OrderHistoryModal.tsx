@@ -7,7 +7,7 @@ import {
   Send, RefreshCw, ChevronRight, Layers, FileVideo, Download
 , ChevronDown} from 'lucide-react';
 import { useRole } from './RoleContext';
-import { formatINR, resolveStorageUrl, parseCustomerProof } from '../utils';
+import { formatINR, resolveStorageUrl, parseCustomerProof, formatDateDDMMYY, formatTime12Hour } from '../utils';
 
 export interface OrderHistoryModalProps {
   isOpen: boolean;
@@ -143,8 +143,8 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
     }
     return {
       iso: d.toISOString(),
-      date: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-      time: d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+      date: formatDateDDMMYY(d),
+      time: formatTime12Hour(d)
     };
   };
 

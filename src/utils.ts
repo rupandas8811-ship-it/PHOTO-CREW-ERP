@@ -249,52 +249,160 @@ export function formatIndianPhoneNumber(phone: string): string {
 }
 
 /**
- * Converts any 24-hour HH:mm time string to a 12-hour AM/PM format.
- * Automatically handles full datetime strings or already formatted strings.
- * Example: "14:30" -> "02:30 PM"
+ * Formats any date into DD-MM-YY (e.g. "20-08-26").
+ * Strict display format only. Does not alter underlying values.
  */
-export function formatTime12Hour(timeStr?: string): string {
-  if (!timeStr) return '';
-  
-  // If it already has AM/PM, just return it
-  if (/am|pm/i.test(timeStr)) {
-    return timeStr.trim();
-  }
-
-  // Check if it is a full datetime ISO string (e.g. 2026-06-11T14:30:00Z)
-  if (timeStr.includes('T')) {
-    try {
-      const date = new Date(timeStr);
-      if (!isNaN(date.getTime())) {
-        let hours = date.getHours();
-        const minutes = date.getMinutes();
-        const ampm = hours >= 12 ? 'PM' : 'AM';
-        hours = hours % 12;
-        hours = hours ? hours : 12; // convert 0 to 12
-        const strHours = hours < 10 ? `0${hours}` : `${hours}`;
-        const strMinutes = minutes < 10 ? `0${minutes}` : `${minutes}`;
-        return `${strHours}:${strMinutes} ${ampm}`;
-      }
-    } catch (e) {
-      // Fall through to standard parsing
+export function formatDateDDMMYY(dateInput?: string | null | Date): string {
+  if (!dateInput && (dateInput as any) !== 0) return '';
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
+      return trimmed;
     }
+    
+    // If it's already in DD-MM-YY format (e.g. "20-08-26")
+    if (/^\d{2}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
+    }
+
+    // If it's in DD-MM-YYYY format (e.g. "20-08-2026")
+    const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (ddmmyyyyMatch) {
+      const day = ddmmyyyyMatch[1].padStart(2, '0');
+      const month = ddmmyyyyMatch[2].padStart(2, '0');
+      const year = ddmmyyyyMatch[3].slice(-2);
+      return `${day}-${month}-${year}`;
+    }
+
+    // If it starts with YYYY-MM-DD (e.g. "2026-08-20" or "2026-08-20T14:30:00" or "2026/08/20")
+    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (yyyymmddMatch) {
+      const year = yyyymmddMatch[1].slice(-2);
+      const month = yyyymmddMatch[2].padStart(2, '0');
+      const day = yyyymmddMatch[3].padStart(2, '0');
+      return `${day}-${month}-${year}`;
+    }
+
+    // Attempt Date object parse for any other string formats
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = String(d.getFullYear()).slice(-2);
+      return `${day}-${month}-${year}`;
+    }
+
+    return trimmed;
   }
 
-  const parts = timeStr.split(':');
-  if (parts.length >= 2) {
-    let hours = parseInt(parts[0], 10);
-    const minutes = parts[1].slice(0, 2);
-    if (!isNaN(hours)) {
+  if (dateInput instanceof Date) {
+    if (isNaN(dateInput.getTime())) return '';
+    const day = String(dateInput.getDate()).padStart(2, '0');
+    const month = String(dateInput.getMonth() + 1).padStart(2, '0');
+    const year = String(dateInput.getFullYear()).slice(-2);
+    return `${day}-${month}-${year}`;
+  }
+
+  return '';
+}
+
+/**
+ * Converts any 24-hour or 12-hour time string or ISO datetime to 12-hour "hh:mm AM/PM" format.
+ * Example: "14:30:00" -> "02:30 PM", "9:05" -> "09:05 AM", "21:15" -> "09:15 PM"
+ */
+export function formatTime12Hour(timeStr?: string | null | Date): string {
+  if (!timeStr && (timeStr as any) !== 0) return '';
+
+  if (timeStr instanceof Date) {
+    if (isNaN(timeStr.getTime())) return '';
+    let hours = timeStr.getHours();
+    const minutes = String(timeStr.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${strHours}:${minutes} ${ampm}`;
+  }
+
+  const trimmed = String(timeStr).trim();
+  if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
+    return trimmed;
+  }
+
+  // If it's an ISO datetime string with T (e.g. 2026-08-20T14:30:00Z)
+  if (trimmed.includes('T')) {
+    const d = new Date(trimmed);
+    if (!isNaN(d.getTime())) {
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
       const ampm = hours >= 12 ? 'PM' : 'AM';
       hours = hours % 12;
-      hours = hours ? hours : 12; // convert 0 to 12
-      const strHours = hours < 10 ? `0${hours}` : `${hours}`;
+      hours = hours ? hours : 12;
+      const strHours = String(hours).padStart(2, '0');
       return `${strHours}:${minutes} ${ampm}`;
     }
   }
 
-  return timeStr;
+  // If it already has AM/PM in it, e.g. "9:30 am", "02:45 PM", "2pm", "11:15 PM"
+  const ampmMatch = trimmed.match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?\s*(am|pm)$/i);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = ampmMatch[2] ? ampmMatch[2].padStart(2, '0') : '00';
+    const ampm = ampmMatch[4].toUpperCase();
+    if (hours > 12) {
+      hours = hours % 12;
+    }
+    if (hours === 0) hours = 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${strHours}:${minutes} ${ampm}`;
+  }
+
+  // Match standard 24h or 12h time like "14:30", "14:30:00", "09:15", "9:05"
+  const timeMatch = trimmed.match(/^(\d{1,2}):(\d{1,2})(?::\d{1,2})?/);
+  if (timeMatch) {
+    let hours = parseInt(timeMatch[1], 10);
+    const minutes = timeMatch[2].padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const strHours = String(hours).padStart(2, '0');
+    return `${strHours}:${minutes} ${ampm}`;
+  }
+
+  return trimmed;
 }
+
+/**
+ * Formats a date and optional time into "DD-MM-YY hh:mm AM/PM" (or "DD-MM-YY" if time is absent).
+ */
+export function formatDateTime(dateTimeInput?: string | null | Date, timeInput?: string | null): string {
+  if (!dateTimeInput && (dateTimeInput as any) !== 0) return '';
+  const dateFormatted = formatDateDDMMYY(dateTimeInput);
+  if (!dateFormatted) return '';
+
+  let timeFormatted = '';
+  if (timeInput) {
+    timeFormatted = formatTime12Hour(timeInput);
+  } else if (typeof dateTimeInput === 'string' && (dateTimeInput.includes('T') || dateTimeInput.includes(' '))) {
+    const timePart = dateTimeInput.includes('T') ? dateTimeInput.split('T')[1] : dateTimeInput.split(' ')[1];
+    if (timePart) {
+      timeFormatted = formatTime12Hour(timePart);
+    }
+  } else if (dateTimeInput instanceof Date) {
+    timeFormatted = formatTime12Hour(dateTimeInput);
+  }
+
+  if (timeFormatted && timeFormatted !== '12:00 AM') {
+    return `${dateFormatted} ${timeFormatted}`;
+  }
+
+  return dateFormatted;
+}
+
+// Aliases for universal compatibility across codebase
+export const formatDate = formatDateDDMMYY;
+export const formatDateDMY = formatDateDDMMYY;
+export const formatDateDDMMYYYY = formatDateDDMMYY;
 
 export function cleanPhone(phone: string | undefined): string {
   if (!phone) return '';
@@ -632,14 +740,15 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
     const q = Number(raw.qty || raw.quantity || raw.count || 1);
     qty = isNaN(q) || q < 1 ? 1 : q;
     text = String(raw.name || raw.text || raw.deliverable || raw.title || raw.role || raw.member_name || "").trim();
+    return { qty, text };
   } else {
     text = String(raw).trim();
   }
 
   if (!text) return { qty: 1, text: "" };
 
+  // 1. Check for explicit (Qty: X), (quantity: X), (count: X), (Qty X) anywhere in the string
   let foundQtyFromPattern: number | null = null;
-  // 1. Extract any (Qty X), (quantity X), (Qty: X) occurrences anywhere in text
   const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
   let match;
   while ((match = qtyPatterns.exec(text)) !== null) {
@@ -653,32 +762,68 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
     }
   }
 
-  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns completely from text
-  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+  if (foundQtyFromPattern !== null) {
+    text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+    return { qty: foundQtyFromPattern, text };
+  }
 
-  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 × Traditional Photos"
-  const leadingMatch = text.match(/^(\d+)\s*[\*xX×\-–—]?\s*(.*)$/);
-  if (leadingMatch) {
-    const parsedQty = parseInt(leadingMatch[1], 10);
+  // 2. Check for dimension / size specifications at the start of the string:
+  // e.g. "16×6", "16x6", "12×8 Album", "16×6 Frame", "16 × 6", "12 x 18", "8x24", "8*12", "12×36"
+  // If the string starts with a dimension (digits x/× digits), it is deliverable text, NOT a leading quantity!
+  const isLeadingDimension = /^\d+\s*[\*xX×]\s*\d+/.test(text);
+  if (isLeadingDimension) {
+    return { qty: 1, text };
+  }
+
+  // 3. Check for technical specifications / units starting with numbers:
+  // e.g. "4K Cinematic Video", "8K Video", "20 Pages × 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
+  const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
+  if (isUnitOrSpec) {
+    return { qty: 1, text };
+  }
+
+  // 4. Check for leading quantity with explicit multiplier:
+  // e.g. "2 x Traditional Photos", "2 × Cinematic Video", "2 * Album", "2 x 16×6 Frame", "2 × 16×6"
+  const multiplierMatch = text.match(/^(\d+)\s*[xX×\*]\s+(.+)$/);
+  if (multiplierMatch) {
+    const parsedQty = parseInt(multiplierMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
-      if (typeof raw !== "object" && foundQtyFromPattern === null) {
-        qty = parsedQty;
-      }
+      return { qty: parsedQty, text: multiplierMatch[2].trim() };
     }
-    text = leadingMatch[2] ? leadingMatch[2].trim() : "";
-    text = text.replace(/^[xX×\*\-–—]\s*/, "").trim();
   }
 
-  if (typeof raw !== "object" && foundQtyFromPattern !== null) {
-    qty = foundQtyFromPattern;
+  // 5. Check for leading quantity followed by dimension:
+  // e.g. "2 16×6", "3 12×8 Album", "2 16×6 Frame"
+  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX×]\s*\d+.*)$/);
+  if (qtyDimensionMatch) {
+    const parsedQty = parseInt(qtyDimensionMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      return { qty: parsedQty, text: qtyDimensionMatch[2].trim() };
+    }
   }
 
-  // Clean any leftover (Qty X) or trailing/leading punctuation
-  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
-  text = text.replace(/^[\*\-•xX×]\s*/, "").trim();
-  text = text.replace(/[\(\[\-–—:]+$/, "").trim();
+  // 6. Check for leading quantity with space followed by item name:
+  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12×18)"
+  const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
+  if (wordMatch) {
+    const parsedQty = parseInt(wordMatch[1], 10);
+    if (!isNaN(parsedQty) && parsedQty >= 1) {
+      return { qty: parsedQty, text: wordMatch[2].trim() };
+    }
+  }
 
-  return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
+  return { qty: 1, text };
+}
+
+export function combineQtyAndText(qty: number | string, text: string): string {
+  const qNum = parseInt(String(qty), 10);
+  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : 1;
+  const cleanText = (text || "").trim();
+  if (!cleanText) return validQty > 1 ? `${validQty}` : "";
+  if (validQty <= 1) {
+    return cleanText;
+  }
+  return `${validQty} ${cleanText}`.trim();
 }
 
 export function parseDeliverablesWithQty(
@@ -903,6 +1048,7 @@ export function parseCustomerProof(
     assignment.confirmation_proof,
     assignment.customer_communication_proof,
     assignment.client_communication_proof,
+    assignment.customer_review_image,
     assignment.customer_proof,
     assignment.client_proof,
     assignment.proof_image,
@@ -917,6 +1063,8 @@ export function parseCustomerProof(
     assignment.proof_file,
     assignment.raw?.confirmation_proof,
     assignment.raw?.customer_communication_proof,
+    assignment.raw?.client_communication_proof,
+    assignment.raw?.customer_review_image,
     assignment.raw?.proof_url
   ] : [];
 
@@ -931,50 +1079,72 @@ export function parseCustomerProof(
     }
   }
 
-  // 2. Fallback to production and order records if not found on assignment
-  if (!rawImageUrl && !rawLinkUrl) {
-    const fallbackCandidates = [
-      prodRec?.client_communication_proof,
-      prodRec?.customer_communication_proof,
-      prodRec?.confirmation_proof,
-      prodRec?.customer_proof,
-      prodRec?.client_proof,
-      prodRec?.proof_url,
-      prodRec?.proof_image,
-      prodRec?.image_proof,
-      prodRec?.uploaded_proof,
-      orderRec?.client_communication_proof,
-      orderRec?.customer_communication_proof,
-      orderRec?.confirmation_proof,
-      orderRec?.customer_proof,
-      orderRec?.proof_url,
-      orderRec?.proof_image
-    ];
-
-    for (const cand of fallbackCandidates) {
-      if (!isValidValue(cand)) continue;
-      const trimmed = cand.trim();
-
-      if (isImageValue(trimmed)) {
-        if (!rawImageUrl) rawImageUrl = trimmed;
-      } else if (isLinkValue(trimmed)) {
-        if (!rawLinkUrl) rawLinkUrl = trimmed;
+  // If assignment is provided, strictly evaluate ONLY that specific assignment.
+  // Do NOT fall back to prodRec or orderRec as that causes proofs from one staff member to leak to all others.
+  if (assignment) {
+    if (!rawImageUrl && !rawLinkUrl && assignment.remarks && typeof assignment.remarks === 'string') {
+      const match = assignment.remarks.match(/Proof \((https?:\/\/[^\s)]+)\)/i) || 
+                    assignment.remarks.match(/Confirmation Proof:?\s*(https?:\/\/[^\s)]+)/i) || 
+                    assignment.remarks.match(/(https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif|svg|bmp))/i);
+      if (match && match[1]) {
+        const pUrl = match[1].trim();
+        if (isImageValue(pUrl)) {
+          rawImageUrl = pUrl;
+        } else if (isLinkValue(pUrl)) {
+          rawLinkUrl = pUrl;
+        }
       }
     }
-  }
 
-  // 3. Check if assignment or production remarks contains an uploaded proof URL
-  if (!rawImageUrl && !rawLinkUrl) {
-    const remarksCand = [assignment?.remarks, prodRec?.remarks, orderRec?.remarks];
-    for (const rem of remarksCand) {
-      if (rem && typeof rem === 'string') {
-        const match = rem.match(/Proof \((https?:\/\/[^\s)]+)\)/i) || rem.match(/Confirmation Proof:?\s*(https?:\/\/[^\s)]+)/i) || rem.match(/(https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif|svg|bmp))/i);
-        if (match && match[1]) {
-          const pUrl = match[1].trim();
-          if (isImageValue(pUrl)) {
-            rawImageUrl = pUrl;
-          } else if (isLinkValue(pUrl)) {
-            rawLinkUrl = pUrl;
+    if (!rawImageUrl && !rawLinkUrl) {
+      return { hasProof: false, imageUrl: null, linkUrl: null, proofType: 'none' };
+    }
+  } else {
+    // 2. Fallback to production and order records ONLY when NO assignment was passed
+    if (!rawImageUrl && !rawLinkUrl) {
+      const fallbackCandidates = [
+        prodRec?.client_communication_proof,
+        prodRec?.customer_communication_proof,
+        prodRec?.confirmation_proof,
+        prodRec?.customer_proof,
+        prodRec?.client_proof,
+        prodRec?.proof_url,
+        prodRec?.proof_image,
+        prodRec?.image_proof,
+        prodRec?.uploaded_proof,
+        orderRec?.client_communication_proof,
+        orderRec?.customer_communication_proof,
+        orderRec?.confirmation_proof,
+        orderRec?.customer_proof,
+        orderRec?.proof_url,
+        orderRec?.proof_image
+      ];
+
+      for (const cand of fallbackCandidates) {
+        if (!isValidValue(cand)) continue;
+        const trimmed = cand.trim();
+
+        if (isImageValue(trimmed)) {
+          if (!rawImageUrl) rawImageUrl = trimmed;
+        } else if (isLinkValue(trimmed)) {
+          if (!rawLinkUrl) rawLinkUrl = trimmed;
+        }
+      }
+    }
+
+    // 3. Check if production/order remarks contains an uploaded proof URL
+    if (!rawImageUrl && !rawLinkUrl) {
+      const remarksCand = [prodRec?.remarks, orderRec?.remarks];
+      for (const rem of remarksCand) {
+        if (rem && typeof rem === 'string') {
+          const match = rem.match(/Proof \((https?:\/\/[^\s)]+)\)/i) || rem.match(/Confirmation Proof:?\s*(https?:\/\/[^\s)]+)/i) || rem.match(/(https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif|svg|bmp))/i);
+          if (match && match[1]) {
+            const pUrl = match[1].trim();
+            if (isImageValue(pUrl)) {
+              rawImageUrl = pUrl;
+            } else if (isLinkValue(pUrl)) {
+              rawLinkUrl = pUrl;
+            }
           }
         }
       }
@@ -1282,6 +1452,127 @@ export const getEventRolesForEvent = (ev: any, index: number, configList: EventT
 
   return [];
 };
+
+export const isRoleMatch = (roleA: string, roleB: string): boolean => {
+  const a = (roleA || '').toLowerCase().trim();
+  const b = (roleB || '').toLowerCase().trim();
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if ((a.includes('drone') || a.includes('aerial')) && (b.includes('drone') || b.includes('aerial'))) return true;
+  if ((a.includes('photo') || a.includes('photographer')) && (b.includes('photo') || b.includes('photographer'))) return true;
+  if ((a.includes('video') || a.includes('cinema') || a.includes('videographer')) && (b.includes('video') || b.includes('cinema') || b.includes('videographer'))) return true;
+  if ((a.includes('assist') || a.includes('helper')) && (b.includes('assist') || b.includes('helper'))) return true;
+  if (a.includes('editor') && b.includes('editor')) return true;
+  return false;
+};
+
+export interface OrderAssignmentStats {
+  totalRequired: number;
+  totalAssigned: number;
+  totalPending: number;
+  isFullyAssigned: boolean;
+}
+
+export function calculateOrderAssignmentStats(params: {
+  lead?: any;
+  order?: any;
+  leadPkgs?: any[];
+  eventAllocations?: Record<string, { staff?: any[] }>;
+  staffAssignments?: any[];
+  staffList?: any[];
+}): OrderAssignmentStats {
+  const { lead, order, leadPkgs = [], eventAllocations, staffAssignments } = params;
+
+  // 1. Resolve raw events list
+  const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0
+    ? lead.events
+    : [{ id: 'default', event_name: order?.event_name || order?.event_type || lead?.event_type || 'Main Event' }];
+
+  const totalEvents = rawEvents.length;
+  const targetLeadPkgs = leadPkgs.length > 0 ? leadPkgs : (lead?.lead_id ? leadPkgs.filter((lp: any) => lp.lead_id === lead.lead_id) : []);
+  const teamMembersConfig = extractTeamMembersConfig(lead, targetLeadPkgs);
+
+  let totalRequired = 0;
+  let totalAssigned = 0;
+  let hasPending = false;
+
+  rawEvents.forEach((ev: any, index: number) => {
+    const evId = ev.id || `EV-N/A-${index}`;
+    const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
+
+    // Group required roles into task slots
+    const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
+    includedRoles.forEach((roleStr: any) => {
+      const { qty, text } = parseQtyAndText(roleStr);
+      const roleName = (text || (typeof roleStr === 'string' ? roleStr : '')).trim();
+      if (!roleName) return;
+      if (tasksMap.has(roleName)) {
+        tasksMap.get(roleName)!.targetQty += (qty || 1);
+      } else {
+        tasksMap.set(roleName, { roleName, targetQty: qty || 1 });
+      }
+    });
+
+    // Resolve assigned staff list for this event
+    let validStaffForEvent: { staff_name: string; staff_role: string }[] = [];
+
+    if (eventAllocations) {
+      const alloc = eventAllocations[evId] || (totalEvents === 1 ? (eventAllocations['default'] || Object.values(eventAllocations)[0]) : null);
+      if (alloc?.staff && Array.isArray(alloc.staff)) {
+        validStaffForEvent = alloc.staff
+          .filter((s: any) => s.staff_name && s.staff_name.trim() !== '' && s.staff_name.toLowerCase() !== 'unassigned' && s.staff_name.toLowerCase() !== 'none' && s.staff_name.toLowerCase() !== 'pending')
+          .map((s: any) => ({ staff_name: s.staff_name.trim(), staff_role: (s.staff_role || '').trim() }));
+      }
+    } else if (staffAssignments) {
+      const isMultiEv = totalEvents > 1;
+      const orderIdToMatch = order?.order_id || lead?.lead_id;
+      validStaffForEvent = staffAssignments
+        .filter((sa: any) =>
+          sa.order_id === orderIdToMatch &&
+          sa.assignment_status !== 'Cancelled' &&
+          (sa.event_id ? sa.event_id === evId : (!isMultiEv || (sa.event_name && (sa.event_name.toLowerCase() === (ev.event_name || '').toLowerCase() || sa.event_name.toLowerCase() === (ev.event_type || '').toLowerCase())))) &&
+          sa.staff_name && sa.staff_name.trim() !== '' && sa.staff_name.toLowerCase() !== 'unassigned' && sa.staff_name.toLowerCase() !== 'none' && sa.staff_name.toLowerCase() !== 'pending'
+        )
+        .map((sa: any) => ({ staff_name: sa.staff_name.trim(), staff_role: (sa.staff_role || '').trim() }));
+    } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
+      const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter((n: string) => n && n.toLowerCase() !== 'unassigned' && n.toLowerCase() !== 'none' && n.toLowerCase() !== 'pending');
+      validStaffForEvent = names.map((name: string) => ({ staff_name: name, staff_role: '' }));
+    }
+
+    if (tasksMap.size > 0) {
+      // Required slots exist
+      for (const task of Array.from(tasksMap.values())) {
+        totalRequired += task.targetQty;
+        const matchingStaff = validStaffForEvent.filter(s => !s.staff_role || s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
+        const assignedCount = matchingStaff.length;
+        const validCount = Math.min(assignedCount, task.targetQty);
+        totalAssigned += validCount;
+        if (assignedCount < task.targetQty) {
+          hasPending = true;
+        }
+      }
+    } else {
+      // No tasks configured in package for this event
+      const directCount = validStaffForEvent.length;
+      totalAssigned += directCount;
+      if (directCount === 0) {
+        hasPending = true;
+      }
+    }
+  });
+
+  const totalPending = Math.max(0, totalRequired - totalAssigned);
+  const isFullyAssigned = totalRequired > 0
+    ? (totalAssigned >= totalRequired && !hasPending)
+    : totalAssigned > 0;
+
+  return {
+    totalRequired,
+    totalAssigned,
+    totalPending,
+    isFullyAssigned
+  };
+}
 
 export function getEventTeamMemberStaffMapping(params: {
   lead?: any;

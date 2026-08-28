@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, Users, Check, AlertCircle, RefreshCw, Box
 } from 'lucide-react';
 import { useRole } from '../RoleContext';
-import { deserializeLeadEvents, getEventTeamMemberStaffMapping, EventTeamMemberAssignmentGroup } from '../../utils';
+import { deserializeLeadEvents, getEventTeamMemberStaffMapping, EventTeamMemberAssignmentGroup, formatDateDDMMYY, formatTime12Hour } from '../../utils';
 import { SafeProofImage } from '../ui/SafeProofImage';
 
 interface ViewDetailsModalProps {
@@ -56,6 +56,21 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   } = useRole();
 
   const [isCustomerDetailsOpen, setIsCustomerDetailsOpen] = useState(true);
+  const modalBodyRef = React.useRef<HTMLDivElement>(null);
+
+  // Lock background scrolling and handle auto-scroll when modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      if (modalBodyRef.current) {
+        modalBodyRef.current.scrollTop = 0;
+      }
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   // Auto-refresh when modal is opened to ensure real-time accuracy
   useEffect(() => {
@@ -308,19 +323,19 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
           item.isReturned = true;
           item.returnStatus = 'Returned';
           item.returnedBy = matchedHandover.returned_by;
-          item.returnDate = matchedHandover.return_date;
+          item.returnDate = matchedHandover.return_date ? formatDateDDMMYY(matchedHandover.return_date) : matchedHandover.return_date;
           item.notes = matchedHandover.notes;
         } else if (matchedHandover.return_status === 'Damaged') {
           item.isReturned = true;
           item.returnStatus = 'Damaged';
           item.returnedBy = matchedHandover.returned_by;
-          item.returnDate = matchedHandover.return_date;
+          item.returnDate = matchedHandover.return_date ? formatDateDDMMYY(matchedHandover.return_date) : matchedHandover.return_date;
           item.notes = matchedHandover.notes;
         } else if (matchedHandover.return_status === 'Missing') {
           item.isReturned = false;
           item.returnStatus = 'Missing';
           item.returnedBy = matchedHandover.returned_by;
-          item.returnDate = matchedHandover.return_date;
+          item.returnDate = matchedHandover.return_date ? formatDateDDMMYY(matchedHandover.return_date) : matchedHandover.return_date;
           item.notes = matchedHandover.notes;
         } else if (matchedHandover.return_status === 'Not Returned') {
           item.isReturned = false;
@@ -343,7 +358,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
           item.isReturned = true;
           item.returnStatus = 'Returned';
           item.returnedBy = returnRecord.returned_by || item.returnedBy || 'Operations Staff';
-          item.returnDate = returnRecord.returned_at ? new Date(returnRecord.returned_at).toLocaleDateString() : (item.returnDate || 'Returned');
+          item.returnDate = returnRecord.returned_at ? formatDateDDMMYY(returnRecord.returned_at) : (item.returnDate || 'Returned');
           if (returnRecord.remarks && !item.notes) {
             try {
               const p = JSON.parse(returnRecord.remarks);
@@ -412,41 +427,45 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   const isStaff = isStaffView || currentRole === 'Staff' || currentRole === 'Operation Staff';
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200">
+    <div 
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] overflow-hidden my-auto animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/70 sticky top-0 z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-lg shrink-0">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/70 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 pr-2">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-base sm:text-lg shrink-0">
               📋
             </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="text-base sm:text-lg font-black text-white font-mono tracking-tight">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h3 className="text-sm sm:text-base md:text-lg font-black text-white font-mono tracking-tight truncate">
                   Order ID: <span className="text-amber-400">{finalOrderId}</span>
                 </h3>
                 {order?.order_status && (
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 uppercase">
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700 uppercase shrink-0">
                     {order.order_status}
                   </span>
                 )}
               </div>
-              <p className="text-xs text-zinc-400 font-sans">
+              <p className="text-[11px] sm:text-xs text-zinc-400 font-sans truncate">
                 {isStaff ? 'Assigned Operations Event Details & Team Roster' : 'Comprehensive Operations & Staff Assignment Dossier'}
               </p>
             </div>
           </div>
           <button 
             onClick={onClose} 
-            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center font-bold cursor-pointer transition-colors"
+            className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center font-bold cursor-pointer transition-colors shrink-0"
+            title="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
         {/* Modal Scroll Content */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 text-zinc-300">
+        <div ref={modalBodyRef} className="p-4 sm:p-6 overflow-y-auto custom-scrollbar space-y-6 text-zinc-300 flex-1 min-h-0">
           
           {/* Section 1: Customer Details */}
           <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-3">
@@ -574,19 +593,19 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Date</span>
-                        <span className="font-bold text-zinc-100 font-mono">{group.eventDate}</span>
+                        <span className="font-bold text-zinc-100 font-mono">{formatDateDDMMYY(group.eventDate)}</span>
                       </div>
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Start Time</span>
-                        <span className="font-bold text-emerald-400 font-mono">{group.eventStartTime}</span>
+                        <span className="font-bold text-emerald-400 font-mono">{formatTime12Hour(group.eventStartTime)}</span>
                       </div>
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Reporting Date</span>
-                        <span className="font-bold text-sky-300 font-mono">{group.reportingDate}</span>
+                        <span className="font-bold text-sky-300 font-mono">{formatDateDDMMYY(group.reportingDate)}</span>
                       </div>
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Reporting Time</span>
-                        <span className="font-bold text-sky-400 font-mono">{group.reportingTime}</span>
+                        <span className="font-bold text-sky-400 font-mono">{formatTime12Hour(group.reportingTime)}</span>
                       </div>
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60 sm:col-span-2 lg:col-span-2">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Location / Venue</span>

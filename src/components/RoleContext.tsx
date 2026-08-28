@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent, CalendarMemo } from '../types';
+import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent, CalendarMemo, ClientAcceptanceVerification } from '../types';
 import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITIAL_RAW_FOOTAGE, INITIAL_PRODUCTION, INITIAL_PAYMENTS, INITIAL_LOGS, INITIAL_EQUIPMENT } from '../data';
 import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
@@ -234,7 +234,8 @@ interface RoleContextType {
       event_name?: string;
       task_status?: string;
       assignment_status?: string;
-    }[]
+    }[],
+    targetStage?: CurrentStage
   ) => Promise<void>;
 
   specialities: ProductionSpeciality[];
@@ -275,6 +276,9 @@ interface RoleContextType {
   addCalendarMemo: (memo: Omit<CalendarMemo, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
   updateCalendarMemo: (id: string, updates: Partial<CalendarMemo>) => Promise<void>;
   deleteCalendarMemo: (id: string) => Promise<void>;
+
+  clientAcceptanceVerifications: ClientAcceptanceVerification[];
+  saveClientAcceptanceVerification: (verification: ClientAcceptanceVerification) => Promise<ClientAcceptanceVerification>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -361,13 +365,18 @@ export const mapFromDbEquipmentId = (uuid: string): string => {
 
 export const mapUserFieldsFromDb = (u: any): any => {
   if (!u) return u;
+  const resolvedFullName = (u.full_name && String(u.full_name).trim()) || 
+    (u.name && String(u.name).trim()) || 
+    (u.user_metadata?.full_name && String(u.user_metadata.full_name).trim()) || 
+    (u.user_metadata?.name && String(u.user_metadata.name).trim()) || 
+    '';
   return {
     ...u,
     id: mapFromDbUserId(u.id),
-    name: u.name || u.full_name || '',
-    full_name: u.full_name || u.name || '',
-    mobile: u.mobile || u.phone || '',
-    phone: u.phone || u.mobile || ''
+    name: resolvedFullName || u.name || '',
+    full_name: resolvedFullName || u.full_name || '',
+    mobile: u.mobile || u.phone || u.user_metadata?.mobile || '',
+    phone: u.phone || u.mobile || u.user_metadata?.phone || ''
   };
 };
 
@@ -930,6 +939,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [equipmentHandovers, setEquipmentHandovers] = useState<EquipmentHandover[]>([]);
 
+  const [clientAcceptanceVerifications, setClientAcceptanceVerifications] = useState<ClientAcceptanceVerification[]>([]);
+
 
 
 
@@ -1044,22 +1055,34 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           equipment_kit: '',
           reporting_time: o.reporting_time || '08:00',
           event_status: o.current_stage,
-          updated_by: 'System'
+          updated_by: 'System',
+          consolidated_drive_link: (o as any).consolidated_drive_link || o.raw_footage_link || '',
+          Consolidated_Drive_Link: (o as any).consolidated_drive_link || o.raw_footage_link || '',
+          raw_footage_drive_link: o.raw_footage_link || ''
         });
       }
     });
     return list.map(op => {
       const ord = augmentedOrders.find(o => o.order_id === op.order_id);
+      const rf = rawFootage.find(f => f.order_id === op.order_id || f.tracking_id === op.order_id);
+      const linkFallback = (ord as any)?.consolidated_drive_link || ord?.raw_footage_link || rf?.server_path || '';
+      const finalConsolidatedLink = op.consolidated_drive_link || op.Consolidated_Drive_Link || linkFallback || '';
       if (ord) {
         return {
           ...op,
           event_status: ord.current_stage,
-          reporting_time: ord.reporting_time || op.reporting_time
+          reporting_time: ord.reporting_time || op.reporting_time,
+          consolidated_drive_link: finalConsolidatedLink,
+          Consolidated_Drive_Link: finalConsolidatedLink
         };
       }
-      return op;
+      return {
+        ...op,
+        consolidated_drive_link: finalConsolidatedLink,
+        Consolidated_Drive_Link: finalConsolidatedLink
+      };
     });
-  }, [operations, augmentedOrders]);
+  }, [operations, augmentedOrders, rawFootage]);
 
   const augmentedProduction = useMemo(() => {
     const list = [...production];
@@ -1073,24 +1096,49 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!prodExists) {
         const parentLeadForO = leads.find(l => l.lead_id === o.lead_id);
         const defaultTargetDate = parentLeadForO?.delivery_target_date || '';
+        const opForO = operations.find(op => op.order_id === o.order_id);
+        const rfForO = rawFootage.find(rf => rf.order_id === o.order_id || rf.tracking_id === o.order_id);
+        
+        // Helper to extract verified link from notes
+        const extractVerifiedFromText = (text?: string | null): string => {
+          if (!text || typeof text !== 'string') return '';
+          const m = text.match(/Verified\s+Footage\s+with\s+Consolidated\s+Link:\s*(https?:\/\/[^\s\n\r"']+)/i) ||
+                    text.match(/Consolidated\s+(?:Drive\s+)?Link:\s*(https?:\/\/[^\s\n\r"']+)/i);
+          return m ? m[1].trim() : '';
+        };
+
+        const link = opForO?.consolidated_drive_link || 
+                     opForO?.Consolidated_Drive_Link || 
+                     extractVerifiedFromText(opForO?.remarks) || 
+                     extractVerifiedFromText(opForO?.upload_notes_remarks) || 
+                     extractVerifiedFromText(rfForO?.upload_notes) || 
+                     (o as any).consolidated_drive_link || 
+                     opForO?.raw_footage_drive_link || 
+                     rfForO?.server_path || 
+                     o.raw_footage_link || '';
+
         list.push({
           production_id: `PRD-${o.lead_id}`,
           tracking_id: o.order_id,
           order_id: o.order_id,
           lead_id: o.lead_id,
           editor_assigned: parentLeadForO?.assigned_editor || 'Unassigned',
-          raw_footage_location: '',
+          raw_footage_location: link,
+          final_consolidated_drive_link: link,
+          consolidated_drive_link: link,
           editing_status: (parentLeadForO?.current_status || parentLeadForO?.status || o.current_stage) as any,
           remarks: '',
           project_priority: 'Medium',
           target_delivery_date: defaultTargetDate,
           expected_delivery_date: defaultTargetDate
-        });
+        } as any);
       }
     });
     return list.map(p => {
       const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id || o.order_id === (p as any).order_id || o.lead_id === (p as any).lead_id);
       const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id) || l.lead_id === (p as any).lead_id);
+      const op = operations.find(o => (ord && o.order_id === ord.order_id) || o.order_id === p.tracking_id || (p as any).order_id === o.order_id);
+      const rf = rawFootage.find(f => (ord && f.order_id === ord.order_id) || f.order_id === p.tracking_id || f.tracking_id === p.tracking_id);
       
       const leadStatus = parentLead?.current_status || parentLead?.status;
       const leadEditor = parentLead?.assigned_editor;
@@ -1098,6 +1146,36 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const leadTargetDate = parentLead?.delivery_target_date;
 
       let updatedP = { ...p };
+
+      const extractVerifiedFromText = (text?: string | null): string => {
+        if (!text || typeof text !== 'string') return '';
+        const m = text.match(/Verified\s+Footage\s+with\s+Consolidated\s+Link:\s*(https?:\/\/[^\s\n\r"']+)/i) ||
+                  text.match(/Consolidated\s+(?:Drive\s+)?Link:\s*(https?:\/\/[^\s\n\r"']+)/i);
+        return m ? m[1].trim() : '';
+      };
+
+      const verifiedFromNotes = extractVerifiedFromText(p.project_notes) || 
+                                extractVerifiedFromText(p.remarks) || 
+                                extractVerifiedFromText(op?.remarks) || 
+                                extractVerifiedFromText(op?.upload_notes_remarks) || 
+                                extractVerifiedFromText(rf?.upload_notes);
+
+      const resolvedLink = verifiedFromNotes ||
+                           op?.consolidated_drive_link || 
+                           op?.Consolidated_Drive_Link || 
+                           (p as any).final_consolidated_drive_link || 
+                           (p as any).consolidated_drive_link || 
+                           (ord as any)?.consolidated_drive_link ||
+                           p.raw_footage_location || 
+                           op?.raw_footage_drive_link || 
+                           rf?.server_path || 
+                           ord?.raw_footage_link || '';
+
+      if (resolvedLink) {
+        (updatedP as any).final_consolidated_drive_link = resolvedLink;
+        (updatedP as any).consolidated_drive_link = resolvedLink;
+        updatedP.raw_footage_location = resolvedLink;
+      }
 
       if (!p.editing_status || p.editing_status === 'Pending') {
         if (leadStatus) {
@@ -1120,7 +1198,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return updatedP;
     });
-  }, [production, augmentedOrders, leads]);
+  }, [production, augmentedOrders, leads, operations, rawFootage]);
 
   const augmentedPayments = useMemo(() => {
     const list = [...payments];
@@ -1719,6 +1797,34 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           if (resJson && resJson.success) {
             console.log(`[pushUpdate Proxy SUCCESS] for ${table}:`, resJson.data);
             updateDiagnosticMetric('update', 'ok');
+            if (table === 'operations') {
+              setOperations(prev => {
+                let found = false;
+                const updated = prev.map(op => {
+                  if (op.order_id === finalMatchValue || op.operation_id === finalMatchValue) {
+                    found = true;
+                    return { ...op, ...sanitized };
+                  }
+                  return op;
+                });
+                if (!found && matchColumn === 'order_id') {
+                  return [...updated, {
+                    operation_id: `OP-${finalMatchValue}`,
+                    order_id: finalMatchValue,
+                    photographer_assigned: 'Unassigned',
+                    videographer_assigned: 'Unassigned',
+                    drone_operator_assigned: 'Unassigned',
+                    assistant_assigned: 'Unassigned',
+                    equipment_kit: '',
+                    reporting_time: '08:00',
+                    event_status: 'Completed',
+                    updated_by: currentUserName || 'System',
+                    ...sanitized
+                  }];
+                }
+                return updated;
+              });
+            }
             if (table === 'editor_assignments') {
               const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link;
               setEditorAssignments(prev => {
@@ -2245,8 +2351,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             const teamData = l.Team_member || l.Team_Members || l.team_members || l.Team_members || l.team_member || '';
             const finalQuoteAmt = l.Final_Quotation_Amount ?? l.final_quotation_amount ?? l.final_amount ?? null;
             const finalPkgAmt = l.Final_Package_Amount ?? l.final_package_amount ?? finalQuoteAmt;
+            const cleanLostReason = l.Lost_Reason || l.lost_reason || l.LostReason || l.lostReason || '';
+            const cleanLostNotes = l.Lost_Notes || l.lost_notes || l.LostNotes || l.lostNotes || '';
             return { 
               ...l, 
+              Lost_Reason: cleanLostReason,
+              lost_reason: cleanLostReason,
+              Lost_Notes: cleanLostNotes,
+              lost_notes: cleanLostNotes,
               Final_Quotation_Amount: finalQuoteAmt !== null && finalQuoteAmt !== undefined && !isNaN(Number(finalQuoteAmt)) ? Number(finalQuoteAmt) : null,
               Final_Package_Amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : null,
               final_package_amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : undefined,
@@ -2381,6 +2493,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbStatusHistory) setStatusHistory(dbStatusHistory);
         if (dbLeadStaffAssignmentHistory) setLeadStaffAssignmentHistory(dbLeadStaffAssignmentHistory);
         if (dbLeadEquipmentHistory) setLeadEquipmentHistory(dbLeadEquipmentHistory);
+
+        // Fetch unified Client Acceptance Verifications
+        try {
+          const caRes = await fetch('/api/client-acceptance/list');
+          const parsedCa = await safeParseResponse(caRes);
+          if (parsedCa.ok && parsedCa.isJson && parsedCa.data?.success && Array.isArray(parsedCa.data?.data)) {
+            setClientAcceptanceVerifications(parsedCa.data.data);
+          }
+        } catch (caErr) {
+          console.warn('[RoleContext] Error loading client acceptance verifications:', caErr);
+        }
         
         updateDiagnosticMetric('read', 'ok');
         updateDiagnosticMetric('connection', 'connected');
@@ -2751,7 +2874,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbUser) {
           isActive = dbUser.active !== false && dbUser.active !== 'false';
           roleToSync = dbUser.role || currentUser.role;
-          nameToSync = dbUser.name || currentUser.name;
+          nameToSync = dbUser.full_name || dbUser.name || currentUser.full_name || currentUser.name;
           found = true;
         }
       }
@@ -2760,8 +2883,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (!isActive) {
           logout();
           alert('Your account is no longer active. You have been logged out.');
-        } else if (roleToSync !== currentUser.role || nameToSync !== currentUser.name) {
-          setCurrentUser({ ...currentUser, role: roleToSync, name: nameToSync });
+        } else if (roleToSync !== currentUser.role || nameToSync !== (currentUser.full_name || currentUser.name)) {
+          setCurrentUser({ ...currentUser, role: roleToSync, name: nameToSync, full_name: nameToSync });
           setCurrentRoleState(roleToSync);
           setCurrentUserNameState(nameToSync);
         }
@@ -2772,10 +2895,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   // Sync username with role switcher for smooth demo
   const setCurrentRole = (role: UserRole) => {
     setCurrentRoleState(role);
-    if (role === 'Business Owner') setCurrentUserNameState('Rupand Das');
-    else if (role === 'Sales Team') setCurrentUserNameState('Sarah Jenkins');
-    else if (role === 'Operations Team') setCurrentUserNameState('Robert O\'Connor');
-    else if (role === 'Production Team') setCurrentUserNameState('Emily Watson');
+    if (currentUser?.full_name || currentUser?.name) {
+      setCurrentUserNameState(currentUser.full_name || currentUser.name);
+    } else {
+      if (role === 'Business Owner') setCurrentUserNameState('Rupand Das');
+      else if (role === 'Sales Team') setCurrentUserNameState('Sarah Jenkins');
+      else if (role === 'Operations Team') setCurrentUserNameState('Robert O\'Connor');
+      else if (role === 'Production Team') setCurrentUserNameState('Emily Watson');
+    }
   };
 
   const setCurrentUserName = (name: string) => {
@@ -3548,8 +3675,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
     
     if (normalizedStatus === 'Lost Lead') {
-      updatesPayload["Lost_Reason"] = callNotes; // Lost Reason is usually passed via callNotes or negotiationNotes
-      updatesPayload["Lost_Notes"] = negotiationNotes || callNotes;
+      const reasonVal = callNotes || '';
+      const notesVal = negotiationNotes || '';
+      updatesPayload["Lost_Reason"] = reasonVal;
+      updatesPayload["lost_reason"] = reasonVal;
+      updatesPayload["Lost_Notes"] = notesVal;
+      updatesPayload["lost_notes"] = notesVal;
     }
 
     const res = await pushUpdate('leads', 'lead_id', leadId, updatesPayload);
@@ -3605,8 +3736,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updated_at: timestamp
           };
           if (normalizedStatus === 'Lost Lead') {
-             (updatedLd as any).Lost_Reason = callNotes;
-             (updatedLd as any).Lost_Notes = negotiationNotes || callNotes;
+             const reasonVal = callNotes || '';
+             const notesVal = negotiationNotes || '';
+             (updatedLd as any).Lost_Reason = reasonVal;
+             (updatedLd as any).lost_reason = reasonVal;
+             (updatedLd as any).Lost_Notes = notesVal;
+             (updatedLd as any).lost_notes = notesVal;
           }
           return updatedLd;
         }
@@ -4025,7 +4160,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Step 2 & 4: Only allow exact workflow statuses, throw custom error on spelling variations
     const allowedWorkflowStatuses = [
+      'Confirm Order',
       'Order Confirmed',
+      'New Order Received',
       'Operations Assigned',
       'Assigned Crew',
       'Staff Assigned',
@@ -4180,7 +4317,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       event_name?: string;
       task_status?: string;
       assignment_status?: string;
-    }[]
+    }[],
+    targetStage?: CurrentStage
   ) => {
     if (!orderId) {
       throw new Error("Missing Required Field: order_id is null or empty.");
@@ -4366,7 +4504,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (!resOp.success) throw new Error(`Error updating operations record:\n\n${resOp.error}`);
       }
 
-      if (assignments.length > 0) { // STEP 5: UPDATE LEAD STATUS
+      if (assignments.length > 0 && targetStage && targetStage !== 'Order Confirmed') { // STEP 5: UPDATE LEAD STATUS (Only if targetStage is not 'Order Confirmed')
         const currentStage = targetLead.current_status || targetLead.status || 'Order Confirmed';
         const preventDowngradeStages = [
           'Event Started', 'Event Completed', 'Raw Footage Received',
@@ -4378,11 +4516,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         ];
 
         if (!preventDowngradeStages.includes(currentStage)) {
+          const finalStage = targetStage || 'Assigned Crew';
           const statusHist = {
             lead_id: leadId,
             order_id: orderId,
             old_status: currentStage,
-            new_status: 'Event Scheduled',
+            new_status: finalStage,
             changed_by: changedBy,
             changed_by_role: changedByRole,
             remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
@@ -4391,14 +4530,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           await pushInsert('lead_status_history', statusHist);
 
           const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
-            current_status: 'Event Scheduled', 
-            status: 'Event Scheduled',
+            current_status: finalStage, 
+            status: finalStage,
             updated_by: changedBy
           });
           if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
 
           const resOrder = await pushUpdate('orders', 'order_id', orderId, { 
-            current_stage: 'Event Scheduled', 
+            current_stage: finalStage, 
             updated_by: changedBy
           });
           if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);
@@ -5060,29 +5199,58 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       throw new Error("Failed to update lead status: " + rLead?.error);
     }
 
-    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists, and store raw footage upload notes/remarks.
+    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists, and store raw footage upload notes/remarks and final consolidated link.
     await pushUpdate('operations', 'order_id', orderId, { 
       event_status: 'Completed',
       Upload_Notes_Remarks: uploadNotes || '',
       upload_notes_remarks: uploadNotes || '',
       Raw_Footage_Drive_Link: footageLink || '',
-      raw_footage_drive_link: footageLink || ''
+      raw_footage_drive_link: footageLink || '',
+      Consolidated_Drive_Link: footageLink || '',
+      consolidated_drive_link: footageLink || ''
     });
 
     // Directly update local state for operations
-    setOperations(prev => prev.map(op => {
-      if (op.order_id === orderId) {
-        return {
-          ...op,
+    setOperations(prev => {
+      let found = false;
+      const updated = prev.map(op => {
+        if (op.order_id === orderId) {
+          found = true;
+          return {
+            ...op,
+            event_status: 'Completed',
+            Upload_Notes_Remarks: uploadNotes || '',
+            upload_notes_remarks: uploadNotes || '',
+            Raw_Footage_Drive_Link: footageLink || op.raw_footage_drive_link || '',
+            raw_footage_drive_link: footageLink || op.raw_footage_drive_link || '',
+            Consolidated_Drive_Link: footageLink || (op as any).Consolidated_Drive_Link || '',
+            consolidated_drive_link: footageLink || op.consolidated_drive_link || ''
+          };
+        }
+        return op;
+      });
+      if (!found) {
+        return [...updated, {
+          operation_id: `OP-${orderId}`,
+          order_id: orderId,
+          photographer_assigned: 'Unassigned',
+          videographer_assigned: 'Unassigned',
+          drone_operator_assigned: 'Unassigned',
+          assistant_assigned: 'Unassigned',
+          equipment_kit: '',
+          reporting_time: '08:00',
           event_status: 'Completed',
+          updated_by: currentUserName || 'Operations Team',
           Upload_Notes_Remarks: uploadNotes || '',
           upload_notes_remarks: uploadNotes || '',
           Raw_Footage_Drive_Link: footageLink || '',
-          raw_footage_drive_link: footageLink || ''
-        };
+          raw_footage_drive_link: footageLink || '',
+          Consolidated_Drive_Link: footageLink || '',
+          consolidated_drive_link: footageLink || ''
+        }];
       }
-      return op;
-    }));
+      return updated;
+    });
 
     let existingRf = rawFootage.find(f => f.order_id === orderId);
     let trackingId = existingRf?.tracking_id || `TRK-${Math.floor(2012 + Math.random() * 850)}`;
@@ -6439,6 +6607,64 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     logActivity(`Removed Editor Task Assignment: ${assignmentId}`, 'Production', assignmentId);
   };
 
+  const saveClientAcceptanceVerification = async (verification: ClientAcceptanceVerification): Promise<ClientAcceptanceVerification> => {
+    const cleanOrderId = String(verification.order_id || '').trim();
+    const cleanEventId = String(verification.event_id || 'default').trim();
+    const preparedVerification: ClientAcceptanceVerification = {
+      ...verification,
+      order_id: cleanOrderId,
+      event_id: cleanEventId,
+      consent_proof_verified: verification.consent_proof_verified !== undefined ? Boolean(verification.consent_proof_verified) : true,
+      updated_at: new Date().toISOString()
+    };
+
+    try {
+      const res = await fetch('/api/client-acceptance/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(preparedVerification)
+      });
+      const parsed = await safeParseResponse(res);
+      const saved: ClientAcceptanceVerification = (parsed.ok && parsed.isJson && parsed.data?.success && parsed.data?.data)
+        ? parsed.data.data
+        : preparedVerification;
+
+      setClientAcceptanceVerifications(prev => {
+        const oId = String(saved.order_id || '').trim().toLowerCase();
+        const eId = String(saved.event_id || 'default').trim().toLowerCase();
+        const existingIdx = prev.findIndex(
+          r => String(r.order_id || '').trim().toLowerCase() === oId &&
+               String(r.event_id || 'default').trim().toLowerCase() === eId
+        );
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = { ...next[existingIdx], ...saved };
+          return next;
+        }
+        return [...prev, saved];
+      });
+
+      return saved;
+    } catch (err) {
+      console.warn('[RoleContext] Network save for CA verification failed, updating local state:', err);
+      setClientAcceptanceVerifications(prev => {
+        const oId = String(preparedVerification.order_id || '').trim().toLowerCase();
+        const eId = String(preparedVerification.event_id || 'default').trim().toLowerCase();
+        const existingIdx = prev.findIndex(
+          r => String(r.order_id || '').trim().toLowerCase() === oId &&
+               String(r.event_id || 'default').trim().toLowerCase() === eId
+        );
+        if (existingIdx >= 0) {
+          const next = [...prev];
+          next[existingIdx] = { ...next[existingIdx], ...preparedVerification };
+          return next;
+        }
+        return [...prev, preparedVerification];
+      });
+      return preparedVerification;
+    }
+  };
+
   const addQuotation = async (newQuote: any): Promise<string> => {
     if (!supabaseClient) {
       setQuotations((prev) => {
@@ -7677,7 +7903,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     if (currentRole === 'Sales Team' && currentUser) {
       return leads.filter(l => 
         l.sales_person === currentUserName || 
+        l.sales_person === currentUser.name || 
+        (currentUser.full_name && l.sales_person === currentUser.full_name) ||
         l.created_by === currentUserName || 
+        l.created_by === currentUser.name ||
+        (currentUser.full_name && l.created_by === currentUser.full_name) ||
         l.sales_staff_id === currentUser.id
       );
     }
@@ -7811,6 +8041,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         deleteProduction,
         deleteStaffAssignment,
         deleteRawFootage,
+        clientAcceptanceVerifications,
+        saveClientAcceptanceVerification,
       }}
     >
       {children}
