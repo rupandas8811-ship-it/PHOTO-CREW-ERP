@@ -11622,4 +11622,4 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 </button>
 </div>
 </div>
-)}
+})()}
