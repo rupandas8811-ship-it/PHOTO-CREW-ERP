@@ -92,8 +92,12 @@ export function getCalculatedOrderStage(
   // Convert minStaffRank to stage string
   let calculatedStage: string;
   if (minStaffRank === 0) {
-    // If staff are pending / not started, preserve baseStage (Order Confirmed stays Order Confirmed, Assigned Crew stays Assigned Crew)
-    calculatedStage = baseStage;
+    const bsLower = baseStage.toLowerCase().trim();
+    if (bsLower === 'operations assigned' || bsLower === 'event scheduled') {
+      calculatedStage = baseStage;
+    } else {
+      calculatedStage = 'Assigned Crew';
+    }
   } else if (minStaffRank === 1) {
     calculatedStage = 'Event Started';
   } else if (minStaffRank === 2) {

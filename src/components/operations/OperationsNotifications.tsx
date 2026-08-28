@@ -4,8 +4,6 @@ import {
   Bell, Check, MessageSquare, Info, AlertOctagon, Trash2
 } from 'lucide-react';
 
-import { formatDateTime } from '../../utils';
-
 export const OperationsNotifications: React.FC = () => {
   const { notifications, markNotificationRead, deleteNotification, currentRole } = useRole();
 
@@ -92,7 +90,7 @@ export const OperationsNotifications: React.FC = () => {
                       {notif.message}
                     </p>
                     <div className="text-[9px] text-zinc-550 font-mono">
-                      Timestamp: {formatDateTime(notif.created_at) || 'Recent telemetry Log'}
+                      Timestamp: {new Date(notif.created_at).toLocaleString() || 'Recent telemetry Log'}
                     </div>
                   </div>
                 </div>

@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
 import { 
   Calendar as CalendarIcon, 
@@ -27,12 +26,11 @@ import {
   Edit,
   Trash2
 } from 'lucide-react';
-import { formatINR, formatTime12Hour, formatDateDDMMYY } from '../utils';
+import { formatINR, formatTime12Hour } from '../utils';
 import { EVENT_TYPES, ACTIVE_STAGE_GROUPS } from '../types';
 
 interface UnifiedCalendarProps {
   role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
-  onSelectLead?: (lead: any) => void;
 }
 
 export interface CalendarEvent {
@@ -143,7 +141,14 @@ const parseEventTimes = (timeStr: string) => {
 
 const formatDateDMY = (dateStr: string | null | undefined): string => {
   if (!dateStr || dateStr === '—' || dateStr === 'N/A') return '—';
-  return formatDateDDMMYY(dateStr) || '—';
+  const ymd = normalizeToYYYYMMDD(dateStr);
+  if (ymd) {
+    const parts = ymd.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+  }
+  return dateStr;
 };
 
 const getProductionAssignedDate = (
@@ -170,7 +175,7 @@ const getProductionAssignedDate = (
   return '—';
 };
 
-export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelectLead }) => {
+export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role }) => {
   const { 
     currentUser,
     currentUserName,
@@ -230,75 +235,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
   const [popupLeadId, setPopupLeadId] = useState<string | null>(null);
   const [showSelectedDateModal, setShowSelectedDateModal] = useState<boolean>(false);
   const [expandedLeads, setExpandedLeads] = useState<Set<string>>(new Set());
-
-  const handleEventAction = (ev: CalendarEvent | any) => {
-    if (ev?.sourceType === 'memo') {
-      setNewMemoTitle(ev.customerName || '');
-      setNewMemoMessage(ev.notes || '');
-      setEditingMemoId(ev.id);
-      setSelectedDate(ev.date);
-      setShowAddMemo(true);
-      return;
-    }
-
-    const targetLeadId = ev?.raw?.lead_id || ev?.orderId || ev?.lead_id || ev?.id;
-    const orderDisplayId = ev?.orderId || ev?.raw?.order_id || ev?.raw?.tracking_id || ev?.raw?.lead_id;
-
-    const targetLead = leads.find(
-      (l) =>
-        (targetLeadId && (l.lead_id === targetLeadId || l.order_id === targetLeadId)) ||
-        (orderDisplayId && (l.lead_id === orderDisplayId || l.order_id === orderDisplayId)) ||
-        (ev?.customerName && l.customer_name && l.customer_name.trim().toLowerCase() === ev.customerName.trim().toLowerCase()) ||
-        (l.events && l.events.some((e) => e.id === ev?.id || (ev?.raw && e.id === ev.raw.id)))
-    ) || (ev?.raw?.lead_id ? ev.raw : (targetLeadId ? { lead_id: targetLeadId, customer_name: ev?.customerName, mobile: ev?.mobile } : null));
-
-    setShowSelectedDateModal(false);
-    setPopupDate(null);
-    setPopupLeadId(null);
-
-    if (role === 'sales' || role === 'owner' || onSelectLead) {
-      if (onSelectLead && targetLead) {
-        onSelectLead(targetLead);
-      }
-      window.dispatchEvent(
-        new CustomEvent("calendar-action-click", {
-          detail: {
-            leadId: targetLead?.lead_id || targetLeadId,
-            role,
-            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
-          }
-        })
-      );
-      window.dispatchEvent(
-        new CustomEvent("calendar-action-click-deferred", {
-          detail: {
-            leadId: targetLead?.lead_id || targetLeadId,
-            role,
-            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
-          }
-        })
-      );
-    } else {
-      window.dispatchEvent(
-        new CustomEvent("calendar-action-click", {
-          detail: {
-            leadId: targetLead?.lead_id || targetLeadId,
-            role,
-            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
-          }
-        })
-      );
-      window.dispatchEvent(
-        new CustomEvent("calendar-action-click-deferred", {
-          detail: {
-            leadId: targetLead?.lead_id || targetLeadId,
-            role,
-            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
-          }
-        })
-      );
-    }
-  };
 
   const toggleLeadExpand = (leadId: string) => {
     const newSet = new Set(expandedLeads);
@@ -1174,7 +1110,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         <td className="p-3 text-zinc-300">{ev.eventType || 'N/A'}</td>
                         <td className="p-3 font-semibold text-zinc-200">{ev.customerName || 'N/A'}</td>
                         <td className="p-3 font-mono text-indigo-400 font-bold">{ev.orderId || 'N/A'}</td>
-                        <td className="p-3 font-mono text-zinc-400">{ev.eventTime ? formatTime12Hour(ev.eventTime) : 'N/A'}</td>
+                        <td className="p-3 font-mono text-zinc-400">{ev.eventTime || 'N/A'}</td>
                         <td className="p-3">
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-zinc-300 border border-zinc-700 inline-block">
                             {ev.currentStage || ev.eventClass || 'N/A'}
@@ -1182,7 +1118,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         </td>
                         <td className="p-3 text-right whitespace-nowrap min-w-[100px]">
                           <button
-                            onClick={() => handleEventAction(ev)}
+                            onClick={() => setPopupLeadId(ev.raw?.lead_id || ev.orderId)}
                             className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
                             style={{ whiteSpace: 'nowrap' }}
                           >
@@ -1426,9 +1362,17 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                 key={ev.id}
                                 id={`week_card_${ev.id}`}
                                 onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEventAction(ev);
-                                }}
+  e.stopPropagation();
+  if (ev.sourceType === 'memo') {
+    setNewMemoTitle(ev.customerName);
+    setNewMemoMessage(ev.notes || '');
+    setEditingMemoId(ev.id);
+    setSelectedDate(ev.date);
+    setShowAddMemo(true);
+  } else {
+    setPopupLeadId(ev.raw?.lead_id || ev.orderId);
+  }
+}}
                                 className={`p-2 rounded-xl text-xs flex flex-col gap-1 transition cursor-pointer w-full hover:brightness-110 active:scale-95 ${col.card}`}
                               >
                                 <span className="font-bold text-zinc-100 line-clamp-1">{ev.customerName}</span>
@@ -1446,7 +1390,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                 ) : (
                                   <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
                                     <Clock className="w-2.5 h-2.5" />
-                                    <span>{formatTime12Hour(ev.eventTime)}</span>
+                                    <span>{ev.eventTime}</span>
                                   </div>
                                 )}
                                 <span className={`${col.badge} text-[9px] font-semibold px-1.5 py-0.5 rounded-md self-start font-mono border text-center  overflow-hidden text-ellipsis break-words max-w-full`}>
@@ -1501,9 +1445,17 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         key={ev.id}
                         id={`day_card_${ev.id}`}
                         onClick={(e) => {
-                          e.stopPropagation();
-                          handleEventAction(ev);
-                        }}
+  e.stopPropagation();
+  if (ev.sourceType === 'memo') {
+    setNewMemoTitle(ev.customerName);
+    setNewMemoMessage(ev.notes || '');
+    setEditingMemoId(ev.id);
+    setSelectedDate(ev.date);
+    setShowAddMemo(true);
+  } else {
+    setPopupLeadId(ev.raw?.lead_id || ev.orderId);
+  }
+}}
                         className={`p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all cursor-pointer w-full hover:brightness-110 active:scale-[0.99] ${col.card}`}
                       >
                         <div className="space-y-1.5">
@@ -1537,7 +1489,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                             <div className="flex items-center gap-4 text-xs font-mono text-zinc-400 flex-wrap">
                               <div className="flex items-center gap-1">
                                 <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                                <span>{formatTime12Hour(ev.eventTime)}</span>
+                                <span>{ev.eventTime}</span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <MapPin className="w-3.5 h-3.5 text-zinc-500" />
@@ -1589,9 +1541,17 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           key={ev.id}
                           id={`agenda_row_${ev.id}`}
                           onClick={(e) => {
-                            e.stopPropagation();
-                            handleEventAction(ev);
-                          }}
+  e.stopPropagation();
+  if (ev.sourceType === 'memo') {
+    setNewMemoTitle(ev.customerName);
+    setNewMemoMessage(ev.notes || '');
+    setEditingMemoId(ev.id);
+    setSelectedDate(ev.date);
+    setShowAddMemo(true);
+  } else {
+    setPopupLeadId(ev.raw?.lead_id || ev.orderId);
+  }
+}}
                           className={`p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition cursor-pointer w-full hover:brightness-110 active:scale-[0.99] ${col.card}`}
                         >
                           <div className="flex items-start gap-3 w-full sm:w-auto">
@@ -1618,7 +1578,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                               </h4>
                               <div className="flex items-center gap-1.5 text-[10px] text-zinc-450 font-mono">
                                 <Clock className="w-3 h-3 text-zinc-650" />
-                                <span>{formatTime12Hour(ev.eventTime)}</span>
+                                <span>{ev.eventTime}</span>
                                 <span className="text-zinc-700">•</span>
                                 <MapPin className="w-3 h-3 text-zinc-650" />
                                 <span className="break-words max-w-[200px]">{ev.eventLocation}</span>
@@ -1720,7 +1680,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
       </div>
 
       {/* 5. ADD memo DIALOG POPUP PORTAL OVERLAY */}
-      {showAddMemo && selectedDate && createPortal(
+      {showAddMemo && selectedDate && (
         <div 
           id="dialog_add_memo"
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
@@ -1800,12 +1760,13 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
               </div>
             </form>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
+
+
       
       {/* EVENTS SCHEDULED MODAL FOR A SPECIFIC DATE OR LEAD */}
-      {(popupDate || popupLeadId) && createPortal(
+      {(popupDate || popupLeadId) && (
         <div 
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
         >
@@ -1964,7 +1925,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           <td className="p-3.5 text-right pr-5 whitespace-nowrap min-w-[100px]">
                             <button 
                               onClick={() => {
-                                handleEventAction({ raw: lead, lead_id: lead.lead_id, orderId: orderIdDisplay });
+                                window.dispatchEvent(new CustomEvent("calendar-action-click", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
+                                window.dispatchEvent(new CustomEvent("calendar-action-click-deferred", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
+                                setPopupDate(null);
+                                setPopupLeadId(null);
                               }}
                               className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
                               style={{ whiteSpace: 'nowrap' }}
@@ -1980,12 +1944,11 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
               </table>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
 
       {/* TEAM POPUP */}
-      {teamPopupEvent && createPortal(
+      {teamPopupEvent && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/90 backdrop-blur-md animate-in zoom-in duration-200">
           <div className="bg-zinc-900 border border-zinc-800 w-full w-full max-w-5xl p-6 rounded-2xl shadow-2xl relative">
             <button
@@ -2015,12 +1978,11 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
               </table>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     
       {/* RESPONSIVE SELECTED DATE EVENT POPUP (READ-ONLY TABLE) */}
-      {showSelectedDateModal && selectedDate && createPortal(
+      {showSelectedDateModal && selectedDate && (
         <div 
           className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
           onClick={(e) => { e.stopPropagation(); setShowSelectedDateModal(false); }}
@@ -2118,7 +2080,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                 {evDate}
                               </td>
                               <td className="p-3.5 font-mono text-zinc-300 whitespace-nowrap">
-                                {formatTime12Hour(evTime)}
+                                {evTime}
                               </td>
                               <td className="p-3.5 text-zinc-300 max-w-[150px] truncate" title={location}>
                                 {location}
@@ -2135,7 +2097,15 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    handleEventAction(ev);
+                                    setShowSelectedDateModal(false);
+                                    if (ev.sourceType === 'memo') {
+                                      setNewMemoTitle(ev.customerName);
+                                      setNewMemoMessage(ev.notes || '');
+                                      setEditingMemoId(ev.id);
+                                      setShowAddMemo(true);
+                                    } else {
+                                      setPopupLeadId(ev.raw?.lead_id || ev.orderId || orderDisplayId);
+                                    }
                                   }}
                                   className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
                                 >
@@ -2152,8 +2122,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
               })()}
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );

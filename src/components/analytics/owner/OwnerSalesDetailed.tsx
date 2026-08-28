@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useRole } from '../../RoleContext';
-import { formatINR, formatDateDDMMYY } from '../../../utils';
+import { formatINR } from '../../../utils';
 import { 
   Users, Target, CheckCircle, XCircle, TrendingUp, BarChart3, 
   PieChart as PieChartIcon, Calendar, ArrowUpRight, ArrowDownRight, User, Filter, HelpCircle
@@ -274,13 +274,13 @@ export const OwnerSalesDetailed: React.FC = () => {
                 <tr key={idx} className="hover:bg-zinc-900/40 transition-colors">
                   <td className="p-4 text-zinc-400 font-mono">
                     {l.created_date && !isNaN(new Date(l.created_date).getTime()) 
-                      ? formatDateDDMMYY(l.created_date) 
+                      ? new Date(l.created_date).toLocaleDateString() 
                       : 'N/A'}
                   </td>
                   <td className="p-4 font-bold text-zinc-100">{l.customer_name}</td>
                   <td className="p-4 text-zinc-400 font-mono">
                     {l.event_date && !isNaN(new Date(l.event_date).getTime()) 
-                      ? formatDateDDMMYY(l.event_date) 
+                      ? new Date(l.event_date).toLocaleDateString() 
                       : 'N/A'}
                   </td>
                   <td className="p-4 text-zinc-300 italic">{l.assigned_to_name || 'Unassigned'}</td>

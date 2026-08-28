@@ -18,7 +18,6 @@ import {
   Sparkles,
   Layers
 } from 'lucide-react';
-import { formatDateDDMMYY } from '../utils';
 
 export const CustomPackageMaster: React.FC = () => {
   const { packages, leads, leadPackages, pushDelete, orders, staffAssignments } = useRole();
@@ -873,7 +872,7 @@ export const CustomPackageMaster: React.FC = () => {
                           </div>
 
                           <div className="text-[10px] text-zinc-500 font-mono flex justify-between items-center border-t border-zinc-850/50 pt-2">
-                            <span>Created: {role.created_at ? formatDateDDMMYY(role.created_at) : 'N/A'}</span>
+                            <span>Created: {role.created_at ? new Date(role.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</span>
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-850/50">
@@ -964,7 +963,7 @@ export const CustomPackageMaster: React.FC = () => {
                                 )}
                               </td>
                               <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
-                                {role.created_at ? formatDateDDMMYY(role.created_at) : 'N/A'}
+                                {role.created_at ? new Date(role.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
                               </td>
                               <td className="py-3 px-4 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
@@ -1096,7 +1095,7 @@ export const CustomPackageMaster: React.FC = () => {
                           </div>
 
                           <div className="text-[10px] text-zinc-500 font-mono flex justify-between items-center border-t border-zinc-850/50 pt-2">
-                            <span>Created: {del.created_at ? formatDateDDMMYY(del.created_at) : 'N/A'}</span>
+                            <span>Created: {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}</span>
                           </div>
 
                           <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-850/50">
@@ -1187,7 +1186,7 @@ export const CustomPackageMaster: React.FC = () => {
                                 )}
                               </td>
                               <td className="py-3 px-4 font-mono text-[11px] text-zinc-500">
-                                {del.created_at ? formatDateDDMMYY(del.created_at) : 'N/A'}
+                                {del.created_at ? new Date(del.created_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'}
                               </td>
                               <td className="py-3 px-4 text-right">
                                 <div className="flex items-center justify-end gap-1.5">

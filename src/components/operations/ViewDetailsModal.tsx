@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, Users, Check, AlertCircle, RefreshCw, Box
 } from 'lucide-react';
 import { useRole } from '../RoleContext';
-import { deserializeLeadEvents, getEventTeamMemberStaffMapping, EventTeamMemberAssignmentGroup, formatDateDDMMYY, formatTime12Hour } from '../../utils';
+import { deserializeLeadEvents, getEventTeamMemberStaffMapping, EventTeamMemberAssignmentGroup } from '../../utils';
 import { SafeProofImage } from '../ui/SafeProofImage';
 
 interface ViewDetailsModalProps {
@@ -308,19 +308,19 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
           item.isReturned = true;
           item.returnStatus = 'Returned';
           item.returnedBy = matchedHandover.returned_by;
-          item.returnDate = matchedHandover.return_date ? formatDateDDMMYY(matchedHandover.return_date) : matchedHandover.return_date;
+          item.returnDate = matchedHandover.return_date;
           item.notes = matchedHandover.notes;
         } else if (matchedHandover.return_status === 'Damaged') {
           item.isReturned = true;
           item.returnStatus = 'Damaged';
           item.returnedBy = matchedHandover.returned_by;
-          item.returnDate = matchedHandover.return_date ? formatDateDDMMYY(matchedHandover.return_date) : matchedHandover.return_date;
+          item.returnDate = matchedHandover.return_date;
           item.notes = matchedHandover.notes;
         } else if (matchedHandover.return_status === 'Missing') {
           item.isReturned = false;
           item.returnStatus = 'Missing';
           item.returnedBy = matchedHandover.returned_by;
-          item.returnDate = matchedHandover.return_date ? formatDateDDMMYY(matchedHandover.return_date) : matchedHandover.return_date;
+          item.returnDate = matchedHandover.return_date;
           item.notes = matchedHandover.notes;
         } else if (matchedHandover.return_status === 'Not Returned') {
           item.isReturned = false;
@@ -343,7 +343,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
           item.isReturned = true;
           item.returnStatus = 'Returned';
           item.returnedBy = returnRecord.returned_by || item.returnedBy || 'Operations Staff';
-          item.returnDate = returnRecord.returned_at ? formatDateDDMMYY(returnRecord.returned_at) : (item.returnDate || 'Returned');
+          item.returnDate = returnRecord.returned_at ? new Date(returnRecord.returned_at).toLocaleDateString() : (item.returnDate || 'Returned');
           if (returnRecord.remarks && !item.notes) {
             try {
               const p = JSON.parse(returnRecord.remarks);
@@ -574,19 +574,19 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Date</span>
-                        <span className="font-bold text-zinc-100 font-mono">{formatDateDDMMYY(group.eventDate)}</span>
+                        <span className="font-bold text-zinc-100 font-mono">{group.eventDate}</span>
                       </div>
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Start Time</span>
-                        <span className="font-bold text-emerald-400 font-mono">{formatTime12Hour(group.eventStartTime)}</span>
+                        <span className="font-bold text-emerald-400 font-mono">{group.eventStartTime}</span>
                       </div>
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Reporting Date</span>
-                        <span className="font-bold text-sky-300 font-mono">{formatDateDDMMYY(group.reportingDate)}</span>
+                        <span className="font-bold text-sky-300 font-mono">{group.reportingDate}</span>
                       </div>
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Reporting Time</span>
-                        <span className="font-bold text-sky-400 font-mono">{formatTime12Hour(group.reportingTime)}</span>
+                        <span className="font-bold text-sky-400 font-mono">{group.reportingTime}</span>
                       </div>
                       <div className="bg-zinc-950/70 p-2.5 rounded-lg border border-zinc-800/60 sm:col-span-2 lg:col-span-2">
                         <span className="block text-[10px] text-zinc-500 font-mono font-semibold uppercase mb-0.5">Event Location / Venue</span>

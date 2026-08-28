@@ -7,9 +7,6 @@ import {
   Shield, Camera, Video, AlertTriangle
 } from 'lucide-react';
 import { Staff, Order } from '../../types';
-import { formatDateDDMMYY } from '../../utils';
-
-import { formatTime12Hour } from "../../utils";
 
 export const OperationsAnalytics: React.FC = () => {
   const { 
@@ -54,7 +51,12 @@ export const OperationsAnalytics: React.FC = () => {
   // Helper: Format Dates cleanly
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
-    return formatDateDDMMYY(dateStr) || dateStr;
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
   };
 
   // Helper: Retrieve all orders assigned to a specific staff member
@@ -107,7 +109,7 @@ export const OperationsAnalytics: React.FC = () => {
   const getReportingTimeOfEvent = (orderId: string) => {
     const o = orders.find(ord => ord.order_id === orderId);
     const op = operations.find(o => o.order_id === orderId);
-    return formatTime12Hour(op?.reporting_time || o?.reporting_time || o?.event_time) || 'N/A';
+    return op?.reporting_time || o?.reporting_time || o?.event_time || 'N/A';
   };
 
   // Apply filters to data (Start Date, End Date, and Search Query)

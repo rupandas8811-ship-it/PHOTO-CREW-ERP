@@ -6,29 +6,21 @@ import {
   X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
-import { AddNoteModal } from '../AddNoteModal';
 import { StatusText } from '../ui/StatusText';
 import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
-import { EquipmentSelectorDropdown } from './EquipmentSelectorDropdown';
-import { ListSortFilter, SortOrder, compareRecordsByDate } from '../ui/ListSortFilter';
-
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { 
   convertTimeToDbFormat, 
   triggerAutoScrollAndFocus, 
   convertTo12Hour, 
-  formatDateDDMMYY,
-  formatTime12Hour,
   formatQtyItem, 
   parseQtyAndText, 
   generateWhatsAppAssignmentMessage,
   extractTeamMembersConfig,
   getEventRolesForEvent,
   getEventTeamMemberStaffMapping,
-  calculateOrderAssignmentStats,
-  isRoleMatch,
   EventTeamMemberConfig
 } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
@@ -79,92 +71,6 @@ const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId
         </button>
       </div>
     </div>
-  );
-};
-
-const EquipmentAssignedCell = ({ equipmentList, equipmentStatusText }: { equipmentList: string[], equipmentStatusText: string }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0, openUpward: false });
-  
-  if (equipmentList.length === 0) {
-    return <span className="text-zinc-500 font-semibold text-xs font-mono">No Equipment Assigned</span>;
-  }
-
-  if (equipmentList.length === 1) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-xs font-bold whitespace-nowrap">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-        {equipmentList[0]}
-      </span>
-    );
-  }
-
-  const handleToggle = (e: React.MouseEvent) => {
-    if (!isOpen) {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      const popupWidth = 256; // 64 * 4
-      const left = Math.min(
-        Math.max(12, rect.left + rect.width / 2 - popupWidth / 2),
-        window.innerWidth - popupWidth - 12
-      );
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      const openUpward = spaceBelow < 250 && spaceAbove > spaceBelow;
-      
-      setCoords({
-        left,
-        top: openUpward ? rect.top - 6 : rect.bottom + 6,
-        openUpward
-      });
-    }
-    setIsOpen(!isOpen);
-  };
-
-  return (
-    <>
-      <button 
-        type="button"
-        onClick={handleToggle}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 transition-colors font-bold text-xs font-mono whitespace-nowrap"
-      >
-        <span>{equipmentList.length} Equipment Assigned</span>
-        <svg className={`w-3.5 h-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      
-      {isOpen && createPortal(
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
-          <div 
-            className="fixed z-50 w-64 bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-xl shadow-black/50 overflow-hidden"
-            style={{ 
-              left: coords.left, 
-              ...(coords.openUpward ? { bottom: window.innerHeight - coords.top } : { top: coords.top }) 
-            }}
-          >
-            <div className="px-3 py-2 bg-zinc-800/50 border-b border-zinc-700/60">
-              <h4 className="text-xs font-bold text-zinc-300 text-left">Equipment Assigned — {equipmentList.length}</h4>
-            </div>
-            <div className="max-h-48 overflow-y-auto p-2 space-y-1">
-              {equipmentList.map((gear, idx) => (
-                <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded bg-zinc-800/30">
-                  <span className="text-emerald-400 font-bold shrink-0">✓</span>
-                  <span className="text-xs font-mono text-zinc-300 whitespace-normal text-left leading-tight break-words">{gear}</span>
-                </div>
-              ))}
-            </div>
-            <div className="px-3 py-2 bg-zinc-800/80 border-t border-zinc-700/60 text-left flex items-center gap-2">
-              <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-bold shrink-0">Status:</div>
-              <div className="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                <span className="text-emerald-400 font-bold">✓</span> <span className="whitespace-normal break-words">{equipmentStatusText.replace('✅ ', '')}</span>
-              </div>
-            </div>
-          </div>
-        </>,
-        document.body
-      )}
-    </>
   );
 };
 
@@ -324,7 +230,6 @@ export const OperationsLeads: React.FC = () => {
   // Sorting state
   const [sortBy, setSortBy] = useState<'event_date' | 'customer_name' | 'status' | 'assignment_date' | 'created_at'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [sortDateOrder, setSortDateOrder] = useState<SortOrder>('latest');
 
   // Dual Dropdown and Multi-Staff Assign State
   const [activeAssignments, setActiveAssignments] = useState<{ staff_role: string; staff_id: string; staff_name: string }[]>([]);
@@ -355,10 +260,6 @@ export const OperationsLeads: React.FC = () => {
   // Inline edit state for assignment
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [noteModalOpen, setNoteModalOpen] = useState(false);
-  const [noteModalLeadId, setNoteModalLeadId] = useState("");
-  const [noteModalOrderId, setNoteModalOrderId] = useState("");
-  const [noteModalCustomerName, setNoteModalCustomerName] = useState("");
   const [eventAllocations, setEventAllocations] = useState<Record<string, {
     reporting_date: string;
     reporting_time: string;
@@ -498,7 +399,6 @@ export const OperationsLeads: React.FC = () => {
   } | null>(null);
 
   const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
-  const [openEquipmentDropdownKey, setOpenEquipmentDropdownKey] = useState<string | null>(null);
 
   useEffect(() => {
     if (viewingStaffOrderId) {
@@ -935,135 +835,6 @@ export const OperationsLeads: React.FC = () => {
     const staffDetailsList: AssignedStaffDetails[] = [];
     const op = getOpDetails(ord.order_id);
 
-    // Robust helper to resolve assigned equipment for a staff member across all possible sources
-    const resolveStaffEquipment = (staffName: string, sa?: any, ev?: any, nameIdx?: number): string[] => {
-      const normName = (staffName || '').trim().toLowerCase();
-      if (!normName) return [];
-      const eqList: string[] = [];
-
-      // 1. Check direct equipment on the specific StaffAssignment for this staff
-      if (sa) {
-        const rawEq = sa.equipment || sa.assigned_equipment;
-        if (rawEq !== undefined && rawEq !== null) {
-          if (Array.isArray(rawEq)) {
-            rawEq.forEach((item: any) => {
-              if (typeof item === 'string' && item.trim()) {
-                eqList.push(item.trim());
-              } else if (item && typeof item === 'object' && (item.name || item.equipment_name)) {
-                eqList.push((item.name || item.equipment_name).trim());
-              }
-            });
-            // Direct explicit assignment on this staff assignment record (even if empty)
-            const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
-            return Array.from(new Set(cleanList));
-          } else if (typeof rawEq === 'string') {
-            const trimmedStr = rawEq.trim();
-            if (trimmedStr) {
-              try {
-                const parsed = JSON.parse(trimmedStr);
-                if (Array.isArray(parsed)) {
-                  parsed.forEach((item: any) => {
-                    if (typeof item === 'string' && item.trim()) eqList.push(item.trim());
-                    else if (item && typeof item === 'object' && (item.name || item.equipment_name)) eqList.push((item.name || item.equipment_name).trim());
-                  });
-                } else if (typeof parsed === 'string' && parsed.trim()) {
-                  eqList.push(parsed.trim());
-                }
-              } catch(e) {
-                trimmedStr.split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
-              }
-              const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
-              return Array.from(new Set(cleanList));
-            }
-          }
-        }
-      }
-
-      // 2. Check ev.assigned_staff_mobiles (encoded equipment JSON per staff slot)
-      if (eqList.length === 0 && ev && ev.assigned_staff_mobiles) {
-        const mobilesRaw = ev.assigned_staff_mobiles || '';
-        const assignedNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-        const resolvedIdx = nameIdx !== undefined && nameIdx >= 0 ? nameIdx : assignedNames.indexOf(normName);
-
-        if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
-          try {
-            const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
-            const staffEquipments = JSON.parse(parts[1]);
-            if (Array.isArray(staffEquipments)) {
-              if (resolvedIdx >= 0 && Array.isArray(staffEquipments[resolvedIdx])) {
-                staffEquipments[resolvedIdx].forEach((eq: string) => { if (eq && eq.trim()) eqList.push(eq.trim()); });
-                const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
-                return Array.from(new Set(cleanList));
-              }
-            }
-          } catch (e) {}
-        } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-          // Legacy format: ONLY assign if this is the ONLY assigned staff member for this event
-          if (assignedNames.length === 1 && (resolvedIdx === 0 || resolvedIdx === -1)) {
-            const parts = mobilesRaw.split(' || EQUIPMENT: ');
-            if (parts[1]) {
-              parts[1].split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
-            }
-          }
-        }
-      }
-
-      // 3. Check active staffAssignments strictly for this specific staff & event
-      if (eqList.length === 0 && staffAssignments) {
-        const matchingSAs = staffAssignments.filter(s => 
-          (s.order_id === ord.order_id || (ord.lead_id && s.order_id === ord.lead_id)) && 
-          (s.staff_name || '').trim().toLowerCase() === normName &&
-          s.assignment_status !== 'Cancelled' &&
-          (!ev?.id || !s.event_id || s.event_id === ev.id)
-        );
-        matchingSAs.forEach(s => {
-          const sEq = s.equipment || s.assigned_equipment;
-          if (sEq) {
-            if (Array.isArray(sEq)) {
-              sEq.forEach((item: any) => { 
-                if (typeof item === 'string' && item.trim()) eqList.push(item.trim());
-                else if (item && typeof item === 'object' && (item.name || item.equipment_name)) eqList.push((item.name || item.equipment_name).trim());
-              });
-            } else if (typeof sEq === 'string' && sEq.trim()) {
-              try {
-                const p = JSON.parse(sEq);
-                if (Array.isArray(p)) {
-                  p.forEach((item: any) => {
-                    if (typeof item === 'string' && item.trim()) eqList.push(item.trim());
-                    else if (item && typeof item === 'object' && (item.name || item.equipment_name)) eqList.push((item.name || item.equipment_name).trim());
-                  });
-                } else if (typeof p === 'string' && p.trim()) {
-                  eqList.push(p.trim());
-                }
-              } catch(e) {
-                sEq.split(',').forEach((item: string) => { if (item.trim()) eqList.push(item.trim()); });
-              }
-            }
-          }
-        });
-      }
-
-      // 4. Check leadEquipmentHistory ONLY if strictly linked to this specific staff member
-      if (eqList.length === 0 && leadEquipmentHistory) {
-        const hist = leadEquipmentHistory.filter(h => 
-          (h.order_id === ord.order_id || (ord.lead_id && h.lead_id === ord.lead_id))
-        );
-        hist.forEach(h => {
-          let parsed: any = {};
-          if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
-          const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-          if (staffMatch && (staffMatch === normName || staffMatch.includes(normName) || normName.includes(staffMatch))) {
-            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection' && !h.equipment_name.includes('Footage')) {
-              eqList.push(h.equipment_name);
-            }
-          }
-        });
-      }
-
-      const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
-      return Array.from(new Set(cleanList));
-    };
-
     if (lead?.events && lead.events.length > 0) {
       const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === lead.lead_id) || [];
       const teamMembersConfig = extractTeamMembersConfig(lead, targetLeadPkgs);
@@ -1071,18 +842,14 @@ export const OperationsLeads: React.FC = () => {
 
       lead.events.forEach((ev: any, evIdx: number) => {
         const evId = ev.id || '';
-        const evOrderAssignments = orderAssignments.filter(sa => 
-          sa.event_id === evId || 
-          (!sa.event_id && totalEvents === 1) ||
-          (sa.event_name && ev.event_name && sa.event_name.toLowerCase() === ev.event_name.toLowerCase()) ||
-          (sa.event_name && ev.event_type && sa.event_name.toLowerCase() === ev.event_type.toLowerCase())
-        );
+        const evOrderAssignments = orderAssignments.filter(sa => sa.event_id === evId || (!sa.event_id && totalEvents === 1));
 
         if (evOrderAssignments.length > 0) {
           evOrderAssignments.forEach((sa, saIdx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
             const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
-            const saEq = resolveStaffEquipment(sa.staff_name, sa, ev, saIdx);
+
+            const saEq = sa.equipment ? (Array.isArray(sa.equipment) ? sa.equipment : (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })()) : [];
 
             staffDetailsList.push({
               staff_name: sa.staff_name,
@@ -1105,7 +872,21 @@ export const OperationsLeads: React.FC = () => {
         } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
           const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
           
-          const cleanMobilesRaw = (ev.assigned_staff_mobiles || '').split(' || EQUIPMENT:')[0] || '';
+          let assignedEquipment: string[] = [];
+          let staffEquipments: string[][] = [];
+          let mobilesRaw = ev.assigned_staff_mobiles || '';
+          if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
+            const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
+            try {
+              staffEquipments = JSON.parse(parts[1]);
+            } catch(e) {}
+            assignedEquipment = Array.from(new Set(staffEquipments.flat()));
+          } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
+            const parts = mobilesRaw.split(' || EQUIPMENT: ');
+            assignedEquipment = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+          }
+
+          const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
           const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim()).filter(Boolean);
 
           const includedRoles = getEventRolesForEvent(ev, evIdx, teamMembersConfig, totalEvents);
@@ -1127,7 +908,15 @@ export const OperationsLeads: React.FC = () => {
             const assignedTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
             const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
             const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord, saMatch?.assignment_id, assignedTask);
-            const memberEquipment = resolveStaffEquipment(name, saMatch, ev, nameIdx);
+
+            let memberEquipment: string[] = [];
+            if (saMatch && saMatch.equipment) {
+              memberEquipment = Array.isArray(saMatch.equipment) ? saMatch.equipment : (() => { try { const p = JSON.parse(saMatch.equipment); return Array.isArray(p) ? p : [saMatch.equipment]; } catch(e) { return saMatch.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })();
+            } else if (staffEquipments[nameIdx] && Array.isArray(staffEquipments[nameIdx])) {
+              memberEquipment = staffEquipments[nameIdx];
+            } else if (mobilesRaw.includes(' || EQUIPMENT: ') && nameIdx === 0) {
+              memberEquipment = assignedEquipment;
+            }
 
             staffDetailsList.push({
               staff_name: name,
@@ -1153,7 +942,7 @@ export const OperationsLeads: React.FC = () => {
       orderAssignments.forEach((sa, saIdx) => {
         const name = sa.staff_name;
         const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase() || s.staff_id === sa.staff_id);
-        const assignedEquipment = resolveStaffEquipment(name, sa, undefined, saIdx);
+        const assignedEquipment = sa.equipment ? (Array.isArray(sa.equipment) ? sa.equipment : (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })()) : [];
         const assignedTask = sa.staff_role || st?.role || 'Staff';
         const staffTaskStatus = getStaffTaskStatus(ord.order_id, undefined, saIdx, name, ord, sa.assignment_id, assignedTask);
 
@@ -1202,27 +991,23 @@ export const OperationsLeads: React.FC = () => {
 
   // Helper to check if an order/lead has reached Verified Footage
   const isVerifiedFootageOrder = (o: Order) => {
-    const postOpStages = [
-      'Verified Footage', 'Footage Handover Verified',
-      'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
-      'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review',
-      'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval',
-      'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed', 'Order Closed'
-    ];
-    
     const stage = (o.current_stage || '').trim();
-    if (postOpStages.includes(stage)) return true;
-
+    if (stage === 'Verified Footage' || stage === 'Footage Handover Verified') {
+      return true;
+    }
     const lead = leads?.find(l => l.lead_id === o.lead_id || l.lead_id === o.order_id);
     if (lead) {
       const leadStatus = (lead.current_status || lead.status || '').trim();
-      if (postOpStages.includes(leadStatus)) return true;
+      if (leadStatus === 'Verified Footage' || leadStatus === 'Footage Handover Verified') {
+        return true;
+      }
     }
-
     const op = operations?.find(op => op.order_id === o.order_id);
     if (op) {
       const opStatus = (op.event_status || '').trim();
-      if (postOpStages.includes(opStatus)) return true;
+      if (opStatus === 'Verified Footage' || opStatus === 'Footage Handover Verified') {
+        return true;
+      }
     }
     return false;
   };
@@ -1241,7 +1026,8 @@ export const OperationsLeads: React.FC = () => {
     'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed', 'Order Closed'
   ];
   const operationsOrders = orders.filter(o => {
-    // Moved isVerifiedFootageOrder exclusion to filteredOrders for active view only
+    // Exclude records whose current status is Verified Footage from Operations active list/view
+    if (isVerifiedFootageOrder(o)) return false;
 
     if (!allowedStages.includes(o.current_stage)) return false;
     if (currentRole === 'Operation Staff') {
@@ -1339,10 +1125,7 @@ export const OperationsLeads: React.FC = () => {
       }
 
       // 1. Status Dropdown filter
-      if (statusFilter === 'All') {
-        // Exclude records whose current status is Verified Footage (or beyond) from Operations active list/view
-        if (isVerifiedFootageOrder(o)) return false;
-      } else {
+      if (statusFilter !== 'All') {
         const isStaffAssigned = staffAssignments ? staffAssignments.some(x => x.order_id === o.order_id) : false;
         const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
         const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
@@ -1351,14 +1134,14 @@ export const OperationsLeads: React.FC = () => {
         
         if (statusFilter === 'Order Confirmed' && !['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(stageNorm)) return false;
         if (statusFilter === 'Operations Assigned' && stageNorm !== 'Operations Assigned') return false;
-        if (statusFilter === 'Assigned Crew' && !['Assigned Crew', 'Staff Assigned', 'Event Scheduled'].includes(stageNorm)) return false;
+        if (statusFilter === 'Assigned Crew' && !['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(stageNorm) && !isStaffAssigned) return false;
         if (statusFilter === 'Staff Assigned' && !isStaffAssigned) return false;
         if (statusFilter === 'Event Scheduled' && stageNorm !== 'Event Scheduled') return false;
         if (statusFilter === 'Event Cancelled' && stageNorm !== 'Event Cancelled') return false;
         if (statusFilter === 'Event Started' && !['Event Started', 'Event Start'].includes(stageNorm)) return false;
         if (statusFilter === 'Event Ended' && !['Event Ended', 'Event End', 'Event Completed', 'Event Complete'].includes(stageNorm)) return false;
         if (statusFilter === 'Footage Handover' && !['Footage Handover', 'Equipment Handover'].includes(stageNorm)) return false;
-        if (statusFilter === 'Verified Footage' && !isVerifiedFootageOrder(o)) return false;
+        if (statusFilter === 'Verified Footage' && !['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(stageNorm)) return false;
         if (statusFilter === 'Event Completed' && !['Event Completed', 'Event Complete', 'Event Ended', 'Event End'].includes(stageNorm)) return false;
         if (statusFilter === 'Raw Footage Received' && !['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified'].includes(stageNorm)) return false;
 
@@ -1418,9 +1201,6 @@ export const OperationsLeads: React.FC = () => {
   const sortedOrders = useMemo(() => {
     const list = [...filteredOrders];
     list.sort((a, b) => {
-      if (sortBy === 'created_at') {
-        return compareRecordsByDate(a, b, sortDateOrder);
-      }
       let valA: any = '';
       let valB: any = '';
 
@@ -1438,14 +1218,19 @@ export const OperationsLeads: React.FC = () => {
         const assignsB = staffAssignments ? staffAssignments.filter(x => x.order_id === b.order_id) : [];
         valA = assignsA.length > 0 ? assignsA[0].assignment_date : 'ZZZZ-ZZ-ZZ'; // place unassigned last
         valB = assignsB.length > 0 ? assignsB[0].assignment_date : 'ZZZZ-ZZ-ZZ';
+      } else if (sortBy === 'created_at') {
+        const leadA = leads ? leads.find(l => l.lead_id === a.lead_id) : null;
+        const leadB = leads ? leads.find(l => l.lead_id === b.lead_id) : null;
+        valA = leadA ? (leadA.created_at ? new Date(leadA.created_at).getTime() : new Date(leadA.created_date).getTime()) : (a.created_at ? new Date(a.created_at).getTime() : 0);
+        valB = leadB ? (leadB.created_at ? new Date(leadB.created_at).getTime() : new Date(leadB.created_date).getTime()) : (b.created_at ? new Date(b.created_at).getTime() : 0);
       }
 
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-      return compareRecordsByDate(a, b, sortDateOrder);
+      return 0;
     });
     return list;
-  }, [filteredOrders, sortBy, sortOrder, sortDateOrder, staffAssignments, leads]);
+  }, [filteredOrders, sortBy, sortOrder, staffAssignments, leads]);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -1751,15 +1536,30 @@ export const OperationsLeads: React.FC = () => {
 
             let isMissingStaff = false;
             for (const task of Array.from(tasksMap.values())) {
-              const assignedCount = validAllocStaff.filter((s: any) => s.staff_role === task.roleName).length;
-              if (assignedCount < task.targetQty) {
+              if (!validAllocStaff.some((s: any) => s.staff_role === task.roleName)) {
                 isMissingStaff = true;
                 break;
               }
             }
 
             if (isMissingStaff) {
-                overallMissingStaff = true;
+                setValidationAttempted(true);
+                setAssignValidationError(`Please complete all Staff Assignments before saving.\nAt least one Staff is required for every Team Member Included task.`);
+                
+                // Open the collapsed event and focus
+                setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
+                
+                // Scroll to error
+                setTimeout(() => {
+                  const el = document.getElementById(`assign-event-${evId}`);
+                  if (el) {
+                     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                     el.classList.add('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950');
+                     setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950'), 3000);
+                  }
+                }, 100);
+                
+                return; // Stop saving
             }
           }
 
@@ -1835,9 +1635,7 @@ export const OperationsLeads: React.FC = () => {
       // Gather all selected equipment across all events
       const allAssignedEquipment = Array.from(
         new Set(
-          Object.values(eventAllocations).flatMap((alloc: any) => 
-            alloc.staff?.flatMap((st: any) => st.equipment || []) || []
-          )
+          Object.values(eventAllocations).flatMap((alloc: any) => alloc.equipment || [])
         )
       ) as string[];
       const consolidatedEquipKit = allAssignedEquipment.join(', ');
@@ -1869,46 +1667,7 @@ export const OperationsLeads: React.FC = () => {
       }
 
       // Save the multi-staff role assignments to Supabase & Context state!
-      // Map some main ones to assignForm variables for legacy column compatibility
-      const finalAssignments = allAssignedStaff.length > 0 ? allAssignedStaff : activeAssignments;
-      const photographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('photographer'))?.staff_name || '';
-      const videographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('videographer'))?.staff_name || '';
-      const droneOp = finalAssignments.find(a => a.staff_role.toLowerCase().includes('drone') || a.staff_role.toLowerCase().includes('aerial'))?.staff_name || '';
-      const assistant = finalAssignments.find(a => a.staff_role.toLowerCase().includes('assistant'))?.staff_name || '';
-      
-      const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
-      const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === parentLeadInstance?.lead_id) || [];
-
-      // Calculate assignment completion using strict requirements logic:
-      // Status changes to "Assigned Crew" ONLY when ALL required tasks/slots are assigned.
-      const assignmentStats = calculateOrderAssignmentStats({
-        lead: parentLeadInstance,
-        order: matchedOrder,
-        leadPkgs: targetLeadPkgs,
-        eventAllocations: eventAllocations
-      });
-
-      const currentOrderStage = matchedOrder?.current_stage || 'Order Confirmed';
-      const advancedStages = [
-        'Event Started', 'Event Completed', 'Event Ended', 'Footage Handover',
-        'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received',
-        'Editor Assigned', 'Editing Started', 'Editing In Progress',
-        'Internal QC Review', 'Client Review Sent', 'Internal Review',
-        'Client Review', 'Revision Required', 'Revision In Progress',
-        'Revision', 'Final Approval', 'Ready for Delivery',
-        'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
-      ];
-
-      let targetStage: CurrentStage;
-      if (advancedStages.includes(currentOrderStage)) {
-        targetStage = currentOrderStage as CurrentStage;
-      } else if (assignmentStats.isFullyAssigned) {
-        targetStage = 'Assigned Crew';
-      } else {
-        targetStage = 'Order Confirmed';
-      }
-
-      await saveStaffAssignments(assigningOrderId, finalAssignments, targetStage);
+      await saveStaffAssignments(assigningOrderId, allAssignedStaff.length > 0 ? allAssignedStaff : activeAssignments);
       
       // Update data so that UI reflects new crew directly from lead_staff_assignment_history
       refreshData();
@@ -1979,6 +1738,20 @@ export const OperationsLeads: React.FC = () => {
         }
       }
 
+      // Map some main ones to assignForm variables for legacy column compatibility
+      const finalAssignments = allAssignedStaff.length > 0 ? allAssignedStaff : activeAssignments;
+      const photographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('photographer'))?.staff_name || '';
+      const videographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('videographer'))?.staff_name || '';
+      const droneOp = finalAssignments.find(a => a.staff_role.toLowerCase().includes('drone') || a.staff_role.toLowerCase().includes('aerial'))?.staff_name || '';
+      const assistant = finalAssignments.find(a => a.staff_role.toLowerCase().includes('assistant'))?.staff_name || '';
+      
+      const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
+      
+      // Set status to Assigned Crew as requested for Status 1 workflow
+      const currentOrderStage = matchedOrder?.current_stage || 'Operations Assigned';
+      const isStaffAssigned = finalAssignments.length > 0;
+      const targetStage: CurrentStage = (isStaffAssigned && !overallMissingStaff) ? 'Assigned Crew' : (currentOrderStage as CurrentStage);
+
       console.log("Saving assignment for order:", assigningOrderId, {
         photographer,
         videographer,
@@ -1986,7 +1759,6 @@ export const OperationsLeads: React.FC = () => {
         assistant,
         equipment: consolidatedEquipKit,
         reporting_time: convertTimeToDbFormat(assignForm.reporting_time),
-        assignmentStats,
         targetStage
       });
 
@@ -2160,14 +1932,6 @@ export const OperationsLeads: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <AddNoteModal
-        isOpen={noteModalOpen}
-        onClose={() => setNoteModalOpen(false)}
-        leadId={noteModalLeadId}
-        orderId={noteModalOrderId}
-        customerName={noteModalCustomerName}
-      />
-
       {/* 1. Results Summary Row - 6 Operations Statuses */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         {[
@@ -2219,57 +1983,52 @@ export const OperationsLeads: React.FC = () => {
           <div className="overflow-hidden">
             <div className="p-4 pt-0 md:pt-4 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                {/* Search Box */}
-                <div className="relative md:col-span-4 w-full">
-                  <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
-                  <input
-                    type="text"
-                    placeholder="Search by Customer Name, Order ID, Mobile Number..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-550 focus:outline-none focus:border-amber-500/50"
-                  />
-                </div>
+          {/* Search Box */}
+          <div className="relative md:col-span-6 w-full">
+            <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3.5" />
+            <input
+              type="text"
+              placeholder="Search by Customer Name, Order ID, Mobile Number..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-zinc-550 focus:outline-none focus:border-amber-500/50"
+            />
+          </div>
 
-                {/* Date Filter Dropdown */}
-                <div className="md:col-span-3 w-full">
-                  <select
-                    value={dateFilter}
-                    onChange={(e) => setDateFilter(e.target.value)}
-                    className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
-                  >
-                    <option value="All">All Dates (Event Date)</option>
-                    <option value="Today">Today</option>
-                    <option value="Tomorrow">Tomorrow</option>
-                    <option value="This Week">This Week</option>
-                    <option value="This Month">This Month</option>
-                    <option value="Custom">Custom Date Range</option>
-                  </select>
-                </div>
+          {/* Date Filter Dropdown */}
+          <div className="md:col-span-3 w-full">
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
+            >
+              <option value="All">All Dates (Event Date)</option>
+              <option value="Today">Today</option>
+              <option value="Tomorrow">Tomorrow</option>
+              <option value="This Week">This Week</option>
+              <option value="This Month">This Month</option>
+              <option value="Custom">Custom Date Range</option>
+            </select>
+          </div>
 
-                {/* Status Dropdown */}
-                <div className="md:col-span-3 w-full">
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Order Confirmed">Order Confirmed</option>
-                    <option value="Assigned Crew">Assigned Crew</option>
-                    <option value="Event Started">Event Started</option>
-                    <option value="Event Ended">Event Ended</option>
-                    <option value="Footage Handover">Footage Handover</option>
-                    <option value="Verified Footage">Verified Footage</option>
-                    <option value="Event Cancelled">Event Cancelled</option>
-                  </select>
-                </div>
-
-                {/* Sort Filter Button */}
-                <div className="md:col-span-2 flex items-center justify-start md:justify-end">
-                  <ListSortFilter value={sortDateOrder} onChange={setSortDateOrder} />
-                </div>
-              </div>
+          {/* Status Dropdown */}
+          <div className="md:col-span-3 w-full">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
+            >
+              <option value="All">All Statuses</option>
+              <option value="Order Confirmed">Order Confirmed</option>
+              <option value="Assigned Crew">Assigned Crew</option>
+              <option value="Event Started">Event Started</option>
+              <option value="Event Ended">Event Ended</option>
+              <option value="Footage Handover">Footage Handover</option>
+              <option value="Verified Footage">Verified Footage</option>
+              <option value="Event Cancelled">Event Cancelled</option>
+            </select>
+          </div>
+        </div>
 
         {/* Custom Date Range pickers if custom is selected */}
         {dateFilter === 'Custom' && (
@@ -2412,6 +2171,15 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 font-bold text-zinc-100">
                       <div>{ord.customer_name}</div>
+                      {op?.equipment_kit && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {op.equipment_kit.split(',').map((kit: string, idx: number) => (
+                            <span key={idx} className="bg-amber-400/10 text-amber-400 px-1.5 py-0.5 rounded text-[9.5px] font-mono border border-amber-400/10 " title="Assigned Gear">
+                              ⚙️ {kit.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 text-zinc-300 font-sans">
                       <UnifiedEventDropdownCell lead={lead || ord} />
@@ -2422,7 +2190,7 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
-                      {op?.reporting_time ? formatTime12Hour(op.reporting_time) : <span className="text-zinc-600 italic">—</span>}
+                      {op?.reporting_time || <span className="text-zinc-600 italic">—</span>}
                     </td>
                     <td className="p-4 text-xs font-mono text-zinc-300">
                       {(() => {
@@ -2635,20 +2403,6 @@ export const OperationsLeads: React.FC = () => {
                           }
 
                           // 2. When Current Status = Footage Handover or Event Completed
-                          // 3. Add Note
-                          if (!actionItems.some(i => i.label === 'Add Note')) {
-                            actionItems.push({
-                              label: 'Add Note',
-                              onClick: () => {
-                                setNoteModalLeadId(ord.lead_id);
-                                setNoteModalOrderId(ord.order_id);
-                                setNoteModalCustomerName(ord.customer_name || '');
-                                setNoteModalOpen(true);
-                                setActiveMenuOrderId(null);
-                              }
-                            });
-                          }
-                          
                           if (isFootageHandover || currentStage === 'Event Completed') {
                             actionItems.push({
                               label: 'Upload Final Footage',
@@ -2822,38 +2576,10 @@ export const OperationsLeads: React.FC = () => {
                     
                     const evName = ev.event_name || ev.event_type || 'Unnamed Event';
                     const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
+                    
                     let loadError = null;
                     if (includedRoles.length === 0) {
                       loadError = `No Team Members specified for event "${evName}". You can manually add staff roles below.`;
-                    }
-
-                    let evTotalRequired = 0;
-                    let evTotalAssigned = 0;
-                    let isEvFullyAssigned = true;
-                    
-                    if (includedRoles.length > 0) {
-                      const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
-                      includedRoles.forEach((roleStr: string) => {
-                        const { qty, text } = parseQtyAndText(roleStr);
-                        const roleName = (text || roleStr).trim();
-                        if (!roleName) return;
-                        if (tasksMap.has(roleName)) {
-                          tasksMap.get(roleName)!.targetQty += (qty || 1);
-                        } else {
-                          tasksMap.set(roleName, { roleName, targetQty: qty || 1 });
-                        }
-                      });
-                      const validEvAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
-                      for (const task of Array.from(tasksMap.values())) {
-                        evTotalRequired += task.targetQty;
-                        const assignedCount = validEvAllocStaff.filter((s: any) => s.staff_role === task.roleName).length;
-                        evTotalAssigned += Math.min(assignedCount, task.targetQty);
-                        if (assignedCount < task.targetQty) {
-                          isEvFullyAssigned = false;
-                        }
-                      }
-                    } else {
-                       evTotalAssigned = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
                     }
 
                     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
@@ -2866,7 +2592,7 @@ export const OperationsLeads: React.FC = () => {
                         <div 
                           className="p-4 flex items-center justify-between cursor-pointer hover:bg-zinc-900/40 transition-colors"
                           onClick={() => setCollapsedAssignEvents(prev => ({ ...prev, [evId]: !isCollapsed }))}
-                        > 
+                        >
                            <div className="flex items-center gap-3">
                               <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 select-none uppercase font-bold font-mono">
                                 🎥 EVENT {index + 1}
@@ -2876,15 +2602,11 @@ export const OperationsLeads: React.FC = () => {
                               </h4>
                            </div>
                            <div className="flex items-center gap-4">
-                              {includedRoles.length > 0 ? (
-                                <span className={`text-[10px] font-mono px-2 py-1 border rounded-md ${isEvFullyAssigned ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
-                                  {evTotalAssigned} / {evTotalRequired} Assigned → {isEvFullyAssigned ? 'Assigned' : 'Pending'}
-                                </span>
-                              ) : allocStaff.length > 0 ? (
+                              {allocStaff.length > 0 && (
                                 <span className="text-[10px] font-mono px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-md">
                                   {allocStaff.length} Staff Assigned
                                 </span>
-                              ) : null}
+                              )}
                               <span className={`text-zinc-500 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`}>▼</span>
                            </div>
                         </div>
@@ -2907,13 +2629,13 @@ export const OperationsLeads: React.FC = () => {
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Date</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">
-                              {formatDateDDMMYY(ev.event_date) || 'N/A'}
+                              {ev.event_date || 'N/A'}
                             </span>
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Time</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">
-                              {formatTime12Hour(ev.event_start_time) || 'N/A'} {ev.event_end_time ? `- ${formatTime12Hour(ev.event_end_time)}` : ''}
+                              {ev.event_start_time || 'N/A'} {ev.event_end_time ? `- ${ev.event_end_time}` : ''}
                             </span>
                           </div>
                           {/* Shoot Type Hidden as requested */}
@@ -2927,11 +2649,11 @@ export const OperationsLeads: React.FC = () => {
                           )}
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Date</span>
-                            <span className="text-zinc-200 text-[11px] font-mono block">{formatDateDDMMYY(allocation.reporting_date || ev.reporting_date || ev.event_date) || 'N/A'}</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">{allocation.reporting_date || ev.reporting_date || ev.event_date || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Time</span>
-                            <span className="text-zinc-200 text-[11px] font-mono block">{formatTime12Hour(allocation.reporting_time || ev.reporting_time) || 'N/A'}</span>
+                            <span className="text-zinc-200 text-[11px] font-mono block">{allocation.reporting_time || ev.reporting_time || 'N/A'}</span>
                           </div>
                           <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Guest Pax</span>
@@ -3192,66 +2914,169 @@ export const OperationsLeads: React.FC = () => {
                                           </div>
 
                                           {/* Equipment Section per Staff */}
-                                           <div className="flex flex-col sm:flex-row sm:items-start gap-2 pt-1.5 border-t border-zinc-900/50">
-                                             <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider pt-1.5 shrink-0 sm:w-28 hidden sm:block">
-                                               Equipment
-                                             </div>
+                                          {(() => {
+                                            const eqKey = `${evId}-${slot.id}`;
+                                            const searchQuery = equipmentSearchQueryByEvent[eqKey] || '';
+                                            const isDropdownOpen = !!isEquipmentDropdownOpenByEvent[eqKey];
+                                            const selectedEquipmentNames = slot.equipment || [];
 
-                                             <div className="flex-1 min-w-0 w-full">
-                                               <EquipmentSelectorDropdown
-                                                 equipment={equipment}
-                                                 selectedEquipmentNames={slot.equipment || []}
-                                                 otherStaffEquipments={allocStaff
-                                                   .filter((s: any) => s.id !== slot.id && s !== slot)
-                                                   .map((s: any) => ({
-                                                     staffName: s.name || s.staff_name,
-                                                     equipmentNames: s.equipment || []
-                                                   }))}
-                                                 onToggleEquipment={(eqName) => {
-                                                   setEventAllocations((prev: any) => {
-                                                     const existingAlloc = prev[evId] || { staff: [] };
-                                                     const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                       if (s.id === slot.id || s === slot) {
-                                                         const currentEq = s.equipment || [];
-                                                         const isSelected = currentEq.includes(eqName);
-                                                         return {
-                                                           ...s,
-                                                           equipment: isSelected
-                                                             ? currentEq.filter((name: string) => name !== eqName)
-                                                             : [...currentEq, eqName]
-                                                         };
-                                                       }
-                                                       return s;
-                                                     });
-                                                     return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
-                                                   });
-                                                 }}
-                                                 onRemoveEquipment={(eqName) => {
-                                                   setEventAllocations((prev: any) => {
-                                                     const existingAlloc = prev[evId] || { staff: [] };
-                                                     const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                       if (s.id === slot.id || s === slot) {
-                                                         return {
-                                                           ...s,
-                                                           equipment: (s.equipment || []).filter((name: string) => name !== eqName)
-                                                         };
-                                                       }
-                                                       return s;
-                                                     });
-                                                     return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
-                                                   });
-                                                 }}
-                                                 isEquipmentBusy={isEquipmentBusy}
-                                                 currentOrderId={assigningOrderId}
-                                                 targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date}
-                                               />
-                                             </div>
-                                           </div>
-                                         </div>
-                                       );
-                                     })}
+                                            const allOtherSelectedEquipments = allocStaff
+                                              .filter((s: any) => s.id !== slot.id && s !== slot)
+                                              .flatMap((s: any) => s.equipment || []);
 
-                                     {/* Add Staff Button under Task */}
+                                            const filteredEquipment = (equipment || []).filter(eq => {
+                                              if (allOtherSelectedEquipments.includes(eq.equipment_name)) {
+                                                return false;
+                                              }
+                                              const q = searchQuery.toLowerCase();
+                                              return eq.equipment_name.toLowerCase().includes(q) ||
+                                                     (eq.category || '').toLowerCase().includes(q) ||
+                                                     (eq.serial_number || '').toLowerCase().includes(q);
+                                            });
+
+                                            return (
+                                              <div className="flex flex-col sm:flex-row sm:items-start gap-2 pt-1.5 border-t border-zinc-900/50">
+                                                <div className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider pt-1 shrink-0 sm:w-32 hidden sm:block">
+                                                  Equipment
+                                                </div>
+
+                                                <div className="flex flex-col flex-1 gap-2 min-w-0 w-full">
+                                                  {selectedEquipmentNames.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                      {selectedEquipmentNames.map((eqName: string, eqIdx: number) => (
+                                                        <span key={eqIdx} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[11px] font-mono font-medium rounded border border-amber-500/20 transition-all">
+                                                          <span className="truncate max-w-[150px] sm:max-w-[220px]">⚙️ {eqName}</span>
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              setEventAllocations((prev: any) => {
+                                                                const existingAlloc = prev[evId] || { staff: [] };
+                                                                const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                                  if (s.id === slot.id || s === slot) {
+                                                                    return {
+                                                                      ...s,
+                                                                      equipment: (s.equipment || []).filter((name: string) => name !== eqName)
+                                                                    };
+                                                                  }
+                                                                  return s;
+                                                                });
+                                                                return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                              });
+                                                            }}
+                                                            className="text-amber-500 hover:text-amber-300 font-bold ml-1 text-xs cursor-pointer focus:outline-none"
+                                                          >
+                                                            ✕
+                                                          </button>
+                                                        </span>
+                                                      ))}
+                                                    </div>
+                                                  )}
+
+                                                  <div className="relative">
+                                                    <div className="flex gap-1.5">
+                                                      <input
+                                                        type="text"
+                                                        placeholder={selectedEquipmentNames.length === 0 ? "Search to assign equipment..." : "Search equipment..."}
+                                                        value={searchQuery}
+                                                        onFocus={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
+                                                        onChange={(e) => setEquipmentSearchQueryByEvent(prev => ({ ...prev, [eqKey]: e.target.value }))}
+                                                        className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 focus:border-amber-500 focus:outline-none rounded-lg py-1 px-2.5 text-xs text-zinc-100 placeholder-zinc-500 h-8"
+                                                      />
+                                                      {isDropdownOpen ? (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: false }))}
+                                                          className="px-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-mono rounded-lg border border-zinc-700 transition-colors cursor-pointer shrink-0 h-8"
+                                                        >
+                                                          Close
+                                                        </button>
+                                                      ) : (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
+                                                          className="px-2.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 text-xs font-mono rounded-lg border border-zinc-800 transition-colors cursor-pointer shrink-0 h-8"
+                                                        >
+                                                          Browse
+                                                        </button>
+                                                      )}
+                                                    </div>
+                                                    {isDropdownOpen && (
+                                                      <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl max-h-48 overflow-y-auto z-40 scrollbar-thin divide-y divide-zinc-800/60">
+                                                        {filteredEquipment.length > 0 ? (
+                                                          filteredEquipment.map((eq) => {
+                                                            const isAlreadySelected = selectedEquipmentNames.includes(eq.equipment_name);
+                                                            const evMatch = parentLeadInstance?.events?.find((e: any) => e.id === evId);
+                                                            const targetEventDate = evMatch?.event_date || assignForm.event_date;
+                                                            const isBusy = !isAlreadySelected && isEquipmentBusy(eq.equipment_name, assigningOrderId, targetEventDate);
+                                                            return (
+                                                              <div
+                                                                key={eq.equipment_id}
+                                                                onClick={() => {
+                                                                  if (isBusy) {
+                                                                    alert(`Equipment "${eq.equipment_name}" is currently assigned to another active order and cannot be assigned.`);
+                                                                    return;
+                                                                  }
+                                                                  setEventAllocations((prev: any) => {
+                                                                    const existingAlloc = prev[evId] || { staff: [] };
+                                                                    const updatedStaff = existingAlloc.staff.map((s: any) => {
+                                                                      if (s.id === slot.id || s === slot) {
+                                                                        const currentEq = s.equipment || [];
+                                                                        return {
+                                                                          ...s,
+                                                                          equipment: isAlreadySelected
+                                                                            ? currentEq.filter((name: string) => name !== eq.equipment_name)
+                                                                            : [...currentEq, eq.equipment_name]
+                                                                        };
+                                                                      }
+                                                                      return s;
+                                                                    });
+                                                                    return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                                  });
+                                                                }}
+                                                                className={`flex items-center justify-between p-2.5 cursor-pointer transition-colors text-xs text-left ${
+                                                                  isAlreadySelected ? 'bg-amber-500/10 hover:bg-amber-500/15' : isBusy ? 'opacity-60 hover:bg-zinc-850' : 'hover:bg-zinc-800/80'
+                                                                }`}
+                                                              >
+                                                                <div className="space-y-0.5">
+                                                                  <div className="font-bold text-white flex items-center gap-1.5">
+                                                                    <span>⚙️ {eq.equipment_name}</span>
+                                                                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-400 uppercase font-mono">
+                                                                      {eq.category}
+                                                                    </span>
+                                                                    {isBusy && (
+                                                                      <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-rose-950/80 border border-rose-800 text-rose-300 font-mono font-semibold">
+                                                                        Busy
+                                                                      </span>
+                                                                    )}
+                                                                  </div>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                  <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${
+                                                                    isAlreadySelected ? 'bg-amber-500 border-amber-500 text-black' : isBusy ? 'border-rose-800 text-rose-500' : 'border-zinc-700'
+                                                                  }`}>
+                                                                    {isAlreadySelected ? '✓' : ''}
+                                                                  </span>
+                                                                </div>
+                                                              </div>
+                                                            );
+                                                          })
+                                                        ) : (
+                                                          <div className="p-4 text-center text-xs text-zinc-500 italic">
+                                                            No equipment found matching "{searchQuery}"
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })()}
+                                        </div>
+                                      );
+                                    })}
+
+                                    {/* Add Staff Button under Task */}
                                     <div className="pt-2 border-t border-zinc-900 flex items-center justify-between">
                                       <button
                                         type="button"
@@ -3523,66 +3348,170 @@ export const OperationsLeads: React.FC = () => {
                                                   </div>
                                                 </div>
                                               </div>
-                                                                                            {/* Assigned Equipment Section for Individual Staff */}
-                                              <div className="flex flex-col sm:flex-row sm:items-start gap-2 mt-1 pt-2 border-t border-zinc-900/50">
-                                                <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider pt-1.5 shrink-0 sm:w-28 hidden sm:block">
-                                                  Equipment
-                                                </div>
+                                              {/* Assigned Equipment Section for Individual Staff */}
+                                              {(() => {
+                                                const eqKey = `${evId}-${roleIdx}`;
+                                                const searchQuery = equipmentSearchQueryByEvent[eqKey] || '';
+                                                const isDropdownOpen = !!isEquipmentDropdownOpenByEvent[eqKey];
+                                                const selectedEquipmentNames = assignedStaff.equipment || [];
+                                                
+                                                const allOtherSelectedEquipments = allocStaff
+                                                  .filter((s: any, idx: number) => {
+                                                    return s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
+                                                  })
+                                                  .flatMap((s: any) => s.equipment || []);
 
-                                                <div className="flex-1 min-w-0 w-full">
-                                                  <EquipmentSelectorDropdown
-                                                    equipment={equipment}
-                                                    selectedEquipmentNames={assignedStaff.equipment || []}
-                                                    otherStaffEquipments={allocStaff
-                                                      .filter((s: any, idx: number) => {
-                                                        return s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
-                                                      })
-                                                      .map((s: any) => ({
-                                                        staffName: s.name || s.staff_name,
-                                                        equipmentNames: s.equipment || []
-                                                      }))}
-                                                    onToggleEquipment={(eqName) => {
-                                                      setEventAllocations((prev: any) => {
-                                                        const existingAlloc = prev[evId] || { staff: [] };
-                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                          if (isTarget) {
-                                                            const currentEq = s.equipment || [];
-                                                            const isSelected = currentEq.includes(eqName);
-                                                            return {
-                                                              ...s,
-                                                              equipment: isSelected 
-                                                                ? currentEq.filter((name: string) => name !== eqName)
-                                                                : [...currentEq, eqName]
-                                                            };
-                                                          }
-                                                          return s;
-                                                        });
-                                                        return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
-                                                      });
-                                                    }}
-                                                    onRemoveEquipment={(eqName) => {
-                                                      setEventAllocations((prev: any) => {
-                                                        const existingAlloc = prev[evId] || { staff: [] };
-                                                        const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
-                                                          const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
-                                                          if (isTarget) {
-                                                            return {
-                                                              ...s,
-                                                              equipment: (s.equipment || []).filter((name: string) => name !== eqName)
-                                                            };
-                                                          }
-                                                          return s;
-                                                        });
-                                                        return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
-                                                      });
-                                                    }}
-                                                    isEquipmentBusy={isEquipmentBusy}
-                                                    currentOrderId={assigningOrderId}
-                                                    targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date || activeOrderInstance?.event_date}
-                                                  />
-                                                </div>
-                                              </div>
+                                                const filteredEquipment = (equipment || []).filter(eq => {
+                                                  if (allOtherSelectedEquipments.includes(eq.equipment_name)) {
+                                                    return false;
+                                                  }
+                                                  const q = searchQuery.toLowerCase();
+                                                  return eq.equipment_name.toLowerCase().includes(q) ||
+                                                         (eq.category || '').toLowerCase().includes(q) ||
+                                                         (eq.serial_number || '').toLowerCase().includes(q);
+                                                });
+                      
+                                                return (
+                                                  <div className="flex flex-col sm:flex-row sm:items-start gap-2 mt-1 pt-2 border-t border-zinc-900/50">
+                                                    
+                                                    <div className="text-[10px] text-zinc-500 font-medium uppercase tracking-wider pt-1 shrink-0 sm:w-28 hidden sm:block">Equipment</div>
+                                                    
+                                                    <div className="flex flex-col flex-1 gap-2 min-w-0 w-full">
+                                                      {/* Selected equipment tags */}
+                                                      {selectedEquipmentNames.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                          {selectedEquipmentNames.map((eqName: string, idx: number) => (
+                                                            <span key={idx} className="inline-flex items-center gap-1 pl-1.5 pr-1 py-0.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] sm:text-[11px] font-mono font-medium rounded border border-amber-500/20 transition-all">
+                                                              <span className="truncate max-w-[120px] sm:max-w-[200px]">⚙️ {eqName}</span>
+                                                              <button
+                                                              type="button"
+                                                              onClick={() => {
+                                                                setEventAllocations((prev: any) => {
+                                                                  const existingAlloc = prev[evId] || { staff: [] };
+                                                                  const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                                    const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                                    if (isTarget) {
+                                                                      return {
+                                                                        ...s,
+                                                                        equipment: (s.equipment || []).filter((name: string) => name !== eqName)
+                                                                      };
+                                                                    }
+                                                                    return s;
+                                                                  });
+                                                                  return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                                });
+                                                              }}
+                                                              className="text-amber-500 hover:text-amber-400 font-bold ml-1 text-xs cursor-pointer focus:outline-none"
+                                                            >
+                                                              ✕
+                                                            </button>
+                                                          </span>
+                                                        ))}
+                                                        </div>
+                                                      )}
+                                                      
+                                                      {/* Search & Select input dropdown */}
+                                                      <div className="relative">
+                                                        <div className="flex gap-1.5">
+                                                          <input
+                                                            type="text"
+                                                            placeholder={selectedEquipmentNames.length === 0 ? "Search to assign equipment..." : "Search equipment..."}
+                                                            value={searchQuery}
+                                                            onFocus={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
+                                                            onChange={(e) => setEquipmentSearchQueryByEvent(prev => ({ ...prev, [eqKey]: e.target.value }))}
+                                                            className="flex-1 min-w-0 bg-zinc-900/50 border border-zinc-800 focus:border-amber-500/50 focus:outline-none rounded py-1 px-2 text-[11px] sm:text-xs text-zinc-100 placeholder-zinc-500 h-7"
+                                                          />
+                                                          {isDropdownOpen ? (
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: false }))}
+                                                              className="px-2 bg-zinc-800 hover:bg-zinc-750 text-zinc-300 text-[11px] sm:text-xs font-mono font-bold rounded border border-zinc-750 transition-colors cursor-pointer shrink-0 h-7"
+                                                            >
+                                                              Close
+                                                            </button>
+                                                          ) : (
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => setIsEquipmentDropdownOpenByEvent(prev => ({ ...prev, [eqKey]: true }))}
+                                                              className="px-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 text-[11px] sm:text-xs font-mono font-bold rounded border border-zinc-800 transition-colors cursor-pointer shrink-0 h-7"
+                                                            >
+                                                              Browse
+                                                            </button>
+                                                          )}
+                                                        </div>
+                                                        {isDropdownOpen && (
+                                                          <div className="absolute left-0 right-0 mt-1 bg-zinc-900 border border-zinc-800 rounded shadow-xl max-h-48 overflow-y-auto z-40 scrollbar-thin divide-y divide-zinc-800/60">
+                                                          {filteredEquipment.length > 0 ? (
+                                                            filteredEquipment.map((eq) => {
+                                                              const isAlreadySelected = selectedEquipmentNames.includes(eq.equipment_name);
+                                                              const evMatch = parentLeadInstance?.events?.find((e: any) => e.id === evId);
+                                                              const targetEventDate = evMatch?.event_date || assignForm.event_date || activeOrderInstance?.event_date;
+                                                              const isBusy = !isAlreadySelected && isEquipmentBusy(eq.equipment_name, assigningOrderId, targetEventDate);
+                                                              return (
+                                                                <div
+                                                                  key={eq.equipment_id}
+                                                                  onClick={() => {
+                                                                    if (isBusy) {
+                                                                      alert(`Equipment "${eq.equipment_name}" is currently assigned to another active order and cannot be assigned.`);
+                                                                      return;
+                                                                    }
+                                                                    setEventAllocations((prev: any) => {
+                                                                      const existingAlloc = prev[evId] || { staff: [] };
+                                                                      const updatedStaff = existingAlloc.staff.map((s: any, idx: number) => {
+                                                                        const isTarget = s.role_index !== undefined ? s.role_index === roleIdx : idx === roleIdx;
+                                                                        if (isTarget) {
+                                                                          const currentEq = s.equipment || [];
+                                                                          return {
+                                                                            ...s,
+                                                                            equipment: isAlreadySelected 
+                                                                              ? currentEq.filter((name: string) => name !== eq.equipment_name)
+                                                                              : [...currentEq, eq.equipment_name]
+                                                                          };
+                                                                        }
+                                                                        return s;
+                                                                      });
+                                                                      return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
+                                                                    });
+                                                                  }}
+                                                                  className={`flex items-center justify-between p-3 cursor-pointer transition-colors text-xs text-left ${
+                                                                    isAlreadySelected ? 'bg-amber-500/5 hover:bg-amber-500/10' : isBusy ? 'opacity-60 hover:bg-zinc-850' : 'hover:bg-zinc-855'
+                                                                  }`}
+                                                                >
+                                                                  <div className="space-y-0.5">
+                                                                    <div className="font-bold text-white flex items-center gap-1.5">
+                                                                      <span>⚙️ {eq.equipment_name}</span>
+                                                                      <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-zinc-800 border border-zinc-700 text-zinc-400 uppercase font-mono">
+                                                                        {eq.category}
+                                                                      </span>
+                                                                      {isBusy && (
+                                                                        <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-rose-950/80 border border-rose-800 text-rose-300 font-mono font-semibold">
+                                                                          Busy
+                                                                        </span>
+                                                                      )}
+                                                                    </div>
+                                                                  </div>
+                                                                  <div className="flex items-center gap-2">
+                                                                    <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[10px] font-bold ${
+                                                                      isAlreadySelected ? 'bg-amber-500 border-amber-500 text-black' : isBusy ? 'border-rose-800 text-rose-500' : 'border-zinc-700'
+                                                                    }`}>
+                                                                      {isAlreadySelected ? '✓' : ''}
+                                                                    </span>
+                                                                  </div>
+                                                                </div>
+                                                              );
+                                                            })
+                                                          ) : (
+                                                            <div className="p-4 text-center text-xs text-zinc-500 italic">
+                                                              No equipment found matching "{searchQuery}"
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                  </div>
+                                                );
+                                              })()}
                                             </div>
 
                                               {/* Validation message if missing */}
@@ -3830,41 +3759,8 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
-                    const findHistoryForModal = (stages: string[]) => {
-                      const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
-                      const orderId = selectedEquipmentStatus.orderId;
-                      const eventId = selectedEquipmentStatus.eventId;
-                      
-                      if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
-                      const matches = leadEquipmentHistory.filter(h => {
-                        if (orderId && h.order_id && h.order_id !== orderId) return false;
-                        let parsed: any = {};
-                        if (h.remarks) {
-                          try { parsed = JSON.parse(h.remarks); } catch(e) {}
-                        }
-                        const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-                        if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
-                        if (eventId && parsed.event_id && eventId !== 'gen' && parsed.event_id !== 'gen' && parsed.event_id !== eventId) return false;
-                        
-                        const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
-                        const eqName = (h.equipment_name || '').toLowerCase();
-                        return stages.some(s => {
-                          const sNorm = s.toLowerCase();
-                          return eqStatus.includes(sNorm) || eqName.includes(sNorm);
-                        });
-                      });
-                      
-                      const withPhoto = matches.find(m => {
-                        const meta = getRecordMeta(m);
-                        return !!meta.url;
-                      });
-                      return withPhoto || matches[0] || null;
-                    };
-
-                    const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received']);
-                    const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return']);
-                    const recMeta = getRecordMeta(recRecord);
-                    const handMeta = getRecordMeta(handRecord);
+                    const recMeta = getRecordMeta(selectedEquipmentStatus.eqReceived);
+                    const handMeta = getRecordMeta(selectedEquipmentStatus.eqHandover);
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
@@ -4352,8 +4248,7 @@ export const OperationsLeads: React.FC = () => {
                     // Save Consolidated Link & update operation status
                     await pushUpdate('operations', 'order_id', receivingFootageOrderId, {
                       consolidated_drive_link: consolidatedDriveLink,
-                      Consolidated_Drive_Link: consolidatedDriveLink,
-                      raw_footage_drive_link: consolidatedDriveLink,
+                      raw_footage_drive_link: rawFootageLink || consolidatedDriveLink,
                       event_status: 'Verified Footage',
                       remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${new Date().toLocaleDateString()}`,
                       updated_by: currentUserName || 'Operations Manager'
@@ -4362,7 +4257,7 @@ export const OperationsLeads: React.FC = () => {
                     // Call confirmRawFootageReceived to move to Verified Footage and Production
                     await confirmRawFootageReceived(
                       receivingFootageOrderId,
-                      consolidatedDriveLink,
+                      rawFootageLink || consolidatedDriveLink,
                       'Google Drive',
                       `Verified Footage with Consolidated Link: ${consolidatedDriveLink}`,
                       undefined,
@@ -4719,7 +4614,7 @@ export const OperationsLeads: React.FC = () => {
                           </h4>
                           {members[0] && (
                             <span className="text-[10px] font-mono text-zinc-500">
-                              {formatDateDDMMYY(members[0].event_date)}
+                              {members[0].event_date}
                             </span>
                           )}
                         </div>
@@ -4731,7 +4626,6 @@ export const OperationsLeads: React.FC = () => {
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>
                                 <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Assigned Task</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Task Status</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment Status</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Event Images</th>
                                 <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Raw Footage</th>
@@ -4743,64 +4637,48 @@ export const OperationsLeads: React.FC = () => {
                                 const normEvName = (evName || '').trim().toLowerCase();
                                 const memberEvId = member.event_id;
 
-                                const rowEqKey = `${ord.order_id}-${memberEvId || 'gen'}-${member.staff_name}-${mIdx}`;
-                                const isEqOpen = openEquipmentDropdownKey === rowEqKey;
-
                                 const getRecordForStage = (stages: string[], equipName?: string) => {
                                   if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
-                                  const matches = leadEquipmentHistory.filter(h => {
-                                    if (h.order_id && h.order_id !== ord.order_id && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
-                                    if (!h.order_id && h.lead_id && ord.lead_id && h.lead_id !== ord.lead_id) return false;
+                                  return leadEquipmentHistory.find(h => {
+                                    if (h.order_id && h.order_id !== ord.order_id) return false;
                                     
                                     let parsed: any = {};
                                     if (h.remarks) {
                                       try { parsed = JSON.parse(h.remarks); } catch(e) {}
                                     }
 
-                                    const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-                                    if (!retBy || !normStaffName || (retBy !== normStaffName && !normStaffName.includes(retBy) && !retBy.includes(normStaffName))) {
-                                      return false;
-                                    }
+                                    const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
+                                    if (retBy && retBy !== normStaffName) return false;
 
                                     const hEventId = parsed.event_id;
                                     const hEventName = parsed.event_name;
-                                    const hProofType = (parsed.proof_type || '').toLowerCase();
+                                    const hProofType = parsed.proof_type;
+                                    const hPhotoUrl = parsed.photo_url || h.photo_url;
                                     
                                     // Match event Id strictly if both exist and neither is 'gen'
-                                    if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) {
-                                      if (!normEvName || !hEventName || (hEventName.trim().toLowerCase() !== normEvName && normEvName !== 'general event' && hEventName.trim().toLowerCase() !== 'general event')) {
-                                        return false;
-                                      }
+                                    if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) return false;
+                                    
+                                    // If we don't have matching event IDs, we can try matching by name
+                                    if (!memberEvId || !hEventId || hEventId === 'gen' || memberEvId === 'gen') {
+                                      if (normEvName && hEventName && hEventName.trim().toLowerCase() !== normEvName && normEvName !== 'general event' && hEventName.trim().toLowerCase() !== 'general event') return false;
                                     }
                                     
-                                    const eqName = (h.equipment_name || '').toLowerCase();
-                                    const eqStatus = (h.equipment_status || hProofType || '').toLowerCase().trim();
-
-                                    if (equipName && eqName.includes(equipName.toLowerCase())) {
+                                    if (equipName && h.equipment_name && h.equipment_name === equipName) {
                                       return true; 
                                     }
 
-                                    const stageMatch = stages.some(s => {
-                                      const sNorm = s.toLowerCase();
-                                      return eqStatus === sNorm || eqStatus.includes(sNorm) || eqName.includes(sNorm) || hProofType.includes(sNorm);
-                                    });
+                                    const eqStatus = (h.equipment_status || hProofType || '').trim();
+                                    const stageMatch = stages.some(s => s.toLowerCase() === eqStatus.toLowerCase());
+                                    if (!stageMatch) return false;
 
-                                    return stageMatch;
+                                    return true;
                                   });
-
-                                  if (matches.length === 0) return null;
-                                  // Prioritize record with uploaded photo
-                                  const withPhoto = matches.find(m => {
-                                    const meta = getRecordMeta(m);
-                                    return !!meta.url;
-                                  });
-                                  return withPhoto || matches[0];
                                 };
 
-                                const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof', 'Asset Collection', 'Received', 'Equipment Received / Asset Picture'], 'Asset Collection');
-                                const evStart = getRecordForStage(['Event Start', 'Event Started', 'Event Start Photo Proof'], 'Event Start');
-                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof'], 'Event Completion');
-                                const eqHandover = getRecordForStage(['Equipment Handover', 'Equipment Handover Photo Proof', 'Equipment Handover Completed', 'Footage Handover', 'Asset Return Photo Proof', 'Handover', 'Returned'], 'Equipment Handover');
+                                const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof'], 'Asset Collection Photo Proof');
+                                const evStart = getRecordForStage(['Event Start', 'Event Started', 'Event Start Photo Proof'], 'Event Start Photo Proof');
+                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof'], 'Event Completion Photo Proof');
+                                const eqHandover = getRecordForStage(['Equipment Handover', 'Equipment Handover Photo Proof'], 'Equipment Handover Photo Proof');
 
                                 // 1. Real-time individual staff status for this event (Event Workflow)
                                 const rawTaskStatus = getStaffTaskStatus(ord.order_id, memberEvId, evIdx, member.staff_name, ord);
@@ -4835,38 +4713,12 @@ export const OperationsLeads: React.FC = () => {
                                   );
                                 }
 
-                                // 2. Equipment Resolution & Status
-                                let effectiveAssignedEq = member.assigned_equipment && member.assigned_equipment.length > 0 ? [...member.assigned_equipment] : [];
-
-                                // Filter out invalid/empty placeholder names
-                                effectiveAssignedEq = effectiveAssignedEq.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
-
-                                const hasEqAssigned = effectiveAssignedEq.length > 0;
-
-                                let equipmentStatusText = hasEqAssigned ? 'Assigned' : 'No Equipment Assigned';
+                                // 2. Equipment Status Text
+                                const hasEqAssigned = member.assigned_equipment && member.assigned_equipment.length > 0;
+                                let equipmentStatusText = hasEqAssigned ? 'Assigned' : 'Not Assigned';
                                 if (hasEqAssigned) {
-                                  const hasHandoverPhoto = eqHandover && getRecordMeta(eqHandover).url;
-                                  const isHandoverDone = eqHandover && (
-                                    hasHandoverPhoto || 
-                                    eqHandover.equipment_status?.toLowerCase().includes('handover') || 
-                                    eqHandover.equipment_status?.toLowerCase().includes('returned') ||
-                                    eqHandover.equipment_status === 'Equipment Handover Completed'
-                                  );
-
-                                  const hasReceivedPhoto = assetCollection && getRecordMeta(assetCollection).url;
-                                  const isReceivedDone = assetCollection && (
-                                    hasReceivedPhoto || 
-                                    assetCollection.equipment_status?.toLowerCase().includes('received') ||
-                                    assetCollection.equipment_status === 'Equipment Received'
-                                  );
-
-                                  if (isHandoverDone) {
-                                    equipmentStatusText = hasHandoverPhoto ? '✅ Handed Over' : 'Assigned / Handed Over';
-                                  } else if (isReceivedDone) {
-                                    equipmentStatusText = hasReceivedPhoto ? '✅ Received' : 'Assigned / Received';
-                                  } else {
-                                    equipmentStatusText = 'Assigned';
-                                  }
+                                  if (eqHandover && getRecordMeta(eqHandover).url) equipmentStatusText = '✅ Handed Over';
+                                  else if (assetCollection && getRecordMeta(assetCollection).url) equipmentStatusText = '✅ Received';
                                 }
 
                                 // 3. Event Image Status Text
@@ -4940,38 +4792,23 @@ export const OperationsLeads: React.FC = () => {
 
                                 return (
                                   <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
-                                    {/* 1. Staff Name */}
                                     <td className="py-3 px-3.5 font-bold text-white font-sans whitespace-nowrap">
                                       {member.staff_name}
                                     </td>
-
-                                    {/* 2. Assigned Task */}
+                                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                                      {statusBadge}
+                                    </td>
                                     <td className="py-3 px-3.5 font-sans whitespace-nowrap">
                                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-bold text-xs">
                                         {formatQtyItem(member.assigned_task || member.staff_role)}
                                       </span>
                                     </td>
-
-                                    {/* 3. Task Status */}
-                                    <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                                      {statusBadge}
-                                    </td>
-
-                                    {/* 4. Equipment Column (Showing assigned equipment) */}
-                                    <td className="py-3 px-3.5 text-center whitespace-nowrap relative">
-                                      <EquipmentAssignedCell 
-                                        equipmentList={effectiveAssignedEq} 
-                                        equipmentStatusText={equipmentStatusText} 
-                                      />
-                                    </td>
-
-                                    {/* 5. Equipment Status */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       {hasEqAssigned ? (
                                         <span 
                                           onClick={() => setSelectedEquipmentStatus({ 
                                             staffName: member.staff_name, 
-                                            assignedEquipment: effectiveAssignedEq.length > 0 ? effectiveAssignedEq : (member.assigned_equipment || []),
+                                            assignedEquipment: member.assigned_equipment || [],
                                             orderId: ord.order_id,
                                             eventId: memberEvId,
                                             eventName: member.event_name,
@@ -4979,18 +4816,15 @@ export const OperationsLeads: React.FC = () => {
                                             eqHandover 
                                           })}
                                           className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
-                                          title="Click to view equipment verification images"
                                         >
                                           {equipmentStatusText}
                                         </span>
                                       ) : (
                                         <span className="text-zinc-500 font-semibold text-xs font-mono">
-                                          No Equipment Assigned
+                                          Not Assigned
                                         </span>
                                       )}
                                     </td>
-
-                                    {/* 6. Event Images */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <span 
                                         onClick={() => setSelectedEventImages({ staffName: member.staff_name, assetCollection, evStart, evEnd })}
@@ -4999,8 +4833,6 @@ export const OperationsLeads: React.FC = () => {
                                         {eventImageStatusText}
                                       </span>
                                     </td>
-
-                                    {/* 7. Raw Footage */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       {rawFootageLink ? (
                                         <div className="flex flex-col items-center gap-1.5">
@@ -5139,7 +4971,7 @@ export const OperationsLeads: React.FC = () => {
                         <div className="w-px h-6 bg-zinc-800" />
                         <div className="flex flex-col">
                            <span className="text-[9px] text-zinc-500 font-mono">TIME</span>
-                           <span className="text-[11px] text-zinc-300 font-mono font-bold">{r.time !== 'N/A' ? formatTime12Hour(r.time) : 'N/A'}</span>
+                           <span className="text-[11px] text-zinc-300 font-mono font-bold">{r.time}</span>
                         </div>
                       </div>
                     </div>

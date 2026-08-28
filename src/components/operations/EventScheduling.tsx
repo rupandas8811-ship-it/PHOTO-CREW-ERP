@@ -4,8 +4,6 @@ import {
   Calendar, Clock, User, Compass, Server, MapPin, AlertCircle, RefreshCw, CheckCircle2
 } from 'lucide-react';
 import { CurrentStage } from '../../types';
-import { formatDateDDMMYY, formatTime12Hour, convertTimeToDbFormat } from '../../utils';
-import { ReportingTimeSelector } from './ReportingTimeSelector';
 
 export const EventScheduling: React.FC = () => {
   const { currentRole, orders, operations, assignOperations } = useRole();
@@ -38,7 +36,7 @@ export const EventScheduling: React.FC = () => {
         drone_operator_assigned: op?.drone_operator_assigned || 'None',
         assistant_assigned: op?.assistant_assigned || 'None',
         equipment_kit: op?.equipment_kit || 'Standard Kit',
-        reporting_time: convertTimeToDbFormat(reportingTime),
+        reporting_time: reportingTime,
         remarks: remarks || op?.remarks || '',
         current_stage: 'Assigned Crew' as CurrentStage
       });
@@ -67,7 +65,7 @@ export const EventScheduling: React.FC = () => {
       setRemarks('');
     } else {
       // Edit Schedule: loads existing!
-      setReportingTime(time ? formatTime12Hour(time) : '');
+      setReportingTime(time || '');
       setRemarks(rem || '');
     }
   };
@@ -75,10 +73,10 @@ export const EventScheduling: React.FC = () => {
   useEffect(() => {
     if (schedulingId) {
       setTimeout(() => {
-        const formEl = document.querySelector('.reporting-time-select');
+        const formEl = document.querySelector('input[type="time"]');
         if (formEl) {
           formEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          (formEl as HTMLSelectElement).focus();
+          (formEl as HTMLInputElement).focus();
         }
       }, 150);
     }
@@ -124,7 +122,7 @@ export const EventScheduling: React.FC = () => {
                         <Calendar className="w-3.5 h-3.5 text-zinc-550" />
                         <span>Date Lock</span>
                       </div>
-                      <div className="font-semibold text-zinc-200">{formatDateDDMMYY(ord.event_date)}</div>
+                      <div className="font-semibold text-zinc-200">{ord.event_date}</div>
                     </div>
                     <div className="space-y-1">
                       <div className="text-[9px] uppercase tracking-wider text-zinc-455 flex items-center gap-1">
@@ -132,7 +130,7 @@ export const EventScheduling: React.FC = () => {
                         <span>Reporting</span>
                       </div>
                       <div className="font-semibold text-zinc-200">
-                        {op?.reporting_time ? formatTime12Hour(op.reporting_time) : 'Unassigned'}
+                        {op?.reporting_time ? `${op.reporting_time} AM` : 'Unassigned'}
                       </div>
                     </div>
                   </div>
@@ -184,10 +182,11 @@ export const EventScheduling: React.FC = () => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div className="space-y-1">
                             <label className="text-[9px] uppercase font-mono text-zinc-450 block">Reporting lock</label>
-                            <ReportingTimeSelector
+                            <input
+                              type="time"
                               value={reportingTime}
-                              onChange={(val) => setReportingTime(val)}
-                              className="w-full"
+                              onChange={(e) => setReportingTime(e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs text-white"
                             />
                           </div>
                           <div className="space-y-1">

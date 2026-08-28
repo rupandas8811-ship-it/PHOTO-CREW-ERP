@@ -234,8 +234,7 @@ interface RoleContextType {
       event_name?: string;
       task_status?: string;
       assignment_status?: string;
-    }[],
-    targetStage?: CurrentStage
+    }[]
   ) => Promise<void>;
 
   specialities: ProductionSpeciality[];
@@ -1045,34 +1044,22 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           equipment_kit: '',
           reporting_time: o.reporting_time || '08:00',
           event_status: o.current_stage,
-          updated_by: 'System',
-          consolidated_drive_link: (o as any).consolidated_drive_link || o.raw_footage_link || '',
-          Consolidated_Drive_Link: (o as any).consolidated_drive_link || o.raw_footage_link || '',
-          raw_footage_drive_link: o.raw_footage_link || ''
+          updated_by: 'System'
         });
       }
     });
     return list.map(op => {
       const ord = augmentedOrders.find(o => o.order_id === op.order_id);
-      const rf = rawFootage.find(f => f.order_id === op.order_id || f.tracking_id === op.order_id);
-      const linkFallback = (ord as any)?.consolidated_drive_link || ord?.raw_footage_link || rf?.server_path || '';
-      const finalConsolidatedLink = op.consolidated_drive_link || op.Consolidated_Drive_Link || linkFallback || '';
       if (ord) {
         return {
           ...op,
           event_status: ord.current_stage,
-          reporting_time: ord.reporting_time || op.reporting_time,
-          consolidated_drive_link: finalConsolidatedLink,
-          Consolidated_Drive_Link: finalConsolidatedLink
+          reporting_time: ord.reporting_time || op.reporting_time
         };
       }
-      return {
-        ...op,
-        consolidated_drive_link: finalConsolidatedLink,
-        Consolidated_Drive_Link: finalConsolidatedLink
-      };
+      return op;
     });
-  }, [operations, augmentedOrders, rawFootage]);
+  }, [operations, augmentedOrders]);
 
   const augmentedProduction = useMemo(() => {
     const list = [...production];
@@ -1086,49 +1073,24 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!prodExists) {
         const parentLeadForO = leads.find(l => l.lead_id === o.lead_id);
         const defaultTargetDate = parentLeadForO?.delivery_target_date || '';
-        const opForO = operations.find(op => op.order_id === o.order_id);
-        const rfForO = rawFootage.find(rf => rf.order_id === o.order_id || rf.tracking_id === o.order_id);
-        
-        // Helper to extract verified link from notes
-        const extractVerifiedFromText = (text?: string | null): string => {
-          if (!text || typeof text !== 'string') return '';
-          const m = text.match(/Verified\s+Footage\s+with\s+Consolidated\s+Link:\s*(https?:\/\/[^\s\n\r"']+)/i) ||
-                    text.match(/Consolidated\s+(?:Drive\s+)?Link:\s*(https?:\/\/[^\s\n\r"']+)/i);
-          return m ? m[1].trim() : '';
-        };
-
-        const link = opForO?.consolidated_drive_link || 
-                     opForO?.Consolidated_Drive_Link || 
-                     extractVerifiedFromText(opForO?.remarks) || 
-                     extractVerifiedFromText(opForO?.upload_notes_remarks) || 
-                     extractVerifiedFromText(rfForO?.upload_notes) || 
-                     (o as any).consolidated_drive_link || 
-                     opForO?.raw_footage_drive_link || 
-                     rfForO?.server_path || 
-                     o.raw_footage_link || '';
-
         list.push({
           production_id: `PRD-${o.lead_id}`,
           tracking_id: o.order_id,
           order_id: o.order_id,
           lead_id: o.lead_id,
           editor_assigned: parentLeadForO?.assigned_editor || 'Unassigned',
-          raw_footage_location: link,
-          final_consolidated_drive_link: link,
-          consolidated_drive_link: link,
+          raw_footage_location: '',
           editing_status: (parentLeadForO?.current_status || parentLeadForO?.status || o.current_stage) as any,
           remarks: '',
           project_priority: 'Medium',
           target_delivery_date: defaultTargetDate,
           expected_delivery_date: defaultTargetDate
-        } as any);
+        });
       }
     });
     return list.map(p => {
       const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id || o.order_id === (p as any).order_id || o.lead_id === (p as any).lead_id);
       const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id) || l.lead_id === (p as any).lead_id);
-      const op = operations.find(o => (ord && o.order_id === ord.order_id) || o.order_id === p.tracking_id || (p as any).order_id === o.order_id);
-      const rf = rawFootage.find(f => (ord && f.order_id === ord.order_id) || f.order_id === p.tracking_id || f.tracking_id === p.tracking_id);
       
       const leadStatus = parentLead?.current_status || parentLead?.status;
       const leadEditor = parentLead?.assigned_editor;
@@ -1136,36 +1098,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const leadTargetDate = parentLead?.delivery_target_date;
 
       let updatedP = { ...p };
-
-      const extractVerifiedFromText = (text?: string | null): string => {
-        if (!text || typeof text !== 'string') return '';
-        const m = text.match(/Verified\s+Footage\s+with\s+Consolidated\s+Link:\s*(https?:\/\/[^\s\n\r"']+)/i) ||
-                  text.match(/Consolidated\s+(?:Drive\s+)?Link:\s*(https?:\/\/[^\s\n\r"']+)/i);
-        return m ? m[1].trim() : '';
-      };
-
-      const verifiedFromNotes = extractVerifiedFromText(p.project_notes) || 
-                                extractVerifiedFromText(p.remarks) || 
-                                extractVerifiedFromText(op?.remarks) || 
-                                extractVerifiedFromText(op?.upload_notes_remarks) || 
-                                extractVerifiedFromText(rf?.upload_notes);
-
-      const resolvedLink = verifiedFromNotes ||
-                           op?.consolidated_drive_link || 
-                           op?.Consolidated_Drive_Link || 
-                           (p as any).final_consolidated_drive_link || 
-                           (p as any).consolidated_drive_link || 
-                           (ord as any)?.consolidated_drive_link ||
-                           p.raw_footage_location || 
-                           op?.raw_footage_drive_link || 
-                           rf?.server_path || 
-                           ord?.raw_footage_link || '';
-
-      if (resolvedLink) {
-        (updatedP as any).final_consolidated_drive_link = resolvedLink;
-        (updatedP as any).consolidated_drive_link = resolvedLink;
-        updatedP.raw_footage_location = resolvedLink;
-      }
 
       if (!p.editing_status || p.editing_status === 'Pending') {
         if (leadStatus) {
@@ -1188,7 +1120,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return updatedP;
     });
-  }, [production, augmentedOrders, leads, operations, rawFootage]);
+  }, [production, augmentedOrders, leads]);
 
   const augmentedPayments = useMemo(() => {
     const list = [...payments];
@@ -1787,34 +1719,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           if (resJson && resJson.success) {
             console.log(`[pushUpdate Proxy SUCCESS] for ${table}:`, resJson.data);
             updateDiagnosticMetric('update', 'ok');
-            if (table === 'operations') {
-              setOperations(prev => {
-                let found = false;
-                const updated = prev.map(op => {
-                  if (op.order_id === finalMatchValue || op.operation_id === finalMatchValue) {
-                    found = true;
-                    return { ...op, ...sanitized };
-                  }
-                  return op;
-                });
-                if (!found && matchColumn === 'order_id') {
-                  return [...updated, {
-                    operation_id: `OP-${finalMatchValue}`,
-                    order_id: finalMatchValue,
-                    photographer_assigned: 'Unassigned',
-                    videographer_assigned: 'Unassigned',
-                    drone_operator_assigned: 'Unassigned',
-                    assistant_assigned: 'Unassigned',
-                    equipment_kit: '',
-                    reporting_time: '08:00',
-                    event_status: 'Completed',
-                    updated_by: currentUserName || 'System',
-                    ...sanitized
-                  }];
-                }
-                return updated;
-              });
-            }
             if (table === 'editor_assignments') {
               const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link;
               setEditorAssignments(prev => {
@@ -2341,14 +2245,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             const teamData = l.Team_member || l.Team_Members || l.team_members || l.Team_members || l.team_member || '';
             const finalQuoteAmt = l.Final_Quotation_Amount ?? l.final_quotation_amount ?? l.final_amount ?? null;
             const finalPkgAmt = l.Final_Package_Amount ?? l.final_package_amount ?? finalQuoteAmt;
-            const cleanLostReason = l.Lost_Reason || l.lost_reason || l.LostReason || l.lostReason || '';
-            const cleanLostNotes = l.Lost_Notes || l.lost_notes || l.LostNotes || l.lostNotes || '';
             return { 
               ...l, 
-              Lost_Reason: cleanLostReason,
-              lost_reason: cleanLostReason,
-              Lost_Notes: cleanLostNotes,
-              lost_notes: cleanLostNotes,
               Final_Quotation_Amount: finalQuoteAmt !== null && finalQuoteAmt !== undefined && !isNaN(Number(finalQuoteAmt)) ? Number(finalQuoteAmt) : null,
               Final_Package_Amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : null,
               final_package_amount: finalPkgAmt !== null && finalPkgAmt !== undefined && !isNaN(Number(finalPkgAmt)) ? Number(finalPkgAmt) : undefined,
@@ -3650,12 +3548,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
     
     if (normalizedStatus === 'Lost Lead') {
-      const reasonVal = callNotes || '';
-      const notesVal = negotiationNotes || '';
-      updatesPayload["Lost_Reason"] = reasonVal;
-      updatesPayload["lost_reason"] = reasonVal;
-      updatesPayload["Lost_Notes"] = notesVal;
-      updatesPayload["lost_notes"] = notesVal;
+      updatesPayload["Lost_Reason"] = callNotes; // Lost Reason is usually passed via callNotes or negotiationNotes
+      updatesPayload["Lost_Notes"] = negotiationNotes || callNotes;
     }
 
     const res = await pushUpdate('leads', 'lead_id', leadId, updatesPayload);
@@ -3711,12 +3605,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updated_at: timestamp
           };
           if (normalizedStatus === 'Lost Lead') {
-             const reasonVal = callNotes || '';
-             const notesVal = negotiationNotes || '';
-             (updatedLd as any).Lost_Reason = reasonVal;
-             (updatedLd as any).lost_reason = reasonVal;
-             (updatedLd as any).Lost_Notes = notesVal;
-             (updatedLd as any).lost_notes = notesVal;
+             (updatedLd as any).Lost_Reason = callNotes;
+             (updatedLd as any).Lost_Notes = negotiationNotes || callNotes;
           }
           return updatedLd;
         }
@@ -4135,9 +4025,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Step 2 & 4: Only allow exact workflow statuses, throw custom error on spelling variations
     const allowedWorkflowStatuses = [
-      'Confirm Order',
       'Order Confirmed',
-      'New Order Received',
       'Operations Assigned',
       'Assigned Crew',
       'Staff Assigned',
@@ -4292,8 +4180,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       event_name?: string;
       task_status?: string;
       assignment_status?: string;
-    }[],
-    targetStage?: CurrentStage
+    }[]
   ) => {
     if (!orderId) {
       throw new Error("Missing Required Field: order_id is null or empty.");
@@ -4479,7 +4366,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (!resOp.success) throw new Error(`Error updating operations record:\n\n${resOp.error}`);
       }
 
-      if (assignments.length > 0 && targetStage && targetStage !== 'Order Confirmed') { // STEP 5: UPDATE LEAD STATUS (Only if targetStage is not 'Order Confirmed')
+      if (assignments.length > 0) { // STEP 5: UPDATE LEAD STATUS
         const currentStage = targetLead.current_status || targetLead.status || 'Order Confirmed';
         const preventDowngradeStages = [
           'Event Started', 'Event Completed', 'Raw Footage Received',
@@ -4491,12 +4378,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         ];
 
         if (!preventDowngradeStages.includes(currentStage)) {
-          const finalStage = targetStage || 'Assigned Crew';
           const statusHist = {
             lead_id: leadId,
             order_id: orderId,
             old_status: currentStage,
-            new_status: finalStage,
+            new_status: 'Event Scheduled',
             changed_by: changedBy,
             changed_by_role: changedByRole,
             remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
@@ -4505,14 +4391,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           await pushInsert('lead_status_history', statusHist);
 
           const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
-            current_status: finalStage, 
-            status: finalStage,
+            current_status: 'Event Scheduled', 
+            status: 'Event Scheduled',
             updated_by: changedBy
           });
           if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
 
           const resOrder = await pushUpdate('orders', 'order_id', orderId, { 
-            current_stage: finalStage, 
+            current_stage: 'Event Scheduled', 
             updated_by: changedBy
           });
           if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);
@@ -5174,58 +5060,29 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       throw new Error("Failed to update lead status: " + rLead?.error);
     }
 
-    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists, and store raw footage upload notes/remarks and final consolidated link.
+    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists, and store raw footage upload notes/remarks.
     await pushUpdate('operations', 'order_id', orderId, { 
       event_status: 'Completed',
       Upload_Notes_Remarks: uploadNotes || '',
       upload_notes_remarks: uploadNotes || '',
       Raw_Footage_Drive_Link: footageLink || '',
-      raw_footage_drive_link: footageLink || '',
-      Consolidated_Drive_Link: footageLink || '',
-      consolidated_drive_link: footageLink || ''
+      raw_footage_drive_link: footageLink || ''
     });
 
     // Directly update local state for operations
-    setOperations(prev => {
-      let found = false;
-      const updated = prev.map(op => {
-        if (op.order_id === orderId) {
-          found = true;
-          return {
-            ...op,
-            event_status: 'Completed',
-            Upload_Notes_Remarks: uploadNotes || '',
-            upload_notes_remarks: uploadNotes || '',
-            Raw_Footage_Drive_Link: footageLink || op.raw_footage_drive_link || '',
-            raw_footage_drive_link: footageLink || op.raw_footage_drive_link || '',
-            Consolidated_Drive_Link: footageLink || (op as any).Consolidated_Drive_Link || '',
-            consolidated_drive_link: footageLink || op.consolidated_drive_link || ''
-          };
-        }
-        return op;
-      });
-      if (!found) {
-        return [...updated, {
-          operation_id: `OP-${orderId}`,
-          order_id: orderId,
-          photographer_assigned: 'Unassigned',
-          videographer_assigned: 'Unassigned',
-          drone_operator_assigned: 'Unassigned',
-          assistant_assigned: 'Unassigned',
-          equipment_kit: '',
-          reporting_time: '08:00',
+    setOperations(prev => prev.map(op => {
+      if (op.order_id === orderId) {
+        return {
+          ...op,
           event_status: 'Completed',
-          updated_by: currentUserName || 'Operations Team',
           Upload_Notes_Remarks: uploadNotes || '',
           upload_notes_remarks: uploadNotes || '',
           Raw_Footage_Drive_Link: footageLink || '',
-          raw_footage_drive_link: footageLink || '',
-          Consolidated_Drive_Link: footageLink || '',
-          consolidated_drive_link: footageLink || ''
-        }];
+          raw_footage_drive_link: footageLink || ''
+        };
       }
-      return updated;
-    });
+      return op;
+    }));
 
     let existingRf = rawFootage.find(f => f.order_id === orderId);
     let trackingId = existingRf?.tracking_id || `TRK-${Math.floor(2012 + Math.random() * 850)}`;

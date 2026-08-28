@@ -1,7 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { DollarSign, X } from 'lucide-react';
-import { formatINR, formatDateDDMMYY } from '../utils';
+import { formatINR } from '../utils';
 
 export const PaymentHistoryModal = ({
   isOpen,
@@ -82,7 +82,7 @@ export const PaymentHistoryModal = ({
                           <td className="py-3 px-4 text-amber-400 font-bold font-mono">{p.order_id || order.orderId}</td>
                           <td className="py-3 px-4 text-zinc-200 font-semibold">{order.customerName}</td>
                           <td className="py-3 px-4 text-zinc-300 font-mono">
-                            {p.payment_date ? formatDateDDMMYY(p.payment_date) : '-'}
+                            {p.payment_date ? new Date(p.payment_date).toLocaleDateString('en-IN') : '-'}
                           </td>
                           <td className="py-3 px-4 text-zinc-300">
                             {p.payment_type || p.Payment_type || '-'}

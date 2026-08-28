@@ -6,12 +6,29 @@ import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../t
 import { supabaseClient } from '../supabaseClient';
 import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } from '../utils/orderStageCalculator';
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
-import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
-import { formatDateDDMMYY, formatTime12Hour } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
   if (!dateStr || dateStr === '—') return '—';
-  return formatDateDDMMYY(dateStr) || '—';
+  try {
+    const raw = dateStr.split('T')[0];
+    const parts = raw.split('-');
+    if (parts.length === 3) {
+      const year = parts[0];
+      const month = parts[1];
+      const day = parts[2];
+      return `${day}/${month}/${year}`;
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+  } catch (e) {
+    // fallback
+  }
+  return dateStr;
 };
 
 const StaffActionDropdown: React.FC<{
@@ -344,24 +361,6 @@ const sortBookingsLatestFirst = (a: any, b: any): number => {
   return String(b.orderId || b.key || '').localeCompare(String(a.orderId || a.key || ''));
 };
 
-// Sort comparator to strictly sort Oldest -> Latest
-const sortBookingsOldestFirst = (a: any, b: any): number => {
-  const timeA = getBookingTimestamp(a);
-  const timeB = getBookingTimestamp(b);
-
-  if (timeA !== timeB) {
-    return timeA - timeB; // Oldest (lower timestamp) on top
-  }
-
-  const createdA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-  const createdB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-  if (createdA !== createdB) {
-    return createdA - createdB;
-  }
-
-  return String(a.orderId || a.key || '').localeCompare(String(b.orderId || b.key || ''));
-};
-
 // Utility for image compression before storage
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -475,8 +474,6 @@ const getBookingProofStatus = (
     }
   });
 
-  const hasEquipment = Boolean(b.equipmentItems && b.equipmentItems.length > 0);
-
   const assetImageUploaded = hasAssetInHistory || 
     (proofObj.equipmentReceivedProofs && proofObj.equipmentReceivedProofs.length > 0) ||
     (proofObj.eventStartProofs && proofObj.eventStartProofs.some(p => (p.equipmentName || '').toLowerCase().includes('asset collection') || (p.equipmentName || '').toLowerCase().includes('equipment received')));
@@ -484,9 +481,7 @@ const getBookingProofStatus = (
   const eventStartImageUploaded = hasStartInHistory ||
     (proofObj.eventStartProofs && proofObj.eventStartProofs.some(p => (p.equipmentName || '').toLowerCase().includes('event start')));
 
-  const isEventStartComplete = hasEquipment 
-    ? Boolean(assetImageUploaded && eventStartImageUploaded) 
-    : Boolean(eventStartImageUploaded);
+  const isEventStartComplete = Boolean(assetImageUploaded && eventStartImageUploaded);
   const isEventComplete = Boolean(hasCompleteInHistory || (proofObj.completeProofs && proofObj.completeProofs.length > 0));
   const isHandoverComplete = Boolean(hasHandoverInHistory || (proofObj.equipmentHandoverProofs && proofObj.equipmentHandoverProofs.length > 0));
 
@@ -498,173 +493,6 @@ const getBookingProofStatus = (
     isHandoverComplete
   };
 };
-
-
-const StaffEventDetailsCell = ({ b }: { b: any }) => {
-  return (
-    <div className="relative">
-      <div className="font-bold text-zinc-100">{b.eventName}</div>
-      <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
-        <span>{formatDateDDMMYY(b.eventDate)}</span>
-        {b.eventStartTime && b.eventStartTime !== 'N/A' && (
-          <>
-            <span className="text-zinc-600">•</span>
-            <span className="text-zinc-400">{formatTime12Hour(b.eventStartTime)}</span>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const StaffEquipmentDetailsCell = ({ b, proofStatus }: { b: any, proofStatus: any }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [coords, setCoords] = useState({ top: 0, left: 0, openUpward: false });
-
-  const hasEquipment = b.equipmentItems && b.equipmentItems.length > 0;
-  
-  if (!hasEquipment) {
-    return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-800/80 text-zinc-400 border border-zinc-700 text-xs font-bold font-mono">
-        Not Assigned
-      </span>
-    );
-  }
-
-  const handleToggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      const popupWidth = 320;
-      const left = Math.min(
-        Math.max(12, rect.left + rect.width / 2 - popupWidth / 2),
-        window.innerWidth - popupWidth - 12
-      );
-      const spaceBelow = window.innerHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      const openUpward = spaceBelow < 280 && spaceAbove > spaceBelow;
-      
-      setCoords({
-        left,
-        top: openUpward ? rect.top - 6 : rect.bottom + 6,
-        openUpward
-      });
-      setIsOpen(true);
-    } else {
-      setIsOpen(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleOutside = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as HTMLElement;
-      if (
-        buttonRef.current &&
-        !buttonRef.current.contains(target) &&
-        !target.closest(`.staff-equipment-details-popup-${b.orderId || b.key}`)
-      ) {
-        setIsOpen(false);
-      }
-    };
-    const handleScrollOrResize = (e: Event) => {
-      const target = e.target as HTMLElement;
-      if (target && target.closest && target.closest(`.staff-equipment-details-popup-${b.orderId || b.key}`)) {
-        return;
-      }
-      setIsOpen(false);
-    };
-    document.addEventListener('mousedown', handleOutside);
-    document.addEventListener('touchstart', handleOutside);
-    window.addEventListener('scroll', handleScrollOrResize, { capture: true, passive: true });
-    window.addEventListener('resize', handleScrollOrResize);
-    return () => {
-      document.removeEventListener('mousedown', handleOutside);
-      document.removeEventListener('touchstart', handleOutside);
-      window.removeEventListener('scroll', handleScrollOrResize, { capture: true });
-      window.removeEventListener('resize', handleScrollOrResize);
-    };
-  }, [isOpen, b.orderId, b.key]);
-
-  const eqStatusText = proofStatus.isHandoverComplete ? 'Handed Over' : proofStatus.assetImageUploaded ? 'Received' : 'Assigned';
-
-  return (
-    <div className="relative">
-      <button 
-        ref={buttonRef}
-        type="button"
-        onClick={handleToggle}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-700/50 bg-zinc-800/40 text-[11px] text-zinc-300 hover:text-white hover:bg-zinc-700/80 hover:border-zinc-600 transition-all font-semibold tracking-wider"
-      >
-        {b.equipmentItems.length} Equipment Assigned 
-        <span className={`transition-transform duration-200 flex items-center justify-center ${isOpen ? 'rotate-180' : ''}`}>▾</span>
-      </button>
-
-      {isOpen && createPortal(
-        <div 
-          className={`staff-equipment-details-popup-${b.orderId || b.key} fixed z-[110] w-[320px] max-w-[95vw] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/80 overflow-hidden transform origin-${coords.openUpward ? 'bottom' : 'top'} animate-in fade-in zoom-in-95 duration-200 flex flex-col`}
-          style={{ 
-            left: coords.left, 
-            ...(coords.openUpward ? { bottom: window.innerHeight - coords.top } : { top: coords.top }),
-            maxHeight: '300px'
-          }}
-        >
-          <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-700/60 flex items-center justify-between shrink-0">
-            <h4 className="text-[11px] font-bold text-white uppercase tracking-wider">Equipment Details</h4>
-            <button onClick={() => setIsOpen(false)} className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-zinc-700/50">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-          
-          <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
-            <div className="space-y-2">
-              {b.equipmentItems.map((e: any, eIdx: number) => (
-                <div key={eIdx} className="flex items-start gap-2 text-sm">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <span className="font-mono font-medium text-white break-words">{e.name}</span>
-                </div>
-              ))}
-            </div>
-            
-            <div className="mt-4 pt-3 border-t border-zinc-800/60">
-              <span className="block text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1.5">Equipment Status</span>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold font-mono">
-                ✓ {eqStatusText}
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-}
-
-const StaffReportingDetailsCell = ({ b }: { b: any }) => {
-  const repDate = b.reportingDate || 'N/A';
-  const repTime = b.reportingTime || 'N/A';
-
-  return (
-    <div className="relative">
-      <div className="text-[11px] text-zinc-300 font-mono flex items-center gap-1.5 flex-wrap">
-        {repDate !== 'N/A' ? (
-          <>
-            <span className="font-bold">{formatDateDDMMYY(repDate)}</span>
-            {repTime !== 'N/A' && (
-              <>
-                <span className="text-zinc-600">•</span>
-                <span className="text-zinc-400 font-medium">{formatTime12Hour(repTime)}</span>
-              </>
-            )}
-          </>
-        ) : (
-          <span className="text-zinc-600">Not set</span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export const StaffModule: React.FC = () => {
   const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead, pushInsert, pushUpdate } = useRole();
@@ -679,7 +507,6 @@ export const StaffModule: React.FC = () => {
 
   // Local state for assignments
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
-  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
   // Local storage cache for individual staff task statuses & photo proofs
   const [staffStatuses, setStaffStatuses] = useState<Record<string, string>>(() => {
@@ -847,162 +674,6 @@ export const StaffModule: React.FC = () => {
   useEffect(() => {
     if (!staffName) return;
 
-    // Robust equipment resolution for staff tasks
-    const resolveAssignedEqListForStaff = (
-      targetStaffName: string, 
-      saObj: any, 
-      evObj: any, 
-      staffIdx: number, 
-      orderIdStr: string, 
-      leadIdStr?: string, 
-      opObj?: any
-    ): { name: string; assetId: string }[] => {
-      const normName = (targetStaffName || '').trim().toLowerCase();
-      if (!normName) return [];
-
-      let eqNames: string[] = [];
-
-      // 1. Direct staff assignment equipment
-      if (saObj) {
-        const saEqRaw = saObj.equipment || saObj.assigned_equipment;
-        if (saEqRaw !== undefined && saEqRaw !== null) {
-          if (Array.isArray(saEqRaw)) {
-            saEqRaw.forEach((item: any) => {
-              if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
-              else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
-                eqNames.push(item.equipment_name || item.name);
-              }
-            });
-          } else if (typeof saEqRaw === 'string') {
-            const str = saEqRaw.trim();
-            if (str) {
-              try {
-                const parsed = JSON.parse(str);
-                if (Array.isArray(parsed)) {
-                  parsed.forEach((item: any) => {
-                    if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
-                    else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
-                      eqNames.push(item.equipment_name || item.name);
-                    }
-                  });
-                } else if (parsed && typeof parsed === 'object') {
-                  const name = parsed.equipment_name || parsed.name || parsed.model;
-                  if (name) eqNames.push(name);
-                } else {
-                  str.split(',').forEach((s: string) => { if (s.trim()) eqNames.push(s.trim()); });
-                }
-              } catch(e) {
-                str.split(',').forEach((s: string) => { if (s.trim()) eqNames.push(s.trim()); });
-              }
-            }
-          }
-        }
-      }
-
-      // 2. Check other staffAssignments strictly for this staff and event
-      if (eqNames.length === 0 && staffAssignments && staffAssignments.length > 0) {
-        const matchedSAs = staffAssignments.filter(s => 
-          (s.order_id === orderIdStr || (leadIdStr && s.lead_id === leadIdStr)) &&
-          s.staff_name && s.staff_name.trim().toLowerCase() === normName &&
-          s.assignment_status !== 'Cancelled' &&
-          (!evObj?.id || !s.event_id || s.event_id === evObj.id)
-        );
-        matchedSAs.forEach(s => {
-          const sEq = s.equipment || s.assigned_equipment;
-          if (sEq) {
-            if (Array.isArray(sEq)) {
-              sEq.forEach((item: any) => {
-                if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
-                else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
-                  eqNames.push(item.equipment_name || item.name);
-                }
-              });
-            } else if (typeof sEq === 'string') {
-              try {
-                const p = JSON.parse(sEq);
-                if (Array.isArray(p)) {
-                  p.forEach((item: any) => {
-                    if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
-                    else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
-                      eqNames.push(item.equipment_name || item.name);
-                    }
-                  });
-                } else {
-                  sEq.split(',').forEach((str: string) => { if (str.trim()) eqNames.push(str.trim()); });
-                }
-              } catch(e) {
-                sEq.split(',').forEach((str: string) => { if (str.trim()) eqNames.push(str.trim()); });
-              }
-            }
-          }
-        });
-      }
-
-      // 3. Check mobilesRaw encoded equipment
-      if (eqNames.length === 0 && evObj?.assigned_staff_mobiles) {
-        const mobilesRaw = evObj.assigned_staff_mobiles;
-        const assignedNames = evObj.assigned_staff_names ? evObj.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-        const resolvedIdx = staffIdx >= 0 ? staffIdx : assignedNames.indexOf(normName);
-
-        if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
-          try {
-            const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
-            const staffEqs = JSON.parse(parts[1]);
-            if (staffEqs && resolvedIdx >= 0 && staffEqs[resolvedIdx] && Array.isArray(staffEqs[resolvedIdx])) {
-              staffEqs[resolvedIdx].forEach((eqStr: string) => {
-                if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim());
-              });
-            }
-          } catch(e) {}
-        } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-          if (assignedNames.length === 1 && (resolvedIdx === 0 || resolvedIdx === -1)) {
-            const parts = mobilesRaw.split(' || EQUIPMENT: ');
-            if (parts[1]) {
-              parts[1].split(',').forEach((s: string) => {
-                if (s.trim()) eqNames.push(s.trim());
-              });
-            }
-          }
-        }
-      }
-
-      // 4. Check leadEquipmentHistory strictly for this staff
-      if (eqNames.length === 0 && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
-        leadEquipmentHistory.forEach(h => {
-          if (h.order_id && h.order_id !== orderIdStr && (!leadIdStr || h.lead_id !== leadIdStr)) return;
-          let parsed: any = {};
-          if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
-          const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-          if (staffMatch && (staffMatch === normName || staffMatch.includes(normName) || normName.includes(staffMatch))) {
-            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection' && !h.equipment_name.includes('Footage')) {
-              eqNames.push(h.equipment_name);
-            }
-          }
-        });
-      }
-
-      // Filter invalid placeholders
-      const cleanNames = eqNames.filter(item => 
-        item && item.trim() && 
-        item.trim().toLowerCase() !== 'none' && 
-        item.trim().toLowerCase() !== 'not assigned' &&
-        item.trim().toLowerCase() !== 'null' &&
-        item.trim().toLowerCase() !== 'undefined'
-      );
-
-      const uniqueNames = Array.from(new Set(cleanNames));
-      return uniqueNames.map(eqStr => {
-        const match = equipment?.find(e => 
-          e.equipment_name?.toLowerCase() === eqStr.toLowerCase() || 
-          e.model?.toLowerCase() === eqStr.toLowerCase()
-        );
-        return {
-          name: eqStr,
-          assetId: match?.equipment_id || match?.serial_number || ('EQ-ASSET-' + Math.floor(1000 + Math.random() * 9000))
-        };
-      });
-    };
-
     const bookings: any[] = [];
 
     const finishedStatuses = [
@@ -1057,7 +728,57 @@ export const StaffModule: React.FC = () => {
               }
               return true;
             });
-            const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, staffIdx, orderId, lead.lead_id, op);
+            let assignedEqItems: { name: string; assetId: string }[] = [];
+            const mobilesRaw = ev.assigned_staff_mobiles || '';
+
+            if (sa && sa.equipment) {
+              const eqList = Array.isArray(sa.equipment) 
+                ? sa.equipment 
+                : (typeof sa.equipment === 'string' ? (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })() : []);
+              
+              assignedEqItems = eqList.filter(Boolean).map((eqStr: string) => {
+                const match = equipment.find(e => 
+                  e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
+                  e.model.toLowerCase() === eqStr.toLowerCase()
+                );
+                return {
+                  name: eqStr,
+                  assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
+                };
+              });
+            } else if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
+              try {
+                const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
+                const staffEqs = JSON.parse(parts[1]);
+                if (staffEqs[staffIdx] && Array.isArray(staffEqs[staffIdx]) && staffEqs[staffIdx].length > 0) {
+                  assignedEqItems = staffEqs[staffIdx].map((eqStr: string) => {
+                    const match = equipment.find(e => 
+                      e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
+                      e.model.toLowerCase() === eqStr.toLowerCase()
+                    );
+                    return {
+                      name: eqStr,
+                      assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
+                    };
+                  });
+                }
+              } catch(e) {}
+            } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
+              if (staffIdx === 0) {
+                const parts = mobilesRaw.split(' || EQUIPMENT: ');
+                const eqList = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+                assignedEqItems = eqList.map(eqStr => {
+                  const match = equipment.find(e => 
+                    e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
+                    e.model.toLowerCase() === eqStr.toLowerCase()
+                  );
+                  return {
+                    name: eqStr,
+                    assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
+                  };
+                });
+              }
+            }
 
             // Role
             const staffObj = staff?.find(s => s.name.toLowerCase() === staffName.toLowerCase());
@@ -1094,7 +815,6 @@ export const StaffModule: React.FC = () => {
                 assignedRole: assignedRole,
                 eventDate: ev.event_date || lead.event_date || 'N/A',
                 eventStartTime: ev.event_start_time || lead.event_time || 'N/A',
-                eventEndDate: ev.event_end_date || ev.event_date || lead.event_date || 'N/A',
                 eventEndTime: ev.event_end_time || 'N/A',
                 reportingDate: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || 'N/A',
                 reportingTime: ev.reporting_time || lead.reporting_time || 'N/A',
@@ -1139,7 +859,23 @@ export const StaffModule: React.FC = () => {
             assignedRole = sa.staff_role;
           }
 
-          const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, null, -1, orderId, lead.lead_id, op);
+          let assignedEqItems: { name: string; assetId: string }[] = [];
+          if (sa && sa.equipment) {
+            const eqList = Array.isArray(sa.equipment) 
+              ? sa.equipment 
+              : (typeof sa.equipment === 'string' ? (() => { try { const p = JSON.parse(sa.equipment); return Array.isArray(p) ? p : [sa.equipment]; } catch(e) { return sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean); } })() : []);
+            
+            assignedEqItems = eqList.filter(Boolean).map((eqStr: string) => {
+              const match = equipment.find(e => 
+                e.equipment_name.toLowerCase() === eqStr.toLowerCase() || 
+                e.model.toLowerCase() === eqStr.toLowerCase()
+              );
+              return {
+                name: eqStr,
+                assetId: match?.equipment_id || match?.serial_number || `EQ-ASSET-${Math.floor(1000 + Math.random() * 9000)}`
+              };
+            });
+          }
 
           const uniqueKey = `${orderId}_gen_${staffName.toLowerCase()}`;
           const fallbackStatus = op?.event_status || 'Assigned Crew';
@@ -1167,8 +903,7 @@ export const StaffModule: React.FC = () => {
               assignedRole: assignedRole,
               eventDate: lead.event_date || 'N/A',
               eventStartTime: lead.event_time || 'N/A',
-              eventEndDate: lead.event_end_date || lead.event_date || 'N/A',
-              eventEndTime: lead.event_end_time || 'N/A',
+              eventEndTime: 'N/A',
               reportingDate: lead.Reporting_date || lead.event_date || 'N/A',
               reportingTime: lead.reporting_time || 'N/A',
               venue: lead.event_location || 'N/A',
@@ -1401,12 +1136,14 @@ export const StaffModule: React.FC = () => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
 
-    const hasEquipment = Boolean(photoModalData?.booking?.equipmentItems && photoModalData.booking.equipmentItems.length > 0);
-
-    // Enforce Event Start ordering rule ONLY if staff has equipment assigned: Must have Asset Collection image before Event Start image
-    if (hasEquipment && photoModalData?.stage === 'Event Start' && (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image')) {
+    // Enforce Event Start ordering rule: Must have Asset Collection image before Event Start image
+    if (photoModalData?.stage === 'Event Start' && (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image')) {
       const hasAssetColl = !!modalPhotos['Asset Collection Photo Proof'] || 
-        !!modalPhotos['Equipment Received / Asset Picture'];
+        !!modalPhotos['Equipment Received / Asset Picture'] ||
+        (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.some((eq: any) => {
+          const k = photoModalData.booking.equipmentItems.length > 1 ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof';
+          return !!modalPhotos[k];
+        }));
 
       if (!hasAssetColl) {
         e.target.value = '';
@@ -1443,40 +1180,32 @@ export const StaffModule: React.FC = () => {
 
     // --- EVENT START WORKFLOW ---
     if (stage === 'Event Start') {
-      const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
-      const isMultiEq = hasEquipment && booking.equipmentItems.length > 1;
-      const assetKeys = hasEquipment ? booking.equipmentItems.map((eq: any) => eq.name) : [];
-      const hasAssetColl = hasEquipment
-        ? (!!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture'])
-        : true;
+      const isMultiEq = booking.equipmentItems && booking.equipmentItems.length > 1;
+      const assetKeys = booking.equipmentItems && booking.equipmentItems.length > 0
+        ? booking.equipmentItems.map((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof')
+        : ['Asset Collection Photo Proof'];
+
+      const hasAssetColl = assetKeys.every((k: string) => !!modalPhotos[k] || !!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture']);
       const hasEventStart = !!modalPhotos['Event Start Photo Proof'] || !!modalPhotos['Event Start Image'];
 
-      if (hasEquipment) {
-        if (!hasAssetColl && hasEventStart) {
-          alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-          showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-          return;
-        }
+      if (!hasAssetColl && hasEventStart) {
+        alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
+        showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
+        return;
+      }
 
-        if (!hasAssetColl && !hasEventStart) {
-          alert("Please upload at least the Equipment Received / Asset Picture.");
-          showToast("⚠️ Please upload at least the Equipment Received / Asset Picture.");
-          return;
-        }
-      } else {
-        if (!hasEventStart) {
-          alert("Please upload the Event Start Image.");
-          showToast("⚠️ Please upload the Event Start Image.");
-          return;
-        }
+      if (!hasAssetColl && !hasEventStart) {
+        alert("Please upload at least the Equipment Received / Asset Picture.");
+        showToast("⚠️ Please upload at least the Equipment Received / Asset Picture.");
+        return;
       }
 
       try {
         setIsSubmitting(true);
         const timestamp = new Date().toISOString();
 
-        // 1. FIRST IMAGE ONLY (Applicable only if staff has equipment): Asset / Equipment Received Image is provided
-        if (hasEquipment && hasAssetColl && !hasEventStart) {
+        // 1. FIRST IMAGE ONLY: Asset / Equipment Received Image is provided
+        if (hasAssetColl && !hasEventStart) {
           const assetProofsToSave: EquipmentProofItem[] = [];
 
           for (const itemKey of assetKeys) {
@@ -1487,7 +1216,7 @@ export const StaffModule: React.FC = () => {
             const finalUrl = await safeUploadImage(rawUrl, fileName);
 
             const eqName = itemKey;
-            const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
+            const assetId = booking.equipmentItems?.find((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` === itemKey : true)?.assetId || 'Asset Collection';
 
             assetProofsToSave.push({
               equipmentName: eqName,
@@ -1565,7 +1294,7 @@ export const StaffModule: React.FC = () => {
             const finalUrl = await safeUploadImage(rawUrl, fileName);
 
             const eqName = itemKey;
-            const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
+            const assetId = booking.equipmentItems?.find((eq: any) => isMultiEq ? `Asset Collection: ${eq.name}` === itemKey : true)?.assetId || 'Asset Collection';
 
             allProofsToSave.push({
               equipmentName: eqName,
@@ -1742,32 +1471,19 @@ export const StaffModule: React.FC = () => {
 
     // --- OTHER STAGES (Event Complete, Equipment Handover, Equipment Received) ---
     let reqItems: { name: string; assetId: string; optional?: boolean }[] = [];
-    const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
-
     if (stage === 'Event Complete') {
       reqItems = [{ name: 'Event Completion Photo Proof', assetId: 'Event Completion' }];
     } else if (stage === 'Equipment Handover') {
-      if (hasEquipment) {
-        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: true }));
-      } else {
-        reqItems = [];
-      }
+      reqItems = [{ name: 'Equipment Handover Photo Proof', assetId: 'Equipment Handover', optional: true }];
     } else if (stage === 'Equipment Received') {
-      if (hasEquipment) {
-        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: false }));
-      } else {
-        reqItems = [];
-      }
+      reqItems = [{ name: 'Asset Collection Photo Proof', assetId: 'Asset Collection' }];
     }
 
     // Validate mandatory photo proofs
     for (const item of reqItems) {
-      if (!item.optional) {
-        const hasPhoto = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
-        if (!hasPhoto) {
-          showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
-          return;
-        }
+      if (!item.optional && !modalPhotos[item.name]) {
+        showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
+        return;
       }
     }
 
@@ -1783,13 +1499,12 @@ export const StaffModule: React.FC = () => {
       const timestamp = new Date().toISOString();
       const uploadedProofs: EquipmentProofItem[] = [];
 
-      const hasHandoverPhoto = stage === 'Equipment Handover' && hasEquipment && (
-        !!modalPhotos['Equipment Handover Photo Proof'] || !!modalPhotos['Asset Return Photo Proof'] ||
-        (booking.equipmentItems && booking.equipmentItems.some((eq: any) => !!modalPhotos[`Equipment Handover: ${eq.name}`]))
+      const hasHandoverPhoto = stage === 'Equipment Handover' && (
+        !!modalPhotos['Equipment Handover Photo Proof'] || !!modalPhotos['Asset Return Photo Proof']
       );
 
       for (const item of reqItems) {
-        const rawUrl = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
+        const rawUrl = modalPhotos[item.name] || (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
         if (rawUrl) {
           const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
           const finalUrl = await safeUploadImage(rawUrl, fileName);
@@ -1805,7 +1520,7 @@ export const StaffModule: React.FC = () => {
 
       const effectiveEquipmentStatus = 
         stage === 'Event Complete' ? 'Event Ended' :
-        stage === 'Equipment Handover' ? (hasEquipment ? (hasHandoverPhoto ? 'Equipment Handover Completed' : 'Equipment Not Handover') : 'Footage Handover Completed') : stage;
+        stage === 'Equipment Handover' ? (hasHandoverPhoto ? 'Equipment Handover Completed' : 'Equipment Not Handover') : stage;
 
       let nextStatus = staffStatuses[booking.key] || 'Assigned Crew';
       if (stage === 'Event Complete') {
@@ -1845,59 +1560,31 @@ export const StaffModule: React.FC = () => {
           await pushInsert('lead_equipment_history', historyRecord);
         }
       } else if (stage === 'Equipment Handover') {
-        if (hasEquipment) {
-          // Record Equipment Not Handover when photo was not uploaded for assigned equipment
-          const historyRecord = {
-            lead_id: booking.leadId || null,
-            order_id: booking.orderId || null,
-            equipment_name: 'Equipment Handover Photo Proof',
-            equipment_status: 'Equipment Not Handover',
-            returned_by: staffName,
-            returned_at: timestamp,
-            remarks: JSON.stringify({
-              asset_id: 'Equipment Handover',
-              proof_type: 'Equipment Handover',
-              staff_name: staffName,
-              photo_url: null,
-              event_id: booking.eventId,
-              event_name: booking.eventName,
-              order_id: booking.orderId,
-              lead_id: booking.leadId,
-              raw_footage_link: modalRawFootageLink || null,
-              uploaded_at: timestamp,
-              uploaded_by: staffName,
-              current_status: nextStatus
-            })
-          };
+        // Record Equipment Not Handover when photo was not uploaded
+        const historyRecord = {
+          lead_id: booking.leadId || null,
+          order_id: booking.orderId || null,
+          equipment_name: 'Equipment Handover Photo Proof',
+          equipment_status: 'Equipment Not Handover',
+          returned_by: staffName,
+          returned_at: timestamp,
+          remarks: JSON.stringify({
+            asset_id: 'Equipment Handover',
+            proof_type: 'Equipment Handover',
+            staff_name: staffName,
+            photo_url: null,
+            event_id: booking.eventId,
+            event_name: booking.eventName,
+            order_id: booking.orderId,
+            lead_id: booking.leadId,
+            raw_footage_link: modalRawFootageLink || null,
+            uploaded_at: timestamp,
+            uploaded_by: staffName,
+            current_status: nextStatus
+          })
+        };
 
-          await pushInsert('lead_equipment_history', historyRecord);
-        } else {
-          // Staff has NO equipment assigned -> Record Footage Handover
-          const historyRecord = {
-            lead_id: booking.leadId || null,
-            order_id: booking.orderId || null,
-            equipment_name: 'Footage Handover',
-            equipment_status: 'Footage Handover Completed',
-            returned_by: staffName,
-            returned_at: timestamp,
-            remarks: JSON.stringify({
-              asset_id: 'Footage Handover',
-              proof_type: 'Footage Handover',
-              staff_name: staffName,
-              photo_url: null,
-              event_id: booking.eventId,
-              event_name: booking.eventName,
-              order_id: booking.orderId,
-              lead_id: booking.leadId,
-              raw_footage_link: modalRawFootageLink || null,
-              uploaded_at: timestamp,
-              uploaded_by: staffName,
-              current_status: nextStatus
-            })
-          };
-
-          await pushInsert('lead_equipment_history', historyRecord);
-        }
+        await pushInsert('lead_equipment_history', historyRecord);
       }
 
       // If stage is Equipment Handover, explicitly mark every assigned equipment item as returned
@@ -2308,107 +1995,92 @@ export const StaffModule: React.FC = () => {
             })}
           </div>
 
-          {/* Selected Date Events Popup (Rendered as Modal via createPortal) */}
-          {calendarModalDate && createPortal(
-            <div 
-              className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200"
-              onClick={() => setCalendarModalDate(null)}
-            >
-              <div 
-                className="bg-zinc-900 border border-zinc-800 w-full max-w-4xl rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between p-4 md:p-6 border-b border-zinc-800/80 shrink-0">
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
-                      EVENT DETAILS
-                    </span>
-                    <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
-                      {calendarModalDate}
-                    </h4>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono text-zinc-400">
-                      {calendarModalEvents.length} Event(s) Scheduled
-                    </span>
-                    <button
-                      onClick={() => setCalendarModalDate(null)}
-                      className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="p-4 md:p-6 overflow-y-auto">
-                  {calendarModalEvents.length === 0 ? (
-                    <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
-                      No events assigned on {calendarModalDate}.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
-                        <table className="w-full text-left border-collapse min-w-[700px]">
-                          <thead>
-                            <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
-                              <th className="p-3.5 pl-4">Event Name</th>
-                              <th className="p-3.5">Event Date</th>
-                              <th className="p-3.5">Event Time</th>
-                              <th className="p-3.5">Customer</th>
-                              <th className="p-3.5">Status</th>
-                              <th className="p-3.5 pr-4">Target Delivery Date</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
-                            {calendarModalEvents.map((ev, idx) => (
-                              <tr key={ev.key || idx} className="bg-zinc-950/30 select-text hover:bg-zinc-900/40 transition-colors">
-                                <td className="p-3.5 pl-4 font-bold text-zinc-100">
-                                  {ev.eventName || 'Photography Event'}
-                                </td>
-                                <td className="p-3.5 font-mono text-zinc-300">
-                                  {formatDateDMY(ev.eventDate || calendarModalDate)}
-                                </td>
-                                <td className="p-3.5 font-mono text-zinc-300">
-                                  {formatTime12Hour(ev.eventStartTime || '10:00 AM')}
-                                </td>
-                                <td className="p-3.5 text-zinc-200 font-medium">
-                                  {ev.customerName || '—'}
-                                </td>
-                                <td className="p-3.5">
-                                  <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
-                                    {ev.status || 'Active'}
-                                  </span>
-                                </td>
-                                <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
-                                  {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
+          {/* Selected Date Events Section below Calendar Grid */}
+          <div className="mt-6 pt-5 border-t border-zinc-800 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+              <div>
+                <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
+                  EVENT DETAILS
+                </span>
+                <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
+                  {calendarModalDate || 'Select a date'}
+                </h4>
+              </div>
+              {calendarModalDate && (
+                <span className="text-xs font-mono text-zinc-400">
+                  {calendarModalEvents.length} Event(s) Scheduled
+                </span>
+              )}
+            </div>
+
+            {!calendarModalDate ? (
+              <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
+                Click or tap any date on the calendar above to view scheduled events.
+              </div>
+            ) : calendarModalEvents.length === 0 ? (
+              <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
+                No events assigned on {calendarModalDate}.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Responsive Read-Only Table */}
+                <div className="overflow-x-auto w-full border border-zinc-800 rounded-2xl bg-zinc-950/60 shadow-inner">
+                  <table className="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+                        <th className="p-3.5 pl-4">Event Name</th>
+                        <th className="p-3.5">Event Date</th>
+                        <th className="p-3.5">Event Time</th>
+                        <th className="p-3.5">Customer</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 pr-4">Target Delivery Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
+                      {calendarModalEvents.map((ev, idx) => (
+                        <tr key={ev.key || idx} className="bg-zinc-950/30 select-text">
+                          <td className="p-3.5 pl-4 font-bold text-zinc-100">
+                            {ev.eventName || 'Photography Event'}
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-300">
+                            {formatDateDMY(ev.eventDate || calendarModalDate)}
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-300">
+                            {ev.eventStartTime || '10:00 AM'}
+                          </td>
+                          <td className="p-3.5 text-zinc-200 font-medium">
+                            {ev.customerName || '—'}
+                          </td>
+                          <td className="p-3.5">
+                            <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
+                              {ev.status || 'Active'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
+                            {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
-            </div>,
-            document.body
-          )}
+            )}
+          </div>
         </div>
       )}
 
       {/* Assigned Orders & Tasks Table/Cards */}
       {activeTab === 'tasks' && (
         <div className="bg-zinc-900/80 border border-zinc-800 rounded-3xl overflow-hidden shadow-xl">
-          <div className="p-4 sm:p-6 border-b border-zinc-800 flex flex-wrap justify-between items-center gap-3">
+          <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
             <div>
-              <h3 className="text-base sm:text-lg font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
+              <h3 className="text-lg font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
                 <Briefcase className="w-5 h-5 text-amber-500" />
                 Assigned Orders & Tasks
               </h3>
               <p className="text-zinc-400 text-xs mt-0.5">Showing orders & equipment assigned specifically to you</p>
             </div>
-            <ListSortFilter value={sortOrder} onChange={setSortOrder} />
           </div>
 
           {activeBookings.length === 0 ? (
@@ -2429,7 +2101,6 @@ export const StaffModule: React.FC = () => {
                     <th className="py-4 px-6">Order ID</th>
                     <th className="py-4 px-6">Customer Name</th>
                     <th className="py-4 px-6">Event Name & Shoot</th>
-                    <th className="py-4 px-6 whitespace-nowrap">Reporting Date & Time</th>
                     <th className="py-4 px-6">Assigned Role</th>
                     <th className="py-4 px-6">Equipment Status</th>
                     <th className="py-4 px-6">Status</th>
@@ -2437,7 +2108,7 @@ export const StaffModule: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-sm">
-                  {[...activeBookings].sort(sortOrder === 'latest' ? sortBookingsLatestFirst : sortBookingsOldestFirst).map((b) => {
+                  {[...activeBookings].sort(sortBookingsLatestFirst).map((b) => {
                     const proofStatus = getBookingProofStatus(b, leadEquipmentHistory, staffProofs, staffName, staffMember?.id || currentUser?.id);
                     const isStarted = (b.taskStatus === 'Event Started' || b.taskStatus === 'Event Start') && proofStatus.isEventStartComplete;
                     const isCompleted = b.taskStatus === 'Event Completed' || b.taskStatus === 'Event Complete' || proofStatus.isEventComplete;
@@ -2451,18 +2122,39 @@ export const StaffModule: React.FC = () => {
                         <td className="py-4 px-6 font-mono font-bold text-amber-400">{b.orderId}</td>
                         <td className="py-4 px-6 font-bold text-white">{b.customerName}</td>
                         <td className="py-4 px-6">
-                          <StaffEventDetailsCell b={b} />
+                          <div className="font-bold text-zinc-100">{b.eventName}</div>
+                          <div className="text-xs text-zinc-400 font-mono mt-0.5 flex items-center gap-1 flex-wrap">
+                            <span>{b.eventDate}</span>
+                            {b.eventStartTime && b.eventStartTime !== 'N/A' && (
+                              <span className="text-zinc-500">• {b.eventStartTime}</span>
+                            )}
+                          </div>
+                          {b.shootType && b.shootType !== 'N/A' && (
+                            <div className="text-[10px] font-mono uppercase text-zinc-500 mt-0.5">
+                              {b.shootType}
+                            </div>
+                          )}
                         </td>
                         <td className="py-4 px-6">
-                          <StaffReportingDetailsCell b={b} />
-                        </td>
-                        <td className="py-4 px-6">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-bold">
                             {b.assignedRole}
                           </span>
                         </td>
                         <td className="py-4 px-6">
-                          <StaffEquipmentDetailsCell b={b} proofStatus={proofStatus} />
+                          {b.equipmentItems && b.equipmentItems.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold font-mono">
+                                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Assigned ({b.equipmentItems.length})
+                              </span>
+                              <span className="text-[10px] text-zinc-400 max-w-[150px] truncate font-mono" title={b.equipmentItems.map((e: any) => e.name).join(', ')}>
+                                {b.equipmentItems.map((e: any) => e.name).join(', ')}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-zinc-800/80 text-zinc-400 border border-zinc-700 text-xs font-bold font-mono">
+                              Not Assigned
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-6 flex flex-col gap-2 items-start">
                           {b.taskStatus === 'Footage Handover' || b.taskStatus === 'Verified Footage' ? (
@@ -2551,15 +2243,11 @@ export const StaffModule: React.FC = () => {
                   {photoModalData.stage === 'Event Complete' ? (
                     <span><strong>Event Completion Proof Required:</strong> Please upload or capture the <strong>Event Completion Photo Proof</strong> to complete the Event End stage.</span>
                   ) : photoModalData.stage === 'Equipment Handover' ? (
-                    photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 ? (
-                      <span><strong>Footage & Equipment Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong> and capture/upload Equipment Handover Photo Proof.</span>
-                    ) : (
-                      <span><strong>Footage Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong> to complete footage handover.</span>
-                    )
+                    <span><strong>Footage Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong>. Equipment Handover Photo Proof is optional.</span>
                   ) : photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 ? (
-                    <span><strong>Equipment Inspection Required:</strong> Please capture or upload a clear photo of each assigned equipment item (Equipment Received / Asset Picture) and <strong>Event Start Image</strong> to start the event.</span>
+                    <span><strong>Equipment Inspection Required:</strong> Please capture or upload a clear photo of each assigned equipment item to verify condition at <span className="font-bold underline">{photoModalData.stage}</span>.</span>
                   ) : (
-                    <span><strong>Event Start Proof Required:</strong> Please capture or upload a clear photo for <strong>Event Start Image</strong>.</span>
+                    <span><strong>Event Start Proof Required:</strong> Please capture or upload a clear photo for <strong>Event Start Photo Proof</strong>.</span>
                   )}
                 </div>
               </div>
@@ -2567,27 +2255,34 @@ export const StaffModule: React.FC = () => {
               {/* Equipment / Proof Items list with photo inputs */}
               <div className="space-y-4">
                 {(photoModalData.stage === 'Event Start'
-                  ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
+                  ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 1 
                       ? [
-                          {
-                            name: 'Asset Collection Photo Proof',
-                            displayName: '1. Equipment Received / Asset Picture',
-                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
+                          ...photoModalData.booking.equipmentItems.map((eq: any, eqIdx: number) => ({
+                            name: `Asset Collection: ${eq.name}`,
+                            displayName: `1.${eqIdx + 1} Equipment Received / Asset Picture (${eq.name})`,
+                            assetId: eq.assetId || eq.name,
                             optional: false,
                             isAsset: true
-                          },
-                          {
-                            name: 'Event Start Photo Proof',
-                            displayName: '2. Event Start Image',
-                            assetId: 'Event Start',
+                          })),
+                          { 
+                            name: 'Event Start Photo Proof', 
+                            displayName: '2. Event Start Image', 
+                            assetId: 'Event Start', 
                             optional: false,
-                            isEventStart: true
+                            isEventStart: true 
                           }
                         ]
                       : [
                           { 
+                            name: 'Asset Collection Photo Proof', 
+                            displayName: '1. Equipment Received / Asset Picture', 
+                            assetId: photoModalData.booking.equipmentItems?.[0]?.assetId || 'Asset Collection', 
+                            optional: false,
+                            isAsset: true 
+                          },
+                          { 
                             name: 'Event Start Photo Proof', 
-                            displayName: 'Event Start Image', 
+                            displayName: '2. Event Start Image', 
                             assetId: 'Event Start', 
                             optional: false,
                             isEventStart: true 
@@ -2595,31 +2290,26 @@ export const StaffModule: React.FC = () => {
                         ])
                   : photoModalData.stage === 'Event Complete'
                   ? [
-                      { name: 'Event Completion Photo Proof', displayName: 'Event Completion Photo Proof', assetId: 'Event Complete', optional: false }
+                      { name: 'Event Completion Photo Proof', displayName: 'Event Completion Photo Proof', assetId: 'Event Completion', optional: false }
                     ]
                   : photoModalData.stage === 'Equipment Handover'
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
-                      ? [
-                          {
-                            name: 'Asset Return Photo Proof',
-                            displayName: 'Equipment Handover Photo Proof',
-                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Equipment Handover',
-                            optional: true
-                          }
-                        ]
-                      : []
+                      ? photoModalData.booking.equipmentItems.map((eq: any) => ({
+                          name: photoModalData.booking.equipmentItems.length > 1 ? `Equipment Handover: ${eq.name}` : 'Equipment Handover Photo Proof',
+                          displayName: `Equipment Handover: ${eq.name}`,
+                          assetId: eq.assetId || eq.name,
+                          optional: true
+                        }))
+                      : [{ name: 'Equipment Handover Photo Proof', displayName: 'Equipment Handover Photo Proof', assetId: 'Handover', optional: true }]
                     )
                   : (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
-                      ? [
-                          {
-                            name: 'Asset Collection Photo Proof',
-                            displayName: 'Equipment Received / Asset Picture',
-                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
-                            optional: false,
-                            isAsset: true
-                          }
-                        ]
-                      : []
+                      ? photoModalData.booking.equipmentItems.map((eq: any) => ({
+                          name: photoModalData.booking.equipmentItems.length > 1 ? `Asset Collection: ${eq.name}` : 'Asset Collection Photo Proof',
+                          displayName: `Asset Collection: ${eq.name}`,
+                          assetId: eq.assetId || eq.name,
+                          optional: false
+                        }))
+                      : [{ name: 'Asset Collection Photo Proof', displayName: 'Asset Collection Photo Proof', assetId: 'Asset Collection', optional: false }]
                     )
                 ).map((item: any, idx: number) => {
                   const currentPhoto = modalPhotos[item.name] || 
@@ -2744,11 +2434,9 @@ export const StaffModule: React.FC = () => {
                 ) : photoModalData.stage === 'Event Start' ? (
                   <>
                     <CheckCircle className="w-4 h-4" />
-                    {!(photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0)
-                      ? 'Confirm Event Start'
-                      : (modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image']) 
-                        ? 'Confirm Event Start' 
-                        : 'Save Equipment / Asset Image'}
+                    {(modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image']) 
+                      ? 'Confirm Event Start' 
+                      : 'Save Equipment / Asset Image'}
                   </>
                 ) : photoModalData.stage === 'Event Complete' ? (
                   <>

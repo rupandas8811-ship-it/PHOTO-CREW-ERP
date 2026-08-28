@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
-import { formatTime12Hour, formatDateDDMMYY } from '../utils';
+import { convertTo12Hour } from '../utils';
 
 interface EventDropdownCellProps {
   type: 'name' | 'date' | 'time';
@@ -118,10 +118,8 @@ export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, item
           {items[0]}
         </div>
       );
-    } else if (type === 'date') {
-      return <span className="text-zinc-300 font-mono">{formatDateDDMMYY(items[0])}</span>;
     } else {
-      return <span className="text-zinc-300 font-mono">{formatTime12Hour(items[0])}</span>;
+      return <span className="text-zinc-300">{items[0]}</span>;
     }
   }
 
@@ -176,8 +174,8 @@ export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, item
           {type === 'name' && events && events.length > 0 ? (
             events.map((ev, idx) => {
               const name = ev.event_name || '';
-              const date = ev.event_date ? formatDateDDMMYY(ev.event_date) : '—';
-              const time = ev.event_start_time ? formatTime12Hour(ev.event_start_time) : '—';
+              const date = ev.event_date || '—';
+              const time = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '—';
               return (
                 <div
                   key={idx}
@@ -202,7 +200,7 @@ export const EventDropdownCell: React.FC<EventDropdownCellProps> = ({ type, item
                 key={idx}
                 className="px-4 py-2 text-[11px] font-medium text-zinc-300 border-b border-zinc-900/60 last:border-0 hover:bg-zinc-900/50 transition-colors text-left font-mono"
               >
-                {type === 'date' ? formatDateDDMMYY(item) : type === 'time' ? formatTime12Hour(item) : (item || '—')}
+                {item || '—'}
               </div>
             ))
           )}
