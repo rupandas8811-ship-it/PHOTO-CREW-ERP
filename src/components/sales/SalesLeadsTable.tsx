@@ -94,6 +94,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
     statQuotesSent,
     statQuoteFollowups,
     statConfirmedOrders,
+    statLeadLost,
     statLostLeads,
     activeStageTab,
     setActiveStageTab,

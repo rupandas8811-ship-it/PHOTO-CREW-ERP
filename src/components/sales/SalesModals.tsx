@@ -90,7 +90,32 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
     setIsComparingPkgs,
     packages,
     formatDDMMYYYY,
-    convertTo12Hour
+    convertTo12Hour,
+    setSelectedLead,
+    handleFinalReportingSubmit,
+    finalReportingForm,
+    setFinalReportingForm,
+    activeTab,
+    handleSaveStep3FollowUp,
+    isCrmLocked,
+    handleSubmitUnlockRequest,
+    handleCancelLead,
+    canEdit,
+    setEditingPackage,
+    setPkgForm,
+    setPkgTeamMembers,
+    setPkgDeliverablesList,
+    setIsAddFormOpen,
+    leads,
+    leadPackages,
+    quotations,
+    orders,
+    setDeletePackageError,
+    setIsDeletingPackage,
+    deletePackage,
+    setPackageSuccessMsg,
+    selectedPkgIds,
+    subtotal
   } = props;
 
   return (

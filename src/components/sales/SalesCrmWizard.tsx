@@ -15,7 +15,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, INITIAL_PACKAGES, SalesModuleProps } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 
 export interface SalesCrmWizardProps {
@@ -163,6 +163,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
     eventsList,
     setEventsList,
     getLeadCurrentStatus,
+    getLeadCurrentStage,
     salesStatus,
     unlockingRecordId,
     setUnlockingRecordId,
@@ -170,7 +171,31 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
     setUnlockReason,
     unlockCustomReason,
     setUnlockCustomReason,
-    handleUnlockRecord
+    handleUnlockRecord,
+    unlockRecord,
+    handleSaveStep,
+    openReportingDetailsModal,
+    areReportingDetailsComplete,
+    confirmForm,
+    setConfirmForm,
+    setShowConfirmModal,
+    saveErrorPopup,
+    setSaveErrorPopup,
+    setDetectedCustomer,
+    handleCheckExistingCustomer,
+    createdLeadId,
+    leads,
+    handleOrderConfirmedSubmit,
+    handleStatusSave,
+    setSelectedLead,
+    handlePackageDropdownChange,
+    salesStaffName,
+    setSalesStaffName,
+    salesStaffMobile,
+    setSalesStaffMobile,
+    saveStep3DataRealtime,
+    handleSavePackageOnly,
+    renderQuotationAndStep4Section
   } = props;
 
   if (activeTab === 'create' && !selectedLead) {
@@ -1600,7 +1625,6 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
               </div>
             </div>
           </div>
-        </div>
 
         {saveErrorPopup && (
         <div id="save_error_popup" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[70] flex items-center justify-center p-4 animate-fade-in text-left">

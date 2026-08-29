@@ -20,23 +20,7 @@ import { AddNoteModal } from '../AddNoteModal';
 
 
 export interface SalesBookingConfirmationModalProps {
-  showConfirmModal: boolean;
-  selectedLead: Lead | null;
-  confirmBookingModalRef: React.RefObject<HTMLDivElement>;
-  confirmForm: any;
-  setConfirmForm: React.Dispatch<React.SetStateAction<any>>;
-  packages: any[];
-  isCustomerInfoExpanded: boolean;
-  setIsCustomerInfoExpanded: React.Dispatch<React.SetStateAction<boolean>>;
-  eventsReporting: Record<string, { reporting_date: string; reporting_time: string }>;
-  setEventsReporting: React.Dispatch<React.SetStateAction<Record<string, { reporting_date: string; reporting_time: string }>>>;
-  formatDDMMYYYY: (d: any) => string;
-  convertTo12Hour: (t: any) => string;
-  isConfirmingBooking: boolean;
-  handleConfirmOrder: (e: React.FormEvent) => Promise<void>;
-  setShowConfirmModal: React.Dispatch<React.SetStateAction<boolean>>;
-  orders: any[];
-  wizardLeadData: any;
+  [key: string]: any;
 }
 
 export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationModalProps> = (props) => {
@@ -55,9 +39,11 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
     convertTo12Hour,
     isConfirmingBooking,
     handleConfirmOrder,
+    handleConfirmOrderSubmit = props.handleConfirmOrder,
     setShowConfirmModal,
     orders,
-    wizardLeadData
+    wizardLeadData,
+    isSaving
   } = props;
 
   if (!showConfirmModal || !selectedLead) return null;
