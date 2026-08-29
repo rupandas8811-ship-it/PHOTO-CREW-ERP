@@ -79,15 +79,15 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
         return leads.map(l => {
           const order = orders.find(o => o.lead_id === l.lead_id || o.customer_name === l.customer_name);
           return {
-            "Lead ID": l.lead_id || '-',
-            "Order ID": order?.order_id || '-',
-            "Customer Name": l.customer_name || '-',
-            "Mobile Number": l.mobile || '-',
-            "Event Type": l.event_type === 'Other' ? (l.custom_event_name || l.custom_event_type || 'Other') : (l.event_type || '-'),
-            "Event Date": l.event_date || '-',
-            "Current Status": l.status || '-',
-            "Lead Source": l.lead_source || '-',
-            "Created Date": l.created_date || '-'
+            "Lead ID": l.lead_id || '—',
+            "Order ID": order?.order_id || '—',
+            "Customer Name": l.customer_name || '—',
+            "Mobile Number": l.mobile || '—',
+            "Event Type": l.event_type === 'Other' ? (l.custom_event_name || l.custom_event_type || 'Other') : (l.event_type || '—'),
+            "Event Date": l.event_date || '—',
+            "Current Status": l.status || '—',
+            "Lead Source": l.lead_source || '—',
+            "Created Date": l.created_date || '—'
           };
         }).filter(row => {
           const name = cardName.trim();
@@ -116,12 +116,12 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             : 'Unassigned';
 
           return {
-            "Order ID": o.order_id || '-',
+            "Order ID": o.order_id || '—',
             "Customer Name": o.customer_name || 'CRM Client',
-            "Event Date": o.event_date || '-',
+            "Event Date": o.event_date || '—',
             "Assigned Team": staffAssigned || 'None',
-            "Event Status": o.current_stage || '-',
-            "Reporting Time": op?.reporting_time || '-',
+            "Event Status": o.current_stage || '—',
+            "Reporting Time": op?.reporting_time || '—',
             "Order Date": o.created_at && typeof o.created_at === 'string' ? o.created_at.split('T')[0] : o.event_date
           };
         }).filter(row => {
@@ -146,7 +146,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
         return production.map(p => {
           const order = orders.find(o => o.order_id === p.tracking_id || o.order_id === p.production_id || o.lead_id === p.original_lead_id);
           return {
-            "Order ID": order?.order_id || p.tracking_id || '-',
+            "Order ID": order?.order_id || p.tracking_id || '—',
             "Customer Name": order?.customer_name || p.customer_name || 'CRM Client',
             "Event Type": (() => {
               const orderType = order?.event_type;
@@ -157,12 +157,12 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
               if (pType === 'Other') {
                 return p.custom_event_type || 'Other';
               }
-              return orderType || pType || '-';
+              return orderType || pType || '—';
             })(),
-            "Event Date": order?.event_date || p.event_date || '-',
+            "Event Date": order?.event_date || p.event_date || '—',
             "Assigned Editors": p.editor_assigned || 'Unassigned',
-            "Current Status": p.editing_status || '-',
-            "Target Delivery Date": p.target_delivery_date || p.expected_delivery_date || '-'
+            "Current Status": p.editing_status || '—',
+            "Target Delivery Date": p.target_delivery_date || p.expected_delivery_date || '—'
           };
         }).filter(row => {
           const name = (cardName || '').trim().toLowerCase();
@@ -198,16 +198,16 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
         if (isFinances) {
           return payments.map(p => {
             const order = orders.find(o => o.order_id === p.order_id);
-            const receivedDate = p.payment_date || (order?.created_at && typeof order.created_at === 'string' ? order.created_at.split('T')[0] : '-');
+            const receivedDate = p.payment_date || (order?.created_at && typeof order.created_at === 'string' ? order.created_at.split('T')[0] : '—');
             return {
-              "Record ID": p.payment_id || '-',
+              "Record ID": p.payment_id || '—',
               "Customer Name": order?.customer_name || 'CRM Client',
               "Amount": p.quotation_amount || 0,
               "Paid Amount": (p.advance_received || 0) + (p.final_payment_received || 0),
               "Balance Due": p.balance_due || 0,
               "Payment Status": p.payment_status || 'Pending',
               "Received Date": receivedDate,
-              "Created Date": order?.created_at && typeof order.created_at === 'string' ? order.created_at.split('T')[0] : order?.event_date || '-'
+              "Created Date": order?.created_at && typeof order.created_at === 'string' ? order.created_at.split('T')[0] : order?.event_date || '—'
             };
           }).filter(row => {
             if (cardName === 'Total Pending Amount' || cardName === 'Outstanding Balance') return row["Balance Due"] > 0;
@@ -219,33 +219,33 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
         } else if (cardName.includes('Staff') || cardName.includes('Editors') || cardName.includes('Workload') || cardName.includes('Projects')) {
           if (cardName === 'Active Staff') {
             return staff.filter(s => s.status === 'Active').map(s => ({
-              "Staff ID": s.staff_id || '-',
-              "Staff Name": s.name || '-',
-              "Role": s.role || '-',
-              "Department": s.department || '-',
+              "Staff ID": s.staff_id || '—',
+              "Staff Name": s.name || '—',
+              "Role": s.role || '—',
+              "Department": s.department || '—',
               "Status": s.status || 'Active',
-              "Joining Date": s.joining_date || '-'
+              "Joining Date": s.joining_date || '—'
             }));
           } else if (cardName === 'Active Editors') {
             const activeEditors = Array.from(new Set(production.map(p => p.editor_assigned).filter(e => e && e !== 'Unassigned')));
             return staff.filter(s => activeEditors.includes(s.name)).map(s => ({
-              "Staff ID": s.staff_id || '-',
-              "Staff Name": s.name || '-',
-              "Role": s.role || '-',
-              "Department": s.department || '-',
+              "Staff ID": s.staff_id || '—',
+              "Staff Name": s.name || '—',
+              "Role": s.role || '—',
+              "Department": s.department || '—',
               "Status": s.status || 'Active',
-              "Joining Date": s.joining_date || '-'
+              "Joining Date": s.joining_date || '—'
             }));
           } else {
             return production.map(p => {
               const order = orders.find(o => o.order_id === p.tracking_id);
               return {
-                "Project ID": p.production_id || '-',
+                "Project ID": p.production_id || '—',
                 "Customer Name": order?.customer_name || 'CRM Client',
                 "Editor Name": p.editor_assigned || 'Unassigned',
-                "Editing Status": p.editing_status || '-',
+                "Editing Status": p.editing_status || '—',
                 "Priority": p.project_priority || 'Medium',
-                "Event Date": order?.event_date || '-'
+                "Event Date": order?.event_date || '—'
               };
             }).filter(row => {
               if (cardName === 'Active Projects') return row["Editing Status"] !== 'Project Closed';
@@ -254,12 +254,12 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
           }
         } else {
           return orders.map(o => ({
-            "Order ID": o.order_id || '-',
+            "Order ID": o.order_id || '—',
             "Customer Name": o.customer_name || 'CRM Client',
-            "Event Type": o.event_type === 'Other' ? (o.custom_event_name || o.custom_event_type || 'Other') : (o.event_type || '-'),
-            "Event Date": o.event_date || '-',
+            "Event Type": o.event_type === 'Other' ? (o.custom_event_name || o.custom_event_type || 'Other') : (o.event_type || '—'),
+            "Event Date": o.event_date || '—',
             "Amount": o.quotation_amount || 0,
-            "Status": o.current_stage || '-'
+            "Status": o.current_stage || '—'
           })).filter(row => {
             if (cardName === 'Completed Events') return row["Status"] === 'Event Completed' || row["Status"] === 'Closed' || row["Status"] === 'Delivered';
             if (cardName === 'Upcoming Events') return row["Event Date"] >= TODAY_REF;
@@ -281,7 +281,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
     // Filter by local date range
     result = result.filter(row => {
       const dateVal = row["Created Date"] || row["Event Date"] || row["Order Date"] || row["Joining Date"] || row["Received Date"] || '';
-      if (!dateVal || dateVal === '-') return true;
+      if (!dateVal || dateVal === '—') return true;
       const cleanDate = dateVal.split('T')[0];
       return cleanDate >= localStartDate && cleanDate <= localEndDate;
     });
@@ -544,7 +544,7 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
             <strong>Target Node:</strong> ${cardName} (Sub-module: ${reportType.toUpperCase()})<br/>
             <strong>Temporal Scope:</strong> ${currentRange.start} through ${currentRange.end} (Custom Range)<br/>
             <strong>Total Elements Recorded:</strong> ${filteredRows.length} entries<br/>
-            ${reportStats.financialSum > 0 ? `<strong>Financial Liquidity Total:</strong> Rs.  ${reportStats.financialSum.toLocaleString('en-IN')}<br/>` : ''}
+            ${reportStats.financialSum > 0 ? `<strong>Financial Liquidity Total:</strong> ₹ ${reportStats.financialSum.toLocaleString('en-IN')}<br/>` : ''}
             <strong>Generation Date:</strong> ${new Date().toLocaleString()}
           </div>
           ${printContent.innerHTML}

@@ -377,7 +377,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                             ? 'bg-amber-500 text-black border-amber-400 shadow-md shadow-amber-500/10' 
                             : 'bg-zinc-950 text-zinc-650 border-zinc-850'
                         }`}>
-                          {step.active ? 'v' : step.num}
+                          {step.active ? '✓' : step.num}
                         </div>
                         <span className={`text-[9px] font-bold text-center tracking-tight font-sans mt-1 ${step.active ? 'text-zinc-200' : 'text-zinc-600'}`}>
                           {step.label}
@@ -691,7 +691,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                           <div className="flex flex-wrap gap-1 mt-2">
                             {operation.equipment_kit.split(',').map((kit: string, idx: number) => (
                               <span key={idx} className="bg-amber-400/10 text-amber-400 px-2 py-0.5 border border-amber-400/10 rounded-lg text-[9.5px] font-mono ">
-                                 {kit.trim()}
+                                ⚙️ {kit.trim()}
                               </span>
                             ))}
                           </div>
@@ -705,7 +705,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                       {/* Equipment Return Log Tracking block */}
                       {orderHandovers.length > 0 && (
                         <div className="bg-zinc-950 p-3 rounded-xl border border-zinc-900 space-y-2">
-                          <span className="text-[10px] text-amber-500 uppercase tracking-widest font-mono font-bold block"> Gear Return Handover Statuses</span>
+                          <span className="text-[10px] text-amber-500 uppercase tracking-widest font-mono font-bold block">⚙️ Gear Return Handover Statuses</span>
                           <div className="space-y-2">
                             {orderHandovers.map((eh) => (
                               <div key={eh.id} className="text-[11px] font-mono border-b border-zinc-900 pb-1.5 last:border-0 last:pb-0 flex flex-col justify-between md:flex-row md:items-center">
@@ -1009,7 +1009,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                     </div>
 
                     <div className="p-3 bg-zinc-950 border border-zinc-900 text-[11px] font-sans text-zinc-450 rounded-xl leading-relaxed">
-                       Funds deposited in Photocrew vaults are reconciled automatically with standard business accounting files daily. Only authorized users with Sales/CEO credentials can adjust outstanding ledger entries.
+                      🏦 Funds deposited in Photocrew vaults are reconciled automatically with standard business accounting files daily. Only authorized users with Sales/CEO credentials can adjust outstanding ledger entries.
                     </div>
                   </div>
                 ) : (

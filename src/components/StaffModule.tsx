@@ -10,8 +10,8 @@ import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
 import { formatDateDDMMYY, formatTime12Hour } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
-  if (!dateStr || dateStr === '-') return '-';
-  return formatDateDDMMYY(dateStr) || '-';
+  if (!dateStr || dateStr === '—') return '—';
+  return formatDateDDMMYY(dateStr) || '—';
 };
 
 const StaffActionDropdown: React.FC<{
@@ -179,8 +179,8 @@ const StaffActionDropdown: React.FC<{
         onClick={handleToggle}
         className="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold border border-indigo-500/30 shadow-md cursor-pointer transition-all inline-flex items-center gap-1.5 outline-none"
       >
-        <span> Action</span>
-        <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}></span>
+        <span>🎯 Action</span>
+        <span className={`text-[9px] text-indigo-200 transition-transform duration-200 ${isOpen ? 'rotate-180 text-white' : ''}`}>▼</span>
       </button>
 
       {isOpen && menuPosition && createPortal(
@@ -196,14 +196,14 @@ const StaffActionDropdown: React.FC<{
         >
           <div className="px-2.5 py-1.5 border-b border-zinc-800 mb-1 flex items-center justify-between shrink-0">
             <span className="text-[9px] font-mono uppercase tracking-widest text-indigo-400 font-extrabold flex items-center gap-1">
-              <span></span> Available Actions
+              <span>🎯</span> Available Actions
             </span>
             <button
               type="button"
               onClick={() => setIsOpen(false)}
               className="text-zinc-500 hover:text-white text-xs p-0.5 rounded cursor-pointer"
             >
-              x
+              ✕
             </button>
           </div>
           <div className="overflow-y-auto space-y-1 pr-0.5" style={{ maxHeight: `${menuPosition.maxHeight - 40}px` }}>
@@ -214,7 +214,7 @@ const StaffActionDropdown: React.FC<{
                 onClick={opt.onClick}
                 className="w-full text-left px-3 py-2 text-xs text-zinc-200 hover:bg-indigo-600/20 hover:text-indigo-300 rounded-lg transition-all cursor-pointer font-sans font-semibold flex items-center justify-start gap-2"
               >
-                <span className="text-indigo-400 text-xs shrink-0"></span>
+                <span className="text-indigo-400 text-xs shrink-0">⚡</span>
                 <span className="truncate">{opt.label}</span>
               </button>
             ))}
@@ -508,7 +508,7 @@ const StaffEventDetailsCell = ({ b }: { b: any }) => {
         <span>{formatDateDDMMYY(b.eventDate)}</span>
         {b.eventStartTime && b.eventStartTime !== 'N/A' && (
           <>
-            <span className="text-zinc-600">*</span>
+            <span className="text-zinc-600">•</span>
             <span className="text-zinc-400">{formatTime12Hour(b.eventStartTime)}</span>
           </>
         )}
@@ -598,7 +598,7 @@ const StaffEquipmentDetailsCell = ({ b, proofStatus }: { b: any, proofStatus: an
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-700/50 bg-zinc-800/40 text-[11px] text-zinc-300 hover:text-white hover:bg-zinc-700/80 hover:border-zinc-600 transition-all font-semibold tracking-wider"
       >
         {b.equipmentItems.length} Equipment Assigned 
-        <span className={`transition-transform duration-200 flex items-center justify-center ${isOpen ? 'rotate-180' : ''}`}></span>
+        <span className={`transition-transform duration-200 flex items-center justify-center ${isOpen ? 'rotate-180' : ''}`}>▾</span>
       </button>
 
       {isOpen && createPortal(
@@ -630,7 +630,7 @@ const StaffEquipmentDetailsCell = ({ b, proofStatus }: { b: any, proofStatus: an
             <div className="mt-4 pt-3 border-t border-zinc-800/60">
               <span className="block text-[10px] text-zinc-500 uppercase tracking-wider font-bold mb-1.5">Equipment Status</span>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-bold font-mono">
-                v {eqStatusText}
+                ✓ {eqStatusText}
               </div>
             </div>
           </div>
@@ -653,7 +653,7 @@ const StaffReportingDetailsCell = ({ b }: { b: any }) => {
             <span className="font-bold">{formatDateDDMMYY(repDate)}</span>
             {repTime !== 'N/A' && (
               <>
-                <span className="text-zinc-600">*</span>
+                <span className="text-zinc-600">•</span>
                 <span className="text-zinc-400 font-medium">{formatTime12Hour(repTime)}</span>
               </>
             )}
@@ -1467,7 +1467,7 @@ export const StaffModule: React.FC = () => {
       if (!hasAssetColl) {
         e.target.value = '';
         alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-        showToast(" Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
+        showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
         return;
       }
     }
@@ -1503,7 +1503,7 @@ export const StaffModule: React.FC = () => {
 
     } catch (err) {
       console.error('Error processing photo:', err);
-      showToast(' Failed to process photo. Please try again.');
+      showToast('❌ Failed to process photo. Please try again.');
     }
   };
 
@@ -1527,7 +1527,7 @@ export const StaffModule: React.FC = () => {
           const assetCard = photoModalBodyRef.current?.querySelector('[data-card="asset-collection"]') as HTMLElement;
           assetCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-          showToast(" Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
+          showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
           return;
         }
 
@@ -1535,7 +1535,7 @@ export const StaffModule: React.FC = () => {
           const assetCard = photoModalBodyRef.current?.querySelector('[data-card="asset-collection"]') as HTMLElement;
           assetCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           alert("Please upload at least the Equipment Received / Asset Picture.");
-          showToast(" Please upload at least the Equipment Received / Asset Picture.");
+          showToast("⚠️ Please upload at least the Equipment Received / Asset Picture.");
           return;
         }
       } else {
@@ -1543,7 +1543,7 @@ export const StaffModule: React.FC = () => {
           const eventStartCard = photoModalBodyRef.current?.querySelector('[data-card="event-start"]') as HTMLElement;
           eventStartCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           alert("Please upload the Event Start Image.");
-          showToast(" Please upload the Event Start Image.");
+          showToast("⚠️ Please upload the Event Start Image.");
           return;
         }
       }
@@ -1624,8 +1624,8 @@ export const StaffModule: React.FC = () => {
 
           setPhotoModalData(null);
           setModalPhotos({});
-          alert("v Equipment Received / Asset Image saved successfully!\n\nEvent Start action remains available. Click Event Start again to upload the Event Start Image.");
-          showToast(" Equipment Received / Asset Image saved!");
+          alert("✓ Equipment Received / Asset Image saved successfully!\n\nEvent Start action remains available. Click Event Start again to upload the Event Start Image.");
+          showToast("✅ Equipment Received / Asset Image saved!");
           return;
         }
 
@@ -1804,13 +1804,13 @@ export const StaffModule: React.FC = () => {
 
           setPhotoModalData(null);
           setModalPhotos({});
-          alert(" Both images saved! Event Started confirmed successfully.");
-          showToast(" Event Started confirmed and saved successfully!");
+          alert("✅ Both images saved! Event Started confirmed successfully.");
+          showToast("✅ Event Started confirmed and saved successfully!");
         }
       } catch (error: any) {
         console.error('Error updating Event Start status:', error);
-        alert(` Failed to submit Event Start: ${error.message || 'Unknown error'}`);
-        showToast(` ${error.message || 'Failed to update status.'}`);
+        alert(`❌ Failed to submit Event Start: ${error.message || 'Unknown error'}`);
+        showToast(`❌ ${error.message || 'Failed to update status.'}`);
       } finally {
         setIsSubmitting(false);
       }
@@ -1842,7 +1842,7 @@ export const StaffModule: React.FC = () => {
       if (!item.optional) {
         const hasPhoto = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
         if (!hasPhoto) {
-          showToast(` Please capture/upload a photo for ${item.name}`);
+          showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
           return;
         }
       }
@@ -1850,7 +1850,7 @@ export const StaffModule: React.FC = () => {
 
     // Validate mandatory Raw Footage Link for Footage Handover
     if (stage === 'Equipment Handover' && (!modalRawFootageLink || !modalRawFootageLink.trim())) {
-      showToast(' Please enter the Raw Footage Drive Link (Required)');
+      showToast('⚠️ Please enter the Raw Footage Drive Link (Required)');
       alert('Please provide the Raw Footage Drive Link.');
       return;
     }
@@ -2133,13 +2133,13 @@ export const StaffModule: React.FC = () => {
       setModalPhotos({});
       setModalRawFootageLink('');
       const stageLabel = stage === 'Event Complete' ? 'Event End' : stage;
-      alert(` ${stageLabel} confirmed and saved successfully!`);
-      showToast(` ${stageLabel} submitted & saved successfully!`);
+      alert(`✅ ${stageLabel} confirmed and saved successfully!`);
+      showToast(`✅ ${stageLabel} submitted & saved successfully!`);
 
     } catch (error: any) {
       console.error('Error updating status:', error);
-      alert(` Failed to submit ${stage}: ${error.message || 'Unknown error'}`);
-      showToast(` ${error.message || 'Failed to update status.'}`);
+      alert(`❌ Failed to submit ${stage}: ${error.message || 'Unknown error'}`);
+      showToast(`❌ ${error.message || 'Failed to update status.'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -2446,7 +2446,7 @@ export const StaffModule: React.FC = () => {
                                   {formatTime12Hour(ev.eventStartTime || '10:00 AM')}
                                 </td>
                                 <td className="p-3 sm:p-3.5 text-zinc-200 font-medium">
-                                  {ev.customerName || '-'}
+                                  {ev.customerName || '—'}
                                 </td>
                                 <td className="p-3 sm:p-3.5">
                                   <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
@@ -2454,7 +2454,7 @@ export const StaffModule: React.FC = () => {
                                   </span>
                                 </td>
                                 <td className="p-3 sm:p-3.5 pr-4 font-mono font-bold text-pink-400">
-                                  {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '-')}
+                                  {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
                                 </td>
                               </tr>
                             ))}
@@ -2559,9 +2559,9 @@ export const StaffModule: React.FC = () => {
                           {(b.taskStatus === 'Footage Handover' || b.taskStatus === 'Verified Footage' || b.rawFootageVerificationStatus === 'Verified' || b.rawFootageVerificationStatus === 'Not Verified') && (
                             <div className="text-[10px] font-bold">
                               {b.rawFootageVerificationStatus === 'Verified' ? (
-                                <span className="text-emerald-400"> Verified by Ops</span>
+                                <span className="text-emerald-400">✅ Verified by Ops</span>
                               ) : b.rawFootageVerificationStatus === 'Not Verified' ? (
-                                <span className="text-rose-400"> Footage Rejected</span>
+                                <span className="text-rose-400">❌ Footage Rejected</span>
                               ) : (
                                 <span className="text-zinc-500 italic">Verification Pending</span>
                               )}
@@ -2605,7 +2605,7 @@ export const StaffModule: React.FC = () => {
             <div className="p-4 sm:p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start shrink-0">
               <div className="pr-2">
                 <span className="text-[10px] sm:text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
-                  {photoModalData.stage === 'Event Complete' ? 'Event End Workflow' : photoModalData.stage === 'Equipment Handover' ? 'Footage Handover Workflow' : `Verification * ${photoModalData.stage}`}
+                  {photoModalData.stage === 'Event Complete' ? 'Event End Workflow' : photoModalData.stage === 'Equipment Handover' ? 'Footage Handover Workflow' : `Verification • ${photoModalData.stage}`}
                 </span>
                 <h3 className="text-lg sm:text-xl font-black text-white leading-tight">{photoModalData.booking.eventName}</h3>
                 <p className="text-zinc-400 text-xs mt-0.5">Order ID: {photoModalData.booking.orderId} | Staff: <strong className="text-white">{staffName}</strong></p>
@@ -2724,7 +2724,7 @@ export const StaffModule: React.FC = () => {
                         </div>
                         {currentPhoto ? (
                           <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-                            <CheckCircle className="w-3.5 h-3.5" /> Photo Attached v
+                            <CheckCircle className="w-3.5 h-3.5" /> Photo Attached ✓
                           </span>
                         ) : item.optional ? (
                           <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-zinc-400 bg-zinc-800/80 px-2.5 py-1 rounded-full border border-zinc-700">

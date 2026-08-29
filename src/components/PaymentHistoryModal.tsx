@@ -32,7 +32,7 @@ export const PaymentHistoryModal = ({
               Payment History
             </h3>
             <p className="text-xs text-zinc-400 mt-1">
-              Order ID: <span className="font-bold text-amber-400">{order.orderId}</span> * 
+              Order ID: <span className="font-bold text-amber-400">{order.orderId}</span> • 
               Customer: <span className="text-zinc-200">{order.customerName}</span>
             </p>
           </div>
