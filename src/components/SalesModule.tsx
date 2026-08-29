@@ -32,1907 +32,7 @@ import { CustomPackageMaster } from './CustomPackageMaster';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { jsPDF } from 'jspdf';
 
-interface LocalEditableInputProps {
-  value: string;
-  disabled?: boolean;
-  onChange: (val: string) => void;
-  className?: string;
-  list?: string;
-  placeholder?: string;
-  options?: string[];
-}
-
-const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, disabled, onChange, className, list, placeholder, options }) => {
-  const [localVal, setLocalVal] = React.useState(value);
-  const timeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-  const latestValueRef = React.useRef(value);
-  const autoListId = React.useId();
-
-  React.useEffect(() => {
-    latestValueRef.current = value;
-    setLocalVal(value);
-  }, [value]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const newVal = e.target.value;
-    setLocalVal(newVal);
-    
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    
-    timeoutRef.current = setTimeout(() => {
-      if (newVal !== latestValueRef.current) {
-        onChange(newVal);
-      }
-    }, 600);
-  };
-
-  const handleBlur = () => {
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (localVal !== value) {
-      onChange(localVal);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      if (localVal !== value) {
-        onChange(localVal);
-      }
-      e.currentTarget.blur();
-    }
-  };
-
-  React.useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
-
-  const datalistId = list || (options && options.length > 0 ? `datalist-${autoListId}` : undefined);
-
-  return (
-    <div className="flex-1 flex items-center gap-2">
-      <input
-        type="text"
-        value={localVal}
-        disabled={disabled}
-        list={datalistId}
-        placeholder={placeholder}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        className={className}
-      />
-      {options && options.length > 0 && !list && (
-        <datalist id={datalistId}>
-          {options.map((opt, idx) => (
-            <option key={idx} value={opt} />
-          ))}
-        </datalist>
-      )}
-    </div>
-  );
-};
-
-function parseQtyAndText(raw: any): { qty: number; text: string } {
-  if (raw === null || raw === undefined) return { qty: 1, text: "" };
-
-  let qty = 1;
-  let text = "";
-
-  if (typeof raw === "object") {
-    const q = Number(raw.qty || raw.quantity || raw.count || 1);
-    qty = isNaN(q) || q < 1 ? 1 : q;
-    text = String(raw.name || raw.text || raw.deliverable || raw.title || raw.role || raw.member_name || "").trim();
-    return { qty, text };
-  } else {
-    text = String(raw).trim();
-  }
-
-  if (!text) return { qty: 1, text: "" };
-
-  // 1. Check for explicit (Qty: X), (quantity: X), (count: X), (Qty X) anywhere in the string
-  let foundQtyFromPattern: number | null = null;
-  const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
-  let match;
-  while ((match = qtyPatterns.exec(text)) !== null) {
-    if (match[1]) {
-      const parsedQty = parseInt(match[1], 10);
-      if (!isNaN(parsedQty) && parsedQty >= 1) {
-        if (foundQtyFromPattern === null) {
-          foundQtyFromPattern = parsedQty;
-        }
-      }
-    }
-  }
-
-  if (foundQtyFromPattern !== null) {
-    text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
-    return { qty: foundQtyFromPattern, text };
-  }
-
-  // 2. Check for dimension / size specifications at the start of the string:
-  // e.g. "16Ã—6", "16x6", "12Ã—8 Album", "16Ã—6 Frame", "16 Ã— 6", "12 x 18", "8x24", "8*12", "12Ã—36"
-  // If the string starts with a dimension (digits x/Ã— digits), it is deliverable text, NOT a leading quantity!
-  const isLeadingDimension = /^\d+\s*[\*xXÃ—]\s*\d+/.test(text);
-  if (isLeadingDimension) {
-    return { qty: 1, text };
-  }
-
-  // 3. Check for technical specifications / units starting with numbers:
-  // e.g. "4K Cinematic Video", "8K Video", "20 Pages Ã— 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
-  const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
-  if (isUnitOrSpec) {
-    return { qty: 1, text };
-  }
-
-  // 4. Check for leading quantity with explicit multiplier:
-  // e.g. "2 x Traditional Photos", "2 Ã— Cinematic Video", "2 * Album", "2 x 16Ã—6 Frame", "2 Ã— 16Ã—6"
-  const multiplierMatch = text.match(/^(\d+)\s*[xXÃ—\*]\s+(.+)$/);
-  if (multiplierMatch) {
-    const parsedQty = parseInt(multiplierMatch[1], 10);
-    if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: multiplierMatch[2].trim() };
-    }
-  }
-
-  // 5. Check for leading quantity followed by dimension:
-  // e.g. "2 16Ã—6", "3 12Ã—8 Album", "2 16Ã—6 Frame"
-  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xXÃ—]\s*\d+.*)$/);
-  if (qtyDimensionMatch) {
-    const parsedQty = parseInt(qtyDimensionMatch[1], 10);
-    if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: qtyDimensionMatch[2].trim() };
-    }
-  }
-
-  // 6. Check for leading quantity with space followed by item name:
-  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12Ã—18)"
-  const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
-  if (wordMatch) {
-    const parsedQty = parseInt(wordMatch[1], 10);
-    if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: wordMatch[2].trim() };
-    }
-  }
-
-  return { qty: 1, text };
-}
-
-function combineQtyAndText(qty: number | string, text: string): string {
-  const qNum = parseInt(String(qty), 10);
-  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : 1;
-  const cleanText = (text || "").trim();
-  if (!cleanText) return validQty > 1 ? `${validQty}` : "";
-  if (validQty <= 1) {
-    return cleanText;
-  }
-  return `${validQty} ${cleanText}`.trim();
-}
-
-export function formatListToStructuredObjects(list: any[]): { name: string; qty: number }[] {
-  if (!Array.isArray(list)) return [];
-  const result: { name: string; qty: number }[] = [];
-  list.forEach(item => {
-    if (!item) return;
-    if (typeof item === 'object') {
-      const rawName = String(item.name || item.role || item.member_name || item.text || item.deliverable || item.title || '').trim();
-      const parsed = parseQtyAndText(rawName);
-      const q = Number(item.qty || item.quantity || item.count || parsed.qty || 1);
-      const qty = isNaN(q) || q < 1 ? 1 : q;
-      if (parsed.text) {
-        result.push({ name: parsed.text, qty });
-      }
-    } else if (typeof item === 'string') {
-      const trimmed = item.trim();
-      if (!trimmed) return;
-      const parsed = parseQtyAndText(trimmed);
-      if (parsed.text) {
-        result.push({ name: parsed.text, qty: parsed.qty });
-      }
-    }
-  });
-  return result;
-}
-
-export function buildStep3EventPayloads(
-  pkgId: string,
-  currentEvents: any[],
-  editableInclusions: Record<string, any[]>,
-  editableDeliverables: Record<string, any[]>
-) {
-  const effectivePkgId = pkgId || 'Custom Package';
-  const hasEvents = currentEvents && currentEvents.length > 0;
-  const isMultiEvent = hasEvents && currentEvents.length > 1;
-  const eventsList = hasEvents ? currentEvents : [null];
-
-  const teamMembersJson = eventsList.map((event, idx) => {
-    const evId = event?.id || event?.event_id || `event_${idx + 1}`;
-    const evName = event?.event_name || event?.event_type || 'Unnamed Event';
-
-    const keysToTry = isMultiEvent
-      ? [
-          `${effectivePkgId}_${evId}`,
-          `${effectivePkgId}_${evName}`,
-          `Custom Package_${evId}`,
-          `Custom Package_${evName}`,
-          `custom_package_${evId}`,
-          `custom_package_${evName}`
-        ]
-      : [
-          `${effectivePkgId}_${evId}`,
-          `${effectivePkgId}_${evName}`,
-          `Custom Package_${evId}`,
-          `Custom Package_${evName}`,
-          `custom_package_${evId}`,
-          `custom_package_${evName}`,
-          effectivePkgId,
-          'Custom Package',
-          'custom_package'
-        ];
-
-    let list: any[] = [];
-    for (const k of keysToTry) {
-      if (editableInclusions[k] !== undefined && Array.isArray(editableInclusions[k]) && editableInclusions[k].length > 0) {
-        list = editableInclusions[k];
-        break;
-      }
-    }
-
-    return {
-      event_id: evId,
-      event_name: evName,
-      team_members: formatListToStructuredObjects(list)
-    };
-  });
-
-  const deliverablesJson = eventsList.map((event, idx) => {
-    const evId = event?.id || event?.event_id || `event_${idx + 1}`;
-    const evName = event?.event_name || event?.event_type || 'Unnamed Event';
-
-    const keysToTry = isMultiEvent
-      ? [
-          `${effectivePkgId}_${evId}`,
-          `${effectivePkgId}_${evName}`,
-          `Custom Package_${evId}`,
-          `Custom Package_${evName}`,
-          `custom_package_${evId}`,
-          `custom_package_${evName}`
-        ]
-      : [
-          `${effectivePkgId}_${evId}`,
-          `${effectivePkgId}_${evName}`,
-          `Custom Package_${evId}`,
-          `Custom Package_${evName}`,
-          `custom_package_${evId}`,
-          `custom_package_${evName}`,
-          effectivePkgId,
-          'Custom Package',
-          'custom_package'
-        ];
-
-    let list: any[] = [];
-    for (const k of keysToTry) {
-      if (editableDeliverables[k] !== undefined && Array.isArray(editableDeliverables[k]) && editableDeliverables[k].length > 0) {
-        list = editableDeliverables[k];
-        break;
-      }
-    }
-
-    return {
-      event_id: evId,
-      event_name: evName,
-      deliverables: formatListToStructuredObjects(list)
-    };
-  });
-
-  let flatTeamMembers: { name: string; qty: number }[] = [];
-  const eventTeamMembers = teamMembersJson.flatMap(e => e.team_members || []);
-  if (eventTeamMembers.length > 0) {
-    flatTeamMembers = eventTeamMembers;
-  } else {
-    const pkgList = editableInclusions[effectivePkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'] || [];
-    flatTeamMembers = formatListToStructuredObjects(pkgList);
-  }
-
-  let flatDeliverables: { name: string; qty: number }[] = [];
-  const eventDeliverables = deliverablesJson.flatMap(e => e.deliverables || []);
-  if (eventDeliverables.length > 0) {
-    flatDeliverables = eventDeliverables;
-  } else {
-    const pkgList = editableDeliverables[effectivePkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'] || [];
-    flatDeliverables = formatListToStructuredObjects(pkgList);
-  }
-
-  return {
-    teamMembersJson,
-    deliverablesJson,
-    flatTeamMembers,
-    flatDeliverables,
-    teamMembersText: teamMembersJson.length > 1 ? JSON.stringify(teamMembersJson) : JSON.stringify(flatTeamMembers),
-    deliverablesText: deliverablesJson.length > 1 ? JSON.stringify(deliverablesJson) : JSON.stringify(flatDeliverables)
-  };
-}
-
-export function parseTeamMembersJsonToRecord(
-  rawTeamData: any,
-  pkgId: string,
-  eventsList: any[] = []
-): Record<string, string[]> {
-  const result: Record<string, string[]> = {};
-  if (!rawTeamData) return result;
-
-  let parsed: any = rawTeamData;
-  if (typeof rawTeamData === 'string') {
-    try {
-      parsed = JSON.parse(rawTeamData);
-    } catch (e) {
-      const list = rawTeamData.split(/[,\n]/).map((s: string) => {
-        const { qty, text } = parseQtyAndText(s);
-        return text ? combineQtyAndText(qty, text) : '';
-      }).filter(Boolean);
-      if (list.length > 0) {
-        result[pkgId] = list;
-        result['Custom Package'] = list;
-        result['custom_package'] = list;
-      }
-      return result;
-    }
-  }
-
-  if (Array.isArray(parsed)) {
-    let generalList: string[] = [];
-    parsed.forEach((item: any) => {
-      if (typeof item === 'string') {
-        const { qty, text } = parseQtyAndText(item);
-        if (text) generalList.push(combineQtyAndText(qty, text));
-      } else if (item && typeof item === 'object') {
-        const isEventStructure = (item.event_name || item.event_type || item.event_id) && (Array.isArray(item.team_members) || Array.isArray(item.members));
-        if (isEventStructure) {
-          const evName = item.event_name || item.event_type;
-          const evId = item.event_id;
-          const membersList = Array.isArray(item.team_members) ? item.team_members : (Array.isArray(item.members) ? item.members : []);
-          const members = membersList.map((m: any) => {
-            const { qty, text } = parseQtyAndText(m);
-            return text ? combineQtyAndText(qty, text) : '';
-          }).filter(Boolean);
-
-          if (evName === 'General' || !evName) {
-            generalList = [...generalList, ...members];
-          } else {
-            if (members.length > 0) {
-              result[`${pkgId}_${evName}`] = members;
-              result[`Custom Package_${evName}`] = members;
-              result[`custom_package_${evName}`] = members;
-              if (evId) {
-                result[`${pkgId}_${evId}`] = members;
-                result[`Custom Package_${evId}`] = members;
-                result[`custom_package_${evId}`] = members;
-              }
-              const matchedEv = (eventsList || []).find(e =>
-                (e.id && String(e.id) === String(evId)) ||
-                (e.event_name && e.event_name === evName) ||
-                (e.event_type && e.event_type === evName)
-              );
-              if (matchedEv) {
-                result[`${pkgId}_${matchedEv.id}`] = members;
-                result[`Custom Package_${matchedEv.id}`] = members;
-                result[`custom_package_${matchedEv.id}`] = members;
-              }
-            }
-          }
-        } else {
-          const rawName = item.role || item.member_name || item.name || item.text || item.title || '';
-          const { qty: parsedQty, text: parsedText } = parseQtyAndText(rawName);
-          const q = Number(item.qty || item.quantity || item.count || parsedQty || 1);
-          const itemQty = isNaN(q) || q < 1 ? 1 : q;
-          if (parsedText) {
-            generalList.push(combineQtyAndText(itemQty, parsedText));
-          }
-        }
-      }
-    });
-
-    if (generalList.length > 0) {
-      result[pkgId] = generalList;
-      result['Custom Package'] = generalList;
-      result['custom_package'] = generalList;
-      if (eventsList && eventsList.length === 1) {
-        const singleEv = eventsList[0];
-        if (singleEv) {
-          const evId = singleEv.id || singleEv.event_id;
-          const evName = singleEv.event_name || singleEv.event_type;
-          if (evId) {
-            result[`${pkgId}_${evId}`] = generalList;
-            result[`Custom Package_${evId}`] = generalList;
-            result[`custom_package_${evId}`] = generalList;
-          }
-          if (evName) {
-            result[`${pkgId}_${evName}`] = generalList;
-            result[`Custom Package_${evName}`] = generalList;
-            result[`custom_package_${evName}`] = generalList;
-          }
-        }
-      }
-    }
-  } else if (parsed && typeof parsed === 'object') {
-    Object.keys(parsed).forEach(k => {
-      if (Array.isArray(parsed[k])) {
-        result[k] = parsed[k].map((s: any) => {
-          const { qty, text } = parseQtyAndText(s);
-          return text ? combineQtyAndText(qty, text) : '';
-        }).filter(Boolean);
-      }
-    });
-  }
-
-  return result;
-}
-
-export function parseDeliverablesJsonToRecord(
-  rawDelData: any,
-  pkgId: string,
-  eventsList: any[] = []
-): Record<string, string[]> {
-  const result: Record<string, string[]> = {};
-  if (!rawDelData) return result;
-
-  let parsed: any = rawDelData;
-  if (typeof rawDelData === 'string') {
-    try {
-      parsed = JSON.parse(rawDelData);
-    } catch (e) {
-      const list = rawDelData.split(/[,\n]/).map((s: string) => {
-        const { qty, text } = parseQtyAndText(s);
-        return text ? combineQtyAndText(qty, text) : '';
-      }).filter(Boolean);
-      if (list.length > 0) {
-        result[pkgId] = list;
-        result['Custom Package'] = list;
-        result['custom_package'] = list;
-      }
-      return result;
-    }
-  }
-
-  if (Array.isArray(parsed)) {
-    let generalList: string[] = [];
-    parsed.forEach((item: any) => {
-      if (typeof item === 'string') {
-        const { qty, text } = parseQtyAndText(item);
-        if (text) generalList.push(combineQtyAndText(qty, text));
-      } else if (item && typeof item === 'object') {
-        const isEventStructure = (item.event_name || item.event_type || item.event_id) && (Array.isArray(item.deliverables) || Array.isArray(item.deliverables_list));
-        if (isEventStructure) {
-          const evName = item.event_name || item.event_type;
-          const evId = item.event_id;
-          let deliverables: string[] = [];
-          if (Array.isArray(item.deliverables)) {
-            deliverables = item.deliverables.map((d: any) => {
-              const { qty, text } = parseQtyAndText(d);
-              return text ? combineQtyAndText(qty, text) : '';
-            }).filter(Boolean);
-          } else if (Array.isArray(item.deliverables_list)) {
-            deliverables = item.deliverables_list.map((d: any) => {
-              const { qty, text } = parseQtyAndText(d);
-              return text ? combineQtyAndText(qty, text) : '';
-            }).filter(Boolean);
-          }
-
-          if (evName === 'General' || !evName || evName === 'Unnamed Event') {
-            generalList = [...generalList, ...deliverables];
-          } else {
-            if (deliverables.length > 0) {
-              result[`${pkgId}_${evName}`] = deliverables;
-              result[`Custom Package_${evName}`] = deliverables;
-              result[`custom_package_${evName}`] = deliverables;
-              if (evId) {
-                result[`${pkgId}_${evId}`] = deliverables;
-                result[`Custom Package_${evId}`] = deliverables;
-                result[`custom_package_${evId}`] = deliverables;
-              }
-              const matchedEv = (eventsList || []).find(e =>
-                (e.id && String(e.id) === String(evId)) ||
-                (e.event_name && e.event_name === evName) ||
-                (e.event_type && e.event_type === evName)
-              );
-              if (matchedEv) {
-                result[`${pkgId}_${matchedEv.id}`] = deliverables;
-                result[`Custom Package_${matchedEv.id}`] = deliverables;
-                result[`custom_package_${matchedEv.id}`] = deliverables;
-              }
-            }
-          }
-        } else {
-          const rawName = item.name || item.deliverable || item.title || item.text || '';
-          const { qty: parsedQty, text: parsedText } = parseQtyAndText(rawName);
-          const q = Number(item.qty || item.quantity || item.count || parsedQty || 1);
-          const itemQty = isNaN(q) || q < 1 ? 1 : q;
-          if (parsedText) {
-            generalList.push(combineQtyAndText(itemQty, parsedText));
-          }
-        }
-      }
-    });
-
-    if (generalList.length > 0) {
-      result[pkgId] = generalList;
-      result['Custom Package'] = generalList;
-      result['custom_package'] = generalList;
-      if (eventsList && eventsList.length === 1) {
-        const singleEv = eventsList[0];
-        if (singleEv) {
-          const evId = singleEv.id || singleEv.event_id;
-          const evName = singleEv.event_name || singleEv.event_type;
-          if (evId) {
-            result[`${pkgId}_${evId}`] = generalList;
-            result[`Custom Package_${evId}`] = generalList;
-            result[`custom_package_${evId}`] = generalList;
-          }
-          if (evName) {
-            result[`${pkgId}_${evName}`] = generalList;
-            result[`Custom Package_${evName}`] = generalList;
-            result[`custom_package_${evName}`] = generalList;
-          }
-        }
-      }
-    }
-  } else if (parsed && typeof parsed === 'object') {
-    Object.keys(parsed).forEach(k => {
-      if (Array.isArray(parsed[k])) {
-        result[k] = parsed[k].map((s: any) => {
-          const { qty, text } = parseQtyAndText(s);
-          return text ? combineQtyAndText(qty, text) : '';
-        }).filter(Boolean);
-      }
-    });
-  }
-
-  return result;
-}
-
-interface CompactQtyItemRowProps {
-  value: string;
-  options?: string[];
-  placeholder: string;
-  addLabel?: string;
-  accentColor?: "indigo" | "emerald";
-  disabled?: boolean;
-  onChange: (newValue: string) => void;
-  onAdd?: () => void;
-  onDelete: () => void;
-}
-
-const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
-  value,
-  options,
-  placeholder,
-  disabled = false,
-  onChange,
-  onDelete,
-}) => {
-  const { qty, text } = React.useMemo(() => parseQtyAndText(value), [value]);
-
-  const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (disabled) return;
-    const rawVal = e.target.value;
-    const newQty = parseInt(rawVal, 10);
-    const validQty = isNaN(newQty) || newQty < 1 ? 1 : newQty;
-    onChange(combineQtyAndText(validQty, text));
-  };
-
-  const handleTextChange = (newText: string) => {
-    if (disabled) return;
-    onChange(combineQtyAndText(qty, newText));
-  };
-
-  return (
-    <div className={`flex items-center gap-2 bg-slate-950/40 border border-slate-800/80 p-2 sm:p-2.5 rounded-lg transition-all ${disabled ? 'opacity-60 pointer-events-none' : 'hover:border-slate-700/80'}`}>
-      <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] font-bold text-slate-400 uppercase font-mono hidden sm:inline">Qty</span>
-        <input
-          type="number"
-          min="1"
-          disabled={disabled}
-          value={qty}
-          onChange={handleQtyChange}
-          className="w-12 sm:w-16 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-1.5 text-xs font-mono font-bold text-center text-white shrink-0 disabled:opacity-50"
-          placeholder="Qty"
-          title="Quantity"
-        />
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <LocalEditableInput
-          value={text}
-          options={options}
-          placeholder={placeholder}
-          disabled={disabled}
-          onChange={handleTextChange}
-          className="w-full bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-2.5 text-xs text-slate-100 font-medium disabled:opacity-50"
-        />
-      </div>
-
-      <div className="shrink-0 flex items-center justify-center">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={onDelete}
-          className={`w-10 h-10 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1 text-[16px] sm:text-[11px] text-rose-400 hover:text-rose-300 font-bold font-mono bg-rose-500/10 hover:bg-rose-500/20 rounded-md transition-all flex items-center justify-center gap-1 border border-rose-500/20 ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-        >
-          <span className="sm:hidden">ğŸ—‘</span>
-          <span className="hidden sm:inline">Delete</span>
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const validateAndFormatTime = (timeStr: any, fieldLabel: string): string | null => {
-  if (timeStr === undefined || timeStr === null) return null;
-  const str = String(timeStr).trim();
-  if (str === '' || str === 'null' || str === 'undefined' || str === 'Invalid Date') {
-    return null;
-  }
-  const normalized = str.replace(/\s+/g, ' ');
-  const ampmMatch = normalized.toUpperCase().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
-  const hhmmMatch = normalized.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
-  
-  if (!ampmMatch && !hhmmMatch) {
-    throw new Error(`${fieldLabel} is invalid.`);
-  }
-
-  if (ampmMatch) {
-    let hours = parseInt(ampmMatch[1], 10);
-    const minutes = ampmMatch[2];
-    const period = ampmMatch[3];
-
-    if (hours < 1 || hours > 12 || parseInt(minutes, 10) < 0 || parseInt(minutes, 10) > 59) {
-      throw new Error(`${fieldLabel} is invalid.`);
-    }
-
-    if (period === 'PM' && hours < 12) {
-      hours += 12;
-    } else if (period === 'AM' && hours === 12) {
-      hours = 0;
-    }
-
-    const hh = String(hours).padStart(2, '0');
-    return `${hh}:${minutes}:00`;
-  }
-
-  if (hhmmMatch) {
-    const hours = parseInt(hhmmMatch[1], 10);
-    const minutes = hhmmMatch[2];
-    const seconds = hhmmMatch[3] || '00';
-
-    if (hours < 0 || hours > 23 || parseInt(minutes, 10) < 0 || parseInt(minutes, 10) > 59 || parseInt(seconds, 10) < 0 || parseInt(seconds, 10) > 59) {
-      throw new Error(`${fieldLabel} is invalid.`);
-    }
-
-    const hh = String(hours).padStart(2, '0');
-    return `${hh}:${minutes}:${seconds}`;
-  }
-
-  throw new Error(`${fieldLabel} is invalid.`);
-};
-
-const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: number }> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        try {
-          const dataURL = canvas.toDataURL('image/png');
-          const aspect = img.naturalWidth / img.naturalHeight;
-          resolve({ base64: dataURL, aspect });
-        } catch (err) {
-          reject(err);
-        }
-      } else {
-        reject(new Error('Failed to get 2D context'));
-      }
-    };
-    img.onerror = (e) => {
-      reject(e);
-    };
-    img.src = url;
-  });
-};
-
-const generateQuotationPdfFileName = (leadObj: any): string => {
-  const customerName = (leadObj?.customer_name || 'Customer').trim();
-  const leadId = (leadObj?.lead_id || leadObj?.id || 'QUOTE').trim();
-
-  // Sanitize customer name and lead ID for file system safety:
-  // Replace invalid filename characters (/ \ : * ? " < > |) with underscores
-  const sanitizedCustomer = customerName
-    .replace(/[/\\:*?"<>|]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'Customer';
-
-  const sanitizedLeadId = leadId
-    .replace(/[/\\:*?"<>|]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'QUOTE';
-
-  return `${sanitizedCustomer}_${sanitizedLeadId}_quote.pdf`;
-};
-
-const generateQuotationPDF = (
-  lead: any,
-  activePkgs: any[],
-  quoteNum: string,
-  termsText: string,
-  logoBase64?: string,
-  logoAspect = 1,
-  editableInclusions?: Record<string, string[]>,
-  editableDeliverables?: Record<string, string[]>,
-  discountValue = 0,
-  additionalCharges = 0,
-  quoteServices: { id: string; name: string; qty: number; price: number; isAdditional?: boolean }[] = []
-) => {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
-  });
-
-  // Color Palette & Premium Theme Variables (Photography Studio Inspired)
-  const slateDark = [15, 23, 42];      // #0f172a
-  const slateGray = [100, 116, 139];   // #64748b
-  const bgLightGrid = [248, 250, 252]; // #f8fafc
-  const headerBgColor = [18, 18, 22];  // Luxury Carbon Black
-  const goldColor = [212, 175, 55];   // #D4AF37 Classic Gold
-
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return 'N/A';
-    return formatDateDDMMYY(dateStr) || dateStr;
-  };
-
-  // Dynamic layout configuration options (Default vs Compact to optimize page count and avoid sparse pages)
-  const defaultConfig = {
-    secSpacing: 6,
-    rowPadding: 2.5,
-    rowTextHeight: 4.2,
-    termsSpacing: 3.8,
-    tableSpacing: 5,
-    pricingCardHeight: 25.5,
-    paymentCardHeight: 29,
-    boxPadding: 16,
-    textPadding: 4.2,
-    notesPadding: 4.2
-  };
-
-  const compactConfig = {
-    secSpacing: 4,
-    rowPadding: 1.5,
-    rowTextHeight: 3.8,
-    termsSpacing: 3.2,
-    tableSpacing: 3,
-    pricingCardHeight: 21,
-    paymentCardHeight: 24,
-    boxPadding: 12,
-    textPadding: 3.6,
-    notesPadding: 3.6
-  };
-
-  // Pre-split fields to calculate wrap height accurately
-  const wrapCustName = doc.splitTextToSize(lead.customer_name || '', 50);
-  const wrapEmail = doc.splitTextToSize(lead.email || 'Not Provided', 50);
-  const displayEventType = lead.event_type === 'Other' ? (lead.custom_event_name || lead.custom_event_type || 'Other') : (lead.event_type || 'N/A');
-  const wrapEventType = doc.splitTextToSize(displayEventType, 50);
-  const wrapLocation = doc.splitTextToSize(lead.event_location || 'N/A', 50);
-
-  const shootTypeStr = lead.desired_event_shoot_type || lead.shoot_type || '';
-  const shootTypes = shootTypeStr ? shootTypeStr.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-  const wrapShootType = shootTypes.length > 0 
-    ? shootTypes.map((st: string) => `â€¢ ${st}`) 
-    : ['N/A'];  // Resolve dynamic services
-  let services = [...quoteServices];
-
-  if (!services || services.length === 0) {
-    const baseSum = activePkgs.reduce((sum, p) => sum + Number(p.package_cost || p.price || 0), 0);
-    const defaultItems = [
-      '2 Photographers',
-      '1 Cinematographer',
-      'Drone Coverage',
-      'LED Wall',
-      'Album (40 Sheets)',
-      'Teaser Video',
-      'Highlight Video',
-      'Full Event Coverage'
-    ];
-    const defaultPrices = [20000, 15000, 10000, 10050, 8000, 7000, 5000, 5000];
-    const sumDefault = defaultPrices.reduce((a, b) => a + b, 0);
-    const ratio = baseSum ? (baseSum / sumDefault) : 1;
-
-    defaultItems.forEach((name, idx) => {
-      services.push({
-        id: `fallback_base_${idx}`,
-        name,
-        qty: 1,
-        price: Math.round((defaultPrices[idx] || 5000) * ratio),
-        isAdditional: false
-      });
-    });
-  }
-
-  if (additionalCharges > 0) {
-    services.push({
-      id: 'extra_charges',
-      name: 'Extra Charges',
-      qty: 1,
-      price: additionalCharges,
-      isAdditional: true
-    });
-  }
-
-  const baseServices = services.filter(s => !s.isAdditional);
-  const additionalServices = services.filter(s => s.isAdditional);
-
-  // Helper formatting and normalization routines for cleaning characters & detecting duplicate specifications
-  const normalizeForComparison = (str: string) => {
-    return str
-      .toLowerCase()
-      .replace(/[^\w\s]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
-  };
-
-  const cleanText = (text: string) => {
-    if (!text) return '';
-    let cleaned = text
-      .replace(/Ã¾Ã¿/g, '')
-      .replace(/Ã¿Ã¾/g, '')
-      .replace(/\uFEFF/g, '')
-      .replace(/\uFFFE/g, '');
-    cleaned = cleaned.replace(/^[\sâ€¢\-\*\u2022\u0095\x95\x96\u2013\u2014\s]+/g, '');
-    cleaned = cleaned.replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.');
-    return cleaned.trim();
-  };
-
-    // NEW PREP FOR TEAM MEMBERS (INCLUSIONS) AND DELIVERABLES
-  const pkg = activePkgs[0];
-  const pkgId = pkg ? (pkg.package_id || pkg.id || 'default') : 'default';
-  const pkgName = pkg ? (pkg.package_name || pkg.name || 'Base Package') : 'Base Package';
-
-  const inclusionsList = (editableInclusions?.[pkgId] || editableInclusions?.['Custom Package'] || editableInclusions?.['custom_package'] || []).filter(Boolean);
-
-  let rawDelList: string[] = [];
-  if (editableDeliverables?.[pkgId] && editableDeliverables[pkgId].filter(Boolean).length > 0) {
-    rawDelList = editableDeliverables[pkgId].filter(Boolean);
-  } else if (editableDeliverables?.['Custom Package'] && editableDeliverables['Custom Package'].filter(Boolean).length > 0) {
-    rawDelList = editableDeliverables['Custom Package'].filter(Boolean);
-  } else if (editableDeliverables?.['custom_package'] && editableDeliverables['custom_package'].filter(Boolean).length > 0) {
-    rawDelList = editableDeliverables['custom_package'].filter(Boolean);
-  } else if (editableDeliverables && Object.values(editableDeliverables).flat().filter(Boolean).length > 0) {
-    rawDelList = Object.values(editableDeliverables).flat().filter(Boolean);
-  } else {
-    const delText = lead?.deliverables_description || pkg?.deliverables || pkg?.deliverables_description || lead?.deliverables || '';
-    if (delText) {
-      try {
-        const parsed = JSON.parse(delText);
-        if (Array.isArray(parsed)) {
-          if (typeof parsed[0] === 'string') {
-            rawDelList = parsed;
-          } else if (parsed[0] && Array.isArray(parsed[0].deliverables)) {
-            rawDelList = parsed.flatMap((item: any) => Array.isArray(item.deliverables) ? item.deliverables : []);
-          }
-        }
-      } catch (e) {
-        rawDelList = delText.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean);
-      }
-    }
-  }
-
-  const deliverablesList = rawDelList.filter(Boolean);
-
-  const eventsToRender: {
-    eventName: string;
-    eventDate: string;
-    eventTime: string;
-    eventEndDate: string;
-    eventEndTime: string;
-    eventLocation: string;
-    guestPax: string;
-    members: string[];
-    deliverables: string[];
-  }[] = [];
-
-  if (lead.events && lead.events.length > 0) {
-    // 1. First, create the array of events
-    const unsortedEvents: any[] = [];
-    lead.events.forEach((event: any) => {
-      const eventKey = `${pkgId}_${event.id}`;
-      const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
-      
-      const eventInclusions = editableInclusions?.[eventKey] !== undefined
-        ? editableInclusions[eventKey]
-        : (editableInclusions?.[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
-
-      const eventName = event.event_name || event.event_type || 'Unnamed Event';
-
-      const eventDeliverables = editableDeliverables?.[eventKey] !== undefined
-        ? editableDeliverables[eventKey]
-        : (editableDeliverables?.[nameKey] !== undefined ? editableDeliverables[nameKey] : null);
-
-      const items = eventDeliverables !== null
-        ? eventDeliverables.filter(Boolean)
-        : deliverablesList;
-
-      unsortedEvents.push({
-        eventName,
-        eventDate: event.event_start_date || event.event_date || "",
-        eventTime: event.event_time || event.event_start_time || "",
-        eventEndDate: event.event_end_date || "",
-        eventEndTime: event.event_end_time || "",
-        eventLocation: event.event_location || "N/A",
-        guestPax: event.guest_pax !== undefined && event.guest_pax !== null && event.guest_pax !== '' ? String(event.guest_pax) : (lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A')),
-        members: (eventInclusions || []).filter(Boolean),
-        deliverables: items
-      });
-    });
-
-    // 2. Sort by event date ascending
-    unsortedEvents.sort((a, b) => {
-      const dateA = new Date(a.eventDate || "9999-12-31").getTime();
-      const dateB = new Date(b.eventDate || "9999-12-31").getTime();
-      return dateA - dateB;
-    });
-
-    // 3. Push to eventsToRender
-    eventsToRender.push(...unsortedEvents);
-  } else {
-    eventsToRender.push({
-      eventName: displayEventType,
-      eventDate: lead.event_date || "",
-      eventTime: lead.event_time || "",
-      eventEndDate: lead.event_end_date || "",
-      eventEndTime: lead.event_end_time || "",
-      eventLocation: lead.event_location || "N/A",
-      guestPax: lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A'),
-      members: (inclusionsList || []).filter(Boolean),
-      deliverables: deliverablesList
-    });
-  }
-
-  const custRemarks = lead.remarks_raw || lead.remarks || '';
-  const teamRemarks = lead.notes || ''; 
-
-  const defaultTerms = [
-    'Payments are non-refundable.',
-    'Crew food arrangements from client side.',
-    '50% advance payment before the event.',
-    'If duration exceeds 1 hour, additional charges of â‚¹1,500 per hour will be applicable.',
-    '50% full payment on event day.',
-    'Pendrive and Hard Disk are not included.',
-    'Edited data will be shared via Google Drive link.'
-  ];
-
-  const termsToRender = termsText.split('\n').map(t => t.trim()).filter(Boolean).length > 0
-    ? termsText.split('\n').map(t => t.trim()).filter(Boolean)
-    : defaultTerms;
-
-  // Layout simulation routine
-  const simulate = (cfg: typeof defaultConfig) => {
-    let simY = 49;
-    let simPageCount = 1;
-
-    const simTable = (itemsCount: number, hideHeader: boolean) => {
-      let tableH = hideHeader ? 4 : (4 + 7.5); 
-      for (let i = 0; i < itemsCount; i++) {
-        tableH += Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
-      }
-      if (simY + tableH > 250 && tableH <= (250 - 52)) {
-        simY = 52;
-        simPageCount++;
-      } else {
-        let currentTableY = simY + (hideHeader ? 4 : (4 + 7.5));
-        for (let i = 0; i < itemsCount; i++) {
-          const rowH = Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
-          if (currentTableY + rowH > 250) {
-            currentTableY = 52 + (hideHeader ? 0 : 7.5);
-            simPageCount++;
-          }
-          currentTableY += rowH;
-        }
-        simY = currentTableY;
-      }
-      simY += cfg.tableSpacing;
-    };
-
-    eventsToRender.forEach((evObj) => {
-      // Event Name / Title height (approx 10.5)
-      if (simY + 10.5 > 250) {
-        simY = 52;
-        simPageCount++;
-      }
-      simY += 10.5;
-
-      // Customer details card height (26)
-      if (simY + 26 > 250) {
-        simY = 52;
-        simPageCount++;
-      }
-      simY += 26 + cfg.secSpacing;
-
-      // Team members table (with header)
-      if (evObj.members.length > 0) {
-        simTable(evObj.members.length, false);
-      }
-
-      // Deliverables table (with header)
-      if (evObj.deliverables.length > 0) {
-        simTable(evObj.deliverables.length, false);
-      }
-    });
-
-    if (additionalServices.length > 0) {
-      simTable(additionalServices.length, false);
-    }
-
-    const pricingH = 4.5 + cfg.pricingCardHeight;
-    if (simY + pricingH > 250) {
-      simY = 52;
-      simPageCount++;
-    }
-    simY += pricingH + cfg.secSpacing;
-
-    if (custRemarks || teamRemarks) {
-      let simBoxH = 4;
-      if (custRemarks) {
-        const wrappedCustSim = doc.splitTextToSize(custRemarks, 170);
-        simBoxH += 4.5 + (wrappedCustSim.length * cfg.notesPadding);
-      }
-      if (teamRemarks) {
-        const wrappedTeamSim = doc.splitTextToSize(teamRemarks, 170);
-        simBoxH += 4.5 + (wrappedTeamSim.length * cfg.notesPadding) + (custRemarks ? 4 : 0);
-      }
-      simBoxH += 2;
-
-      const remarksH = 4.5 + simBoxH;
-      if (simY + remarksH > 250) {
-        simY = 52;
-        simPageCount++;
-      }
-      simY += remarksH + cfg.secSpacing;
-    }
-
-    // 8. TERMS & CONDITIONS (Boxed)
-    if (simY + 4.5 > 250) {
-      simY = 52;
-      simPageCount++;
-    }
-    simY += 4.5; // heading
-
-    let simTermsIndex = 0;
-    while (simTermsIndex < termsToRender.length) {
-      let tempY = simY + 4; // top padding of box
-      let collectedOnPage = 0;
-
-      while (simTermsIndex < termsToRender.length) {
-        const term = termsToRender[simTermsIndex];
-        const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
-        const wrapped = doc.splitTextToSize(cleanTerm, 163);
-        const termH = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
-
-        if (tempY + termH > 248) {
-          if (collectedOnPage === 0) {
-            // Force break page
-            simY = 52;
-            simPageCount++;
-            tempY = simY + 4;
-            continue;
-          }
-          break; // Stop adding terms on this page, box will end here
-        }
-        collectedOnPage++;
-        tempY += termH;
-        simTermsIndex++;
-      }
-
-      if (collectedOnPage > 0) {
-        const boxH = tempY - simY + 2; // including bottom padding
-        simY = simY + boxH + 4; // ending of this box plus some margin
-      }
-    }
-
-    // 9. PHOTOCREW PICTURES FOOTER (Always Last, at footerY = 255)
-    if (simY > 250) {
-      simY = 52;
-      simPageCount++;
-    }
-    simY = 275;
-
-    return { pageCount: simPageCount, lastPageY: simY };
-  };
-
-  // Run simulations to select the most appropriate page-budget configuration
-  const defaultRes = simulate(defaultConfig);
-  let cfg = defaultConfig;
-
-  if (defaultRes.pageCount > 1) {
-    const compactRes = simulate(compactConfig);
-    if (compactRes.pageCount < defaultRes.pageCount) {
-      cfg = compactConfig;
-    } else if (compactRes.pageCount === defaultRes.pageCount && compactRes.lastPageY < defaultRes.lastPageY) {
-      if (defaultRes.pageCount === 2 && defaultRes.lastPageY < 80) {
-        cfg = compactConfig;
-      }
-    }
-  }
-
-  // Header drawing function
-  const drawPageHeader = (pageDoc: typeof doc) => {
-    // Premium Dark Carbon Header Bar
-    pageDoc.setFillColor(headerBgColor[0], headerBgColor[1], headerBgColor[2]);
-    pageDoc.rect(0, 0, 210, 42, 'F'); 
-
-    // Gold Accent Line separating header from content
-    pageDoc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
-    pageDoc.rect(0, 41, 210, 1.2, 'F');
-
-    let logoY = 6;
-    let logoW = 18;
-    let logoH = 18;
-    let hasLogo = false;
-    
-    if (logoBase64 && logoBase64.startsWith('data:image')) {
-      const maxLogoW = 24;
-      const maxLogoH = 18;
-      logoW = maxLogoH * logoAspect;
-      logoH = maxLogoH;
-      if (logoW > maxLogoW) {
-        logoW = maxLogoW;
-        logoH = maxLogoW / logoAspect;
-      }
-      logoY = (30 - logoH) / 2;
-      try {
-        pageDoc.addImage(logoBase64, 'PNG', 15, logoY, logoW, logoH);
-        hasLogo = true;
-      } catch (e) {
-        console.warn('Failed to add logo image to PDF:', e);
-      }
-    }
-
-    if (!hasLogo) {
-      pageDoc.setDrawColor(goldColor[0], goldColor[1], goldColor[2]);
-      pageDoc.setLineWidth(0.6);
-      pageDoc.setFillColor(18, 18, 22);
-      pageDoc.circle(24, logoY + 9, 9, 'FD');
-      pageDoc.setFont('helvetica', 'bold');
-      pageDoc.setFontSize(11);
-      pageDoc.setTextColor(255, 255, 255);
-      pageDoc.text('P', 22.2, logoY + 12.2);
-      logoW = 18;
-      logoY = 8;
-    }
-
-    const brandingX = 15 + logoW + 5;
-
-    // Left block: Company Branding & Location Info
-    pageDoc.setFont('helvetica', 'bold');
-    pageDoc.setFontSize(13.5);
-    pageDoc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    pageDoc.text('PHOTOCREW PICTURES', brandingX, logoY + 3);
-
-    pageDoc.setFont('helvetica', 'normal');
-    pageDoc.setFontSize(7);
-    pageDoc.setTextColor(185, 185, 185);
-    pageDoc.text('PREMIUM PHOTOGRAPHY STUDIO & VISUAL PRODUCTION', brandingX, logoY + 7.5);
-    
-    pageDoc.setFontSize(7);
-    pageDoc.setTextColor(150, 150, 150);
-    pageDoc.text('No. 45, 1st Floor, 80 Feet Road, VijayNagar, Bangalore - 560040', brandingX, logoY + 12);
-    pageDoc.text('GSTIN: 29AAFCP5894N1ZN (Registered Karnataka)', brandingX, logoY + 16.5);
-
-    // Right block: Studio Contact Info
-    pageDoc.setFont('helvetica', 'normal');
-    pageDoc.setFontSize(7.5);
-    pageDoc.setTextColor(230, 230, 230);
-    pageDoc.text('www.photocrewpictures.com', 195, logoY + 4, { align: 'right' });
-    pageDoc.text('info@photocrewpictures.com', 195, logoY + 8.5, { align: 'right' });
-    pageDoc.text('+91 9060144016', 195, logoY + 13, { align: 'right' });
-
-    // Header Meta Row: Quote Number, Quote Date, and Validity Date
-    pageDoc.setFillColor(28, 28, 35);
-    pageDoc.rect(15, 30, 180, 7.5, 'F');
-    
-    pageDoc.setFont('helvetica', 'bold');
-    pageDoc.setFontSize(8);
-    pageDoc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    pageDoc.text('QUOTATION DOCUMENT', 19, 35);
-
-    pageDoc.setFont('helvetica', 'normal');
-    pageDoc.setFontSize(7.5);
-    pageDoc.setTextColor(240, 240, 240);
-    pageDoc.text(`Date: ${formatDate(lead.quotation_date || new Date().toISOString().split('T')[0])}`, 130, 35);
-    pageDoc.text(`Validity: 15 Days`, 168, 35);
-  };
-
-  // Footer drawing function
-  const drawPageFooter = (pageDoc: typeof doc, pageNum: number, totalPages: number) => {
-    let footerY = 260;
-    
-    if (totalPages > 1) {
-      pageDoc.setFont('helvetica', 'normal');
-      pageDoc.setFontSize(7);
-      pageDoc.setTextColor(148, 163, 184);
-      pageDoc.text(`Page ${pageNum} of ${totalPages}`, 195, footerY + 14, { align: 'right' });
-    }
-
-    pageDoc.setFillColor(goldColor[0], goldColor[1], goldColor[2]);
-    pageDoc.rect(0, 292, 210, 5, 'F');
-  };
-
-  const drawPhotoCrewFooter = (pageDoc: typeof doc, footerY: number) => {
-    pageDoc.setDrawColor(226, 232, 240);
-    pageDoc.setLineWidth(0.3);
-    pageDoc.line(15, footerY, 195, footerY);
-
-    pageDoc.setFont('helvetica', 'bold');
-    pageDoc.setFontSize(8.5);
-    pageDoc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    pageDoc.text('PHOTOCREW PICTURES', 15, footerY + 5);
-    
-    pageDoc.setFont('helvetica', 'normal');
-    pageDoc.setFontSize(7.5);
-    pageDoc.setTextColor(100, 116, 139);
-    pageDoc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Phone: +91 9060144016', 15, footerY + 9);
-
-    pageDoc.setFont('helvetica', 'bold');
-    pageDoc.setFontSize(8);
-    pageDoc.setTextColor(goldColor[0], goldColor[1], goldColor[2]); 
-    pageDoc.text('Thank You For Choosing Photocrew Pictures', 15, footerY + 14);
-
-    pageDoc.setFont('helvetica', 'normal');
-    pageDoc.setFontSize(7.5);
-    pageDoc.setTextColor(100, 116, 139);
-    pageDoc.text('For Photocrew Pictures', 195, footerY + 5, { align: 'right' });
-    pageDoc.setFont('helvetica', 'bold');
-    pageDoc.setFontSize(8);
-    pageDoc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    pageDoc.text('Authorized Signatory', 195, footerY + 12, { align: 'right' });
-  };
-
-  const createNewPage = () => {
-    doc.addPage();
-    return 52; 
-  };
-
-  let currentY = 49;
-
-  const parsePdfItem = (raw: any): { name: string; qty: number } => {
-    if (raw === null || raw === undefined) return { name: '', qty: 1 };
-    if (typeof raw === 'object') {
-      const rawName = String(raw.name || raw.role || raw.member_name || raw.text || raw.deliverable || raw.title || '').trim();
-      const parsed = parseQtyAndText(rawName);
-      const q = Number(raw.qty || raw.quantity || raw.count || parsed.qty || 1);
-      const qty = isNaN(q) || q < 1 ? 1 : q;
-      let name = parsed.text || rawName;
-      name = cleanText(name);
-      name = name.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
-      name = name.replace(/^TEAM MEMBERS?\s*(?:INCLUDED)?\s*[:-]?\s*/i, '');
-      name = name.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, '').trim();
-      return { name, qty };
-    }
-    if (typeof raw === 'string') {
-      const trimmed = raw.trim();
-      if (!trimmed) return { name: '', qty: 1 };
-      if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
-        try {
-          const parsedObj = JSON.parse(trimmed);
-          return parsePdfItem(parsedObj);
-        } catch (e) {}
-      }
-      const parsed = parseQtyAndText(trimmed);
-      let name = parsed.text || trimmed;
-      name = cleanText(name);
-      name = name.replace(/^DELIVERABLES\s*[:-]?\s*/i, '');
-      name = name.replace(/^TEAM MEMBERS?\s*(?:INCLUDED)?\s*[:-]?\s*/i, '');
-      name = name.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, '').trim();
-      const qty = parsed.qty >= 1 ? parsed.qty : 1;
-      return { name, qty };
-    }
-    return { name: cleanText(String(raw)), qty: 1 };
-  };
-
-  const drawTeamMembersTable = (title: string, members: any[]) => {
-    if (!members || members.length === 0) return;
-
-    const mapped = members.map(m => parsePdfItem(m)).filter(m => m.name.length > 0);
-    if (mapped.length === 0) return;
-
-    let tableH = 4 + 7.5; // Title spacing + Header row
-    mapped.forEach((item) => {
-      const wrappedName = doc.splitTextToSize(item.name, 154);
-      tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-    });
-
-    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
-      currentY = createNewPage();
-    }
-
-    if (currentY + 4 > 250) {
-      currentY = createNewPage();
-    }
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text(title, 15, currentY);
-    currentY += 4;
-
-    if (currentY + 7.5 > 250) {
-      currentY = createNewPage();
-    }
-
-    // Header Row (Slate-800)
-    doc.setFillColor(30, 41, 59);
-    doc.rect(15, currentY, 180, 7.5, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    // Narrow QTY column: from 15 to 35 (width 20mm), centered at 25
-    doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
-    // Main column: from 35 to 195 (width 160mm), text start at 38
-    doc.text('TEAM MEMBER', 38, currentY + 4.8);
-
-    currentY += 7.5;
-
-    doc.setDrawColor(203, 213, 225); 
-    doc.setLineWidth(0.2);
-
-    mapped.forEach((item, index) => {
-      const wrappedName = doc.splitTextToSize(item.name, 154);
-      const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-
-      if (currentY + rowHeight > 250) {
-        doc.line(15, currentY, 195, currentY);
-        currentY = createNewPage();
-
-        doc.setFillColor(30, 41, 59);
-        doc.rect(15, currentY, 180, 7.5, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(255, 255, 255);
-        doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
-        doc.text('TEAM MEMBER (CONTINUED)', 38, currentY + 4.8);
-        currentY += 7.5;
-      }
-
-      if (index % 2 === 1) {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(15, currentY, 180, rowHeight, 'F');
-      }
-
-      // Vertical table border lines
-      doc.line(15, currentY, 15, currentY + rowHeight);
-      doc.line(35, currentY, 35, currentY + rowHeight);
-      doc.line(195, currentY, 195, currentY + rowHeight);
-
-      // Qty value (centered in 15..35)
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
-      doc.text(String(item.qty || 1), 25, currentY + 4.3, { align: 'center' });
-
-      // Member Name in main column (at 38)
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
-      wrappedName.forEach((line: string, i: number) => {
-        doc.text(line, 38, currentY + 4.3 + (i * cfg.rowTextHeight));
-      });
-
-      // Horizontal row bottom line
-      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
-      currentY += rowHeight;
-    });
-
-    currentY += cfg.tableSpacing; 
-  };
-
-  const drawEventDeliverablesTable = (title: string, deliverables: any[]) => {
-    if (!deliverables || deliverables.length === 0) return;
-
-    const mapped = deliverables.map(d => parsePdfItem(d)).filter(d => d.name.length > 0);
-    if (mapped.length === 0) return;
-
-    let tableH = 4 + 7.5; // Title spacing + Header row
-    mapped.forEach((item) => {
-      const wrappedName = doc.splitTextToSize(item.name, 154);
-      tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-    });
-
-    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
-      currentY = createNewPage();
-    }
-
-    if (currentY + 4 > 250) {
-      currentY = createNewPage();
-    }
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text(title, 15, currentY);
-    currentY += 4;
-
-    if (currentY + 7.5 > 250) {
-      currentY = createNewPage();
-    }
-
-    // Header Row (Slate-800)
-    doc.setFillColor(30, 41, 59);
-    doc.rect(15, currentY, 180, 7.5, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    // Narrow QTY column: from 15 to 35 (width 20mm), centered at 25
-    doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
-    // Main column: from 35 to 195 (width 160mm), text start at 38
-    doc.text('DELIVERABLE', 38, currentY + 4.8);
-
-    currentY += 7.5;
-
-    doc.setDrawColor(203, 213, 225); 
-    doc.setLineWidth(0.2);
-
-    mapped.forEach((item, index) => {
-      const wrappedName = doc.splitTextToSize(item.name, 154);
-      const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-
-      if (currentY + rowHeight > 250) {
-        doc.line(15, currentY, 195, currentY);
-        currentY = createNewPage();
-
-        doc.setFillColor(30, 41, 59);
-        doc.rect(15, currentY, 180, 7.5, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(255, 255, 255);
-        doc.text('QTY', 25, currentY + 4.8, { align: 'center' });
-        doc.text('DELIVERABLE (CONTINUED)', 38, currentY + 4.8);
-        currentY += 7.5;
-      }
-
-      if (index % 2 === 1) {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(15, currentY, 180, rowHeight, 'F');
-      }
-
-      // Vertical table border lines
-      doc.line(15, currentY, 15, currentY + rowHeight);
-      doc.line(35, currentY, 35, currentY + rowHeight);
-      doc.line(195, currentY, 195, currentY + rowHeight);
-
-      // Qty value (centered in 15..35)
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
-      doc.text(String(item.qty || 1), 25, currentY + 4.3, { align: 'center' });
-
-      // Deliverable Name in main column (at 38)
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
-      wrappedName.forEach((line: string, i: number) => {
-        doc.text(line, 38, currentY + 4.3 + (i * cfg.rowTextHeight));
-      });
-
-      // Horizontal row bottom line
-      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
-      currentY += rowHeight;
-    });
-
-    currentY += cfg.tableSpacing; 
-  };
-
-  const drawAdditionalTable = (title: string, items: { id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]) => {
-    let tableH = 4 + 7.5; 
-    items.forEach((item) => {
-      const cleanedItemName = cleanText(item.name || '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
-      tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-    });
-
-    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
-      currentY = createNewPage();
-    }
-
-    if (currentY + 4 > 250) {
-      currentY = createNewPage();
-    }
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text(title, 15, currentY);
-    currentY += 4;
-
-    if (currentY + 7.5 > 250) {
-      currentY = createNewPage();
-    }
-    doc.setFillColor(30, 41, 59); // Slate-800
-    doc.rect(15, currentY, 180, 7.5, 'F');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text('SERVICE / DELIVERABLES', 19, currentY + 4.8);
-
-    currentY += 7.5;
-
-    doc.setDrawColor(203, 213, 225); 
-    doc.setLineWidth(0.2);
-
-    items.forEach((item, index) => {
-      const cleanedItemName = cleanText(item.name || '');
-      const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
-      const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
-
-      if (currentY + rowHeight > 250) {
-        doc.line(15, currentY, 195, currentY);
-        currentY = createNewPage();
-
-        doc.setFillColor(30, 41, 59);
-        doc.rect(15, currentY, 180, 7.5, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(255, 255, 255);
-        doc.text('SERVICE / DELIVERABLES (CONTINUED)', 19, currentY + 4.8);
-        currentY += 7.5;
-      }
-
-      if (index % 2 === 1) {
-        doc.setFillColor(248, 250, 252);
-        doc.rect(15, currentY, 180, rowHeight, 'F');
-      }
-
-      doc.line(15, currentY, 15, currentY + rowHeight);
-      doc.line(195, currentY, 195, currentY + rowHeight);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
-
-      doc.setFillColor(51, 65, 85);
-      doc.circle(20, currentY + 4.3 - 0.9, 0.6, 'F');
-
-      wrappedName.forEach((line: string, i: number) => {
-        doc.text(line, 23, currentY + 4.3 + (i * cfg.rowTextHeight));
-      });
-
-      doc.line(15, currentY + rowHeight, 195, currentY + rowHeight);
-      currentY += rowHeight;
-    });
-
-    currentY += cfg.tableSpacing; 
-  };
-
-  // Now, iterate through events and draw the specified blocks
-  eventsToRender.forEach((evObj, idx) => {
-    // 1. EVENT NAME & META DETAILS
-    if (currentY + 11 > 250) {
-      currentY = createNewPage();
-    }
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-    const eventHeading = eventsToRender.length === 1
-      ? `EVENT â€” ${evObj.eventName.toUpperCase()}`
-      : `EVENT ${idx + 1} â€” ${evObj.eventName.toUpperCase()}`;
-    doc.text(eventHeading, 15, currentY);
-    currentY += 4.5;
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7.5);
-    doc.setTextColor(slateGray[0], slateGray[1], slateGray[2]);
-    
-    const formattedEvDate = formatDate(evObj.eventDate);
-    const formattedEvTime = evObj.eventTime ? formatTime12Hour(evObj.eventTime) : 'N/A';
-    const formattedEndDate = formatDate(evObj.eventEndDate);
-    const formattedEndTime = evObj.eventEndTime ? formatTime12Hour(evObj.eventEndTime) : 'N/A';
-    
-    const startStr = `Start: ${formattedEvDate} | ${formattedEvTime}`;
-    const endStr = `End: ${formattedEndDate} | ${formattedEndTime}`;
-    const locStr = `Location: ${evObj.eventLocation || 'N/A'}`;
-    
-    doc.text(`${startStr}`, 15, currentY);
-    doc.text(`${endStr}`, 70, currentY);
-    doc.text(`${locStr}`, 125, currentY);
-    currentY += 6;
-
-    // 2. CUSTOMER DETAILS CARD
-    if (currentY + 26 > 250) {
-      currentY = createNewPage();
-    }
-
-    doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
-    doc.roundedRect(15, currentY, 180, 26, 1.5, 1.5, 'F');
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(15, currentY, 180, 26, 1.5, 1.5, 'D');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text('CUSTOMER DETAILS', 20, currentY + 5);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(71, 85, 105);
-
-    const col1 = [
-      { label: 'Customer Name', val: lead.customer_name || 'N/A' },
-      { label: 'Mobile Number', val: lead.mobile || 'N/A' },
-      { label: 'Email Address', val: lead.email || 'N/A' },
-      { label: 'Quotation Date', val: formatDate(lead.quotation_date || new Date().toISOString().split('T')[0]) }
-    ];
-
-    const col2 = [
-      { label: 'Sales Staff Name', val: lead.sales_staff_name || 'N/A' },
-      { label: 'Sales Staff Mobile', val: lead.sales_staff_mobile || 'N/A' },
-      { label: 'Guest Pax', val: evObj.guestPax || 'N/A' }
-    ];
-
-    col1.forEach((item, i) => {
-      const itemY = currentY + 9.5 + (i * 4.5);
-      doc.text(item.label, 20, itemY);
-      doc.text(':', 45, itemY);
-      doc.text(String(item.val), 47, itemY);
-    });
-
-    col2.forEach((item, i) => {
-      const itemY = currentY + 9.5 + (i * 4.5);
-      doc.text(item.label, 110, itemY);
-      doc.text(':', 135, itemY);
-      doc.text(String(item.val), 137, itemY);
-    });
-
-    currentY += 26 + cfg.secSpacing;
-
-    // 3. TEAM MEMBERS INCLUDED
-    if (evObj.members.length > 0) {
-      drawTeamMembersTable('TEAM MEMBERS INCLUDED', evObj.members);
-    }
-
-    // 4. DELIVERABLES
-    if (evObj.deliverables.length > 0) {
-      drawEventDeliverablesTable('DELIVERABLES', evObj.deliverables);
-    }
-  });
-
-  // 5. ADDITIONAL SPECIFICATIONS & SERVICE ADD-ONS (if any)
-  if (additionalServices.length > 0) {
-    drawAdditionalTable('ADDITIONAL SPECIFICATIONS & SERVICE ADD-ONS', additionalServices);
-  }
-
-  // 5. PRICING SUMMARY CARD
-  const pricingCardTotalH = 4.5 + cfg.pricingCardHeight;
-  if (currentY + pricingCardTotalH > 250) {
-    currentY = createNewPage();
-  }
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('PRICING SUMMARY & ESTIMATES', 15, currentY);
-  currentY += 4.5;
-
-  doc.setFillColor(248, 250, 252);
-  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'F');
-  doc.setDrawColor(226, 232, 240);
-  doc.setLineWidth(0.2);
-  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'D');
-
-  const pricingRowH = cfg.pricingCardHeight / 3;
-  doc.line(15, currentY + pricingRowH, 195, currentY + pricingRowH);
-  doc.line(15, currentY + (pricingRowH * 2), 195, currentY + (pricingRowH * 2));
-  doc.line(115, currentY, 115, currentY + cfg.pricingCardHeight);
-
-  // Fetch saved / entered Final Quotation Amount from Sales Dashboard Section 2 / lead record
-  const getSavedFinalAmount = () => {
-    if (!lead) return null;
-    const candidates = [
-      lead.Final_Quotation_Amount,
-      lead.final_quotation_amount,
-      lead.final_amount,
-      lead.final_quoted_amount,
-      lead.dynamicFinalAmt,
-      lead.budget,
-      lead.quotation_amount
-    ];
-    for (const val of candidates) {
-      if (val !== undefined && val !== null && val !== '') {
-        const num = Number(val);
-        if (!Number.isNaN(num) && num > 0) {
-          return num;
-        }
-      }
-    }
-    return null;
-  };
-
-  const savedFinalAmt = getSavedFinalAmount();
-  const baseSumValRaw = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-  const addlSumVal = additionalServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-
-  // Use the saved Final Quotation Amount from Section 2 if available, otherwise calculate
-  const finalAmountSum = savedFinalAmt !== null ? savedFinalAmt : Math.max(0, baseSumValRaw + addlSumVal - discountValue);
-
-  // Ensure baseSumVal matches when displayed if baseSumValRaw was 0
-  const baseSumVal = (baseSumValRaw > 0) 
-    ? baseSumValRaw 
-    : Math.max(0, finalAmountSum + discountValue - addlSumVal);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(71, 85, 105);
-  
-  doc.text('Package Base Price', 19, currentY + pricingRowH - 2);
-  doc.text('Quotation Discount (Applied)', 19, currentY + (pricingRowH * 2) - 2);
-  
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text('FINAL ESTIMATED COMMERCIAL AMOUNT', 19, currentY + (pricingRowH * 3) - 2);
-
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(51, 65, 85);
-  doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + pricingRowH - 2, { align: 'right' });
-  doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right' });
-
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
-  doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right' });
-
-  currentY += cfg.pricingCardHeight + cfg.secSpacing;
-
-  // 6. PAYMENT DETAILS CARD (Completely hidden/removed as requested)
-  // PAYMENT DETAILS section is hidden from the quotation PDF.
-  // We do not increment currentY or draw the section.
-
-  // 8. TERMS AND CONDITIONS
-  if (currentY + 4.5 > 250) {
-    currentY = createNewPage();
-  }
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('TERMS & CONDITIONS', 15, currentY);
-  currentY += 4.5;
-
-  let termsIndex = 0;
-  while (termsIndex < termsToRender.length) {
-    let boxStartY = currentY;
-    let tempY = currentY + 4; // top padding of box
-    let pageTerms = [];
-
-    while (termsIndex < termsToRender.length) {
-      const term = termsToRender[termsIndex];
-      const cleanTerm = term.replace(/^\d+[\.\s\-)]+\s*/, '').replace(/[â‚¹\u20B9\u20b9]/g, 'Rs.').replace(/\s+/g, ' ').trim();
-      const prefix = `${termsIndex + 1}. `;
-      const wrapped = doc.splitTextToSize(cleanTerm, 163); // fits beautifully inside 180mm box with margins and padding
-      const termHeight = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
-
-      if (tempY + termHeight > 248) {
-        if (pageTerms.length === 0) {
-          // Force break page if not even one term fits
-          currentY = createNewPage();
-          boxStartY = currentY;
-          tempY = currentY + 4;
-          continue;
-        }
-        break; // Stop adding terms to this page, box will end here
-      }
-      pageTerms.push({ prefix, wrapped, termHeight });
-      tempY += termHeight;
-      termsIndex++;
-    }
-
-    if (pageTerms.length > 0) {
-      const boxHeight = tempY - boxStartY + 2; // including bottom padding of box
-      
-      // Draw a dedicated bordered content box for the terms on this page
-      doc.setFillColor(255, 255, 255);
-      doc.setDrawColor(226, 232, 240); // Light gray border
-      doc.setLineWidth(0.25);
-      doc.roundedRect(15, boxStartY, 180, boxHeight, 1.5, 1.5, 'FD'); // Rounded corners, filled with white, and bordered
-
-      let textOffset = boxStartY + 5; // Start with top padding
-      pageTerms.forEach((pt) => {
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.2);
-        doc.setTextColor(100, 116, 139);
-        doc.text(pt.prefix, 23, textOffset, { align: 'right' }); // Right-aligned prefix for vertical alignment
-
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(7.2);
-        pt.wrapped.forEach((line: string, lineIdx: number) => {
-          doc.text(line, 25, textOffset + (lineIdx * cfg.termsSpacing)); // Left-aligned wrapped text
-        });
-        textOffset += (pt.wrapped.length * cfg.termsSpacing) + 3; // Add spacing between terms
-      });
-
-      currentY = boxStartY + boxHeight + 4; // Spacing after the box
-    }
-  }
-
-  // 9. PHOTOCREW PICTURES FOOTER (Always Last)
-  // Check if we have enough space for the footer on the current final page.
-  // If not, we create a new page for it.
-  if (currentY > 250) {
-    currentY = createNewPage();
-  }
-
-  // Draw the one-time brand company footer on the final page
-  const finalPageNum = (doc as any).internal.getNumberOfPages();
-  doc.setPage(finalPageNum);
-  drawPhotoCrewFooter(doc, 255);
-
-  // Apply Brand Headers and Page Number Footers to ALL pages
-  const totalPages = (doc as any).internal.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    if (i === 1) {
-      drawPageHeader(doc);
-    }
-    drawPageFooter(doc, i, totalPages);
-  }
-
-  return doc;
-};
-
-
-const highlightText = (text: string, search: string) => {
-  if (!search.trim()) return <span>{text}</span>;
-  const regex = new RegExp(`(${search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
-  const parts = text.split(regex);
-  return (
-    <span>
-      {parts.map((part, i) => 
-        regex.test(part) ? (
-          <mark key={i} className="bg-yellow-500/30 text-yellow-105 rounded px-0.5 font-bold">
-            {part}
-          </mark>
-        ) : (
-          part
-        )
-      )}
-    </span>
-  );
-};
-
-export const LEAD_SOURCES = [
-  'Instagram Marketing',
-  'Facebook Leads',
-  'Google Ads / Search',
-  'Website Inquiry',
-  'WhatsApp / Direct',
-  'Reference / Referral',
-  'YouTube Channel',
-  'Walk In Enquiry',
-  'JustDial / Third Party',
-  'Past Customer Repeat',
-  'Other'
-];
-
-interface SalesModuleProps {
-  activeSubTab?: 'list' | 'create' | 'profiles' | 'packages' | 'calendar';
-  setActiveSubTab?: (tab: 'list' | 'create' | 'profiles' | 'packages' | 'calendar') => void;
-}
+import { LocalEditableInput, CompactQtyItemRow, parseQtyAndText, combineQtyAndText } from './SalesHelpers';
 
 export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: externalActiveTab, setActiveSubTab: externalSetActiveTab }) => {
   const { 
@@ -6797,6 +4897,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         await completeApprovedUnlockRequest(selectedLead.lead_id);
         showToastMsg(`âœ… Quotation & CRM changes saved.`, "success");
+        const isConfirmedLeadLocal = ['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(selectedLead?.status || '') || (selectedLead as any)?.current_status === 'Order Confirmed' || (selectedLead as any)?.booking_status === 'Confirmed' || allOrders?.some(o => o.lead_id === selectedLead.lead_id && o.status !== 'Cancelled');
+        if (isConfirmedLeadLocal) {
+          setIsSaving(false);
+          return;
+        }
         setStep3FollowUpDate(selectedLead?.next_follow_up_date || '');
         setStep3FollowUpTime((selectedLead as any)?.next_follow_up_time || '');
         setStep3FollowUpNotes(selectedLead?.follow_up_notes || '');
@@ -11606,114 +9711,1127 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
                           isDownloadReportsExpanded
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
-                        xœì}ÛrIvØ»¿"»èF 8,€3°H€3Ú i°Ğ] J¬îê­ªÆe°ˆØPØ/+Ş]ëA!ÅZ
-;Âzğƒá¯™Ğ~‚Ï9Y—ÌªÌ¬¬êÌ ¤¢ë’×sÏsaŒ±U6{tÒşŞöÚ_­tÙipæ†«Ùn—ÅîEÌ-Ã¯£ ì»!ÿı¤›½/Üı²ÛıwLs]¸Ö<[×~ó49Ãõ?ıñ÷ÿûéıYñæVp>ô§ÏöÜQÆQÕWW^”~’|±}ôİ>{ÆZÚÏ »ÍS÷,†oG¬ç;Q´ëÜµ™óörg…ÒiíœÁ¬Í#X¬ßîÂİè4ô†Ûİ¶ ÕìŒMç8tc÷´)µ{×mÓÓ…£q°œš®~Æ^x~ì†;NN|—=§/ØÏ´ò6µ£‰/G03şÒŒö-¯ïÄÃÃ˜z=<æƒĞ¿7}¯÷qíª5ÇÖÖYäÆ;Q2ò ZŸyÅ[Ú•aÂ.\}8öİ‹ö"‹«ô×0ºÿb^ì¢vÏB£ì/ÇQì_¦?OœQ{‰.hóF—ğ7íàEÄƒaÜ>
-ü>ƒ1£}á'¸ÈâĞF^ìÃ¶ãû¬7£ lÚŒN~pŞìó+8•æÉ~óæôbïÌå6¡ß˜­³®¡ƒÔÄ¸¡ã÷Û+İîÂRBAÒ{_{ÔMG*Ş]4¼îñâ«gÄĞtÆˆ¤VØÉé\²a•äM¹‹ì‹/ÌäG-o«°°¸ğôëİbwtñ>Ußé}DH^äÜí,e{<(¥·Á0˜Ñ\=z=ş!u2¯…y¯Ê0ê/nîŠş«Ÿö½3Õ£äâ	ò‹ÍÀ÷Qä³(roöz„¤-boœ¡ëk˜ÈSh)G$Òä“Ğë©e:ôéƒëDnÛ¶ƒq¬§–ziA»š@±ïvœG€&Çá{Œœ_¶¡ÛQÜ^NiS\$R»³ú–W¥–»bËĞ.gm÷ØKD<HMÜÔ„M³Å¸Ô¼!	=önŸzı¾;Ô¢sñ;b†ÄÏCg$³Å„ÆíEu¨lÅA8…}ôİ7€1ß[­)Ì¥³'êì^Çì-˜[.]&â€?+*&‡¬/%Æş‰Y~0­[ìÅ>ÌÖ‹ù.àlH«Æâ€œ‘écÑOåı¿ı?ÿö/“PtÆ;á»¢	#qÂëšÌĞ@?%0eä?%ÿÖ˜D8pâÉàé÷ÿ9¦¬hú^S:ğí‹ëßpÊ„Ÿ•;Q´|,…@³¢S×°şk
-X¼áVçÂ.æ, ëÓAĞæş·÷ ~¼aß;	îA‚µcÇïN5ÿB´×˜
-i%îja\s»t¿(¡ÿrğ”Ùxôb¹N(Ÿ¶H^VÜ4kU!†.ÛËZQ{‚¶JÌVîO#»ø•€Lh]IQb)7q)1ÀÀ¡ë;¨v³Qû‘VçpÑºáøŞß5À€~ŒL¿Â`£(ğÇ±¢#Šş¾{Ã?çDCNé¿EıÈW[‘ZmEŸ¡wrZÕi8½N@ëq®G70×¬[Ãtl¦kÙ1!8aN/ğ#à#ƒşªğs‰8ÅrÂKÜaß ğ!¼í»NØ;e¿»á¥¼Êã€n¡Ç6Üö²ÑæôÔw€¢‰˜ä Ò¢k<í¦¤)·c	Œ­`v92ª±x%³z‰*ÔÛVÀ‚3ìİhì¢‘çRX…¯+Æó4dVz@òHëVº+,ƒ,‚ãeB¦e£m‰zğ†£±^‘ãq°GŸÆkä;=÷ÖŞ×fv¶æÙ=Ï‚Nw:ªÎ‰üÁË$á‚ˆT'ğQËM^äŸ·ÜNì„'nÜ¡¦–G~IkM&RQ>ÒPlá0`ä·¿b£°(nå°ˆ,î8è£Uà¥¾7tQn’zÈ)ü½Ú0ió*÷Ü ¨ÍÈŒÃÛí—ní#@0×ï	áù¬&ÄóÈõİŸ$çšaRàüëz®„o¾Z_•Ä{~ÿËI’¸ÎT
-	¼ùÛ ß_uMZA’24'ë43³¾cä3.ğ‡g/·7¶÷_¿İÛÜŞïœQ+âkg2å‹½t/×®øg×é–%?×Ó?ìF3gÜĞ=d&ÄÈØ‰ÇkÁ¿' #?ÌÜ S'FóºmÔ¤5mŒšôõDÍœÏ¨µl©,~N¿qƒmÑ{có`çÛíÃıƒ¯·¿Ş{ıöÇòÖ	,Åhyı‹9[\§O8¶Ãg×ŒàhíŠnwèÇµ¤(ç;+ÿyò Pnâ[×9´¸6Oƒ¦Â¿ç³hğ·ÍØÅ•¤ÑÃßÈ2r%Ü ‹Àáü}>Ô!Ztı™uzOØnğ2Ó6ãBºÈw‚J†1Û‚İûQHaR­ÍĞ…ûz‹§¥¬Ö	¸FĞ‡ÎÌ’h‰øâÒIl}’º%}÷ˆª´•EjZ!“o‰@oû?6pÎ¦t÷†:(Ã×€Œ2Šyè[ÒYîÆ 7³C’08GCWv?91C}å‘ı¡OÉ¹Ñäú‡@ÈÆhä{nŸHBKK¦s¿°n@Ln nT|~]íN ˜àµö¸+3‰Ö<Ë>l%ábKÑÍO”²3%\§KNn¸ÔŞ\ª¥¦Œ¤ªêûÓCh5›µ4ÉQë®ÕúÄñİè›<¬õ¡€İ9£æGHÑí>)¡x­ÏR´®üèf}3ÎóDDæœé(™Qâ‰?ªˆé²ƒ°Š3gè°å*æ”áû«È°¥J§ô*|§¦&Âw£!vúÇÉ•7%`ºk8"Ü@.}àà±ó™çµéÈsÉêÈ³p´šÂ^­=“½h;ã¸ìÅü4¦A—a ÏJ2Q(S±»làÛçís¡Æ§®ÓWîB*—b¥»ğeW:’Z}0
-'~ÙÂTÉÚ€!½xNpîÁwº#éX:Cñ¸¿‚™¾w¶.Ä§ößÎ¬¿¦]¬ÿt¦V÷ãWÁ‘{¹;FWËºo£O@ıá†!|–ØWkÍ50ê}›8âÑ0%­°s€ÇTr©Y×2ÜUÔ@¹Oã£ )0`ª}É’?2”~ÜUÂYb7uûSQÇw‡'05ŒqĞ9ğË	İWòJôîåš½×hPØB²Y‰hAéø#o¤—}pâªš9qmZñ"n¤Ş’„Éí®­±Yz2knô¬nŸ#Ö#2u=*Z­HĞÁÑz}jÿNohGºñ8Œ‰H­\Œ,‹bO×¦·Ø)ù‘-,ƒ€dŞŞĞ‡+î«	›H!9]Tè¹[[Uô‹´F¶+¹‚qÀê±Òßg^à»1O²±WU ¤g"Xu¨€VÙìîÂÆìÍÌ¤ ¯Y-m/á‡è0Àqfgx„r{ÑÈíÅ³è76C/pÓ;’úTM…{Gï T9Ã7èğÀYQ‘Î€¸W…™»ÁXe¬Ê]*NaŞ½cT&-n…ÁÄ­á¦‚–#ıu•'AıÑV:¼ñ>€)±ˆşä#IÎâ¦?¦;Íaó÷C´¯ ¦ïu"Ğ×@<˜{×}cHg!+äòõ™ÇG-=®ZvÖƒ”¾r†Àô6ÃÁë¡™1èw³» 3 sg³/@À†‘ŒGùö–~lÂf8=X>úA+É~9b7ÿİ§äá8û¾»åû.çö¼»JEZäÚğg
-ûÂ`©K¶ˆıfıIw\&Mc×=	b‹OäØŒÈ.ŞàÔ8¹óSc}%áá³já¡8­¤ê0›Ó±ãGî/ØÂÛò"TˆúŒ,ù¡ûë±º”qxa#|€‰üaÙ'îìË Š…5$½ïáìñ_¾ıº-³êÍQüvˆCßƒ‘Ãèk,ş®1c.t¶Zá*s†—İ¡V²Âi‰õ‹/˜ÀGéuƒ¥äÂ,:ªc?ùGå&Ô/Î™>’ÉDA·ZMeåSÂ‘•è(#INŒ£:ê„|©²;33s}¼ÈŞÎ?u
-Ÿ:æO‘ÈÙBé˜äğ„ï%l¢bkŸu¢œ	’f±WåËÉĞUÙjÏıKÉı°Ò/ê+ûÊšVF!pa`£¿N)Ó!Şu9,ªøUBº¤9q8v)2½rÒ‘Õ[€ì«*¯&Ì;f­"@ÁXJ‹F÷
-;L÷Ês®’ßY¨Vù¥óşåöÖÔÄjvº–Ú³8'È/ûƒüòúèêÎ$Æpø¹¬	i1¯ü0Âµ’'ò¤¨80rNN[•^˜ÀF0r‡)“G´£ĞŸkŒ‡,ñ¯Km¶†cß¯1²kæ"Öé—ƒà€ÛI…~‚ÿ{êà ¬´‹¡®½¸ÎR¥íG#§ç>wQ([cç !çÀ³‡nøK"f›FĞáñ›ß8¼„æ©%ØİúÍ€Ä2N´Æ¾êÖi Æ« z£ı*’Ç~J	:e§Cç‹À~ÎÕ ¶Ê¿T5<‹fìJÆĞpBˆÂ?×È½°9ë ÔC†KÖh",Y#àaã5Ü–HáUdŠs B[ÔºÂ©ÏóUißyıø4=ŸO'{]IÕÄÇÊX¾l¦â 1¿DOÉóöòcvÚ~¢1ÀÕÍŸäÉEDyäÆç®;ÄÃÅ%J¯‚'HY–sÖ%ù*J5¶‡ç]â¹ xâ¤bvˆÌ2š¿´”eDÊï-›²”¯Õ²¼SñÊù¢‹¡ã·aôâİåŠŒQª	„³Zß§S Ä	âø³L
-Ùà³Wò‘g·ê;M}•ûaNÃŸ¤!Ôüçrö†àĞR<&·‚­øe'U¦ÑÖó¿*â	ìÀŸşøÇL¼¹fU@É_ù'é•Â¶Ó+ø¿Â+øûwéo[RT•‚J1õ’›trî:ğÑmñ‡¿ıuÚ´H. ^Wb*²h®‘¿µßñmtŠ6+“êSx ·=‘Èu•Ûá“nW8Àgß·ß}×{ÆS\Ñæ ©‡7½µOÿ~4ÿj%@_L‘ˆÎë¤İOV«BŒ­f4¾ô?]qÉ®/qğÈ¿$®]zš2s[ğ´G³zÚ^M4>¼š+ixM¤¨á5½
-/acŸ"°ó)®ê²ŞF¼Ê¾%(õH^¶3I•8…àÌ«v¤Áf9ª,@ñ,_aíÁÅ€„·/.8yn<«4xŠ&‰‹¾H›{¯êûÚÄ/·³¥¿Ôcm,nÇŒõ+­êÂ1‡Ó¯ “ wáqW«Éw\ ÓcµÃ F ÎñH"Éóñ¥1ø¬xÕ*ÌæH{[«åÙÖ„Ş~¿s OAíÇ³.)9~]X¶ó-–¯9µlvwz2Ö4æ4Eö¤aPól¹fCµ¸T}üNÕ9‰Ue7K©Åjñ+¡òº–U›l÷½xÊ|+Å|j:;Z¾-œ@pÃ5E‡¦8v§Äµ™š4%¨í¹E@d´Ù™,sú}Â!ÇG ‡Iš«ã
-ªúãı¤½6joÿ48—Ú|ôA{ÅCÆ»Eñ2‰¦h¥›H6Ïå»Ké;ÚäÕºD¸¸]Rgo$Â0ˆyË·ûAoŒ®2ô”¶úÆj y²¶ªPåºJ™á'å²³Î´ºk0úÌ";–>&ß«ñ¨áytSf3“™Ä&aIõdü]ÊÏ^Šdn4G>e°@Š”‘ºô6ª4ğ$¹e¤w¥ B;“êò˜NulÀÆÒ\ka¢(®‰5Elj¬°§|Ó"j§È/¾(E9 )Ú¢{[Î2	¨)ÔÖà:‘Â›º`¨R‡7îMóàüR¸œ_¦çü²¸üàıby=x¿T]Ş/ª÷z¿è$°›ô|YÌïE¶×ö{)¸…(İE–vCevã:võÇÊ{áíÓz`\©Ü&~øû?02oƒÁ’_Ä—:[D³×ùP„ë¾9<PB¨~Ÿíb”¯:fLU¼&ê¬¡!\l2ËNÆS‹­QPÅÏ‹ƒág)Øn„«îõ€ß]²~0œÙ©’¥€ÃÆÃØóó´ÆcH-åˆâ­rğğ$³ƒÕ¯oÆ¾Qç’#ì¦gòä7ù±<}E7êY±³6î¦‡ÉÏw)lø&ÜLRjÔÜÍÄö‹ZD25(İm"9-£-¿~,$÷ÁGí®QƒUBÏï	eH£yäsßC;Á•`z*QïœŒ†1,—l-îÙgÿõ>™Şà—”¬¢Ş0õ	ŒñFAÃüEÕİ½q.){‡úòˆßO0ÂŒl÷Ñ*éûM²lo£æ±ÒDaxÏ0€x§ãğ7Ö]ïŒ×yïÎ±Ÿ³Â{0|Ç?L¦Sx›\zäy‹?u}ÀGbbšô-L|G.+sIë5á >!>/‚pĞªëÁÓétzùç¶gòé:öGçÄ%‰~5ı•î~kDT õQ'}÷!!y@«Á‘íğMò
-' ssÏ:bì®}ŸÎÎÖAˆïĞug5ItWH#Áá¡ø2m™¸©/èµÌëâpÃôZ:üòKª¾Ó…(÷¬z[xKR*iá£ÄI
-iÛ³ìÉ³´½sï{'¤‡@±œBƒ«Ê¨uºˆ«"æÖmŒJR¶Ÿ$1U~GT·Y›±7ÛÄ´êùLÕ¤®ŞĞ‹)+TÄ«%§˜QŸ¢ßWBz|İ¨Œû£óo­%›nº½û¿;áÍˆ½’zK²o–gèÈ½>Œ÷¨ŞƒÌ+6´/°…†´A¡©Ó*N%>uÃ	ÛÀÏÑjd•æ¼ô5Olá.RN
-—–È&¿Sª^oO0Óî(µü‹¡‘½ºiÃâOÑÏU•ŠğS:²éÏïİa?späøwg\×¦g¼ıDNp“ÙY¸~Ğ>·S
-º¤¦ ÑÇË’ÿ-İœoñw=Ï[±…p»µkš4åè*NR9Ö×µ·Ö£§·ˆvS“?úME*œP"œ@œTl.N&6¡[ç@°´!©Ä'¬Lf[±–ûJ$Kjc*4«Aˆ ^I‰˜WNø-X™h6e¢W$y1÷ÚÔ®½º5±ËZ6²§ŸuiçtÄ•f´²1l.¢X¡ùCXâ²Bœ›	jv2l‹õUeÁ¨¶“©SzuYcÇ×ª,¿úpô§ú(ÿ}àïÃr­]-.J…a;!íÚŠ1£ÿS^(NË‡îÀÕ§"…^g
-K™.7[í`›â\¡â oZuâŞ)FB„ää"0?ş‚ğ’„^¿Ãà¯+ñì!¼˜YÇGúmÕm©JàU4
-”Ë‰Q™­B©®"ã)Ü(üÌz“†
-><?‰C¶àõñ±×óÈğepÂ€Š²çAğßÆªX±`ı}ºÑïg^{Y^„²éÚÕPôçËçŒl ¤“´€bÉñ2mkä“p+4Ç¥]¡AîØ(vÈïä¯ô_Eá=Ñ…1}y!_¢¨pĞBÑ,‚ÄL©¼óu/xG—üŸ½!Ìhy:½OVÈ§yå}u…ÀO¾9X\3èÃ?Ù´ŞÃèC¶ıRµ7$I~rWè%¹Ö|øTšÊñƒñ¾z`L0DåÒ3ªì»ı£Ëµ™ÔßäÀè¾;$	0ÿN‚Ü’Cyè¯]%í<çÍĞÒï¹Ç2Ö€H¢îoFnP®—ø•ëJ)®ÈEõŠë9p.Úçhc…àÃK‰eWğS—kæâ‹§°Ëİ³Ó÷lpÉÉœ­¿:(­("LK&ˆÊß 8ÂtÚìš³ƒ`T:§±·¥±/Åz¹cşè%l È‹ö
- \¦—2—¼\Cğô‘~°‘F«ª¹ôG wÃ¥Z~{vVÉ')ã¢â`j&CÍ¦} dbÑúŸşø»¿Öq‰r[áxØÃªØë	€Ëtø‹œĞ¢Ã†ºÙ§§J÷¸Söu5Kû…z¶ªóå"EN¯âåÉñ•ß\Bˆ!™R8ªPåtÍI OFE6­’By®\İ$S~šS¬ä¦ÜšuñkÅÎª”N…ğ¢–/Uõ»“_ïn³ıİ¯_Â?›{¯_¾Üxn¾Ş=ØØÙİŞc/^ï±ƒo¶ÙöîÁÎŞ6{óúÍÛ7ônT"|FÑ:$”ùLhN%œYÍğ@ìG	mG=àş‘ÃÏŒ¥çŸbÁ. ¬ıñÑÀ‹×®¸&&Õƒ '’œ™†ó<Jµ(^–np)†
-‹Rù¥,{ÏÎÃíÜtÂ>PÆí@$ı†èÓ$Şœ{ñ)Û}Í(˜’åÓRo›*6%~jÁà´«ş [c-QRà®&QQ€Hn5Õ…;©¾ÒŠÈTñÑ=ÃÑºg‰“Kê]•İ@¢ ¯’Vóô ñkhxñ//[XŒˆœ†ÊÃ¤È½†œ_Ô>6«ªÕâ_R]2êİs>çpz(Ï\ÿF6BŞ~²†aæÔø÷­8ŠB¿YdÜÂW]ÃÉDF8²ŠV-«2Ù™†ÊLc'JqQãšÛo}æ)ïåò¡yB’€¡\-³”Ksï¼¢ô°¤Ì,Nñ<•Œˆ ÁX$»†«–V²jŞùh¹šëö½ñ€å’„Áì "‰+„Ùdb;nVJµ
-’ä"”Ép’Fïª 	cx¿ñú.î¢äb±«oËleEï®³0¾éXò¼+ÌVÕ©Ó·‚sm"±z]ê¯ÊÌQá:¦[SIG.µZ |)ªñbÂ€„ÖÅ%¢—Åİ)…}/hì!‹¢vĞ
-ÒNşs‰@µü÷2=jÎ
-TÕÚ,t¦×2
-ß)u…$ÄĞ‰÷Ì¬ó-Iıo»çÓ(À:Ñô¸˜Õ<•¨&–s]çcûÍh3ëW
-®šV›E–H…9a<ÔUÅºUŸ§|¢¥-ÔGŸââ’¹Ò´ÌXÁ¹°È¼Şí-¬. àC§8pKk½Ñï‡n}2æ"ŒÅÉ"ns•‘â™éİ-í*1“mBÊh³	¢ò4­Å®xÁøXÃ'µß(høyRe}ıq/NãiÑË6Ûl£[R}ªéú)4$õ!Ïåf~±hÎàY¬šÒa&q,Ä\ØÏTCX 1(GçGãXÙ<W5p@j ¤«¡|hLÅæøc7³#£­fÔ,”I¢Ö!MÕ_¡áâK}rÒe×”æQ9%åTYxRmæöOä\ËÕ8•8€¿¯ã˜ÎQïÉJ<YQ4¤Ô<N–Õn+„V•/D Rµ)Ş’}Á²x¶åÆçG°„=mœÂÑ('q,tS²˜‡ÎˆëIÄãÏŸşøûÿÂg)gù36&"Rñ‚!*‡ mì»˜0í‹‚£¨„uèëû3 ƒmCkÍ£äd›%#á²fá®äÈ7[«›AñS}ˆöµ–{6Ï¼
-?nüèb€°{Öáu¯?¸g‡Ÿ_y×ôîiVÆÆçÑ·RÜØ;hñ=6eò Éö0‰¢ƒşå[:èeq…{¥§™±°t#Š0¿-­Q¹‰jfİ•£ÄÒGæ°Ï¼)Ü'M5ï“Z/?6Dÿ]v“”¸H€M`Yx²³lm½zõ+¸ZšU“V×à["tÁy…6iÏğÕ3^—¾	Æa±g|kNgÅT· y[™=x¾er½äãv‡}Å¨ánå˜Ów¨/CÊÇ¤ü{Úò¢‘O!ùB×ÏØ‡Ï¯Ä%¼f?üö÷ìó«üëĞøŠa×-\òˆì®]Á®Õp¥»ğ¥–"÷¹4’Á„ú-i%6©÷éô¢Ò12I‰B¯FßßÌcñÄOâÚç^ßlĞä—Bm(ú"îøö·x$¤–ıœ-ÒöÎò[[Û;/÷+kÚ*@N[PóQŠF—ín~*gÃ+Hé:6™€Ï„w‹+Ø©Íêå”á4ò3iQåGh\â©¬™N²“F˜Iy¸¨ó$ëÍ3DMæƒÊÔz6¿åÄ9@ŸğéÈ!EÃA_‹¬%w5¦4´dUëõ‚Ğš€àx4rÃ¹D¤À8³/­µ—¤¡ã¥’–/k÷æcHáğÌ2Û¦•ïõYcÜ›Yc¡«+Qù."âıÍ/bQ†˜ŞBÚR<AÉ+ê¶Dú¦KõøIÇ?iéÚ0x«£&­æ‹´ùş@µk«ĞÍÂò©LU…¡êõÖÂ‹z3–|q£Šô6XdÊ­’p&6­D)T¨O³V5œƒáæ©3<qkFaDn)yÉ(ä>&Ö‰:~c.MZîjˆ:hŸ•«Ç%Ípv–]ÏÙç)éĞ˜WF Í°lÆ.fìzî†BS”¦AK»àRz¼2¼‹""oÉ&Èo¡µÈğƒı+]‹(’ÊXkÖu?ˆ'íŸŒX!jÜ±ÊÍ-ÄJO¬8µiL¬+Ø±º/ÄjÒ£Lín(CÄÌGz{ıÍ˜«nßTu[f*ÉØdÜÜ*-ã¾™˜®&³#Uz!VhS¨IíÃ&ùnbBÚ©²İ]kQ3ü“X‰&±Y¸OÛÍ»ÊûkwˆÉYâÖma¨&ãŸ~3mÍQÍ­(…Ó/Í©Şe=m-S˜ö¦vX7ù’ÛPŞ\¯ÙA5$š"á­e°ªÖÿ>îWËHe¥óYé{ö†)K=/ÑñŠ¾	³}÷ØûñìûgUgü7ä*P¥u4Ğ*'Õ(kh“ÉòÙê’™™¯ûÄ¦¯‰Í^ÕzŸ…Y©=ŞgÍÑ¨5Zñ½»MÚ,LZÓ&m6f¬› mÖFtiB+×Ä®ºt“tÉøØğPék¯}ŸS„ç“`W•ÃwI*¨ëcœz½÷0efÁI
-h½ŠëÊ±j'V=m¿9GÆ¨`E6e^°‚µ~ø«ÓPq#õ6Rm¾s¼Fµ+è´12@éş_,ì!V×PÉœÏ,
-‚È¾Æ†Ê -›ºÜ¹N…Ã0•GL³-” Ñº©8)î ËäB ¬ l)ÕË¢ºŠ¨5D)Éš^™ı48˜9ÚLqüè§@ bul”„˜bù¢bA"Eİ˜Teö>¼ù¤šÓ
-å¶;Nm°ÔÜÖ°*^ëUĞG§¡ôçArXÁv¶0ãƒ¹íFÁ0‚UfKÈ‰Æƒ!óK˜Ö’©‰ËÒ ‹8¥´G‘´˜Ø º›zˆ­EŞû‚Â§Vfxp_ë™·ovfÖá?¬õ5ììÂ›Sèò;÷t¿fÙÊ¦Î¬ãÙ7 Õaòš-<w†·†Ñ1Ğuú¹ûâ`aïàëı…Woök(ìÃˆ@Üñâ…-÷È‹)eQİVNAfr¡ú—m®y±¹‘§Æïw,µ¶ç'¼â†„T}lj¥ˆ:ò{
-ÓtÃµ·sÒa±»¸´ühåñ—Ojğ]ÊCÃ+Õòø1½!¡>q‘[¿¯äåpÜçO²ZV	µ[Š~GÒˆ‹K%>\’b!óÌ’B
-ì—~úitš ƒ5oÖ¹CÓì¹Ç"ê¥³ß»«† PMf ±ô›Ê©Jç¨‹÷ä‡;»{­WN|Ú8­î<3j~mf’kç4Ö]F#1toğ`äç”?G}¦t‚©·Ñiµ›%SÆ<7Ã8ÚA¬Cz°êÔ`ä’Ä«LT`âç<S!¥Å`LÊYHŞõåJÉ±E@ŸB/U{9í—úZ5i5\n"LùJ@Òç¯^ûˆÒ&ª×3©ŠEŸMï¦ÉÖ®¼hß9”pCNB§ù‡ÚqĞÙq2,Œ4=hÇ®ãÓß|Ç¤WVòŒ¡É‹x'äjªï§{+XA‰^;\7Á})¹(e) Ü®ô—PËIqFå,û@$ËjÆ7 ó˜½	ƒEğø4%4ÛBXĞé¤Üæ“ü«Ï²F¿ø‚=İÃà|Ï;9ÕUÂ”aj¢§ƒU%Ã|º€ÄX¾[+Wy-‰'·H–³¼	Fc1³1eé¦—³wm“u[dèîb†î/»Vºy:dcbnvU¢¼4D^n‚ËÏ8’lÖMS'èX/)³V§ŞšİºIª—J)Ñ„„Ô7œ:IL[È—©Ì4mHÚ”=s|d¾ ˜˜ÅO’Mv‰¤K9aèŞ°ï©,HcHn=*í³ğîR–øzfı‡¿ùgcşéu6İvviÕÙa"%(P8TrÅÚUšÒWŠ³ºÒfT¥®^Tæ÷°2Wh²yDXèå‘¢.[ETl2Xš%«FÚ¿R7Yµx«„ñ(N›ê—³W©óAË®È¤4¥JÓ<ú_®`ıbëbfê*^5LÇ¬ÌcÎ	Ó¿¨Hí%i]¥Àõ{GYb´'åóJ¯~T§¦ÜÔ>;ù4¯Ø¤Î²wkí7U	ÌyBOW\ –©„&ø±ˆû¡ pêÃPU²a‹ÄµÜOôÏ® 0(EµwûéŠî©Ö£[tôÇÎÙâªLµ^ ïÿÎëÇ§sïÌ"¯®¬¡z“æ?¼ò)¯Â©¨Ò¡¨Úò‡WÅ	4^™Qeî£gÊÒ¶Ø-Š<•â dm+w´P$r+›âôK£u 1»§€º´*çvã?ö1»AU|“Ó*=¹ªv²»ihgâJ˜\é,é,Üèlıƒ- ¿û¶Î¹÷ØşRUŞRw¼DÜº% «öÔldB*4‰ÌZ:`şd`Ï/¯"æ…ßÛÃ~éŞTÉ3±{D	‘?-fdnäò-·¿W UøÛ¦ÜÎÏR)²Œ˜ñGuúø¢¤á´®t²jzu:²b4_õU¢9­2:ääÃŸ¯ˆd`×æVõÇŸü² ÚSPê%«öŒSxÅ‚ÒÈæesõ½eg`bJ¯î.6`p˜SÈJüû¦v¸¥
-ŸzV|¡`íHÓã>KµpŒµ],Öš*´‡¹n*?¾Ó ç$»	˜6Ÿ™*lå	¯	åÚZ”u
-·ÔÙRŒyR¦e8ml¿«e»»IU³Âfw³z6Q"†Å’”¥šæï¬1¡­nšv:ë½YŠ…m®‚±V0UI²RŠÔÃ¸e@¾IÌ»G®e*&ñ‰aËÂ073‹l@Øâ¢ÔVM`§i‚›ºùí†Ñ£–Æcir»‚\¡İ$è¢8ù7çM1aÉ4túúN6ŞDÛ1NiKœIúq)?wG5DÂ
-kÛ•‹Êæ´Ÿ,kº«€õÉ…¡)SwèQ÷º&®ê^!ZİV,báÅ#‘gç*Û$W6  eQQéŸ]ğt—üá@B|d¨XûD™ŒQéRçb¹"W''q
-‹Ê¶9D‘ü¯†B¹ÂÍ/«QÄø<Ù/`¦Q’€¸å@’‚Û°m4O{9p.Ê+¦4*Š1'ü¯4Ş~¹e/quÒÅ†( ³b²»#¶Ì^ÈòÚãQıÁ<
-1 øî2¾¤RìĞX¾µÎÏ)Û!vgçš……¬°ïÛ+&÷P!(¤¢şˆpô‡Ç4ÑñÈüñd¥:¶Vû1è+B?ĞTÙ¡›‡}L5¶ãH‘I¢VG4Ğq,ŠAº˜*¾šxê
-àÇ-Î`ô’EJÀ¯›(õR+l"	‘È!\F©N0+ØÉÒ˜]œBıè‚GÀ©Õ.0S)NÆƒQÖb|†ÈÀ“7ËàËØßEñ¨wêöÇ¾ËâS3L÷Tñ8à^ûŞ÷.Ë"‹);ìEaÉxá›I ô:&…rÙ>¬dGÜ©½ YéÛbR8!B[ÁÌ{eN¹˜¥†,¢ú×+2!ëSCğFh5=³ş3ÖÚK$ì9m4“NÈ×Š÷f}Ñ Ò§:""ŸÉ[¬f¢<€V	éûÅ‹	*$—„N×Î©€!¹ªÄ
-5*‘$­Ì« Àr•eóî@#©‘¦„Ü˜©f½ÅK³;şÔQ§eª î@ãòP	qøáÄİˆÛİ,Èa[À­‘Î£µ«eÕîKijöÇƒ"kÃ’å=#úÙ(tAYöÜh¹#™®ïö¼YÂ2nï<B6Äi‚.aÜ´, ›¾¼Ïà=Pk5ô,	HE
-•Ø[¡“ëó~4V‹Šú#AQ×§ø(×®Q¦‚HÉH&ÓÊ²®ª¬ÉãaÈŒ0ù*òèXÔÄ%ˆW-_Ù‚š®m†ƒ—@Ò\R|?³’`
-à›ï…"»‡`G› ÙºÅäÈg¹=è½OÛ£M¬&d ŠEË	İ™ÔRÒ8[ÆvıMsd”ì#.>NŸ6¶x¼ªg™	£Úèa—×Ds:J±±mÀÖªlyùÊ±m”ı™Ì¶\†,¼æ©IO¡µfüğÿ-5fH°Ğ‰½Ø/ÑƒZùÊÔ[è€'f°µSò/pbPÊ®PmøáïÿGÃƒtK§vgV¥*¥{´êı{®ÃÕLé/¬}H¯Ÿ.ŒJÙ
-¤÷¢`öÈ}_h{ŸnjÛæßPÛÅÅ—_<†ÿºıã!OR&wò‚²ô©¶7¹‹^Aw(ÏŠÜßVr[ÛQúEh‹Ùé: cğÎ–¶}ş‘EëÑøäÄÆÚá]¨S”jSáAI’şø ú	/é"¼”eÑ3ÈQw)\¤c02=xÃW±,›#¦«OWÕq‡gİ×[Û‡Û»ß²ÏĞ¸Oúc‚…Y\¹ëXCı%Ë|«ÅeÉø %áBj*‹Ÿ•0ï/Ï ÙªY:P+
-õe*3%³rMZm%˜s²òüJ*C!mó¦¤{Õrß4£ñöBÕK¬ü@$Ãpì„/M1áØôO–`¥âC$l‡JŸşPéwHå°WNø‘¥Eˆ¦+„í‹ 9•ã¢•ÒqQº©dúĞiSŸè°%fåIQú â˜_3¢30`BI^2.ÎÑYœp[†pƒîò‘D¤e1]kô$¢É%_&èÔ0ejïWŸÖ ±ãÛš_f_Üš9‰Å„ECF}¥t(çŠŸYo·ÏŸ—nU»mJ_Ì€?îÃ2a:R€]ˆÁÌzéVæ6O1‘İf0¹ !&±—ïÔhŒOpÃ*/À¼£x‹ÙOk¶*Öèb7€U£J.´ğ5Œ5ÆÆ•·k4»åFÜü°ôíĞ9¡­d3ëº'5§¢Ç3ëôkíÜğLøœ*(è
-¨MÓöI…›µÂ¾rÜS¤EŒ¥İ¤è={âdt'5¸’VE%]H¥Ã˜mb±<êáÂ&Fs¼’QÀ ×ü¥‘ª	ákùCjxé¡ …)¬/'ßÌõ€ìµÛaœü °!ß4êáÎötk‰äã^8½ÓsB<„-eç^äšÏ¢kÿ½L?¸—lú'sìW­sOıPz½™ÄşVúÉ]<øÃEDÕĞşÌï3õb"='ş¬À æ²Ïµè¨:¥Õœ¢Úôx…É±ÿé±x"È_šö‰àm–“õ“FŸ(óÊ€§›§nïãş¯Ç@¤¹ø­¡nºGˆo‡Äºñ¸Q¬6vñw’WJV/şt2Û×Ÿ1>XºnØÒõ\öqJì;¼Õ\m8Ï@-+ššÀàô-ae¸ı	šÄ²Å/ÅòGf1şâ’:²çàÔ‹HÒÄM=÷PêBK‡q@rãó1ĞK šìõùrqÃ‚Q…ÇïÀ×¢KuHÅ¦"æs?–ñ0Ù“¿ìö-LeÊ”óü—×*ƒÚ£L\»}ûÙ'3Åe©gC{[şô^JéŒi›Ib ò]¬Ş÷¸#'Ê5=,;6³n÷^³Y¹Á¤€3…ğ½¡’²gÕ‹“uMI?X`#Rö)½1Yg±ëØÀ¥Ò¦.ïMÖqßõ=à(ª;V¼W£ã7¡×C1³„¡ÛKè!Çß™uÃÃ†öÀ©Ùÿ$ä®¹9íšşì¬~ÒÊsx¬kÿ{«kâÁ(¿6KŒ*ŸÙ´-15dŞŸ¦IfºQæâšq”‚Ì–@Cè¸fåT’Ì·½~!©*û†¦rš¸Âƒ—Ö{[Ò˜5Ø $ÜN·?yC¥©ƒ_’{µz ÊoçrOìT¹üt±ëdá@Ë’¨\µQZVø‹É{y{#JSÿ!•íBk°Èı‹Ğµ¨GÃÏŠŞ”§Q4x°¿XyığwÿóßşåonÑ×¨¿?5‹Ú?œóî·ïÇ¥Û]vŒY4Nş8w¸½d€{£EÅ6îYíaMç hšišÊM€ÎVÙÃÔn`<¯7^ñeSÙ,ºµÌ`²¥¤;MÃ´Ÿ¹”×·â¼åW‘j<t™®Gp…s¯Ğ`ÆûÜ³øá‘ç»)[Ş”9ä»?ë.ãÿ½·ªî[æ„yÙø^Pf¡¡ÍxgnFBSş˜Q'¡¸­Ì“ò½’—2¯ô»Êöc ÖrñÏ«ÏŞÍnR²²ó»³ó,ùİÏÿxs×='5û¾ã{ş¸ïF-P:ñÖæ8Ä<$ûä@)eö™›S
-4ğêCâ‡NpEšÑ7=ãŞÕŒ>âS‹ATÂ‚Ğh>—D' úÑ)hŸáñçåÂŸ^„C%ÿl/|ç}ï„}Jn„æ‘e„ïï0,$‹aÈPqa¹K0/e™Ï_ËD«ÙBç×®x%á³d*‘¿Z(âìD !?CF¿§§Ë%®‰‰²«Rh ‰³±1KCÊ¡«ú©M.˜¹eÿu**my'^â9—Ş÷^±ï‚ğ#I—ì‡ßşmrg—ç,F19]ÖL\ıŸ„£LTÀy‘kŸİ<ØBX–ŒNÏ¬o}wµP‹•(•×7&-PêÃâå.K6Ä»S9zªğK@3Ä¢×tc¹.*¡‹¦õQ9qešÂm–ûïF³É ¤³3ù(Óp”6ñ^ÃÊÌ}¼”†¿Ëğ‘¾5…!¼b¹øFãpä»Ò(’[åïšÆ‚Í~T?Ó¢_åöèö—İã—’Úñ‹æ·Š"…ZY„×ÊQ>th£Ûòw“ìprØj_wÑ5i3ÕE\ì\%[+í´¤]ĞV3*Ø[y¥]£½³%¸e\dL¸ÊŞ$g}¤q$Ú |%K1ºZİU\®H2Î(¸›˜œG-,˜*I–´Ş±—¯÷ØËí-ö^7[Ã‚)!W
-+¥Îş¢T«ŒÑ…qjÖ‹UùVÊu9D?õŠzG_J¹Z´8Ğ0)*íp¢ÙÙ»Ÿ“ˆˆ&1‰P-J"fÃwÃ¸¬ÎŸëtT$á¥vŒoR7urò¬Dh¨Õb.Ò…Cµ\ÿÖQ6…Á4ò=ú£MN›¨ö,I–S£¶“NªCe”H†ˆÆ=ÔİgUÀÌ9•; AÇïS€·:é‘f¤÷!MT´ÉYå)µ'Äÿ‰©5¬'N$®L3„éüğwÿH”šÛ`gµrµ‘Tªè›4}º	7ÊG3€ ×ôg	¶ î„è¢õÜ	ÙlÆ7F%è-)Ù‰=âó«ÚúîR7×Æm_Åû¹|-$çÚ~±©nOÕ¢½õó«¶SÀœ«í4WS/åF ó ´€ş”ş ÚŒ¡«¤¥”’,PVIf´âOÌ©r/fõ«æ‘¸=Å±/)·h.8åµ^r¢†dÉ5A”R2t­ ZkI2ós"çÌ“
-;	ËÖ@oÑè•K¦‘oŠ(«´R©6X­°‚4›4Ÿ"ÅãAU3ÚM¼*OkÛÎf¾ZinsNZş~	¿Oê¾U|<›»4gö#Mp®/nU)m’oİNfää’ŠµH¤ M0pNı wNá‡2;±¢¢<ùp»’|ceA]Õ
-§OyO™5–p©k2Ä•nÆñr3R+Íh¢øÒ‡‘\±s,ºÊ>|~Õ’»X`Ësìgl±Û½ş÷Øµº!SHËÛ7ÍA5x`Ğ”šëJ%m‰¤ŠéhJeP ôŸHkÊŒÊ'J&fÊäUZu}4SY·‚å _âT!ØOaµCï{¼å³ºVOÔBkªUŠ´£^ø¾Z»J	NFI.¹°5¢ó$.U‡åU²šJ+,$~™n$}d9[¼ØNkN° ŠìÄ6=×ïcşñ|8Kªn)w*C!u€ÿ£ò"êÌXF«åXº&ô‡’úÃ›bˆ‹ÉÇ\qÓöP*óÖ1I©%ä¬«"Ç¥òŞ¢T¢Fs¤µS¦ìõEï°^”ƒª¾ÓŸkÑÓ‘N•ùƒ';³şÊ¢E2	'ÌëÅ€—ğË‹/çÿøÜÃjô1ıô|’Z‡+ †‡Ğ¬yÔQdPÌ‡m*dÖ 1ê”øo–Ò¢zïöì¹9y×˜ıİ•)É‹ÇŸÙncLL3n¬™F4×MÃ«º7¿_uNv‘c`¾GEamC54¼TÎëßIm¶¨f™ÜÏ<“:*×(3"ÃËäß®qi|Ò­ªC&y´›\áÓø;¢;¦UÖúÔVàÂ]ÔWä)ÃvÇ³ó³»  Üy§dêNêÒ«‡é’°[¶V€G¬ˆ1!­…wÿé?öß/œ€Ü<;×‰@˜u[İyæç~QÑ¸%Zğé­Ò(®+ÕèÙtL8²r«8b*!^•5ï?J}wêÄÑÆh” Õ]@©s’39ß Õ/tuŸé¾Lßwpİ&Ùïfd’+› ,HoL©ƒéç]$¸“§¤9VA,o£ÖR¥qİ
-Øîp©ÇA€!ôÉ³´Û‰1ÚĞıüRÃ&ùï%IâoB…nî5-:¨Ó²·á¿E©Cù²L[\
-ÂYÿá¿…ÿx	0á%ÁN3ü‰)¢;¿®Ğ¸ÿúíŞæö~gàŒZ	8ÀîêNŠCúè^®]%e²bMüçúUVNÀf4sF`Ğ…”Kó1@xe<¹ÔYhŒLí~p>D£„™€PK6EÏçš?ÑA•*½ŠI+¨ ı]W=k5µ¡×ª¹&^¶’^Â/)ŞİíœtØsÏ÷Ğ­zñ3¶ş¥*pµx©ib²„‡|	ñş!_ÂÃ]K3^MieE÷µé'^µx}î…l,fVJëÓ0¹¡Uôô2È tULsˆhõµé©şY9	 ]
-Ó÷’&MÓö=Mã÷mZ¿oØü½TmşNìßÒ9~åWfë·Úü½¨4/b÷Ãu“Œ8DŸÈù$á±UZ‚8š’šVcÇR‹QbG–„Ş‰74š¿+°Awÿ*ta•Ãm~ğDK´ÏSÍ´âP›d*dòv(yœY`PÉ£Zô`)YÄP»yËÒqß#­‹–~œrr\´pÕ*ZãW@vã°Šˆ»¨+1]ç/ªwQ—<­ˆFTŒG !Ò#ºk·¶YÄƒ‘ğĞD–­©‹ÂıgRcé¯\Õi9á[™Mä†/¬a]_üd+VY/:˜IeB©$g¶§FjÈÊLšûUœ+|Tœ6VšğnÉ’Ô–H#O¸-ÏÊbe!şŞa’Éîk¦²§ZYHİŒ²¶<*œZT)xÉœ“9Ù(%-‚ô'-m…ÁõPş]²­ìRø_«´‚ú“‚•Ds–]Ÿµl×ËnõEß¯gêÆT¹Û
-—‚u>*Ø•²l9%\Ò…´I—‚ÿj-VK47¬÷ó£«ŠršíK=1,ËYÇÒÄ®Z-«“Íäh³ÇıùŞ|<Ùé³5Ë­·G¼ª#ĞdYÁGÃh%ıQ-ÜôïïOâS¶Îºè¬Ÿ½²Êvvwv6^¾ÙØüó¯·÷m{ía¶…¤KicÏ¬jÈ@÷Ù¨“”†‚9¥wâàepî†›@h[I(.op–!÷cÔÁ[£N¾ts¼øbb5J–kÖü2÷‰H×_ı2ºK¨Û®<‚fŞ1kI0€èó…éDÁÀåË #N;y ¶277W€é6€^€Ú”b†ı&]WÎ™Ï:éÖj L€•ÎxzÇqÖ€E×Ìõ½›ödõcùê¬Jx=_ïsî}ó!•>¿Ûºf­—î‰Ó»œû`ÛlèáDf¤õP\.q“ŞĞñ3!ıpc€©wñ½®e¯QÀ<»ÁqÒæ«kÌSã/­v´ê•ÊB7‡ÃJó?\Ú¤~Òu% 0´FOælÒ^ÄsøV@¶ì¼¡pÛj\46ñC„/ £şê_¯¸ÃC‹"˜ÌUí9¾›`ö¬;lïìÎÎ][ˆ4	;&É/ó9HŞ¦*épJbS×½ôw¨S$Ê#¬€Äë¹–y6‡9ìª$NÀ÷µQ â¨Êæ8nŸXéutÑ('¨2©%i4öõ¬Í1ÿ,ŒL¥®#÷8I$‹½áÓZUYÅõV>¼llâë‚XwûÂÔ‘¿0¬c¾g|ú aìe‡ÏÄn1bHü]¿g…1_éùv%Ë‚ÚšJ<„u-¿T
-ó0»\µbø–¼¼;/¦WJï‹ñı™™ùŒ_Ïp~=“1cóf‰Naµ	:…ßÏ:2HšõŞDE˜ñç¥?×˜Û÷bœÊNöàÔå{lùİûê–Åe)´½%<Ò´nhŞJÒ°>üª$¬ D¹™Øö…ÛSF»ä¢îS=$$PÌU¾ õHYAãh8i/g™g)ˆ'[ˆÈTÔ19…ÑÈ)aÅ“££ÎÀ4!`¢-Vl>&´qnıïÿ+µÎjv£zöŠ´³Õ;f¥±lågaa.Íß´µ›fÜöµ	Ê_ÑıØ9>¶sùHiçø‘¼lçşÁ/4¸Òû‡í0Â¡ß¨öĞàW7~Y;“ğ+õYÂñÑÊáÂYIàLíè±/µTÓ0›]re‡ÎIgıgHX/İ”½çl\å•^³
-¹Dk¹‡ğ«Zya6"é‹÷ Ï‘/wáy¬ÈİEy¾†ÓAzŞÖÑş«'_>^y´¼´¨Œ¯V]÷ñÓcÁOŠøV¯©k/’:a®€¡©"óE0¬Æä’µi½ÀpkÖú†‹”g^4†Y_²Q^j®±„:“çyè{@×å*›ÅM™e×†²
-²¦’8¹{ß„g-‰òwÿœJ”Ú%®&‹Ö$Ñšr2ÆÃ‡l`X}È,i±x˜‚¸x¨Eg"U/c
-Ğ«M¯/ë´l¤vZQ­ÚÁ‹üÒ‡0Z˜¹³ïau¿¥&¨!´*`*µ.L*±áÂ}»9S…=b
-²T[t G/~cyÀÄm 8Êº&v¾¶û°Ôu¿:¦£¬³éö:÷H›°jáÚê ®È9sÉ[·`Ïu|t_l•­óJ+Äü­|óÉü¬^áÊ/Eµ¶Ì¬‹‹öS[²M¾¦ÁãÅšg"cxË]eú.›YXn•ìİ“{jû;/*¤¶eA˜²jù¾ï­æè¶JGI:'şC°ykhÉWş)¨‘;ğ<÷
-Şé_Ô&ÂôáŸ»—@F?|~%Ùñ®?¿¢Ç¯ı¡eĞ¬j“ş›åoïQ†LäAo‡ø¸Ï7m‡Pwb9ÉP[EÓÙ¿—¹«%]|flÒ²`ÁŠV’,ŒKİcö.šã‹€•&±+ØˆWÙ»÷H•ë.¨HouÆài-ªºÑúË*µS¹°ê·MK[2’7X\òâv„‡Ì°®˜ØÉ‰·¶^½ú\-;èÍÃ>fL+àŞ³d´É‘º{Î9n¥Ğ<Èzà§nZ‚Ãmxa+yÁÂ£ªÜ'Ÿ¦0€g¥9gÏ¨BßîÂF­~h™@|Hz*­ ŠĞ+¼{‹KßãP±Ôøb£!ÀÔÀåµè>}­Qç'¨:¾q.¸„Ì›¥{ ]pÇ,òÜR=!ÅAóLB™Âól˜Vã´w6¡‹T\rIyRÿÀ÷¤¼dÒÁÌ’6¤}áq—J
-Èó&<ŒA»œ.×£êBãÛí½_±ıW/_²Í×¯Şll°ío·wØşÛW¯6àYµ@Q˜³rb+4zİÄ¾ìJÉæDq®P·‰‡@YÈ”÷SK«b?j7“N”±Æğ2Ñ¥/th¾”’Éõ•ˆ- jìçl±Âã¶<¡ê óhH&ªöb)w\Õ‘+…,”Öõtù'k¯>cïJS¾¶e÷Ù|,´µ}–w`},| *ù(FúåkzyÉ–*ÌâÄóÊu-­fÂ°ê¯•`	AõWU“³™õ+Q¸¹¾’831"dÀN>°ß š‰¯?ğ¸¹&»Úå©ƒ¸KÎÁ³Ú8“•SL‹¼‚èõÃoÿ©É³¶ëÆÈ}õ·_ùÄín¯2DTëHşpğ ehô…¤tÕ"/7·ïöük”íˆ‘õw]@o	k’f;£‘p¡xwà:öÊEÓWÄvx"ê~-™®Æ¹²ğ”øÈ"÷H±úg9ùñ´Môraj5§#­Ë`A)7ˆˆú¹­UM€Iè~¤ºŸt™(k§¥UM!Ûõe$…›rj¥ŒhÏÅZ”^of}v	weìŠÓGX½tccô¿¶gM=âÊË\°¸ò*$c·=‘.É%8ñc|×ét
-€ctˆÔ77Û£ÓÖÌŒ¥F9Êñ¨OÙï×šM•¢'&ÍÚÊÍn«â<›¶–šÓ¤Æš´uİh#7Ş.­L+Yğf{¦>±JšTS5éÈê„©p™tÁ3T(7ÜÍt
-Kù²Z¥Ò²IÔÿbFE=QşÄXˆ 6Ñh Ùşœmôû	ÿªMµõ
-*>«Ëètõ(½h|¨mı,ä«Äjé
-YÜ<ó’Ó§º#¤QnXüËørÛÎQ2Â8`Ë|0p6ÍàaVÑZööÊ‰ z÷ÀùfíIGÆh
-ÒÜƒ›e¢<jyv\¾œJ'›„è¿‡xÙ¬!ÁdèãéycÍn˜i3‰o¿˜yÍóQ7np:ü›M—…³isq6MFÎšòrv#ìœİGgÍ˜:C,ƒ¾İØH"f·Š_hD9èÍæÙbã­y@°F×‚Õ¹jZ÷ğ²Ú–.å9Zjp‡}6Šk›%-7UÔÙÄº:›ºÎn—8M¤´³²ô@–ê]ùşOWŸgTzÖH«ÿÿ   ÿÿì}]sÜF’àûüŠ²nVİ‹ÍoÛCKbP$e3Fi’²÷Âë ÁÈF¨»ÑĞ¢hv_÷n&¼³q±¾—İ§{¸{ÚÙ¿ã?°ş	—Y@PU(t£IJ$a‘@¡PÈÊÌÊï”&TìÉ$ºıDÕ9wêÎŞ%Úo;HºqÈê,ğ,À¬Œ»w†<n×é+‘ß{ï-É¼%Jˆ{o‰Vö’Qçƒó—(Ù$÷EÔ’a3Ÿ‰.ËgŠ×4í1	ğí}¿(b‰ËK)
-YòuW)«ğÌ-q›H¨qï;1şhŞ{ï‰ô£õÈàjŞ‰"ÍŞŒ÷„Óç­wŸLŠ“÷ÅÒÀ™Nî‚)¥¹ó\ÓOn·¥i»ÍN”{"³üÜI"»w£Üz7JãêV:RîY“åçN²¦;¯è“éü)S¨ûän;Ujw$	‡2ô®¶³-ÿó¨¥¢iS&ÛÔò-MëWz?lêáë¥Z4d
-OÑ­õİL>ÍD²åBå´Ò¤IŒTñ£¾ÙˆğØ€ÔØTÜM¡úT¢]}™®á¸˜kˆ©+¾İÍ˜š"Ï¤A/fõ“º.˜æÜ/Åƒ¬¿K>—Éı-SùZšÌR¹†•F²Sšs­Ìê($ûSš±¥4ÚäÙH&4y49z=Q£˜9špq\®7à×¸GvÍÏAöºõXêd™‰‹aR÷Ât®…Ü
-×Ä¦ñ%Ü³ÍÏawUM$“Xõ§È˜Ì_¿~^=ÓÕ6\§ø“d’6FößQ«ôud:Ô4ZË1ß›­›JløPÌÖEù ×SÆ9ÜÓu3q3@hÒtı‡Ld¿0ÈàC6b—¶{3v³é³Lh&M`övìéÏFrÛ-ÙÓGŞ2}¾±Ğ½ëÛ»e¶ì¦ñı6Z³ïŞ8çmDø{{¶óÏíÙ3†[eÑ¾g	Æ9o#K¸Óú#™Ü°=y¨ú‡`İnphå›İê%{v:¿JÊ›•ÛıÈ©{ÈdÇ
-([~?8–ÀÙ{Ãş…Ë&øa‚Hçƒv›ÀãáğÌå)	2@r«¢÷ªDŸ,ê©”1‚óèÒ²µ^jö”s CkîXn–ô<?:—‰¸‹ªkbèÚ½œ}ğz4òºaz‹Ê¯qâF)ò‚è<pP}]Ğ7.Ù -öœq-ì
-ƒ{&¼­jØ»’»c§Y8 _£”v‘İúx¤¬Â	¶ÓxTPT%]Z«¹¶evëÌöï£°£}²Fv_í|q°y´³MÚ[/çÖ±9T:NÈkz*’²GÚM;¢Sh;H½°Ÿ/%Ïöö^’è” dÈŠÅf2¡­oĞçrêùÁ|8”šÛcùÄÂBJv„”{&/ª2Õ=î­ÔëUÇÉTOIŒ¯Ô†gD´ñvm%GuÑç-¹•8k¸êÒu‡uR¶»ú±Ç½Ë~Ø±İŒÙ[Ávùmë¶»Çß­G¤…ÿ¼BÿÀ¿cñ+>Å&âì;ÿøG"^¼µ!]oË7D£Ô—‡ó­Öú]t&ğ_’8ğ’h¸Nú°Èúû|ñ#¬4HØåWø+^%W œéa‡İôEöp:FYg…ÔêØœ“nLè?y€9Æşuüs™p|œ0÷ àE£„9Q—‹NTz‘weQöŸæW°%ßwü]Ğ>½ ÿ£h ÿÂÄÄçı»ç—:VñƒlUË‚#4äÑ}Ü[5‰öŒiô=á®§kPıòÊùH-=ÌÅİéÀhü×ŸÿéŸ9i“Œ€Èîµêd/ üU'Hè;Uş7ª”w ª6füAµÅ¥ƒePGà0Ö·ƒÄ	níÌ\SŠ{‡>Áÿ¡ –€†ût’Ÿ‰ü`rÃKw¢¸oJ„Éb¦¤Ò¸SXI¾¬[,…,ã^uúÀÙâ5LÁ²ÔËšæªè¥ôµ+ÊÖĞÄŸK•…»irÎŠœ{<ÓmØY<nh_Ùıe¡1œF¥1v²Œâ€5[­ßCøR=Šñ´a¬Õ¼>;±É(Ş¯ö;:	ıòšĞÈ0‡AVñõt“ÛRt€€Ê^¬òa·øã¾r	[€ÊĞ5nz	;²>@Ÿ:€1tƒğ-Š Pztw|ü xçò1!”M>è‡]éöIá¡,?Œ;kå Àñ}D‘5Ùèœ‚lŞPŒ:T|.¨3ò;ss•ákmíJéŠ{aü.:º¸M·ë3%É³‹¯<ÇÁqW¼ü˜¾Ö${
-«‰Vü”˜·J-Zd«ÕÒlfwS6$;H™P@üïEßYö+‡3jĞêi§ë£^ ëòbX[›økø#w>·/ Ïêî‡	a;|G:ï>Ì-şÑ‘±ÖŞà^èû®JB8SnÅDˆ<¡3zŠ¤˜½²®êâ^Õå´£kµ®ä ¦¹^]¹ù(•uÇc­Ü 4Ó½<şAÎ½P`Zş˜çt\f`;Ş4Œcó˜Pš­ğùlX~{qF_­.ÎóßzÃ.2®>»¬Y™ó3oºÕ5¦]$ƒõüÏåÛ©l¬¹ˆ¤”Ÿ0ÆÔºZri’ÆEæ%ñQ1yv2Âüô¡…:îSŞRØ¹yüR¶™Ù_ËÙ·Ljd\vãòğ!Éş±÷OkEŞçÓÇàí:rä¸NEÕv¤Oƒ·Ğ¿2V9ZS#÷Aw0©ÔÂ‚ÿC@ÒßãèœÃ*7¾Ğ¾öxW¶ÅÔ
-®Ğ†kdï€°q>?ğŞÕØ0X[$òÌ”†$)Áè:”ÄÄF%“¥É¿k—Šš6Q…JW¸«ìÜÂªzÈ"³È†™6¶°Ùš`=õ=ººı¢(Qw‹&©vfã¿¯É<}Æ
-²ídâ×/HÏ!Ùæ­Hj¸$UæÛ™‰!b÷œY§´„úeãnèÂÁÍ€r®c~ÎâáÛ N¢¥å/£qÜÖŒBÿZ·i¦µ÷ª‹êÑa5’êáÔŒ™ ÉÃ‰ËVŒÛÕ†%Ä0ŠcÜ÷^J~«QF\}èV×j`S°ÍÛ]İ÷ªLYB&S˜šv™ °*ÆG~ù‡ÿ¸|E%µö-×ôæ:iô"êzı ı¦Ã³v+Îï¾jÍÕÂ-w;íM£Á&S(.A3 ›ô8ĞŞ{×öŠïyùõü%µyôˆ½éx ošLàz z„Amµ“İí†áêê.j[àÏLé^ÒÓXİË÷Ò^ÓÈºi(’¨¤ù÷¢İ¦ä“Ãü•éQ‡YÍ¹e¾=™é~#Ÿ¥´ôÌ¼¯[]»c|ëÌĞÒÅ>R'€bvõ4ÖBİ²‰=W4.Ğ‡  u~P±©#“;8aØc¾MdNõê¹*+Ç9˜àú$õ¯itræñqİøŞšÉ®2¥»…8ú„è÷ÃÓI ùaÖêÚñÛ[-s›ÍØf7$¯f†äÉŒr5,,ä^Ïh3éê×ŸÿôH…ıª¶Ùª®j\»	ïl˜3Nhlª6wÌÄÂô‚ú Eq:…m¯6¸cñÆä÷{ ö`gè_3ÚC_ŞJyÇ°Œãm~±]:HQè[Â£T•
-n(·‹w×…œw7yBKî„FMi×EWu,kuLk•“]Õwg+ñƒ.¢ÅÚbu¼wfNG±qÖ~oZ®­ÑRZ}ğtËëwÇ}šF¼L ³S D-q ¥¤‰ìJ"~Ç¥Ğ€Ô~O¬ˆd4lë2»nNI¾ËÛQ+ˆ¡*›!ğ•-A2…\†@ÉÀ.¦2TPº0r2w§ow¯VÅW²Ë·üµšœóš_ü|Üï_}/ôk|¬KnhC1Ó®Ö!VTë¬bZgÑº% Ÿ‡mñ(×‡DXà¶¸=Ì-Æµn„+/¾H
-aíÆ‡Æ7óûóT¾Å‘?fÆl öø¢Cz°îƒ—xç4ì0và…Ã$+ÈLÂSÛeqòqğÃ€.(L\ÂbÓ ~G¶ÃdÔ÷.Hàu{„êÀâG`Q ´Z]5·)ë)…tÙ½9]E1]İnÀüv=¡HôY‘xœáà_n©S@w¢@ÎÚ1ÔV¼mÊHX6ş-ç‡@eL^CUv­qw³µ
-V‡Ù¹X©æG÷g¢¸7İç—JWaÕ-å6uı™.jƒñšª5#Q­Od¥ãRáŠ®æZ­‘õ£''‹v»Uû–’Û±SÁÍ~ïfwSö§aÕFŸ©3å›/iá9]AÄor2NÂa$¤…]Ğ1Ó^CPœÇ;gT{½ëÔ8`šÜ¡I„–¥ªèTXB~WG.¡ sÂ.T‡èèc]’’[%1–Œã>§ë8&Iµ]’²Ëß.~'sûu‘DÚrL	–Rê—M‚ôe¡íK,õ§.şÑ­~`^gAÚ¡ŸL®­K>ÏŸ‚ŞMªs²×ÔœlVÛ
-Ôü•Ìrª+bå²ag>İ(]Q¥’°`Mnkÿòÿ17{ò’­huÈŠç¸MAXåô»™R‚üºuòÒK{ À¼k/>" ˜&Áî0m«d1ÇŠ·€:4Ñ¶9­ş0\ª–¸Vå°¥«BĞkVAàºH«hR¾^òÒçÎ”ÄŠ¯|ßÈLÒü^ÚÆËSJßÿ@:)^fÊ:f&s-àÌêÀÅÁhgèS!û	¹1-çšÇuäòŸÉƒW®/xĞõ×g8Q~jM«ÊlÎd5­Ö,¯iŞ5ÍDx4_~¯†¤ÿ–£Ü÷µ«sKêeí•ğ#Û1B®uUû¥#|‚âñÅúó–†­ƒpfúK‡'P`/¡ò½óˆ¨ŸXÖ>¹Ğ‘“TnÉdK,kò
-ğWõ|»taåGH 5¿©VŠå˜7ÇƒÄq~³|(5êBÒH¯ûœÒwëÕÂfm4·SàÂ'F"ÄN.t¨sLRÔ\ù¹sT†~›=çÑG35}á$ÍœóY€îs¬ãİëwğX¯W^ÃmÿÜì@7ÛÁd¦¡äu#Ì–®ä¥Ä†DO?NÃ‹ÕZµAÀÅAuC­İ£¨]íàïi`°Ãç¹„ÀZîV‡›iÙyª*AÓxWŞ3Â±›~»ò¨M	¥W‘­õÉæ[ø‡v‘ujµQÙfº>/5ïißöxá4ú>œÓågà^Š×5/Ğ1_¯À’Ï Êg´9O‚MfÂî›rÜh3h§2ÚB)¬Ã¿k)ÒI¸±¢L¬.’„-â$‚EæÉó@®I8ÇøëÄë¾ñãh4ÒÃ{%s‹·Ò@S2ó¾Ğ¦9OÉ’!!ÁÖ«ºV¡«"“Àò÷¶ÕUÌ“%ªí¬VD¹œŸÉÍ¬Ø¥O×‹—ÔÑÉM%šÓö¶Ê:İØúĞiYÆ§‹º,ê ¤'›g°íZê05–2ñ»¦÷îP²å·‡ ÇŞïÖ$»UZQ9Z.ûV¬%Ø¶ÆQ o¡ÜÓçïŞFã‘­™Ü¿ˆ„£7_…7—ßËˆ3ÕÆ³şs(DÿÖ¤×JÃÚ7
-Né²©†Hmêø»†Ñ0 ­ãD·¥×è+#+pìäóˆg–ÖZÚ¥_ğ˜~úÈÃfQZ“„ƒmÍgj ±^ë1¿Óö“VH +³AxŒ³8I‡Ç	¶måiRY´›qì”´?RÚfq¦I¥ÀVfF/.÷‰vj®9‹Ñ&Ãâ,/#ßë+S<"öûR—¿xCŸÀ§¦%¿59	@$D4 D¥@ëØšÛ¿Û$†2S
-ë¾ OÈ08§fö6*\»‡{\Ûš£MÓÓvë¨5÷í¢±Ñ2›«RVà3Nú„Ô©R• ryP’(/Üp)%=İÀÃÏ^û«AíŠP¥'……`ã8åŠA—%“Â8‘DË
-‡³Z×Åpñ…òŸ¦wÀCšôÚrv-èá#+4qücÜÃeN*?M£m¦§NGÄïâ@sÏk‘lŒ^÷uñ—Øîöˆ²·£ŒŒ[ÏoûÈpçÃ‹©Î&¥óòœÇ{#<
-±Tš¼M²òÄs3»³Å$îubKı6d~Ëû¯,IŸ ^1\|@y°mMjö¸ëSåÑsÃ]3,ËÑp¥›“ã´p¨A”»VÍÂóšYr„‰µIRH–Œ¬ØáDeJı†®çåVÉ¸YºÃP¦Üğ¾zTHtĞfäÚ2S(È´«ÍI´ßÜ›1Ócœ„^ã†7(Ş1³İ˜ô›L–v÷o5¾™)uúoëÕ5Aß Ôÿoõ‚î›ÃÆØIñU¡ÖÃÿ?0y|XwÏ½ƒí²µ÷êùîÁËK!ÔZZ±Y”¯ä…zÃ1
-°T×,ïy“ö²uJKßnÇ¤¾Ì
-÷µK½¥Œ¨šÍš	]÷îLö™3ãKŒ+ñÆŞŸ¬ILI\³ñ$İ¬:Ş£c9Í˜já”|&K X¿ĞååKæÅ‚…Ï†:ŞEM’d<53*¡eiİô!yõ-ö(höÑ!Ùüz‡<$Ï÷^¼Øûfşõ>µ!¯‹¯ ¾æL_×4{?Œòt×KdŒ;qÅÔ„§ÚS²ê1”{8êx„Ã”b1§á;@·pÒz+dßÆgkï0‰ç¿ıtñ;‹—„ÿ‰5±O¢pŒ>™ÖæÆ38:¥¢5Ëïú„Çc¼wóçè!æ³L|ŸÈ¾,ë Xâ£¸ˆóù¥e@QøŸÅ« e%Dïæ½q*:÷õÎØrüò¿ş›3Ì•LÊe÷VÊ®ËA1ğœÑ›±ä„y­%lì¤aÚÊÆŞJieår8"6††!hŠR÷Ãa@Ğ‚ƒK‹ƒ¾Xì°¤A$ÀĞË‹U I’ÑX×•7ê],å`¢Öá¸¦Zšƒ’DYê:m;ïÑh^8ò³ã<;ûU±ªÆ­~”ğ”™YdÊŸÈ±~óôà¾ÜÛŞ|±NvŞ…	kÂD,ŒIVÊŠ Üæ—åNİËÔÊì~Æé|z%ğ³)ôÜo€ŠèqÀ_xÜå£}1¡3;,:s;üdæìğ,4ÇÜ£4š?¡K%	×LQhüì¯â˜€ ÇDZJC8Ğu
-fR¬õ;¹98¡£úáY/%hèªôÃ{'IÔ£@¸HğÛ‘ÅÏ¯~Ìş—,¸èo;‹+ß©l–`2\|™§–‹„
-HTÇ±®AÚ*Ö¯äŞ/dƒåÒÜèº|ĞÍ¯uækÎşœ×œ¦V¯KIì1ï­_qñK«¥óV»¼(÷.º„”y'Ğy½ÿbwkóhwïùfóàÕî«/,Ú$½±ó·»‡G0l½><Ú{	ŠèöÎÑÎÖ‘YÕ#†ÂjyµşA+YiµŠÖîX;mÔ¼àô£˜`õ´>’õİ ƒ×ÇX÷ §Q‚U? ğØÍÄëvÑ"ØÑ,¿TUMhÃO²½»è²æ7•O¶O½~Ì}w·ü’MŸëqú§UC¿¨k¶äoÕãnI]c‹ĞÈ:‡¤IäYU‰³‹€+?íj	beÚeåğÊgsÆ¨] C¶:f°õİ|œö 9´¨ŸÆFÁ· öÂ‘Ï¨0;ëqkğf•,ë5PL2ÌQûx!íM?å>%f.ofFj˜ß¢UE‚NÓnã˜¶·çõsÂõXÇ†Ûû8=‰ü‹ZÛÎÂÉT¬5n­ïøyrîÅeQdêdÒú“@wMµˆZÿ}¼şxé}ƒè$ì7ÿ"ƒY¤ü~ÔğÈîÈYïãsæ¸Îªt:ÃŒ´oJ?o›’=Ûï°úyÖöâ\ç,H1-¦=77guŠÛìÓ´à˜¸€}&À¶À ‚dÏi”‘hÛ0aÅi»íñşĞ' ŸXNæó‘}{`Ìî‰‰6ÁÈ_t|.ãaå5»Éô*v¼&•Rº¹•µ•ƒ¡Ïâ|*õ±´LÆZ%#]ı{“[ÀîpÓ±JAúñ¹H?x“ÊuGŞI»ÕRWúÀ.O	³ır&<ØC*×ŠÕ@õQJ¦QÁåTPÿeKÊØÇ¢‚Ú°©l–¬ÇL—­ì‘øëÓl;å1k‹kBˆòçÖdPÚÉÜ;ÓÜÂĞp8Œ»ª^-²”*3ûM2õ<•÷Î‡°ğ×CšÚsx	Úz 2£T¶õŒé}8ò‚. ø®o5ë$^?H0†³G§´n‰İV{+öUeÎÏ¨2çTY¿]ì4ùb&5ÓÈ+¸>“Eã¿ıÆ›èB½ÍÀ™p¥åfï›W;dïëƒƒİí*£ÍëW/ö¶ş@v6÷^Á?_½Ş=hØ`“kÀNö`'oòÄã(vYºUÆXùüQ±ÓPşAÿ¸&#Íë"ƒkc¥üãŒíz¢YƒØKÏ<e;ÕÄÈÖ{iÄÁT0 Ğáød¦Æ´õ 3Š)ãØN½q?m—Îp+Kãïø¡ò„o¶ø3o‹úÄ¸@×åñÅùi·4=Ğk2ÒÚÄìşĞ(³·„I–¨İÑ‰úˆêâ¶Š•"ê´Kgå#tFF·É )½Ìˆ…¦q%|34#oá	*övşUHãnd…SÚºåÍ­~ˆn›Š3\]¹X kóz{É©§H¡P—¨~Ñ)uÜbF;Å‰ªe],*—ìeÆÈÂ8nşNÃ”3³°ÍÜ¼Ø„Œå:İTWİQÙÖB}F{„’{™„Åb™„ecÍ•åE<ºãd=§è¦â¿TT‰Êº†ö,‹X 4ÒƒæÒv ò…Çl¼ÃT™Mõ€õT‘¬¬üJÉ6ıÈ˜=°†©üw‰('„£ÿ!í#lÁ¬€œQÍ™ç‚£¢˜áP,\½4ramÚOIUÅk½œtsôJ¸ëº i”éÕB±ÄV>–W—5ës–¬åD•J;TŞä§‘²ÜN§£Ÿ\á2÷×Û´ÌœC99øGC…Vt„‰èdøÓŸP[òÄ<E[HE+&–Ûh5’•S(Ó<FNch“lüå¥L{£ÒëTF³’ïÏl3™ÓÔ& N'‰ÖZf‹—®Úš„ÊÆº­©‚Sÿ”@¢L#´›š@µ-@ˆB‰½B„‘Â%Kõtuš¨ıùŸÿ"Ò¢¹½È¨ÚpÊbÕ	wÖ/öm¾`¦¬C²¹µµsx¸ûìÅÙ:Ø;<œ?Ú|&Ù®¤ç–:ä‹~tâõQóç±ù:DßÏ»¤é1ÓgGÔ@Å›¹íGq
-×A_ÅmÃNiT{‘è"¬`D‡%˜œ÷& ‡ğl0$ËÜ5JXfªdS{o†}Ú#2GY©çü…ûÚTñPË‹‹Î&´Ì%Áb#&5·©Õbá“ÅI£HËRgÉ†&BG³ø'­IÍê©U½0•¶@Íä+OÛ½2VÀ^Ğ$™Jd/p£/i³ò‡=°D÷5øº_şåÿç_ÿl´îhš0–­dXK4:€}>ú)F£”xR5]EKœh&Ö=xŠA;¼‹! .3À#èfrOBºÑ…/=ÁÑIÔÇtÖ¹à„¾éac')Ó×E|0×âĞòz%	iM—„¤¸ò}ÃB9 U~ïxÖ•bB)„Ü¹2ÍÖ»|È.®{ĞŞ 1é}8u­éç½=} ÈQçkZcğ	iŞœqGğ›àb$Ônp1ñ¼t€²ãç3&,’U;â-8ûÊf(1	%g>I1Y×a’Ò4?Á0ıiÔ‹Ò(ié°÷ÿìö`ÍOHñ36:ô^{¡ıwşÇ—|Œ¦•À‡_Ø¬Ä«oäƒğ”!s¡Öß†käïÄ:	üø‚»»ı±$möm4®TDšB« o*“À¾?AFr… "ÏQà^(„$¥5¤¦J$OòyÒw¢ S¢î¨õƒ*ÆVêzC?ô[¦¤ølÔ=ĞÖ±şLë0…×x±O¾Ïzó ÈŠ(d;<Q8Ùgû ñ¥–«%*Ø‹¦y#öj0‚×¢½cÃ•.¨qXj­«½›b‰ŒøıÁ$	ƒÑ­ óÀRS£\`« [âıÉXù×ô#ëbë+8ÁwÙrı	Pç~ŒÃË(…w´7’HØïªåßa#>©Aœ8@À!Z6TøN<deŠBúp<`S¸é‡hª¾y[Äºh¡+¥xñI¢nè¡€‹‚eXw±¡®×?¡_çˆºbxCO¢èşÀ|yPWúBó üc-‡1ÿîñ;?Tá]ÖÙ1J6é¢¯uNc ‡l×Ÿ³Şğ­÷ÉdÒ—Xå,öQ"Àùã´ãûÉš
-ádŸbÚs¹%òíòdûf€Cy³_€¾*-ù04{ra³ôÀÕçÅñ™ê‡¨Ô€ÎGÑ¤Áñ€á%××ÈÇ¤ÿ}lÔ
-›Ğèr©Í‘ ™&@
-?|Xt1Ò¨I+ƒ«Pb™ñ'>>!í%ÄYxé#²Dòiçja¯Ógh¹S|*ñx?Nƒ$a_Ì¬|È4«˜
-Ä[ÛŠV:‰d˜Ú=ŸÉ â“‚^O6È÷¿½JşÒwWÔê¬|[;™ûCá—¦Úˆ†n³8)¡õ	),ÎÄ¦¾¥šØ¾–Æ3b£/l”ØJŸ`Q›I»ıs}OşPÒ–UÁ©>ÎûJëA=â•×_kÁx|t½48‹â‹J;`×GzkHÕrI;§B=O\¯r‡°¡V||éù1–°q¦91¼¼^ƒæ„xAŒÑh½ÂÙÈ~ØÁ¤ã#`à&-© uV¿ŸPi.„ãÙôıùh¨›¯R§H' *¤5ô:é‘2¤¨iEo±Å‘?f™AoèáFA·7»€Ï±Ì?ÙÌ^ï
-=^Û4Î_ra^w$á}‹µ9{Ü~ì¥,Ÿä†³çàÈæºhñÙ³OÉÊ\şùËä~‘‡ä…lşı:ƒh%údjá¬tÁ~ÄüS¸3¡È¼…ú'løb3,S89S›¥—ÄN5½hÛ´Ù¢Îóç•c´jSÒ‹¢T{‡úÇÂ(ÖŞäôTMD+èŞ_#´‡9Ä—‘/éÜ¸ÈSƒ¢qBöë®wi™-²>—|nõmï‚´?£-š'ªb,ƒ¤ÆN7•—ã~²ì	,û9vøÿšv’“ö¥)œv”7M &ôF[€+!§~d@éì^ˆvŞÁ#	¨Æ lì±‡ÈÎËêáµº8+Á…CãÂóçªVşœFšïÒ©Ğ.c¹jŸ¦c?ŒàÚA€Ü”"Gİmıòâ»T·ŸEiO¼å™7üa¤p†P}G@0\x‰‡Áh¶¼ïô4Œ)8„pïrBCø¼ş1»Hyw]ˆ˜Ã‚°lv‰Ù/ác¯˜lÈ¡@oèö&7Gñ"¬÷I‹²`Üæ”÷EXÕ¤Ö•ıUŸ`68f@Ú8ƒ ·@1Ke£8¤µæé±LÇ¼w“ÆF<…³C¾ê¹R}
-¦yDŒ’Şv´±Äşä¦R±¼Ïê¯N¬ìyØˆåµ—æ1âyª¶Æi}ŸI{ÂÏµ-›7G£şÅìhŸEO|MÅaMÄL» ö(7Ñ§\1w~½E€~FêX«7!÷Èêç£¡zóq'’!ÉŒúMêM(|-¶má*u6qfÓ6ïJf¾°ìM½iU«ˆ~Zª’;ÎÇÕwÃÎµÉq2IË5 ’*ÙlŠŠ£‘+úå1A³ÆlB2ÕO‡YÉ˜üføNqŒeóI'ºv¶ü€Õ/N9|œg-Y¥År¥IóÑV^øù2ğ0H·X„?eK”iàrŠ¸=%ÜvmJä÷Š‘²Å¢\¥î©rf†7Ïr”'¬{©ám„ìn¯kB·;jåê–ğÙ½‡oghâ–¥¹¤!v7°á“,7*OP£yó<Ë<' Eûˆåë~ıù/ÿhû¼Ì ËC%€×ò©ºÈavÇ¸¹“÷`äÏPƒVgÏ±ÊØ¡©ú›åäÛ<R†“ÜH¥17-…É¥Yq­\B@mjQÀ~¤.iJdÑ$­PÅYŒ3Ozõı•s4HÃèÂa1!%XáOuó1ü™*Ú›ıJ?œ
-¥å)ıy© cÖ“yí´fó“4¼›%©˜Æš7ÈµX@6Ş˜ ÅîÈÖÜ¡Ğº(Âcÿ³-a¢Õ{è|Æœ¡æÿÃŒ‹vbşç2e	«¥n°rÓïw}SºbÇÜ\ #é©RH¸(Š”›góã'ƒÍ°êQyh— •-¼[–_£xàõÃñ¦²<‘ÙçŒåó­˜PŞ;Æ¬GĞŒàYRòhÊú`•s±³­ÛÂÏiË‹Ñ5',Õ‹74g
-½cj~n¯jgç¬Ò°mx¦õîğ4²“ğ¥·x_+Ìs‡ó¡|ßÇè€f‘¶¸íeÎÔ³².ÿX¡üceBş‘Ó—a74û.Âøâ;Ì8UA8‹‚p*ÈEI¯Íˆ‡™¾±&Au;tÛ2–3š	üp$b‡•éĞWÙz§OqÍ;3\»­°Í8{ğP\ğ‹¤|k7áÁyÕf¿E˜Ìd7ŒÏ”"Ğá“Èa faênoşÛµÅ·½ïJ™Å£XÓ…ıĞ“F¶Äî{Ã o8al™Æ´•›‘chÃ#‰µ‹İe‹@¿¿%]Ò\-\íŞR´A¬$kÔJ‚ÅQê•­c? ÙÿAV€*‚'ÓËß—+ÏÁªDj9Oœ¿Kù.™;s¬`\*f¥»mgÎ4*,´¦zåÀlˆAde.^fn‚é8ÁvøÖØ×J|™{Rî^8ø™ÏmVĞ^§{àK §yI3¹pÌİƒ\9õwÏÍ3çåt@·aŒÊ<²h/ìÌx0\g!óˆ*WyËTÄX}§˜§¾faîıçP ûé_1
-b´B˜«ç&“ñ]„={! °ÎäJÒ¿W7Ïäç“óV ëÇÃ´šÂ+h|­¨à¢	*)½’ÁŞbx*™$3‚g!Œâƒ†'KØƒ›^Í¢"‚äƒe–0+(Êá3ÓCÒå¼·µâ¥¼îÛ)Û¿ü5*·Ô5vÒÖ1ÔŠ»á_X&ÂåHpµHj<K)˜šÎ
-İÒDHÙ,xÕ­$ëÏ‡õ%)Hyæ‡‹úQ˜YHİMÑ¿ÀCı~6LPx=¬¿Ö-»C—E‚Ö·ÄoL…æà!xJ,­é›Ôfûj:)*ø]³¢ñ0Éa‘=-ŒHøëÏúû,– ƒŸ~IvÓûdqÊO ƒ­°ZÔæåÚİfMHYŠL
-ÊĞ´²¢1K¶f§k€ÄV&GŞF¨bxğä ™gñ ¡†¢!ËÂ¯Á7rár¥ºr<­ù‹.XÆ’ˆİ¬É4Ä.®Õ!rj;@ÄŸX¦š×MÇ@DİDS3å¼¤ø²ÄWûgFh2/ìr¹¶3¶èÄoÃòÉXSZÕŠ1 NëÈOñsóÅÈ‹#_)Œ,Ã.)P›½«”øÉB»¨™…$,A0	â·Pu6±<Ğ0Hˆ‡©<ëdmñoˆç¿Åªğ´—M—•4§aÈÊÚß`qo–Wê{h¨â\õÇxEx±¡‹ÙÁ¸k–[Š§ •KI·‡5›hµdËñ®)cÌ~êúêíDÊÊ™?¢”ch¥+š+…:  m{ ˜œû]oˆõK1ØÃ½;yé%v¨&†~$|±³ˆ6ÇygiAoÎÈ“r8š¾ZûI‚t‡5KâÒ&wêdOÀÔÏ£xĞ¶­ˆ9&söYŸ¡ì9ñ—ı‡¸g!ÚG³ào6œın/ñZ/UIfY¬öä:al†rå°Š5+™³ëÆlÚªu¨ŒP¬¥Ì«fÊƒáØjĞdÕÓ"–‹CS
-¨¬z²¤bW©Eg²LteÅsNRXÄ7U ”7Ğh”ÇéÄrëğş2Úü;a½Sx†£xÿWéÅæĞ?‚c¨ïéR—ä‡(%îÀ?#·¸CkÔ]}_IÖÉ·|Ì’¸ßj‘«ïœ¿;èOQ„Qİó"LÒvö(ğò, aÿrXén²éûÈãöFÁĞÒ3XzÄ­a~JÛ¾†Ã¾\¼ÅÊíkJQ:URv¯±wB­aÕfˆ¤v‹¤=™Ã$uXOY—3vêœóFå}u}”~:Ú>öÍÈ[<[·Å´),S“ãLB¿y?ÂŞãR¦N±ùâ\[İÔ6ÔÉ9¿uÇ¨Av°•=¿Šğ_y f ğ†-IT&äĞ;Ò²Õ@b²&Ê–âyÎŞ3º(kÉ’•ıXùØÉ™•( –f• @›‚¢|%xâ–”ËŞ&¯Ù‘£it‘­f”Şõyi(ò?ZÂZ7‰ö&µ”OZXÀŞDX±1)½gKŞÒ{ø¦>ı¦VÛI¢A@¯”¥X^„µäÏuXSËcşUÇ{£\.0­US²à“>yÂà¥>B«eä#20ÉS]•€°ÙO"P¡ø
-mĞCÄÇe+°•!Ã¿¢_B0¶ù¨¼J÷ªv³ÎG.‹şj¥^Ñ0 `> ?ï‡ü/ùãğr`ü¾¢EG›>Y;–5—üã:éQÌòX[]X=x+sÍÙ¡¿" ¿‡‡³	òì&B=b¿Ég§»âôvó˜Ã§—L«¡„ìêW
-ÂÈ–¿é5ü%ú.d#ÁD}È–®½™İ’V¿|Ë”Èê\„ëÌ^=A×EÌ-Şµİ=ƒrÿÁÓ_şŸ?YºÙ¬ì{+¥)óR¹9–u@ª
- úfõtZcÃúB9Z"ï\Ÿw<£u5×¿2êŒšöòåGa²­
-&Ó–Mà®·ÍY	-‘På‹Ù‰ã(¶ëRâY²=aĞ¼ŞZ5O÷ƒ_’eu]¦}.¯w£~W7L3IëuãÍr{I…1´_öK°wk¼Ì³Rår†+Šó$¯ù°²˜%¨Êü—Uf1WÒ0xSU½ÍA.&?¥JÄ’g!ÏAcÄ ƒıüñè©¾Mq9'î’«å‘uƒ£5¼+o‘+6¬è§©òõB©NB¼>éşœN§AŒ=:h{Óà]˜ UÃeìœpÅâ“âà_ÀN& ÍuÈÆ¤¨àÔd=MÃÿUšÍ Û% ğî4ŠÃnş¶Dç1íKmOÄJE'fs’Àô&?LĞØæ?¹,±y“QÃÙï0«®Ï¬-†2SK³‘lQo$«g{É¤9S.HM[Œ¾4şTÔ8¹Qäğ’‹a—T¡ˆ(?Æt´ÜÔòD5Ùûf|¡F“òXš¾0:ÕLNk}²ª¤-X~œ«:¦úìGŞ­İá[¯æ=bw·;¸‡ØvGİ X×y˜ö¸u&vÊ5Ôä¦ÒXÌÄÆ;i|Qµşİâ¶¶Óx\iÊ®OÔ„xçp[åtkÁîò~wşÀŸâ£Ç]àçÉËä¬UcËòIÂî¡¦tQ±-0áQ8¢qÚÎŒÃå7Ğu="kX+Ô²…èÏìöH;ˆcZ8w¼ƒg;x-~à4¯³Wmà¼"§áĞÃbÅµ¥ÊéaÂËÚÜš
-Š™<+6\ğéÜV.øİzÄ¦ kšËã1®¤¬+m–¸ÔétZXğ†í¡æÍD¦uÈ‡­g%Ú-O!ÚmÆ¹ Y,ó_Î1§ä/F…$•D¿w±KsI³Îuv,!™R§0éŒÆ}´Ô-ğwœ‚ÌÙÛ:W58IéÑÿ‹ù“Q8´Õ:£*ŒøÖìä9£ñ½ÔC ßDÅ”ÜÊiÜ¹ï½«óO"èæo™šŞ‹¾÷¢ï½è[zÿ½è{/ú^ƒèkÉ4œ^(¶„V[3L"
-L®âH™*„#ú€q:½¤­yQEÆ–1xº!…@¾4¦_£°‘ÔJÀ†Û,wÈaèó'óø/ÁD/“h(…×ğáaÂïÒ`*Z6OïµmÆg»xí>Ûf=¶k4d*—­ò‡¥6şiõ»zïêŒ
-á‹j¯İi€N?LŒ)ô†ÒõV«ÿå_şÇşõÏ*µ¨¥èeâi_fâFŸ$<ö*8Ë½9+(W®×²“Èl–Ë’»*aóÃ²ÌÚÌ¹¯×àMÕìyÁ‹ŠøšæÑsc³”U1È6ñL„<¢]=«(.cBï2p‹…Ï”œÔBÍß2Ù¥ôåÊW21&Ä{'Ş  ì{£$°ä©=N{À=´GR+lÏÈ`½ßş—ÅçKŸ.o~gÒüAW(øsìRjAb9ƒ8Ÿ_ı,ó:ëí
--’}«\¥˜šöA
-Å¨ôvè[UÀº¡£¡o”9‘£úÁÆ.*2Øß úúW5á¿”n%Ğ®!h	Ì–Š*hñ|Eñ³šøì9}Ö5Í”¢¬¿¦éVò7Fhó&¢¬[R…KV4]ßââ÷4˜¡b­€:åZörR“¥ŸıV—" ½5mdBqã)0ZaÎå‡×e1(ø
-N”µšğ—2Vsº,•¢/­ß.-ã†YÃÅÖ¤ÏÛËmäI^“Öwne%Ã(…¿‹Ÿ+í†ÃD±NÎ7°áÇ)Šìº7ÓS‰£9ˆÎMé”\Iºpóª;R›‘»ûEî¢"|İÊW*˜>ııùßQæ°Ó_7ÎËØ³odÏf­–x¯$²JåF
-¶a+é!ÍµU00¤µ/‚!R»…ŞÌû1©P_4p¹[˜ÿOÿ—~¸hrø®'‘ûù¡³Ñä©s=T Ø¿®R¿;´ğ—­,VÛ¤Ş“„tØJjTœEİX¶'ªÜ3™~óXå"ğuªÁN Rª}I ÕèxğôU”²úgã¼8™M$¬÷®‹z•Ê¹w‡zúWV„ù øaÒ=»§ÜÜğèN©ŒnŠ&\é&«Yƒ¯êÜàçVoj=¯»D#úûüãiÕûó­D%Yi2*)”PyøPWX…V¼ÂæÔ\,Ü_w#®5<”àdU…n=±Ú¨¢•×!§_şüÿĞj}÷‹p¦÷ô4Í©#¬`Ö>ˆ~ß¾/"’4CxıÓü¶lÜPó‘;¢¼O»•ô¢(m•]bòÏi­`ìé+öÛÒ…‘æ? ¾=GÉ¶wAÚŸÍ/-²§æn‡BwØFA^ÑğÎ(ètÿNq³î©³	êÜ(‰vEhÍÕ¤¿·=…“ª‰v”E,äÒ%lm•t›‰¬/Çı4œ§JD›vÏX 3Üv¯Kª’ñ{C©?i>ñ`]Í/öÿÎæ—"HuËµÁèÉüd­ÀKÌö+Æe[Ë5ĞrYA7-T6eÄİåõkI<î‹’©·Î¬£¹ªóÖÁe4hÕ49Š \äp<`ùæªX…qºôé²÷1,#ã¤Hµ!Z2X§¿ÇÑ¹½şm©ZYG¤``°ZëçKÉIEÏ³”•¿µ÷ró`÷pïÙzıòõ‹Í£İ¯wÈáë—Æ°°ŠZúrÙ?xú,J{y¼–4"mŒ¡×>QÃXäß=?LºØäSßŞÁİXaÿßÓ^ ×áZ6kG§a? I$(ø@LQlˆhÕ;İ“¤‡Ã7ÚHªBÕ…ó@l­0~ÜÂ'ûq4Šøà¯½ş8Xw†|•Gêe_ĞS“ŒOR„­É7c(A®—‰y¡âÍ®şÜ¶ÆUb–æG•ÉãæÂòFïæi Ìrß)5	ÕhôB¬º¹‡¢¡–aaXıÂœ)–6Õ-ˆoÂ
-„Ê£p@\}ş›ÿ  ÿÿ ÚÎX¶
+                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <span>ğŸ“¥</span>
+                        <span>Download Reports</span>
+                        {isDownloadReportsExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-amber-400 ml-0.5 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
+                        )}
+                      </button>
+
+                      {/* Filters Toggle Button */}
+                      <button
+                        type="button"
+                        id="btn_toggle_filters"
+                        onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                          isFiltersExpanded || activeFilterCount > 0
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/10'
+                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                        }`}
+                      >
+                        <Filter className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Filters</span>
+                        {activeFilterCount > 0 && (
+                          <span className="bg-emerald-500 text-zinc-950 text-[10px] font-black px-1.5 py-0.2 rounded-full font-mono">
+                            {activeFilterCount}
+                          </span>
+                        )}
+                        {isFiltersExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-emerald-400 ml-0.5 shrink-0" />
+                        ) : (
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Collapsible Download Reports Options Panel */}
+                  <div 
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      isDownloadReportsExpanded 
+                        ? 'grid-rows-[1fr] opacity-100 pt-3 border-t border-zinc-800/60' 
+                        : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handlePrintReport}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Print lead report to paper"
+                        >
+                          <span>ğŸ–¨ï¸</span> Print Report
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={handlePrintReport}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-rose-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as PDF format"
+                        >
+                          <span>ğŸ“„</span> Download PDF
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={handleDownloadExcel}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-emerald-450 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as Excel spreadsheet"
+                        >
+                          <span>ğŸ“Š</span> Excel (.xlsx)
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleDownloadCSV}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-indigo-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as CSV file"
+                        >
+                          <span>ğŸ“</span> CSV
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Collapsible Quick Filters Panel */}
+                <div 
+                  className={`grid transition-all duration-300 ease-in-out ${
+                    isFiltersExpanded 
+                      ? 'grid-rows-[1fr] opacity-100 my-3' 
+                      : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="bg-zinc-900/40 rounded-2xl border border-zinc-850 shadow-xl relative p-4">
+                      {/* Corner calibration tick marks */}
+                      <div className="absolute top-2 left-2 w-1.5 h-1.5 border-t border-l border-emerald-500/40" />
+                      <div className="absolute top-2 right-2 w-1.5 h-1.5 border-t border-r border-emerald-500/40" />
+                      <div className="absolute bottom-2 left-2 w-1.5 h-1.5 border-b border-l border-emerald-500/40" />
+                      <div className="absolute bottom-2 right-2 w-1.5 h-1.5 border-b border-r border-emerald-500/40" />
+
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        {/* Search query */}
+                        <div className="md:col-span-3">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-zinc-400 mb-1">
+                            Search Lead / Customer Name
+                          </label>
+                          <div className="relative">
+                            <Search className="w-4 h-4 text-emerald-505 absolute left-3 top-3" />
+                            <input
+                              type="text"
+                              placeholder="ID, name, or phone..."
+                              value={filterQuery}
+                              onChange={(e) => setFilterQuery(e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-850 rounded-xl pl-9 pr-3 py-2 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Source */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Lead Source
+                          </label>
+                          <select
+                            value={filterSource}
+                            onChange={(e) => setFilterSource(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90"
+                          >
+                            <option value="">All Sources</option>
+                            {LEAD_SOURCES.map(source => (
+                              <option key={source} value={source}>{source}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Status (Stage) */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Active Stage
+                          </label>
+                          <select
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="">All Stages</option>
+                            {ACTIVE_STAGE_GROUPS.map((group, idx) => (
+                              <optgroup key={idx} label={group.label} className={`bg-slate-950 ${group.colorClass} font-bold`}>
+                                {group.options.map(opt => (
+                                  <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Start Date */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Start Date (Created)
+                          </label>
+                          <input
+                            type="date"
+                            value={dateRangeStart}
+                            onChange={(e) => setDateRangeStart(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                          />
+                        </div>
+
+                        {/* End Date */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            End Date (Created)
+                          </label>
+                          <input
+                            type="date"
+                            value={dateRangeEnd}
+                            onChange={(e) => setDateRangeEnd(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Actions */}
+                        <div className="md:col-span-1 flex flex-col sm:flex-row md:flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAppliedStartDate(dateRangeStart);
+                              setAppliedEndDate(dateRangeEnd);
+                            }}
+                            className="w-full flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 py-1.5 text-[10px] font-bold text-white rounded transition-all cursor-pointer"
+                            title="Apply Date Filter"
+                          >
+                            Apply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFilterQuery('');
+                              setFilterSource('');
+                              setFilterStatus('');
+                              setFilterSalesPerson('');
+                              setFilterDate('');
+                              setDateRangeStart('');
+                              setDateRangeEnd('');
+                              setAppliedStartDate('');
+                              setAppliedEndDate('');
+                            }}
+                            className="w-full flex items-center justify-center gap-0.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 py-1.5 px-1.5 text-[10px] text-zinc-300 rounded transition-all cursor-pointer animate-none"
+                            title="Reset all filters"
+                          >
+                            Reset
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Table view */}
+          <div className="bg-zinc-900/20 rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-max">
+                <thead>
+                  <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
+                    <th className="p-3.5 pl-5">Lead ID</th>
+                    <th className="p-3.5">Order ID</th>
+                    <th className="p-3.5">Customer Name</th>
+                    <th className="p-3.5">Mobile Number</th>
+                    <th className="p-3.5">Event</th>
+                    <th className="p-3.5">Current Status</th>
+                    <th className="p-3.5">Created Date</th>
+                    <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900/60">
+                  {filteredLeads.length > 0 ? (
+                    filteredLeads.map((lead) => {
+                      const leadStatus = getLeadCurrentStatus(lead);
+                      const currentStage = getLeadCurrentStage(lead);
+                      const isActiveInSales = currentStage === 'Sales';
+                      const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
+                      return (
+                        <tr 
+                          key={lead.lead_id} 
+                          className="hover:bg-zinc-900/30 text-zinc-300 transition-all"
+                        >
+                          <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-indigo-400">
+                            {lead.lead_id}
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-violet-400 font-bold">
+                            {linkedOrder ? linkedOrder.order_id : 'N/A'}
+                          </td>
+                          <td className="p-3.5 font-bold text-white">
+                            {lead.customer_name === 'Inbound Prospect' ? '' : lead.customer_name}
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {formatIndianPhoneNumber(lead.mobile)}
+                          </td>
+                          <td className="p-3.5 text-zinc-300 font-sans">
+                            <UnifiedEventDropdownCell lead={lead} />
+                          </td>
+                          <td className="p-3.5">
+                            <StatusText status={leadStatus} />
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
+                          </td>
+                          <td className="p-3.5 text-right pr-5 w-[160px] min-w-max overflow-visible relative">
+                            {(() => {
+                              const isManageCrmOnlyStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Contacted', 'Create Quote', 'Created Quotation'].includes(leadStatus);
+                              const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
+                              const isConfirmOrderStatus = false; // Disabled lock requirement for confirmed orders
+                              const isLeadLostStatus = ['Lead Lost', 'Lost Lead'].includes(leadStatus);
+
+                              const latestUnlockRequest = unlockRequests
+                                .filter((r: any) => r.lead_id === lead.lead_id || (linkedOrder && r.order_id === linkedOrder.order_id) || ((lead as any).order_id && r.order_id === (lead as any).order_id))
+                                .sort((a: any, b: any) => new Date(b.created_at || b.requested_at || "").getTime() - new Date(a.created_at || a.requested_at || "").getTime())[0];
+                              const isPendingUnlock = latestUnlockRequest?.status === 'Pending' || latestUnlockRequest?.request_status === 'Pending';
+                              const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected' || latestUnlockRequest?.request_status === 'Rejected';
+                              const isApprovedUnlock = lead.quotation_locked === false || (
+                                lead.quotation_locked !== true && (latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved')
+                              );
+
+                               if (isPendingUnlock || isApprovedUnlock || isRejectedUnlock || isConfirmOrderStatus) {
+                                return (
+                                  <div className="relative flex justify-end">
+                                    <button
+                                      type="button"
+                                      id={`btn_actions_confirm_${lead.lead_id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (openDropdownLeadId === lead.lead_id) {
+                                          setOpenDropdownLeadId(null);
+                                        } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const spaceBelow = window.innerHeight - rect.bottom;
+                                          const spaceAbove = rect.top;
+                                          const menuHeight = 90;
+                                          
+                                          let top: number | string = rect.bottom + 4;
+                                          let bottom: number | string = 'auto';
+                                          
+                                          if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+                                            top = 'auto';
+                                            bottom = window.innerHeight - rect.top + 4;
+                                          }
+                                          
+                                          setDropdownCoords({ top, right: window.innerWidth - rect.right, bottom });
+                                          setOpenDropdownLeadId(lead.lead_id);
+                                        }
+                                      }}
+                                      className={`w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2.5 shadow shrink-0 ${
+                                        isPendingUnlock 
+                                          ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-amber-500/30' 
+                                          : isApprovedUnlock 
+                                            ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30'
+                                            : isRejectedUnlock 
+                                              ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border-rose-500/30'
+                                              : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+                                      }`}
+                                    >
+                                      <span>
+                                        {isPendingUnlock ? 'ğŸŸ¡ Action' : isApprovedUnlock ? 'ğŸŸ¢ Action' : isRejectedUnlock ? 'ğŸ”´ Action' : 'ğŸ”’ Action'}
+                                      </span>
+                                      <span className="text-[10px] ml-1">â–¼</span>
+                                    </button>
+
+                                    {openDropdownLeadId === lead.lead_id && createPortal(
+                                      <div 
+                                        className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
+                                        style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-lg border border-zinc-850/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                                          <span>View CRM</span>
+                                        </button>
+
+                                        {isPendingUnlock ? (
+                                          <button
+                                            type="button"
+                                            disabled
+                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950/40 text-amber-400/60 rounded-lg border border-amber-900/20 flex items-center gap-2 cursor-not-allowed opacity-70"
+                                          >
+                                            <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400/60" />
+                                            <span>Waiting for Approval</span>
+                                          </button>
+                                        ) : isApprovedUnlock ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenDropdownLeadId(null);
+                                              handleSelectLead(lead, 3);
+                                            }}
+                                            className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                          >
+                                            <Edit className="w-3.5 h-3.5 shrink-0" />
+                                            <span>Edit Quotation</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenDropdownLeadId(null);
+                                              setSelectedUnlockLead(lead);
+                                              setUnlockRequestReason('Customer requested additional discount');
+                                              setUnlockRequestCustomReason('');
+                                              setShowUnlockRequestModal(true);
+                                            }}
+                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950 hover:bg-amber-900 text-amber-400 hover:text-white rounded-lg border border-amber-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                          >
+                                            <Ban className="w-3.5 h-3.5 shrink-0" />
+                                            <span>Unlock Quotation</span>
+                                          </button>
+                                        )}
+                                      </div>,
+                                      document.body
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              if (isLeadLostStatus) {
+                                return (
+                                  <button
+                                    type="button"
+                                    id={`btn_followup_${lead.lead_id}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSelectLead(lead);
+                                    }}
+                                    className="w-32 h-8 text-xs font-bold bg-purple-950/30 hover:bg-purple-900/50 text-purple-400 hover:text-white rounded-xl border border-purple-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                                    <span>View CRM</span>
+                                  </button>
+                                );
+                              }
+
+                              if (isActionsDropdownStatus && isActiveInSales && canEdit) {
+                                return (
+                                  <div className="relative inline-block text-left actions-dropdown-container">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (openDropdownLeadId === lead.lead_id) {
+                                          setOpenDropdownLeadId(null);
+                                        } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const spaceBelow = window.innerHeight - rect.bottom;
+                                          const spaceAbove = rect.top;
+                                          const menuHeight = 130;
+                                          
+                                          let top: number | string = rect.bottom + 4;
+                                          let bottom: number | string = 'auto';
+                                          
+                                          if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+                                            top = 'auto';
+                                            bottom = window.innerHeight - rect.top + 4;
+                                          }
+                                          
+                                          setDropdownCoords({ top, right: window.innerWidth - rect.right, bottom });
+                                          setOpenDropdownLeadId(lead.lead_id);
+                                        }
+                                      }}
+                                      className={`w-32 h-8 text-xs font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-3 shadow shrink-0 ${
+                                        isApprovedUnlock
+                                          ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/40'
+                                          : 'bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border-zinc-850'
+                                      }`}
+                                    >
+                                      <span>{isApprovedUnlock ? 'âœ” Edit Record' : 'âš¡ Actions'}</span>
+                                      <span className="text-[10px] ml-1">â–¼</span>
+                                    </button>
+
+                                    {openDropdownLeadId === lead.lead_id && createPortal(
+                                      <div 
+                                        className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
+                                        style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
+                                      >
+                                        {/* Add Note Option */}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            setNoteModalLeadId(lead.lead_id);
+                                            setNoteModalOrderId(''); // sales leads typically don't have an orderId until confirmed
+                                            setNoteModalCustomerName(lead.customer_name);
+                                            setNoteModalOpen(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 hover:text-white rounded-lg border border-blue-900/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <FileText className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Add Note</span>
+                                        </button>
+                                        
+                                        {/* View CRM Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_followup_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-lg border border-zinc-850/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                                          <span>View CRM</span>
+                                        </button>
+
+                                        {/* Confirm Order Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_confirm_order_direct_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+
+                                            const today = new Date().toISOString().split('T')[0];
+                                            const linkedOrder = orders?.find(o => o.lead_id === lead.lead_id);
+                                            const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                                            const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(lead.advance_collected) || 0));
+
+                                            setConfirmForm({
+                                              ...confirmForm,
+                                              package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
+                                              quotation_amount: Number((lead as any).final_quotation_amount) || Number(lead.Final_Quotation_Amount) || Number(lead.Final_Package_Amount) || Number((lead as any).final_package_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
+                                              advance_received: calcAdvance,
+                                              event_date: lead.event_date || today,
+                                              event_time: lead.event_time || ''
+                                            });
+                                            initEventsReporting(lead);
+                                            setShowConfirmModal(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Confirm Order</span>
+                                        </button>
+
+                                        {/* Lost Lead Option */}
+                                        <button
+                                          type="button"
+                                          id={`btn_lost_lead_direct_${lead.lead_id}`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            setSelectedLead(lead);
+                                            setLostReason('');
+                                            setOtherLostReason('');
+                                            setLostNotes('');
+                                            setShowLostModal(true);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-rose-950 hover:bg-rose-900 text-rose-400 hover:text-white rounded-lg border border-rose-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <X className="w-3.5 h-3.5 shrink-0" />
+                                          <span>Lost Lead</span>
+                                        </button>
+                                      </div>,
+                                      document.body
+                                    )}
+                                  </div>
+                                );
+                              }
+
+                              if (isManageCrmOnlyStatus && isActiveInSales && canEdit) {
+                                return (
+                                  <div className="flex items-center justify-end gap-1.5 w-full">
+                                    <button
+                                      type="button"
+                                      id={`btn_followup_${lead.lead_id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleSelectLead(lead);
+                                      }}
+                                      className="flex-1 h-8 px-2 text-xs font-bold bg-sky-950/30 hover:bg-sky-900/50 text-sky-400 hover:text-white rounded-xl border border-sky-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow"
+                                    >
+                                      <Edit className="w-3.5 h-3.5 shrink-0" />
+                                      <span>Manage CRM</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      id={`btn_lost_lead_direct_${lead.lead_id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenDropdownLeadId(null);
+                                        setSelectedLead(lead);
+                                        setLostReason('');
+                                        setOtherLostReason('');
+                                        setLostNotes('');
+                                        setShowLostModal(true);
+                                      }}
+                                      className="w-8 h-8 text-xs font-bold bg-rose-950/30 hover:bg-rose-900/50 text-rose-400 hover:text-white rounded-xl border border-rose-900/50 transition-all cursor-pointer inline-flex items-center justify-center shadow shrink-0"
+                                      title="Mark as Lost Lead"
+                                    >
+                                      <X className="w-4 h-4 shrink-0" />
+                                    </button>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <button
+                                  type="button"
+                                  id={`btn_followup_${lead.lead_id}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectLead(lead);
+                                  }}
+                                  className="w-32 h-8 text-xs font-bold bg-purple-950/30 hover:bg-purple-900/50 text-purple-400 hover:text-white rounded-xl border border-purple-900/50 transition-all cursor-pointer inline-flex items-center justify-center gap-1.5 shadow shrink-0"
+                                >
+                                  <Eye className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                                  <span>View CRM</span>
+                                </button>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={11} className="p-12 text-center text-slate-500">
+                        <Filter className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
+                        <span className="text-xs font-mono text-zinc-500">No matching records in the directory grid. Try resetting filters.</span>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        )}
+      </div>
+
+      {/* Confirmation Modal to Officially Log and Book Contract */}
+      <AddNoteModal
+        isOpen={noteModalOpen}
+        onClose={() => setNoteModalOpen(false)}
+        leadId={noteModalLeadId}
+        orderId={noteModalOrderId}
+        customerName={noteModalCustomerName}
+      />
+
+      {showConfirmModal && selectedLead && (
+        <div 
+          className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden transition-opacity duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm_booking_modal_title"
+        >
+          <div 
+            ref={confirmBookingModalRef}
+            id="confirm_booking_modal" 
+            className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg md:max-w-xl w-full shadow-2xl flex flex-col max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-150 relative"
+          >
+            {/* Header - Fixed at Top */}
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-5 py-3 sm:py-3.5 shrink-0 bg-slate-850">
+              <h4 id="confirm_booking_modal_title" className="font-bold text-slate-100 text-sm sm:text-base flex items-center gap-2 font-sans min-w-0">
+                <span className="text-base sm:text-lg shrink-0">ğŸ’</span>
+                <span className="truncate">Booking Confirmation & Contract Form</span>
+              </h4>
+              <button 
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0 ml-2"
+                title="Close"
+                aria-label="Close Booking Confirmation Modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* ONE SINGLE SCROLLABLE CONTAINER FOR THE ENTIRE POPUP CONTENT */}
+            <div className="overflow-y-auto overflow-x-hidden px-3.5 sm:px-5 md:px-6 py-4 custom-scrollbar flex-1">
+              <form onSubmit={handleConfirmOrderSubmit} className="space-y-4 text-xs">
+                
+                {/* Collapsible Customer Information Card - Expands naturally with NO inner scrollbar */}
+                {(() => {
+                  const combinedType = (selectedLead.events && selectedLead.events.length > 0)
+                    ? selectedLead.events
+                        .map(ev => ev.event_name || ev.event_type)
+                        .filter(Boolean)
+                        .join(', ') || selectedLead.event_type || 'Event'
+                    : (selectedLead.event_type === 'Other'
+                        ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other')
+                        : (selectedLead.event_type || 'Event'));
+
+                  return (
+                    <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomerInfoExpanded(!isCustomerInfoExpanded)}
+                        className="w-full px-3.5 py-2.5 flex items-center justify-between text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer select-none"
+                      >
+                        <span className="flex items-center gap-1.5 text-slate-200 font-medium truncate">
+                          Customer Information
+                        </span>
+                        <span className="flex items-center gap-1 text-slate-400 text-[11px] font-medium shrink-0">
+                          <span>{isCustomerInfoExpanded ? 'Hide' : 'Show'}</span>
+                          {isCustomerInfoExpanded ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                          )}
+                        </span>
+                      </button>
+
+                      {isCustomerInfoExpanded && (
+                        <div className="px-3.5 pb-3.5 pt-1.5 border-t border-slate-800/60 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-slate-300">
+                            <div className="min-w-0">
+                              <span className="text-slate-400 font-medium text-[11px] block">Client Name</span>
+                              <strong className="text-slate-100 font-semibold text-xs break-words">{selectedLead.customer_name || 'N/A'}</strong>
+                            </div>
+                            <div className="min-w-0">
+                              <span className="text-slate-400 font-medium text-[11px] block">Mobile Number</span>
+                              <strong className="text-slate-100 font-mono font-semibold text-xs break-all">{selectedLead.mobile || 'N/A'}</strong>
+                            </div>
+                            <div className="sm:col-span-2 min-w-0">
+                              <span className="text-slate-400 font-medium text-[11px] block">Address</span>
+                              <strong className="text-slate-100 font-semibold text-xs break-words">{selectedLead.event_location || 'N/A'}</strong>
+                            </div>
+                            <div className="sm:col-span-2 pt-1 border-t border-slate-800/60 min-w-0">
+                              <span className="text-slate-400 font-medium text-[11px] block">Type</span>
+                              <strong className="text-amber-400 font-semibold text-xs break-words">{combinedType}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Product package name - Read-Only */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Product Package Name *
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    disabled
+                    value={confirmForm.package_name || packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || 'Custom Selected Package'}
+                    className="w-full h-9 bg-slate-900/80 border border-slate-750 rounded-lg px-3 text-slate-200 text-xs font-medium focus:outline-none opacity-85 cursor-not-allowed select-none shadow-inner"
+                  />
+                </div>
+
+                {/* Event Date & Reporting Details Section */}
+                <div>
+                  <label className="block text-xs font-semibold text-amber-400 mb-1.5 flex items-center justify-between flex-wrap gap-1">
+                    <span>ğŸ“… Events & Reporting Details *</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Set reporting time for crew</span>
+                  </label>
+                  <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-3.5 space-y-3">
+                    {selectedLead?.events && selectedLead.events.length > 0 ? (
+                      selectedLead.events.map((ev, i) => {
+                        const key = ev.id || `ev_${i}`;
+                        const repData = eventsReporting[key] || {
+                          reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || '',
+                          reporting_time: ev.reporting_time || selectedLead.reporting_time || ''
+                        };
+
+                        const startDateStr = formatDDMMYYYY(ev.event_start_date || ev.event_date);
+                        const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : (selectedLead.event_time ? convertTo12Hour(selectedLead.event_time) : 'TBD');
+                        const endTimeStr = ev.event_end_time ? convertTo12Hour(ev.event_end_time) : '';
+                        const eventTimeDisplay = endTimeStr ? `${startTimeStr} â€“ ${endTimeStr}` : startTimeStr;
+
+                        return (
+                          <div key={key} className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2.5">
+                            <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                              <span className="text-xs font-bold text-amber-400 font-sans tracking-wide">
+                                {selectedLead.events.length > 1 ? `EVENT ${i + 1}` : 'EVENT DETAILS'}
+                              </span>
+                              <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 truncate max-w-[150px]">
+                                {ev.event_shoot_type || selectedLead.shoot_type || 'Shoot'}
+                              </span>
+                            </div>
+
+                            {/* Event Name, Date, Time info */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
+                              <div className="min-w-0">
+                                <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Name</span>
+                                <span className="text-slate-200 font-semibold break-words">{ev.event_name || ev.event_type || 'Event'}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Date</span>
+                                <span className="text-slate-200 font-semibold font-mono">{startDateStr}</span>
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Time</span>
+                                <span className="text-slate-200 font-semibold font-mono">{eventTimeDisplay}</span>
+                              </div>
+                            </div>
+
+                            {/* Reporting Date & Reporting Time */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                              <div>
+                                <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                                  Reporting Date *
+                                </label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={repData.reporting_date || ''}
+                                  onChange={(e) => {
+                                    setEventsReporting(prev => ({
+                                      ...prev,
+                                      [key]: {
+                                        ...(prev[key] || { reporting_time: '' }),
+                                        reporting_date: e.target.value
+                                      }
+                                    }));
+                                  }}
+                                  className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                                  Reporting Time *
+                                </label>
+                                <input
+                                  type="time"
+                                  required
+                                  value={repData.reporting_time || ''}
+                                  onChange={(e) => {
+                                    setEventsReporting(prev => ({
+                                      ...prev,
+                                      [key]: {
+                                        ...(prev[key] || { reporting_date: '' }),
+                                        reporting_time: e.target.value
+                                      }
+                                    }));
+                                  }}
+                                  className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2.5">
+                        <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
+                          <span className="text-xs font-bold text-amber-400 font-sans tracking-wide">
+                            EVENT DETAILS
+                          </span>
+                          <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 truncate max-w-[150px]">
+                            {selectedLead.shoot_type || 'Shoot'}
+                          </span>
+                        </div>
+
+                        {/* Single Event Info */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
+                          <div className="min-w-0">
+                            <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Name</span>
+                            <span className="text-slate-200 font-semibold break-words">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : (selectedLead.event_type || 'General Event')}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Date</span>
+                            <span className="text-slate-200 font-semibold font-mono">{formatDDMMYYYY(selectedLead.event_date)}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Time</span>
+                            <span className="text-slate-200 font-semibold font-mono">{selectedLead.event_time ? convertTo12Hour(selectedLead.event_time) : 'TBD'}</span>
+                          </div>
+                        </div>
+
+                        {/* Reporting Inputs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
+                          <div>
+                            <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                              Reporting Date *
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={eventsReporting['default']?.reporting_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || ''}
+                              onChange={(e) => {
+                                setEventsReporting(prev => ({
+                                  ...prev,
+                                  default: {
+                                    ...(prev['default'] || { reporting_time: '' }),
+                                    reporting_date: e.target.value
+                                  }
+                                }));
+                              }}
+                              className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
+                              Reporting Time *
+                            </label>
+                            <input
+                              type="time"
+                              required
+                              value={eventsReporting['default']?.reporting_time || selectedLead.reporting_time || ''}
+                              onChange={(e) => {
+                                setEventsReporting(prev => ({
+                                  ...prev,
+                                  default: {
+                                    ...(prev['default'] || { reporting_date: '' }),
+                                    reporting_time: e.target.value
+                                  }
+                                }));
+                              }}
+                              className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <input type="hidden" value={confirmForm.event_date || ''} />
+                </div>
+
+                {/* Package cost and advance */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Final Package Amount (â‚¹) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      readOnly
+                      value={confirmForm.quotation_amount || Number((selectedLead as any)?.final_quotation_amount) || Number(selectedLead?.Final_Quotation_Amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0) || Number(selectedLead?.Final_Package_Amount) || Number((selectedLead as any)?.final_package_amount)}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none font-mono opacity-80 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Advance Collected (â‚¹)
+                    </label>
+                    <input
+                      type="number"
+                      value={confirmForm.advance_received}
+                      onChange={(e) => setConfirmForm({ ...confirmForm, advance_received: Number(e.target.value) })}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Payment Mode & Payment Tracking ID in a responsive 2-column layout */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Payment Mode
+                    </label>
+                    <select
+                      value={confirmForm.payment_mode}
+                      onChange={(e) => setConfirmForm({ ...confirmForm, payment_mode: e.target.value })}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    >
+                      <option value="UPI">UPI (GPay/PhonePe)</option>
+                      <option value="Cash">Cash Handover</option>
+                      <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
+                      <option value="Card">Credit/Debit Card</option>
+                      <option value="Cheque">Cheque Deposit</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Payment Tracking / Ref Number *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. TXN12345678"
+                      value={confirmForm.transaction_id || ''}
+                      onChange={(e) => setConfirmForm({ ...confirmForm, transaction_id: e.target.value })}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                {/* Balance due readout */}
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
+                  <span className="text-xs text-slate-300">Remaining Balance Due:</span>
+                  <strong className="text-emerald-400 font-mono font-bold text-sm sm:text-base">
+                    {formatINR(Math.max(0, confirmForm.quotation_amount - confirmForm.advance_received))}
+                  </strong>
+                </div>
+
+                {/* Bottom Action Buttons */}
+                <div className="flex flex-wrap sm:flex-nowrap items-center justify-end gap-2.5 border-t border-slate-800 pt-3.5 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmModal(false)}
+                    className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-medium transition-colors text-center"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    id="btn_confirm_submit"
+                    disabled={isSaving}
+                    className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/20 text-xs transition-all text-center"
+                  >
+                    <span>{isSaving ? 'Processing...' : 'Approve & Book Contract'}</span>
+                    {!isSaving && <ArrowRight className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Final Reporting Details Popup */}
+      {showFinalReportingModal && selectedLead && (
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 sm:p-6 backdrop-blur-md overflow-y-auto">
+          <div id="final_reporting_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-2xl w-full shadow-2xl space-y-0 my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-900/90">
+              <h4 className="font-bold text-slate-100 text-base flex items-center gap-2.5 font-sans leading-none m-0">
+                <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-sm">â°</span>
+                <span>Final Reporting Details</span>
+              </h4>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowFinalReportingModal(false);
+                  setSelectedLead(null);
+                }}
+                className="p-1.5 text-slate-400 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer border-0 bg-transparent flex items-center justify-center"
+                aria-label="Close modal"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Form Body */}
+            <form onSubmit={handleFinalReportingSubmit} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              {(selectedLead.events && selectedLead.events.length > 0) ? (
+                selectedLead.events.map((ev, idx) => {
+                  const evData = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
+                  return (
+                    <div key={ev.id} className="bg-slate-950/60 p-5 rounded-xl border border-slate-800 space-y-4">
+                      {selectedLead.events.length > 1 && (
+                        <h5 className="font-bold text-indigo-400 text-xs uppercase tracking-wider font-mono border-b border-slate-800/80 pb-2.5 flex items-center justify-between">
+                          <span>Event #{idx + 1}</span>
+                        </h5>
+                      )}
+                      
+                      {/* Row 1: Event Name (Full Width) */}
+                      <div className="w-full">
+                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                          Event Name
+                        </label>
+                        <inputxœì}]sÜHràûşŠonº9Ãn6¿43\‰
+Š¤fy+‘Z’š±CÖQ`£ÈÆ	İèĞ¢8\F8qoö9ÎŞ{qœc}÷x÷hÿùŞŸp™U 
+¨
+ènŠöØ@¡ª•ß™•õ+b¼â«1}¼ÓñÂ¯Ì­Bê¸‡#ÿª¤É{ÇŸĞÇ×ô}—¾§£øtä)ùÃHzGÂ­ÖMI7}ß‰¢x÷ñÂeç|âûdĞYé‘³‹Nä;1í|×ë-¿ƒĞ¥¡øG<ú¶×#a0¹Ôíødü¡³FğÃ:"ş/o¶ÍÎƒQÜ£€ô'a„Qwß.©û“h3˜Ä¾7¢ğdDÍ YŞ2<z´ìzï·~exz½ü9
+.Éê&ÙCà]˜ùRü80&' ğ«e°Aÿ2´.BÏ%øŸN?ğ£Î
+‰†›ÙÏUráŒ;ë¦éòşÌOá¹ïœQ_ñÌúïR3Ftè¾›‡÷ğ¬³Òİ(/	_•Md™Í¤t®Şh<‰KãxïÂ`exo…ùEÜÇn«Qı“CötOŞøø —L[·„d16$‹ğKN±s•ÍŠ÷¸§>¬àÄk›äˆƒ0öFŒ-I¿÷FnáŞLÙógÏdwV>.&—/¦ÑØéãŠ\†Î¸‚¬T¨İ)Îıû‰R×¨`òN7L¾…qğrú	F;gt/·é"y¼E"?óFŸäYÛ×¤´Bºİîyáµ¥ª·^½{î›Mrğé/uş›„vG\Ğ¸Ë>“Ü”÷z³85ÇĞ²‹o6z‚ÔÅmoäzAg£—ÜaÊ@Ò©‰§YQ8M:£È‹½`„œæ“gSPbÂ¯î-6ptä¦šÜdòû>ítWÜlGÔ§ı˜ºÏ¡û'ù_~IÔç¬×èI×§£‹x@?~LVÈ¥Q¾M£‹÷ÒT}|§QÿÎivS!ìşSB8ÿ{!4/!TòĞøhñ×…›7‹¹[‹ÀõÚ…fy}6øFoùaŒ;)>øFFÇiúÊà‰H”ñ•Ä-‚c‘ö3\æ=7,4îüì8j˜Æ<MÍlÚ†…)a>¥l§ÚOW!c“Q¤ê˜SÄÁ†©¯Å>Í(?!¨%8³•8¥¯n–~º2Ñ;_Š…o®B°VUM²R‹4ãx¢G*s©JÍû„0Ü(TÊdÆGÆ-ÇÜ,0¬\e›Ã¿›òHÕ…>k«f°³tÁÍÜı6gò¨eñXºÜnƒ!WX7‚\Š¶Åë–KÏ‰·Ş<É¹İª¨d6O}{'¯°vJ?iO\™ôË2~îœŒjH„Ş¶;ªİiŸ­hº«ˆõÑ•¡swèãîu]\÷Ü½B?´º­bîê”O'qŒ6É0:
+x¬Qójâ¹O?ÿ2‰bïüªÓgï Üa”ü q=~\àsËßöt„ıèŒÍDóÑœ£ÉÙĞÓúu\/rÎ|ê>¾ö¢cç=¬œ}¤€|HÆWU`:gé2?„õïi¸y¦,½Ó½÷TºùÜLÆÜ€_yñ´ä¸À˜˜ìäc(‘q=À™hà¸Á%¢’ø+›Àòj/‡9	“ôˆqv¶
+Ğs2ôFËÎĞùP„˜Ö©˜€<!-şPxc;ğ‹ÊÚ4Ï4ÜéÑ2_Â|ÿì|´|ìB¾—k¤üL!ÆÇtLÖÈ³ E^g2&/ƒ1ü÷Eà:¾„½×Ñ ¸Ä¶küù—_ª¡0ä±|iOœ3çjõAGˆik‘µÍ¦’Gï‰7ÛaŒçÌwúï–¿İ ?u66HåÊ uo¸a0†w'agè*Áô\@yœıé9ûĞÉøtˆ_¸ õ/»aæz."vŸ#ÔëÒô@$q‰`¥W¡)ºªS?4qFŞûóFäÜqÙ¿?Áşí|·AÜIè0|]íåI[Ë;´Ğ9£ñ%…9‰ùŸõ£ñYg­À9Ö•şUjË83ÿ9Ô,Zµ¨~phOÃ(F[şÓ?ş×GËìO	ı¸§ÓÍt‘òÖs6°:ÎèøÃ"Ù‚Ğ÷½ş;ù‰È?V0¼}îøÕp}	<P6Rv—ÓÆrG,ÃtÆšÆN€ËÏO³¿P…õ:Hêõ…¢ÈÓ³'D^ÉøôòJ¤g«{Y“¥¸"ÀEË"úòÒ§NDIÔPwâS(9O×™âq@˜*äıDÉï'AÌhHÆÅ5">òšnN"lù(ŠÃ`t±õ;hHÉ1@0ŠßêÖ@B k€¾zk¡H/z¢L}½²2şğ&/Èøë€0“ñ˜†}„R¦ş J¯UßstÃ«€¡a±®¶¾"í#¡a/
+ÒÓÈƒ’oTïËíÅ•>±‘èø—¼ï² tJúqşÅ¶ªkß¢Êk¥íÊ*+è:’Ş*ë«ysÑFVŒ:\î"5T®ólŞldf¤S~¹°Õ>#q;şÌ‘Ñdeê0îÄòP‰qøâ=ÆİŒ; Íå°/ÖÉ—Ñãë5İêAŸ¥øP>^8‡Nˆ¢í½‚yz†‡ôŒÅQŸFK„~3¥š¸´ïE(ú—qy—H’~&Ø¶ÈÍÀÒ»Ù›Ÿ2zO…ÔF‚"‚:îªÙ$G‹½¨ZWÛä&Uu
+e5o¨¯K†z6ßÔN«“*øª—”Q«dÿ$l$ÕiU]×ÎTŞq ï}këw&PÄw}Š–¸‚ñ:ğ½!hézÑN8|,2Ã÷•“Ã(@ßl-.BÇE^Ğ‰ƒNHÎCf¦~¸	–-•|*rÉôí6ª]*Úµõ†$6^Î¶É<1yÌhâ5aªXöœ°;ÓzJr·ì%{aüWøkŠşŠ“§=¯ë½™•ÓC›:WàÈ š³PŠo–VçÛx˜ú66îŒo£˜ÏTîÛ@0¬'Œ¾SïÙX5z3~şç¿Mœ
+.tc/öü ÄQtä¹ÿ4@{ëaí§XWıœH>Ò~àaAt?úçÿù?ê8”[&³;õ*Uİã­Äî?¢NŒ6S£?û=¾y´<Î÷¡¶‹‚IØgéûRßÇì¦±oşë;|µá9ü—ºÏ&£>ód¨ƒ<cIòÔ8šÚ‰Å¨`;g¨E«ãíŠÛÆ’÷,†@_Ì¾›€9ƒ÷wıó—,z&«ûÌû 2T"1P‚)ÆS'<Ox-Ïïø•á%"‹=Ó¡.Á‹dbffFiú:‘ebº‡Q—Şww÷N÷~ Ğ¹OÜ	Ã…G:ÑPdinµ–T8“8`R` <Ät^/µğxô.g„édñšAÍ‚á°€Z^©/r™¹•kòj+Åœ³mĞç72Éè›gğ§®76áğ;~İïV<Ş^©zD1a,£$ì„øƒÜşª»YHÅ§ÈØîƒJ?¨ôLô°Nø#—1L›­v,£æLÂE…pQ²¨Ìõa²¦>R°5fm¤(yP&Âfe1"FèÄ
+R„W„«s,äÜ†Q ’À.Ğ]	)LZUÓNOÆ4¹æKäˆNW&n£h2;>¸­[ñyúÆ­¹‘YLéPt†g0 ê+VÎ‹Gs,(-,lu:ä˜£°XªNçÑ2odñşÓ‰`";Áp×f°°U¸U£»sxu8¦`áÂVşNÎøæ	î¸Cãe„w˜ KÖâ  ¨EğÌq™|s±sííİîÒ‘›K_œ÷ ”¡—laËô¤Fç‡ñ€`Ù?¤}<¦}™è/¸\4wÌ‰a‰kZ¢>dÃFk™•}í¼gÈ‹I>t‡íŞ³gN¥é¤%©¤U»KSH•`Ì±|×!AÀ
+c¯¤0@˜?/eƒzFx¨¾hÃï ?”´0Í„59˜&³íãN(l(7ËB€f¼³r+‘%ÅĞN?ÁÇ$NˆAXRÂğïÒ‹hy1ºVøïyòÂ')¦?›°_µÍ‘ú¡öÊb¬¥Î…BÔO2KsvI¢[Ù'w1ğ‡@DÓĞ>æ÷@½XÆ,‰äÄbúº‘uQZC\Í¦‡,(È»ğo)(ÈËAŞhÖÁÛ¾äŞO)È,zaÌk7t<ÚĞş»ãßO€I«,
+i`€ÿÕ˜Á·B|5b¢I¤uvñ6¢IÁëÅŸNçûš{ŒñŞÓ5gO×S5ÇIøwx¯™Ù
+x¢ÚïÒDZA³÷„ñö3t‰¥À/:Å²Gn1ŞpU¿³çdàELÓÄE½ôPëBO(‡qÀôÆ§à—À4Éáå? `ãq€"×…·å”êàÄçy,“Qº'oL]Wî9dài©le¿d¸Ñ9ÔÖSuíöıgÍu6‘ÁRÏ‡öªøê'©¥7r¦íˆÂ@	æ¶:®ëñDNÔkú0ßxaË®]·Y±CÀßwÎ%ÃÀõÎ½>#%íÈº†ÓÍŠ~>ÃH;¦ÒbºÁbêÉâº•©i7İÀ.õ=¨ª–¬iWcà—¡×G5³„!í~Èéwa«äaCàÌürWÜö	ºşì¼~
+ä9>Öõÿ½2uqï	T›ÍÀ£«g6kOL÷ótÉÌv—¹3ƒÊ&óœ'°dë¸r:IšÛ^e/×÷où4©¹Âƒç»áªÁ­A†!£ídù£±7Òº:ø¥¤Wë'¢}w1ËÄNŒË·wùA8ÒbXôÜ‡Ü´ÑzVxCÑ.ÛÅŞÈ‡Ò4Hç»0:,²ü"L-ê³éŸöùüç–iïı/V™F?ÿÓ¿üû¿şı-æñ÷só°èóÃ¹Làyûô<.,ØvHÉU0!ÑDüqépÉ×,FŠ/-Ü“ÚÓšM h–eš¡Šy˜­R¢¬²Ç©ƒÀ
+y¦†w^q°éÃB6
+‹	–i&%»Ót›Vã˜K¾ñ–¿Ä©¥A—ÙfW$÷J¦bÑå™Õ Ï<Ÿ&bQj©JÈ×ÿ¡·†ÿ÷¦²nÊ½¢$d´Î¶ïõƒ¢)tã½§)MäcÊ2Á’“IÙZ© D=ç75¿Mr²^jJ]?xİÚaÅv˜ŸŸ¶–ˆøíf¼y@/™Œj½éz£¾?qiÔ£oíLB¬CrÌ(•Ê>‹‹:§B^¿yèï£á&ËMO¥wµ ø§Å *õ@¿B÷¹¢:×`}¾ƒÇ_\ğØ‹pª,¿&Û‡?z?9¡ËŠ¡{dñ;¡;Ü’îaHIqy­Çp^©2Ÿ5KU«Vnğ›·7ºR§ğ@LA§òW+E\œH(„èWRÑïÑ`­ 5±PÖpSÙÀÔY…Ù”kCl+G¶;?áut\z.ú¹LfK’–ıw‰ª´ë]x1¨ç\{?zA~ÂwL»$?ÿõÉOvy ğ†É`ÍğáÚİÿb;J¡¼\«f½à?É•»ùÀ'W^¶ÙBKÊ§¶v—nª¬Œmz:õp×“¾æ€nò@Rp[¼:daƒšU‰½‹A¬#~I#Q†øÚ¬jÌZq»¨B.†ŞLå‚ª<…û,ŸF-1%v¦†2KBiSÏá Çd:‘èİ•2ü]Ä¤Õ¦ğRÚËÅ§0„cŸ*³·Š‘Ú–Í»ı	¸~¶M‹ı*öÇnÓ+ğ9~i¹¿Ø÷m¢J!£VºÃ™k%@ôÏ_Ù˜V£øŞ4«’–£ZÀ×º¡l¦ş{W)Ö
++­XlE«¬­ºˆÊª±µ‘³U¸U
+d,¸I^ŠX³¸.„¤6*_«ZŒŞ?X-å $ÑÑŒFºÉÅyôÊBÙI’…Z¯ÉóÃãò|o{—¼1}m	À´˜kÂN—ÒäÑšÕÅ˜¶qÖ+UõVŠuq‹¾@õŠó¾Qjµi aQT¶ÂÂ²ów?e*fÀ@4›8$B³Hì88	 ˜mŸ†qÑ4=œ?7Ù0hHB£NŒ­À¨99}Va4C´j†1×Ù¥ Zf›8›Æaùû£Ã’6ÑìYU<§¥ÖNòQ]vŒÓ!¢Im÷–™¹¤¢CPt|—mğVQ'y"óŒäŞ:òDMŸ\„±Ú!…ş¤ıri+Ã‰3‰ë²/„ÏùùŸşãÔÜÛ2êÕ¥¬RÇß¤¢éã
+i”Íf >oÏmAİ»1Eë©’/É>}Üß°·`dÄ×µíİÕ^fÛ¾šö™|#’3k?ÅØÄ¶g§EKvë×söSÀ7WûØ·ê„z¡6‹‡l §ògåªİ¦“´´:¨eUdÆ¨şdNŒ{¹ª_µ$ˆäå‘8z)µE3Å)³¨ÍšëHõ‘ÜàT)­@7*¢µ@’ºŸ…ÃtDÙ,…Ùb°*AfĞoò(©ôRéXoœ6+ºÏ‘|xP×q¯‹‰gÛ¶Ò\­¤¶¹É&-¾¿Šï‹sß*^ne)Í©ÿÈpÆƒ:×W·¿«Ô¶Ç¢Ä[¯›¡YJ‡%zòœ´b#iXLœs? üĞV‡a¢(ïÿ íñT²¡_z² éÔ
+™¦|¤œÎš*Kêšq£—J¼ÌÍ‡ÜÊ0›(¾òa&×äİ$o¿¸n«C,“µEòYéõnşã[r£ï¨ìHËÛó– :(±”šÛJk‰i³±”Š" Çè?’Õ”
+]N”LÊM¨²ì¬ÔÍ»™Š¶€ƒå'à~< h‡ŞOxË'cL­]è•ÖÄªºd$Ò‰úaàûzë*a8)'¹âÊÖ˜Å“P¹ÔË«t5–Û° ò2i4}9»ü°ö¢vÃ‚ng'öéQßÅú#r|8-ªï)K*C%uˆÿcÇ‹è+c­Qb™J˜¬›ƒ’æàM~‹KY:Nù‰›¶A©4[§,&¥×Ó¡ò{œè{+Ê5†8ÑgÌ*eo­”É^i[y=¨ê=s\‹=›ìXÕ™?Œñc¶^8#ôHŠ­ãŒòú1Ğ%üòâ«%‚›|á5\,?½$JëğÍ
+@á!0ºš
+ŠÙ´Ë2kp1Ú”øoZ²EÍÙíéóòjä½Òjä˜ï®-I¦«C¹Ìxé™il‚åç¦áU}7¿D®:g»(1°Ş£æ`í’ÓĞğÒ%¯ÿ¨ôÙfg–©ã,e âe%‘áU–ßnHiü¶Wu™’Ñ^–
+Ÿì¿c|§ÊÆœÚ
+Z¸+˜ú‚eÊƒ	Û³óÕ]@P¼Ó3M‘ºäêc¹$–<Îá#ˆ{BÚË¯ÿó_¹o–/@on-v#Pfi»·Êüâ¯+:·$şy›l7l‡ôsÊhdãVi¤ìøùª<ÓñÓ'©NmÇ‚¨îI]â”œñøtÄé|\?7Ô§Ì÷ípúSG×=¦ûÍGGaze„å
+éÑ”0[ä¼‹w:äT,Çá&¨å´Zª,®[AÛıÑ‚J$Œ`L^¥İN1nİÏ.=n²ü=Q$~*óI3Ñ|‚:{ş;Ôu¨^ÊBÙ6a/lıüÇ¿†ÿ|	°à%Ã3üIÙîìºFwüéñá«£½ãîĞ·:Àêš"ù)½£W¯Å±éaMüçÖuzœ€ÍlK‘Á´¥\ù¯ÜO®–c9'SÇ.Gè”(g ¬'›CÏsqÍ\è°Ê•\ù¢•V0ûİtz:×jnÃšUKM¼l5=¼,„_Ê~wÚ½è’§ïŸaZõá1¶gş•nãjşÒóDÂSÂS¼ÊAxz`éfÀ«)¯¬¾6ÿÄ«–¬Ï²K3+”õiXÜĞê ôä*ÑØU¡CÑêí²§ægÅ" ìÒ¸¾WKxÒ,}ß³t~ß¦÷{ÎîïÕj÷·ğ+qüÊ·Ê½ßz÷÷ŠÖı½‚{0x.q†0	—±–“„a«äâh	Xjr;µ	/8Š„ ô.¼Q©û»‚L÷¯C
+P÷xà‰è˜—šiÇ¡±ÈL¨,Û¡qfAA…Œj9ƒ¥x8€”È"oµ³lYî[7¦h™ç™'§E‹T­Â¬Yq9b/VĞ³u-¥›òEÍ)êJ¦ãóÑnùA)¹—¶Ù‡RÆÃ>dÍš»hÒ¦å1–ù÷Z¨Î*	ßj“ÙTiøëæâ V@Ù¬:”³JÁÙ‘œéš–rCRÒ<ÿ¨"ZXzÂGE´±Ò…wKÎq¶D²ó„ûò¬Ü V~–ÁÁÛŠJv§Ü2­Ğ=õÆB’f”öå±ƒSó&O|Ó©ø&C¢`Eğı¢§İ0£ÊÛØÛJ/MşµÎ*¨ï0ÉyIŒ{ÎÒëAÛ^vĞ—s¿è;ÓÕnË]Ñ¹ó+¥Õ2N¸jÚÒ¦\ùkôXI"±¼cs»ª8g¹©/ï Kk@Öñ4‘ëvÛ*²)B›}Ï÷òİÅ¾K[.½=áU…@Å,ÒS`L£-Æcgá&w}:ºˆd‹ô0Y?m²IööOö·ŸŸ¾ÜŞùíö÷{Ç¶£ö±Ú‚R™B÷ÜóªÚcæ {0îŠ£¡à›’¿»qğ<¸¤á0Ú¶ØŠË;l±DÈãmğö¸›n‘¾(¼F\­òÆ<'"¿¾1¦Kèû®Aïœ´À
+ô`ºQ0¤Ú9âg‹r/‹‹‹Õ˜,ØhMiÖ`ä6ºò›ùW‹a­&J$\éNFÑÀ;Ó,Æ»!Ôòn:’Õ{„dĞÙTèz©Şë<ûæm¢|q-÷uCÚÏé…Ó¿Z|kÛmèa@"Ç3’Áú¨.¤É3oäø§©’~º=ÄÒ»Ø®g9j$60·¶9MÚ¼uƒujœÑ•ÕŠV5©lÒx*İÿp‹ú)×µ„8ahß],Ú’Qä8¼+[oÈİ¶š››ü"â ÑÏóo×<á¡Í"š,2®Úw|*(»EGıƒÖâ…*Á>ÂNHò«<’õ©+:œ°Ø$u/ù]cú‰ê+0ñf±]ş6Ár]P§ûÆ] ò¬Šî8îŸØèåmĞtÑ)'™2‰'i<ñÍ¬M‡oÿ,™h]gô<™J{£	–µªòŠ›½|xÙøÄK¼6jİí+SsV"]B|§rÆQ:*êäaqÇü>¹.}Ÿäæ|m–Û9‘¬*juê!ÀµØ(¯fÛì2%ÔJà[ÊòŞ’\^=*´—bû……¥T^/py½
+ãòÅ(e~9%h3ì”~?éª(Yn¯ğîØ†¨+ş<÷àçcB]/ÆOÙO¼V†|ƒ=¿~Sİ³–\ß»Ò#Cï%İ[iÖÁ¯JÆŠ€Xm&²÷ö'¬¢R¶ûTÏCl	”k•/3R6Ğy ;N:kiåY¶ˆ[ˆ†(Tô{rr³QKÂÊ‘£œ ’b`†-`²/Ö¸?¸<Lh1ãÌ;ûßÿOâ5¬Fõ×kÊÎV¯˜Í.5«<wiÖÒÖošnä¶?› xqˆÇÎù¹]Ê‡˜¤]â‡hl—şÁ/t¸²ö§Ní4Â©1¹Q¡Á¯:i$ü²N&áW’³„ócCÀYiàDŸèq¬ôTÓ1›^êÉİ‹îùOÎˆ$°İŒ³çlRå½ V%”j‰ÖJáWµñBl2E’†Ÿ çv¾ÜI‚ç{Eî.ÉsÎ†èy_3$ûï¾ıæáÆúÚêŠvµîú„	?	~TÂ·j¦?Ë(1­¾(41d¢
+†§1QæmZ$Ïp»5iÿ†«”ï½h_}EÆÙÉP‹5Ô…¬ÎƒëE€]W›¤…‹Ò"7²
+¶¦Ó8yzß”
+g-òş_¢QA\Í­Y¢5;älŒo²Áa}Y±b1˜‚´x¤Åb"U±NØÕeÍÀ€WmO6fvZq­Ú›ùeŞÂháæNßèşÀº`¡WK©õà£„îÛøÍ‰nÛ#–P`jË@fôâ;–± "/ÛGY÷Eá÷à@°}ùlâ¨ë¾uÎBxÎ&uO÷Hº°êáÆ* Wä¼§,[—àˆ:>¦/¶‹ŞŒ%­bi†^¾%ñ}V¯ØáÊ/Íim©[9[Oã‘mê5/ŸyÖhgï`­§-ßeóÖŠ[¥x·Ç,=µó£åJÛ’ LDµzßNöVKL[eƒG¢œÿ!ù¼h©Wö*‹¨±tà%¼ï~¨Í„Ù‹¿¥WÀFß~q­øñnN¿¸f»{ó¶gÔ¬ê“ı7­ß ßc2Q½ác—/Z§P÷Ã2–¡÷Š&_ÿF•®–|ñIi—–€Öô" ˜›—~Ä´-ºãóˆ•±Ëùˆ7Éë7È•ëTæ·&gğ¬€ªï´>X•~*«o]Ú‚“¼pY?ˆ#2\±°“ïî¾xñ—pµeê`-O]¬˜–£¼g)hÅŠPÒ#ç—Rê	¤#ğÁ“4„.Áé4Ø,2ªŠcòÏ”&ğ¤ğÍé3vBßÁòv­q˜N@}# ˆªŒ
+­aíâ“`eõ7Á$Ô€6š|~^‹á“f¿@Óñ¥ókÈ¼[v”¡<1‹ené0ÃÁğL!™ÜótšVó´O6a3qY"H"“Rü¹§Ô%S3«Æ-íË{ìHC©yaÂ`úåLµu*?ìı%9~±ıü9Ù9|ñr{ç„ìı°wpB_½x±ÏªŠÜ7k?lƒÍŞôaßô”bs²:—;·‰o²PYİ_,-­ÛûQË¹)ÑîE(İ^&û Ì–_ZÍä-ßõ%Ô@5ò5Y©È¸-~Põ&òÙ0¨:‹¥8pÅ®Ì8ÈU¡´>ÈT²6ô	y]øä[qŸ~o@[ûgù Öañ‚îÈGy§_sÜ¡—ÙREY|x]¹¥×LšV}8±#XB0ıõH•§@ëXØº–•››kE23A„BÄÉ[ò 3ùñÍ[¾o®Éª6"9Ië`Ò%“àéDm’ÉŠ“©Oe@Ş@òúù¯ÿw“oLû®ÿ! ÷Õ_~Iå“—[º½ITÑÁ=Eìá4èÁÀĞè=‹IåªÅ^æ·îÖü{Ôí¨‘õW]R@o‰~k²f;§‘t¡zwB!yAÑõ‘}^ˆÚ­¥ÓÕˆ+K/(¥Ï,jäû¨ËÉÂÓ6»÷´€©jNfZWÀ
+E)sˆÈö¹­WM@™Ò½nVº¿íY×NV-Û²]_GÒ¤)'şXV1 ı¹x¥×_Ø:€UÂUŠUq\ÄÕ+—îş7l8¸ò*?°¸òÊc·Ç(—’,ò_w»İâ”&Dš;Ïºí'Ñ ½°`é…ÑÎr2vYõûÇÍ>•¢4“f}en·Mù;›ö–¸Ó”ÎšôuÓÀ÷
+i€7[3}ÄJt©S5È*Â”»Êl)3T:n@ÜMC:¹õÒ³
+GËŠ]ÿ+)7æíDõ•Òƒj3ší×dÛu…üªÍçT¼VWĞ™Î£,ÅCm›g¡^QËbP(â–ˆ'¢OugÈf¹abñïâ«}èì(¸lÄa˜{æÑ€ZHšƒ_Ó¬¾Í*z,¶½½p"ÀŞ£ h¾YJÈø=@AR{`·dYÖG-cÇÅËé£v²øAˆù{H—Í:’²AFô£ç%6™³Ğ&ŠÜ~8óºç³nÜálä7™­'³–âd–‚œ4•åd.âœÜšD'Í„:A*ƒ±iL§ÒˆÉ­ÒW7³ô@fKd¥ñÒÜX£ëÀê\5½{xYnÚV.m-qĞ‘KÆqí°™è¹©¡N¦¶ÕÉlÌur»Ìi*£Ü³¥{¶Tïj(÷?_{42éÉtV=ilØ“&¶}£—êÈº½c´CÉöÛ¥Q?ôxİ‘e±ËB$0+íîƒ![Màv›±yÜûhI-QŠ@ÜGK´º—Œ:¿¸x‰²›ä>b¢¨Z2læ3Ñíò™b˜YGLè¾İwó*Vr»DÇJšä•,ù¾­–•{ç„M$Ô¸/è½H—6z"ƒköA©÷ÙDO}ŞùğÉôRœ|*”Ètò9¸Rf'ßÉ-‰xr·C(³¦±»D¹'²’ë³$²û0Ê£ÌœAİÉ@Ê=k*¹>KÖôÙúdºxÊæ>ù¼ƒ*µš[’„Ez[ß‡Ù—‹û¨¥¢iSn¶©[š6®ôil°©‡¯×jÑ)"Ew6JôqöÓ4Ò-§P*§Õ&Mj¤ŠõuÈ™(3Ğg•w“«ƒ>•jW_§›q^Ì-$ÄÔUß>Ï˜š*OÓ¤—ŠY=qR73»ğK^Í î2ƒ˜KóxËT±–YîR¹…*3Ù2»ĞÊ¼D!™q<e6¾”&¤ÎR6’†.ÙgŞNÖh7Ç,B·ƒë3ˆkÜ#»æúl½n=–ºYæbh^˜.´0ƒ°Â-1…ib	÷ì@s}6ìàs5I¯ş;$š9òë×Ï«gcÚú†ë’\ÒÆÌşÏÔ+};j:­óå˜ïİÖ³ÚØğKq[ç1äá¸2ÏáÎ¸®g“‡0÷„Yº®á)ü×“~ÉNì‚`»wcÏv»À<·
+Ìf›ÀüıØÓËFr×=ÙÓgŞ1{~f©{·‘¶wÇ|Ù³Æ÷»èÍ¾GxcŸwáïıÙÖ×ıÙ3gwÊ£}ÏŒ}ŞE–ğYÛ¤¹c»yªú/Á»=Ã¦•#Û9Ôşì¸³NŠÈÎËm/rê
+™T¬€±åúôX‚pdü+›Ep½‘Îë6‚×½Ñ…Í[d€äÖ“³W%‚|ØÓS)g—°¥eo½tØSÆGs‡ò1aÑÀqƒK™ˆûhºF†S»WÓŞÆNß‹¯`RÙ=Aü£ F^\RÓ×}Sà’'¤Åÿ×ÂSapÍ’èC«ö¶änyÒ,B èï&AÌN‘İ¹(RÖA`ÂÏvNhEUÒe‰Ø¹Yl—ô^Úsù÷±@ØÉŞK²AöNö¾?Ú>ÙÛ%í£‹›x8T<‰È+&É29dÂ¦‹;bPh—ÆçGÄ‰ÉÓÃ““Ã$8'²V@3¹ĞÖ‰3ò†s9w\ÚñFÒávÀX–°B`‡‹°³â™ÉÀ‹ª\ukõÎªdª§¤
+ÆW8†gÌhÇµÕù˜wr[3ğƒ ×mNİá'	)Ë]ıÚ£åÁZÉz”c»Ò/ÛõëÖs<îÏün-‘şKğûÿ¾áù+.(ùCÄùwşá$QxñÑé~[~”ú¤+ôáÓ¬a«µˆñG[…+ü×$¤NŒ6‰“<bŸÀ/`¥4â·ğO¼KnÀ2¸ ñqzıøyúpÖF™g…Öjy8'[Ï}¼€9ÅóëÄçråø4âo!EƒˆQWóATö‘w­'ÇOÇ5<ÎR¬;şĞ>}Bş?Áş…‰+Îïî¬ZDXÅÒY­&aFİGƒu“jÏ™†ï$áz65.¯ÈïH:ÒÓÀ\ìƒœÆÿü§ø£ m’Ùñ£z=+İİ
+ú“*¿UÊ+M3ş Ùbs‚e
+PKàpÖ·™Ä
+vÇ™Ù&¦ä1ö"ô\‚ÿAE-;×é$“‰B0Ùá¥½‘_7%Ã¤—©,/Á”V’­?-–A–s¯:çÀ•åk˜’5d­—š«¢—r®]^·¶„&^×*·³ä¬9û|¦»°²(>Òºòç«‰ÅzÓÆ¸d‡”¶ZÿákU£´?0×†YOÏ%6‡Á{àÕn×Â&a_^fÒÌ¢Q©ú€ö†É_·€2İ‹§|ÜPwâ+·ğPù†¦1ìÃná‰¬Ï°§.(0†>õŞ‹¦`0 ¥·ÁvÇ×è{^Êm’Y£´óiT?Ôè
+Ï‚ …r¢øaŞY+¶ğ€!kô¤{ºy;@}0è2õ	¸8¾ ö(,.V¦¯µµ3eSÈ¯…ñ»Xëü2İ­Ï”4Ï>y1	éi?ü”kÒ=¯‰Vı”˜wJÍ{d«ÍÒ´g{Sv$[h™¨ ş]‰¡o­ûÓµ¬zvÒõÉ€Â¼œæ6 aãõ~åÎşôá£¬á¹¾Âça0díÁ0qÎàÃìò-kíx®kk$x£ñ$^L„ÈB’:£§Hæ€)Ğ+?U=y–cuí¨ÍZ­9é„[®77v1JeŞ£	æ˜fÎ–ğtÌİu§ÎÈ..~Á3Ö*õªn§ír_Ã»ËºéİÊG8î{gÔG>äóÛš™%mB!Â¦›İÌŒ…h¸™ı\½›¶Ã††ÉØgHÜJ«¥fFq€çE[L:OôÏ^š¡fÁLŠK
++×Á/å‹™şZM%Ö*©±yàº™ái÷é$•~«V"}ö:KX¤ï7ÑCÆr7	§¨š¹‹ìãYŞ!}ßõÜcÑ¢5L“µÀ&ø¤!û;.1¬_
+;¦ŸÊ®•Z¹Úì‹tÜ!è—¡ó¡fş…Áy"‘ƒ`f4$	}c$(¡$®bv'ùš¬4;Ç];5°»´ûN˜²„«ÊÅÉC™Ş@6Ì«åíVƒùÔĞêÖ‹¡Dİ%jR¼¬Œ?~W“=.l=åúÙµòØë'¤ç|ñÖ$«ZR³åLµŠdõ¬Y§4…úUàîèO¼áÇ=ã\§˜Ëœ´½÷4ŒO‚•Õß“°­i…ü­.Ó\KéU×ÈcÍjäö×Ã©9):2A“/!W9Zqv\nep,!†VãŞ:1ùBi¢´¸y‹èV×j`UîÌGw£Ú¯=3†Òı•Üš…²Ë…õDQà|äç¿ù·ë¦©µo×p[ìÆÁó ïø£š£‹v‹:û­ÅZ¨bïEıØ«ºÍíCX×«!Í‚ÊN›%mlÆ~nk%Öˆ¼ÜzÑŒÚ,wÌG:ÂHÍô§Oª'˜ræ0Ï-Ùß1\mƒ9íøsG·4>ñbÃÃx@C–÷Á5õ•8û^ôŠC—¢“Äm>FÛxÜå>má7o7s¬?Éz)L=u¾ë¦Äæn™}:7´´qwÔIo˜Ÿ>Æâ€µP·è ÏôzM€²À!@£G,ffáGè'txäÙ…ÕnÿzÄÊv$¸ß¤:5ËNã1¶?Ø0¹I¦†Ëˆû~x;¢R”d£®[Nq¥Õò•ùÎÊıÂë©_¸™­†ÃÄ’Üëù`x¢şü§ÿöI…;ª¶ª®¥[ûˆÜù07îlè;ªö^ÌÅaô‰‚úˆƒ0ÂUWÜa2b
+òû5HÖ`oäŞ2ÚÓ‘+¯£¼S˜Æé®¸Ù.RTúVP”ªzAîÕ'ÊãüÓÍDÏû¹¡cv
+Bc±Û¢«:²:²ÊÎnêG§•ì>Õb£WzÇQmœwÛ€–y´TsJ¶v¿?ñÙ&ß—À1gâÙ“¨%¤Ò†±do
+#$»Æ¥ĞÔş8NAÒ!3v]™}WÏæıA·VÆ@ÕN ê*»›„Îí Êîåü6€
+:L\{‚í©Ï>„Tñ•¹ÙŠEZüZÍ~íš_ülâûWä¥ã¹5>Öf_åŒò\K›ü²2Bç•:÷lĞúY”Èı’$ş±á­²Ë­›*ÆÅ¤ôÏ~Ht9¸§Îï0íkî„»šÚÃ«.9À¼^à“sÏ§Ğvèx£(-fL¼s–CÚç9æ!ıı€‘>Kß‹lRJ-·/Ev½hì;W„:ıa–0ù±XDV«+ÎÎÊ÷fÚ~¹j°[E!ZİjAÿåZ|&Ø»É¦İ ÿ2×Eâ³²&k'Ø1O}?+^Ñ5·š	Ê¸U¨-Mr›¯Ï®:§ÍÆ§Çì2¶>’ÌtŸ_ØŒ¹†«n¡%»®ë—´1b8Œ7T›‰j³iF“~Ä•ÜˆŠ­îÇ+õÖOUl–Zv§Öıwc=¦Ê8›ÿÚÍ3ßìcy[¬šU»d¦Ş.`ì¨ßü†m!bƒE Jhø’³Iäh?¸ğú`cÆƒ š :O.˜
+öjßªèş4ûnš(-+U© :µ„|UG/a ³Â.4‡XëSİ»*\|ç‹}{±7ÆrƒQÛf§AzûuïÌí7“˜-Ëí´Ò>Ê¢¦T&Ú¾Æ2yêä—ˆnö›„vy]Ğ¸Ë>™ÜX:‹$|ºìœƒİMª÷3o¨û™y](0ó×R¿¦® ”Í‚Íx›ÑG¥+fT)^íŸÿæßçO^²­Y‰eSVq¯Û\)An“¼pâ0Ú½%†iD÷Gq[%‹EáT¼Ô¡Im•Èjvhğ{!µ©øaOX•Í>*]åRRÓİ÷·EZy—òí’—~Ãæ\I,?ä§FfÚ„ãO‚Ğ>b6›qÿæ§Ÿæ&e³L™ğÆİd¶Åyµ÷F.S²“;aÑ²®lYƒ-»š§ö­İ^jŸ5ê®Ï9c¯ÑfĞš^•ùÈd5A¬––çÆ-ïšn"Í×oÕ„±Ó/Ê½­]ÙZ2/kÏDˆlËüµÖMí
+"¼Aáõ|íöKÃcw°göGW¤ï3`/aú{²DÔO,ZŸÀ\XË&UÏA3ÙI¦Õ¼zúM} ß-[X¹¤æ7Õ:½á—À²ôÈÇƒqşqùP¦jÔ'„´,.^÷=åÌªƒåíÚh^NËDˆ§\ÚĞ¡.hĞ¤ ¸r}vT†q+ç1F35}a'³‘óiúì/F¬ãİ‹õÏP¬×«ea·~v~ {úÇ\½-k.Z¹-mó»Ûæß=mv7KÛÎW:Õ&çÕÍœ¶OŠ¶õƒ¢‰ÁŸg“[ò´:íØL{ÜÏSUE™å»Šó,Ëé—+ËZÑÔ+:ÊÙ~ÿ°X­©¨<Aeº3Rj>ÓöhùÜ£¾rºø<Âaş¾f óÅô
+,— |Ê¶‰ğ€¯ÿ®˜7šÇvÊ;~(nÂ¿	RÄM¸±bL¬÷HÄ'qÀ¤†ù©ä€s¼ƒ_gNÿãÎ™?q†³Ë·Ò•@W2¾°g¶ÈŠaCBÙ±RÕIåN$äX6n[E‡¬°P=
+j-9}-ç·òAPüÖ7½¼Å%Çõ¦ÍiÏ…JO‰);ÃMË2¾é¥èÒÓHO6OaÙµÔa:”ÉÄïf½vÇ’/¿==ö~µš¬Vh9jDãhµ[)-_n´ÍÁåê=¾ûe0ŒËğ’Ï~âåèu«ğæú­Œ8S-<?»•è/Lv­41¬L£àiNJ]5D:âMŒ5
+F”»–œÔ¢œS—œÉ"p9ìı$ï.¯l´´S¿Éá1ûô±ƒ-i]z.;¸¥ë­sò;;Z¢‰°BXcÿ ı:)²Ï5%<Ë`v§,ìø° Ê‘'Ø}e<ÀğzõÑ€Š‡¢R©u	$b|Æ^É	ia´¸¸8¦‚¹,gñ>‡×ÄV´4£ĞŠéøPB9ÖKDMNöKêXºu‚êa‹%±`LGù^^®ã+],‘…— z`V}1,±Ë
+ô³$ŞBn 9£ öÒ$ã2Iöe@ë–\şİ&UŸ{ñb˜÷yLFô’…2ÚhÔî
+‹v‘ê·['­Å×=ãAĞ¼/4YêrdLêÔéJKpÙ¢•ŸØ“^H B…úMùĞ`å÷“t°Ç¹‰àÁvÊƒ¿€|Mrí’Í¼tZ~çğfÒ<ùBù§ixI³…¹¸ƒ™ñ0Ñ²ÂÛ!¬Œ‹c¸ Gåg`ÍµÍôÔí&9ÒØĞ|&w²ñ36“_Ér·ÇŒ]¼w“Æ¸À¸ôâAşœ£Ó¬y~Cy—kÂ§¢ŞèéáÕ,'ÏG³!¼qß\È˜áğûtk{’Œª[q¾>é™ûÚäE×
+ íûT‘½gr3ÍLòòmç"uŞ3Ã¤˜9(Q¬ù59§]™³š@Á¸dU/<ˆ¡é%‹×˜X´‘´-œ“2LÿÖ¿`8]½x$3NGÖ„Q!y`‡¿Õ­º@jÃ6'»–©DNÿ_Ÿö?tÍg@¦6Ÿ•`\ğ†1æ¶M¿É•°ÿVãÈÜxªsÎ·Ş„R‹¬¨¶Ò£í¿;şı[Râzh­ğ¿¦è?Eôğhwïˆì<Û?z±WRÒµ–Á¬’W)ä‰:6Ö)*¢L/×5Ì)áÙağEO–¾í8ÑÔ›îk§zGQ5š7ºíÕiö™sãKœ+‰ÄnHL)¹WÆ“t½êxd4cªTˆ/I,)Åjò›^Vİ¥“L8‰o±$…¤~K4öF[fF•XKÚ{I}‹ÿ
+>ºÈt…¶Ó½_g~~¶Û?ì1%şA¾$ÏŸ??ü±óêe‹m<G¶w •ÍĞMÊ”3ŞÈva_£ÚÃ deÕ•5b‚Šb«Ó16Sj{€²½(ÊD“Cnßnä‚jÀê¼ş¦÷¦$x'~bÀ7!‰¤‘~wYtÙ—j)­~ğ‰H::—˜¸ xÓ*‹;?”ãÎéf˜|å™ü$.;+«Àà?%É
+ıWBdø¡ãLâäğg_Ÿ#CŸÿùoË1Ã\`§XäÑ`­Qæ÷CpÖf¬„bk»±û´èø¬fV¬Ò”¤l±ìM%sßQ‚ŒS©ï [LiH£dgqRã
+4)š 2¢>òWÌqcI$kj „”÷ÂAâeªÆrrÚUª9¥j–ªÁæÁÈ$@<Ef–™ò9Ö¯~…‰/w·Ÿo’½^ÄÏU"f¢—WX# ·ğ²,×à:>}r:—İ¡nÚ…ûÑæ?¥bÀÓ¾h}ê&Z³Ã|g‡çÎ/B@sÜ3v­Ä!á)9R¨YUDâ˜HK±YgÂLò%hp%·‡g¬™ï]b‚¾ÁÊôç,
+ü	§„=‚ß,ö²³ş-0[øO¦â¤_÷º½µ7*›e€˜cŞ–Ğ;ÌI1]”™“¥s–ŠŸÈXÈ:ÉmRÌçñæ&ğÁìm‰Fö×à¼æİ“õê4Ü1O*à›È3qk½ o¥¶«=ùüºÄl“6„Êu^½|¾¿³}²x@~Ü>:Ø?ø¾ÄpgöşbÿøÚ‘WÇ'‡/Àæßİ;ÙÛ91›ü:9b¨÷—!´–Vü%ˆ€=jˆ%ıÆÀ+à.@?	õó	äx@Ø* ·`\=#,F€Ç#P Iœ~¯]ÍôÅş´ù_BêCù(_âéTùdûÜñ#ºøk|º›ã—\4ıZçóÔ'Ş­kòLò¾Í’ü…*îÖ‘Ô5n½‚¬‹“›Tu•8ó)28ós0d;\+Ò.¯ÒX”Í)£Nèc@°ÔY’MÙÙ«â ‡õãĞ¨øæÀùœ
+SYoH§„‘U°ª7öqïk*D±í£åx0}—/áğ Ålzdá+Æ™ì›E·;Ü2MO}Ö÷	÷C2,ï£ø,p¯j-;ÏrT±Ö¸´®åçÉ[‚®ó*S7Õ†0¶k¬EÔúã‰¢õ…ñ†Á™çÏ~ ƒª8>Z‘NyäOäb%~ş4ÖŸ×èv»†Ùa;~vÖNú®ßåee³b½Åîq·V{qq±4 ,Àêàé;°ÏØ%°ˆ Ùå$Ú6taÜn;âŒğ3ĞÏJN:YK§|y`Ì‘ F‹`ä/:>·QXÙ%sos»Š‹×¨RK7g¨Êtäòô3Â”J}Š7×±ÖÉXwh‚)S±Èl*Õ‚ôíz‘¾ñ6ÓëNœ³vË‹RW‘£\ŸJ"$«©òPé»‘/R«OÆU6Àå¢{9óßXM§ˆ}ÜjTÔ~‹Ú`±ds<äæ¸Ğ’_ß¤Ë)·Ùèm$Jt½·!›€ÒJf°Ù­)4õFj\Uõn¥T¹yø_’«çiRóğr5b;Î¨¡¯ 3e_Ï„=‘wDû€âûn©['r|aÎ
+4=å¯Néİ»«ş^ƒ®ÊŸQåÎ©ò~Ûøi²É4uÓÈ3¸=—M‰Å÷7Ğó6«KhÂ•:›ÃöÈá{GGû»{UN›WÏw~Kö¶àŸß½Ú?š±Ã&³€­ü5ÀNŞä‰#PÄëó]€q@8sà§:ŒÃ€KÂøáüã–œ4¯ò®u½²'œ3¶[ôfj/“yJ.Õ’–­OÒ‰ƒ;@Ç“³¡«)Ğî8dŒc—;?nd8O/f©B¨<‹üÌÎR{bR  ¨ërû|ÿ,í]ê^$]èòÛ™À imcÑ	ÏMP.ä£xQZ? «SõIèùeMfŠ¨Ó.ÈÊ%FF·–d€3b¡©]ßLÍÈ›{C€Š.¾
+éqÒïƒ®pÎN:Gw«ëaØæA¾‡›`m^_^‰E:ê&W?.)ÊÒ-ÓÆvJUËºx"39Ê‘…	ÜüJÃ”u\ñìMß¢ŠŒå:ÛTWtTYÖ\ÙĞòd0ûê½|õUc) ÕŠ€ş$Ú&1Æ€™:!nåM¢¢­¡•eÏç@ZÈa.;¥B¾ñh™··è*õ©ñ£~$/«¸S£³mw:f‚XZWş]£#Æ	AÔã?¤}‚'–p/ `T‹æ¾@´33ÅÜİk#Öî”*(¡ªz­×“>½ºÎiEz-¡XRVÕX=‚9ë·y•V¹UJ{í1}SH#eºİnWß¹Â1dî¯÷i™9‡"9,øÇŒêÿè8WÑ%Èˆ·2_rc¢­ï£U‹§gh-‚—wöÆY:¢ÆÑ&ùø‹SiœìüQµ×©œf…ØŸÙ9fr§©gÓXI­·¬,5½ji"¦ë–¦
+6ÜüS‰R‹°ÜÕ¦mBğJèä2Œ.Y(ó¬³Díàøç?ıñ“¤Pá/²ª62_ÅŞ‡õıóÃ§ÛÏ¹+ë˜lïììï?}¾Gv;'ÛO%ß•ôŞJ—|ïgzœÛÁêŒäcb«*Û‰DpW÷˜9¨Äƒ/ƒ0†û`¯â²á~Ìz“àƒIZÁ˜5‹p?ã;Já]:"«"4Jøf^É§öF†uzù.ÙlË+gæükSåC­özÖ.´4$Ås#.5·™×bùa¯iiQë,øĞ’ÔÑ4ÿIëR+ÔªQ˜…%P7?óÔË£2¥€½buqR“¨¼î’¾ÒÒÚ‘öÀë/lÀ×ıüOÿòïÿú÷FïælĞ¢—Œk…eğÏÇØ ÃÈQG*Ò¤;İ³$O4Uë¶0iG®	¨+Àğ ıTï‰H?˜À¤pĞ3l>î ÛNèÏâœ™$bú!æ1Z^¯ì÷ÚĞí÷RB
+Ù:Èi¡€*¿·”u…œP!{®Ì6ZëC>ËËdg‚Gñ°#+B2 >HHëú¹Àh"êüÀJ_>&íñ»~G¯6IÄâè†“ØÊğovİ¬Çdo+VwIÃ}E7TÒ	#gÑI~³E'…è~‚àöÓxÄAÔÒ×Vàãÿì`ÎIş3tÙ³örû¯Ü¯ÿ*ú]+Ô…?x¯À»_?É~ƒòï•&‹Ë6Ş†sã&E$’yjàîlS	ÿ6–W&"ÛH¢kµŒ•%ø÷GÈè@c@ä9¡ÎğE%$*¬¬a°Iò8ëQì“dŠÔ-ı Š¶UúÎÈõpOŠ~Öé*¨k k¬c3âÖqÃ8¡K~ã]:G È=†(d×»ğP9yÉ×AK-ñT°]óFìÕ`k¯Eö¤Wú`ÆaÀ¾öiŒUEÂO“$@T4²D·xÌSHMr‚­ÿ–ì$ã3$ãä?°¬‹­ Á÷ùtİ(	Š³_#“æE”Â'ÚÑ 4ìOÕ²ï0·I>i†8q„€%‰NX² zlÀ1QÈÊ•ôÑdÈ?&÷Ğõ°T]ó²$ób;!=,.ã„W$
+úƒ N6Q,=‹Éş   ÿÿì]_oÜF’ßOÑë»µF·ÖŸ‘2·bKP$+Î²KNp‡RÂ3Ã	É±<'èaïõ€¾ wÀ½ä)û¼û´{_'_`ó¶«ÿ°›ì®nrşÈr¬	†d³»º«ºªºêWÖ¶g\ºAÿ]Í¥+o7W(dVÚ7\º^Ş£¥«¿IÖ±‹qÏq}«M•ş¯Ê:ßFÉ.ëô/³”²C±Çî·ï³ÁğuğédÚHœzÔ@›|qZğ~²®Bú
+rÌVÚ;—rmòüòdB[ ›òn7P{Uëò¬ĞâÉµ]ãËOª÷¦,¥9Ø|lRmgğ|À×¥Lhÿ=Y¢ÿıµ
+çaÑ)­­&CrK€T¾}ÛPt!Ò`I—nö-‰.ŸÄıiµaÍÒ—Ş!mrªš]n´zkÃ*e¸áã]ÇÇire1ïpi ³ôvzb–(6·şÔëCÕ+ÀÑËÒº-!&>©Øõd‡|óÏÒÈo?»d^çÒØZÙò7
+ßi"ëµRËmÎpÜ`©Ílå·ø™íKí~Îlì…se6c³™4±°ıË_Ù{ú@IK7gN{¯÷ óêıoÔaØ>ºA½LÒÉ×DW×oíŞ_w×IKqÈ„°“'aWÕ§0"P=ƒ÷±^˜ZPm“·›D)µÃj-¼(…hğ^Akä8îSÅ¤¥Ö#]»¬µ¬9u(©‹²„isÑ Èn®$C[{^›R:£¦BŞÀ®Ó1)Å\+vÅ(MÂ1ÏCº<êñBÔíã.]P}‚ì¯¯K=›FçGB™·mIpİám.wo{yËûªğuñİ²¨p]w¨øüÙm²¹¬†¿¶ANè÷¹M2ÊªñÛ¢ŞåS˜…{´_Ôì'ü|ªæÚ™ReŞû“Nøj3í¦<äBm‘§$n®é%ãÔeÍVm¦4Z9B@±šMY/Irëv>'©õ¢à'?mÂñ~‡ì-xùœàÛ"5(gD®Òz:‚ş¶7x'›KÉ8Vß&¤u—5´7ä<ƒ¤ÁLÏ…*Gã~óì,ÇjQëğ+ñ¹v¢pšö(ˆ‡ŒNJoš‚Lpí eXÉ8dI×|$zğ†>’QÓ˜*ùCä¡eÍÖu¹sN†‹‡hÇÕs¾°HóCÖøe(¤€ğ’“|Æ	ıíI”Q½‡rU9šNëç“P<½õi’÷ä[>†ß£œî!’TŸÑ- ®Áf0Z¬ì|vF-Œ$ˆÓåŒ…ğıçüG&»›:@dË[”>ö…Aô=âº¡ »`›å"òE ­Ê@Yˆ@$ìË°ª)X­«Ÿø†€;+­PBº8K£È»¶Q¢àZÙ(<?Û–ÙwÈ{Ç”0~Ç6İ ä«ÙQ
+ˆO)4OÙ!£f·M(o´¹ã1œŞU*»w·yïdÏâş@v¯Õ^ˆ{~Rµ7Î›ËøBÛ“ç\ûº;qw4êOÇû<zâK¦["fZF€ÚnbO¹âÇùÍZ”! öÙÁZ³Å‰¬½=v"Ô¬=qˆ„$™±s“fÊ³×´“ºh¸ğiã³R¸/sÓ¬Ù²WÄŞ,3Ék¶'Ìwdf¤ÙT³1ÍÊEÉŒ€¢µ’‰cmQöîqE³AkR3µ7
+YƒÆ¸ş†ŒSncE{ÚnmMm°öÎ•6ŸÚ­V¶,£³BDYÒ|¬€ÍkÿB>Ò­¢“ˆ§\‰2\Ow§„#i×XZ ¸V”­‚rE}õÌ-nç(^ğ¢ºÈÛ9Üß²„n¯–AÂ—ä™İÃxø
+Aœa‰[š§Hìn6à)Â/ŠÜ(•PæUy–*' ÿˆct¿üøÃ¹†WxäfyR
+àuÕ9Ì¯ “;}iPñ|ei0 ü¢>°¾:,¨¿EN>ZQƒ“N:6¥ÁëCHx­D  3!ô»±jü£ï+á$ËÚ}gyŞèå7—øÊ±,ƒ\ĞbJNpÔjƒ¿^|fŠöæŸ
+ôC%Á©‚â_IéWPAhÖŞw†Ù|ÿïæI*Ø½øÕ(îG¤øU„mñÂñ°P{¡*<”ŒÛ“.Jjzkï1/Ár‡ÿAÆEFg
+Dõç	EŠõZôoúXºâ<¶½$F²]¥’pQŠÔkº‹í§ Íg´×#{X» ÁÇVŞş&»µ}1LÒAĞÿ#’o2õ‰Â‡¼ŒÂç;W‚9w\ş8· ÑÓ0ò0œÊædÕsµˆ
+Ãmû´cıù?ÿß¶Ã2»xÇ²§°+ÌéĞú‘@\Š†+‡x¥ÕÎ-Y§äa©ÛˆLëÃáYâfáËÚ%Ä Ïîæõpœ²hœCÛ¾´ÌgSù±ÉäÇæ”òCñ2–y×A_SÆY—Œãa—RzmÁ<Üõ˜nñuc£à™(ŒÇ”Eœäp
+ö*\ğXëKñåÅZ»®°/:¸xòKR\ñ«¬|m'áß¢	9 ôÅÏB•&™ôİ>FÍ,Hİí­|İYİ{fdRKEşa;î‰=†QÙa\™Æ¬j*±G¬¶”&Úe†î†Ã`Ÿ_Ã–ÄÑÂËÕ[ª>ÄKÒa^ Gi[Ç?Ô²ÿ5\"ªÎ.Cß7¼û /‘ZÏçÛo[Í^0^ZdçR5+½Şt*¡áñ0Lõ<QÄœ“€(`.¶/Šc‚Ù$Á¯Œì,ğm~dïrYœ¤Ü½²7ròó3·EQ_:İ_#9ËKZÉåÁÜÉ5’³óîÅ-óâğr6¢»œ0¨1Ï•¬',Ï—ÎÌx0Üâ!·UDU]}1.¿‹µ.RÌĞ¦¯X™{?Õ9PèŞşQƒ‚ eÎ§ÎM§ã×QöÜ@@†p¶T—¥?.OvÎ§ç­ĞU?æ~÷ğx§jàU¢	¼œî°×˜¥L’Ñ³Fñ«¦'OxL/y²0ŠÊ’_5)‹¤€EQQŸ™’uö{×V+wp	åu³İÎ¸İşğ7ETá©›ÛNÛÄuÒ(îFŒĞdÂ9°àGU(Éó”‚™ù¬R-M†”-BV]Bòú|€/ÉH*2?ê˜ÍˆY„Ôıª©)"ú×D¨¿\Ÿó&¦(¼Ñßè’û@—GR«ï8J_a…e“!°K´;ö"µÅ¼b;…GŞ5Ù+ªÓljHl·@á/?~÷Ç"–  _)ü’ÂJGæÉq(?…¶É±¨ñîºÍæ¡eİÚ>‘™ŒŞĞ´²iqk¶ssÏPbÏ\Ó‘C•ªR£<=I¦”§Q:È˜£hÈ³ğÈ¥\nú‘ãæ/,p)2Ú2v³¡Ğ³ØiCT«ì SßòLµ ›)HuÍ,Jû%ÓÀ74¹Ú‰R“ŸÂn˜ØÎP¢ÆğÉ€)­‘jˆ³äç0Üçj°¹ã8È/‚eÜ%nsW•’Ÿ"´‹¹YHÆ³(}U/Ç1À£ŒÊ³E:ë¿#AøPáY-›.‡4gawÈfçw îÍóJÃ`r‡…*¶é¯á¯ˆ š¬’wÍsKa`z)éö ³‰¡%;¶wŒ1ÿ4=«w3)‡3?H’œ9cXe]>Å‘Â+€7ÑØá~7~){²v§€^â›j†Ô#]DD0ç]¤½zIî›áhv´şÉ¢ü/–$´HîDğŠ'hÓI:h¹zDˆ“¿Eª9ûwœÏÊĞNşœüËı‹CÜRYˆî»yğ7¿wß¯ƒxm(É<‹Õİ‚Æ[0‘Ã<}.eÎn¡Ù´¾~”¡ì‹)}-©`8ŞF9hÒ÷´ŒåÔÔ*}OVãÊ««ˆÔb-9ºt®sÁR€b„úÖ`šÒã¬a½tøx+şñÚ)"ÃQ¾ÿ‹|²;Oé6Ô¢ï“éRäÛœrJºJÿ¹C8»¥«£îò:J²E¾÷´åõ¥%rù¬öø÷£ş Œ:	ôè‡q–·ŠØH?/‚î‘Óf»a2îñ(:jk ÙøSÖò5‚ö&x?¨•Ê×Q:>-ª×¸«K¥é5®±Ôí‘t's`Z‡s—­³ÇÎœsƒO”ª³°n«³Pª§c­³àUâÙ9-Ø¤ğLHÃ”~|>eï‘©S-¾¸Ü*‡nZê(É&İ1X«PÊ^ü
+ˆ¯" 3¢ô“=MU&kä$8‹ò	ÙëEÔœâº&è–òùVŠ¨]ÕµtÍJê~>v7ôÌJPV5*°¢  _IYkKK‚åïŠ³§|Ë±º(zs7ïúÄ¸äCƒpâ&±Ú¤ø¤µ5¨MÄ		ˆ™ñ1íòá]ƒ7õÙÚ<µ«Y2ˆØ/¦+ĞAx©AñÜ*/jù\Œêùã‘Ò°¾êmJ Ñèıûœ^åGZ†º£ “ŞÔ¥A„İ~–PJ’AôĞEy‹\ñw‰6#“2b}cñÉãU»æ›Í&ƒÜ3ıÅ8Éƒªc@ º†÷­úKü¡ã«ZPìnlÈÖ{yqÉ(|Şä!ûs<Ö*w¬½Km-»©¿)©ÿ6gŒòü"P=áßtŠóİ¥8»<ÿ•#š×mÖÂ	Å¯_”Œ>0õØ4´×ˆ—Ø«YœSÕ!k_y2·'­y%2:–‘5q¸È£37z‚­ŠX½úºåî9•û·¶ùñß:ª¹¼ì÷z›F“
+Ê@¹cyôí²b/VÏšEÖWà „ª\¯*1\‡’™^":TA³ş|ñÛ8Û/+˜kË¥pûÕíšî¬ŒAäPªŠÎ<HÓ$uÛRò]r=X^Èim9O^Ôƒ]iëºº-Ó^éëİ¤Ÿ¤ş‚i˜¶Ş$1×Û)¿´¯WxYd¥êp€ÃféğDa>l®	ªºüåÈ,8’rš2ğÕÄƒ\°sÊ2k'ë|ñQâ€ZŒøÏï¶-ô›9qÂŒ0kD6¶È.U"WNXõœÆw6rÚ‹µb8	útK'tw:‹R¨ÑÁÊ›Foâ¸šşuƒ3aXÜáZı—®N® -¯’OÆ¤K—B1—=Ô4sØüs0=X6_Ç.¡ïÎ“4îª·e¶Ól^ŸDlz*1ãI³»8Â8g[xÿÂó˜S£ö¹Ã¢º¹°v8Ê°—¸“lİî$kæ{)´9,¤¡/Æ^ >Œ“wº8‚l2ìß‘ğcÜFS®–ûe—}ˆ¯æ41 hr:ÂäÌÒ8Ãúä¨¤Kp£ù¸0u0|Gş±/ï¥Ãáë «±‡û«0‡Pv”&İˆŠ®ó8ï	ïL2\51Ôô7inbôJN|ı?¬Nk+OÇ^Wvs¦&$8¨´-ín-”ìuŞ__>ˆ§Äİ'ã.•çÙQö²U €ñn…$ã×ÀRšx¦…6x¢dœ·
+ç°ùÖ¯;¤X¡)„óÌn´¢4eÀ¹Ó¬;úìê€¾ÆC×´ÀY¡¿ºÈyIÎâa `ÅŠïĞ[—¥5SşJnòl6¹”ÓÊW.åİVB™7Î©el).4®Ä´•vÈ’üiuuu	 oøì!˜7S¹Öm*”B^”j·1ƒj·›FdBu±l,¾œCNÕ¿8’\Sıvê«]–Ÿ,³QgÇ’©…pJ—ÎhÜ@S€¿'ÑÕ9{{çeBRzìÿ²ıl]XgÌ„‘c-v³40ÈğPĞÅ7˜R=8%÷½Wrm'ÁÓ(ºê-3‹ÓÕ÷Fõ½Q}÷ß¨¾7ªï¨¾LÃÙ•bGhµ3óS™@aª«.±†J*“G9b ÍÙ5mË‹<[hğôœ‚róÆ=Õø{„v@]
+Øp›Ur‡ÑÊ‹É
+üK ‘$Hã,já5âö8WY0ƒÍ³ŸÚÎçÌvıÊÏlç{bÛay$3Ù–şp`ãO‘Ùì`×~ºº  |‰öÚUk‘èôãM¡G ëçˆVÿóÿıÏßÿö}™[ÊPô:ó´.
+u¢O2
+{YœŠŞ²E˜ÈõVñ€©ÌneÙŒ<,3¶Ø,MÑ†ç¾^ÁiªeÎ+§¨`w,{ˆ]ÛK9ŠA1‰ŸA"ä)«êéã¸B½áB‘kwK9©Ì_“íröòÒ(¹„‰‡¼‘o $ì£,rä©İË{TzX·¤<-‰=T6Ğş~ıOëí?lì>Ã,j+TÎ• ®µ 	% ÎW>º[œ:Ûı%^$Ç \åš÷Œ 
+‡BTz+&`ÓĞÑ8DuN$rÔ~3ZEE'û«hBMßğ²!ıÛÅæf¶¤%´µ\¢ ¥+ğ³†ğÅsö¬k–!©EYÜ±T« ú7Dh‹"ÖM-©J†%M·—¸ø˜3xúJ—‰e¯'59ê9°±Öèu¬‘	Õ‰äTĞJw®Ø¼.ªAÁ—tGé4¤¿–±ªøÒ€¢¯l­_·7`Âœ‰áò˜ôª¼ÜJòšw¾.q½H˜À0ÂßåçÒ:á´¡Ô¦ç#bø^*»íÍlWK‹<IÎ±tÊšRXº²Ô-ˆ•îaUº”‘¹î”+¡Aßÿt.9xJ;ëşõÎeyñ¢â§ÑG†ìÕTVn¤âv²ğå6 ^û,·;øŸ©XYú²€Ë‡µòÿûÏlà²lÈÍÂ¯»9W¿Øtvæ¹ë\ĞÕ¿URÿpxá‡?Q«,-—I½a	m/pAjxöƒªÂÂv@áÂŒ{®ÓÒhP.T€o-ì¾í©ö†jè¸µı(É9~ÆË±'s©„~uïª¸·„œûápïÛŸ8ó“èÛqÌæì†s•ã±>§r¾©LÔå›³ AŸšwzŸk±½•ñ¼>$ùîjğõãf3¸¤€&«Á%•Û·mÀ*,°â§Š`åúV=æêÀ¦D÷A*tø‰c£ÊR^;ıüı_ÀkPŒûa<ˆó~še×‘˜uLU¿¯¢0”I–[ş©º¬û#wÊùÈ«Ş§µ”õ’$_2ÄôÏYÚ„ØÓû]²…‘ª5ßàÄd?˜Öİ•ö:jùzt'İd)DÃ†E©M÷Wr“ÍIpÃóàÎ“XU„¥å†ü÷zª§ p’Ÿi÷¨±@.]ÂûæåÛBe=÷óx…-V=cµpMx¸>.i™ßN}kâÃÖu¿¸1şk»_ªëDÃ-·ÀIæ¿v*²÷ß8W\1µÂ5aëY¡º‹¨`î®À¯%é¸/!S¯[Çò«í´ş­Æ&§	%9 ßì‹5áQgí?lÏĞ°4ˆŒÓ"MÊÑ²Áû&çnüVRÕ‹#R	0@|€Nü|-9©zò¬eåï=>:Ş}rxòøÙ{zôôáîéá—ÈÉÓ#4,Ìƒ¥¯ÃvT¸øÖö§IŞSñZA±ˆ´1„^‡<Db‘WÅì…qÖ…"/ú>†ôˆĞM©(ìO ñ=ïEôwú…ÁfÒä,îG$‹²¿ˆ2S’"­öà/´Ò=Ézi<|eÔğUWö9aü•!9N“Q’ÑôÇÑVmÊûp´Zö ø'5ÙøE´ÅÎfr¹0@Å»]û¾íŒ«„,)È2Ùãİ…åŞ¬°@˜y ¾)a–£Ñ+±êxEËĞ\0¿P	EcRëñM‰@Xz”n—Ÿüæ7ÿ   ÿÿ €Ä.†
