@@ -14,6 +14,19 @@ import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
 
+export const SHOOT_TYPES = [
+  "CANDID PHOTOGRAPHY",
+  "CINEMATOGRAPHY",
+  "TRADITIONAL PHOTOGRAPHY",
+  "TRADITIONAL VIDEOGRAPHY",
+  "DRONEGRAPHY",
+  "LIVE STREAMING",
+  "SEMI CANDID PHOTOGRAPHY",
+  "SEMI CANDID VIDEOGRAPHY",
+  "STANDARD PHOTOGRAPHY",
+  "STANDARD VIDEOGRAPHY"
+];
+
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
 import { CustomPackageMaster } from './CustomPackageMaster';
