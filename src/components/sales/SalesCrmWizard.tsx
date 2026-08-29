@@ -1567,7 +1567,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {crmWizardStep === 3 && !['Order Confirmed', 'Event Scheduled', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') && (
+                {crmWizardStep === 3 && !isLeadConfirmed && !['Order Confirmed', 'Event Scheduled', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') && (
                   <button
                     type="button"
                     id="btn_step3_order_confirmed"
@@ -1621,7 +1621,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                   {isSaving ? (
                     <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
                   ) : null}
-                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? (['Order Confirmed', 'Event Scheduled', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') ? 'SAVE' : 'SAVE & FOLLOW-UP') : 'Save & Next'}</span>
+                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? ((isLeadConfirmed || ['Order Confirmed', 'Event Scheduled', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '')) ? 'Save' : 'SAVE & FOLLOW-UP') : 'Save & Next'}</span>
                 </button>
               </div>
             </div>

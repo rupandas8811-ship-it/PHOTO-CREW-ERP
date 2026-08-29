@@ -567,8 +567,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                           </button>
                                         )}
                                         
-                                        {/* UNLOCK QUOTATION (if pending/rejected/locked) */}
-                                        {(!isApprovedUnlock && !isPendingUnlock && lead.quotation_locked) && (
+                                        {/* UNLOCK QUOTATION (if pending/rejected/locked) - ONLY before Order Confirmed */}
+                                        {(!isApprovedUnlock && !isPendingUnlock && lead.quotation_locked && leadStatus !== 'Order Confirmed' && !['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(leadStatus)) && (
                                           <button
                                             type="button"
                                             onClick={(e) => {

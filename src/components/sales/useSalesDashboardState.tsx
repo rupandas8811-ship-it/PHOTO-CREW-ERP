@@ -764,13 +764,14 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   };
 
   const isLeadConfirmed = selectedLead
-    ? (['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(selectedLead.status || '') ||
+    ? (['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(selectedLead.status || '') ||
        (selectedLead as any).current_status === 'Order Confirmed' ||
        (selectedLead as any).booking_status === 'Confirmed' ||
        getLeadCurrentStatus(selectedLead) === 'Order Confirmed' ||
        ['Operations', 'Production', 'Post-Production', 'Completed'].includes(getLeadCurrentStage(selectedLead)) ||
-       (orders && orders.some(o => o.lead_id === selectedLead.lead_id && o.status !== 'Cancelled')))
-    : false;
+       (orders && orders.some(o => o.lead_id === selectedLead.lead_id && o.status !== 'Cancelled')) ||
+       wizardLeadData.status === 'Order Confirmed')
+    : (wizardLeadData.status === 'Order Confirmed');
 
   const isApprovedUnlocked = selectedLead
     ? (selectedLead.quotation_locked === false ||
@@ -4783,96 +4784,29 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           };
         });
 
-        if (wizardLeadData.status === 'Order Confirmed') {
-          if (!wizardLeadData.confirmed_event_date) {
-             showToastMsg("Please provide Confirmed Event Date.", "error");
-             setIsSaving(false); return;
-          }
-          if (!wizardLeadData.final_amount || isNaN(wizardLeadData.final_amount)) {
-             showToastMsg("Please provide Final Amount.", "error");
-             setIsSaving(false); return;
-          }
-          
-          const pkgName = packages.find(p => p.package_id === wizardLeadData.selected_package_id)?.package_name || 'Selected Package';
-          
-          let masterOrderId = '';
+        if (isLeadConfirmed) {
           try {
-             masterOrderId = await confirmOrder(
-               selectedLead.lead_id,
-               pkgName,
-               Number(wizardLeadData.final_amount),
-               Number(wizardLeadData.advance_received || 0),
-               wizardLeadData.confirmed_event_date,
-               wizardLeadData.confirmed_event_time,
-               'UPI',
-               wizardLeadData.notes || 'Order confirmed via CRM Wizard',
-               undefined,
-               undefined
-             );
-          } catch (err: any) {
-             console.error('confirmOrder error', err);
-             showToastMsg('Failed to confirm order: ' + err.message, 'error');
-             setIsSaving(false); return;
+            const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+            if (linkedOrder && supabaseClient) {
+              await supabaseClient
+                .from('orders')
+                .update({
+                  package_name: packages.find(p => p.package_id === pkgId)?.package_name || pkgId,
+                  final_amount: cleanFinalAmt,
+                  package_price: cleanPkgCost,
+                  deliverables_description: safeDeliverablesText,
+                  team_members: safeTeamMembersText,
+                  notes: wizardLeadData.notes || linkedOrder.notes,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('order_id', linkedOrder.order_id);
+            }
+          } catch (syncErr) {
+            console.warn("Order sync warning on Step 3 Save:", syncErr);
           }
 
-          // Save to order_event_reporting
-          try {
-             if (supabaseClient) {
-               const finalAmt = Number(wizardLeadData.final_amount);
-               const advanceAmt = Number(wizardLeadData.advance_received || 0);
-               const pendingAmt = finalAmt - advanceAmt;
-               const paymentStatus = pendingAmt <= 0 ? 'Paid' : 'Pending';
-
-               for (const ev of crmEvents) {
-                 const payload = {
-                   order_id: masterOrderId,
-                   lead_id: selectedLead.lead_id,
-                   event_id: ev.id,
-                   event_name: ev.event_name || ev.event_type || 'Unknown Event',
-                   confirmed_event_date: wizardLeadData.confirmed_event_date,
-                   confirmed_event_time: wizardLeadData.confirmed_event_time,
-                   contract_final_amount: finalAmt,
-                   advance_payment_received: advanceAmt,
-                   reporting_date: ev.reporting_date || ev.event_date || wizardLeadData.confirmed_event_date,
-                   reporting_time: ev.reporting_time || wizardLeadData.confirmed_event_time,
-                   pending_amount: pendingAmt,
-                   payment_status: paymentStatus
-                 };
-
-                 const { data: existing, error: fetchErr } = await supabaseClient
-                   .from('order_event_reporting')
-                   .select('event_id')
-                   .eq('event_id', ev.id)
-                   .maybeSingle();
-
-                 if (fetchErr && fetchErr.code !== 'PGRST116') {
-                    throw fetchErr;
-                 }
-
-                 if (existing) {
-                   const { error: updErr } = await supabaseClient
-                     .from('order_event_reporting')
-                     .update(payload)
-                     .eq('event_id', ev.id);
-                   if (updErr) throw updErr;
-                 } else {
-                   const { error: insErr } = await supabaseClient
-                     .from('order_event_reporting')
-                     .insert(payload);
-                   if (insErr) throw insErr;
-                 }
-               }
-             }
-          } catch (err: any) {
-             const errMsg = `Failed to save Order Event Reporting.\nTable Name: order_event_reporting\nColumn Name: Multiple (Check schema)\nFailed Function: handleSaveStep -> UPSERT\nSQL Operation: INSERT/UPDATE\nExact Supabase Error: ${err.message || String(err)}\nSuggested Fix: Verify table schema 'order_event_reporting' exists with correct columns.`;
-             alert(errMsg);
-             setIsSaving(false);
-             return;
-          }
-          
-          await completeApprovedUnlockRequest(selectedLead.lead_id);
-          showToastMsg("Order Confirmed and sent to Operations.", "success");
-          setSelectedLead(null);
+          showToastMsg("Record saved successfully.", "success");
+          setShowStep3Popup(false);
           setIsSaving(false);
           return;
         }
