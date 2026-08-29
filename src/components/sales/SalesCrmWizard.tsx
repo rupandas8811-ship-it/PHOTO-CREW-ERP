@@ -1566,7 +1566,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {crmWizardStep === 3 && (
+                {crmWizardStep === 3 && !['Order Confirmed', 'Event Scheduled', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') && (
                   <button
                     type="button"
                     id="btn_step3_order_confirmed"
@@ -1584,7 +1584,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                       setConfirmForm({
                         ...confirmForm,
                         package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
-                        quotation_amount: Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
+                        quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number((selectedLead as any).final_amount) || 0,
                         advance_received: calcAdvance,
                         event_date: selectedLead.event_date || today,
                         event_time: selectedLead.event_time || ''
