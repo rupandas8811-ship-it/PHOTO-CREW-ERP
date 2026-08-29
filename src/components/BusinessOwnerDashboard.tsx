@@ -17,7 +17,8 @@ import {
   Download, 
   CheckCircle2, 
   ChevronLeft, 
-  ChevronRight, 
+  ChevronRight,
+  ChevronDown, 
   X, 
   Eye, 
   ShieldCheck, 
@@ -1319,9 +1320,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 <CalendarIcon className="w-4 h-4" />
                 <span>EVENT CALENDAR</span>
               </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Single unified calendar displaying Event Dates, Delivery Dates, Client Acceptance, and Orders Waiting for Approval.
-              </p>
+              
             </div>
 
             {/* Calendar Legend */}
@@ -1694,19 +1693,36 @@ interface BusinessOwnerCalendarViewProps {
 }
 
 const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
-  orders,
-  production,
+  orders = [],
+  production = [],
   onSelectEvent
 }) => {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
+
+  // Filter state
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [draftFilters, setDraftFilters] = useState({
+    event_date: true,
+    delivery_date: true,
+    client_acceptance: true,
+    waiting_approval: true
+  });
+  const [activeFilters, setActiveFilters] = useState({
+    event_date: true,
+    delivery_date: true,
+    client_acceptance: true,
+    waiting_approval: true
+  });
+
+  const activeFilterCount = useMemo(() => {
+    return Object.values(activeFilters).filter(Boolean).length;
+  }, [activeFilters]);
 
   // Navigate Months
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
@@ -1720,39 +1736,35 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   // Combine events from orders & production
   const eventsByDate = useMemo(() => {
     const map: Record<string, any[]> = {};
-
-    orders.forEach(order => {
+    (orders || []).forEach(order => {
       if (!order.event_date) return;
       const dateStr = order.event_date.split('T')[0];
       if (!map[dateStr]) map[dateStr] = [];
-
-      const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+      const prod = (production || []).find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+      
+      const isClientAcceptance = order.current_stage === 'Client Acceptance' || prod?.editing_status === 'Client Acceptance';
       
       const isWaitingApproval = [
-        'Client Acceptance',
         'Business Owner Review',
         'Customer Review',
         'Editing Complete',
         'Final Approval'
       ].includes(order.current_stage) || (prod && [
-        'Client Acceptance',
         'Business Owner Review',
         'Customer Review',
         'Editing Complete',
         'Final Approval'
       ].includes(prod.editing_status));
 
-      const isClientAcceptance = order.current_stage === 'Client Acceptance' || prod?.editing_status === 'Client Acceptance';
-
       let typeCategory = 'event_date';
       let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/30';
 
-      if (isWaitingApproval) {
-        typeCategory = 'waiting_approval';
-        badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
-      } else if (isClientAcceptance) {
+      if (isClientAcceptance) {
         typeCategory = 'client_acceptance';
         badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+      } else if (isWaitingApproval) {
+        typeCategory = 'waiting_approval';
+        badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
       }
 
       map[dateStr].push({
@@ -1792,42 +1804,159 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         }
       }
     });
-
     return map;
   }, [orders, production]);
 
   return (
     <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
-      
       {/* Calendar Header Navigation */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-zinc-850">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
           <h3 className="text-base sm:text-lg font-black font-mono tracking-tight text-white">
             {monthNames[month]} {year}
           </h3>
           <button
+            type="button"
             onClick={todayMonth}
-            className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-mono hover:bg-zinc-850 cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-mono hover:bg-zinc-850 cursor-pointer transition-colors"
           >
             Today
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end">
+          {/* Filters Toggle Button */}
           <button
-            onClick={prevMonth}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer"
+            type="button"
+            onClick={() => {
+              if (!isFilterOpen) {
+                setDraftFilters({ ...activeFilters });
+              }
+              setIsFilterOpen(!isFilterOpen);
+            }}
+            className={`px-3 py-1.5 rounded-xl border font-mono text-xs flex items-center gap-2 cursor-pointer transition-all ${
+              isFilterOpen || activeFilterCount < 4
+                ? 'bg-purple-500/15 border-purple-500/40 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.15)]'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-850 hover:border-zinc-700'
+            }`}
           >
-            <ChevronLeft className="w-4 h-4" />
+            <Filter className="w-3.5 h-3.5 text-purple-400" />
+            <span className="font-bold">Filters</span>
+            {activeFilterCount < 4 && (
+              <span className="px-1.5 py-0.5 text-[9px] rounded-full bg-purple-500/30 text-purple-200 font-bold border border-purple-500/40">
+                {activeFilterCount}/4
+              </span>
+            )}
+            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isFilterOpen ? 'rotate-180' : ''}`} />
           </button>
-          <button
-            onClick={nextMonth}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={prevMonth}
+              className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer transition-colors"
+              title="Previous Month"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={nextMonth}
+              className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer transition-colors"
+              title="Next Month"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Expandable Filter Panel */}
+      {isFilterOpen && (
+        <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-3.5 sm:p-4 animate-in slide-in-from-top-2 duration-200 space-y-3.5 shadow-xl">
+          <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+            <span className="text-xs font-mono font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-1.5">
+              <Filter className="w-3.5 h-3.5 text-purple-400" />
+              Filter Calendar Event Types
+            </span>
+            <span className="text-[10px] text-zinc-400 font-mono">Select events to display</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-zinc-950 border border-zinc-850 cursor-pointer hover:border-zinc-700 transition-all select-none">
+              <input
+                type="checkbox"
+                checked={draftFilters.event_date}
+                onChange={(e) => setDraftFilters({ ...draftFilters, event_date: e.target.checked })}
+                className="w-4 h-4 rounded border-zinc-700 text-blue-600 focus:ring-blue-500/20 bg-zinc-900 accent-blue-500 cursor-pointer"
+              />
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+              <span className="text-xs font-mono text-zinc-200 font-medium">Event Dates</span>
+            </label>
+
+            <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-zinc-950 border border-zinc-850 cursor-pointer hover:border-zinc-700 transition-all select-none">
+              <input
+                type="checkbox"
+                checked={draftFilters.delivery_date}
+                onChange={(e) => setDraftFilters({ ...draftFilters, delivery_date: e.target.checked })}
+                className="w-4 h-4 rounded border-zinc-700 text-indigo-600 focus:ring-indigo-500/20 bg-zinc-900 accent-indigo-500 cursor-pointer"
+              />
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
+              <span className="text-xs font-mono text-zinc-200 font-medium">Delivery Dates</span>
+            </label>
+
+            <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-zinc-950 border border-zinc-850 cursor-pointer hover:border-zinc-700 transition-all select-none">
+              <input
+                type="checkbox"
+                checked={draftFilters.client_acceptance}
+                onChange={(e) => setDraftFilters({ ...draftFilters, client_acceptance: e.target.checked })}
+                className="w-4 h-4 rounded border-zinc-700 text-emerald-600 focus:ring-emerald-500/20 bg-zinc-900 accent-emerald-500 cursor-pointer"
+              />
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="text-xs font-mono text-zinc-200 font-medium">Client Acceptance</span>
+            </label>
+
+            <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-zinc-950 border border-zinc-850 cursor-pointer hover:border-zinc-700 transition-all select-none">
+              <input
+                type="checkbox"
+                checked={draftFilters.waiting_approval}
+                onChange={(e) => setDraftFilters({ ...draftFilters, waiting_approval: e.target.checked })}
+                className="w-4 h-4 rounded border-zinc-700 text-amber-600 focus:ring-amber-500/20 bg-zinc-900 accent-amber-500 cursor-pointer"
+              />
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 animate-pulse" />
+              <span className="text-xs font-mono text-zinc-200 font-medium">Waiting Approval</span>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-800">
+            <button
+              type="button"
+              onClick={() => {
+                const resetState = {
+                  event_date: true,
+                  delivery_date: true,
+                  client_acceptance: true,
+                  waiting_approval: true
+                };
+                setDraftFilters(resetState);
+                setActiveFilters(resetState);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 font-mono text-xs uppercase tracking-wider transition-all cursor-pointer font-semibold"
+            >
+              Reset Filters
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveFilters({ ...draftFilters });
+              }}
+              className="px-4 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs uppercase tracking-wider font-bold transition-all shadow-md cursor-pointer"
+            >
+              Apply Filters
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Weekday Labels */}
       <div className="grid grid-cols-7 gap-1 text-center font-mono text-[11px] font-bold text-zinc-400 uppercase py-1">
@@ -1846,16 +1975,22 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         {Array.from({ length: firstDayIndex }).map((_, i) => (
           <div key={`empty-${i}`} className="min-h-[70px] sm:min-h-[90px] p-1 bg-zinc-900/20 rounded-xl border border-zinc-900/50 opacity-30" />
         ))}
-
         {/* Days of Month */}
         {Array.from({ length: daysInMonth }).map((_, i) => {
           const dayNum = i + 1;
           const monthStr = String(month + 1).padStart(2, '0');
           const dayStr = String(dayNum).padStart(2, '0');
           const fullDateStr = `${year}-${monthStr}-${dayStr}`;
-
           const isToday = fullDateStr === new Date().toISOString().split('T')[0];
-          const dayEvents = eventsByDate[fullDateStr] || [];
+          
+          const rawDayEvents = eventsByDate[fullDateStr] || [];
+          const dayEvents = rawDayEvents.filter(ev => {
+            if (ev.type === 'event_date') return activeFilters.event_date;
+            if (ev.type === 'delivery_date') return activeFilters.delivery_date;
+            if (ev.type === 'client_acceptance') return activeFilters.client_acceptance;
+            if (ev.type === 'waiting_approval') return activeFilters.waiting_approval;
+            return true;
+          });
 
           return (
             <div
@@ -1883,7 +2018,6 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
                   </span>
                 )}
               </div>
-
               {/* Event Cards inside the Day Cell */}
               {dayEvents.length > 0 && (
                 <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0">
@@ -1892,10 +2026,16 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
                     return (
                       <div
                         key={ev.id || eIdx}
-                        className="w-full truncate text-[8px] sm:text-[10px] leading-tight px-1 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800/80 font-medium text-left"
-                        title={displayName}
+                        className={`w-full truncate text-[8px] sm:text-[10px] leading-tight px-1 py-0.5 rounded text-zinc-300 border font-medium text-left flex items-center gap-1 ${ev.badgeColor || 'bg-zinc-900/90 border-zinc-800/80'}`}
+                        title={`${ev.customerName || ''} - ${displayName}`}
                       >
-                        {displayName}
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          ev.type === 'event_date' ? 'bg-blue-500' :
+                          ev.type === 'delivery_date' ? 'bg-indigo-500' :
+                          ev.type === 'client_acceptance' ? 'bg-emerald-500' :
+                          ev.type === 'waiting_approval' ? 'bg-amber-500 animate-pulse' : 'bg-blue-500'
+                        }`} />
+                        <span className="truncate">{displayName}</span>
                       </div>
                     );
                   })}
@@ -1905,7 +2045,6 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
           );
         })}
       </div>
-
     </div>
   );
 };
