@@ -460,15 +460,6 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                 (lead as any).is_confirmed === true;
                               const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
                               
-                              const latestUnlockRequest = unlockRequests
-                                .filter((r: any) => r.lead_id === lead.lead_id || (linkedOrder && r.order_id === linkedOrder.order_id) || ((lead as any).order_id && r.order_id === (lead as any).order_id))
-                                .sort((a: any, b: any) => new Date(b.created_at || b.requested_at || "").getTime() - new Date(a.created_at || a.requested_at || "").getTime())[0];
-                              const isPendingUnlock = latestUnlockRequest?.status === 'Pending' || latestUnlockRequest?.request_status === 'Pending';
-                              const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected' || latestUnlockRequest?.request_status === 'Rejected';
-                              const isApprovedUnlock = !isLeadConfirmedRecord && (lead.quotation_locked === false || (
-                                lead.quotation_locked !== true && (latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved')
-                              ));
-                              
                               return (
                                   <div className="relative flex justify-end actions-dropdown-container">
                                     <button
@@ -482,7 +473,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                           const rect = e.currentTarget.getBoundingClientRect();
                                           const spaceBelow = window.innerHeight - rect.bottom;
                                           const spaceAbove = rect.top;
-                                          const menuHeight = 180;
+                                          const menuHeight = 160;
                                           
                                           let top: number | string = rect.bottom + 4;
                                           let bottom: number | string = 'auto';
@@ -496,13 +487,9 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                           setOpenDropdownLeadId(lead.lead_id);
                                         }
                                       }}
-                                      className={`w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2.5 shadow shrink-0 ${
-                                        isApprovedUnlock
-                                          ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/40'
-                                          : 'bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border-zinc-850'
-                                      }`}
+                                      className="w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2.5 shadow shrink-0 bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border-zinc-850"
                                     >
-                                      <span>{isApprovedUnlock ? '✔ Edit Record' : '⚡ Actions'}</span>
+                                      <span>⚡ Actions</span>
                                       <span className="text-[10px] ml-1">▼</span>
                                     </button>
                                     
@@ -571,25 +558,6 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                           >
                                             <CheckSquare className="w-3.5 h-3.5 shrink-0" />
                                             <span>Confirm Order</span>
-                                          </button>
-                                        )}
-                                        
-                                        {/* UNLOCK QUOTATION (if pending/rejected/locked) - ONLY before Order Confirmed */}
-                                        {(!isLeadConfirmedRecord && !isApprovedUnlock && !isPendingUnlock && lead.quotation_locked) && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setOpenDropdownLeadId(null);
-                                              setSelectedUnlockLead(lead);
-                                              setUnlockRequestReason('Customer requested additional discount');
-                                              setUnlockRequestCustomReason('');
-                                              setShowUnlockRequestModal(true);
-                                            }}
-                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950 hover:bg-amber-900 text-amber-400 hover:text-white rounded-lg border border-amber-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
-                                          >
-                                            <Ban className="w-3.5 h-3.5 shrink-0" />
-                                            <span>Unlock Quotation</span>
                                           </button>
                                         )}
                                         
