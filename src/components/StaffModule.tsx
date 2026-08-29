@@ -847,7 +847,7 @@ export const StaffModule: React.FC = () => {
   useEffect(() => {
     if (!staffName) return;
 
-    // Robust equipment resolution for staff tasks strictly isolated to this task and event
+    // Robust equipment resolution for staff tasks
     const resolveAssignedEqListForStaff = (
       targetStaffName: string, 
       saObj: any, 
@@ -873,24 +873,6 @@ export const StaffModule: React.FC = () => {
                 eqNames.push(item.equipment_name || item.name);
               }
             });
-            const cleanList = eqNames.filter(item => 
-              item && item.trim() && 
-              item.trim().toLowerCase() !== 'none' && 
-              item.trim().toLowerCase() !== 'not assigned' &&
-              item.trim().toLowerCase() !== 'null' &&
-              item.trim().toLowerCase() !== 'undefined'
-            );
-            const uniqueList = Array.from(new Set(cleanList));
-            return uniqueList.map(eqStr => {
-              const match = equipment?.find(e => 
-                e.equipment_name?.toLowerCase() === eqStr.toLowerCase() || 
-                e.model?.toLowerCase() === eqStr.toLowerCase()
-              );
-              return {
-                name: eqStr,
-                assetId: match?.equipment_id || match?.serial_number || ('EQ-ASSET-' + Math.floor(1000 + Math.random() * 9000))
-              };
-            });
           } else if (typeof saEqRaw === 'string') {
             const str = saEqRaw.trim();
             if (str) {
@@ -912,24 +894,6 @@ export const StaffModule: React.FC = () => {
               } catch(e) {
                 str.split(',').forEach((s: string) => { if (s.trim()) eqNames.push(s.trim()); });
               }
-              const cleanList = eqNames.filter(item => 
-                item && item.trim() && 
-                item.trim().toLowerCase() !== 'none' && 
-                item.trim().toLowerCase() !== 'not assigned' &&
-                item.trim().toLowerCase() !== 'null' &&
-                item.trim().toLowerCase() !== 'undefined'
-              );
-              const uniqueList = Array.from(new Set(cleanList));
-              return uniqueList.map(eqStr => {
-                const match = equipment?.find(e => 
-                  e.equipment_name?.toLowerCase() === eqStr.toLowerCase() || 
-                  e.model?.toLowerCase() === eqStr.toLowerCase()
-                );
-                return {
-                  name: eqStr,
-                  assetId: match?.equipment_id || match?.serial_number || ('EQ-ASSET-' + Math.floor(1000 + Math.random() * 9000))
-                };
-              });
             }
           }
         }
@@ -941,12 +905,7 @@ export const StaffModule: React.FC = () => {
           (s.order_id === orderIdStr || (leadIdStr && s.lead_id === leadIdStr)) &&
           s.staff_name && s.staff_name.trim().toLowerCase() === normName &&
           s.assignment_status !== 'Cancelled' &&
-          (
-            (evObj?.id && s.event_id === evObj.id) ||
-            (!evObj?.id && !s.event_id) ||
-            (s.event_name && evObj?.event_name && s.event_name.trim().toLowerCase() === evObj.event_name.trim().toLowerCase()) ||
-            (s.event_name && evObj?.event_type && s.event_name.trim().toLowerCase() === evObj.event_type.trim().toLowerCase())
-          )
+          (!evObj?.id || !s.event_id || s.event_id === evObj.id)
         );
         matchedSAs.forEach(s => {
           const sEq = s.equipment || s.assigned_equipment;
@@ -1005,6 +964,21 @@ export const StaffModule: React.FC = () => {
             }
           }
         }
+      }
+
+      // 4. Check leadEquipmentHistory strictly for this staff
+      if (eqNames.length === 0 && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
+        leadEquipmentHistory.forEach(h => {
+          if (h.order_id && h.order_id !== orderIdStr && (!leadIdStr || h.lead_id !== leadIdStr)) return;
+          let parsed: any = {};
+          if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
+          const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+          if (staffMatch && (staffMatch === normName || staffMatch.includes(normName) || normName.includes(staffMatch))) {
+            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection' && !h.equipment_name.includes('Footage')) {
+              eqNames.push(h.equipment_name);
+            }
+          }
+        });
       }
 
       // Filter invalid placeholders
@@ -1250,52 +1224,53 @@ export const StaffModule: React.FC = () => {
       }
       
       // 2. Fallback to client-side direct upload
-      if (supabaseClient) {
-        try {
-          // Convert base64 to Blob
-          const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, '');
-          const byteCharacters = atob(base64Data);
-          const byteArrays = [];
-          
-          for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-            const slice = byteCharacters.slice(offset, offset + 512);
-            const byteNumbers = new Array(slice.length);
-            for (let i = 0; i < slice.length; i++) {
-              byteNumbers[i] = slice.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            byteArrays.push(byteArray);
-          }
-          
-          const blob = new Blob(byteArrays, { type: 'image/jpeg' });
-
-          const { data, error } = await supabaseClient.storage
-            .from('img')
-            .upload(fileName, blob, {
-              contentType: 'image/jpeg',
-              upsert: true
-            });
-
-          if (!error) {
-            const { data: publicData } = supabaseClient.storage
-              .from('img')
-              .getPublicUrl(fileName);
-
-            if (publicData && publicData.publicUrl) {
-              return publicData.publicUrl;
-            }
-          }
-        } catch (storageErr) {
-          console.warn("[UploadProof] Client storage upload failed, using direct base64 image", storageErr);
+      console.log("[UploadProof] Using client-side Supabase upload as fallback...");
+      
+      // Convert base64 to Blob
+      const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, '');
+      const byteCharacters = atob(base64Data);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
         }
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+
+      // Upload directly to Supabase storage
+      if (!supabaseClient) throw new Error("Supabase client is not initialized.");
+      
+      const { data, error } = await supabaseClient.storage
+        .from('img')
+        .upload(fileName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true
+        });
+
+      if (error) {
+        throw new Error("Supabase Storage Error: " + (error.message || JSON.stringify(error)));
       }
 
-      // Fallback: return base64 URL directly (compressed to <50KB)
-      return base64Url;
+      // Get public URL
+      const { data: publicData } = supabaseClient.storage
+        .from('img')
+        .getPublicUrl(fileName);
+
+      if (!publicData || !publicData.publicUrl) {
+        throw new Error("Failed to generate public URL for uploaded proof.");
+      }
+
+      return publicData.publicUrl;
 
     } catch (err: any) {
-      console.warn("[UploadProof] Upload exception fallback to base64:", err);
-      return base64Url;
+      console.error("[UploadProof] Upload exception:", err);
+      throw new Error(err.message || String(err));
     }
   };
 

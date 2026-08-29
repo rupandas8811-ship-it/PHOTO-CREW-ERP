@@ -7,7 +7,7 @@ import { SalesAnalytics } from './components/analytics/SalesAnalytics';
 import { OperationsAnalytics } from './components/analytics/OperationsAnalytics';
 import { ProductionAnalytics } from './components/analytics/ProductionAnalytics';
 import { BusinessOverviewAnalytics } from './components/analytics/BusinessOverviewAnalytics';
-import { SalesModule } from './components/SalesModule';
+import { SalesModule as SalesModuleNew } from './components/SalesModuleNew';
 import { OperationsModule } from './components/OperationsModule';
 import { StaffModule } from './components/StaffModule';
 import { ProductionStaffModule } from './components/ProductionStaffModule';
@@ -988,7 +988,7 @@ const MainAppContent: React.FC = () => {
                     {activeTab === 'revenue_analytics' && <BusinessOverviewAnalytics />}
                     {activeTab === 'staff_performance_analytics' && <ProductionModule activeSubTab="staff_performance" />}
                     {activeTab === 'dashboard' && currentRole === 'Business Owner' && <BusinessOwnerDashboard activeSection="overview" onSectionChange={(sec) => setActiveTab(sec as any)} />}
-                    {activeTab === 'sales' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <SalesModule activeSubTab={activeSalesSubTab} setActiveSubTab={setActiveSalesSubTab} />}
+                    {activeTab === 'sales' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <SalesModuleNew activeSubTab={activeSalesSubTab} setActiveSubTab={setActiveSalesSubTab} />}
                     {activeTab === 'operations' && (currentRole === 'Business Owner' || currentRole === 'Operations Team') && (
                       <OperationsModule activeSubTab={activeOpSubTab} setActiveSubTab={setActiveOpSubTab} />
                     )}

@@ -1,5 +1,24 @@
-import React from 'react';
-import { Trash2, Plus, Check, X } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { AddNoteModal } from "./AddNoteModal";
+import { createPortal } from 'react-dom';
+import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
+import { supabaseClient } from '../supabaseClient';
+import { 
+  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw
+} from 'lucide-react';
+import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
+import { StatusText } from './ui/StatusText';
+import { EventDropdownCell } from './EventDropdownCell';
+import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
+import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
+import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
+import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
+
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../utils';
+import { SalesCalendar } from './SalesCalendar';
+import { CustomPackageMaster } from './CustomPackageMaster';
+import { AddressAutocomplete } from './AddressAutocomplete';
+import { jsPDF } from 'jspdf';
 
 interface LocalEditableInputProps {
   value: string;
@@ -561,7 +580,7 @@ export function parseDeliverablesJsonToRecord(
   return result;
 }
 
-interface CompactQtyItemRowProps {
+export interface CompactQtyItemRowProps {
   value: string;
   options?: string[];
   placeholder: string;
@@ -638,7 +657,7 @@ export const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
   );
 };
 
-const validateAndFormatTime = (timeStr: any, fieldLabel: string): string | null => {
+export const validateAndFormatTime = (timeStr: any, fieldLabel: string): string | null => {
   if (timeStr === undefined || timeStr === null) return null;
   const str = String(timeStr).trim();
   if (str === '' || str === 'null' || str === 'undefined' || str === 'Invalid Date') {
@@ -687,7 +706,7 @@ const validateAndFormatTime = (timeStr: any, fieldLabel: string): string | null 
   throw new Error(`${fieldLabel} is invalid.`);
 };
 
-const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: number }> => {
+export const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: number }> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -716,7 +735,7 @@ const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: nu
   });
 };
 
-const generateQuotationPdfFileName = (leadObj: any): string => {
+export const generateQuotationPdfFileName = (leadObj: any): string => {
   const customerName = (leadObj?.customer_name || 'Customer').trim();
   const leadId = (leadObj?.lead_id || leadObj?.id || 'QUOTE').trim();
 
@@ -737,7 +756,7 @@ const generateQuotationPdfFileName = (leadObj: any): string => {
   return `${sanitizedCustomer}_${sanitizedLeadId}_quote.pdf`;
 };
 
-const generateQuotationPDF = (
+export const generateQuotationPDF = (
   lead: any,
   activePkgs: any[],
   quoteNum: string,
@@ -1865,7 +1884,7 @@ const generateQuotationPDF = (
 };
 
 
-const highlightText = (text: string, search: string) => {
+export const highlightText = (text: string, search: string) => {
   if (!search.trim()) return <span>{text}</span>;
   const regex = new RegExp(`(${search.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
   const parts = text.split(regex);
@@ -1898,7 +1917,7 @@ export const LEAD_SOURCES = [
   'Other'
 ];
 
-interface SalesModuleProps {
+export interface SalesModuleProps {
   activeSubTab?: 'list' | 'create' | 'profiles' | 'packages' | 'calendar';
   setActiveSubTab?: (tab: 'list' | 'create' | 'profiles' | 'packages' | 'calendar') => void;
 }
