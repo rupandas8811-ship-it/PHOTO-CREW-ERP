@@ -1,20 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { AddNoteModal } from "./AddNoteModal";
 import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
-import {
-  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw, AlertCircle, Activity, PhoneCall, LayoutDashboard, UserPlus, TrendingUp, Flame, CheckCircle, Download, FileSpreadsheet, Printer, MoreVertical, Unlock, Lock, XCircle, FileImage, Edit3, User, Info, ChevronRight, MessageSquare, History
-} from "lucide-react";
+import { 
+  Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw
+} from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
 import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
-import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
 
-export interface QuotationService { id: string; name: string; qty: number; price: number; }
 export const SHOOT_TYPES = [
   "CANDID PHOTOGRAPHY",
   "CINEMATOGRAPHY",
@@ -27,7 +24,7 @@ export const SHOOT_TYPES = [
   "STANDARD PHOTOGRAPHY",
   "STANDARD VIDEOGRAPHY"
 ];
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
 import { CustomPackageMaster } from './CustomPackageMaster';
 import { AddressAutocomplete } from './AddressAutocomplete';
@@ -126,15 +123,14 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
     const q = Number(raw.qty || raw.quantity || raw.count || 1);
     qty = isNaN(q) || q < 1 ? 1 : q;
     text = String(raw.name || raw.text || raw.deliverable || raw.title || raw.role || raw.member_name || "").trim();
-    return { qty, text };
   } else {
     text = String(raw).trim();
   }
 
   if (!text) return { qty: 1, text: "" };
 
-  // 1. Check for explicit (Qty: X), (quantity: X), (count: X), (Qty X) anywhere in the string
   let foundQtyFromPattern: number | null = null;
+  // 1. Extract any (Qty X), (quantity X), (Qty: X) occurrences anywhere in text
   const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
   let match;
   while ((match = qtyPatterns.exec(text)) !== null) {
@@ -148,67 +144,40 @@ function parseQtyAndText(raw: any): { qty: number; text: string } {
     }
   }
 
-  if (foundQtyFromPattern !== null) {
-    text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
-    return { qty: foundQtyFromPattern, text };
-  }
+  // Remove ALL (Qty X) / (quantity X) / (Qty: X) patterns completely from text
+  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
 
-  // 2. Check for dimension / size specifications at the start of the string:
-  // e.g. "16√ó6", "16x6", "12√ó8 Album", "16√ó6 Frame", "16 √ó 6", "12 x 18", "8x24", "8*12", "12√ó36"
-  // If the string starts with a dimension (digits x/√ó digits), it is deliverable text, NOT a leading quantity!
-  const isLeadingDimension = /^\d+\s*[\*xX√ó]\s*\d+/.test(text);
-  if (isLeadingDimension) {
-    return { qty: 1, text };
-  }
-
-  // 3. Check for technical specifications / units starting with numbers:
-  // e.g. "4K Cinematic Video", "8K Video", "20 Pages √ó 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
-  const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
-  if (isUnitOrSpec) {
-    return { qty: 1, text };
-  }
-
-  // 4. Check for leading quantity with explicit multiplier:
-  // e.g. "2 x Traditional Photos", "2 √ó Cinematic Video", "2 * Album", "2 x 16√ó6 Frame", "2 √ó 16√ó6"
-  const multiplierMatch = text.match(/^(\d+)\s*[xX√ó\*]\s+(.+)$/);
-  if (multiplierMatch) {
-    const parsedQty = parseInt(multiplierMatch[1], 10);
+  // 2. Check for leading quantity: e.g. "2 Lead Photographer", "2 x Traditional Photos", "2 √ó Traditional Photos"
+  const leadingMatch = text.match(/^(\d+)\s*[\*xX√ó\-‚Äì‚Äî]?\s*(.*)$/);
+  if (leadingMatch) {
+    const parsedQty = parseInt(leadingMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: multiplierMatch[2].trim() };
+      if (typeof raw !== "object" && foundQtyFromPattern === null) {
+        qty = parsedQty;
+      }
     }
+    text = leadingMatch[2] ? leadingMatch[2].trim() : "";
+    text = text.replace(/^[xX√ó\*\-‚Äì‚Äî]\s*/, "").trim();
   }
 
-  // 5. Check for leading quantity followed by dimension:
-  // e.g. "2 16√ó6", "3 12√ó8 Album", "2 16√ó6 Frame"
-  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX√ó]\s*\d+.*)$/);
-  if (qtyDimensionMatch) {
-    const parsedQty = parseInt(qtyDimensionMatch[1], 10);
-    if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: qtyDimensionMatch[2].trim() };
-    }
+  if (typeof raw !== "object" && foundQtyFromPattern !== null) {
+    qty = foundQtyFromPattern;
   }
 
-  // 6. Check for leading quantity with space followed by item name:
-  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12√ó18)"
-  const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
-  if (wordMatch) {
-    const parsedQty = parseInt(wordMatch[1], 10);
-    if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: wordMatch[2].trim() };
-    }
-  }
+  // Clean any leftover (Qty X) or trailing/leading punctuation
+  text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+  text = text.replace(/^[\*\-‚Ä¢xX√ó]\s*/, "").trim();
+  text = text.replace(/[\(\[\-‚Äì‚Äî:]+$/, "").trim();
 
-  return { qty: 1, text };
+  return { qty: isNaN(qty) || qty < 1 ? 1 : qty, text };
 }
 
 function combineQtyAndText(qty: number | string, text: string): string {
+  const parsed = parseQtyAndText(text);
   const qNum = parseInt(String(qty), 10);
-  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : 1;
-  const cleanText = (text || "").trim();
+  const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : parsed.qty;
+  const cleanText = parsed.text;
   if (!cleanText) return validQty > 1 ? `${validQty}` : "";
-  if (validQty <= 1) {
-    return cleanText;
-  }
   return `${validQty} ${cleanText}`.trim();
 }
 
@@ -669,6 +638,7 @@ const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
     </div>
   );
 };
+
 const validateAndFormatTime = (timeStr: any, fieldLabel: string): string | null => {
   if (timeStr === undefined || timeStr === null) return null;
   const str = String(timeStr).trim();
@@ -747,27 +717,6 @@ const getLogoBase64FromUrl = (url: string): Promise<{ base64: string; aspect: nu
   });
 };
 
-const generateQuotationPdfFileName = (leadObj: any): string => {
-  const customerName = (leadObj?.customer_name || 'Customer').trim();
-  const leadId = (leadObj?.lead_id || leadObj?.id || 'QUOTE').trim();
-
-  // Sanitize customer name and lead ID for file system safety:
-  // Replace invalid filename characters (/ \ : * ? " < > |) with underscores
-  const sanitizedCustomer = customerName
-    .replace(/[/\\:*?"<>|]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'Customer';
-
-  const sanitizedLeadId = leadId
-    .replace(/[/\\:*?"<>|]/g, '_')
-    .replace(/\s+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '') || 'QUOTE';
-
-  return `${sanitizedCustomer}_${sanitizedLeadId}_quote.pdf`;
-};
-
 const generateQuotationPDF = (
   lead: any,
   activePkgs: any[],
@@ -796,7 +745,16 @@ const generateQuotationPDF = (
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return 'N/A';
-    return formatDateDDMMYY(dateStr) || dateStr;
+    try {
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      }
+      return new Date(dateStr).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch {
+      return dateStr;
+    }
   };
 
   // Dynamic layout configuration options (Default vs Compact to optimize page count and avoid sparse pages)
@@ -892,8 +850,8 @@ const generateQuotationPDF = (
   const cleanText = (text: string) => {
     if (!text) return '';
     let cleaned = text
-      .replace(/√æ√ø/g, '')
-      .replace(/√ø√æ/g, '')
+      .replace(/\u00fe\u00ff/g, '')
+      .replace(/\u00ff\u00fe/g, '')
       .replace(/\uFEFF/g, '')
       .replace(/\uFFFE/g, '');
     cleaned = cleaned.replace(/^[\s‚Ä¢\-\*\u2022\u0095\x95\x96\u2013\u2014\s]+/g, '');
@@ -941,8 +899,6 @@ const generateQuotationPDF = (
     eventName: string;
     eventDate: string;
     eventTime: string;
-    eventEndDate: string;
-    eventEndTime: string;
     eventLocation: string;
     guestPax: string;
     members: string[];
@@ -974,8 +930,6 @@ const generateQuotationPDF = (
         eventName,
         eventDate: event.event_start_date || event.event_date || "",
         eventTime: event.event_time || event.event_start_time || "",
-        eventEndDate: event.event_end_date || "",
-        eventEndTime: event.event_end_time || "",
         eventLocation: event.event_location || "N/A",
         guestPax: event.guest_pax !== undefined && event.guest_pax !== null && event.guest_pax !== '' ? String(event.guest_pax) : (lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A')),
         members: (eventInclusions || []).filter(Boolean),
@@ -997,8 +951,6 @@ const generateQuotationPDF = (
       eventName: displayEventType,
       eventDate: lead.event_date || "",
       eventTime: lead.event_time || "",
-      eventEndDate: lead.event_end_date || "",
-      eventEndTime: lead.event_end_time || "",
       eventLocation: lead.event_location || "N/A",
       guestPax: lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A'),
       members: (inclusionsList || []).filter(Boolean),
@@ -1012,9 +964,9 @@ const generateQuotationPDF = (
   const defaultTerms = [
     'Payments are non-refundable.',
     'Crew food arrangements from client side.',
-    '50% advance payment before the event.',
-    'If duration exceeds 1 hour, additional charges of ‚Çπ1,500 per hour will be applicable.',
-    '50% full payment on event day.',
+    '50% advance and remaining 50% before collecting the raw data.',
+    'If the duration extends, Rs. 3,000 per service per hour additional charges are applicable.',
+    'We expect 90% of the payment once the event is completed and the remaining 10% before the final deliverables are ready.',
     'Pendrive and Hard Disk are not included.',
     'Edited data will be shared via Google Drive link.'
   ];
@@ -1550,19 +1502,9 @@ const generateQuotationPDF = (
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(slateGray[0], slateGray[1], slateGray[2]);
-    
     const formattedEvDate = formatDate(evObj.eventDate);
-    const formattedEvTime = evObj.eventTime ? formatTime12Hour(evObj.eventTime) : 'N/A';
-    const formattedEndDate = formatDate(evObj.eventEndDate);
-    const formattedEndTime = evObj.eventEndTime ? formatTime12Hour(evObj.eventEndTime) : 'N/A';
-    
-    const startStr = `Start: ${formattedEvDate} | ${formattedEvTime}`;
-    const endStr = `End: ${formattedEndDate} | ${formattedEndTime}`;
-    const locStr = `Location: ${evObj.eventLocation || 'N/A'}`;
-    
-    doc.text(`${startStr}`, 15, currentY);
-    doc.text(`${endStr}`, 70, currentY);
-    doc.text(`${locStr}`, 125, currentY);
+    const metaDetailsStr = `Event Date: ${formattedEvDate}   |   Event Time: ${evObj.eventTime || 'N/A'}   |   Event Location: ${evObj.eventLocation || 'N/A'}`;
+    doc.text(metaDetailsStr, 15, currentY);
     currentY += 6;
 
     // 2. CUSTOMER DETAILS CARD
@@ -1825,6 +1767,7 @@ const highlightText = (text: string, search: string) => {
     </span>
   );
 };
+
 export const LEAD_SOURCES = [
   'Instagram Marketing',
   'Facebook Leads',
@@ -1845,6 +1788,18 @@ interface SalesModuleProps {
 }
 
 export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: externalActiveTab, setActiveSubTab: externalSetActiveTab }) => {
+  const isLeadLost = false;
+  const noteModalOpen = false;
+  const setNoteModalOpen = (v: any) => {};
+  const noteModalLeadId = null;
+  const setNoteModalLeadId = (v: any) => {};
+  const noteModalOrderId = null;
+  const setNoteModalOrderId = (v: any) => {};
+  const noteModalCustomerName = null;
+  const setNoteModalCustomerName = (v: any) => {};
+  const FileText = () => null;
+  const AddNoteModal = (props: any) => null;
+
   const { 
     currentUser,
     currentRole, 
@@ -1895,23 +1850,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [logoBase64, setLogoBase64] = useState<string>('');
   const [logoAspectRatio, setLogoAspectRatio] = useState<number>(1);
   const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [form, setForm] = useState<any>({ customer_name: "", mobile: "", email: "", lead_source: "WhatsApp", stage: "Lead Generated", inquiry_type: "Unknown", remarks: "", address: "" });
-  const [step4FollowUpNotes, setStep4FollowUpNotes] = useState<string>("");
-  const [showAddNoteModal, setShowAddNoteModal] = useState<boolean>(false);
-  const [noteText, setNoteText] = useState<string>("");
-  const handleCreateLeadSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitError(null);
-    try {
-      await addLead(form);
-      setForm({ customer_name: "", mobile: "", email: "", lead_source: "WhatsApp", stage: "Lead Generated", inquiry_type: "Unknown", remarks: "", address: "" });
-      if(externalSetActiveTab) externalSetActiveTab("Active Leads");
-      setInternalTab("list");
-    } catch (err: any) {
-      setSubmitError(err.message || "Failed to create lead");
-    }
-  };
 
   // Fetch unlock requests
   useEffect(() => {
@@ -2454,10 +2392,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [statusError, setStatusError] = useState<{ title: string; reason: string; suggestedFix: string } | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
-  const [noteModalOpen, setNoteModalOpen] = useState(false);
-  const [noteModalLeadId, setNoteModalLeadId] = useState("");
-  const [noteModalOrderId, setNoteModalOrderId] = useState("");
-  const [noteModalCustomerName, setNoteModalCustomerName] = useState("");
 
   const [unlockingRecordId, setUnlockingRecordId] = useState<string | null>(null);
   const [unlockReason, setUnlockReason] = useState('Data Correction');
@@ -2483,103 +2417,91 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [unlockRequestCustomReason, setUnlockRequestCustomReason] = useState('');
   const [selectedUnlockLead, setSelectedUnlockLead] = useState<Lead | null>(null);
 
-  // Helper function to resolve Lost Reason and Notes strictly and cleanly from fields
+  // Helper function to resolve Lost Reason and Notes strictly from fields
   const getStrictLostReasonAndNotes = (lead: Lead | null) => {
     if (!lead) return { reason: '', notes: '' };
-
-    let rawReason = (lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason || '').trim();
-    let rawNotes = (lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes || '').trim();
-
-    // Check if string contains internal generated activity/update text or metadata
-    const isDirty = (str: string) => {
-      if (!str) return false;
-      return /\[Update|\bNeg Notes:|\bNext follow-up:|\bWhatsApp:|^Lost Reason:/i.test(str);
-    };
-
-    let cleanReason = rawReason;
-    let cleanNotes = rawNotes;
-
-    const parseComposite = (text: string) => {
-      let r = '';
-      let n = '';
-      if (!text) return { r, n };
-
-      // Pattern 1: "Lost Reason: <reason>. Notes: <notes>"
-      const explicitMatch = text.match(/Lost Reason:\s*([^.\n]+?)(?:\.\s*Notes:\s*([\s\S]*?))?(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
-      if (explicitMatch) {
-        if (explicitMatch[1]) r = explicitMatch[1].trim();
-        if (explicitMatch[2]) n = explicitMatch[2].trim();
-      }
-
-      // Pattern 2: "[Update YYYY-MM-DD]: <reason>. Neg Notes: <notes>. Next follow-up:"
-      if (!r) {
-        const updateMatch = text.match(/\[Update[^\]]*\]:\s*([^.]+?)(?:\.\s*(?:Neg Notes|Notes):\s*([\s\S]*?))?(?:\.\s*Next follow-up:|$|\n)/i);
-        if (updateMatch) {
-          if (updateMatch[1]) r = updateMatch[1].trim();
-          if (updateMatch[2]) n = updateMatch[2].trim();
-        }
-      }
-
-      // Standalone notes match
-      if (!n) {
-        const negMatch = text.match(/(?:Neg Notes|Notes):\s*([^.\n]+?)(?:\.\s*Next follow-up:|$|\n)/i);
-        if (negMatch && negMatch[1]) {
-          n = negMatch[1].trim();
-        }
-      }
-      return { r, n };
-    };
-
-    if (isDirty(cleanReason)) {
-      const parsed = parseComposite(cleanReason);
-      if (parsed.r) cleanReason = parsed.r;
-      if (parsed.n && !cleanNotes) cleanNotes = parsed.n;
-    }
-
-    if (isDirty(cleanNotes)) {
-      const parsed = parseComposite(cleanNotes);
-      if (parsed.n) cleanNotes = parsed.n;
-      else {
-        cleanNotes = cleanNotes
-          .replace(/^Neg Notes:\s*/i, '')
-          .replace(/\.?\s*Next follow-up:.*$/i, '')
-          .replace(/^Notes:\s*/i, '')
-          .trim();
-      }
-    }
-
-    // If reason is still empty or dirty, check remarks field
-    if ((!cleanReason || cleanReason === 'N/A' || cleanReason === 'NULL' || isDirty(cleanReason)) && lead.remarks) {
-      const parsed = parseComposite(lead.remarks);
-      if (parsed.r) cleanReason = parsed.r;
-      if (parsed.n && !cleanNotes) cleanNotes = parsed.n;
-    }
-
-    // Final clean-up of any stray prefix/suffix
-    cleanReason = cleanReason
-      .replace(/^WhatsApp:\s*\d+\s*/i, '')
-      .replace(/^\[Update[^\]]*\]:\s*/i, '')
-      .replace(/\.?\s*Neg Notes:.*$/i, '')
-      .replace(/\.?\s*Next follow-up:.*$/i, '')
-      .replace(/[,;]+$/, '')
-      .trim();
-
-    cleanNotes = cleanNotes
-      .replace(/\.?\s*Next follow-up:.*$/i, '')
-      .replace(/^Neg Notes:\s*/i, '')
-      .replace(/^Notes:\s*/i, '')
-      .replace(/[,;]+$/, '')
-      .trim();
-
     return {
-      reason: cleanReason || 'No reason provided.',
-      notes: cleanNotes || ''
+      reason: lead.Lost_Reason || '',
+      notes: lead.Lost_Notes || ''
     };
   };
 
-  // Helper function to resolve Lost Reason and Notes
-  const getLostReasonAndNotes = (lead: Lead | null, _historyList?: any[]) => {
-    return getStrictLostReasonAndNotes(lead);
+  // Helper function to resolve Lost Reason and Notes from all possible sources
+  const getLostReasonAndNotes = (lead: Lead | null, historyList?: any[]) => {
+    if (!lead) return { reason: '', notes: '' };
+
+    // 1. Direct fields on lead (check casing variations)
+    let reason = lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason;
+    let notes = lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes;
+
+    // 2. Extract from remarks field if missing
+    if (lead.remarks) {
+      if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
+        const matchReason = lead.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
+        if (matchReason && matchReason[1] && matchReason[1].trim()) {
+          reason = matchReason[1].trim();
+        }
+      }
+      if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
+        const matchNotes = lead.remarks.match(/Notes:\s*([\s\S]*?)(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
+        if (matchNotes && matchNotes[1] && matchNotes[1].trim()) {
+          notes = matchNotes[1].trim();
+        }
+      }
+    }
+
+    // 3. Check statusHistory array (ONLY specific regex)
+    if (((!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') || (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null')) && historyList && historyList.length > 0) {
+      const lostHistItems = [...historyList]
+        .filter(h => String(h.lead_id) === String(lead.lead_id) && ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''))
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+      
+      const lostHist = lostHistItems[0];
+      if (lostHist) {
+        if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null') {
+          if (lostHist.remarks) {
+            const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
+            if (matchR && matchR[1] && matchR[1].trim()) {
+              reason = matchR[1].trim();
+            }
+          }
+        }
+        if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null') {
+          if (lostHist.remarks) {
+            const matchN = lostHist.remarks.match(/Notes:\s*([\s\S]*?)(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
+            if (matchN && matchN[1] && matchN[1].trim()) {
+              notes = matchN[1].trim();
+            }
+          }
+        }
+      }
+    }
+
+    // Sanitize reason
+    if (reason && typeof reason === 'string') {
+      if (reason.includes('---EVENTS_JSON---')) reason = reason.split('---EVENTS_JSON---')[0].trim();
+      if (reason.includes('Notes:')) reason = reason.split('Notes:')[0].trim();
+      if (reason.includes('[{')) reason = reason.split('[{')[0].trim();
+    }
+    // Sanitize notes
+    if (notes && typeof notes === 'string') {
+      if (notes.includes('---EVENTS_JSON---')) notes = notes.split('---EVENTS_JSON---')[0].trim();
+      if (notes.includes('[{')) notes = notes.split('[{')[0].trim();
+    }
+
+    if (!reason || reason === 'N/A' || reason === 'NULL' || reason === 'null' || reason.trim() === '') {
+      reason = 'No reason provided.';
+    } else {
+      reason = reason.replace(/[,;]+$/, '').trim();
+    }
+
+    if (!notes || notes === 'N/A' || notes === 'NULL' || notes === 'null' || notes.trim() === '') {
+      notes = '';
+    } else {
+      notes = notes.replace(/[,;]+$/, '').trim();
+    }
+
+    return { reason, notes };
   };
 
   const [showCancelConfirmPopup, setShowCancelConfirmPopup] = useState(false);
@@ -2628,18 +2550,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
        })) && selectedLead.quotation_locked !== true
     : false;
 
-  const isCrmLocked = false;
-  const isLeadLocked = false;
-  const isLeadLost = Boolean(
-    selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(
-      selectedLead.status || (selectedLead as any).current_status || wizardLeadData.status || ''
-    )
-  );
+  const isCrmLocked = isLeadConfirmed && !isApprovedUnlocked;
+  const isLeadLocked = isCrmLocked;
 
-  // No longer locking steps so Sales can update/add required services
-  const isStep1Locked = false;
-  const isStep2Locked = false;
-  const isStep3Locked = false;
+  // When Business Owner approves Unlock Request, ALL steps (Step 1, Step 2, Step 3) become editable.
+  // When locked, ALL steps remain locked in Read Only mode.
+  const isStep1Locked = isCrmLocked;
+  const isStep2Locked = isCrmLocked;
+  const isStep3Locked = isCrmLocked;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
@@ -2681,7 +2599,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   // Filter & Collapse States
   const [filterQuery, setFilterQuery] = useState('');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
   const [isDownloadReportsExpanded, setIsDownloadReportsExpanded] = useState(false);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [filterSource, setFilterSource] = useState('');
@@ -3107,3932 +3024,8617 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [showConfirmModal]);
   const [confirmForm, setConfirmForm] = useState({
     package_name: '',
-    quotation_amount: '',
-    advance_received: '',
+    quotation_amount: 0,
+    advance_received: 0,
     event_date: '',
-    event_time: ''
+    event_time: '',
+    payment_mode: 'UPI',
+    notes: '',
+    transaction_id: '',
   });
 
-  const [validationError, setValidationError] = useState('');
-  
-  // Custom Quotation PDF Generation States
-  const [showStep3Popup, setShowStep3Popup] = useState(false);
-  const [generatedPDFBlobUrl, setGeneratedPDFBlobUrl] = useState<string | null>(null);
-  const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
-  const [quoteAdditional, setQuoteAdditional] = useState<number | ''>('');
-  const [activeQuoteNum, setActiveQuoteNum] = useState<string>('');
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
-  const [editableInclusions, setEditableInclusions] = useState<Record<string, string>>({});
-  const [editableDeliverables, setEditableDeliverables] = useState<Record<string, string>>({});
+  // Final Reporting Details State per event
+  const [eventsReporting, setEventsReporting] = useState<Record<string, { reporting_date: string, reporting_time: string }>>({});
 
-  const [quoteServices, setQuoteServices] = useState<QuotationService[]>([]);
-  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
-  const [newServiceName, setNewServiceName] = useState('');
-  const [newServiceQty, setNewServiceQty] = useState<number>(1);
-  const [newServicePrice, setNewServicePrice] = useState<number>(0);
-  const [isAddingInline, setIsAddingInline] = useState(false);
-
-  React.useEffect(() => {
-    if (activeTab === 'create') {
-      const cached = localStorage.getItem('erp_quote_services_create');
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) {
-            setQuoteServices(parsed);
-          }
-        } catch(e) {}
-      } else {
-        setQuoteServices([]);
-      }
-    } else if (activeTab === 'list' && selectedLead && showStep3Popup) {
-      const cached = localStorage.getItem(`erp_quote_services_${selectedLead.lead_id}`);
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed)) {
-            setQuoteServices(parsed);
-          }
-        } catch(e) {}
-      } else if ((selectedLead as any).quotations && (selectedLead as any).quotations.length > 0) {
-        const latestQ = (selectedLead as any).quotations[(selectedLead as any).quotations.length - 1];
-        if (latestQ.services && Array.isArray(latestQ.services)) {
-           setQuoteServices(latestQ.services);
-        } else if (latestQ.deliverables_json) {
-           try {
-             const parsed = JSON.parse(latestQ.deliverables_json);
-             const fallbackServices = parsed.map((d: any, idx: number) => ({
-               id: `gen-${idx}`,
-               name: d.name,
-               qty: d.qty || 1,
-               price: 0
-             }));
-             setQuoteServices(fallbackServices);
-           } catch(e) {}
-        }
-      }
-    }
-  }, [activeTab, selectedLead, showStep3Popup]);
-
-  // Lead Details Modal State
-  const [showLeadDetails, setShowLeadDetails] = useState(false);
-
-  // Status Filter State
-  const [statusOptions, setStatusOptions] = useState<string[]>([]);
-  
-  React.useEffect(() => {
-    const statuses = Array.from(new Set(leads.map(getLeadCurrentStatus)));
-    setStatusOptions(['All', ...statuses]);
-  }, [leads, getLeadCurrentStatus]);
-
-  // Derived Values
-  const totalLeads = leads.length;
-  const newLeads = leads.filter(l => getLeadCurrentStage(l) === 'New Lead').length;
-  const hotLeads = leads.filter(l => getLeadCurrentStage(l) === 'Hot Lead').length;
-  const quoteFollowUp = leads.filter(l => getLeadCurrentStage(l) === 'Quote Follow-up').length;
-  const quotationsSent = leads.filter(l => getLeadCurrentStage(l) === 'Quote Sent').length;
-  
-  const leadStageDistribution = {
-    new: leads.filter(l => getLeadCurrentStage(l) === 'New Lead').length,
-    hot: leads.filter(l => getLeadCurrentStage(l) === 'Hot Lead').length,
-    quote: leads.filter(l => getLeadCurrentStage(l) === 'Quote Sent' || getLeadCurrentStage(l) === 'Quote Follow-up').length,
-    converted: leads.filter(l => getLeadCurrentStatus(l) === 'Order Confirmed').length,
-    lost: leads.filter(l => getLeadCurrentStatus(l) === 'Lost').length
-  };
-
-  const filteredLeads = leads
-    .filter(l => {
-      const q = filterQuery.toLowerCase();
-      
-      const combinedSearchString = [
-        l.lead_id,
-        l.customer_name,
-        l.mobile,
-        l.whatsapp_number,
-        l.email,
-        l.event_type,
-        l.event_name,
-        l.custom_event_name,
-        getLeadCurrentStage(l),
-        getLeadCurrentStatus(l),
-        l.lead_source,
-        l.sales_person,
-        l.reference_source,
-        l.address,
-        l.city,
-        l.client_residence_address
-      ].filter(Boolean).join(" ").toLowerCase();
-
-      return combinedSearchString.includes(q);
-    })
-    .filter(l => {
-      if (!filterSource) return true;
-      return l.lead_source === filterSource || l.reference_source === filterSource;
-    })
-    .filter(l => {
-      if (!filterStatus || filterStatus === 'All') return true;
-      return getLeadCurrentStatus(l) === filterStatus;
-    })
-    .filter(l => {
-      if (!filterSalesPerson || filterSalesPerson === 'All') return true;
-      return l.sales_person === filterSalesPerson;
-    })
-    .filter(l => {
-      if (!appliedStartDate || !appliedEndDate) return true;
-      
-      const createdDateStr = String(l.created_date).split(' ')[0]; // Gets YYYY-MM-DD
-      const start = new Date(appliedStartDate);
-      const end = new Date(appliedEndDate);
-      const target = new Date(createdDateStr);
-      
-      start.setHours(0,0,0,0);
-      end.setHours(23,59,59,999);
-      
-      // Strict range match
-      return target >= start && target <= end;
-    })
-    .sort((a, b) => {
-      const aDate = new Date(a.created_date).getTime();
-      const bDate = new Date(b.created_date).getTime();
-      return sortOrder === 'latest' ? bDate - aDate : aDate - bDate;
-    });
-
-  const getSubtotal = () => quoteServices.reduce((sum, s) => sum + (s.price * s.qty), 0);
-  const getGrandTotal = () => Math.max(0, getSubtotal() - Number(quoteDiscount || 0) + Number(quoteAdditional || 0));
-
-  // Package Selection & Comparison Handlers
-  const togglePackageSelection = (pkgId: string) => {
-    setSelectedPkgIds(prev => 
-      prev.includes(pkgId) ? prev.filter(id => id !== pkgId) : [...prev, pkgId]
-    );
-  };
-
-  const handlePriceChange = (pkgId: string, val: string) => {
-    const num = parseInt(val.replace(/\D/g, '')) || 0;
-    setPkgPrices(prev => ({ ...prev, [pkgId]: num }));
-  };
-
-  const handleDeliverableChange = (pkgId: string, val: string) => {
-    setPkgDeliverables(prev => ({ ...prev, [pkgId]: val }));
-  };
-
-  const handleNotesChange = (pkgId: string, val: string) => {
-    setPkgNotes(prev => ({ ...prev, [pkgId]: val }));
-  };
-  
-  const validateCreateForm = () => {
-    if (!createForm.customer_name.trim()) return "Customer Name is required";
-    if (!createForm.mobile.trim()) return "Mobile Number is required";
-    if (!createForm.event_type) return "Event Type is required";
-    if (createForm.event_type === 'Other' && !createForm.custom_event_name.trim()) return "Please specify the custom event name";
-    if (!createForm.lead_source) return "Lead Source is required";
-    if (createForm.lead_source === 'Other' && !otherSource.trim()) return "Please specify the lead source";
-    return null;
-  };
-
-  const handleNextStep = () => {
-    if (wizardStep === 1) {
-      const error = validateCreateForm();
-      if (error) {
-        showValidationError('customer_name', error);
-        return;
-      }
-    }
-    setWizardStep(prev => prev + 1);
-  };
-
-  const handlePrevStep = () => {
-    setWizardStep(prev => Math.max(1, prev - 1));
-  };
-  
-  const handleWizardSubmit = async (finalDataOverride?: any) => {
-    try {
-      if (wizardStep === 1) {
-        const error = validateCreateForm();
-        if (error) {
-          showValidationError('customer_name', error);
-          return;
-        }
-      }
-
-      setIsSaving(true);
-      const dataToSave = finalDataOverride || createForm;
-
-      // Extract events
-      const hasEvents = createEvents.length > 0;
-
-      const baseLeadData: Partial<Lead> = {
-        customer_name: dataToSave.customer_name,
-        mobile: dataToSave.mobile,
-        alternate_mobile: dataToSave.alternate_mobile,
-        email: dataToSave.email,
-        lead_source: dataToSave.lead_source === 'Other' ? otherSource : dataToSave.lead_source,
-        event_type: hasEvents ? 'Multiple Events' : dataToSave.event_type,
-        custom_event_name: dataToSave.custom_event_name,
-        event_name: hasEvents ? 'Multiple Events' : dataToSave.event_name,
-        // event_shoot_type: dataToSave.event_shoot_type,
-        event_date: hasEvents ? createEvents[0]?.event_date : dataToSave.event_date,
-        // event_start_date: hasEvents ? createEvents[0]?.event_date : dataToSave.event_date,
-        event_time: hasEvents ? createEvents[0]?.event_start_time : dataToSave.event_time,
-        event_location: hasEvents ? createEvents[0]?.event_location : dataToSave.event_location,
-        guest_pax: hasEvents ? createEvents[0]?.guest_pax : dataToSave.guest_pax,
-        staff_pax: hasEvents ? createEvents[0]?.staff_pax : dataToSave.staff_pax,
-        budget: dataToSave.budget ? Number(dataToSave.budget) : 0,
-        remarks: dataToSave.remarks,
-        whatsapp_number: dataToSave.whatsapp_number || dataToSave.mobile,
-        address: dataToSave.address,
-        city: dataToSave.city,
-        state: dataToSave.state,
-        pincode: dataToSave.pincode,
-        client_residence_address: dataToSave.client_residence_address,
-        desired_event_shoot_type: dataToSave.desired_event_shoot_type,
-        total_pax: dataToSave.total_pax ? Number(dataToSave.total_pax) : 0,
-        reference_source: dataToSave.reference_source,
-        lead_value: dataToSave.lead_value ? Number(dataToSave.lead_value) : 0,
-        lead_score: dataToSave.lead_score ? Number(dataToSave.lead_score) : 0,
-        booking_status: 'Pending',
-        current_status: 'New Lead',
-        sales_person: currentUser?.name || 'System',
-        sales_staff_id: currentUser?.id || 'system_id',
-        created_date: new Date().toISOString()
-      };
-
-      const customId = `L-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
-      
-      const leadPayload = {
-        ...baseLeadData,
-        lead_id: customId,
-        events: hasEvents ? createEvents : [{
-          id: `evt-${Date.now()}`,
-          event_type: dataToSave.event_type,
-          event_name: dataToSave.event_name,
-          // event_shoot_type: dataToSave.event_shoot_type,
-          event_date: dataToSave.event_date,
-          event_start_date: dataToSave.event_date,
-          event_end_date: dataToSave.event_end_date,
-          event_start_time: dataToSave.event_time,
-          event_location: dataToSave.event_location,
-          guest_pax: dataToSave.guest_pax,
-          staff_pax: dataToSave.staff_pax
-        }]
-      };
-
-      const result = await addLead(leadPayload as Omit<Lead, 'id'>);
-      
-      if (result?.success) {
-        setCreatedLeadId(result.lead.lead_id);
-        if (selectedPkgIds.length > 0) {
-          const lpPayloads = selectedPkgIds.map(pkgId => ({
-            lead_id: result.lead.lead_id,
-            package_id: pkgId,
-            custom_price: pkgPrices[pkgId] || 0,
-            custom_deliverables: pkgDeliverables[pkgId] || '',
-            custom_notes: pkgNotes[pkgId] || ''
-          }));
-          await saveLeadPackages(result.lead.lead_id, lpPayloads);
-        }
-
-        const historyPayload = {
-          lead_id: result.lead.lead_id,
-          order_id: null,
-          old_status: 'New Lead',
-          new_status: 'New Lead',
-          changed_by: currentUser?.name || 'System',
-          changed_by_role: currentRole,
-          remarks: 'Lead Created'
+  const initEventsReporting = (lead: Lead | null | undefined) => {
+    if (!lead) return;
+    const initialMap: Record<string, { reporting_date: string, reporting_time: string }> = {};
+    if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
+      lead.events.forEach((ev, idx) => {
+        const key = ev.id || `ev_${idx}`;
+        initialMap[key] = {
+          reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || lead.Reporting_date || (lead as any).reporting_date || lead.event_date || '',
+          reporting_time: ev.reporting_time || lead.reporting_time || ''
         };
-        
-        await supabaseClient.from('lead_status_history').insert([historyPayload]).select();
-        
-        addNotification({
-          title: 'New Lead Created',
-          message: `Lead ${result.lead.lead_id} for ${result.lead.customer_name} added.`,
-          type: 'info'
-        });
-
-        // Add creation note (without duplicating step complete marker)
-        if (dataToSave.remarks) {
-            const cleanRemarks = dataToSave.remarks;
-            await supabaseClient.from('lead_notes').insert([{
-                lead_id: result.lead.lead_id,
-                order_id: null,
-                sales_person_name: currentUser?.name || 'System',
-                note_text: cleanRemarks,
-                customer_name: result.lead.customer_name,
-                user_id: currentUser?.id
-            }]);
-        }
-
-        showToastMsg(`Lead ${result.lead.lead_id} created successfully!`, 'success');
-        setWizardStep(4);
-      } else {
-        throw new Error(result?.error || 'Failed to save lead');
-      }
-    } catch (err: any) {
-      console.error("Error submitting lead:", err);
-      showToastMsg(`Error creating lead: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const finalizeLeadCreation = () => {
-    resetForm();
-    setActiveTab('list');
-    setWizardStep(1);
-    setCreatedLeadId(null);
-  };
-  
-  // Custom Quotation Builder Functions
-  const generateQuotationNumber = () => {
-    const today = new Date();
-    const yy = String(today.getFullYear()).slice(-2);
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const random = Math.floor(1000 + Math.random() * 9000);
-    return `QT-${yy}${mm}${dd}-${random}`;
-  };
-
-  // Build the complete Quotation PDF structure
-  const handleGeneratePDF = async () => {
-    if (!selectedLead) return;
-    setIsGeneratingPDF(true);
-
-    try {
-      if (!logoBase64) {
-        throw new Error("Logo image not loaded yet. Please wait a moment and try again.");
-      }
-
-      // Calculate totals based on the dynamic quoteServices array
-      const subTotal = getSubtotal();
-      const grandTotal = getGrandTotal();
-
-      const qtNum = activeQuoteNum || generateQuotationNumber();
-      setActiveQuoteNum(qtNum);
-      
-      const termsConditions = "1. 50% advance payment required to confirm booking.\n2. Remaining 50% on the day of the event.\n3. Customizations may incur additional charges.";
-      const doc = generateQuotationPDF(
-        selectedLead,
-        [],
-        qtNum,
-        termsConditions,
-        logoBase64,
-        logoAspectRatio,
-        undefined,
-        undefined,
-        Number(quoteDiscount || 0),
-        Number(quoteAdditional || 0),
-        quoteServices
-      );
-
-      // Output PDF as Blob URI for iframe preview
-      const pdfBlob = doc.output('blob');
-      const blobUrl = URL.createObjectURL(pdfBlob);
-      setGeneratedPDFBlobUrl(blobUrl);
-
-    } catch (err: any) {
-      console.error("Error generating PDF:", err);
-      showErrorHelper(
-        "PDF Generation Failed",
-        err.message || "Failed to generate PDF Document",
-        "handleGeneratePDF",
-        selectedLead.lead_id,
-        "Check console for specific PDF generation errors."
-      );
-      showToastMsg(`Failed to generate PDF: ${err.message}`, 'error');
-    } finally {
-      setIsGeneratingPDF(false);
-    }
-  };
-
-  // Convert blob URL to File and Upload
-  const handleFinalizeAndSendQuote = async () => {
-    if (!selectedLead || !generatedPDFBlobUrl) return;
-    setIsSaving(true);
-    
-    try {
-      // 1. Fetch blob from generated URL
-      const response = await fetch(generatedPDFBlobUrl);
-      const blob = await response.blob();
-      
-      // 2. Format proper filename
-      const qtNum = activeQuoteNum;
-      const fileName = generateQuotationPdfFileName(selectedLead);
-      
-      // 3. Upload to Supabase Storage
-      const { data: storageData, error: storageError } = await supabaseClient.storage
-        .from('documents')
-        .upload(`quotations/${selectedLead.lead_id}/${fileName}`, blob, {
-          cacheControl: '3600',
-          upsert: true,
-          contentType: 'application/pdf'
-        });
-
-      if (storageError) {
-        throw new Error(`Storage upload failed: ${storageError.message}`);
-      }
-
-      // 4. Get Public URL
-      const { data: { publicUrl } } = supabaseClient.storage
-        .from('documents')
-        .getPublicUrl(`quotations/${selectedLead.lead_id}/${fileName}`);
-        
-      // 5. Serialize complex deliverables map back to flat JSON array (required format for old records)
-      const flatDeliverables = quoteServices.map(s => ({ name: s.name, qty: s.qty, price: s.price }));
-      const serializedJson = JSON.stringify(flatDeliverables);
-
-      // 6. Save Quotation Record to database
-      const quotePayload = {
-        lead_id: selectedLead.lead_id,
-        quotation_number: qtNum,
-        file_url: publicUrl,
-        file_name: fileName,
-        total_amount: getGrandTotal(),
-        status: 'Sent',
-        generated_by: currentUser?.name || 'System',
-        version: 1, // Calculate dynamic version based on existing length later
-        valid_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-        discount_amount: Number(quoteDiscount || 0),
-        additional_charges: Number(quoteAdditional || 0),
-        deliverables_json: serializedJson,
-        services: quoteServices // Save dynamic structure
-      };
-
-      const result = await addQuotation(quotePayload as any);
-      
-      if (result.success) {
-        // 7. Update lead status if needed
-        if (selectedLead.status === 'New Lead') {
-          await updateLeadFollowUp(selectedLead.lead_id, 'Quote Sent', '');
-          // Status History
-          const historyPayload = {
-            lead_id: selectedLead.lead_id,
-            order_id: null,
-            old_status: 'New Lead',
-            new_status: 'Quote Sent',
-            changed_by: currentUser?.name || 'System',
-            changed_by_role: currentRole,
-            remarks: `System: Status updated to Quote Sent. Quotation ${qtNum} generated and sent.`
-          };
-          await supabaseClient.from('lead_status_history').insert([historyPayload]);
-        }
-        
-        // Final success state
-        addNotification({
-          title: 'Quotation Sent',
-          message: `Quotation ${qtNum} for ${selectedLead.customer_name} has been generated and saved.`,
-          type: 'success'
-        });
-        
-        showToastMsg(`Quotation successfully generated and attached to Lead ${selectedLead.lead_id}`, 'success');
-        
-        // Clean up UI state
-        setGeneratedPDFBlobUrl('');
-        setShowStep3Popup(false);
-        setCrmWizardStep(4); // Move to negotiation step
-        
-        // Force refresh data
-        window.dispatchEvent(new Event('refresh-leads'));
-      } else {
-        throw new Error(result.error || 'Failed to save quotation record');
-      }
-
-    } catch (err: any) {
-      console.error("Error finalizing quote:", err);
-      showErrorHelper(
-        "Finalize Quote Failed",
-        err.message || "Failed to finalize and save quotation",
-        "handleFinalizeAndSendQuote",
-        selectedLead.lead_id,
-        "Check storage permissions and database constraints."
-      );
-      showToastMsg(`Error finalizing quote: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleUpdateFollowUp = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    setStatusError(null);
-
-    const oldStatus = selectedLead.status || (selectedLead as any).current_status || 'Quote Follow-up';
-    const newStatusStr = 'Quote Follow-up' as string; // Stay in follow-up but update notes
-    
-    // Check missing event dates requirement
-    if (newStatusStr === 'Order Confirmed') {
-       const missingDate = (!selectedLead.event_date && !wizardLeadData.event_date);
-       if (missingDate) {
-           setStatusError({
-             title: 'Missing Event Date',
-             reason: 'Event Date is required to move a lead to Order Confirmed status.',
-             suggestedFix: 'Please set the Event Date in the lead details before confirming.'
-           });
-           setIsSaving(false);
-           return;
-       }
-    }
-
-    try {
-      // Create comprehensive update string
-      const updateString = [
-        `[Update ${new Date().toISOString().split('T')[0]}]`,
-        `Status: ${newStatusStr}`,
-        `Neg Notes: ${followUpForm.negotiation_notes}`,
-        `Next follow-up: ${followUpForm.next_follow_up_date || 'None'}`,
-        `Quote Amt: ‚Çπ${followUpForm.quotation_amount}`
-      ].filter(Boolean).join(' | ');
-
-      // Use the safe append helper
-      const newRemarks = appendCompletedStep(
-        `${selectedLead.remarks || ''}\n${updateString}`.trim(),
-        4
-      );
-
-      const dbUpdatePayload = {
-        current_status: newStatusStr,
-        status: newStatusStr,
-        remarks: newRemarks,
-        budget: Number(followUpForm.quotation_amount || 0)
-      };
-
-      const result = await updateLeadFollowUp(selectedLead.lead_id, newStatusStr, newRemarks);
-      if (result.success) {
-        
-        // Clean old remarks field in case we mutated logic earlier
-        const cleanRemarks = followUpForm.negotiation_notes;
-        if (cleanRemarks) {
-            await supabaseClient.from('lead_notes').insert([{
-                lead_id: selectedLead.lead_id,
-                order_id: null,
-                sales_person_name: currentUser?.name || 'System',
-                note_text: cleanRemarks,
-                customer_name: selectedLead.customer_name,
-                user_id: currentUser?.id
-            }]);
-        }
-
-        const historyPayload = {
-          lead_id: selectedLead.lead_id,
-          order_id: null,
-          old_status: oldStatus,
-          new_status: newStatusStr,
-          changed_by: currentUser?.name || 'System',
-          changed_by_role: currentRole,
-          remarks: updateString
-        };
-        
-        const hRes = await supabaseClient.from('lead_status_history').insert([historyPayload]).select();
-        
-        if (hRes.error) {
-           logStatusUpdateError({
-             leadId: selectedLead.lead_id,
-             orderId: null,
-             oldStatus,
-             newStatus: newStatusStr,
-             updatePayload: dbUpdatePayload,
-             insertPayload: historyPayload,
-             dbResponse: hRes,
-             fullError: hRes.error.message
-           });
-           const parsedErr = parseStatusUpdateError(hRes.error.message);
-           setStatusError({
-             title: "Status Updated, History Failed",
-             reason: parsedErr.reason,
-             suggestedFix: parsedErr.suggestedFix
-           });
-           showToastMsg("Follow-up updated, but history log failed. Check details.", "error");
-        } else {
-           addNotification({
-            title: 'Follow-up Updated',
-            message: `Lead ${selectedLead.lead_id} updated.`,
-            type: 'info'
-           });
-           showToastMsg(`Follow-up notes updated successfully for Lead ${selectedLead.lead_id}`, 'success');
-           
-           // Automatically transition to step 5 (Final Actions)
-           setCrmWizardStep(5);
-           // setShowStep3Popup(false); <-- No longer auto-closing modal
-           window.dispatchEvent(new Event('refresh-leads'));
-        }
-      } else {
-        throw new Error(result.error || 'Failed to update follow-up');
-      }
-    } catch (err: any) {
-      console.error("Error updating follow-up:", err);
-      logStatusUpdateError({
-         leadId: selectedLead.lead_id,
-         orderId: null,
-         oldStatus,
-         newStatus: newStatusStr,
-         updatePayload: {},
-         insertPayload: {},
-         dbResponse: err,
-         fullError: err.message
       });
-      const parsedErr = parseStatusUpdateError(err.message);
-      setStatusError({
-         title: "Follow-up Update Failed",
-         reason: parsedErr.reason,
-         suggestedFix: parsedErr.suggestedFix
-      });
-      showErrorHelper(
-        "Follow-up Update Failed",
-        err.message || "Failed to update lead follow-up",
-        "handleUpdateFollowUp",
-        selectedLead.lead_id,
-        parsedErr.suggestedFix,
-        err
-      );
-      showToastMsg(`Error updating follow-up: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCreateOrder = async (orderData: any, newRemarksStr: string, updateString: string) => {
-      // Double check date requirements
-      const missingDate = (!selectedLead?.event_date && !orderData.event_date);
-      if (missingDate) {
-         setStatusError({
-             title: 'Missing Event Date',
-             reason: 'Event Date is required to move a lead to Order Confirmed status.',
-             suggestedFix: 'Please set the Event Date in the lead details before confirming.'
-         });
-         return { success: false, error: 'Missing Event Date' };
-      }
-
-      // Check amount requirement
-      if (!orderData.final_amount || isNaN(Number(orderData.final_amount)) || Number(orderData.final_amount) <= 0) {
-         setStatusError({
-             title: 'Invalid Order Amount',
-             reason: 'Final Order Amount must be greater than zero.',
-             suggestedFix: 'Please enter a valid Final Order Amount in the booking confirmation step.'
-         });
-         return { success: false, error: 'Invalid Final Amount' };
-      }
-      
-      const newRemarks = appendCompletedStep(newRemarksStr, 5);
-
-      const orderPayload = {
-          ...orderData,
-          remarks: newRemarks,
-          payment_mode: followUpForm.payment_mode || 'Bank Transfer',
-          transaction_id: followUpForm.transaction_id || ''
+    } else {
+      initialMap['default'] = {
+        reporting_date: lead.Reporting_date || (lead as any).reporting_date || lead.event_date || '',
+        reporting_time: lead.reporting_time || ''
       };
-
-      const result = await confirmOrder(orderPayload);
-      if (result.success) {
-          
-          if (updateString) {
-              await supabaseClient.from('lead_notes').insert([{
-                  lead_id: selectedLead!.lead_id,
-                  order_id: result.order.order_id,
-                  sales_person_name: currentUser?.name || 'System',
-                  note_text: updateString,
-                  customer_name: selectedLead!.customer_name,
-                  user_id: currentUser?.id
-              }]);
-          }
-
-          const historyPayload = {
-            lead_id: selectedLead!.lead_id,
-            order_id: result.order.order_id,
-            old_status: selectedLead!.status || 'Quote Follow-up',
-            new_status: 'Order Confirmed',
-            changed_by: currentUser?.name || 'System',
-            changed_by_role: currentRole,
-            remarks: updateString || 'Converted to Order'
-          };
-          
-          const hRes = await supabaseClient.from('lead_status_history').insert([historyPayload]).select();
-          if (hRes.error) {
-              const parsedErr = parseStatusUpdateError(hRes.error.message);
-              setStatusError({
-                 title: "Order Confirmed, History Failed",
-                 reason: parsedErr.reason,
-                 suggestedFix: parsedErr.suggestedFix
-              });
-              showToastMsg("Order Confirmed, but history log failed. See details.", "error");
-          } else {
-              addNotification({
-                title: 'Order Confirmed!',
-                message: `Lead ${selectedLead!.lead_id} successfully converted to Order ${result.order.order_id}.`,
-                type: 'success'
-              });
-              showToastMsg(`Order Confirmed! New Order ID: ${result.order.order_id}`, 'success');
-              setShowConfirmModal(false);
-              setShowStep3Popup(false);
-              window.dispatchEvent(new Event('refresh-leads'));
-          }
-      } else {
-          throw new Error(result.error || 'Failed to create order');
-      }
-      return result;
-  };
-
-  const handleConfirmOrderSubmit = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    setStatusError(null);
-    
-    // Explicit Validation Rules Check (Mandatory fields for Final Step)
-    if (!wizardLeadData.final_amount || isNaN(Number(wizardLeadData.final_amount)) || Number(wizardLeadData.final_amount) <= 0) {
-      showValidationError('confirm_final_amount', 'Final amount must be greater than zero to confirm an order.');
-      setIsSaving(false);
-      return;
     }
-    
-    if (!wizardLeadData.advance_received || isNaN(Number(wizardLeadData.advance_received))) {
-      showValidationError('confirm_advance_received', 'Advance received amount is required (can be 0).');
-      setIsSaving(false);
-      return;
-    }
-
-    if (!wizardLeadData.confirmed_event_date && !selectedLead.event_date) {
-      showValidationError('confirm_event_date', 'Confirmed event date is required.');
-      setIsSaving(false);
-      return;
-    }
-    
-    try {
-      const confirmedDate = wizardLeadData.confirmed_event_date || selectedLead.event_date;
-      const finalAmt = Number(wizardLeadData.final_amount);
-      const advAmt = Number(wizardLeadData.advance_received);
-      const balAmt = Math.max(0, finalAmt - advAmt);
-      
-      const updateString = [
-        `[Update ${new Date().toISOString().split('T')[0]}]`,
-        `Status: Order Confirmed`,
-        `Final Amt: ‚Çπ${finalAmt}`,
-        `Adv Rcvd: ‚Çπ${advAmt}`,
-        `Notes: ${wizardLeadData.notes_special_customizations || 'None'}`
-      ].filter(Boolean).join(' | ');
-
-      const baseEvent = (selectedLead.events && selectedLead.events.length > 0) ? selectedLead.events[0] : {
-        id: `evt-${Date.now()}`,
-        event_type: selectedLead.event_type || '',
-        event_name: selectedLead.event_name || '',
-        event_shoot_type: selectedLead.event_shoot_type || '',
-        event_date: confirmedDate,
-        event_start_time: wizardLeadData.confirmed_event_time || selectedLead.event_time || '',
-        event_location: selectedLead.event_location || ''
-      };
-
-      const orderData = {
-        lead_id: selectedLead.lead_id,
-        customer_name: selectedLead.customer_name,
-        mobile: selectedLead.mobile,
-        event_date: confirmedDate,
-        event_time: wizardLeadData.confirmed_event_time || selectedLead.event_time,
-        event_location: selectedLead.event_location,
-        total_amount: finalAmt,
-        advance_payment: advAmt,
-        balance_amount: balAmt,
-        payment_status: balAmt <= 0 ? 'Completed' : (advAmt > 0 ? 'Partially Paid' : 'Pending'),
-        package_id: wizardLeadData.selected_package_id || selectedLead.packages?.[0]?.package_id || '',
-        deliverables: wizardLeadData.deliverables_description || selectedLead.packages?.[0]?.custom_deliverables || '',
-        notes: wizardLeadData.notes_special_customizations || selectedLead.remarks,
-        current_status: 'Order Confirmed',
-        events: selectedLead.events && selectedLead.events.length > 0 ? selectedLead.events : [baseEvent],
-        sales_person: currentUser?.name || selectedLead.sales_person || 'System',
-        sales_staff_id: currentUser?.id || selectedLead.sales_staff_id || 'system_id'
-      };
-
-      await handleCreateOrder(orderData, selectedLead.remarks || '', updateString);
-
-    } catch (err: any) {
-      console.error("Error confirming order:", err);
-      showErrorHelper(
-        "Confirm Order Failed",
-        err.message || "Failed to process order confirmation",
-        "handleConfirmOrderSubmit",
-        selectedLead.lead_id,
-        "Check database constraints and mandatory field formats.",
-        err
-      );
-      showToastMsg(`Error confirming order: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSaveAddNote = async () => {
-    if (!noteModalLeadId) return;
-    setIsSaving(true);
-    setStatusError(null);
-    try {
-      if (!internalNotes.trim()) {
-        showToastMsg('Please enter a note before saving.', 'error');
-        setIsSaving(false);
-        return;
-      }
-      
-      const newRemarks = appendCompletedStep(
-        `${selectedLead?.remarks || ''}\n[Note ${new Date().toISOString().split('T')[0]}]: ${internalNotes}`.trim(),
-        crmWizardStep
-      );
-      
-      const result = await updateLeadFollowUp(noteModalLeadId, selectedLead?.status || 'New Lead', newRemarks);
-      if (result.success) {
-        
-        await supabaseClient.from('lead_notes').insert([{
-            lead_id: noteModalLeadId,
-            order_id: noteModalOrderId || null,
-            sales_person_name: currentUser?.name || 'System',
-            note_text: internalNotes,
-            customer_name: noteModalCustomerName,
-            user_id: currentUser?.id
-        }]);
-
-        const historyPayload = {
-          lead_id: noteModalLeadId,
-          order_id: noteModalOrderId || null,
-          old_status: selectedLead?.status || 'New Lead',
-          new_status: selectedLead?.status || 'New Lead',
-          changed_by: currentUser?.name || 'System',
-          changed_by_role: currentRole,
-          remarks: `System Note added: ${internalNotes}`
-        };
-        await supabaseClient.from('lead_status_history').insert([historyPayload]);
-
-        addNotification({
-          title: 'Note Added',
-          message: `Note added to Lead ${noteModalLeadId}.`,
-          type: 'info'
-        });
-        showToastMsg('Note added successfully', 'success');
-        setNoteModalOpen(false);
-        setInternalNotes('');
-        window.dispatchEvent(new Event('refresh-leads'));
-      } else {
-        throw new Error(result.error || 'Failed to add note');
-      }
-    } catch (err: any) {
-      console.error("Error adding note:", err);
-      showErrorHelper(
-        "Add Note Failed",
-        err.message || "Failed to append note to lead",
-        "handleSaveAddNote",
-        noteModalLeadId,
-        "Check connection and update permissions.",
-        err
-      );
-      showToastMsg(`Error adding note: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
+    setEventsReporting(initialMap);
   };
 
   const [showFinalReportingModal, setShowFinalReportingModal] = useState(false);
-  const handleFinalizeEventReporting = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    setStatusError(null);
-    try {
-      if (!reportingTime) {
-        showToastMsg('Please enter reporting time before finalizing.', 'error');
-        setIsSaving(false);
-        return;
-      }
-      const newRemarks = appendCompletedStep(
-        `${selectedLead.remarks || ''}\nReporting Time Finalized: ${reportingTime} | Notes: ${internalNotes}`.trim(),
-        5
-      );
-      
-      const result = await updateLeadFollowUp(selectedLead.lead_id, 'Event Scheduled', newRemarks);
-      if (result.success) {
-        
-        await supabaseClient.from('lead_notes').insert([{
-            lead_id: selectedLead.lead_id,
-            order_id: null,
-            sales_person_name: currentUser?.name || 'System',
-            note_text: `Reporting time set to: ${reportingTime}. Notes: ${internalNotes}`,
-            customer_name: selectedLead.customer_name,
-            user_id: currentUser?.id
-        }]);
+  const [finalReportingForm, setFinalReportingForm] = useState<Record<string, { reporting_date: string, reporting_time: string }>>({});
 
-        const historyPayload = {
-          lead_id: selectedLead.lead_id,
-          order_id: null,
-          old_status: selectedLead.status || 'Order Confirmed',
-          new_status: 'Event Scheduled',
-          changed_by: currentUser?.name || 'System',
-          changed_by_role: currentRole,
-          remarks: `Reporting Time Finalized: ${reportingTime}`
-        };
-        await supabaseClient.from('lead_status_history').insert([historyPayload]);
+  const areReportingDetailsComplete = (lead: Lead | null | undefined): boolean => {
+    if (!lead) return false;
 
-        addNotification({
-          title: 'Event Scheduled',
-          message: `Reporting time finalized for Lead ${selectedLead.lead_id}.`,
-          type: 'success'
-        });
-        showToastMsg('Event reporting finalized successfully!', 'success');
-        setShowFinalReportingModal(false);
-        window.dispatchEvent(new Event('refresh-leads'));
-      } else {
-        throw new Error(result.error || 'Failed to finalize event reporting');
-      }
-    } catch (err: any) {
-      console.error("Error finalizing event:", err);
-      showErrorHelper(
-        "Finalize Event Failed",
-        err.message || "Failed to update lead status to Event Scheduled",
-        "handleFinalizeEventReporting",
-        selectedLead.lead_id,
-        "Check connection and update permissions.",
-        err
-      );
-      showToastMsg(`Error finalizing event: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleMarkLost = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    setStatusError(null);
-    
-    try {
-      const finalLostReason = lostReason === 'Other' ? otherLostReason : lostReason;
-      
-      const updateString = [
-        `[Update ${new Date().toISOString().split('T')[0]}]`,
-        `Lost Reason: ${finalLostReason}`,
-        `Neg Notes: ${lostNotes}`
-      ].filter(Boolean).join(' | ');
-
-      const newRemarks = `${selectedLead.remarks || ''}\n${updateString}`.trim();
-
-      const dbUpdatePayload = {
-        current_status: 'Lost Lead',
-        status: 'Lost Lead',
-        remarks: newRemarks,
-        lost_reason: finalLostReason,
-        lost_notes: lostNotes
-      };
-
-      const result = await updateLeadFollowUp(selectedLead.lead_id, 'Lost Lead', newRemarks);
-      if (result.success) {
-        
-        await supabaseClient
-          .from('leads')
-          .update({ 
-            lost_reason: finalLostReason,
-            lost_notes: lostNotes 
-          })
-          .eq('lead_id', selectedLead.lead_id);
-
-        await supabaseClient.from('lead_notes').insert([{
-            lead_id: selectedLead.lead_id,
-            order_id: null,
-            sales_person_name: currentUser?.name || 'System',
-            note_text: `Lost Lead: ${finalLostReason}. Notes: ${lostNotes}`,
-            customer_name: selectedLead.customer_name,
-            user_id: currentUser?.id
-        }]);
-
-        const historyPayload = {
-          lead_id: selectedLead.lead_id,
-          order_id: null,
-          old_status: selectedLead.status || 'Unknown',
-          new_status: 'Lost Lead',
-          changed_by: currentUser?.name || 'System',
-          changed_by_role: currentRole,
-          remarks: updateString
-        };
-        const hRes = await supabaseClient.from('lead_status_history').insert([historyPayload]).select();
-        
-        if (hRes.error) {
-            logStatusUpdateError({
-             leadId: selectedLead.lead_id,
-             orderId: null,
-             oldStatus: selectedLead.status || 'Unknown',
-             newStatus: 'Lost Lead',
-             updatePayload: dbUpdatePayload,
-             insertPayload: historyPayload,
-             dbResponse: hRes,
-             fullError: hRes.error.message
-            });
-            const parsedErr = parseStatusUpdateError(hRes.error.message);
-            setStatusError({
-               title: "Marked Lost, History Failed",
-               reason: parsedErr.reason,
-               suggestedFix: parsedErr.suggestedFix
-            });
-            showToastMsg("Lead marked as lost, but history log failed. Check details.", "error");
-        } else {
-            addNotification({
-              title: 'Lead Marked as Lost',
-              message: `Lead ${selectedLead.lead_id} has been marked as lost. Reason: ${finalLostReason}`,
-              type: 'warning'
-            });
-            showToastMsg(`Lead ${selectedLead.lead_id} has been marked as lost.`, 'success');
-            
-            // Clean up UI state
-            setShowLostModal(false);
-            setLostReason('Price too high');
-            setOtherLostReason('');
-            setLostNotes('');
-            setShowStep3Popup(false);
-            
-            window.dispatchEvent(new Event('refresh-leads'));
-        }
-      } else {
-        throw new Error(result.error || 'Failed to update lead status');
-      }
-    } catch (err: any) {
-      console.error("Error marking lead as lost:", err);
-      logStatusUpdateError({
-         leadId: selectedLead.lead_id,
-         orderId: null,
-         oldStatus: selectedLead.status || 'Unknown',
-         newStatus: 'Lost Lead',
-         updatePayload: {},
-         insertPayload: {},
-         dbResponse: err,
-         fullError: err.message
+    if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
+      return lead.events.every((ev) => {
+        const rDate = ev.reporting_date || (ev as any).Reporting_date;
+        const rTime = ev.reporting_time;
+        return typeof rDate === 'string' && rDate.trim() !== '' && typeof rTime === 'string' && rTime.trim() !== '';
       });
-      const parsedErr = parseStatusUpdateError(err.message);
-      setStatusError({
-         title: "Mark Lost Failed",
-         reason: parsedErr.reason,
-         suggestedFix: parsedErr.suggestedFix
-      });
-      showErrorHelper(
-        "Mark Lost Failed",
-        err.message || "Failed to mark lead as lost",
-        "handleMarkLost",
-        selectedLead.lead_id,
-        parsedErr.suggestedFix,
-        err
-      );
-      showToastMsg(`Error marking as lost: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
     }
+
+    const leadRDate = lead.Reporting_date || (lead as any).reporting_date;
+    const leadRTime = lead.reporting_time;
+    return typeof leadRDate === 'string' && leadRDate.trim() !== '' && typeof leadRTime === 'string' && leadRTime.trim() !== '';
   };
 
-  const submitUnlockRequest = async () => {
-    if (!selectedUnlockLead || (!unlockRequestReason && !unlockRequestCustomReason)) return;
-    setIsSaving(true);
-    setStatusError(null);
-    try {
-      const reasonToSave = unlockRequestReason === 'Other' ? unlockRequestCustomReason : unlockRequestReason;
-      
-      const relatedOrder = orders?.find(o => o.lead_id === selectedUnlockLead.lead_id);
-      
-      const existingRequest = await supabaseClient
-        .from('unlock_requests')
-        .select('*')
-        .eq('lead_id', selectedUnlockLead.lead_id)
-        .eq('status', 'Pending')
-        .single();
-        
-      if (existingRequest.data) {
-        showToastMsg('An unlock request is already pending for this record.', 'error');
-        setIsSaving(false);
-        return;
-      }
-      
-      const requestPayload = {
-        lead_id: selectedUnlockLead.lead_id,
-        order_id: relatedOrder?.order_id || selectedUnlockLead.lead_id, // Fallback to lead_id if order_id is null
-        project_id: selectedUnlockLead.lead_id, // Add project_id to ensure Dashboard compatibility
-        reason: reasonToSave,
-        request_reason: reasonToSave, // Add legacy field support
-        status: 'Pending',
-        request_status: 'Pending', // Add legacy field support
-        requested_by_name: currentUser?.name || 'System',
-        requested_by_user_id: currentUser?.id,
-        sales_staff_name: currentUser?.name || 'System', // Legacy field support
-        sales_staff_id: currentUser?.id, // Legacy field support
-        created_at: new Date().toISOString()
-      };
-      
-      console.log("Submitting unlock request payload:", requestPayload);
-
-      const { data, error } = await supabaseClient
-        .from('unlock_requests')
-        .insert([requestPayload])
-        .select();
-
-      if (error) {
-        console.error("Supabase unlock request insert error:", error);
-        throw error;
-      }
-
-      addNotification({
-        title: 'Unlock Request Sent',
-        message: `Unlock request for Lead ${selectedUnlockLead.lead_id} sent to admin.`,
-        type: 'info'
-      });
-      showToastMsg('Unlock request submitted successfully to Admin.', 'success');
-      setShowUnlockRequestModal(false);
-      
-      // Update local state to reflect pending request immediately
-      setUnlockRequests(prev => [...prev, requestPayload]);
-      
-    } catch (err: any) {
-      console.error("Error submitting unlock request:", err);
-      showErrorHelper(
-        "Unlock Request Failed",
-        err.message || "Failed to submit unlock request to Admin",
-        "submitUnlockRequest",
-        selectedUnlockLead.lead_id,
-        "Check if the unlock_requests table exists and has correct RLS policies.",
-        err
-      );
-      showToastMsg(`Error submitting request: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleStep2Submit = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    setStatusError(null);
-    try {
-      const updateString = [
-        `[Update ${new Date().toISOString().split('T')[0]}]`,
-        `Status: Next Step Follow-up`,
-        `Notes: ${step2FollowUpNotes}`,
-        `Next Follow-up Date: ${step2FollowUpDate || 'None'}`
-      ].filter(Boolean).join(' | ');
-
-      const newRemarks = appendCompletedStep(
-        `${selectedLead.remarks || ''}\n${updateString}`.trim(),
-        2
-      );
-
-      const result = await updateLeadFollowUp(selectedLead.lead_id, 'Lead Contacted', newRemarks);
-      if (result.success) {
-        
-        await supabaseClient.from('lead_notes').insert([{
-            lead_id: selectedLead.lead_id,
-            order_id: null,
-            sales_person_name: currentUser?.name || 'System',
-            note_text: `Next Step Follow-up: ${step2FollowUpNotes}. Next Date: ${step2FollowUpDate}`,
-            customer_name: selectedLead.customer_name,
-            user_id: currentUser?.id
-        }]);
-
-        const historyPayload = {
-          lead_id: selectedLead.lead_id,
-          order_id: null,
-          old_status: selectedLead.status || 'New Lead',
-          new_status: 'Lead Contacted',
-          changed_by: currentUser?.name || 'System',
-          changed_by_role: currentRole,
-          remarks: updateString
-        };
-        await supabaseClient.from('lead_status_history').insert([historyPayload]);
-
-        addNotification({
-          title: 'Follow-up Scheduled',
-          message: `Next follow-up for Lead ${selectedLead.lead_id} scheduled for ${step2FollowUpDate}.`,
-          type: 'info'
-        });
-        showToastMsg(`Follow-up scheduled for Lead ${selectedLead.lead_id}`, 'success');
-        setShowStep2Popup(false);
-        setStep2FollowUpNotes('');
-        setStep2FollowUpDate('');
-        window.dispatchEvent(new Event('refresh-leads'));
-      } else {
-        throw new Error(result.error || 'Failed to update follow-up');
-      }
-    } catch (err: any) {
-      console.error("Error setting follow-up:", err);
-      showErrorHelper(
-        "Follow-up Update Failed",
-        err.message || "Failed to update lead follow-up details",
-        "handleStep2Submit",
-        selectedLead.lead_id,
-        "Check connection and update permissions.",
-        err
-      );
-      showToastMsg(`Error updating follow-up: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleStep3Submit = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    setStatusError(null);
-    try {
-      const updateString = [
-        `[Update ${new Date().toISOString().split('T')[0]}]`,
-        `Status: Office Visit/Meeting Scheduled`,
-        `Meeting Date: ${step3FollowUpDate || 'None'}`,
-        `Meeting Time: ${step3FollowUpTime || 'None'}`,
-        `Notes: ${step3FollowUpNotes}`
-      ].filter(Boolean).join(' | ');
-
-      const newRemarks = appendCompletedStep(
-        `${selectedLead.remarks || ''}\n${updateString}`.trim(),
-        3
-      );
-
-      const result = await updateLeadFollowUp(selectedLead.lead_id, 'Office Visit Scheduled', newRemarks);
-      if (result.success) {
-        
-        await supabaseClient.from('lead_notes').insert([{
-            lead_id: selectedLead.lead_id,
-            order_id: null,
-            sales_person_name: currentUser?.name || 'System',
-            note_text: `Office Visit Scheduled on ${step3FollowUpDate} at ${step3FollowUpTime}. Notes: ${step3FollowUpNotes}`,
-            customer_name: selectedLead.customer_name,
-            user_id: currentUser?.id
-        }]);
-
-        const historyPayload = {
-          lead_id: selectedLead.lead_id,
-          order_id: null,
-          old_status: selectedLead.status || 'New Lead',
-          new_status: 'Office Visit Scheduled',
-          changed_by: currentUser?.name || 'System',
-          changed_by_role: currentRole,
-          remarks: updateString
-        };
-        await supabaseClient.from('lead_status_history').insert([historyPayload]);
-
-        addNotification({
-          title: 'Office Visit Scheduled',
-          message: `Office visit for Lead ${selectedLead.lead_id} scheduled for ${step3FollowUpDate}.`,
-          type: 'info'
-        });
-        showToastMsg(`Office visit scheduled for Lead ${selectedLead.lead_id}`, 'success');
-        
-        // Clean up UI state
-        // setShowStep3Popup(false); <-- No longer auto-closing modal
-        setStep3FollowUpNotes('');
-        setStep3FollowUpDate('');
-        setStep3FollowUpTime('');
-        
-        // Advance to Step 4 after completing Step 3
-        setCrmWizardStep(4);
-        window.dispatchEvent(new Event('refresh-leads'));
-      } else {
-        throw new Error(result.error || 'Failed to update lead');
-      }
-    } catch (err: any) {
-      console.error("Error scheduling visit:", err);
-      showErrorHelper(
-        "Schedule Visit Failed",
-        err.message || "Failed to update lead with office visit details",
-        "handleStep3Submit",
-        selectedLead.lead_id,
-        "Check connection and update permissions.",
-        err
-      );
-      showToastMsg(`Error scheduling visit: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleStep3BSubmit = async () => {
-    if (!selectedLead) return;
-    setIsSaving(true);
-    setStatusError(null);
-    try {
-      const updateString = [
-        `[Update ${new Date().toISOString().split('T')[0]}]`,
-        `Status: Office Visit Completed`,
-        `Meeting Date: ${step3FollowUpDate || 'None'}`,
-        `Meeting Time: ${step3FollowUpTime || 'None'}`,
-        `Notes: ${step3FollowUpNotes}`
-      ].filter(Boolean).join(' | ');
-
-      const newRemarks = appendCompletedStep(
-        `${selectedLead.remarks || ''}\n${updateString}`.trim(),
-        3
-      );
-
-      const result = await updateLeadFollowUp(selectedLead.lead_id, 'Office Visit Completed', newRemarks);
-      if (result.success) {
-        
-        await supabaseClient.from('lead_notes').insert([{
-            lead_id: selectedLead.lead_id,
-            order_id: null,
-            sales_person_name: currentUser?.name || 'System',
-            note_text: `Office Visit Completed. Notes: ${step3FollowUpNotes}`,
-            customer_name: selectedLead.customer_name,
-            user_id: currentUser?.id
-        }]);
-
-        const historyPayload = {
-          lead_id: selectedLead.lead_id,
-          order_id: null,
-          old_status: selectedLead.status || 'New Lead',
-          new_status: 'Office Visit Completed',
-          changed_by: currentUser?.name || 'System',
-          changed_by_role: currentRole,
-          remarks: updateString
-        };
-        await supabaseClient.from('lead_status_history').insert([historyPayload]);
-
-        addNotification({
-          title: 'Office Visit Completed',
-          message: `Office visit for Lead ${selectedLead.lead_id} completed.`,
-          type: 'info'
-        });
-        showToastMsg(`Office visit marked as completed for Lead ${selectedLead.lead_id}`, 'success');
-        
-        // Clean up UI state
-        // setShowStep3Popup(false); <-- No longer auto-closing modal
-        setStep3FollowUpNotes('');
-        setStep3FollowUpDate('');
-        setStep3FollowUpTime('');
-        
-        // Advance to Step 4 after completing Step 3
-        setCrmWizardStep(4);
-        window.dispatchEvent(new Event('refresh-leads'));
-      } else {
-        throw new Error(result.error || 'Failed to update lead');
-      }
-    } catch (err: any) {
-      console.error("Error completing visit:", err);
-      showErrorHelper(
-        "Complete Visit Failed",
-        err.message || "Failed to update lead with office visit details",
-        "handleStep3BSubmit",
-        selectedLead.lead_id,
-        "Check connection and update permissions.",
-        err
-      );
-      showToastMsg(`Error completing visit: ${err.message}`, 'error');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-  
-  // Custom Quotation PDF Generation Support functions
-  const openCustomPDFGenerator = (lead: Lead) => {
+  const openReportingDetailsModal = (lead: Lead, customMsg?: string) => {
     setSelectedLead(lead);
-    
-    // Check local storage for draft services first
-    const cached = localStorage.getItem(`erp_quote_services_${lead.lead_id}`);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setQuoteServices(parsed);
-          setShowStep3Popup(true);
-          return;
-        }
-      } catch(e) {}
-    }
-    
-    // Pre-populate with existing quotation data if available
-    if ((lead as any).quotations && (lead as any).quotations.length > 0) {
-      const latestQ = (lead as any).quotations[(lead as any).quotations.length - 1];
-      if (latestQ.services && Array.isArray(latestQ.services) && latestQ.services.length > 0) {
-        setQuoteServices(latestQ.services);
-        setQuoteDiscount(latestQ.discount_amount || '');
-        setQuoteAdditional(latestQ.additional_charges || '');
-      } else if (latestQ.deliverables_json) {
-        try {
-          const parsed = JSON.parse(latestQ.deliverables_json);
-          const fallbackServices = parsed.map((d: any, idx: number) => ({
-            id: `gen-${idx}`,
-            name: d.name,
-            qty: d.qty || 1,
-            price: d.price || 0
-          }));
-          setQuoteServices(fallbackServices);
-        } catch(e) {}
-      }
+    const crmEvents = lead.events || [];
+    const initialFormState: Record<string, { reporting_date: string, reporting_time: string }> = {};
+
+    if (crmEvents.length > 0) {
+      crmEvents.forEach((ev) => {
+        initialFormState[ev.id] = {
+          reporting_date: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || '',
+          reporting_time: ev.reporting_time || lead.reporting_time || ''
+        };
+      });
     } else {
-      // Default empty structure if no existing quotes
-      setQuoteServices([]);
-      setQuoteDiscount('');
-      setQuoteAdditional('');
+      initialFormState['default'] = {
+        reporting_date: lead.Reporting_date || (lead as any).reporting_date || lead.event_date || '',
+        reporting_time: lead.reporting_time || ''
+      };
     }
-    
-    setShowStep3Popup(true);
-  };
-  const persistQuoteServices = (services: QuotationService[]) => {
-     if (selectedLead) {
-       localStorage.setItem(`erp_quote_services_${selectedLead.lead_id}`, JSON.stringify(services));
-     } else if (activeTab === 'create') {
-       localStorage.setItem(`erp_quote_services_create`, JSON.stringify(services));
-     }
+
+    setFinalReportingForm(initialFormState);
+    setShowFinalReportingModal(true);
+    showToastMsg(customMsg || "Please complete and save the Reporting Details before confirming the order.", "error");
   };
 
-  const handleAddCustomQuoteService = () => {
-    if (!newServiceName.trim()) {
-      showToastMsg('Please enter a service/deliverable name', 'error');
-      return;
-    }
-    const newService: QuotationService = {
-      id: `svc-${Date.now()}`,
-      name: newServiceName.trim(),
-      qty: Number(newServiceQty) || 1,
-      price: Number(newServicePrice) || 0
+  // Quotation System State
+  const [quotationTerms, setQuotationTerms] = useState(
+    "1. Payments are non-refundable.\n" +
+    "2. Crew food arrangements from client side.\n" +
+    "3. 50% advance and remaining 50% before collecting the raw data.\n" +
+    "4. If the duration extends, ‚Çπ3,000 per service per hour additional charges are applicable.\n" +
+    "5. We expect 90% of the payment once the event is completed and the remaining 10% before the final deliverables are ready.\n" +
+    "6. Pendrive and Hard Disk are not included.\n" +
+    "7. Edited data will be shared via Google Drive link."
+  );
+  const [generatedPDFBlobUrl, setGeneratedPDFBlobUrl] = useState<string>('');
+  const [activeQuoteNum, setActiveQuoteNum] = useState<string>('');
+  const [showStep3Popup, setShowStep3Popup] = useState<boolean>(false);
+  const [step3Option, setStep3Option] = useState<'negotiation' | 'quotation_send'>('negotiation');
+
+  // Customizable inclusions, deliverables, discount, and additional charges states
+  const [editableInclusions, setEditableInclusions] = useState<Record<string, string[]>>({});
+  const [editableDeliverables, setEditableDeliverables] = useState<Record<string, string[]>>({});
+  
+  const [step3AutoSaveStatus, setStep3AutoSaveStatus] = useState<'saving' | 'saved' | 'error' | null>(null);
+
+  const step3SaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const saveStep3DataRealtime = async (
+    updatedInclusions: Record<string, string[]>,
+    updatedDeliverables: Record<string, string[]>,
+    activePkgId?: string,
+    packageCostOverride?: number | null,
+    discountOverride?: number | null,
+    additionalOverride?: number | null
+  ) => {
+    if (isStep3Locked) return;
+    const pkgId = activePkgId || wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0] || 'Custom Package';
+    const leadId = selectedLead?.lead_id || createdLeadId;
+    if (!leadId || leadId === 'DRAFT-LEAD' || !pkgId || !supabaseClient) return;
+
+    setStep3AutoSaveStatus('saving');
+
+    const activeEventsList = (activeTab === 'create' && createEvents.length > 0) ? createEvents : (crmEvents && crmEvents.length > 0 ? crmEvents : []);
+    const { teamMembersJson, deliverablesJson, flatTeamMembers, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+      pkgId,
+      activeEventsList,
+      updatedInclusions,
+      updatedDeliverables
+    );
+
+    const safeTeamMembersText = teamMembersText;
+    const safeDeliverablesText = deliverablesText;
+
+    console.log('TEAM MEMBERS SAVE', { leadId, teamMembers: flatTeamMembers, serialized: safeTeamMembersText });
+
+    const cleanPkgCost = packageCostOverride !== undefined ? packageCostOverride : (
+      wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
+      ? Number(wizardLeadData.package_cost)
+      : (wizardLeadData.package_price !== "" && wizardLeadData.package_price != null && !isNaN(Number(wizardLeadData.package_price))
+        ? Number(wizardLeadData.package_price)
+        : (wizardLeadData.budget ? Number(wizardLeadData.budget) : null))
+    );
+
+    const cleanDiscount = discountOverride !== undefined ? (discountOverride || 0) : (
+      quoteDiscount === "" || quoteDiscount == null || isNaN(Number(quoteDiscount)) ? 0 : Number(quoteDiscount)
+    );
+    const cleanAdditional = additionalOverride !== undefined ? (additionalOverride || 0) : (
+      quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? 0 : Number(quoteAdditional)
+    );
+    const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + cleanAdditional - cleanDiscount);
+
+    const updatePayload: any = {
+      Team_Members: safeTeamMembersText,
+      Add_Deliverable: safeDeliverablesText,
+      Select_Package_Option: pkgId,
+      Quotation_Discount: cleanDiscount,
+      Additional_Services_Cost: cleanAdditional,
+      Final_Quotation_Amount: cleanFinalAmt,
+      Final_Package_Amount: cleanFinalAmt,
+      final_package_amount: cleanFinalAmt,
+      _explicit_step3_save: true
     };
-    const updated = [...quoteServices, newService];
-    setQuoteServices(updated);
-    persistQuoteServices(updated);
-    
-    // reset inline form
+
+    if (cleanPkgCost !== null && cleanPkgCost !== undefined) {
+      updatePayload.package_price = cleanPkgCost;
+      updatePayload.budget = cleanPkgCost;
+    }
+
+    if (step3SaveTimeoutRef.current) {
+      clearTimeout(step3SaveTimeoutRef.current);
+    }
+
+    step3SaveTimeoutRef.current = setTimeout(async () => {
+      try {
+        // Direct Supabase update to ensure public.leads.Team_Members and Final_Package_Amount are immediately saved
+        try {
+          const { data: dbResult, error: dbError } = await supabaseClient
+            .from('leads')
+            .update({
+              Team_Members: safeTeamMembersText,
+              Add_Deliverable: safeDeliverablesText,
+              Select_Package_Option: pkgId,
+              Quotation_Discount: cleanDiscount,
+              Additional_Services_Cost: cleanAdditional,
+              Final_Quotation_Amount: cleanFinalAmt,
+              Final_Package_Amount: cleanFinalAmt,
+              ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? { package_price: cleanPkgCost, budget: cleanPkgCost } : {})
+            })
+            .eq('lead_id', leadId)
+            .select('*');
+          console.log('TEAM MEMBERS SAVED', { leadId, Team_Members: safeTeamMembersText });
+          console.log('FINAL PACKAGE AMOUNT SAVED', { leadId, Final_Package_Amount: cleanFinalAmt });
+          console.log('TEAM MEMBERS DB RESULT', { data: dbResult, error: dbError });
+        } catch (dbErr) {
+          console.warn("Direct Supabase update warning:", dbErr);
+        }
+
+        // Update using RoleContext to keep the local leads array perfectly in sync
+        await updateLead(leadId, updatePayload);
+        setStep3AutoSaveStatus('saved');
+        
+        // Update local context manually to ensure instant visual sync in modal
+        if (selectedLead) {
+          setSelectedLead(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              Team_member: safeTeamMembersText,
+              Team_Members: safeTeamMembersText,
+              team_members: safeTeamMembersText,
+              Add_Deliverable: safeDeliverablesText,
+              deliverables_description: safeDeliverablesText,
+              Select_Package_Option: pkgId,
+              Quotation_Discount: cleanDiscount,
+              Additional_Services_Cost: cleanAdditional,
+              Final_Quotation_Amount: cleanFinalAmt,
+              Final_Package_Amount: cleanFinalAmt,
+              final_package_amount: cleanFinalAmt,
+              ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
+                package_price: cleanPkgCost,
+                budget: cleanPkgCost
+              } : {})
+            };
+          });
+        }
+        
+        // Also sync wizardLeadData deliverables and team members state
+        setWizardLeadData(prev => ({
+          ...prev,
+          Team_member: safeTeamMembersText,
+          Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
+          Add_Deliverable: safeDeliverablesText,
+          deliverables: deliverablesText,
+          deliverables_description: deliverablesText,
+          Select_Package_Option: pkgId,
+          final_amount: cleanFinalAmt,
+          ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
+            package_price: cleanPkgCost,
+            budget: cleanPkgCost
+          } : {})
+        }));
+
+        // Also save / update lead_packages record in Supabase
+        try {
+          const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
+          const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
+
+          const packagePayload = {
+            lead_id: leadId,
+            package_id: pkgId,
+            package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
+            quantity: 1,
+            total_amount: cleanPkgCost || 0,
+            discount: quoteDiscount || 0,
+            final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
+            Team_Members_Included: teamMembersJson,
+            editable_inclusions: updatedInclusions,
+            deliverables_descriptionn: deliverablesJson, // keeping typo just in case other code uses it, but adding deliverables_json too
+            deliverables_json: deliverablesJson,
+            deliverables_description: deliverablesText,
+            editable_deliverables: updatedDeliverables,
+            updated_at: new Date().toISOString()
+          };
+
+          const { data: existingLps } = await supabaseClient
+            .from('lead_packages')
+            .select('*')
+            .eq('lead_id', leadId);
+          
+          let targetLpId = `LP-${leadId}-${pkgId}`;
+          
+          if (existingLps && existingLps.length > 0) {
+            const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
+            targetLpId = matched.lead_package_id || matched.id || targetLpId;
+            await supabaseClient
+              .from('lead_packages')
+              .update(packagePayload)
+              .eq(matched.lead_package_id ? 'lead_package_id' : 'id', targetLpId);
+          } else {
+            await supabaseClient
+              .from('lead_packages')
+              .insert({
+                ...packagePayload,
+                lead_package_id: targetLpId,
+                created_at: new Date().toISOString()
+              });
+          }
+        } catch (e) {
+          console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
+        }
+      } catch (err) {
+        console.error("Exception in saveStep3DataRealtime:", err);
+        setStep3AutoSaveStatus('error');
+      }
+    }, 400);
+  };
+
+  const getCleanSalesStaffName = (rawName?: any, leadObj?: Lead | null): string => {
+    let candidate = String(rawName || '').trim();
+
+    if (!candidate && leadObj) {
+      if (leadObj.sales_staff_name && String(leadObj.sales_staff_name).trim()) {
+        candidate = String(leadObj.sales_staff_name).trim();
+      } else if (leadObj.sales_person && !['Sales', 'Sales Team', 'Admin', 'Admin User'].includes(String(leadObj.sales_person).trim())) {
+        candidate = String(leadObj.sales_person).trim();
+      }
+    }
+
+    if (!candidate && currentUser?.name) {
+      candidate = currentUser.name;
+    }
+
+    if (!candidate) return '';
+
+    // If candidate contains comma-separated names, extract only the actual Sales Person
+    if (candidate.includes(',')) {
+      if (leadObj?.sales_person && !['Sales', 'Sales Team', 'Admin', 'Admin User'].includes(String(leadObj.sales_person).trim())) {
+        const sp = String(leadObj.sales_person).trim().toLowerCase();
+        const parts = candidate.split(',').map(s => s.trim());
+        const match = parts.find(p => p.toLowerCase() === sp || p.toLowerCase().includes(sp) || sp.includes(p.toLowerCase()));
+        if (match) return match;
+      }
+      return candidate.split(',')[0].trim();
+    }
+
+    return candidate;
+  };
+
+  const getCleanSalesStaffMobile = (rawMobile?: any, leadObj?: Lead | null): string => {
+    let candidate = String(rawMobile || '').trim();
+
+    if (!candidate && leadObj && leadObj.sales_staff_mobile && String(leadObj.sales_staff_mobile).trim()) {
+      candidate = String(leadObj.sales_staff_mobile).trim();
+    }
+
+    if (!candidate && currentUser?.mobile) {
+      candidate = currentUser.mobile || '';
+    }
+
+    if (!candidate) return '';
+
+    if (candidate.includes('||')) {
+      candidate = candidate.split('||')[0].trim();
+    }
+    if (candidate.includes(',')) {
+      candidate = candidate.split(',')[0].trim();
+    }
+
+    return candidate;
+  };
+
+  const [salesStaffName, setSalesStaffName] = useState<string>('');
+  const [salesStaffMobile, setSalesStaffMobile] = useState<string>('');
+
+  const getEffectiveSalesStaffName = (): string => {
+    if (salesStaffName && String(salesStaffName).trim()) {
+      return String(salesStaffName).trim();
+    }
+    if (currentUser?.name && String(currentUser.name).trim()) {
+      return String(currentUser.name).trim();
+    }
+    if (selectedLead?.sales_staff_name && String(selectedLead.sales_staff_name).trim()) {
+      return String(selectedLead.sales_staff_name).trim();
+    }
+    return 'Sales Staff';
+  };
+
+  const getEffectiveSalesStaffMobile = (): string => {
+    let raw = '';
+    if (salesStaffMobile && String(salesStaffMobile).trim()) {
+      raw = String(salesStaffMobile).trim();
+    } else if (currentUser?.mobile && String(currentUser.mobile).trim()) {
+      raw = String(currentUser.mobile).trim();
+    } else if (selectedLead?.sales_staff_mobile && String(selectedLead.sales_staff_mobile).trim()) {
+      raw = String(selectedLead.sales_staff_mobile).trim();
+    }
+    const digits = raw.replace(/\D/g, '');
+    return digits || raw;
+  };
+
+  React.useEffect(() => {
+    if (currentUser?.name && (!salesStaffName || !salesStaffName.trim())) {
+      setSalesStaffName(currentUser.name);
+    }
+    if (currentUser?.mobile && (!salesStaffMobile || !salesStaffMobile.trim())) {
+      setSalesStaffMobile(currentUser.mobile);
+    }
+  }, [currentUser]);
+  const [quoteDiscount, setQuoteDiscount] = useState<number | ''>('');
+  const [quoteAdditional, setQuoteAdditional] = useState<number | ''>('');
+  
+  const [quoteServices, setQuoteServices] = useState<{ id: string; name: string; qty: number; price: number; isAdditional?: boolean }[]>([]);
+  const [editingServiceId, setEditingServiceId] = useState<string | null>(null);
+  
+  // Adding service inline temp states
+  const [newServiceName, setNewServiceName] = useState('');
+  const [newServiceQty, setNewServiceQty] = useState(1);
+  const [newServicePrice, setNewServicePrice] = useState(0);
+  const [isAddingInline, setIsAddingInline] = useState(false);
+
+  const handleAddInlineService = () => {
+    if (!newServiceName.trim()) return;
+    const newService = {
+      id: `add_${Date.now()}`,
+      name: newServiceName.trim(),
+      qty: Math.max(1, newServiceQty),
+      price: Math.max(0, newServicePrice),
+      isAdditional: true
+    };
+    setQuoteServices(prev => [...prev, newService]);
+    // reset states
     setNewServiceName('');
     setNewServiceQty(1);
     setNewServicePrice(0);
     setIsAddingInline(false);
   };
-  
-  const handleRemoveQuoteService = (id: string) => {
-    const updated = quoteServices.filter(s => s.id !== id);
-    setQuoteServices(updated);
-    persistQuoteServices(updated);
+
+  const handleEditServiceItem = (id: string, updatedFields: Partial<{ name: string; qty: number; price: number }>) => {
+    setQuoteServices(prev => prev.map(s => s.id === id ? { ...s, ...updatedFields } : s));
   };
+
+  const handleRemoveServiceItem = (id: string) => {
+    setQuoteServices(prev => prev.filter(s => s.id !== id));
+  };
+
   
-  const handleUpdateQuoteService = (id: string, field: keyof QuotationService, value: any) => {
-    const updated = quoteServices.map(s => {
-      if (s.id === id) {
-        return { ...s, [field]: field === 'name' ? value : Number(value) || 0 };
+  // Synchronize/initialize services on entering Step 4
+  React.useEffect(() => {
+    const isStep4Active = wizardStep === 3 || crmWizardStep === 3;
+    if (!isStep4Active) {
+      setEditingServiceId(null);
+      setIsAddingInline(false);
+      return;
+    }
+
+    const activePkgs = getSelectedPkgsInfo(crmWizardStep === 3);
+    const activePkgIds = activePkgs.map(lp => lp.package_id).filter(Boolean);
+
+    // Build expected list of base deliverables from active packages directly from packages table
+    const expectedBaseDeliverables: { pkgId: string; name: string }[] = [];
+    activePkgs.forEach((lp) => {
+      const pkgKey = lp.package_id || 'default';
+      const pObj = (packages || []).find(p => p.package_id === lp.package_id);
+      const incStr = pObj?.team_members || '';
+      const delStr = pObj?.deliverables || '';
+
+      const inclusionsList = parseTeamMembers(incStr);
+      const deliverablesList = delStr
+        ? delStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+        : [];
+
+      const combined = [...inclusionsList, ...deliverablesList];
+      if (combined.length === 0) {
+        const defaultItems = [
+          '2 Photographers',
+          '1 Cinematographer',
+          'Drone Coverage',
+          'LED Wall',
+          'Album (40 Sheets)',
+          'Teaser Video',
+          'Highlight Video',
+          'Full Event Coverage'
+        ];
+        defaultItems.forEach(name => {
+          expectedBaseDeliverables.push({ pkgId: pkgKey, name });
+        });
+      } else {
+        combined.forEach(name => {
+          expectedBaseDeliverables.push({ pkgId: pkgKey, name });
+        });
       }
-      return s;
     });
-    setQuoteServices(updated);
-    persistQuoteServices(updated);
-  };
 
-  const handleLoadPackageToQuote = (pkgId: string) => {
-    const pkg = packages.find(p => p.package_id === pkgId);
-    if (!pkg) return;
-    
-    let loadedServices: QuotationService[] = [];
-    
-    // Parse package team members and deliverables JSON
-    if (pkg.team_members) {
+    const leadId = crmWizardStep === 3 ? (selectedLead?.lead_id || 'edit') : (createdLeadId || 'create');
+    const storageKey = `erp_quote_services_${leadId}`;
+    const cached = localStorage.getItem(storageKey);
+    let cacheIsValid = false;
+
+    if (cached) {
       try {
-        const tm = JSON.parse(pkg.team_members);
-        if (Array.isArray(tm)) {
-          tm.forEach((item, idx) => {
-            loadedServices.push({
-              id: `tm-${pkg.package_id}-${idx}-${Date.now()}`,
-              name: item.name || 'Team Member',
-              qty: item.qty || 1,
-              price: 0 // Base package pricing usually hides individual breakdown
+        const parsed = JSON.parse(cached);
+        if (parsed && Array.isArray(parsed) && parsed.length > 0) {
+          const cachedBaseServices = parsed.filter(s => !s.isAdditional && s.id.startsWith('base_'));
+          
+          if (cachedBaseServices.length === expectedBaseDeliverables.length) {
+            const allMatched = expectedBaseDeliverables.every((expected) => {
+              return cachedBaseServices.some(s => {
+                const parts = s.id.split('_');
+                const pkgIdPart = parts[1];
+                return pkgIdPart === expected.pkgId && s.name === expected.name;
+              });
             });
-          });
+            if (allMatched) {
+              cacheIsValid = true;
+              setQuoteServices(parsed);
+              return;
+            }
+          }
         }
-      } catch (e) {}
-    }
-    
-    if (pkg.deliverables) {
-      try {
-         const del = JSON.parse(pkg.deliverables);
-         if (Array.isArray(del)) {
-           del.forEach((item, idx) => {
-             loadedServices.push({
-               id: `del-${pkg.package_id}-${idx}-${Date.now()}`,
-               name: item.name || 'Deliverable',
-               qty: item.qty || 1,
-               price: 0
-             });
-           });
-         }
-      } catch (e) {}
-    }
-    
-    // Add the package itself as the base price line item if we didn't parse individual components well
-    if (loadedServices.length === 0) {
-        loadedServices.push({
-           id: `base-${pkg.package_id}-${Date.now()}`,
-           name: `${pkg.package_name} (Base Package)`,
-           qty: 1,
-           price: pkg.price || 0
-        });
-    } else {
-        // Add a primary package line for the main cost, components are cost 0
-        loadedServices.unshift({
-           id: `base-${pkg.package_id}-${Date.now()}`,
-           name: `${pkg.package_name} (Package Price)`,
-           qty: 1,
-           price: pkg.price || 0
-        });
+      } catch (e) {
+        console.warn("Failed to parse cached quote services", e);
+      }
     }
 
-    setQuoteServices(loadedServices);
-    persistQuoteServices(loadedServices);
-    showToastMsg(`Loaded "${pkg.package_name}" structure`, 'success');
+    // Fallback/Rebuild: auto-initialize directly using data from packages table
+    const initialServices: { id: string; name: string; qty: number; price: number; isAdditional: boolean }[] = [];
+    activePkgs.forEach((lp) => {
+      const pkgKey = lp.package_id || 'default';
+      const pObj = (packages || []).find(p => p.package_id === lp.package_id);
+      const incStr = pObj?.team_members || '';
+      const delStr = pObj?.deliverables || '';
+
+      const inclusionsList = parseTeamMembers(incStr);
+      const deliverablesList = delStr
+        ? delStr.split(/[,\n]/).map((s: string) => s.trim()).filter(Boolean)
+        : [];
+
+      const combined = [...inclusionsList, ...deliverablesList];
+
+      if (combined.length === 0) {
+        // Fallback standard photography inclusions
+        const defaultItems = [
+          '2 Photographers',
+          '1 Cinematographer',
+          'Drone Coverage',
+          'LED Wall',
+          'Album (40 Sheets)',
+          'Teaser Video',
+          'Highlight Video',
+          'Full Event Coverage'
+        ];
+        const defaultPrices = [20000, 15000, 10000, 10050, 8000, 7000, 5000, 5000];
+        const sumDefault = defaultPrices.reduce((a, b) => a + b, 0);
+        const totalCost = Number(lp.package_cost || 0);
+        const ratio = totalCost ? (totalCost / sumDefault) : 1;
+
+        let distributed = 0;
+        defaultItems.forEach((name, idx) => {
+          let pricePerItem;
+          if (idx === defaultItems.length - 1) {
+            pricePerItem = totalCost - distributed;
+          } else {
+            pricePerItem = Math.round((defaultPrices[idx] || 5000) * ratio);
+            distributed += pricePerItem;
+          }
+          initialServices.push({
+            id: `base_${pkgKey}_${idx}`,
+            name,
+            qty: 1,
+            price: pricePerItem,
+            isAdditional: false
+          });
+        });
+      } else {
+        // Divide lp.package_cost equally among combined items
+        const count = combined.length;
+        const totalCost = Number(lp.package_cost || 0);
+        let distributed = 0;
+        combined.forEach((name, idx) => {
+          let pricePerItem;
+          if (idx === count - 1) {
+            pricePerItem = totalCost - distributed;
+          } else {
+            pricePerItem = Math.round(totalCost / count);
+            distributed += pricePerItem;
+          }
+          initialServices.push({
+            id: `base_${pkgKey}_${idx}`,
+            name,
+            qty: 1,
+            price: pricePerItem,
+            isAdditional: false
+          });
+        });
+      }
+    });
+
+    setQuoteServices(initialServices);
+  }, [wizardStep, crmWizardStep, selectedLead, createdLeadId, packages, wizardLeadData.selected_package_id, selectedPkgIds]);
+
+  // Save services to local storage whenever they change
+  React.useEffect(() => {
+    const isStep4Active = wizardStep === 3 || crmWizardStep === 3;
+    if (!isStep4Active) return;
+    const leadId = crmWizardStep === 3 ? (selectedLead?.lead_id || 'edit') : (createdLeadId || 'create');
+    localStorage.setItem(`erp_quote_services_${leadId}`, JSON.stringify(quoteServices));
+  }, [quoteServices, selectedLead, createdLeadId, crmWizardStep, wizardStep]);
+
+  const handleEditInclusion = (pkgKey: string, index: number, value: string) => {
+    if (isStep3Locked) return;
+    setEditableInclusions(prev => {
+      const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
+      list[index] = value;
+      return { ...prev, [pkgKey]: list };
+    });
   };
 
-  const handleCreatePackageSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRemoveInclusion = (pkgKey: string, index: number) => {
+    if (isStep3Locked) return;
+    setEditableInclusions(prev => {
+      const list = prev[pkgKey] ? prev[pkgKey].filter((_, i) => i !== index) : [];
+      return { ...prev, [pkgKey]: list };
+    });
+  };
+
+  const handleAddInclusion = (pkgKey: string, value: string) => {
+    if (isStep3Locked) return;
+    if (!value.trim()) return;
+    setEditableInclusions(prev => {
+      const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
+      list.push(value.trim());
+      return { ...prev, [pkgKey]: list };
+    });
+  };
+
+  const handleEditDeliverable = (pkgKey: string, index: number, value: string) => {
+    if (isStep3Locked) return;
+    setEditableDeliverables(prev => {
+      const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
+      list[index] = value;
+      return { ...prev, [pkgKey]: list };
+    });
+  };
+
+  const handleRemoveDeliverable = (pkgKey: string, index: number) => {
+    if (isStep3Locked) return;
+    setEditableDeliverables(prev => {
+      const list = prev[pkgKey] ? prev[pkgKey].filter((_, i) => i !== index) : [];
+      return { ...prev, [pkgKey]: list };
+    });
+  };
+
+  const handleAddDeliverable = (pkgKey: string, value: string) => {
+    if (isStep3Locked) return;
+    if (!value.trim()) return;
+    setEditableDeliverables(prev => {
+      const list = prev[pkgKey] ? [...prev[pkgKey]] : [];
+      list.push(value.trim());
+      return { ...prev, [pkgKey]: list };
+    });
+  };
+
+  // Reset or clear state when selectedLead changes or is deselected
+  React.useEffect(() => {
+    if (!selectedLead && activeTab === 'create') {
+      return;
+    }
+    if (!selectedLead) {
+      setEditableInclusions({});
+      setEditableDeliverables({});
+      return;
+    }
+  }, [selectedLead, activeTab]);
+
+  const lastLoadedLeadIdRef = React.useRef<string | null>(null);
+
+  // Fetch from Supabase directly for the JSON columns
+  React.useEffect(() => {
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    const targetLeadId = selectedLead?.lead_id || (activeTab === 'create' ? createdLeadId : null);
+    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && supabaseClient) {
+      const currentKey = `${targetLeadId}`;
+      if (lastLoadedLeadIdRef.current === currentKey) {
+        return;
+      }
+      const fetchSupabasePackageData = async () => {
+        try {
+          const { data: lpData } = await supabaseClient
+            .from('lead_packages')
+            .select('*')
+            .eq('lead_id', targetLeadId);
+
+          const { data, error } = await supabaseClient
+            .from('leads')
+            .select('*')
+            .eq('lead_id', targetLeadId)
+            .maybeSingle();
+          
+          if (!error && (data || (lpData && lpData.length > 0))) {
+            lastLoadedLeadIdRef.current = currentKey;
+            
+            const primaryLp = lpData && lpData.length > 0 ? lpData[0] : null;
+            const effectivePkgId = pkgId || data?.Select_Package_Option || primaryLp?.package_id || 'Custom Package';
+
+            const cleanCost = primaryLp?.package_cost ?? data?.package_price ?? data?.budget;
+            if (cleanCost != null && !isNaN(Number(cleanCost))) {
+              setWizardLeadData(prev => {
+                const existingPkg = prev.selected_package_id || prev.Select_Package_Option;
+                const finalPkg = (existingPkg && existingPkg.trim() !== '') ? existingPkg : effectivePkgId;
+                return {
+                  ...prev,
+                  package_cost: Number(cleanCost),
+                  package_price: Number(cleanCost),
+                  budget: Number(cleanCost),
+                  notes: data?.notes_special_customizations ?? prev.notes,
+                  Select_Package_Option: finalPkg,
+                  selected_package_id: finalPkg,
+                };
+              });
+            }
+            if (data?.Quotation_Discount != null) {
+              setQuoteDiscount(Number(data.Quotation_Discount));
+            }
+            if (data?.Additional_Services_Cost != null) {
+              setQuoteAdditional(Number(data.Additional_Services_Cost));
+            }
+
+            const rawTeamData = data?.Team_Members || data?.Team_member || (data as any)?.team_members || primaryLp?.Team_Members_Included || primaryLp?.editable_inclusions;
+            console.log('TEAM MEMBERS LOADED', { leadId: targetLeadId, Team_Members: rawTeamData });
+            if (rawTeamData) {
+              const loadedInclusions = parseTeamMembersJsonToRecord(rawTeamData, effectivePkgId, crmEvents);
+              if (Object.keys(loadedInclusions).length > 0) {
+                setEditableInclusions(loadedInclusions);
+              }
+            }
+
+            const rawDelData = data?.Add_Deliverable || primaryLp?.deliverables_descriptionn || primaryLp?.editable_deliverables || data?.deliverables_description;
+            console.log('DELIVERABLES LOADED', { leadId: targetLeadId, Add_Deliverable: rawDelData });
+            if (rawDelData) {
+              const loadedDeliverables = parseDeliverablesJsonToRecord(rawDelData, effectivePkgId, crmEvents);
+              if (Object.keys(loadedDeliverables).length > 0) {
+                setEditableDeliverables(loadedDeliverables);
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching leads/lead_packages details from Supabase', e);
+        }
+      };
+      fetchSupabasePackageData();
+    } else {
+      if (!selectedLead && !createdLeadId) {
+        lastLoadedLeadIdRef.current = null;
+      }
+    }
+  }, [selectedLead?.lead_id, createdLeadId, activeTab, wizardLeadData.selected_package_id, wizardLeadData.Select_Package_Option, supabaseClient, crmEvents, crmWizardStep, wizardStep]);
+
+  // Save to Supabase directly for the JSON columns
+  const isFirstRender = React.useRef(true);
+  
+  // Explicit saves are now handled directly in the onChange handlers for immediate persistence
+  // to avoid closure stale state overwrites in debounced effects.
+
+  // Step 1 Automatic Data Prefill & Hydration from Supabase leads table
+  React.useEffect(() => {
+    if (!selectedLead?.lead_id || !supabaseClient || selectedLead.lead_id === 'DRAFT-LEAD') return;
+
+    let isMounted = true;
+
+    const loadStep1DataFromDB = async () => {
+      try {
+        const { data: dbLead, error } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', selectedLead.lead_id)
+          .maybeSingle();
+
+        if (error || !dbLead || !isMounted) return;
+
+        setWizardLeadData(prev => ({
+          ...prev,
+          customer_name: dbLead.customer_name || prev.customer_name || '',
+          mobile: dbLead.mobile ? String(dbLead.mobile) : (prev.mobile ? String(prev.mobile) : ''),
+          whatsapp_number: dbLead.whatsapp_number ? String(dbLead.whatsapp_number) : (dbLead.mobile ? String(dbLead.mobile) : (prev.whatsapp_number ? String(prev.whatsapp_number) : '')),
+          email: dbLead.email ?? prev.email ?? '',
+          lead_source: dbLead.lead_source || prev.lead_source || '',
+          Specify_Custom_Lead_Source_Name: dbLead.Specify_Custom_Lead_Source_Name || prev.Specify_Custom_Lead_Source_Name || '',
+          address: dbLead.address || prev.address || '',
+          city: dbLead.city || prev.city || '',
+          state: dbLead.state || prev.state || '',
+          pincode: dbLead.pincode || prev.pincode || '',
+          client_residence_address: dbLead.client_residence_address || prev.client_residence_address || '',
+          desired_event_shoot_type: dbLead.desired_event_shoot_type || prev.desired_event_shoot_type || '',
+          status: dbLead.status || dbLead.current_status || prev.status,
+          budget: dbLead.budget ?? prev.budget ?? 0,
+          package_price: dbLead.package_price ?? prev.package_price ?? 0,
+          Select_Package_Option: prev.Select_Package_Option || prev.selected_package_id || dbLead.Select_Package_Option || '',
+          selected_package_id: prev.selected_package_id || prev.Select_Package_Option || dbLead.Select_Package_Option || '',
+        }));
+
+        // Keep selectedLead object in sync with fresh database values
+        setSelectedLead(prev => {
+          if (!prev || prev.lead_id !== dbLead.lead_id) return prev;
+          return {
+            ...prev,
+            customer_name: dbLead.customer_name || prev.customer_name,
+            mobile: dbLead.mobile ? String(dbLead.mobile) : prev.mobile,
+            whatsapp_number: dbLead.whatsapp_number ? String(dbLead.whatsapp_number) : prev.whatsapp_number,
+            email: dbLead.email ?? prev.email,
+            lead_source: dbLead.lead_source || prev.lead_source,
+            Specify_Custom_Lead_Source_Name: dbLead.Specify_Custom_Lead_Source_Name || prev.Specify_Custom_Lead_Source_Name,
+            status: dbLead.status || dbLead.current_status || prev.status,
+          };
+        });
+      } catch (err) {
+        console.error("Error loading Step 1 data from DB:", err);
+      }
+    };
+
+    loadStep1DataFromDB();
+
+    return () => { isMounted = false; };
+  }, [selectedLead?.lead_id, supabaseClient]);
+
+  // Step 1 Customer Details Automatic Data Hydration from Supabase
+  React.useEffect(() => {
+    if (!selectedLead?.lead_id || selectedLead.lead_id === 'DRAFT-LEAD' || !supabaseClient) return;
+
+    let isMounted = true;
+
+    const hydrateCustomerDetails = async () => {
+      try {
+        const { data: leadData, error } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', selectedLead.lead_id)
+          .maybeSingle();
+
+        if (error || !leadData || !isMounted) return;
+
+        setWizardLeadData(prev => ({
+          ...prev,
+          customer_name: leadData.customer_name || prev.customer_name || selectedLead.customer_name || '',
+          mobile: String(leadData.mobile || prev.mobile || selectedLead.mobile || ''),
+          whatsapp_number: String(leadData.whatsapp_number || prev.whatsapp_number || leadData.mobile || prev.mobile || selectedLead.whatsapp_number || selectedLead.mobile || ''),
+          email: leadData.email ?? prev.email ?? selectedLead.email ?? '',
+          lead_source: leadData.lead_source || prev.lead_source || selectedLead.lead_source || 'Reference',
+          Specify_Custom_Lead_Source_Name: leadData.Specify_Custom_Lead_Source_Name || prev.Specify_Custom_Lead_Source_Name || selectedLead.Specify_Custom_Lead_Source_Name || '',
+          address: leadData.address || prev.address || selectedLead.address || '',
+          city: leadData.city || prev.city || selectedLead.city || '',
+          state: leadData.state || prev.state || selectedLead.state || '',
+          pincode: leadData.pincode || prev.pincode || selectedLead.pincode || '',
+          client_residence_address: leadData.client_residence_address || prev.client_residence_address || selectedLead.client_residence_address || '',
+          desired_event_shoot_type: leadData.desired_event_shoot_type || prev.desired_event_shoot_type || selectedLead.desired_event_shoot_type || '',
+          Select_Package_Option: prev.Select_Package_Option || prev.selected_package_id || leadData.Select_Package_Option || selectedLead.Select_Package_Option || '',
+          status: leadData.status || leadData.current_status || prev.status || selectedLead.status || '',
+        }));
+      } catch (err) {
+        console.warn("Failed to hydrate customer details from Supabase", err);
+      }
+    };
+
+    hydrateCustomerDetails();
+
+    return () => { isMounted = false; };
+  }, [selectedLead?.lead_id, supabaseClient]);
+
+  // Step 2 Automatic Data Persistence & Prefill
+  React.useEffect(() => {
+    const isStep2 = (activeTab === 'create' && wizardStep === 2) || (activeTab === 'crm' && crmWizardStep === 2);
+    const activeLeadId = activeTab === 'create' ? createdLeadId : selectedLead?.lead_id;
+
+    if (!isStep2 || !activeLeadId || !supabaseClient) return;
+
+    let isMounted = true;
+
+    const loadStep2DataFromDB = async () => {
+      try {
+        // 1. Fetch lead details
+        const { data: leadData, error: leadErr } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', activeLeadId)
+          .maybeSingle();
+
+        if (leadErr) {
+          console.error("Error fetching lead for step 2:", leadErr);
+          return;
+        }
+
+        if (!isMounted) return;
+
+        // 2. Fetch lead events
+        const { data: eventsData, error: eventsErr } = await supabaseClient
+          .from('lead_events')
+          .select('*')
+          .eq('lead_id', activeLeadId);
+
+        if (eventsErr) {
+          console.error("Error fetching events for step 2:", eventsErr);
+          return;
+        }
+
+        if (!isMounted) return;
+
+        if (leadData) {
+          // Restore follow-up details
+          if (leadData.next_follow_up_date) {
+            setStep2FollowUpDate(leadData.next_follow_up_date);
+          }
+          if (leadData.follow_up_notes) {
+            setStep2FollowUpNotes(leadData.follow_up_notes);
+          }
+          
+          setWizardLeadData(prev => ({
+            ...prev,
+            lead_source: leadData.lead_source || prev.lead_source,
+            Specify_Custom_Lead_Source_Name: leadData.Specify_Custom_Lead_Source_Name || prev.Specify_Custom_Lead_Source_Name,
+            client_residence_address: leadData.client_residence_address || prev.client_residence_address,
+            city: leadData.city || prev.city,
+            state: leadData.state || prev.state,
+            pincode: leadData.pincode || prev.pincode,
+            reference_source: leadData.reference_source || prev.reference_source,
+          }));
+        }
+
+        if (eventsData && eventsData.length > 0) {
+          const mappedEvents: LeadEvent[] = eventsData.map(ev => ({
+            id: ev.id,
+            event_type: ev.event_type,
+            event_name: ev.event_name,
+            event_date: ev.event_date,
+            event_start_date: ev.event_date,
+            event_end_date: ev.event_end_date || ev.Event_End_Date || '',
+            event_location: ev.event_location,
+            event_shoot_type: ev.event_shoot_type,
+            guest_pax: ev.guest_pax,
+            staff_pax: ev.staff_pax,
+            event_start_time: ev.event_start_time,
+            event_end_time: ev.event_end_time,
+            google_maps_link: ev.google_maps_link,
+            assigned_staff_names: ev.assigned_staff_names,
+            assigned_staff_mobiles: ev.assigned_staff_mobiles,
+            reporting_date: ev.reporting_date,
+            reporting_time: ev.reporting_time
+          }));
+
+          if (activeTab === 'create') {
+            setCreateEvents(mappedEvents);
+          } else {
+            setCrmEvents(mappedEvents);
+          }
+
+          // Pre-fill the form with the first event's details
+          const firstEv = mappedEvents[0];
+          setEventForm({
+            event_type: firstEv.event_type || '',
+            event_name: firstEv.event_name || '',
+            event_date: firstEv.event_date || '',
+            event_start_date: firstEv.event_date || '',
+            event_end_date: firstEv.event_end_date || (firstEv as any).Event_End_Date || '',
+            event_location: firstEv.event_location || '',
+            event_shoot_type: firstEv.event_shoot_type || '',
+            guest_pax: firstEv.guest_pax || '',
+            staff_pax: firstEv.staff_pax || '',
+            event_start_time: firstEv.event_start_time || '',
+            event_end_time: firstEv.event_end_time || '',
+            google_maps_link: firstEv.google_maps_link || ''
+          });
+          setEditingEventId(firstEv.id);
+          setShowEventForm(true); // Force form to display so fields are not blank
+        }
+      } catch (err) {
+        console.error("Error in loadStep2DataFromDB effect:", err);
+      }
+    };
+
+    loadStep2DataFromDB();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [wizardStep, crmWizardStep, activeTab, createdLeadId, selectedLead?.lead_id, supabaseClient]);
+
+  // Auto-scroll and focus transitions for Sales Popups & Forms
+  React.useEffect(() => {
+    if (activeTab === 'create') {
+      triggerAutoScrollAndFocus('#create_lead_form', 150);
+    }
+  }, [wizardStep, activeTab]);
+
+  React.useEffect(() => {
+    if (selectedLead) {
+      triggerAutoScrollAndFocus('#lead_details_mobile_modal', 150);
+    }
+  }, [crmWizardStep, selectedLead?.lead_id]);
+
+  React.useEffect(() => {
+    if (isAddFormOpen || editingPackage) {
+      triggerAutoScrollAndFocus('#add_edit_package_modal', 150);
+    }
+  }, [isAddFormOpen, editingPackage]);
+
+  React.useEffect(() => {
+    if (showConfirmModal) {
+      triggerAutoScrollAndFocus('#confirm_booking_modal', 150);
+      if (selectedLead) {
+         initEventsReporting(selectedLead);
+         setConfirmForm(prev => ({
+            ...prev,
+            quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.final_amount) || 0
+         }));
+      }
+    }
+  }, [showConfirmModal, selectedLead?.lead_id]);
+
+  React.useEffect(() => {
+    if (showFinalReportingModal) {
+      triggerAutoScrollAndFocus('#final_reporting_modal', 150);
+    }
+  }, [showFinalReportingModal]);
+
+  React.useEffect(() => {
+    if (showStep3Popup) {
+      triggerAutoScrollAndFocus('#step3_followup_modal', 150);
+    }
+  }, [showStep3Popup]);
+
+  React.useEffect(() => {
+    // Completely removed automated quotation number generation as per instructions
+  }, [wizardStep, crmWizardStep, activeQuoteNum]);
+
+  const getSelectedPkgsInfo = (isEdit: boolean) => {
+    const finalPkgId = (isEdit
+      ? (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option)
+      : (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0])) || 'Custom Package';
+
+    if (finalPkgId === 'Custom Package' || finalPkgId === 'custom_package') {
+      return [{
+        package_name: 'Custom Package',
+        package_id: 'Custom Package',
+        package_cost: Number(wizardLeadData.package_cost) || 0,
+        deliverables: wizardLeadData.deliverables || '',
+        inclusions: '',
+        team_members: '',
+        seasonal_offer: '',
+        terms_conditions: '',
+        event_type: '',
+        duration: '',
+        category: ''
+      }];
+    }
+
+    const primaryPkg = (packages || []).find(p => String(p.package_id) === String(finalPkgId) || String(p.package_name) === String(finalPkgId));
+    if (primaryPkg) {
+      return [{
+        package_name: primaryPkg.package_name,
+        package_id: primaryPkg.package_id,
+        package_cost: pkgPrices[primaryPkg.package_id] !== undefined ? Number(pkgPrices[primaryPkg.package_id]) : (Number(wizardLeadData.package_cost) || Number(primaryPkg.price) || 0),
+        deliverables: wizardLeadData.deliverables || pkgDeliverables[primaryPkg.package_id] || primaryPkg.deliverables || '',
+        inclusions: primaryPkg.package_includes || '',
+        team_members: primaryPkg.team_members || '',
+        seasonal_offer: primaryPkg.seasonal_offer || '',
+        terms_conditions: primaryPkg.terms_conditions || '',
+        event_type: primaryPkg.event_type || '',
+        duration: primaryPkg.duration || '',
+        category: primaryPkg.category || ''
+      }];
+    }
+
+    return [{
+      package_name: wizardLeadData.package_name || 'Custom Package',
+      package_id: finalPkgId || 'Custom Package',
+      package_cost: Number(wizardLeadData.package_cost) || 0,
+      deliverables: wizardLeadData.deliverables || '',
+      inclusions: '',
+      team_members: '',
+      seasonal_offer: '',
+      terms_conditions: '',
+      event_type: '',
+      duration: '',
+      category: ''
+    }];
+  };
+
+  const dynamicBaseSum = getSelectedPkgsInfo(crmWizardStep > 0).reduce((sum, p) => sum + Number(p.package_cost || 0), 0);
+  const dynamicAdditionalSum = quoteServices
+    .filter(s => s.isAdditional)
+    .reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
+    const discountVal = Number(quoteDiscount || 0);
+  const rawDynamicFinalAmt = Math.max(0, dynamicBaseSum + Number(quoteAdditional || 0) - discountVal);
+  const dynamicFinalAmt = Number.isNaN(rawDynamicFinalAmt) ? 0 : rawDynamicFinalAmt;
+
+  React.useEffect(() => {
+    setWizardLeadData(prev => {
+      if (prev.final_amount !== dynamicFinalAmt) {
+        return { ...prev, final_amount: dynamicFinalAmt };
+      }
+      return prev;
+    });
+  }, [dynamicFinalAmt]);
+
+  const getLeadInfoForQuote = (isEdit: boolean) => {
+    const effectiveSalesName = getEffectiveSalesStaffName();
+    const effectiveSalesMobile = getEffectiveSalesStaffMobile();
+
+    const finalAmountVal = dynamicFinalAmt;
+    if (isEdit) {
+      return {
+        ...selectedLead,
+        customer_name: wizardLeadData.customer_name,
+        mobile: wizardLeadData.mobile,
+        email: wizardLeadData.email,
+        event_date: wizardLeadData.event_date,
+        event_location: wizardLeadData.event_location,
+        event_type: wizardLeadData.event_type,
+        shoot_type: wizardLeadData.shoot_type,
+        budget: wizardLeadData.budget || finalAmountVal,
+        whatsapp_number: wizardLeadData.whatsapp_number,
+        address: wizardLeadData.address,
+        city: wizardLeadData.city,
+        state: wizardLeadData.state,
+        pincode: wizardLeadData.pincode,
+        client_residence_address: wizardLeadData.client_residence_address,
+        desired_event_shoot_type: wizardLeadData.desired_event_shoot_type,
+        deliverables_description: wizardLeadData.deliverables,
+        notes_special_customizations: wizardLeadData.notes,
+        Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || '',
+        sales_staff_name: effectiveSalesName,
+        sales_staff_mobile: effectiveSalesMobile,
+        events: crmEvents,
+        Final_Quotation_Amount: finalAmountVal || wizardLeadData.final_quoted_amount || wizardLeadData.budget || selectedLead?.Final_Quotation_Amount || selectedLead?.final_quotation_amount || selectedLead?.final_amount,
+        final_quotation_amount: finalAmountVal || wizardLeadData.final_quoted_amount || wizardLeadData.budget || selectedLead?.final_quotation_amount || selectedLead?.Final_Quotation_Amount || selectedLead?.final_amount,
+        final_amount: finalAmountVal || wizardLeadData.final_quoted_amount || wizardLeadData.budget || selectedLead?.final_amount || selectedLead?.Final_Quotation_Amount || selectedLead?.final_quotation_amount,
+        dynamicFinalAmt: finalAmountVal
+      };
+    } else {
+      return {
+        ...createForm,
+        lead_id: createdLeadId || 'DRAFT-LEAD',
+        deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
+        notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
+        Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
+        sales_staff_name: effectiveSalesName,
+        sales_staff_mobile: effectiveSalesMobile,
+        events: createEvents,
+        Final_Quotation_Amount: finalAmountVal || createForm.budget,
+        final_quotation_amount: finalAmountVal || createForm.budget,
+        final_amount: finalAmountVal || createForm.budget,
+        dynamicFinalAmt: finalAmountVal
+      };
+    }
+  };
+
+  const validateLeadForQuotation = (leadObj: any, activePkgs: any[]) => {
+    const missing: string[] = [];
+    if (!String(leadObj.customer_name || '').trim()) missing.push('Customer Name');
+    if (!String(leadObj.mobile || '').trim()) missing.push('Mobile Number');
+    if (!String(leadObj.event_type || '').trim()) missing.push('Event Type');
+    if (!String(leadObj.event_date || '').trim()) missing.push('Event Date');
+    if (!String(leadObj.event_location || '').trim() && !String(leadObj.location || '').trim()) missing.push('Event Location');
+    if (activePkgs.length === 0) missing.push('At least one selected package');
+    return missing;
+  };
+
+  const handleGenerateQuote = async (isEdit: boolean): Promise<string | null> => {
     setIsSaving(true);
-    setDeletePackageError(null);
-    setPackageSuccessMsg(null);
+    console.log("‚úî Starting quotation generation...");
     try {
-      if (!pkgForm.package_name) throw new Error("Package Name is required");
+      const effName = getEffectiveSalesStaffName();
+      const effMobile = getEffectiveSalesStaffMobile();
+      if (!salesStaffName || !salesStaffName.trim()) setSalesStaffName(effName);
+      if (!salesStaffMobile || !salesStaffMobile.trim()) setSalesStaffMobile(effMobile);
+
+      const leadObj = getLeadInfoForQuote(isEdit);
+      const leadIdForError = leadObj?.lead_id || createdLeadId || 'UNKNOWN';
+
+      console.log("‚úî Validating form...");
+      const activePkgs = getSelectedPkgsInfo(isEdit);
+
+      const missingFields = validateLeadForQuotation(leadObj, activePkgs);
+      if (missingFields.length > 0) {
+        showErrorHelper(
+          "Quotation Incomplete",
+          `Missing required fields: ${missingFields.join(', ')}`,
+          "validateLeadForQuotation()",
+          leadIdForError,
+          "Complete all required fields before generating the quotation."
+        );
+        setIsSaving(false);
+        return null;
+      }
+
+      const basePkgSum = dynamicBaseSum;
+      const finalAmt = dynamicFinalAmt;
+
+      const leadId = leadObj.lead_id || 'DRAFT-LEAD';
+      let dbQuote = null;
+      if (supabaseClient && leadId !== 'DRAFT-LEAD') {
+        const { data, error } = await supabaseClient
+          .from('quotations')
+          .select('quotation_id, quotation_number, created_at')
+          .eq('lead_id', leadId)
+          .maybeSingle();
+        if (!error && data) {
+          dbQuote = data;
+        }
+      }
+
+      const existingQuotation = dbQuote || (quotations || []).find(q => q.lead_id === leadId);
       
-      const finalCategory = customCategory || pkgForm.category;
-      if (!finalCategory) throw new Error("Category is required");
+      const d = new Date();
+      const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+      const randomFour = String(Math.floor(1 + Math.random() * 9999)).padStart(4, '0');
+      const generatedQuotNum = existingQuotation ? existingQuotation.quotation_number : `QT-${dateStr}-${randomFour}`;
+      const quotNum = activeQuoteNum || generatedQuotNum;
+      
+      console.log(`‚úî Creating/Updating quotation ${quotNum}...`);
+      const qId = existingQuotation ? existingQuotation.quotation_id : ('QT-' + Math.random().toString(36).substring(2, 9).toUpperCase());
+      
+      const activePkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+      const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+        activePkgId,
+        crmEvents,
+        editableInclusions,
+        editableDeliverables
+      );
+      
+      const activeDeliverablesText = (deliverablesText === '[]' && leadObj.deliverables_description && leadObj.deliverables_description !== '[]') 
+        ? leadObj.deliverables_description 
+        : deliverablesText;
+        
+      const activeTeamMembersText = (teamMembersText === '[]' && (leadObj.Team_member || leadObj.Team_Members) && (leadObj.Team_member !== '[]' || leadObj.Team_Members !== '[]'))
+        ? (leadObj.Team_member || leadObj.Team_Members)
+        : teamMembersText;
+        
+      let finalBasePkgSum = basePkgSum;
+      if (finalBasePkgSum === 0 && leadObj.package_price && leadObj.package_price > 0) {
+        finalBasePkgSum = leadObj.package_price;
+      }
 
-      const tMembers = pkgTeamMembers.filter(t => t.name.trim() !== '');
-      const dItems = pkgDeliverablesList.filter(d => d.name.trim() !== '');
+      const standardQuotation = {
+        quotation_id: qId,
+        quotation_number: quotNum,
+        lead_id: leadId,
+        customer_id: leadObj.customer_name || '',
+        customer_name: leadObj.customer_name || '',
+        order_id: '',
+        package_name: activePkgs.map(p => p.package_name).join(' + '),
+        package_price: finalBasePkgSum,
+        quotation_amount: finalBasePkgSum + Number(quoteAdditional || 0),
+        discount: quoteDiscount,
+        discount_amount: quoteDiscount,
+        additional_services_cost: Number(quoteAdditional || 0),
+        final_quotation_amount: finalAmt,
+        final_amount: finalAmt,
+        tax_amount: 0,
+        quotation_status: 'Sent',
+        pdf_url: '',
+        generated_date: new Date().toISOString().split('T')[0],
+        created_at: existingQuotation ? existingQuotation.created_at : new Date().toISOString(),
+        created_by: salesStaffName || 'System',
+        whatsapp_sent_status: false,
+        viewed_status: false,
+        terms_conditions: quotationTerms,
+        deliverables_description: activeDeliverablesText,
+        notes_special_customizations: leadObj.notes_special_customizations,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalAmt,
+        client_residence_address: leadObj.client_residence_address,
+        city: leadObj.city,
+        state: leadObj.state,
+        pincode: leadObj.pincode,
+        desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
 
-      const payload = {
-        package_name: pkgForm.package_name,
-        category: finalCategory,
-        price: Number(pkgForm.price),
-        status: pkgForm.status,
-        deliverables: dItems.length > 0 ? JSON.stringify(dItems) : '',
-        team_members: tMembers.length > 0 ? JSON.stringify(tMembers) : '',
-        seasonal_offer: pkgForm.seasonal_offer,
-        terms_conditions: pkgForm.terms_conditions,
-        event_type: pkgForm.event_type,
-        duration: pkgForm.duration,
-        package_includes: pkgForm.package_includes
+        editableInclusions: editableInclusions,
+        editableDeliverables: editableDeliverables
       };
 
-      if (editingPackage) {
-        const result = await updatePackage(editingPackage.package_id, payload);
-        if (result.success) {
-          showToastMsg('Package updated successfully!', 'success');
-          setIsAddFormOpen(false);
-          setEditingPackage(null);
-          setCustomCategory('');
-        } else throw new Error(result.error);
+      console.log("‚úî Saving to Supabase...");
+      const finalQuoteNum = await addQuotation(standardQuotation);
+      console.log(`‚úî Quotation saved successfully. Confirmed Quotation Number: ${finalQuoteNum}`);
+      setActiveQuoteNum(finalQuoteNum);
+
+      if (isEdit) {
+        if (wizardLeadData.selected_package_id) {
+          const selectedPkg = packages.find((p) => p.package_id === wizardLeadData.selected_package_id);
+          const activePackagesList = (leadPackages || []).filter(lp => lp.lead_id === selectedLead.lead_id);
+          
+          if (!activePackagesList.some(lp => lp.package_id === wizardLeadData.selected_package_id)) {
+            activePackagesList.push({
+              package_id: wizardLeadData.selected_package_id,
+              package_name: selectedPkg?.package_name || 'Selected Package',
+              package_cost: Number(wizardLeadData.package_cost),
+              quantity: 1,
+              total_amount: Number(wizardLeadData.package_cost),
+              discount: 0,
+              final_amount: Number(wizardLeadData.package_cost),
+              deliverables_description: activeDeliverablesText,
+              notes_special_customizations: wizardLeadData.notes,
+              additional_services_cost: 0,
+              team_members: '',
+              deliverables: ''
+            } as any);
+          }
+          
+          const payloadToSave = activePackagesList.map(lp => {
+            const isPrimary = lp.package_id === wizardLeadData.selected_package_id;
+            const incStr = (editableInclusions[lp.package_id!] || []).join(', ');
+            const delStr = (editableDeliverables[lp.package_id!] || []).join(', ');
+            
+            // Protect against empty object overwriting valid data during a race condition
+            const hasNewInclusions = Object.keys(editableInclusions).length > 0;
+            const hasNewDeliverables = Object.keys(editableDeliverables).length > 0;
+            
+            return {
+              package_id: lp.package_id!,
+              package_name: lp.package_name || 'Selected Package',
+              package_cost: isPrimary ? Number(wizardLeadData.package_cost) : lp.package_cost,
+              quantity: lp.quantity || 1,
+              total_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.total_amount,
+              discount: lp.discount || 0,
+              final_amount: isPrimary ? Number(wizardLeadData.package_cost) : lp.final_amount,
+              deliverables_description: isPrimary ? activeDeliverablesText : lp.deliverables_description,
+              notes_special_customizations: isPrimary ? wizardLeadData.notes : lp.notes_special_customizations,
+              additional_services_cost: lp.additional_services_cost || 0,
+              team_members: incStr || lp.team_members || '',
+              deliverables: delStr || lp.deliverables || '',
+              ...(hasNewInclusions ? { editable_inclusions: editableInclusions, Team_Members_Included: teamMembersJson } : {}),
+              ...(hasNewDeliverables ? { editable_deliverables: editableDeliverables, deliverables_descriptionn: deliverablesJson } : {}),
+            };
+          });
+
+          await saveLeadPackages(selectedLead.lead_id, payloadToSave);
+        }
+
+        const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
+
+        setWizardLeadData(prev => ({
+          ...prev,
+          budget: finalAmt,
+          final_quoted_amount: finalAmt,
+          status: 'Quotation Sent' as CurrentStage,
+          remarks: updatedRemarks,
+          deliverables: activeDeliverablesText,
+          deliverables_description: activeDeliverablesText,
+          Team_member: activeTeamMembersText,
+          Team_Members: activeTeamMembersText,
+          team_members: activeTeamMembersText
+        }));
+        await updateLead(leadObj.lead_id, {
+          budget: finalAmt,
+          status: 'Quotation Sent' as CurrentStage,
+          package_price: finalBasePkgSum,
+          deliverables_description: activeDeliverablesText,
+          Team_member: activeTeamMembersText,
+          Team_Members: activeTeamMembersText,
+          team_members: activeTeamMembersText,
+          notes_special_customizations: leadObj.notes_special_customizations,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalAmt,
+          
+          client_residence_address: leadObj.client_residence_address,
+          city: leadObj.city,
+          state: leadObj.state,
+          pincode: leadObj.pincode,
+          desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
+          remarks: updatedRemarks,
+          Select_Package_Option: leadObj.Select_Package_Option || ''
+        });
+        
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            status: 'Quotation Sent' as CurrentStage,
+            remarks: updatedRemarks
+          };
+        });
       } else {
-        const result = await addPackage(payload);
-        if (result.success) {
-          showToastMsg('Package created successfully!', 'success');
-          setIsAddFormOpen(false);
-          setCustomCategory('');
-        } else throw new Error(result.error);
+        setCreateForm(prev => ({
+          ...prev,
+          budget: finalAmt
+        }));
+        setSalesStatus('Quotation Sent');
+        await updateLead(createdLeadId!, {
+          budget: finalAmt,
+          status: 'Quotation Sent' as CurrentStage,
+          package_price: finalBasePkgSum,
+          deliverables_description: activeDeliverablesText,
+          Team_member: activeTeamMembersText,
+          Team_Members: activeTeamMembersText,
+          team_members: activeTeamMembersText,
+          notes_special_customizations: leadObj.notes_special_customizations,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalAmt,
+          sales_staff_name: salesStaffName,
+          sales_staff_mobile: salesStaffMobile,
+          client_residence_address: leadObj.client_residence_address,
+          city: leadObj.city,
+          state: leadObj.state,
+          pincode: leadObj.pincode,
+          desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
+          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
+          Select_Package_Option: leadObj.Select_Package_Option || ''
+        });
       }
+
+      console.log("‚úî Process completed");
+      return finalQuoteNum;
     } catch (err: any) {
-      console.error(err);
-      setDeletePackageError(err.message || 'Failed to save package');
-      showToastMsg(err.message || 'Failed to save package', 'error');
+      showErrorHelper(
+        "Quotation Save Failed",
+        err.message || "Failed to save quotation data to the database.",
+        "handleGenerateQuote()",
+        isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+        "Check your network connection and ensure the lead data is valid.",
+        err
+      );
+      return null;
     } finally {
       setIsSaving(false);
     }
   };
 
-  const openEditPackage = (pkg: any) => {
-    setEditingPackage(pkg);
-    setPkgForm({
-      package_name: pkg.package_name,
-      category: pkg.category || 'Weddings',
-      price: pkg.price || 0,
-      status: pkg.status || 'Active',
-      deliverables: pkg.deliverables || '',
-      team_members: pkg.team_members || '',
-      seasonal_offer: pkg.seasonal_offer || '',
-      terms_conditions: pkg.terms_conditions || '',
-      event_type: pkg.event_type || '',
-      duration: pkg.duration || '',
-      package_includes: pkg.package_includes || ''
-    });
-
+  const handlePreviewQuotePDF = async (isEdit: boolean) => {
     try {
-      const tm = pkg.team_members ? JSON.parse(pkg.team_members) : [];
-      setPkgTeamMembers(Array.isArray(tm) && tm.length > 0 ? tm : [{qty: 1, name: ''}]);
-    } catch (e) {
-      setPkgTeamMembers([{qty: 1, name: ''}]);
-    }
+      const effName = getEffectiveSalesStaffName();
+      const effMobile = getEffectiveSalesStaffMobile();
+      if (!salesStaffName || !salesStaffName.trim()) setSalesStaffName(effName);
+      if (!salesStaffMobile || !salesStaffMobile.trim()) setSalesStaffMobile(effMobile);
 
-    try {
-      const d = pkg.deliverables ? JSON.parse(pkg.deliverables) : [];
-      setPkgDeliverablesList(Array.isArray(d) ? d : []);
-    } catch (e) {
-      setPkgDeliverablesList([]);
-    }
+      const leadObj = getLeadInfoForQuote(isEdit);
+      const activePkgs = getSelectedPkgsInfo(isEdit);
 
-    if (!PACKAGE_CATEGORIES.includes(pkg.category)) {
-      setCustomCategory(pkg.category);
-    } else {
-      setCustomCategory('');
-    }
-
-    setIsAddFormOpen(true);
-  };
-
-  const executeDeletePackage = async () => {
-    if (!deletingPackageId) return;
-    setIsDeletingPackage(true);
-    setDeletePackageError(null);
-    try {
-      const result = await deletePackage(deletingPackageId);
-      if (result.success) {
-        setPackageSuccessMsg('Package deleted successfully');
-        setDeletingPackageId(null);
-        setTimeout(() => setPackageSuccessMsg(null), 3000);
-      } else {
-        throw new Error(result.error || 'Failed to delete package');
+      const missingFields = validateLeadForQuotation(leadObj, activePkgs);
+      if (missingFields.length > 0) {
+        showToastMsg(`Quotation Incomplete! Please enter the following fields: ${missingFields.join(', ')}`, "error");
+        return;
       }
-    } catch (err: any) {
-      setDeletePackageError(err.message || 'Failed to delete package');
-    } finally {
-      setIsDeletingPackage(false);
+
+      let currentLogo = logoBase64;
+      let currentAspect = logoAspectRatio;
+      try {
+        const logoUrl = 'https://aqifyxsimhqayfjwzzwj.supabase.co/storage/v1/object/public/img/logo%20(4)%20(1).png';
+        const result = await getLogoBase64FromUrl(logoUrl);
+        currentLogo = result.base64;
+        currentAspect = result.aspect;
+      } catch (e) {
+        console.warn("Failed to wait-load logo for preview, using preloaded:", e);
+      }
+
+      const doc = generateQuotationPDF(
+        leadObj,
+        activePkgs,
+        "",
+        quotationTerms,
+        currentLogo,
+        currentAspect,
+        editableInclusions,
+        editableDeliverables,
+        Number(quoteDiscount || 0),
+        Number(quoteAdditional || 0),
+        quoteServices
+      );
+      
+      const blobUrl = doc.output('bloburl');
+      setGeneratedPDFBlobUrl(blobUrl);
+      window.open(blobUrl, '_blank');
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      alert("Failed to preview PDF.");
     }
   };
 
-  return (
-    <div className="flex flex-col h-full bg-slate-50 overflow-hidden relative">
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
-        .animate-slide-up { animation: slideUp 0.4s ease-out; }
-        .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
-        .fancy-checkbox:checked + div { border-color: #0ea5e9; background-color: #f0f9ff; }
-        .fancy-checkbox:checked + div svg { opacity: 1; transform: scale(1); }
-      `}</style>
+  const handleDownloadQuotePDF = async (isEdit: boolean) => {
+    try {
+      console.log("‚úî Generating PDF...");
+      const leadObj = getLeadInfoForQuote(isEdit);
+      const activePkgs = getSelectedPkgsInfo(isEdit);
       
-      {/* Toast Notification Container */}
-      {crmToast && (
-        <div id="crm-toast-container" className="fixed top-20 right-4 z-[9999] animate-fade-in pointer-events-none">
-          <div className={`px-6 py-3 rounded-xl shadow-xl flex items-center gap-3 backdrop-blur-md border ${
-            crmToast.type === 'success' ? 'bg-emerald-500/90 text-white border-emerald-400' : 'bg-red-500/90 text-white border-red-400'
-          }`}>
-            {crmToast.type === 'success' ? <CheckCircle2 size={20} className="drop-shadow" /> : <AlertCircle size={20} className="drop-shadow" />}
-            <span className="font-semibold tracking-wide drop-shadow-sm">{crmToast.message}</span>
-          </div>
-        </div>
-      )}
+      const doc = generateQuotationPDF(
+        leadObj,
+        activePkgs,
+        "",
+        quotationTerms,
+        logoBase64,
+        logoAspectRatio,
+        editableInclusions,
+        editableDeliverables,
+        Number(quoteDiscount || 0),
+        Number(quoteAdditional || 0),
+        quoteServices
+      );
+      
+      console.log("‚úî PDF generated");
+      doc.save(`Quotation.pdf`);
+      
+      showToastMsg("Quotation successfully generated!", "success");
+    } catch (err: any) {
+      showErrorHelper(
+        "PDF Generation Failed",
+        err.message || "jsPDF failed to render the quotation document.",
+        "handleDownloadQuotePDF()",
+        isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+        "Check console logs to see if there is an issue with the document template or variables.",
+        err
+      );
+    }
+  };
 
-      {/* Global Status Error Modal */}
-      {statusError && (
-         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-red-100 flex flex-col">
-               <div className="bg-red-50 p-4 border-b border-red-100 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
-                     <AlertCircle size={24} />
-                  </div>
-                  <div>
-                     <h3 className="text-lg font-bold text-red-700">{statusError.title}</h3>
-                     <p className="text-sm text-red-600/80 font-medium">Database Operation Failed</p>
-                  </div>
-               </div>
-               
-               <div className="p-6 overflow-y-auto max-h-[60vh] bg-slate-50">
-                  <div className="mb-4">
-                     <h4 className="text-sm font-bold text-slate-700 mb-1 flex items-center gap-2">
-                        <FileText size={14} className="text-slate-400" />
-                        Error Reason
-                     </h4>
-                     <div className="bg-white p-3 rounded-lg border border-slate-200 text-sm text-slate-700 font-mono text-xs whitespace-pre-wrap break-all shadow-inner">
-                        {statusError.reason}
-                     </div>
-                  </div>
-                  
-                  <div>
-                     <h4 className="text-sm font-bold text-emerald-700 mb-1 flex items-center gap-2">
-                        <Activity size={14} className="text-emerald-500" />
-                        Suggested Fix
-                     </h4>
-                     <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-200 text-sm text-emerald-800 leading-relaxed">
-                        {statusError.suggestedFix}
-                     </div>
-                  </div>
-               </div>
-               
-               <div className="p-4 border-t border-slate-200 bg-white flex justify-end">
-                  <button 
-                     onClick={() => setStatusError(null)}
-                     className="px-6 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 transition-colors shadow-sm active:scale-95"
-                  >
-                     Acknowledge & Close
-                  </button>
-               </div>
-            </div>
-         </div>
-      )}
+  const handleSendWhatsAppQuote = async (isEdit: boolean) => {
+    try {
+      console.log("‚úî Generating PDF...");
+      const leadObj = getLeadInfoForQuote(isEdit);
+      const activePkgs = getSelectedPkgsInfo(isEdit);
+      const finalAmt = dynamicFinalAmt;
 
-      {/* Header and Tabs */}
-      <div className="bg-white border-b border-slate-200 px-4 md:px-6 py-4 flex-shrink-0 z-10 shadow-sm relative">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
-              <PhoneCall size={20} />
-            </div>
+      const doc = generateQuotationPDF(
+        leadObj,
+        activePkgs,
+        "",
+        quotationTerms,
+        logoBase64,
+        logoAspectRatio,
+        editableInclusions,
+        editableDeliverables,
+        Number(quoteDiscount || 0),
+        Number(quoteAdditional || 0),
+        quoteServices
+      );
+      
+      console.log("‚úî PDF generated");
+      const pdfBlob = doc.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      setGeneratedPDFBlobUrl(blobUrl);
+
+      // Download the PDF automatically as requested
+      doc.save(`Quotation.pdf`);
+
+      console.log("‚úî Opening WhatsApp...");
+      const rawPhone = leadObj.whatsapp_number || leadObj.mobile || '';
+      const phoneStr = typeof rawPhone === 'string' ? rawPhone : String(rawPhone);
+      
+      const safeCustomerName = String(leadObj.customer_name || '');
+      const safeEventLocation = String(leadObj.event_location || leadObj.location || 'N/A');
+
+      let eventDetailsStr = '';
+      if (leadObj.events && leadObj.events.length > 0) {
+        eventDetailsStr = leadObj.events.map((ev) => {
+          const eName = ev.event_name || ev.event_type || 'Event';
+          const eDate = ev.event_date || 'N/A';
+          const eTime = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : '';
+          return `üéâ ${eName}\nüìÖ Date: ${eDate}${eTime ? ` | Time: ${eTime}` : ''}`;
+        }).join('\n\n') + '\n';
+      } else {
+        const safeEventType = String(leadObj.event_type || 'Event');
+        const safeEventDate = String(leadObj.event_date || 'N/A');
+        eventDetailsStr = `üéâ Event: ${safeEventType}\nüìÖ Event Date: ${safeEventDate}\n`;
+      }
+
+      const message = `Hello *${safeCustomerName}*,\n\n` +
+        `Thank you for choosing *PhotoCrew Pictures*.\n\n` +
+        `Please find your quotation details below:\n\n` +
+        eventDetailsStr +
+        `üìç Event Address: ${safeEventLocation}\n` +
+        `üí∞ Final Amount: ‚Çπ${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `Thank you.\nPhotoCrew Pictures`;
+
+      const cleanPhone = phoneStr.replace(/[^0-9]/g, '');
+      if (!cleanPhone) {
+        showErrorHelper(
+          "WhatsApp Redirect Failed",
+          "Customer WhatsApp or mobile number is missing.",
+          "handleSendWhatsAppQuote()",
+          isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+          "Enter a valid mobile/WhatsApp number in Customer Details."
+        );
+        return;
+      }
+      const formattedPhone = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+
+      window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+
+      showToastMsg("Quotation downloaded and WhatsApp prepared!", "success");
+      console.log("‚úî Process completed");
+    } catch (err: any) {
+      showErrorHelper(
+        "WhatsApp Redirect Failed",
+        err.message || "Failed to prepare WhatsApp message or generate PDF.",
+        "handleSendWhatsAppQuote()",
+        isEdit && selectedLead ? selectedLead.lead_id : (createdLeadId || 'UNKNOWN'),
+        "Check console logs to see if there is an issue with the document template or variables.",
+        err
+      );
+    }
+  };
+
+  const handleSendEmailQuote = async (isEdit: boolean) => {
+    try {
+      const leadObj = getLeadInfoForQuote(isEdit);
+      const activePkgs = getSelectedPkgsInfo(isEdit);
+      const basePkgSum = dynamicBaseSum;
+      const finalAmt = dynamicFinalAmt;
+      
+      const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
+      const email = leadObj.email || '';
+      
+      const safeCustomerName = String(leadObj.customer_name || '');
+      const safeEventType = String(leadObj.event_type || 'Event');
+
+      const subject = `Photocrew Pictures - Custom Quotation Details`;
+      const body = `Dear ${safeCustomerName},\n\n` +
+        `Thank you for reach out to us! We are pleased to provide the custom quotation details for your upcoming ${safeEventType} shoot.\n\n` +
+        `Selected Package: ${pkgNames}\n` +
+        `Package Base Price: Rs. ${basePkgSum.toLocaleString('en-IN')}\n` +
+        `Discount Applied: Rs. ${(quoteDiscount || 0).toLocaleString('en-IN')}\n` +
+        `Final Quotation Amount: Rs. ${finalAmt.toLocaleString('en-IN')}\n\n` +
+        `We will follow up shortly to discuss any specific adjustments you might need.\n\n` +
+        `Warm regards,\n` +
+        `The Photocrew Pictures Team\n` +
+        `https://www.photocrewpictures.com/`;
+
+      window.open(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, '_blank');
+    } catch (err: any) {
+      showToastMsg("Failed to open email client.", "error");
+    }
+  };
+
+  const renderQuotationAndStep4Section = (isEdit: boolean) => {
+    const activePkgs = getSelectedPkgsInfo(isEdit);
+    const basePkgSum = dynamicBaseSum;
+    const finalAmt = dynamicFinalAmt;
+    const pkgNames = activePkgs.map(p => p.package_name).join(' + ') || 'Selected Package';
+
+    const budgetValue = isEdit ? wizardLeadData.budget : createForm.budget;
+    const setBudget = (val: number | '') => {
+      if (isEdit) {
+        setWizardLeadData(prev => ({ ...prev, budget: val === '' ? 0 : val }));
+      } else {
+        setCreateForm(prev => ({ ...prev, budget: val }));
+      }
+    };
+
+    const remarksValue = isEdit ? wizardLeadData.remarks : createForm.remarks;
+    const setRemarks = (val: string) => {
+      if (isEdit) {
+        setWizardLeadData(prev => ({ ...prev, remarks: val }));
+      } else {
+        setCreateForm(prev => ({ ...prev, remarks: val }));
+      }
+    };
+
+    const notesValue = isEdit ? wizardLeadData.notes : internalNotes;
+    const setNotes = (val: string) => {
+      if (isEdit) {
+        setWizardLeadData(prev => ({ ...prev, notes: val }));
+      } else {
+        setInternalNotes(val);
+      }
+    };
+
+    const followUpValue = isEdit ? wizardLeadData.next_follow_up_date : followUpDate;
+    const setFollowUp = (val: string) => {
+      if (isEdit) {
+        setWizardLeadData(prev => ({ ...prev, next_follow_up_date: val }));
+      } else {
+        setFollowUpDate(val);
+      }
+    };
+
+    const leadValue = isEdit ? wizardLeadData.lead_value : createForm.lead_value;
+    const setLeadValue = (val: number | '') => {
+      if (isEdit) {
+        setWizardLeadData(prev => ({ ...prev, lead_value: val === '' ? 0 : val }));
+      } else {
+        setCreateForm(prev => ({ ...prev, lead_value: val }));
+      }
+    };
+
+    const leadScore = isEdit ? wizardLeadData.lead_score : createForm.lead_score;
+    const setLeadScore = (val: number | '') => {
+      if (isEdit) {
+        setWizardLeadData(prev => ({ ...prev, lead_score: val === '' ? 0 : val }));
+      } else {
+        setCreateForm(prev => ({ ...prev, lead_score: val }));
+      }
+    };
+
+    return (
+      <div className="space-y-6">
+        {/* Quotation Details */}
+        <div className="bg-slate-900/50 border border-slate-805/40 rounded-xl p-4.5 space-y-3.5 shadow-sm">
+          <h4 className="text-xs font-bold text-amber-500 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-2">
+            <span>üìã</span> Quotation Details
+          </h4>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Package Amount (Editable Package Base Price) */}
             <div>
-              <h2 className="text-xl font-bold text-slate-800 tracking-tight">Sales & Leads Desk</h2>
-              <p className="text-xs text-slate-500 font-medium tracking-wide uppercase">Manage Inquiries & Quotations</p>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center gap-1.5 font-mono">
+                <span>üí∞</span> Package Base Price (‚Çπ)
+              </label>
+              <input
+                type="number"
+                id={isEdit ? "input_section2_package_base_price" : "create_section2_package_base_price"}
+                value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (basePkgSum || 0)}
+                onChange={(e) => {
+                  const rawVal = e.target.value;
+                  const numVal = rawVal === '' ? '' : rawVal;
+                  const parsedNum = rawVal === '' ? 0 : Number(numVal);
+                  const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+                  setWizardLeadData(prev => ({
+                    ...prev,
+                    package_cost: numVal,
+                    package_price: numVal,
+                    budget: parsedNum,
+                    final_quoted_amount: parsedNum
+                  }));
+                  if (currentPkg) {
+                    setPkgPrices(prev => ({ ...prev, [currentPkg]: parsedNum }));
+                  }
+                  saveStep3DataRealtime(editableInclusions, editableDeliverables, currentPkg, parsedNum);
+                }}
+                placeholder="0"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 rounded-lg py-2 px-3 text-xs text-amber-300 font-mono font-bold focus:outline-none focus:ring-1 focus:ring-amber-500/20 transition-all"
+              />
+            </div>
+
+            {/* Discount */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Quotation Discount (‚Çπ)
+              </label>
+              <input
+                type="number"
+                value={quoteDiscount || ''}
+                onChange={(e) => {
+                  const rawVal = e.target.value;
+                  const discNum = rawVal === '' ? 0 : Number(rawVal);
+                  setQuoteDiscount(rawVal === '' ? 0 : discNum);
+                  const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+                  saveStep3DataRealtime(editableInclusions, editableDeliverables, currentPkg, undefined, discNum, quoteAdditional);
+                }}
+                placeholder="0"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
+              />
+            </div>
+
+            {/* Additional Services Cost - Hidden per user request */}
+            <div className="hidden">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Additional Services Cost (‚Çπ)
+              </label>
+              <input
+                type="number"
+                value={quoteAdditional || ''}
+                onChange={(e) => {
+                  const rawVal = e.target.value;
+                  const addNum = rawVal === '' ? 0 : Number(rawVal);
+                  setQuoteAdditional(rawVal === '' ? 0 : addNum);
+                  const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
+                  saveStep3DataRealtime(editableInclusions, editableDeliverables, currentPkg, undefined, quoteDiscount, addNum);
+                }}
+                placeholder="0"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 font-mono transition-all"
+              />
+            </div>
+
+            {/* Extra Charges */}
+
+          </div>
+
+          {/* Final Calculated Amount Badge */}
+          <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between shadow-inner mt-2">
+            <div className="space-y-0.5">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide font-mono">Final Quotation Amount</p>
+              <p className="text-[9px] text-slate-500 font-mono">Formula: Base Price (‚Çπ{basePkgSum}) - Disc (‚Çπ{quoteDiscount || 0})</p>
+            </div>
+            <div className="text-right">
+              <span className="text-lg font-extrabold text-amber-500 font-mono">
+                ‚Çπ{finalAmt.toLocaleString('en-IN')}
+              </span>
             </div>
           </div>
-          
-          <div className="flex items-center gap-2 overflow-x-auto custom-scrollbar pb-2 md:pb-0">
+
+          {/* Action buttons directly under Quotation Details */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 border-t border-slate-800/60">
+            {/* Download PDF */}
             <button
-              onClick={() => setActiveTab('list')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
-                activeTab === 'list' 
-                  ? 'bg-slate-800 text-white shadow-md' 
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
+              type="button"
+              onClick={() => handleDownloadQuotePDF(isEdit)}
+              disabled={isSaving}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-red-950/40 hover:bg-red-900/50 text-red-300 rounded-lg transition-all border border-red-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <LayoutDashboard size={16} />
-              <span className="hidden sm:inline">Lead Board</span>
-              <span className="sm:hidden">Board</span>
+              <span>üìÑ</span> {isSaving ? 'Processing...' : 'Download PDF Document'}
             </button>
+
+            {/* Send WhatsApp */}
             <button
-              onClick={() => setActiveTab('create')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
-                activeTab === 'create' 
-                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' 
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
+              type="button"
+              onClick={() => handleSendWhatsAppQuote(isEdit)}
+              disabled={isSaving}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 rounded-lg transition-all border border-emerald-900/40 active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <UserPlus size={16} />
-              <span className="hidden sm:inline">Create Lead</span>
-              <span className="sm:hidden">Create</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('packages')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
-                activeTab === 'packages' 
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20' 
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
-            >
-              <Package size={16} />
-              <span className="hidden sm:inline">Packages Master</span>
-              <span className="sm:hidden">Packages</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('calendar')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
-                activeTab === 'calendar' 
-                  ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20' 
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
-            >
-              <Calendar size={16} />
-              <span className="hidden sm:inline">Availability</span>
-              <span className="sm:hidden">Calendar</span>
-            </button>
-            <button
-              onClick={() => setActiveTab('profiles')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap ${
-                activeTab === 'profiles' 
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' 
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-              }`}
-            >
-              <Users size={16} />
-              <span className="hidden sm:inline">Customer Profiles</span>
-              <span className="sm:hidden">Customers</span>
+              <span>üí¨</span> {isSaving ? 'Processing...' : 'Send Quotation via WhatsApp'}
             </button>
           </div>
         </div>
       </div>
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar relative">
-        <div className="max-w-7xl mx-auto p-4 md:p-6 pb-32">
-          
-          {activeTab === 'list' && (
-            <div className="animate-fade-in space-y-6">
-              
-              {/* Dashboard Metrics (Only shown on List View) */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:shadow-md transition-shadow relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -z-0 opacity-50 group-hover:scale-110 transition-transform"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Total Leads</h3>
-                      <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
-                        <Users size={18} />
+    );
+  };
+
+  const renderStep3Workspace = (isEdit: boolean) => {
+    const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+    const rawPkgId = isEdit
+      ? (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || '')
+      : (wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedPkgIds[0] || '');
+    const currentPkgId = (rawPkgId && rawPkgId.trim() !== '') ? rawPkgId : 'Custom Package';
+
+    let selectedPkg = availablePkgs.find(p => String(p.package_id) === String(currentPkgId) || String(p.package_name) === String(currentPkgId));
+    if (!selectedPkg && currentPkgId) {
+      selectedPkg = {
+        package_id: currentPkgId,
+        package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId}`,
+        price: wizardLeadData.package_cost || 0,
+        deliverables: wizardLeadData.deliverables || "",
+        status: "Active"
+      } as any;
+    }
+    const selectedPkgId = selectedPkg?.package_id || 'Custom Package';
+    const inclusionsList = editableInclusions[selectedPkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'] || (Object.values(editableInclusions).find(v => Array.isArray(v) && v.length > 0) || []);
+    const deliverablesList = editableDeliverables[selectedPkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'] || (Object.values(editableDeliverables).find(v => Array.isArray(v) && v.length > 0) || []);
+    const currentEvents = isEdit ? crmEvents : createEvents;
+
+    return (
+      <div className="space-y-4 animate-fade-in text-left">
+        <div className="space-y-3.5 text-left">
+          <div className="flex items-center justify-between">
+            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
+            {step3AutoSaveStatus === 'saving' && (
+              <span className="text-[10px] text-amber-400 font-mono font-semibold animate-pulse flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                Saving...
+              </span>
+            )}
+            {step3AutoSaveStatus === 'saved' && (
+              <span className="text-[10px] text-emerald-400 font-mono font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                Saved ‚úì
+              </span>
+            )}
+            {step3AutoSaveStatus === 'error' && (
+              <span className="text-[10px] text-red-400 font-mono font-semibold flex items-center gap-1">
+                Save failed
+              </span>
+            )}
+          </div>
+          <select
+            id={isEdit ? "select_package_option" : "wizard_step3_first_field"}
+            value={currentPkgId}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedPkgIds([val]);
+              handlePackageDropdownChange(val);
+            }}
+            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 text-white focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer"
+          >
+              <option value="Custom Package">Custom Package</option>
+              {(() => {
+                const activePkgs = availablePkgs.filter(p => {
+                  if (p.status && p.status.toLowerCase() !== 'active') return false;
+                  const pId = String(p.package_id || '');
+                  const pName = String(p.package_name || '');
+                  if (pId === 'Custom Package' || pId === 'custom_package' || pName === 'Custom Package') return false;
+                  if (pName.toLowerCase().includes('legacy') || pName.toLowerCase().includes('‚Çπ0')) return false;
+                  return true;
+                });
+                if (currentPkgId && currentPkgId !== 'Custom Package' && currentPkgId !== 'custom_package' && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
+                  const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
+                  if (matched && !String(matched.package_name || '').toLowerCase().includes('legacy')) {
+                    activePkgs.unshift(matched);
+                  }
+                }
+                return activePkgs.map((pkg) => (
+                  <option key={pkg.package_id} value={pkg.package_id}>
+                    {pkg.package_name} (‚Çπ{Number(pkg.price).toLocaleString('en-IN')})
+                  </option>
+                ));
+              })()}
+            </select>
+          </div>
+
+          {/* Sales Executive Details */}
+          <div className="hidden bg-slate-900/50 border border-slate-805/40 rounded-lg p-3 space-y-2.5 shadow-sm mt-3">
+            <h4 className="text-[11px] font-bold text-indigo-400 uppercase tracking-wide font-mono flex items-center gap-1.5 border-b border-slate-800 pb-1">
+              <span>üë§</span> Sales Executive Details
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                  Sales Staff Name *
+                </label>
+                <input
+                  id={isEdit ? "input_sales_staff_name" : "wizard_sales_staff_name"}
+                  type="text"
+                  required
+                  value={salesStaffName}
+                  onChange={(e) => setSalesStaffName(e.target.value)}
+                  placeholder="E.g., Jane Doe"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-sans transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-semibold text-slate-400 mb-1">
+                  Sales Staff Mobile Number *
+                </label>
+                <input
+                  id={isEdit ? "input_sales_staff_mobile" : "wizard_sales_staff_mobile"}
+                  type="text"
+                  required
+                  value={salesStaffMobile}
+                  onChange={(e) => setSalesStaffMobile(e.target.value)}
+                  placeholder="E.g., 9876543210"
+                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 font-mono transition-all"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Single Package Base Price (‚Çπ) Field (Hidden visually per request, keeping value intact internally) */}
+          <div className="hidden" style={{ display: 'none' }}>
+            <label className="block text-[11px] font-bold text-amber-400 uppercase tracking-wide font-mono flex items-center gap-1.5">
+              <span>üí∞</span> Package Base Price (‚Çπ) *
+            </label>
+            <input
+              type="number"
+              value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (selectedPkg?.price || '')}
+              onChange={(e) => {
+                const val = e.target.value;
+                const numVal = val === '' ? 0 : Number(val);
+                setWizardLeadData(prev => ({
+                  ...prev,
+                  package_cost: val,
+                  package_price: numVal,
+                  budget: numVal,
+                  final_quoted_amount: numVal
+                }));
+                saveStep3DataRealtime(editableInclusions, editableDeliverables, wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option, numVal);
+              }}
+              placeholder="Enter package base price..."
+              className="w-full bg-slate-950 border border-slate-800 focus:border-amber-500 focus:outline-none rounded-lg py-1.5 px-3 text-xs text-amber-300 font-mono font-bold"
+              required
+            />
+          </div>
+
+          {/* Event-Wise Configuration or Single Configuration */}
+          <div>
+            {currentEvents && currentEvents.length > 0 ? (
+              currentEvents.map((event, eventIdx) => {
+                const eventKey = `${selectedPkgId}_${event.id}`;
+                const nameKey = `${selectedPkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+                const customKey = `Custom Package_${event.id}`;
+                const customNameKey = `Custom Package_${event.event_name || event.event_type || 'Unnamed Event'}`;
+                const customLowerKey = `custom_package_${event.id}`;
+                const customLowerNameKey = `custom_package_${event.event_name || event.event_type || 'Unnamed Event'}`;
+
+                const eventInclusions = editableInclusions[eventKey] !== undefined
+                  ? editableInclusions[eventKey]
+                  : (editableInclusions[nameKey] !== undefined
+                    ? editableInclusions[nameKey]
+                    : (editableInclusions[customKey] !== undefined
+                      ? editableInclusions[customKey]
+                      : (editableInclusions[customNameKey] !== undefined
+                        ? editableInclusions[customNameKey]
+                        : (editableInclusions[customLowerKey] !== undefined
+                          ? editableInclusions[customLowerKey]
+                          : (editableInclusions[customLowerNameKey] !== undefined
+                            ? editableInclusions[customLowerNameKey]
+                            : (currentEvents.length === 1 ? inclusionsList : []))))));
+
+                const eventDeliverables = editableDeliverables[eventKey] !== undefined
+                  ? editableDeliverables[eventKey]
+                  : (editableDeliverables[nameKey] !== undefined
+                    ? editableDeliverables[nameKey]
+                    : (editableDeliverables[customKey] !== undefined
+                      ? editableDeliverables[customKey]
+                      : (editableDeliverables[customNameKey] !== undefined
+                        ? editableDeliverables[customNameKey]
+                        : (editableDeliverables[customLowerKey] !== undefined
+                          ? editableDeliverables[customLowerKey]
+                          : (editableDeliverables[customLowerNameKey] !== undefined
+                            ? editableDeliverables[customLowerNameKey]
+                            : (currentEvents.length === 1 ? deliverablesList : []))))));
+
+                const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
+                const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
+                const endDateStr = endDateRaw ? formatDDMMYYYY(endDateRaw) : 'N/A';
+                const startTimeStr = event.event_start_time ? convertTo12Hour(event.event_start_time) : 'N/A';
+                const endTimeStr = event.event_end_time ? convertTo12Hour(event.event_end_time) : 'N/A';
+                const guestPaxVal = event.guest_pax !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
+
+                return (
+                  <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                    {/* VERY SMALL COMPACT EVENT SUMMARY */}
+                    <div className="bg-slate-950/60 border border-slate-800/70 p-2.5 sm:p-3 rounded-lg text-left font-mono">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="text-xs sm:text-sm font-bold text-slate-100 font-sans">
+                          {event.event_name || `Event ${eventIdx + 1}`}
+                        </span>
+                        {event.event_type && (
+                          <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold border border-slate-700">
+                            [{event.event_type}]
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-300 leading-tight flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span>
+                          Start: <span className="text-slate-100 font-semibold">{startDateStr}{startTimeStr !== 'N/A' ? ` | ${startTimeStr}` : ''}</span>
+                        </span>
+                        {(endDateRaw || endTimeStr !== 'N/A') && (
+                          <>
+                            <span className="text-slate-500">‚Ä¢</span>
+                            <span>
+                              End: <span className="text-slate-100 font-semibold">{endDateStr !== 'N/A' ? endDateStr : startDateStr}{endTimeStr !== 'N/A' ? ` | ${endTimeStr}` : ''}</span>
+                            </span>
+                          </>
+                        )}
+                        <span className="text-slate-500">‚Ä¢</span>
+                        <span>
+                          Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
+                        </span>
                       </div>
                     </div>
-                    <p className="text-3xl font-black text-slate-800">{totalLeads}</p>
-                    <p className="text-xs font-semibold text-blue-600 mt-1 flex items-center gap-1">
-                      <TrendingUp size={12} /> Live Count
-                    </p>
+
+                    {/* Team Members Included */}
+                    <div>
+                      <div className="mb-2">
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
+                      </div>
+                      {eventInclusions.length === 0 ? (
+                        <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                          <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentList = [...eventInclusions];
+                              currentList.push("");
+                              const updated = {
+                                ...editableInclusions,
+                                [eventKey]: currentList,
+                                [nameKey]: currentList
+                              };
+                              setEditableInclusions(updated);
+                              saveStep3DataRealtime(updated, editableDeliverables);
+                            }}
+                            className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                          >
+                            + Add Member
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {eventInclusions.map((item, idx) => (
+                            <CompactQtyItemRow
+                              key={idx}
+                              value={item}
+                              options={activeMasterRoles}
+                              placeholder="Type or select Role / Team Member..."
+                              accentColor="indigo"
+                              onChange={(newVal) => {
+                                const currentList = [...eventInclusions];
+                                currentList[idx] = newVal;
+                                const updated = {
+                                  ...editableInclusions,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableInclusions(updated);
+                                saveStep3DataRealtime(updated, editableDeliverables);
+                              }}
+                              onDelete={() => {
+                                const currentList = [...eventInclusions];
+                                currentList.splice(idx, 1);
+                                const updated = {
+                                  ...editableInclusions,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableInclusions(updated);
+                                saveStep3DataRealtime(updated, editableDeliverables);
+                              }}
+                            />
+                          ))}
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentList = [...eventInclusions];
+                                currentList.push("");
+                                const updated = {
+                                  ...editableInclusions,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableInclusions(updated);
+                                saveStep3DataRealtime(updated, editableDeliverables);
+                              }}
+                              className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                            >
+                              + Add Member
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Deliverables Description / Base Package Deliverables */}
+                    <div>
+                      <div className="mb-2">
+                        <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
+                      </div>
+                      {eventDeliverables.length === 0 ? (
+                        <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                          <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentList = [...eventDeliverables];
+                              currentList.push("");
+                              const updated = {
+                                ...editableDeliverables,
+                                [eventKey]: currentList,
+                                [nameKey]: currentList
+                              };
+                              setEditableDeliverables(updated);
+                              saveStep3DataRealtime(editableInclusions, updated);
+                            }}
+                            className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                          >
+                            + Add Deliverable
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {eventDeliverables.map((item, idx) => (
+                            <CompactQtyItemRow
+                              key={idx}
+                              value={item}
+                              options={activeMasterDeliverables}
+                              placeholder="Type or select Deliverable..."
+                              accentColor="emerald"
+                              onChange={(newVal) => {
+                                const currentList = [...eventDeliverables];
+                                currentList[idx] = newVal;
+                                const updated = {
+                                  ...editableDeliverables,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableDeliverables(updated);
+                                saveStep3DataRealtime(editableInclusions, updated);
+                              }}
+                              onDelete={() => {
+                                const currentList = [...eventDeliverables];
+                                currentList.splice(idx, 1);
+                                const updated = {
+                                  ...editableDeliverables,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableDeliverables(updated);
+                                saveStep3DataRealtime(editableInclusions, updated);
+                              }}
+                            />
+                          ))}
+                          <div className="flex justify-end pt-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentList = [...eventDeliverables];
+                                currentList.push("");
+                                const updated = {
+                                  ...editableDeliverables,
+                                  [eventKey]: currentList,
+                                  [nameKey]: currentList
+                                };
+                                setEditableDeliverables(updated);
+                                saveStep3DataRealtime(editableInclusions, updated);
+                              }}
+                              className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                            >
+                              + Add Deliverable
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:shadow-md transition-shadow relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-amber-50 rounded-bl-full -z-0 opacity-50 group-hover:scale-110 transition-transform"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">New Leads</h3>
-                      <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center">
-                        <UserPlus size={18} />
+                );
+              })
+            ) : (
+              <div className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                {/* Single Team Members Included */}
+                <div>
+                  <div className="mb-2">
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Team Members Included</label>
+                  </div>
+                  {inclusionsList.length === 0 ? (
+                    <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                      <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentList = [...inclusionsList];
+                          currentList.push("");
+                          const updated = {
+                            ...editableInclusions,
+                            [selectedPkgId]: currentList
+                          };
+                          setEditableInclusions(updated);
+                          saveStep3DataRealtime(updated, editableDeliverables);
+                        }}
+                        className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                      >
+                        + Add Member
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {inclusionsList.map((item, idx) => (
+                        <CompactQtyItemRow
+                          key={idx}
+                          value={item}
+                          options={activeMasterRoles}
+                          placeholder="Type or select Role / Team Member..."
+                          accentColor="indigo"
+                          onChange={(newVal) => {
+                            const currentList = [...inclusionsList];
+                            currentList[idx] = newVal;
+                            const updated = {
+                              ...editableInclusions,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableInclusions(updated);
+                            saveStep3DataRealtime(updated, editableDeliverables);
+                          }}
+                          onDelete={() => {
+                            const currentList = [...inclusionsList];
+                            currentList.splice(idx, 1);
+                            const updated = {
+                              ...editableInclusions,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableInclusions(updated);
+                            saveStep3DataRealtime(updated, editableDeliverables);
+                          }}
+                        />
+                      ))}
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentList = [...inclusionsList];
+                            currentList.push("");
+                            const updated = {
+                              ...editableInclusions,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableInclusions(updated);
+                            saveStep3DataRealtime(updated, editableDeliverables);
+                          }}
+                          className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                        >
+                          + Add Member
+                        </button>
                       </div>
                     </div>
-                    <p className="text-3xl font-black text-slate-800">{newLeads}</p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-amber-500 h-full rounded-full" style={{ width: `${totalLeads ? (newLeads/totalLeads)*100 : 0}%` }}></div>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:shadow-md transition-shadow relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-orange-50 rounded-bl-full -z-0 opacity-50 group-hover:scale-110 transition-transform"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Hot Leads</h3>
-                      <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
-                        <Flame size={18} />
+                {/* Single Deliverables */}
+                <div>
+                  <div className="mb-2">
+                    <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono tracking-wider">Deliverables Description / Base Package Deliverables</label>
+                  </div>
+                  {deliverablesList.length === 0 ? (
+                    <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
+                      <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentList = [...deliverablesList];
+                          currentList.push("");
+                          const updated = {
+                            ...editableDeliverables,
+                            [selectedPkgId]: currentList
+                          };
+                          setEditableDeliverables(updated);
+                          saveStep3DataRealtime(editableInclusions, updated);
+                        }}
+                        className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                      >
+                        + Add Deliverable
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {deliverablesList.map((item, idx) => (
+                        <CompactQtyItemRow
+                          key={idx}
+                          value={item}
+                          options={activeMasterDeliverables}
+                          placeholder="Type or select Deliverable..."
+                          accentColor="emerald"
+                          onChange={(newVal) => {
+                            const currentList = [...deliverablesList];
+                            currentList[idx] = newVal;
+                            const updated = {
+                              ...editableDeliverables,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableDeliverables(updated);
+                            saveStep3DataRealtime(editableInclusions, updated);
+                          }}
+                          onDelete={() => {
+                            const currentList = [...deliverablesList];
+                            currentList.splice(idx, 1);
+                            const updated = {
+                              ...editableDeliverables,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableDeliverables(updated);
+                            saveStep3DataRealtime(editableInclusions, updated);
+                          }}
+                        />
+                      ))}
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const currentList = [...deliverablesList];
+                            currentList.push("");
+                            const updated = {
+                              ...editableDeliverables,
+                              [selectedPkgId]: currentList
+                            };
+                            setEditableDeliverables(updated);
+                            saveStep3DataRealtime(editableInclusions, updated);
+                          }}
+                          className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                        >
+                          + Add Deliverable
+                        </button>
                       </div>
                     </div>
-                    <p className="text-3xl font-black text-slate-800">{hotLeads}</p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-orange-500 h-full rounded-full" style={{ width: `${totalLeads ? (hotLeads/totalLeads)*100 : 0}%` }}></div>
-                    </div>
-                  </div>
+                  )}
                 </div>
-                
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:shadow-md transition-shadow relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-50 rounded-bl-full -z-0 opacity-50 group-hover:scale-110 transition-transform"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Quotes Sent</h3>
-                      <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                        <FileText size={18} />
+              </div>
+            )}
+          </div>
+
+        <div className="mt-4 flex justify-end pb-2">
+          <button
+            type="button"
+            onClick={handleSavePackageOnly}
+            disabled={isSaving}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-bold uppercase tracking-wider rounded-lg shadow transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? 'Saving Package...' : 'Save Package'}
+          </button>
+        </div>
+
+        {renderQuotationAndStep4Section(isEdit)}
+      </div>
+    );
+  };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchReportingData = async () => {
+       if (!selectedLead?.lead_id) return;
+       try {
+          if (!supabaseClient) return;
+          const { data, error } = await supabaseClient
+             .from('order_event_reporting')
+             .select('*')
+             .eq('lead_id', selectedLead.lead_id);
+          
+          if (error) {
+             console.error("Failed to load order_event_reporting data", error);
+             return;
+          }
+
+          if (isMounted && data && data.length > 0) {
+             const first = data[0];
+             setWizardLeadData(prev => ({
+                ...prev,
+                confirmed_event_date: first.confirmed_event_date || prev.confirmed_event_date,
+                confirmed_event_time: first.confirmed_event_time || prev.confirmed_event_time,
+                final_amount: first.contract_final_amount || prev.final_amount,
+                advance_received: first.advance_payment_received || prev.advance_received,
+             }));
+
+             setCrmEvents(prev => prev.map(ev => {
+                const rep = data.find(r => r.event_id === ev.id);
+                if (rep) {
+                   return {
+                      ...ev,
+                      reporting_date: rep.reporting_date || ev.reporting_date,
+                      reporting_time: rep.reporting_time || ev.reporting_time
+                   };
+                }
+                return ev;
+             }));
+          }
+       } catch (err) {
+          console.error("Error loading reporting data", err);
+       }
+    };
+
+    fetchReportingData();
+    
+    return () => { isMounted = false; };
+  }, [selectedLead?.lead_id, supabaseClient]);
+
+  // Sync wizardLeadData.advance_received and wizardLeadData.final_amount with latest payment and order confirmation data
+  React.useEffect(() => {
+    if (!selectedLead?.lead_id) return;
+    const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+    const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+    
+    if (linkedOrder || linkedPayment) {
+      setWizardLeadData(prev => {
+        const latestAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : prev.advance_received);
+        const latestFinalAmount = linkedOrder ? (linkedOrder.quotation_amount || 0) : prev.final_amount;
+        
+        if (prev.advance_received !== latestAdvance || prev.final_amount !== latestFinalAmount) {
+          return {
+            ...prev,
+            advance_received: latestAdvance,
+            final_amount: latestFinalAmount
+          };
+        }
+        return prev;
+      });
+    }
+  }, [selectedLead?.lead_id, orders, payments]);
+
+  // Handle lead select
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e.detail.role === 'sales' || e.detail.role === 'owner') {
+        const targetLead = leads.find(l => l.lead_id === e.detail.leadId || l.order_id === e.detail.orderId);
+        if (targetLead) {
+          if (externalSetActiveTab) externalSetActiveTab('list'); else setInternalTab('list');
+          handleSelectLead(targetLead);
+        }
+      }
+    };
+    window.addEventListener('calendar-action-click-deferred', handler);
+    return () => window.removeEventListener('calendar-action-click-deferred', handler);
+  }, [leads]);
+  
+  const handleSelectLead = async (lead: Lead, targetStep?: number) => {
+    let fullLead = lead;
+    if (supabaseClient && lead.lead_id && lead.lead_id !== 'DRAFT-LEAD') {
+      try {
+        const { data: dbLead, error: dbLeadErr } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', lead.lead_id)
+          .maybeSingle();
+        
+        if (!dbLeadErr && dbLead) {
+          fullLead = {
+            ...lead,
+            ...dbLead,
+            Lost_Reason: dbLead.Lost_Reason || dbLead.lost_reason || lead.Lost_Reason || (lead as any).lost_reason,
+            Lost_Notes: dbLead.Lost_Notes || dbLead.lost_notes || lead.Lost_Notes || (lead as any).lost_notes
+          };
+        }
+      } catch (err) {
+        console.warn("Failed to fetch full lead details on select", err);
+      }
+    }
+
+    // If lost lead and reason is missing, attempt to fetch from lead_status_history
+    if (['Lost Lead', 'Lead Lost', 'Lost'].includes(fullLead.status || (fullLead as any).current_status || '')) {
+      const currentR = fullLead.Lost_Reason || (fullLead as any).lost_reason;
+      if (!currentR || currentR === 'N/A' || currentR === 'NULL') {
+        if (supabaseClient && fullLead.lead_id) {
+          try {
+            const { data: histData } = await supabaseClient
+              .from('lead_status_history')
+              .select('*')
+              .eq('lead_id', fullLead.lead_id)
+              .order('created_at', { ascending: false });
+            if (histData && histData.length > 0) {
+              const lostHist = histData.find((h: any) => ['Lost Lead', 'Lead Lost', 'Lost'].includes(h.new_status || h.status || ''));
+              if (lostHist) {
+                if (lostHist.remarks) {
+                  const matchR = lostHist.remarks.match(/Lost Reason:\s*([^.\n]+)/i);
+                  fullLead.Lost_Reason = matchR && matchR[1] ? matchR[1].trim() : lostHist.remarks.trim();
+                  const matchN = lostHist.remarks.match(/Notes:\s*(.*)/i);
+                  if (matchN && matchN[1]) fullLead.Lost_Notes = matchN[1].trim();
+                } else if (lostHist.call_notes) {
+                  fullLead.Lost_Reason = lostHist.call_notes.trim();
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to load status history for lost lead reason", e);
+          }
+        }
+      }
+    }
+
+    setSelectedLead(fullLead);
+    setCrmEvents(fullLead.events || []);
+
+    // Always fetch fresh events to ensure no cached EV- IDs are used
+    let eventsForCheck = fullLead.events || [];
+    if (supabaseClient && fullLead.lead_id && fullLead.lead_id !== 'DRAFT-LEAD') {
+      try {
+        const { data: freshEvents, error } = await supabaseClient
+          .from('lead_events')
+          .select('*')
+          .eq('lead_id', fullLead.lead_id)
+          .order('created_at', { ascending: true });
+        
+        if (!error && freshEvents && freshEvents.length > 0) {
+          setCrmEvents(freshEvents as LeadEvent[]);
+          eventsForCheck = freshEvents as LeadEvent[];
+          setSelectedLead(prev => prev ? { ...prev, events: freshEvents as LeadEvent[] } : prev);
+        }
+      } catch (err) {
+        console.warn("Failed to load fresh events on selection", err);
+      }
+    }
+
+    setGeneratedPDFBlobUrl('');
+    setActiveQuoteNum('');
+    setQuoteDiscount(0);
+    setQuoteAdditional(0);
+    // Explicitly reset only when switching to a different lead ID
+    if (!selectedLead || selectedLead.lead_id !== lead.lead_id) {
+      setEditableInclusions({});
+      setEditableDeliverables({});
+      lastLoadedLeadIdRef.current = null;
+    }
+    // Clean and set Sales Executive Details (isolated from Operations/Production staff on events)
+    const initialSalesStaffName = getCleanSalesStaffName(lead.sales_staff_name, lead);
+    const initialSalesStaffMobile = getCleanSalesStaffMobile(lead.sales_staff_mobile, lead);
+    setSalesStaffName(initialSalesStaffName);
+    setSalesStaffMobile(initialSalesStaffMobile);
+
+    const activePackages = (leadPackages || []).filter(lp => lp.lead_id === lead.lead_id);
+    const primaryLP = activePackages[0];
+    
+    // Find the latest quotation for this lead if it exists
+    const latestQuote = [...(quotations || [])]
+      .filter(q => q.lead_id === lead.lead_id)
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+
+    // Determine the target CRM step based on persisted data and status
+    const hasQuotationOrPackage = !!(
+      latestQuote ||
+      primaryLP?.package_id ||
+      (fullLead.Select_Package_Option && String(fullLead.Select_Package_Option).trim() !== '') ||
+      ['Quotation Sent', 'Negotiation', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Lost Lead'].includes(fullLead.status || '') ||
+      ['Quotation Sent', 'Negotiation', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Lost Lead'].includes((fullLead as any).current_status || '')
+    );
+
+    const hasCustomerDetails = !!(
+      (fullLead.customer_name && String(fullLead.customer_name).trim() !== '') ||
+      (fullLead.mobile && String(fullLead.mobile).trim() !== '')
+    );
+
+    const localSavedStep = localStorage.getItem(`crm_last_step_${lead.lead_id}`);
+    const remarksMatch = fullLead.remarks?.match(/\[CRM_COMPLETED_STEP:\s*(\d+)\]/);
+    const explicitStep = localSavedStep ? parseInt(localSavedStep, 10) : (remarksMatch ? parseInt(remarksMatch[1], 10) : null);
+
+    const isConfirmedLead = ['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(fullLead.status || '') || (fullLead as any).current_status === 'Order Confirmed' || (fullLead as any).booking_status === 'Confirmed' || orders.some(o => o.lead_id === fullLead.lead_id && o.status !== 'Cancelled');
+    const isUnlockedLead = unlockRequests.some(r => (r.lead_id === fullLead.lead_id || r.order_id === fullLead.lead_id || r.project_id === fullLead.lead_id) && (r.status === 'Approved' || r.request_status === 'Approved')) || unlockedRecords.some(r => r.recordId === fullLead.lead_id && r.module === 'Sales');
+
+    // Navigation logic: always open first incomplete step. If lead is unlocked, open Step 3.
+    let startStep = 1;
+    if (isConfirmedLead && isUnlockedLead) {
+      startStep = 3;
+    } else if (explicitStep) {
+      if (explicitStep >= 2) startStep = 3;
+      else if (explicitStep === 1) startStep = 2;
+    } else {
+      if (hasQuotationOrPackage) startStep = 3;
+      else if (hasCustomerDetails) startStep = 2;
+      else startStep = 1;
+    }
+
+    const finalStep = targetStep || startStep;
+    const completedStep = Math.max(finalStep === 3 ? 3 : (startStep === 3 ? (hasQuotationOrPackage ? 3 : 2) : startStep - 1), explicitStep || 1);
+    setCrmHighestStep(completedStep);
+    setCrmWizardStep(finalStep);
+    
+    const hasPackageAnywhere = !!(lead.Select_Package_Option || primaryLP?.package_id || latestQuote?.package_id);
+    if (completedStep >= 3 || hasPackageAnywhere) {
+    } else {
+    }
+
+    setQuoteDiscount(fullLead.Quotation_Discount ?? latestQuote?.discount_amount ?? 0);
+    setQuoteAdditional(fullLead.Additional_Services_Cost ?? latestQuote?.additional_services_cost ?? 0);
+    if (latestQuote) {
+      setActiveQuoteNum(latestQuote.quotation_number || '');
+      const quoteSalesName = getCleanSalesStaffName(latestQuote.sales_staff_name || lead.sales_staff_name, lead);
+      const quoteSalesMobile = getCleanSalesStaffMobile(latestQuote.sales_staff_mobile || lead.sales_staff_mobile, lead);
+      setSalesStaffName(quoteSalesName);
+      setSalesStaffMobile(quoteSalesMobile);
+    }
+
+    const matchedPkgId = fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || 'Custom Package';
+    const matchedPkg = (packages || []).find(p => p.package_id === matchedPkgId);
+
+    // 1. Load Deliverables
+    const rawDelData = fullLead.Add_Deliverable || primaryLP?.deliverables_descriptionn || primaryLP?.editable_deliverables || fullLead.deliverables_description || latestQuote?.deliverables_description || matchedPkg?.deliverables;
+    if (rawDelData) {
+      const newDeliverables = parseDeliverablesJsonToRecord(rawDelData, matchedPkgId, fullLead.events || crmEvents);
+      setEditableDeliverables(newDeliverables);
+    } else {
+      setEditableDeliverables({});
+    }
+
+    // 2. Load Team Members
+    const rawTeamData = fullLead.Team_Members || fullLead.Team_member || (fullLead as any)?.team_members || primaryLP?.Team_Members_Included || primaryLP?.editable_inclusions || matchedPkg?.team_members;
+    console.log('TEAM MEMBERS LOADED in openCRMModal', { leadId: fullLead.lead_id, Team_Members: rawTeamData });
+    if (rawTeamData) {
+      const newInclusions = parseTeamMembersJsonToRecord(rawTeamData, matchedPkgId, fullLead.events || crmEvents);
+      setEditableInclusions(newInclusions);
+    } else {
+      setEditableInclusions({});
+    }
+
+    const firstEvent = fullLead.events && fullLead.events.length > 0 ? fullLead.events[0] : null;
+    const evName = firstEvent?.event_name || fullLead.custom_event_name || '';
+    const evShootType = firstEvent?.event_shoot_type || fullLead.desired_event_shoot_type || fullLead.shoot_type || '';
+    const evDate = firstEvent?.event_date || fullLead.event_date || '';
+    const evStartDate = firstEvent?.event_start_date || fullLead.event_date || '';
+    const evEndDate = firstEvent?.event_end_date || (firstEvent as any)?.Event_End_Date || fullLead.Event_End_Date || '';
+    const evLocation = firstEvent?.event_location || fullLead.event_location || '';
+    const evGuestPax = firstEvent?.guest_pax ?? fullLead.guest_pax ?? fullLead.total_pax ?? '';
+    const evStaffPax = firstEvent?.staff_pax ?? fullLead.staff_pax ?? '';
+    setInternalNotes(fullLead.follow_up_notes || '');
+    setFollowUpDate(fullLead.next_follow_up_date || '');
+    
+    const cleanPkgPrice = (fullLead.package_price && Number(fullLead.package_price) > 0)
+      ? Number(fullLead.package_price)
+      : ((primaryLP?.package_cost && Number(primaryLP.package_cost) > 0)
+        ? Number(primaryLP.package_cost)
+        : ((latestQuote?.package_price && Number(latestQuote.package_price) > 0)
+          ? Number(latestQuote.package_price)
+          : (fullLead.budget && Number(fullLead.budget) > 0
+            ? Number(fullLead.budget)
+            : (matchedPkg ? Number(matchedPkg.price) : 0))));
+    
+    setWizardLeadData({
+      customer_name: fullLead.customer_name || '',
+      mobile: fullLead.mobile ? String(fullLead.mobile) : '',
+      whatsapp_number: fullLead.whatsapp_number ? String(fullLead.whatsapp_number) : (fullLead.mobile ? String(fullLead.mobile) : ''),
+      email: fullLead.email || '',
+      address: fullLead.address || '',
+      city: latestQuote?.city || fullLead.city || '',
+      state: latestQuote?.state || fullLead.state || '',
+      pincode: latestQuote?.pincode || fullLead.pincode || '',
+      client_residence_address: latestQuote?.client_residence_address || fullLead.client_residence_address || '',
+      desired_event_shoot_type: latestQuote?.desired_event_shoot_type || fullLead.desired_event_shoot_type || '',
+      // Step 2
+      event_type: fullLead.event_type || '',
+      custom_event_name: fullLead.custom_event_name || '',
+      event_name: evName,
+      event_shoot_type: evShootType,
+      event_date: evDate,
+      event_start_date: evStartDate,
+      event_end_date: evEndDate,
+      event_time: fullLead.event_time || '',
+      reporting_time: fullLead.reporting_time || '',
+      event_location: evLocation,
+      guest_pax: evGuestPax,
+      staff_pax: evStaffPax,
+      lead_source: fullLead.lead_source || '',
+      Specify_Custom_Lead_Source_Name: fullLead.Specify_Custom_Lead_Source_Name || '',
+      shoot_type: evShootType,
+      // Step 3
+      selected_package_id: matchedPkgId || 'Custom Package',
+      Select_Package_Option: matchedPkgId || 'Custom Package',
+      package_cost: cleanPkgPrice || '',
+      package_price: cleanPkgPrice || '',
+      deliverables: typeof rawDelData === 'string' ? rawDelData : JSON.stringify(rawDelData || ''),
+      deliverables_description: typeof rawDelData === 'string' ? rawDelData : JSON.stringify(rawDelData || ''),
+      notes_special_customizations: fullLead.notes_special_customizations || latestQuote?.notes_special_customizations || primaryLP?.notes_special_customizations || '',
+      notes: fullLead.remarks || '',
+      // Step 4
+      budget: cleanPkgPrice || fullLead.budget || latestQuote?.quotation_amount || 0,
+      final_quoted_amount: fullLead.Final_Quotation_Amount ?? latestQuote?.final_amount ?? (primaryLP ? Number(primaryLP.final_amount) : 0),
+      remarks: fullLead.remarks || '',
+      next_follow_up_date: '',
+      // Step 5
+      status: fullLead.status || 'New Lead',
+      // Order Confirmed Rule fields
+      confirmed_event_date: fullLead.booking_date || fullLead.event_date || '',
+      confirmed_event_time: fullLead.booking_time || fullLead.event_time || '',
+      final_amount: (fullLead.Final_Package_Amount !== null && fullLead.Final_Package_Amount !== undefined && !isNaN(Number(fullLead.Final_Package_Amount)) && Number(fullLead.Final_Package_Amount) > 0)
+        ? Number(fullLead.Final_Package_Amount)
+        : (Number(fullLead.final_package_amount) || Number(fullLead.Final_Quotation_Amount) || (Number((fullLead as any).final_amount) > 0 ? Number((fullLead as any).final_amount) : 0)),
+      advance_received: fullLead.advance_collected || 0,
+      total_pax: fullLead.total_pax || 0,
+      reference_source: fullLead.reference_source || '',
+      lead_value: fullLead.lead_value || 0,
+      lead_score: fullLead.lead_score || 0,
+      booking_status: fullLead.booking_status || 'Pending',
+    });
+
+    setFollowUpForm({
+      call_notes: lead.follow_up_notes || '',
+      next_follow_up_date: '',
+      status: lead.status,
+      quotation_amount: 0,
+      negotiation_notes: '',
+      event_date: lead.event_date || '',
+      event_time: lead.event_time || '',
+      reporting_time: lead.reporting_time || '08:00',
+      advance_received: 0,
+      payment_mode: 'UPI',
+    });
+    setConfirmForm({
+      package_name: packages?.find((p) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
+      quotation_amount: Number(fullLead.Final_Package_Amount) || Number((fullLead as any).final_package_amount) || Number(fullLead.Final_Quotation_Amount) || Number((fullLead as any).final_amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0),
+      advance_received: 0,
+      event_date: lead.event_date || '',
+      event_time: lead.event_time || '',
+      payment_mode: 'UPI',
+      notes: '',
+    });
+  };
+
+  const handlePackageDropdownChange = (packageId: string) => {
+    if (isStep3Locked) {
+      showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
+      return;
+    }
+
+    const activeEvents = activeTab === 'create' ? createEvents : crmEvents;
+    
+    // Auto save by logged in sales user
+    if (currentUser) {
+      setSalesStaffName(currentUser.name || '');
+      setSalesStaffMobile(currentUser.mobile || '');
+    }
+    
+    const targetPkgId = packageId || 'Custom Package';
+    setSelectedPkgIds([targetPkgId]);
+
+    if (targetPkgId === 'Custom Package' || targetPkgId === 'custom_package') {
+      const customPkgVal = 'Custom Package';
+      setWizardLeadData((prev) => ({
+        ...prev,
+        selected_package_id: customPkgVal,
+        Select_Package_Option: customPkgVal,
+        package_name: 'Custom Package',
+        package_cost: 0,
+        package_price: 0,
+        budget: 0,
+        final_quoted_amount: 0,
+      }));
+      setPkgPrices(prev => ({ ...prev, [customPkgVal]: 0, 'custom_package': 0 }));
+
+      const newInclusions = { ...editableInclusions };
+      if (!newInclusions[customPkgVal]) newInclusions[customPkgVal] = [];
+      const newDeliverables = { ...editableDeliverables };
+      if (!newDeliverables[customPkgVal]) newDeliverables[customPkgVal] = [];
+
+      if (activeEvents && activeEvents.length > 0) {
+        activeEvents.forEach((ev) => {
+          const k1 = `${customPkgVal}_${ev.id}`;
+          const k2 = `${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
+          if (!newInclusions[k1]) newInclusions[k1] = [];
+          if (!newInclusions[k2]) newInclusions[k2] = [];
+          if (!newDeliverables[k1]) newDeliverables[k1] = [];
+          if (!newDeliverables[k2]) newDeliverables[k2] = [];
+        });
+      }
+
+      setEditableInclusions(newInclusions);
+      setEditableDeliverables(newDeliverables);
+      if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
+        saveStep3DataRealtime(newInclusions, newDeliverables, customPkgVal);
+      }
+      return;
+    }
+
+    const availablePkgs = (packages && packages.length > 0) ? packages : INITIAL_PACKAGES;
+    const pkg = availablePkgs.find((p) => String(p.package_id) === String(targetPkgId) || String(p.package_name) === String(targetPkgId));
+    if (pkg) {
+      const pkgIdStr = String(pkg.package_id);
+      const pkgPrice = Number(pkg.price) || 0;
+      setWizardLeadData((prev) => ({
+        ...prev,
+        selected_package_id: pkgIdStr,
+        Select_Package_Option: pkgIdStr,
+        package_name: pkg.package_name,
+        package_cost: pkgPrice,
+        package_price: pkgPrice,
+        deliverables: pkg.deliverables || '',
+        notes: pkg.seasonal_offer ? `Seasonal Offer: ${pkg.seasonal_offer}` : prev.notes,
+        budget: pkgPrice,
+        final_quoted_amount: pkgPrice,
+      }));
+      
+      const incList = parseTeamMembers(pkg.team_members);
+      const defaultInc = incList.length > 0 ? incList : [];
+      
+      const delList = parseTeamMembers(pkg.deliverables);
+      const defaultDel = delList.length > 0 ? delList : [];
+
+      const newInclusions = { ...editableInclusions };
+      newInclusions[pkgIdStr] = [...defaultInc];
+      newInclusions[targetPkgId] = [...defaultInc];
+      
+      const newDeliverables = { ...editableDeliverables };
+      newDeliverables[pkgIdStr] = [...defaultDel];
+      newDeliverables[targetPkgId] = [...defaultDel];
+
+      if (activeEvents && activeEvents.length > 0) {
+        activeEvents.forEach((ev) => {
+          newInclusions[`${pkgIdStr}_${ev.id}`] = [...defaultInc];
+          newInclusions[`${pkgIdStr}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
+          newInclusions[`${targetPkgId}_${ev.id}`] = [...defaultInc];
+          newInclusions[`${targetPkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
+          
+          newDeliverables[`${pkgIdStr}_${ev.id}`] = [...defaultDel];
+          newDeliverables[`${pkgIdStr}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultDel];
+          newDeliverables[`${targetPkgId}_${ev.id}`] = [...defaultDel];
+          newDeliverables[`${targetPkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultDel];
+        });
+      }
+
+      setEditableInclusions(newInclusions);
+      setEditableDeliverables(newDeliverables);
+      if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
+        saveStep3DataRealtime(newInclusions, newDeliverables, pkgIdStr);
+      }
+    } else {
+      setWizardLeadData((prev) => ({
+        ...prev,
+        selected_package_id: targetPkgId,
+        Select_Package_Option: targetPkgId,
+      }));
+      if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
+        saveStep3DataRealtime(editableInclusions, editableDeliverables, targetPkgId);
+      }
+    }
+  };
+
+  const validateStep3Data = (mode: 'package' | 'all'): boolean => {
+    // Validate package selection
+    const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option;
+    if (!pkgId || pkgId.trim() === '') {
+      showValidationError("select_package_option", "Please select a package before continuing.");
+      showToastMsg("‚ùå Please complete all required fields before saving the package.", "error");
+      return false;
+    }
+
+    // Auto-detect & attach current logged-in Sales Executive
+    const effName = getEffectiveSalesStaffName();
+    const effMobile = getEffectiveSalesStaffMobile();
+    if (!salesStaffName || !salesStaffName.trim()) {
+      setSalesStaffName(effName);
+    }
+    if (!salesStaffMobile || !salesStaffMobile.trim()) {
+      setSalesStaffMobile(effMobile);
+    }
+
+    if (mode === 'all') {
+      if (wizardLeadData.status === 'Order Confirmed') {
+        if (!wizardLeadData.confirmed_event_date) {
+          showValidationError("input_confirmed_event_date", "Please provide Confirmed Event Date.");
+          showToastMsg("‚ùå Please complete all required fields before saving.", "error");
+          return false;
+        }
+
+        if (wizardLeadData.final_amount === undefined || wizardLeadData.final_amount === null || isNaN(wizardLeadData.final_amount) || wizardLeadData.final_amount <= 0) {
+          showValidationError("input_final_amount", "Please provide Final Amount.");
+          showToastMsg("‚ùå Please complete all required fields before saving.", "error");
+          return false;
+        }
+        if (wizardLeadData.advance_received === undefined || wizardLeadData.advance_received === null || isNaN(wizardLeadData.advance_received)) {
+          showValidationError("input_advance_received", "Please provide Advance Payment Received.");
+          showToastMsg("‚ùå Please complete all required fields before saving.", "error");
+          return false;
+        }
+
+        if (crmEvents && crmEvents.length > 0) {
+          for (const ev of crmEvents) {
+            const rDate = ev.reporting_date || ev.event_date || wizardLeadData.confirmed_event_date;
+            if (!rDate) {
+              showValidationError(`reporting_date_${ev.id}`, "Reporting Date is required.");
+              showToastMsg("‚ùå Please complete all required fields before saving.", "error");
+              return false;
+            }
+            if (!ev.reporting_time) {
+              showValidationError(`reporting_time_${ev.id}`, "Reporting Time is required.");
+              showToastMsg("‚ùå Please complete all required fields before saving.", "error");
+              return false;
+            }
+          }
+        }
+      }
+    }
+
+    return true;
+  };
+
+  const completeApprovedUnlockRequest = async (leadId: string) => {
+    if (!leadId) return;
+    console.log("[DEBUG completeApprovedUnlockRequest] Executing completeApprovedUnlockRequest for leadId:", leadId);
+    try {
+      const linkedOrder = (orders || []).find(o => o.lead_id === leadId);
+      const orderId = linkedOrder?.order_id || (selectedLead as any)?.order_id;
+      const nowIso = new Date().toISOString();
+
+      // 1. Update lead record in Supabase & context state: set quotation_locked = true
+      try {
+        await updateLead(leadId, { quotation_locked: true, updated_at: nowIso } as any);
+        console.log("[DEBUG completeApprovedUnlockRequest] Successfully updated lead quotation_locked = true via updateLead for", leadId);
+      } catch (lErr: any) {
+        console.warn("[DEBUG completeApprovedUnlockRequest] updateLead warning:", lErr?.message || lErr);
+      }
+
+      if (selectedLead && selectedLead.lead_id === leadId) {
+        setSelectedLead(prev => prev ? { ...prev, quotation_locked: true } : prev);
+      }
+
+      // 2. Update unlock_requests table status to Completed
+      if (supabaseClient) {
+        try {
+          const { data: allReqs } = await supabaseClient
+            .from('unlock_requests')
+            .select('*');
+
+          if (allReqs && allReqs.length > 0) {
+            const matchingReqs = allReqs.filter((r: any) => {
+              const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
+              const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
+              return matchesLead || matchesOrder;
+            });
+
+            for (const req of matchingReqs) {
+              const reqKeyCol = req.id ? 'id' : (req.request_id ? 'request_id' : 'lead_id');
+              const reqKeyVal = req.id || req.request_id || req.lead_id;
+
+              await supabaseClient
+                .from('unlock_requests')
+                .update({
+                  request_status: 'Completed',
+                  status: 'Completed',
+                  completed_at: nowIso,
+                  edited_at: nowIso,
+                  updated_at: nowIso
+                })
+                .eq(reqKeyCol, reqKeyVal);
+            }
+          }
+
+          // Proxy call fallback
+          await fetch('/api/db/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              table: 'unlock_requests',
+              matchColumn: 'lead_id',
+              matchValue: leadId,
+              updates: { request_status: 'Completed', status: 'Completed', completed_at: nowIso, updated_at: nowIso }
+            })
+          }).catch(() => {});
+
+          if (orderId && orderId !== leadId) {
+            await fetch('/api/db/update', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                table: 'unlock_requests',
+                matchColumn: 'order_id',
+                matchValue: orderId,
+                updates: { request_status: 'Completed', status: 'Completed', completed_at: nowIso, updated_at: nowIso }
+              })
+            }).catch(() => {});
+          }
+        } catch (dbErr: any) {
+          console.warn("[DEBUG completeApprovedUnlockRequest] unlock_requests DB update warning:", dbErr?.message || dbErr);
+        }
+      }
+
+      // 3. Update local React unlockRequests state
+      setUnlockRequests(prev => Array.isArray(prev) ? prev.map(r => {
+        const matchesLead = r.lead_id === leadId || r.order_id === leadId || r.project_id === leadId;
+        const matchesOrder = orderId && (r.order_id === orderId || r.lead_id === orderId);
+        if (matchesLead || matchesOrder) {
+          return {
+            ...r,
+            request_status: 'Completed',
+            status: 'Completed',
+            completed_at: nowIso,
+            edited_at: nowIso
+          };
+        }
+        return r;
+      }) : []);
+
+      // Re-fetch unlock_requests from DB to stay synchronized
+      if (supabaseClient) {
+        const { data } = await supabaseClient.from('unlock_requests').select('*');
+        if (data) {
+          setUnlockRequests(data.map((r: any) => ({
+            ...r,
+            request_status: r.request_status || r.status || 'Pending',
+            status: r.request_status || r.status || 'Pending',
+            reason: r.request_reason || r.reason || '',
+            sales_staff_name: r.requested_by_name || r.sales_staff_name || '',
+            sales_staff_id: r.requested_by_user_id || r.sales_staff_id || ''
+          })));
+        }
+      }
+
+    } catch (err: any) {
+      console.error("[DEBUG completeApprovedUnlockRequest] Exception during unlock completion:", err?.message || err);
+    }
+  };
+
+  const handleSavePackageOnly = async () => {
+    if (isSaving) return;
+    if (isStep3Locked) {
+      showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
+      return;
+    }
+    const targetLeadId = selectedLead?.lead_id || createdLeadId;
+    setIsSaving(true);
+    try {
+      // 1. Perform unified validation
+      if (!validateStep3Data('package')) {
+        setIsSaving(false);
+        return;
+      }
+
+      const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead?.Select_Package_Option || 'Custom Package';
+      const currentEvents = selectedLead ? crmEvents : createEvents;
+
+      const { teamMembersJson, deliverablesJson, flatTeamMembers, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+        pkgId,
+        currentEvents,
+        editableInclusions,
+        editableDeliverables
+      );
+
+      // 3. Update the lead record in Supabase with latest Step 3 package / pricing / staff info
+      const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
+      
+      const updatedEvents = currentEvents.map(ev => ({
+        ...ev,
+        assigned_staff_names: ev.assigned_staff_names || '',
+        assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
+      }));
+
+      const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost))
+        ? Number(wizardLeadData.package_cost)
+        : (wizardLeadData.package_price !== "" && wizardLeadData.package_price != null && !isNaN(Number(wizardLeadData.package_price))
+          ? Number(wizardLeadData.package_price)
+          : (wizardLeadData.budget ? Number(wizardLeadData.budget) : (selectedLead?.package_price || selectedLead?.budget || null)));
+
+      const cleanDiscount = quoteDiscount === "" || quoteDiscount == null || isNaN(Number(quoteDiscount)) ? null : Number(quoteDiscount);
+      const cleanAdditional = quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? null : Number(quoteAdditional);
+      const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + (cleanAdditional || 0) - (cleanDiscount || 0));
+
+      const effectiveSalesName = getEffectiveSalesStaffName();
+      const effectiveSalesMobile = getEffectiveSalesStaffMobile();
+
+      const safeTeamMembersText = teamMembersText;
+      const safeDeliverablesText = deliverablesText;
+
+      if (targetLeadId && targetLeadId !== 'DRAFT-LEAD' && supabaseClient) {
+        console.log('TEAM MEMBERS SAVE in handleSavePackageOnly', { leadId: targetLeadId, teamMembers: flatTeamMembers, serialized: safeTeamMembersText });
+        
+        try {
+          const { data: dbResult, error: dbError } = await supabaseClient
+            .from('leads')
+            .update({
+              budget: cleanPkgCost,
+              package_price: cleanPkgCost,
+              deliverables_description: safeDeliverablesText,
+              Team_member: safeTeamMembersText,
+              Team_Members: safeTeamMembersText,
+              team_members: safeTeamMembersText,
+              notes_special_customizations: wizardLeadData.notes,
+              remarks: updatedRemarks,
+              Select_Package_Option: pkgId,
+              sales_staff_name: effectiveSalesName,
+              sales_staff_mobile: effectiveSalesMobile,
+              Quotation_Discount: cleanDiscount,
+              Additional_Services_Cost: cleanAdditional,
+              Final_Quotation_Amount: cleanFinalAmt,
+              Final_Package_Amount: cleanFinalAmt,
+              events: updatedEvents
+            })
+            .eq('lead_id', targetLeadId)
+            .select('*');
+          console.log('TEAM MEMBERS DB RESULT handleSavePackageOnly', { data: dbResult, error: dbError });
+        } catch (dbErr) {
+          console.warn("Direct Supabase update warning in handleSavePackageOnly:", dbErr);
+        }
+
+        await updateLead(targetLeadId, {
+          budget: cleanPkgCost,
+          package_price: cleanPkgCost,
+          deliverables_description: safeDeliverablesText,
+          Team_member: safeTeamMembersText,
+          Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
+          notes_special_customizations: wizardLeadData.notes,
+          remarks: updatedRemarks,
+          Select_Package_Option: pkgId,
+          sales_staff_name: effectiveSalesName,
+          sales_staff_mobile: effectiveSalesMobile,
+          Quotation_Discount: cleanDiscount,
+          Additional_Services_Cost: cleanAdditional,
+          Final_Quotation_Amount: cleanFinalAmt,
+          Final_Package_Amount: cleanFinalAmt,
+          final_package_amount: cleanFinalAmt,
+          _explicit_step3_save: true,
+          events: updatedEvents
+        });
+
+        // Also upsert to lead_packages table so that Step 3 reloads from lead_packages perfectly
+        try {
+          // If we safely retained the old lead data, we should also try to retain the old json data
+          // if the new one is empty. We can check if teamMembersText was '[]' but we saved safeTeamMembersText
+          const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
+          const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
+          
+          const packagePayload = {
+            lead_id: targetLeadId,
+            package_id: pkgId,
+            package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
+            quantity: 1,
+            total_amount: cleanPkgCost || 0,
+            discount: cleanDiscount || 0,
+            final_amount: cleanFinalAmt || 0,
+            Team_Members_Included: teamMembersJson,
+            editable_inclusions: editableInclusions,
+            deliverables_descriptionn: deliverablesJson,
+            deliverables_json: deliverablesJson,
+            deliverables_description: deliverablesText,
+            editable_deliverables: editableDeliverables,
+            updated_at: new Date().toISOString()
+          };
+
+          const { data: existingLps } = await supabaseClient
+            .from('lead_packages')
+            .select('*')
+            .eq('lead_id', targetLeadId);
+
+          let targetLpId = `LP-${targetLeadId}-${pkgId}`;
+          if (existingLps && existingLps.length > 0) {
+            const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
+            targetLpId = matched.lead_package_id;
+            await supabaseClient
+              .from('lead_packages')
+              .update(packagePayload)
+              .eq('lead_package_id', targetLpId);
+          } else {
+            await supabaseClient
+              .from('lead_packages')
+              .insert({
+                ...packagePayload,
+                lead_package_id: targetLpId,
+                created_at: new Date().toISOString()
+              });
+          }
+        } catch (lpErr) {
+          console.warn("Could not upsert lead_packages record:", lpErr);
+        }
+      }
+
+      setWizardLeadData(prev => ({
+        ...prev,
+        deliverables: deliverablesText,
+        deliverables_description: deliverablesText,
+        package_price: cleanPkgCost ?? prev.package_price,
+        selected_package_id: pkgId,
+        Select_Package_Option: pkgId
+      }));
+
+      // Update the local selectedLead state so that the UI reflects it
+      if (selectedLead) {
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            budget: cleanPkgCost || 0,
+            package_price: cleanPkgCost || 0,
+            deliverables_description: deliverablesText,
+            notes_special_customizations: wizardLeadData.notes,
+            remarks: updatedRemarks,
+            Select_Package_Option: pkgId,
+            sales_staff_name: effectiveSalesName,
+            sales_staff_mobile: effectiveSalesMobile,
+            Quotation_Discount: cleanDiscount,
+            Additional_Services_Cost: cleanAdditional,
+            Final_Quotation_Amount: cleanFinalAmt,
+          };
+        });
+        await completeApprovedUnlockRequest(selectedLead.lead_id);
+      }
+
+      showToastMsg("Package configuration saved successfully!", "success");
+    } catch (err: any) {
+      console.error("Save package only failed:", err);
+      setSaveErrorPopup({
+        title: "Failed to save package",
+        message: "‚ùå Failed to save package.\nPlease try again."
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveStep = async (step: number) => {
+    if (!selectedLead) return;
+    setIsSaving(true);
+    try {
+      if (step === 1) {
+        if (isStep1Locked) {
+          showToastMsg("Customer details are locked after order confirmation.", "error");
+          setIsSaving(false);
+          return;
+        }
+        if (!wizardLeadData.mobile) {
+          showToastMsg("Phone Number is required.", "error");
+          setIsSaving(false);
+          return;
+        }
+        const mobileVal = String(wizardLeadData.mobile || '').trim();
+        if (!/^\d{10}$/.test(mobileVal)) {
+          showToastMsg("Please enter a valid 10-digit mobile number.", "error");
+          setIsSaving(false);
+          return;
+        }
+        if (!wizardLeadData.lead_source) {
+          showToastMsg("Lead Source is required.", "error");
+          setIsSaving(false);
+          return;
+        }
+        const updatedRemarks = appendCompletedStep(selectedLead.remarks || wizardLeadData.remarks, 1);
+        await updateLead(selectedLead.lead_id, {
+          customer_name: wizardLeadData.customer_name || '',
+          mobile: wizardLeadData.mobile,
+          whatsapp_number: wizardLeadData.whatsapp_number,
+          email: wizardLeadData.email,
+          address: wizardLeadData.address,
+          city: wizardLeadData.city,
+          state: wizardLeadData.state,
+          pincode: wizardLeadData.pincode,
+          client_residence_address: wizardLeadData.client_residence_address,
+          lead_source: wizardLeadData.lead_source,
+          Specify_Custom_Lead_Source_Name: wizardLeadData.lead_source === 'Other' && wizardLeadData.Specify_Custom_Lead_Source_Name?.trim() !== '' ? wizardLeadData.Specify_Custom_Lead_Source_Name.trim() : null,
+          total_pax: wizardLeadData.total_pax,
+          reference_source: wizardLeadData.reference_source,
+          Select_Package_Option: wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
+          remarks: updatedRemarks,
+          status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.status || 'Create Quote'),
+          current_status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.current_status || selectedLead.status || 'Create Quote')
+        });
+
+        const newCompleted = Math.max(crmHighestStep, 1);
+        setCrmHighestStep(newCompleted);
+        localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            remarks: updatedRemarks
+          };
+        });
+
+        showToastMsg("CRM Updated Successfully.", "success");
+      } else if (step === 2) {
+        if (isStep2Locked) {
+          showToastMsg("Event details are locked after order confirmation.", "error");
+          setIsSaving(false);
+          return;
+        }
+        let finalEventsList = [...crmEvents];
+
+        if (showEventForm || finalEventsList.length === 0) {
+          if (!eventForm.event_type || eventForm.event_type === '') {
+            showToastMsg("Please select Event Type.", "error");
+            setIsSaving(false);
+            return;
+          }
+          if (!eventForm.event_date || eventForm.event_date === '') {
+            showToastMsg("Please select Event Date.", "error");
+            setIsSaving(false);
+            return;
+          }
+          if (!eventForm.event_location || eventForm.event_location.trim() === '') {
+            showToastMsg("Please enter Event Location.", "error");
+            setIsSaving(false);
+            return;
+          }
+
+          const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+          if (dateTimeErrMsg) {
+            showToastMsg(dateTimeErrMsg, "error");
+            setIsSaving(false);
+            return;
+          }
+
+          const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
+          const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
+
+          const eventData = {
+            ...eventForm,
+            guest_pax: guestPaxVal,
+            staff_pax: staffPaxVal,
+            event_start_date: eventForm.event_date,
+            event_end_date: eventForm.event_end_date || ''
+          };
+
+          if (editingEventId) {
+            finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
+          } else {
+            finalEventsList.push({
+              ...eventData,
+              id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+            });
+          }
+
+          setCrmEvents(finalEventsList);
+          setEditingEventId(null);
+          setShowEventForm(false);
+        }
+
+        if (finalEventsList.length === 0) {
+          showToastMsg("Please add at least one event.", "error");
+          setIsSaving(false);
+          return;
+        }
+
+        // Pre-validate and format all events in the finalEventsList
+        for (const ev of finalEventsList) {
+          if (!ev.event_type || ev.event_type.trim() === '') {
+            showToastMsg("Please select Event Type for all events.", "error");
+            setIsSaving(false); return;
+          }
+          if (ev.event_type === 'Other' && (!ev.event_name || ev.event_name.trim() === '')) {
+            showToastMsg("Please enter Event Name for 'Other' event types.", "error");
+            setIsSaving(false); return;
+          }
+          if (!ev.event_date || ev.event_date.trim() === '') {
+            showToastMsg("Please select Event Date for all events.", "error");
+            setIsSaving(false); return;
+          }
+          if (!ev.event_start_time || ev.event_start_time.trim() === '') {
+            showToastMsg("Please select Event Start Time for all events.", "error");
+            setIsSaving(false); return;
+          }
+          if (!ev.event_end_time || ev.event_end_time.trim() === '') {
+            showToastMsg("Please select Event End Time for all events.", "error");
+            setIsSaving(false); return;
+          }
+          if (!ev.event_location || ev.event_location.trim() === '') {
+            showToastMsg("Please enter Event Location for all events.", "error");
+            setIsSaving(false); return;
+          }
+          
+          try {
+            ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
+          } catch (err: any) {
+            showToastMsg(err.message, "error");
+            setIsSaving(false);
+            return;
+          }
+          try {
+            ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
+          } catch (err: any) {
+            showToastMsg(err.message, "error");
+            setIsSaving(false);
+            return;
+          }
+          
+          const dateTimeErrMsg = getEventDateTimeErrorMessage(ev.event_date, ev.event_end_date, ev.event_start_time, ev.event_end_time);
+          if (dateTimeErrMsg) {
+            showToastMsg(dateTimeErrMsg, "error");
+            setIsSaving(false);
+            return;
+          }
+        }
+
+
+        // Perform direct save for Step 2 without showing follow-up popup
+        await handleSaveStep2Direct();
+        return;
+      } else if (step === 3) {
+        if (isStep3Locked) {
+          showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
+          setIsSaving(false);
+          return;
+        }
+        if (!validateStep3Data('all')) {
+          setIsSaving(false);
+          return;
+        }
+        const pkgId = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || 'Custom Package';
+        const { teamMembersJson, deliverablesJson, flatTeamMembers, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+          pkgId,
+          crmEvents,
+          editableInclusions,
+          editableDeliverables
+        );
+
+        const updatedRemarks = appendCompletedStep(wizardLeadData.notes || '', 3);
+        
+        const updatedEvents = crmEvents.map(ev => ({
+          ...ev,
+          assigned_staff_names: ev.assigned_staff_names || '',
+          assigned_staff_mobiles: ev.assigned_staff_mobiles || ''
+        }));
+
+        const cleanPkgCost = wizardLeadData.package_cost !== "" && wizardLeadData.package_cost != null && !isNaN(Number(wizardLeadData.package_cost)) ? Number(wizardLeadData.package_cost) : (wizardLeadData.package_price !== "" && wizardLeadData.package_price != null && !isNaN(Number(wizardLeadData.package_price)) ? Number(wizardLeadData.package_price) : null);
+        const cleanDiscount = quoteDiscount === "" || quoteDiscount == null || isNaN(Number(quoteDiscount)) ? null : Number(quoteDiscount);
+        const cleanAdditional = quoteAdditional === "" || quoteAdditional == null || isNaN(Number(quoteAdditional)) ? null : Number(quoteAdditional);
+        const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + (cleanAdditional || 0) - (cleanDiscount || 0));
+        const cleanPincode = wizardLeadData.pincode === "" || wizardLeadData.pincode == null ? null : wizardLeadData.pincode;
+
+        const effectiveSalesName = getEffectiveSalesStaffName();
+        const effectiveSalesMobile = getEffectiveSalesStaffMobile();
+
+        const safeTeamMembersText = teamMembersText;
+        const safeDeliverablesText = deliverablesText;
+
+        console.log('TEAM MEMBERS SAVE in handleStep3Submit', { leadId: selectedLead.lead_id, teamMembers: flatTeamMembers, serialized: safeTeamMembersText });
+
+        try {
+          const { data: dbResult, error: dbError } = await supabaseClient
+            .from('leads')
+            .update({
+              budget: cleanPkgCost,
+              package_price: cleanPkgCost,
+              deliverables_description: safeDeliverablesText,
+              Team_member: safeTeamMembersText,
+              Team_Members: safeTeamMembersText,
+              team_members: safeTeamMembersText,
+              notes_special_customizations: wizardLeadData.notes,
+              remarks: updatedRemarks,
+              Select_Package_Option: pkgId,
+              client_residence_address: wizardLeadData.client_residence_address,
+              city: wizardLeadData.city,
+              state: wizardLeadData.state,
+              pincode: cleanPincode,
+              sales_staff_name: effectiveSalesName,
+              sales_staff_mobile: effectiveSalesMobile,
+              Quotation_Discount: cleanDiscount,
+              Additional_Services_Cost: cleanAdditional,
+              Final_Quotation_Amount: cleanFinalAmt,
+              Final_Package_Amount: cleanFinalAmt,
+              events: updatedEvents
+            })
+            .eq('lead_id', selectedLead.lead_id)
+            .select('*');
+          console.log('TEAM MEMBERS DB RESULT handleStep3Submit', { data: dbResult, error: dbError });
+        } catch (dbErr) {
+          console.warn("Direct Supabase update warning in handleStep3Submit:", dbErr);
+        }
+
+        await updateLead(selectedLead.lead_id, {
+          budget: cleanPkgCost,
+          package_price: cleanPkgCost,
+          deliverables_description: safeDeliverablesText,
+          Team_member: safeTeamMembersText,
+          Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
+          notes_special_customizations: wizardLeadData.notes,
+          remarks: updatedRemarks,
+          Select_Package_Option: pkgId,
+          client_residence_address: wizardLeadData.client_residence_address,
+          city: wizardLeadData.city,
+          state: wizardLeadData.state,
+          pincode: cleanPincode,
+          sales_staff_name: effectiveSalesName,
+          sales_staff_mobile: effectiveSalesMobile,
+          Quotation_Discount: cleanDiscount,
+          Additional_Services_Cost: cleanAdditional,
+          Final_Quotation_Amount: cleanFinalAmt,
+          Final_Package_Amount: cleanFinalAmt,
+          final_package_amount: cleanFinalAmt,
+          _explicit_step3_save: true,
+          events: updatedEvents
+        });
+
+        setWizardLeadData(prev => ({
+          ...prev,
+          deliverables: safeDeliverablesText,
+          deliverables_description: safeDeliverablesText,
+          Team_member: safeTeamMembersText,
+          Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
+          package_price: cleanPkgCost ?? prev.package_price,
+          selected_package_id: pkgId,
+          Select_Package_Option: pkgId,
+          final_amount: cleanFinalAmt
+        }));
+
+        const newCompleted = Math.max(crmHighestStep, 3);
+        setCrmHighestStep(newCompleted);
+        localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            budget: cleanPkgCost ?? prev.budget,
+            package_price: cleanPkgCost ?? prev.package_price,
+            deliverables_description: safeDeliverablesText,
+            Team_member: safeTeamMembersText,
+            Team_Members: safeTeamMembersText,
+            team_members: safeTeamMembersText,
+            notes_special_customizations: wizardLeadData.notes,
+            remarks: updatedRemarks,
+            Select_Package_Option: pkgId,
+            client_residence_address: wizardLeadData.client_residence_address,
+            city: wizardLeadData.city,
+            state: wizardLeadData.state,
+            pincode: wizardLeadData.pincode,
+            sales_staff_name: effectiveSalesName,
+            sales_staff_mobile: effectiveSalesMobile,
+            Quotation_Discount: cleanDiscount,
+            Additional_Services_Cost: cleanAdditional,
+            Final_Quotation_Amount: cleanFinalAmt,
+            Final_Package_Amount: cleanFinalAmt,
+            final_package_amount: cleanFinalAmt
+          };
+        });
+
+        if (wizardLeadData.status === 'Order Confirmed') {
+          if (!wizardLeadData.confirmed_event_date) {
+             showToastMsg("Please provide Confirmed Event Date.", "error");
+             setIsSaving(false); return;
+          }
+          if (!wizardLeadData.final_amount || isNaN(wizardLeadData.final_amount)) {
+             showToastMsg("Please provide Final Amount.", "error");
+             setIsSaving(false); return;
+          }
+          
+          const pkgName = packages.find(p => p.package_id === wizardLeadData.selected_package_id)?.package_name || 'Selected Package';
+          
+          let masterOrderId = '';
+          try {
+             masterOrderId = await confirmOrder(
+               selectedLead.lead_id,
+               pkgName,
+               Number(wizardLeadData.final_amount),
+               Number(wizardLeadData.advance_received || 0),
+               wizardLeadData.confirmed_event_date,
+               wizardLeadData.confirmed_event_time,
+               'UPI',
+               wizardLeadData.notes || 'Order confirmed via CRM Wizard',
+               undefined,
+               undefined
+             );
+          } catch (err: any) {
+             console.error('confirmOrder error', err);
+             showToastMsg('Failed to confirm order: ' + err.message, 'error');
+             setIsSaving(false); return;
+          }
+
+          // Save to order_event_reporting
+          try {
+             if (supabaseClient) {
+               const finalAmt = Number(wizardLeadData.final_amount);
+               const advanceAmt = Number(wizardLeadData.advance_received || 0);
+               const pendingAmt = finalAmt - advanceAmt;
+               const paymentStatus = pendingAmt <= 0 ? 'Paid' : 'Pending';
+
+               for (const ev of crmEvents) {
+                 const payload = {
+                   order_id: masterOrderId,
+                   lead_id: selectedLead.lead_id,
+                   event_id: ev.id,
+                   event_name: ev.event_name || ev.event_type || 'Unknown Event',
+                   confirmed_event_date: wizardLeadData.confirmed_event_date,
+                   confirmed_event_time: wizardLeadData.confirmed_event_time,
+                   contract_final_amount: finalAmt,
+                   advance_payment_received: advanceAmt,
+                   reporting_date: ev.reporting_date || ev.event_date || wizardLeadData.confirmed_event_date,
+                   reporting_time: ev.reporting_time || wizardLeadData.confirmed_event_time,
+                   pending_amount: pendingAmt,
+                   payment_status: paymentStatus
+                 };
+
+                 const { data: existing, error: fetchErr } = await supabaseClient
+                   .from('order_event_reporting')
+                   .select('event_id')
+                   .eq('event_id', ev.id)
+                   .maybeSingle();
+
+                 if (fetchErr && fetchErr.code !== 'PGRST116') {
+                    throw fetchErr;
+                 }
+
+                 if (existing) {
+                   const { error: updErr } = await supabaseClient
+                     .from('order_event_reporting')
+                     .update(payload)
+                     .eq('event_id', ev.id);
+                   if (updErr) throw updErr;
+                 } else {
+                   const { error: insErr } = await supabaseClient
+                     .from('order_event_reporting')
+                     .insert(payload);
+                   if (insErr) throw insErr;
+                 }
+               }
+             }
+          } catch (err: any) {
+             const errMsg = `Failed to save Order Event Reporting.\nTable Name: order_event_reporting\nColumn Name: Multiple (Check schema)\nFailed Function: handleSaveStep -> UPSERT\nSQL Operation: INSERT/UPDATE\nExact Supabase Error: ${err.message || String(err)}\nSuggested Fix: Verify table schema 'order_event_reporting' exists with correct columns.`;
+             alert(errMsg);
+             setIsSaving(false);
+             return;
+          }
+          
+          await completeApprovedUnlockRequest(selectedLead.lead_id);
+          showToastMsg("Order Confirmed and sent to Operations.", "success");
+          setSelectedLead(null);
+          setIsSaving(false);
+          return;
+        }
+
+        await completeApprovedUnlockRequest(selectedLead.lead_id);
+        showToastMsg(`‚úÖ Quotation & CRM changes saved.`, "success");
+        if (isLeadConfirmed) {
+          setIsSaving(false);
+          return;
+        }
+        setStep3FollowUpDate(selectedLead?.next_follow_up_date || '');
+        setStep3FollowUpTime((selectedLead as any)?.next_follow_up_time || '');
+        setStep3FollowUpNotes(selectedLead?.follow_up_notes || '');
+        setShowStep3Popup(true);
+        setIsSaving(false);
+        return; // Open follow-up popup
+      }
+
+      if (step < 3) {
+        let nextStep = step + 1;
+        setCrmWizardStep(nextStep);
+        setTimeout(() => {
+          document.getElementById('crm-wizard-scroll-container')?.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 50);
+      } else {
+        setSelectedLead(null);
+      }
+    } catch (err: any) {
+      console.error("Save failed:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+      
+      const oldStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null;
+      const newStatus = wizardLeadData?.status || null;
+      
+      logStatusUpdateError({
+        leadId: selectedLead?.lead_id || null,
+        orderId: null,
+        oldStatus,
+        newStatus,
+        updatePayload: {
+          budget: Number(wizardLeadData?.package_cost || wizardLeadData?.budget || 0),
+          package_price: Number(wizardLeadData?.package_cost || 0),
+          remarks: wizardLeadData?.remarks || wizardLeadData?.notes || '',
+          Select_Package_Option: wizardLeadData?.selected_package_id || wizardLeadData?.Select_Package_Option || ''
+        },
+        insertPayload: null,
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "CRM Multi-step Wizard Status Update Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      showToastMsg(parsed.reason, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Automatic background sync for Quote Sent -> Quote Follow-up when follow-up date and time are reached
+  React.useEffect(() => {
+    if (!leads || leads.length === 0) return;
+
+    const checkAndSyncFollowUp = () => {
+      leads.forEach(async (ld) => {
+        const rawSt = ld.current_status || ld.status;
+        if ((rawSt === 'Quote Sent' || rawSt === 'Quotation Sent') && isFollowUpDateTimeReached(ld)) {
+          try {
+            await updateLeadFollowUp(
+              ld.lead_id,
+              'Quote Follow-up' as CurrentStage,
+              'Auto updated: Scheduled follow-up date and time reached',
+              ld.next_follow_up_date || '',
+              Number(ld.budget || 0),
+              ld.follow_up_notes || 'Follow-up date and time reached'
+            );
+          } catch (e) {
+            // Silent auto sync
+          }
+        }
+      });
+    };
+
+    checkAndSyncFollowUp();
+    const interval = setInterval(checkAndSyncFollowUp, 30000);
+    return () => clearInterval(interval);
+  }, [leads]);
+
+  const handleSaveStep2Direct = async (passedEvents?: any[]) => {
+    const isCreateFlow = activeTab === 'create';
+    if (!isCreateFlow && isStep2Locked) {
+      showToastMsg("Event details are locked after order confirmation.", "error");
+      return;
+    }
+    const currentLeadId = isCreateFlow ? createdLeadId : selectedLead?.lead_id;
+    if (!currentLeadId) {
+      showToastMsg("Lead not initialized yet.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const finalEventsList = passedEvents || (isCreateFlow ? [...createEvents] : [...crmEvents]);
+      if (finalEventsList.length === 0) {
+        showToastMsg("Please add at least one event.", "error");
+        setIsSaving(false);
+        return;
+      }
+      
+      // Pre-validate and format all events in the finalEventsList
+      for (const ev of finalEventsList) {
+        if (!ev.event_type || ev.event_type.trim() === '') {
+          showToastMsg("Please select Event Type for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (ev.event_type === 'Other' && (!ev.event_name || ev.event_name.trim() === '')) {
+          showToastMsg("Please enter Event Name for 'Other' event types.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_date || ev.event_date.trim() === '') {
+          showToastMsg("Please select Event Date for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_start_time || ev.event_start_time.trim() === '') {
+          showToastMsg("Please select Event Start Time for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_end_time || ev.event_end_time.trim() === '') {
+          showToastMsg("Please select Event End Time for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_location || ev.event_location.trim() === '') {
+          showToastMsg("Please enter Event Location for all events.", "error");
+          setIsSaving(false); return;
+        }
+        
+        try {
+          ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          setIsSaving(false); return;
+        }
+        try {
+          ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          setIsSaving(false); return;
+        }
+        
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(ev.event_date, ev.event_end_date, ev.event_start_time, ev.event_end_time);
+        if (dateTimeErrMsg) {
+          showToastMsg(dateTimeErrMsg, "error");
+          setIsSaving(false); return;
+        }
+      }
+
+      const firstEvent = finalEventsList[0];
+
+      const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
+      const formattedReportingTime = validateAndFormatTime(isCreateFlow ? reportingTime : wizardLeadData.reporting_time, "Reporting Time");
+
+      await updateLead(currentLeadId, {
+        event_type: firstEvent.event_type === 'Other' ? 'Other' : firstEvent.event_type,
+        custom_event_name: firstEvent.event_name,
+        custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
+        event_date: firstEvent.event_date,
+        Event_End_Date: firstEvent.event_end_date || (firstEvent as any).Event_End_Date || null,
+        event_time: formattedEventTime || null,
+        event_start_time: firstEvent.event_start_time || null,
+        event_end_time: firstEvent.event_end_time || null,
+        reporting_time: formattedReportingTime || null,
+        event_location: firstEvent.event_location,
+        google_maps_link: firstEvent.google_maps_link || '',
+        lead_source: isCreateFlow ? createForm.lead_source : wizardLeadData.lead_source,
+        shoot_type: firstEvent.event_shoot_type || '',
+        event_shoot_type: firstEvent.event_shoot_type || '',
+        desired_event_shoot_type: firstEvent.event_shoot_type || '',
+        client_residence_address: isCreateFlow ? createForm.client_residence_address : wizardLeadData.client_residence_address,
+        city: isCreateFlow ? createForm.city : wizardLeadData.city,
+        state: isCreateFlow ? createForm.state : wizardLeadData.state,
+        pincode: isCreateFlow ? createForm.pincode : wizardLeadData.pincode,
+        total_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
+        guest_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
+        staff_pax: firstEvent.staff_pax !== '' && firstEvent.staff_pax != null ? Number(firstEvent.staff_pax) : null,
+        reference_source: isCreateFlow ? createForm.reference_source : wizardLeadData.reference_source || '',
+        Select_Package_Option: isCreateFlow ? (createForm.Select_Package_Option || selectedPkgIds[0] || '') : (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || ''),
+        events: finalEventsList
+      });
+
+      let reloadedEvents = finalEventsList;
+      if (supabaseClient) {
+        const { data: dbEvents, error: dbErr } = await supabaseClient
+          .from('lead_events')
+          .select('*')
+          .eq('lead_id', currentLeadId)
+          .order('created_at', { ascending: true });
+          
+        if (!dbErr && dbEvents && dbEvents.length > 0) {
+          reloadedEvents = dbEvents as LeadEvent[];
+          if (isCreateFlow) {
+            setCreateEvents(reloadedEvents);
+          } else {
+            setCrmEvents(reloadedEvents);
+          }
+        }
+      }
+
+      if (isCreateFlow) {
+        // Await confirmation from Supabase that the lead and events are persisted before initializing Step 3
+        if (supabaseClient && currentLeadId) {
+          try {
+            await supabaseClient
+              .from('leads')
+              .select('lead_id')
+              .eq('lead_id', currentLeadId)
+              .maybeSingle();
+          } catch (refetchErr) {
+            console.warn("Silent confirmation before Step 3 failed:", refetchErr);
+          }
+        }
+
+        if (selectedPkgIds.length === 0) {
+          setSelectedPkgIds(['Custom Package']);
+          setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
+        }
+        setWizardStep(3);
+      } else {
+        const newCompleted = Math.max(crmHighestStep, 2);
+        setCrmHighestStep(newCompleted);
+        if (selectedLead) {
+          localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+        }
+
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            events: reloadedEvents
+          };
+        });
+
+        setCrmWizardStep(3);
+      }
+
+      showToastMsg("‚úÖ Event Details Saved Successfully", "success");
+    } catch (err: any) {
+      console.error("Step 2 direct save failed:", err);
+      showToastMsg(`Failed to save event details: ${err.message || err}`, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveStep3FollowUp = async () => {
+    const isCreateFlow = activeTab === 'create';
+    const currentLeadId = isCreateFlow ? createdLeadId : selectedLead?.lead_id;
+
+    if (!currentLeadId) {
+      showToastMsg("Lead record not found.", "error");
+      return;
+    }
+    if (!step3FollowUpDate) {
+      showToastMsg("Follow-up Date is required.", "error");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const fullNotes = step3FollowUpTime
+        ? `[Time: ${step3FollowUpTime}] ${step3FollowUpNotes}`.trim()
+        : step3FollowUpNotes;
+
+      const currentPkgCost = Number(isCreateFlow ? (createForm.budget || finalTotal || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0));
+
+      const previousStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'Create Quote') : 'Create Quote';
+      const prevRank = getStatusRank(previousStatus);
+
+      // Target stage:
+      // If previous status rank < 2 (i.e. Create Quote or New Lead), update status to Quote Sent.
+      // If previous status rank >= 2 (already Quote Sent, Quote Follow-up, Confirm Order, Lost Lead), preserve existing status!
+      const targetStage: CurrentStage = (isCreateFlow || prevRank < 2) 
+        ? ('Quote Sent' as CurrentStage) 
+        : (previousStatus as CurrentStage);
+
+      await updateLeadFollowUp(
+        currentLeadId,
+        targetStage,
+        fullNotes || 'Quotation created & follow-up scheduled',
+        step3FollowUpDate,
+        currentPkgCost,
+        fullNotes || 'Quotation sent'
+      );
+
+      await completeApprovedUnlockRequest(currentLeadId);
+
+      localStorage.setItem(`follow_up_date_${currentLeadId}`, step3FollowUpDate);
+      localStorage.setItem(`follow_up_notes_${currentLeadId}`, fullNotes);
+
+      if (isCreateFlow) {
+        setSalesStatus('Quote Sent' as CurrentStage);
+        resetForm();
+        setActiveTab('list');
+      } else {
+        setSelectedLead(null);
+        setCrmWizardStep(1);
+        setActiveTab('list');
+      }
+
+      showToastMsg("‚úÖ Quotation & Follow-up saved! Status updated to Quote Sent.", "success");
+      setShowStep3Popup(false);
+    } catch (err: any) {
+      console.error("Failed to save Step 3 follow-up:", err);
+      showToastMsg(`Failed to save follow-up: ${err.message || err}`, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveStep2FollowUp = async () => {
+    const isCreateFlow = activeTab === 'create';
+    const currentLeadId = isCreateFlow ? createdLeadId : selectedLead?.lead_id;
+    if (!currentLeadId) {
+      showToastMsg("Lead not initialized yet.", "error");
+      return;
+    }
+    if (!step2FollowUpDate) {
+      showToastMsg("Next Follow-up Date is mandatory.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const finalEventsList = (isCreateFlow ? [...createEvents] : [...crmEvents]);
+      if (finalEventsList.length === 0) {
+        showToastMsg("No events found to save.", "error");
+        setIsSaving(false);
+        return;
+      }
+      
+      // Pre-validate and format all events in the finalEventsList
+      for (const ev of finalEventsList) {
+        if (!ev.event_type || ev.event_type.trim() === '') {
+          showToastMsg("Please select Event Type for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (ev.event_type === 'Other' && (!ev.event_name || ev.event_name.trim() === '')) {
+          showToastMsg("Please enter Event Name for 'Other' event types.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_date || ev.event_date.trim() === '') {
+          showToastMsg("Please select Event Date for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_start_time || ev.event_start_time.trim() === '') {
+          showToastMsg("Please select Event Start Time for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_end_time || ev.event_end_time.trim() === '') {
+          showToastMsg("Please select Event End Time for all events.", "error");
+          setIsSaving(false); return;
+        }
+        if (!ev.event_location || ev.event_location.trim() === '') {
+          showToastMsg("Please enter Event Location for all events.", "error");
+          setIsSaving(false); return;
+        }
+        
+        try {
+          ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          setIsSaving(false); return;
+        }
+        try {
+          ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          setIsSaving(false); return;
+        }
+        
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(ev.event_date, ev.event_end_date, ev.event_start_time, ev.event_end_time);
+        if (dateTimeErrMsg) {
+          showToastMsg(dateTimeErrMsg, "error");
+          setIsSaving(false); return;
+        }
+      }
+
+      const firstEvent = finalEventsList[0];
+
+      const formattedEventTime = validateAndFormatTime(firstEvent.event_start_time, "Event Start Time");
+      const formattedReportingTime = validateAndFormatTime(isCreateFlow ? reportingTime : wizardLeadData.reporting_time, "Reporting Time");
+
+      // Save event details first
+      await updateLead(currentLeadId, {
+        event_type: firstEvent.event_type === 'Other' ? 'Other' : firstEvent.event_type,
+        custom_event_name: firstEvent.event_name,
+        custom_event_type: firstEvent.event_type === 'Other' ? firstEvent.event_name : undefined,
+        event_date: firstEvent.event_date,
+        Event_End_Date: firstEvent.event_end_date || (firstEvent as any).Event_End_Date || null,
+        event_time: formattedEventTime || null,
+        event_start_time: firstEvent.event_start_time || null,
+        event_end_time: firstEvent.event_end_time || null,
+        reporting_time: formattedReportingTime || null,
+        event_location: firstEvent.event_location,
+        google_maps_link: firstEvent.google_maps_link || '',
+        lead_source: isCreateFlow ? createForm.lead_source : wizardLeadData.lead_source,
+        shoot_type: firstEvent.event_shoot_type || '',
+        event_shoot_type: firstEvent.event_shoot_type || '',
+        desired_event_shoot_type: firstEvent.event_shoot_type || '',
+        client_residence_address: isCreateFlow ? createForm.client_residence_address : wizardLeadData.client_residence_address,
+        city: isCreateFlow ? createForm.city : wizardLeadData.city,
+        state: isCreateFlow ? createForm.state : wizardLeadData.state,
+        pincode: isCreateFlow ? createForm.pincode : wizardLeadData.pincode,
+        total_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
+        guest_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
+        staff_pax: firstEvent.staff_pax !== '' && firstEvent.staff_pax != null ? Number(firstEvent.staff_pax) : null,
+        
+        reference_source: isCreateFlow ? createForm.reference_source : wizardLeadData.reference_source || '',
+        Select_Package_Option: isCreateFlow ? (createForm.Select_Package_Option || selectedPkgIds[0] || '') : (wizardLeadData.Select_Package_Option || wizardLeadData.selected_package_id || ''),
+        events: finalEventsList
+      });
+
+      // Reload latest Event Details from the database to ensure we have the real IDs
+      let reloadedEvents = finalEventsList;
+      if (supabaseClient) {
+        const { data: dbEvents, error: dbErr } = await supabaseClient
+          .from('lead_events')
+          .select('*')
+          .eq('lead_id', currentLeadId)
+          .order('created_at', { ascending: true });
+          
+        if (dbErr) {
+          throw new Error(`Failed to verify saved events: ${dbErr.message || dbErr.details || 'Unknown database error'}`);
+        }
+        
+        if (dbEvents && dbEvents.length > 0) {
+          reloadedEvents = dbEvents as LeadEvent[];
+          if (isCreateFlow) {
+            setCreateEvents(reloadedEvents);
+          } else {
+            setCrmEvents(reloadedEvents);
+          }
+        }
+      }
+
+      const notesWithTag = appendCompletedStep(step2FollowUpNotes || 'Saved event details', 2);
+
+      // Determine target status: If the current status is New Lead or empty, update to Follow Up. Otherwise preserve advanced status.
+      const previousStatus = isCreateFlow ? 'New Lead' : (selectedLead ? getLeadCurrentStatus(selectedLead) : 'New Lead');
+      const targetStatus = (previousStatus === 'New Lead' || !previousStatus) ? 'Follow Up' : previousStatus;
+
+      // Update lead follow up and preserve/update status
+      await updateLeadFollowUp(
+        currentLeadId,
+        targetStatus as CurrentStage,
+        notesWithTag,
+        step2FollowUpDate,
+        Number(isCreateFlow ? (createForm.budget || 0) : (wizardLeadData.package_cost || selectedLead?.budget || 0)),
+        step2FollowUpNotes || 'Saved event details'
+      );
+
+      localStorage.setItem(`follow_up_date_${currentLeadId}`, step2FollowUpDate);
+      localStorage.setItem(`follow_up_notes_${currentLeadId}`, step2FollowUpNotes);
+
+      if (isCreateFlow) {
+        setSalesStatus(targetStatus as CurrentStage);
+        setSelectedPkgIds(['Custom Package']);
+        setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', Select_Package_Option: 'Custom Package' }));
+        setWizardStep(3);
+      } else {
+        const newCompleted = Math.max(crmHighestStep, 2);
+        setCrmHighestStep(newCompleted);
+        if (selectedLead) {
+          localStorage.setItem(`crm_last_step_${selectedLead.lead_id}`, String(newCompleted));
+        }
+
+        // Locally update the status and remarks
+        const timestamp = new Date().toISOString();
+        const updatedRemarks = `${selectedLead?.remarks || ''}\n[Update ${timestamp.split('T')[0]}]: ${notesWithTag}. ${step2FollowUpNotes ? 'Neg Notes: ' + step2FollowUpNotes : ''}. Next follow-up: ${step2FollowUpDate}`;
+
+        // Locally update the status
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            status: targetStatus as CurrentStage,
+            current_status: targetStatus,
+            remarks: updatedRemarks,
+            follow_up_notes: step2FollowUpNotes,
+            next_follow_up_date: step2FollowUpDate,
+            events: reloadedEvents
+          };
+        });
+
+        setCrmWizardStep(3);
+      }
+
+      showToastMsg("‚úÖ Event Details Saved Successfully", "success");
+      setShowStep2Popup(false);
+    } catch (err: any) {
+      console.error("Step 2 Follow-up save failed:", err);
+      const errorMsg = err?.details || err?.message || String(err);
+      showToastMsg(`Save Failed: ${errorMsg}`, "error");
+      showErrorHelper(
+        "Step 2 Save & Next Failed",
+        errorMsg,
+        "handleSaveStep2FollowUp",
+        currentLeadId,
+        "Check event details and try again.",
+        err
+      );
+      setTimeout(() => {
+        document.getElementById('error_details_modal')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveLostLead = async () => {
+    if (!selectedLead) return;
+    const finalReason = lostReason === 'Other' ? otherLostReason : lostReason;
+    if (!finalReason || finalReason.trim() === '') {
+      showToastMsg("Lost Reason is mandatory.", "error");
+      return;
+    }
+    if (!lostNotes || lostNotes.trim() === '') {
+      showToastMsg("Lost Notes are mandatory.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateLead(selectedLead.lead_id, {
+        status: 'Lost Lead',
+        current_status: 'Lost Lead',
+        remarks: `Lost Reason: ${finalReason}. Notes: ${lostNotes}`,
+        "Lost_Reason": finalReason,
+        "Lost_Notes": lostNotes,
+        lost_reason: finalReason,
+        lost_notes: lostNotes,
+        follow_up_notes: finalReason
+      } as any);
+
+      await updateLeadFollowUp(
+        selectedLead.lead_id,
+        'Lost Lead',
+        finalReason,
+        '',
+        Number(selectedLead.package_price || selectedLead.budget || 0),
+        lostNotes
+      );
+
+      showToastMsg("Lead status set to Lost successfully.", "success");
+      setShowLostModal(false);
+      setSelectedLead(null);
+    } catch (err: any) {
+      console.error("Failed to set lead as lost:", err);
+      showToastMsg(err.message || String(err), "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  const handleSubmitUnlockRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUnlockLead) return;
+    
+    if (unlockRequestReason === 'Other' && !unlockRequestCustomReason.trim()) {
+      showToastMsg("Please enter a custom reason.", "error");
+      return;
+    }
+    
+    setIsSaving(true);
+    
+    try {
+      if (!supabaseClient) {
+        throw new Error("Supabase database client is not initialized.");
+      }
+
+      const order = orders.find(o => o.lead_id === selectedUnlockLead.lead_id);
+      const orderId = order?.order_id || (selectedUnlockLead as any).order_id || selectedUnlockLead.lead_id || 'ORD-UNKNOWN';
+      
+      // 1. Prevent Duplicate Requests: Check if a Pending request already exists
+      const { data: existingPending, error: checkErr } = await supabaseClient
+        .from('unlock_requests')
+        .select('*')
+        .or(`lead_id.eq.${selectedUnlockLead.lead_id},order_id.eq.${orderId}`)
+        .eq('request_status', 'Pending');
+
+      if (checkErr) {
+        console.error("Error checking existing pending unlock requests:", checkErr);
+      }
+
+      const localPending = unlockRequests.find((r: any) => 
+        (r.lead_id === selectedUnlockLead.lead_id || r.order_id === orderId) &&
+        (r.status === 'Pending' || r.request_status === 'Pending')
+      );
+
+      if ((existingPending && existingPending.length > 0) || localPending) {
+        showToastMsg("An Unlock Request is already pending Business Owner approval.", "error");
+        setIsSaving(false);
+        return;
+      }
+
+      const fullReason = unlockRequestReason === 'Other' ? unlockRequestCustomReason.trim() : unlockRequestReason;
+
+      const unlockRequestPayload = {
+        lead_id: selectedUnlockLead.lead_id,
+        order_id: orderId,
+        requested_by_user_id: currentUser?.id || 'sales-user',
+        requested_by_name: currentUser?.name || 'Sales Staff',
+        requested_by_role: currentUser?.role || 'Sales',
+        business_owner_user_id: 'BO-MAIN',
+        chapter_id: selectedUnlockLead.chapter_id || 'DEFAULT',
+        request_reason: fullReason || 'Unlock quotation for editing',
+        request_status: 'Pending',
+        requested_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
+      };
+      
+      // 2. Save to Supabase: MUST succeed
+      const { data: insertedData, error: reqErr } = await supabaseClient
+        .from('unlock_requests')
+        .insert([unlockRequestPayload])
+        .select();
+
+      if (reqErr) {
+        console.error("Supabase unlock_requests insert failed:", reqErr);
+        throw new Error(`Database insert failed: ${reqErr.message}`);
+      }
+
+      if (!insertedData || insertedData.length === 0) {
+        throw new Error("Database insert did not return confirmation. Request not saved.");
+      }
+
+
+
+      // 4. Send notification to Business Owner
+      if (addNotification) {
+        try {
+          const payload = {
+            title: unlockRequestReason,
+            message: `New unlock request received for ${selectedUnlockLead.customer_name || 'Lead'}.`,
+            notification_type: 'Quotation Unlock Request',
+            recipient_role: 'Business Owner',
+            project_id: orderId,
+            task_id: 'Pending',
+            priority: 'High',
+            action_url: JSON.stringify({
+              lead_id: selectedUnlockLead.lead_id,
+              customer_name: selectedUnlockLead.customer_name,
+              mobile: selectedUnlockLead.mobile,
+              sales_staff_id: currentUser?.id || '',
+              sales_staff_name: currentUser?.name || '',
+              sales_staff_mobile: currentUser?.mobile || ''
+            })
+          };
+          await addNotification(payload);
+        } catch (notifErr) {
+          console.error("Notification error:", notifErr);
+        }
+      }
+      
+      const normalizedNewRecord = {
+        ...insertedData[0],
+        status: 'Pending',
+        request_status: 'Pending',
+        reason: fullReason,
+        request_reason: fullReason,
+        sales_staff_name: currentUser?.name || 'Sales Staff',
+        sales_staff_id: currentUser?.id || 'sales-user',
+        customer_name: selectedUnlockLead.customer_name || 'Unknown'
+      };
+
+      setUnlockRequests(prev => [
+        ...prev.filter(r => r.lead_id !== selectedUnlockLead.lead_id && r.order_id !== orderId),
+        normalizedNewRecord
+      ]);
+
+      showToastMsg("Unlock request submitted successfully.", "success");
+      setShowUnlockRequestModal(false);
+      setSelectedUnlockLead(null);
+    } catch (err: any) {
+      console.error("Failed to submit unlock request:", err);
+      showToastMsg(err.message || String(err), "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelLead = async () => {
+    const targetLeadId = createdLeadId || selectedLead?.lead_id;
+    if (!targetLeadId) {
+      showToastMsg("No lead found to cancel.", "error");
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const existingLead = leads.find(l => l.lead_id === targetLeadId) || selectedLead;
+      const leadBudget = existingLead?.budget || 0;
+
+      const finalReason = "Cancelled";
+      const cancellationNotes = createdLeadId ? "Cancelled during Step 2 creation" : "Cancelled during Operations configuration";
+
+      let finalEventsList = [...(createdLeadId ? createEvents : crmEvents)];
+      if (finalEventsList.length === 0 && (eventForm.event_type || eventForm.event_name || eventForm.event_date || eventForm.event_location)) {
+        finalEventsList.push({
+          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`,
+          event_type: eventForm.event_type || '',
+          event_name: eventForm.event_name || '',
+          event_shoot_type: eventForm.event_shoot_type || '',
+          event_date: eventForm.event_date || '',
+          event_start_time: eventForm.event_start_time || '',
+          event_end_time: eventForm.event_end_time || '',
+          event_location: eventForm.event_location || '',
+          google_maps_link: eventForm.google_maps_link || '',
+          guest_pax: eventForm.guest_pax || '',
+          staff_pax: eventForm.staff_pax || '',
+          event_start_date: eventForm.event_date || '',
+          event_end_date: eventForm.event_end_date || ''
+        } as any);
+      }
+      const firstEvent = finalEventsList[0] || {};
+      const payload: any = {
+        status: 'Lost Lead',
+        current_status: 'Lost Lead',
+        remarks: `Lost Reason: ${finalReason}. Notes: ${cancellationNotes}`,
+        "Lost_Reason": finalReason,
+        "Lost_Notes": cancellationNotes,
+        
+        client_residence_address: createForm.client_residence_address || existingLead?.client_residence_address || '',
+        city: createForm.city || existingLead?.city || '',
+        state: createForm.state || existingLead?.state || '',
+        pincode: createForm.pincode || existingLead?.pincode || '',
+        
+        event_type: firstEvent.event_type || '',
+        custom_event_name: firstEvent.event_name || '',
+        event_date: firstEvent.event_date || '',
+        event_start_time: firstEvent.event_start_time || null,
+        event_end_time: firstEvent.event_end_time || null,
+        event_location: firstEvent.event_location || '',
+        google_maps_link: firstEvent.google_maps_link || '',
+        event_shoot_type: firstEvent.event_shoot_type || '',
+        guest_pax: firstEvent.guest_pax !== '' && firstEvent.guest_pax != null ? Number(firstEvent.guest_pax) : null,
+        staff_pax: firstEvent.staff_pax !== '' && firstEvent.staff_pax != null ? Number(firstEvent.staff_pax) : null,
+        
+        next_follow_up_date: step2FollowUpDate || null,
+        follow_up_notes: step2FollowUpNotes || null,
+        
+        events: finalEventsList
+      };
+
+      await updateLead(targetLeadId, payload);
+
+      await updateLeadFollowUp(
+        targetLeadId,
+        'Lost Lead',
+        finalReason,
+        step2FollowUpDate || '',
+        Number(leadBudget),
+        cancellationNotes
+      );
+
+      showToastMsg("Lead marked as Lost successfully.", "success");
+      setShowCancelConfirmPopup(false);
+      resetForm();
+      setActiveTab('list');
+    } catch (err: any) {
+      console.error("Error marking lead as Lost:", err);
+      showToastMsg(`Failed to mark lead as Lost: ${err.message || err}`, "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // On-change/blur handler for phone/email inputs to detect repeat customers
+  const handleCheckExistingCustomer = (type: 'phone' | 'email', value: string) => {
+    if (!value || value.length < 5) return;
+    const parsedCustomers = getCustomers(leads, orders, payments || []);
+    
+    const matched = parsedCustomers.find(c => {
+      if (type === 'phone') {
+        const cleanInput = String(value).replace(/[^\d]/g, '').slice(-10);
+        if (!cleanInput || cleanInput.length < 10) return false;
+        const cleanMobile = String(c.mobile || '').replace(/[^\d]/g, '').slice(-10);
+        const cleanAlt = String(c.alternate_mobile || '').replace(/[^\d]/g, '').slice(-10);
+        return cleanInput === cleanMobile || (cleanAlt && cleanInput === cleanAlt);
+      } else {
+        const cleanInput = value.trim().toLowerCase();
+        if (!cleanInput.includes('@')) return false;
+        return c.email && c.email.trim().toLowerCase() === cleanInput;
+      }
+    });
+
+    if (matched) {
+      setDetectedCustomer(matched);
+      setShowDetectionPopup(true);
+    }
+  };
+
+  // Handle repeat bookings (Pre-fills customized data and issues a Lead AND dynamic Order immediately)
+  const handleExecuteQuickReorder = async (cust: any) => {
+    if (!reorderForm.event_date) {
+      alert('Please specify the event date for the repeat customer booking.');
+      return;
+    }
+
+    const newLeadId = await addLead({
+      customer_name: cust.customer_name,
+      mobile: cust.mobile,
+      alternate_mobile: cust.alternate_mobile || undefined,
+      whatsapp_number: cust.whatsapp_number || cust.mobile,
+      email: cust.email,
+      address: cust.address,
+      city: cust.city,
+      state: cust.state,
+      pincode: cust.pincode,
+      client_residence_address: cust.client_residence_address,
+      lead_source: 'Repeat Customer Desk',
+      event_type: reorderForm.event_type,
+      custom_event_name: reorderForm.event_type === 'Other' ? reorderForm.custom_event_name : undefined,
+      custom_event_type: reorderForm.event_type === 'Other' ? reorderForm.custom_event_name : undefined,
+      event_date: reorderForm.event_date,
+      event_time: reorderForm.event_time,
+      event_location: reorderForm.event_location,
+      budget: Number(reorderForm.quotation_amount),
+      remarks: `Dynamic Repeat reservation. [CUST_ID: ${cust.customer_id}]`
+    });
+
+    const newOrderId = await confirmOrder(
+      newLeadId,
+      reorderForm.package_name,
+      Number(reorderForm.quotation_amount),
+      Number(reorderForm.advance_received)
+    );
+
+    alert(`Success! Repeat booking completed.\nNew Lead ID: ${newLeadId}\nNew Order ID: ${newOrderId}\nSame Customer ID: ${cust.customer_id}`);
+
+    // Reset forms and view
+    setShowDetectionPopup(false);
+    setIsQuickReorderView(false);
+    setDetectedCustomer(null);
+    setReorderForm({
+      event_type: '',
+      custom_event_name: '',
+      custom_event_type: '',
+      event_date: '',
+      event_time: '',
+      event_location: '',
+      package_name: '',
+      quotation_amount: 0,
+      advance_received: 0,
+    });
+    setActiveTab('list');
+  };
+
+  // Wizard action helpers and handlers
+  const autoScrollToFormHeader = () => {
+    const el = document.getElementById('create_lead_form_heading');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      const formEl = document.getElementById('create_lead_form');
+      if (formEl) {
+        formEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  };
+
+  const getRemarksPayload = (formRemarks: string, intNotes: string, fDate: string, wNum: string, adr: string, cty: string, resAdr?: string) => {
+    let result = '';
+    if (wNum) result += `WhatsApp: ${wNum}\n`;
+    if (adr) result += `Event Venue: ${adr}\n`;
+    if (resAdr) result += `Residence: ${resAdr}\n`;
+    if (cty) result += `City: ${cty}\n`;
+    if (fDate) result += `Follow-up Date: ${fDate}\n`;
+    if (intNotes) result += `Internal Notes: ${intNotes}\n`;
+    if (formRemarks) result += `Remarks: ${formRemarks}\n`;
+    
+    if (selectedPkgIds.length > 0) {
+      result += `\n--- Selected Package Customizations ---\n`;
+      selectedPkgIds.forEach(id => {
+        const p = PACKAGES_LIST.flatMap(cat => cat.items).find(item => item.id === id);
+        if (p) {
+          result += `Package: ${p.name}\n`;
+          result += `  Custom Price: ‚Çπ${(pkgPrices[id] !== undefined ? pkgPrices[id] : p.cost).toLocaleString('en-IN')}\n`;
+          result += `  Deliverables: ${pkgDeliverables[id] || 'N/A'}\n`;
+          result += `  Notes: ${pkgNotes[id] || 'N/A'}\n`;
+        }
+      });
+    }
+    return result;
+  };
+
+  const handleSaveEventForm = (isCrm: boolean = !!selectedLead, addAnother: boolean = false) => {
+    if (!eventForm.event_type) {
+      showValidationError("input_event_type", "Event Type is required.");
+      return;
+    }
+    if (!eventForm.event_date) {
+      showValidationError("input_event_date", "Event Date is required.");
+      return;
+    }
+    if (!eventForm.event_location.trim()) {
+      showValidationError("input_event_location", "Event Location is required.");
+      return;
+    }
+
+    const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+    if (dateTimeErrMsg) {
+      showToastMsg(dateTimeErrMsg, "error");
+      return;
+    }
+
+    const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
+    const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
+
+    const eventData = {
+      ...eventForm,
+      guest_pax: guestPaxVal,
+      staff_pax: staffPaxVal,
+      event_start_date: eventForm.event_date,
+      event_end_date: eventForm.event_end_date || ''
+    };
+
+    const savedEventType = eventForm.event_type;
+
+    if (isCrm) {
+      if (editingEventId) {
+        setCrmEvents(prev => prev.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev));
+        showToastMsg("Event updated in list.", "success");
+      } else {
+        const newEv: LeadEvent = {
+          ...eventData,
+          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+        };
+        setCrmEvents(prev => [...prev, newEv]);
+        showToastMsg("Event added to list.", "success");
+      }
+    } else {
+      if (editingEventId) {
+        setCreateEvents(prev => prev.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev));
+        showToastMsg("Event updated in list.", "success");
+      } else {
+        const newEv: LeadEvent = {
+          ...eventData,
+          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+        };
+        setCreateEvents(prev => [...prev, newEv]);
+        showToastMsg("Event added to list.", "success");
+      }
+    }
+
+    setEditingEventId(null);
+
+    if (addAnother) {
+      setEventForm({
+        event_type: '',
+        event_name: '',
+        event_shoot_type: '',
+        event_date: '',
+        event_start_time: '',
+        event_end_time: '',
+        event_location: '',
+        google_maps_link: '',
+        guest_pax: "" as any,
+        staff_pax: "" as any,
+        event_start_date: '',
+        event_end_date: ''
+      });
+      setShowEventForm(true);
+    } else {
+      setShowEventForm(false);
+    }
+  };
+
+  const handleEditEvent = (ev: LeadEvent) => {
+    setEditingEventId(ev.id);
+    const startDate = ev.event_start_date || ev.event_date || '';
+    const endDate = ev.event_end_date || (ev as any).Event_End_Date || (ev as any).Event_end_date || '';
+    const startTime = ev.event_start_time || (ev as any).start_time || (ev as any).event_time || '';
+    const endTime = ev.event_end_time || (ev as any).end_time || '';
+    const location = ev.event_location || (ev as any).location || (ev as any).venue_address || '';
+    const maps = ev.google_maps_link || (ev as any).maps_link || '';
+
+    setEventForm({
+      event_type: ev.event_type || '',
+      event_name: ev.event_name || '',
+      event_shoot_type: ev.event_shoot_type || '',
+      event_date: startDate,
+      event_start_date: startDate,
+      event_end_date: endDate,
+      event_start_time: startTime,
+      event_end_time: endTime,
+      event_location: location,
+      google_maps_link: maps,
+      guest_pax: ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : ('' as any),
+      staff_pax: ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : ('' as any),
+      reporting_date: ev.reporting_date || '',
+      reporting_time: ev.reporting_time || ''
+    });
+    setShowEventForm(true);
+  };
+
+  const handleDeleteEvent = (id: string, isCrm: boolean = !!selectedLead) => {
+    if (isCrm) {
+      setCrmEvents(prev => prev.filter(ev => ev.id !== id));
+    } else {
+      setCreateEvents(prev => prev.filter(ev => ev.id !== id));
+    }
+    showToastMsg("Event removed from list.", "success");
+  };
+
+  const handleAddNewEventClick = (isCrm: boolean = !!selectedLead) => {
+    setEditingEventId(null);
+    setEventForm({
+      event_type: '',
+      event_name: '',
+      event_shoot_type: '',
+      event_date: '',
+      event_start_time: '',
+      event_end_time: '',
+      event_location: '',
+      google_maps_link: '',
+      guest_pax: "" as any,
+      staff_pax: "" as any,
+      event_start_date: '',
+      event_end_date: ''
+    });
+    setShowEventForm(true);
+  };
+
+  const formatDDMMYYYY = (dateStr: string | undefined | null): string => {
+    if (!dateStr) return 'N/A';
+    const clean = dateStr.trim();
+    if (!clean) return 'N/A';
+    if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) return clean;
+    const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      return `${match[3]}-${match[2]}-${match[1]}`;
+    }
+    return clean;
+  };
+
+  const convertTo24Hour = (timeStr: string | undefined | null): string => {
+    if (!timeStr) return '';
+    const clean = timeStr.trim().toUpperCase();
+    if (!clean) return '';
+
+    // Match 12-hour AM/PM format (e.g., "08:00 AM", "8:00:00 AM", "12:30 PM", "01:00:00 PM")
+    const ampmMatch = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/);
+    if (ampmMatch) {
+      let hours = parseInt(ampmMatch[1], 10);
+      const minutes = ampmMatch[2];
+      const period = ampmMatch[3];
+
+      if (period === 'PM' && hours < 12) {
+        hours += 12;
+      } else if (period === 'AM' && hours === 12) {
+        hours = 0;
+      }
+
+      const hh = String(hours).padStart(2, '0');
+      return `${hh}:${minutes}`;
+    }
+
+    // Check if it's in 24-hour format with or without seconds (e.g., "14:30", "14:30:00", "8:30:00")
+    const hhmmssMatch = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (hhmmssMatch) {
+      const hh = String(parseInt(hhmmssMatch[1], 10)).padStart(2, '0');
+      const mm = hhmmssMatch[2];
+      return `${hh}:${mm}`;
+    }
+
+    return '';
+  };
+
+  const convertTo12Hour = (timeStr: string | undefined | null): string => {
+    if (!timeStr) return '';
+    const clean = timeStr.trim();
+    if (!clean) return '';
+
+    // If it already has AM/PM, format nicely
+    if (clean.toUpperCase().includes('AM') || clean.toUpperCase().includes('PM')) {
+      const ampmMatch = clean.toUpperCase().match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/);
+      if (ampmMatch) {
+        const hh = String(parseInt(ampmMatch[1], 10)).padStart(2, '0');
+        const mm = ampmMatch[2];
+        const period = ampmMatch[3];
+        return `${hh}:${mm} ${period}`;
+      }
+      return clean;
+    }
+
+    // Match 24-hour format HH:MM or HH:MM:SS
+    const match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (!match) {
+      return clean;
+    }
+
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = hours >= 12 ? 'PM' : 'AM';
+
+    hours = hours % 12;
+    if (hours === 0) {
+      hours = 12;
+    }
+
+    const hh = String(hours).padStart(2, '0');
+    return `${hh}:${minutes} ${period}`;
+  };
+
+  const parseDateParts = (dStr: string | undefined | null): { year: number; month: number; day: number } | null => {
+    if (!dStr) return null;
+    const clean = dStr.trim();
+    if (!clean) return null;
+
+    // YYYY-MM-DD or YYYY/MM/DD
+    const ymdMatch = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (ymdMatch) {
+      const year = parseInt(ymdMatch[1], 10);
+      const month = parseInt(ymdMatch[2], 10);
+      const day = parseInt(ymdMatch[3], 10);
+      if (year > 1000 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return { year, month, day };
+      }
+    }
+
+    // DD-MM-YYYY or DD/MM/YYYY
+    const dmyMatch = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmyMatch) {
+      const day = parseInt(dmyMatch[1], 10);
+      const month = parseInt(dmyMatch[2], 10);
+      const year = parseInt(dmyMatch[3], 10);
+      if (year > 1000 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return { year, month, day };
+      }
+    }
+
+    const parsed = new Date(clean);
+    if (!isNaN(parsed.getTime())) {
+      return {
+        year: parsed.getFullYear(),
+        month: parsed.getMonth() + 1,
+        day: parsed.getDate()
+      };
+    }
+
+    return null;
+  };
+
+  const parseTimeParts = (tStr: string | undefined | null): { hours: number; minutes: number } | null => {
+    if (!tStr) return null;
+    const clean = tStr.trim();
+    if (!clean) return null;
+
+    const t24 = convertTo24Hour(clean);
+    if (!t24) return null;
+
+    const parts = t24.split(':');
+    if (parts.length >= 2) {
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      if (!isNaN(hours) && !isNaN(minutes)) {
+        return { hours, minutes };
+      }
+    }
+    return null;
+  };
+
+  const buildDateTime = (
+    dateStr: string | undefined | null,
+    timeStr: string | undefined | null,
+    defaultTime: { hours: number; minutes: number }
+  ): Date | null => {
+    const dParts = parseDateParts(dateStr);
+    if (!dParts) return null;
+
+    const tParts = parseTimeParts(timeStr) || defaultTime;
+    return new Date(dParts.year, dParts.month - 1, dParts.day, tParts.hours, tParts.minutes, 0, 0);
+  };
+
+  const normalizeDateStr = (dStr: string | undefined | null): string => {
+    const parts = parseDateParts(dStr);
+    if (!parts) return dStr ? dStr.trim() : '';
+    const y = parts.year;
+    const m = String(parts.month).padStart(2, '0');
+    const d = String(parts.day).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  const getEventDateTimeErrorMessage = (
+    startDate: string | undefined | null,
+    endDate: string | undefined | null,
+    startTime: string | undefined | null,
+    endTime: string | undefined | null
+  ): string | null => {
+    if (!startDate || startDate.trim() === '') return null;
+
+    const startParts = parseDateParts(startDate);
+    if (!startParts) return null;
+
+    const effectiveEndDate = endDate && endDate.trim() !== '' ? endDate : startDate;
+    const endParts = parseDateParts(effectiveEndDate);
+    if (!endParts) return null;
+
+    // Rule 3 ‚Äì Check if End Date is earlier than Start Date
+    if (
+      startParts.year > endParts.year ||
+      (startParts.year === endParts.year && startParts.month > endParts.month) ||
+      (startParts.year === endParts.year && startParts.month === endParts.month && startParts.day > endParts.day)
+    ) {
+      return "Event End Date cannot be earlier than Event Start Date.";
+    }
+
+    const isSameDate =
+      startParts.year === endParts.year &&
+      startParts.month === endParts.month &&
+      startParts.day === endParts.day;
+
+    // Rule 1 ‚Äì If Start Date and End Date are the same date
+    if (isSameDate) {
+      const startT = parseTimeParts(startTime);
+      const endT = parseTimeParts(endTime);
+      if (startT && endT) {
+        const startMin = startT.hours * 60 + startT.minutes;
+        const endMin = endT.hours * 60 + endT.minutes;
+        if (endMin <= startMin) {
+          return "End Time must be later than Start Time when the Event Start Date and Event End Date are the same.";
+        }
+      }
+    }
+
+    // Rule 2 ‚Äì Different Start Date & End Date (End Date > Start Date): any End Time allowed
+    return null;
+  };
+
+  const isEventDateTimeInvalid = (
+    startDate: string | undefined | null,
+    endDate: string | undefined | null,
+    startTime: string | undefined | null,
+    endTime: string | undefined | null
+  ): boolean => {
+    return getEventDateTimeErrorMessage(startDate, endDate, startTime, endTime) !== null;
+  };
+
+  const isTimeEarlier = (start: string | undefined | null, end: string | undefined | null): boolean => {
+    return isEventDateTimeInvalid(eventForm.event_date, eventForm.event_end_date, start, end);
+  };
+
+  const renderEventDetailsSection = (isCrm: boolean) => {
+    const eventsList = isCrm ? crmEvents : createEvents;
+    const isNewFormVisible = !editingEventId && (showEventForm || eventsList.length === 0);
+
+    const renderFormFields = (isEditingThisEvent: boolean) => (
+      <div className="space-y-4">
+        {/* Event Type */}
+        <div className="text-left">
+          <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+            Event Type *
+          </label>
+          <select
+            id="input_event_type"
+            value={eventForm.event_type}
+            onChange={(e) => {
+              const val = e.target.value;
+              setEventForm(prev => ({
+                ...prev,
+                event_type: val,
+                event_name: prev.event_name || ''
+              }));
+            }}
+            className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
+          >
+            <option value="">Select Event Type</option>
+            {EVENT_TYPES.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Conditional Event Details fields displayed only after Event Type is selected */}
+        {eventForm.event_type && eventForm.event_type !== '' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+            {/* Event Name */}
+            <div className="sm:col-span-2 text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event Name
+              </label>
+              <input
+                id="input_event_name"
+                type="text"
+                placeholder="e.g. Sangeet, Haldi, Reception"
+                value={eventForm.event_name}
+                onChange={(e) => setEventForm({ ...eventForm, event_name: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
+              />
+            </div>
+
+            {/* Event Date */}
+            <div className="text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event Date *
+              </label>
+              <input
+                id="input_event_date"
+                type="date"
+                required
+                value={eventForm.event_date}
+                onChange={(e) => setEventForm({ ...eventForm, event_date: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
+              />
+            </div>
+
+            {/* Event Start Time */}
+            <div className="text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event Start Time
+              </label>
+              <input
+                id="input_event_start_time"
+                type="time"
+                value={convertTo24Hour(eventForm.event_start_time)}
+                onChange={(e) => {
+                  const val24 = e.target.value;
+                  const val12 = convertTo12Hour(val24);
+                  setEventForm({ ...eventForm, event_start_time: val12 });
+                }}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
+              />
+            </div>
+
+            {/* Event End Date */}
+            <div className="text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event End Date
+              </label>
+              <input
+                id="input_event_end_date"
+                type="date"
+                value={eventForm.event_end_date || ''}
+                onChange={(e) => setEventForm({ ...eventForm, event_end_date: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
+              />
+            </div>
+
+            {/* Event End Time */}
+            <div className="text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event End Time
+              </label>
+              <input
+                id="input_event_end_time"
+                type="time"
+                value={convertTo24Hour(eventForm.event_end_time)}
+                onChange={(e) => {
+                  const val24 = e.target.value;
+                  const val12 = convertTo12Hour(val24);
+                  setEventForm({ ...eventForm, event_end_time: val12 });
+                }}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
+              />
+              {(() => {
+                const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+                return dateTimeErrMsg ? (
+                  <p className="text-[11px] text-rose-400 mt-1 animate-fade-in font-medium">
+                    {dateTimeErrMsg}
+                  </p>
+                ) : null;
+              })()}
+            </div>
+
+            {/* Event Location - Multiline Address */}
+            <div className="sm:col-span-2 text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Event Location * (Venue Address)
+              </label>
+              <textarea
+                required
+                rows={3}
+                placeholder="Enter the full event location and venue address details"
+                value={eventForm.event_location}
+                onChange={(e) => setEventForm({ ...eventForm, event_location: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none"
+              />
+            </div>
+
+            {/* Google Maps Link */}
+            <div className="sm:col-span-2 text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Google Maps Location Link (Optional)
+              </label>
+              <input
+                type="url"
+                placeholder="e.g. https://maps.app.goo.gl/..."
+                value={eventForm.google_maps_link}
+                onChange={(e) => setEventForm({ ...eventForm, google_maps_link: e.target.value })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none"
+              />
+            </div>
+
+            {/* Guest Pax */}
+            <div className="sm:col-span-2 text-left">
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Guest Pax
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="e.g. 150"
+                value={eventForm.guest_pax}
+                onChange={(e) => setEventForm({ ...eventForm, guest_pax: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value) || 0) })}
+                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono"
+              />
+            </div>
+
+            {/* Save Event Buttons */}
+            <div className="sm:col-span-2 flex flex-wrap justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEventForm(false);
+                  setEditingEventId(null);
+                }}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-4 py-2 rounded-lg text-xs transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              {isEditingThisEvent ? (
+                <button
+                  type="button"
+                  onClick={() => handleSaveEventForm(isCrm, false)}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm cursor-pointer"
+                >
+                  Update Event
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEventForm(isCrm, false)}
+                    className="bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm cursor-pointer"
+                  >
+                    Save Event
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveEventForm(isCrm, true)}
+                    className="bg-cyan-600 hover:bg-cyan-500 text-slate-100 font-bold px-4 py-2 rounded-lg text-xs transition-colors shadow-sm cursor-pointer"
+                  >
+                    Save & Add Another Event
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="space-y-4">
+        {/* Render Event Cards */}
+        {eventsList.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
+              Added Events ({eventsList.length})
+            </h4>
+            <div className="grid grid-cols-1 gap-3">
+              {eventsList.map((ev, idx) => {
+                const isEditingThisEvent = editingEventId === ev.id;
+                const isCollapsed = collapsedEventIds[ev.id] ?? true;
+                const startDateStr = formatDDMMYYYY(ev.event_start_date || ev.event_date);
+                const endDateRaw = ev.event_end_date || (ev as any).Event_End_Date || '';
+                const endDateStr = endDateRaw ? formatDDMMYYYY(endDateRaw) : 'N/A';
+                const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A';
+                const endTimeStr = ev.event_end_time ? convertTo12Hour(ev.event_end_time) : 'N/A';
+
+                const guestPaxVal = ev.guest_pax !== '' && ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : 'N/A';
+                const staffPaxVal = ev.staff_pax !== '' && ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : 'N/A';
+
+                const dateTimeSummary = (() => {
+                  const startPart = `${startDateStr} ‚Ä¢ ${startTimeStr}`;
+                  if (endDateRaw && endDateStr !== 'N/A') {
+                    return `${startPart} ‚Üí ${endDateStr} ‚Ä¢ ${endTimeStr}`;
+                  } else if (endTimeStr !== 'N/A') {
+                    return `${startPart} ‚Üí ${endTimeStr}`;
+                  }
+                  return startPart;
+                })();
+
+                if (isEditingThisEvent) {
+                  return (
+                    <div key={ev.id} className="bg-slate-900 border border-cyan-500/50 rounded-xl p-4 space-y-4 shadow-lg animate-fade-in text-left">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider font-mono flex items-center gap-1.5">
+                          <Edit className="w-3.5 h-3.5" /> Edit Event {idx + 1}: {ev.event_name || ev.event_type}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingEventId(null);
+                            setShowEventForm(false);
+                          }}
+                          className="text-slate-400 hover:text-slate-200 text-xs px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {renderFormFields(true)}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div key={ev.id} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-sm transition-all duration-200">
+                    <div 
+                      className="flex items-center justify-between p-3.5 bg-slate-950/40 cursor-pointer select-none border-b border-slate-800/40 hover:bg-slate-950/60 transition-colors"
+                      onClick={() => setCollapsedEventIds(prev => ({ ...prev, [ev.id]: !isCollapsed }))}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="bg-cyan-500/10 text-cyan-400 p-1.5 rounded-lg shrink-0">
+                          <Calendar className="w-4 h-4" />
+                        </div>
+                        <div className="text-left space-y-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs font-bold text-slate-100">{ev.event_name || `Event ${idx + 1}`}</span>
+                            <span className="text-xs text-slate-500 font-mono">|</span>
+                            <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                              {ev.event_type}
+                            </span>
+                          </div>
+
+                          {/* Show compact summary ONLY when COLLAPSED */}
+                          {isCollapsed && (
+                            <>
+                              <p className="text-[11px] text-slate-300 font-mono">
+                                {dateTimeSummary}
+                              </p>
+                              <p className="text-[11px] text-slate-400 font-mono">
+                                Guest Pax: <span className="text-slate-200 font-semibold">{guestPaxVal}</span>
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => handleEditEvent(ev)}
+                          className="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-cyan-400 transition-colors cursor-pointer"
+                          title="Edit Event"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteEvent(ev.id, isCrm)}
+                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                          title="Remove Event"
+                        >
+                          <Trash className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCollapsedEventIds(prev => ({ ...prev, [ev.id]: !isCollapsed }))}
+                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                        >
+                          {isCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                        </button>
                       </div>
                     </div>
-                    <p className="text-3xl font-black text-slate-800">{quotationsSent}</p>
-                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-indigo-500 h-full rounded-full" style={{ width: `${totalLeads ? (quotationsSent/totalLeads)*100 : 0}%` }}></div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 hover:shadow-md transition-shadow relative overflow-hidden group col-span-2 md:col-span-1">
-                  <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-bl-full -z-0 opacity-50 group-hover:scale-110 transition-transform"></div>
-                  <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Converted</h3>
-                      <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                        <CheckCircle size={18} />
+
+                    {!isCollapsed && (
+                      <div className="p-4 bg-slate-900/50 text-xs text-slate-300 space-y-3">
+                        {/* Event Name & Type Info Header if name differs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Event Name</span>
+                            <span className="text-slate-100 font-semibold">{ev.event_name || `Event ${idx + 1}`}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Event Type</span>
+                            <span className="text-slate-100 font-semibold">{ev.event_type}</span>
+                          </div>
+                          {(ev.event_shoot_type || (ev as any).shoot_type) && (
+                            <div>
+                              <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Event Shoot Type</span>
+                              <span className="text-slate-100 font-semibold">{ev.event_shoot_type || (ev as any).shoot_type}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Dates & Times Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Start Date</span>
+                            <span className="text-slate-200 font-semibold">{startDateStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Start Time</span>
+                            <span className="text-slate-200 font-semibold">{startTimeStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">End Date</span>
+                            <span className="text-slate-200 font-semibold">{endDateStr}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">End Time</span>
+                            <span className="text-slate-200 font-semibold">{endTimeStr}</span>
+                          </div>
+                        </div>
+
+                        {/* Pax Info Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Guest Pax</span>
+                            <span className="text-slate-200 font-semibold">{guestPaxVal}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Staff Pax</span>
+                            <span className="text-slate-200 font-semibold">{staffPaxVal}</span>
+                          </div>
+                        </div>
+
+                        {/* Reporting Info if present */}
+                        {(ev.reporting_date || ev.reporting_time) && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
+                            {ev.reporting_date && (
+                              <div>
+                                <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Reporting Date</span>
+                                <span className="text-slate-200 font-semibold">{formatDDMMYYYY(ev.reporting_date)}</span>
+                              </div>
+                            )}
+                            {ev.reporting_time && (
+                              <div>
+                                <span className="text-slate-400 block text-[10px] font-sans font-bold uppercase tracking-wider mb-0.5">Reporting Time</span>
+                                <span className="text-slate-200 font-semibold">{convertTo12Hour(ev.reporting_time)}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Venue Address */}
+                        <div className="border-t border-slate-800/40 pt-2.5 text-left">
+                          <span className="text-slate-400 block mb-1 text-[10px] font-sans font-bold uppercase tracking-wider">Venue Address / Location:</span>
+                          <p className="text-slate-200 bg-slate-950/20 p-2 rounded border border-slate-850/50 whitespace-pre-wrap font-mono">
+                            {ev.event_location || 'N/A'}
+                          </p>
+                        </div>
+
+                        {/* Google Maps Link */}
+                        {ev.google_maps_link && (
+                          <div className="flex items-center gap-1.5 text-cyan-400 text-left pt-1 font-mono text-[11px]">
+                            <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                            <a 
+                              href={ev.google_maps_link} 
+                              target="_blank" 
+                              referrerPolicy="no-referrer"
+                              rel="noopener noreferrer" 
+                              className="hover:underline break-all"
+                            >
+                              {ev.google_maps_link}
+                            </a>
+                          </div>
+                        )}
+
+                        {/* Assigned Staff if present */}
+                        {ev.assigned_staff_names && (
+                          <div className="border-t border-slate-800/40 pt-2 text-left font-mono">
+                            <span className="text-slate-400 block mb-0.5 text-[10px] font-sans font-bold uppercase tracking-wider">Assigned Staff:</span>
+                            <span className="text-slate-200">{ev.assigned_staff_names}</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <p className="text-3xl font-black text-slate-800">{leadStageDistribution.converted}</p>
-                    <p className="text-xs font-semibold text-emerald-600 mt-1 flex items-center gap-1">
-                      <TrendingUp size={12} /> {totalLeads ? Math.round((leadStageDistribution.converted/totalLeads)*100) : 0}% Win Rate
-                    </p>
+                    )}
                   </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Inline Event Form for New Event */}
+        {isNewFormVisible ? (
+          <div className="bg-slate-900/60 border border-slate-850 rounded-xl p-4 space-y-4 animate-fade-in text-left">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+              <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">
+                Event Details
+              </span>
+              {eventsList.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEventForm(false);
+                    setEditingEventId(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+            {renderFormFields(false)}
+          </div>
+        ) : (
+          /* Add Another Event Button */
+          <div className="flex justify-start">
+            <button
+              type="button"
+              onClick={() => handleAddNewEventClick(isCrm)}
+              className="flex items-center gap-1.5 border border-dashed border-slate-700 hover:border-cyan-500 text-slate-300 hover:text-cyan-400 bg-slate-900/30 px-4 py-2.5 rounded-lg text-xs transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Add Another Event</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const handleWizardNext = async () => {
+    if (isSaving) return;
+
+    let finalUser: any = null;
+
+    if (wizardStep === 1) {
+      if (!createForm.mobile) {
+        showValidationError("input_mobile", "Phone Number is required.");
+        return;
+      }
+      if (!createForm.lead_source || createForm.lead_source === '') {
+        showValidationError("input_lead_source", "Lead Source is required.");
+        return;
+      }
+
+      // Check Supabase Authentication and Session before creating lead
+      if (supabaseClient) {
+        try {
+          const { data: sessionData, error: sessionErr } = await supabaseClient.auth.getSession();
+          const { data: userData, error: userErr } = await supabaseClient.auth.getUser();
+
+          const session = sessionData?.session;
+          const authUser = userData?.user;
+
+          console.log('SESSION', session);
+          console.log('USER', authUser);
+
+          if (sessionErr || userErr) {
+            console.warn("Session/user fetch error:", sessionErr || userErr);
+          }
+
+          // If BOTH session and authUser are null AND we don't have a currentUser in React state
+          if (!session && !authUser && !currentUser) {
+            showToastMsg("Please login again.", "error");
+            return;
+          }
+
+          // Check if session is expired
+          const isExpired = session?.expires_at ? (session.expires_at <= Math.floor(Date.now() / 1000)) : false;
+          if (isExpired && !authUser) {
+            showToastMsg("Session expired.", "error");
+            return;
+          }
+
+          // Users Table Lookup
+          const currentUid = authUser?.id || session?.user?.id || currentUser?.id;
+          const emailFromAuth = authUser?.email || session?.user?.email || currentUser?.email;
+
+          let dbUser: any = null;
+          if (currentUid) {
+            const { data: userById, error: dbUserErr } = await supabaseClient
+              .from('users')
+              .select('*')
+              .eq('id', currentUid)
+              .maybeSingle();
+
+            dbUser = userById;
+            if (dbUserErr) {
+              console.warn("Users table lookup failed in UI:", dbUserErr.message);
+            }
+          }
+
+          if (!dbUser && emailFromAuth) {
+            const { data: dbUserByEmail } = await supabaseClient
+              .from('users')
+              .select('*')
+              .eq('email', emailFromAuth.toLowerCase().trim())
+              .maybeSingle();
+            
+            if (dbUserByEmail && currentUid) {
+              console.log("Aligning user profile ID during lead creation...");
+              await supabaseClient
+                .from('users')
+                .update({ id: currentUid })
+                .eq('email', emailFromAuth.toLowerCase().trim());
+              dbUser = { ...dbUserByEmail, id: currentUid };
+            } else if (dbUserByEmail) {
+              dbUser = dbUserByEmail;
+            }
+          }
+
+          finalUser = currentUser;
+          if (dbUser) {
+            finalUser = mapUserFieldsFromDb(dbUser);
+          }
+
+          if (!finalUser) {
+            showToastMsg("User record missing from users table.", "error");
+            return;
+          }
+
+          if (emailFromAuth && finalUser.email && finalUser.email.toLowerCase().trim() !== emailFromAuth.toLowerCase().trim()) {
+            showToastMsg("User record email does not match logged-in account.", "error");
+            return;
+          }
+
+          if (!finalUser.role) {
+            showToastMsg("User role not loaded correctly.", "error");
+            return;
+          }
+
+          if (!finalUser.active) {
+            showToastMsg("User account is deactivated.", "error");
+            return;
+          }
+
+          if (finalUser.role !== 'Sales Team' && finalUser.role !== 'Business Owner') {
+            showToastMsg("User does not have permission to create quotations.", "error");
+            return;
+          }
+        } catch (authErr: any) {
+          showToastMsg(`Authentication error: ${authErr.message || authErr}`, "error");
+          return;
+        }
+      } else {
+        if (!currentUser) {
+          showToastMsg("Please login again.", "error");
+          return;
+        }
+        finalUser = currentUser;
+        if (currentUser.role !== 'Sales Team' && currentUser.role !== 'Business Owner') {
+          showToastMsg("User does not have permission to create quotations.", "error");
+          return;
+        }
+      }
+
+      const mobileVal = String(createForm.mobile || '').trim();
+      if (!/^\d{10}$/.test(mobileVal)) {
+        showToastMsg("Please enter a valid 10-digit mobile number.", "error");
+        return;
+      }
+      if (createForm.email && createForm.email.trim() !== '') {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(createForm.email.trim())) {
+          showToastMsg("Please enter a valid email address.", "error");
+          return;
+        }
+      }
+
+      try {
+        setIsSaving(true);
+        const finalSource = createForm.lead_source === 'Other' ? 'Other' : createForm.lead_source;
+        const customLeadSourceName = createForm.lead_source === 'Other' && otherSource.trim() !== '' ? otherSource.trim() : null;
+        let finalId = createdLeadId;
+        if (!createdLeadId) {
+          const newId = await addLead({
+            customer_name: createForm.customer_name || '',
+            mobile: createForm.mobile,
+            alternate_mobile: (createForm.alternate_mobile && String(createForm.alternate_mobile).trim() !== '' && String(createForm.alternate_mobile).trim() !== '+91') ? String(createForm.alternate_mobile) : undefined,
+            email: createForm.email,
+            lead_source: finalSource,
+            Specify_Custom_Lead_Source_Name: customLeadSourceName,
+            whatsapp_number: createForm.whatsapp_number,
+            address: createForm.address,
+            city: createForm.city,
+            state: createForm.state,
+            pincode: createForm.pincode,
+            client_residence_address: createForm.client_residence_address,
+            shoot_type: createForm.shoot_type,
+            desired_event_shoot_type: createForm.desired_event_shoot_type,
+            total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
+            reference_source: createForm.reference_source,
+            booking_status: createForm.booking_status || undefined,
+            event_type: createForm.event_type || '',
+            event_date: createForm.event_date || '',
+            event_time: createForm.event_time || '',
+            event_location: createForm.event_location || '',
+            budget: Number(createForm.budget) || 0,
+            remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
+            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+          });
+          setCreatedLeadId(newId);
+          finalId = newId;
+          console.log(`Created lead with ID: ${newId}`);
+        } else {
+          await updateLead(createdLeadId, {
+            customer_name: createForm.customer_name || '',
+            mobile: createForm.mobile,
+            alternate_mobile: (createForm.alternate_mobile && String(createForm.alternate_mobile).trim() !== '' && String(createForm.alternate_mobile).trim() !== '+91') ? String(createForm.alternate_mobile) : undefined,
+            email: createForm.email,
+            lead_source: finalSource,
+            Specify_Custom_Lead_Source_Name: customLeadSourceName,
+            whatsapp_number: createForm.whatsapp_number,
+            address: createForm.address,
+            city: createForm.city,
+            state: createForm.state,
+            pincode: createForm.pincode,
+            client_residence_address: createForm.client_residence_address,
+            desired_event_shoot_type: createForm.desired_event_shoot_type,
+            total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
+            reference_source: createForm.reference_source,
+            booking_status: createForm.booking_status || undefined,
+            remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
+            Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+          });
+        }
+        const isEdit = !!createdLeadId;
+
+        const newLeadObj: Lead = {
+          lead_id: finalId,
+          customer_name: createForm.customer_name || '',
+          mobile: createForm.mobile,
+          alternate_mobile: (createForm.alternate_mobile && String(createForm.alternate_mobile).trim() !== '' && String(createForm.alternate_mobile).trim() !== '+91') ? String(createForm.alternate_mobile) : undefined,
+          email: createForm.email,
+          lead_source: finalSource,
+            Specify_Custom_Lead_Source_Name: customLeadSourceName,
+          whatsapp_number: createForm.whatsapp_number,
+          address: createForm.address,
+          city: createForm.city,
+          state: createForm.state,
+          pincode: createForm.pincode,
+          client_residence_address: createForm.client_residence_address,
+          shoot_type: createForm.shoot_type,
+          desired_event_shoot_type: createForm.desired_event_shoot_type,
+          total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
+          reference_source: createForm.reference_source,
+          booking_status: createForm.booking_status || 'Pending',
+          event_type: createForm.event_type || 'Other',
+          event_date: createForm.event_date || new Date().toISOString().split('T')[0],
+          event_time: createForm.event_time || '12:00',
+          event_location: createForm.event_location || 'TBD',
+          budget: Number(createForm.budget) || 0,
+          remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+          next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
+          Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
+          status: 'Create Quote',
+          created_date: new Date().toISOString().split('T')[0],
+          sales_person: finalUser?.name || currentUser?.name || 'Sales Team',
+          created_by: finalUser?.name || currentUser?.name || 'Sales Team'
+        };
+
+        // Stay in Create Lead form, and advance to Step 2
+        setWizardStep(2);
+
+        showToastMsg("Inbound quotation created successfully! Continuing to Step 2.", "success");
+      } catch (err: any) {
+        console.error("Step 1 saving failed:", err);
+  
+      const errMsg = err.message || String(err);
+      
+      if (errMsg.includes('FATAL_MISSING_COLUMN')) {
+        const parts = errMsg.split('||');
+        const table = parts[1] || 'leads';
+        const col = parts[2] || 'Unknown';
+        const sql = `ALTER TABLE "${table}" ADD COLUMN "${col}" numeric;`;
+        const colType = col === 'Specify_Custom_Lead_Source_Name' ? 'text' : 'numeric';
+        const properSql = `ALTER TABLE "${table}" ADD COLUMN "${col}" ${colType};`;
+        
+        showToastMsg(`CRITICAL DB ERROR:\nTable: ${table}\nMissing Column: ${col}\nSuggested SQL: ${properSql}`, "error");
+        setIsSaving(false);
+        return;
+      }
+
+        let displayedMsg = errMsg;
+        
+        const lowerMsg = errMsg.toLowerCase();
+        if (lowerMsg.includes("row-level security policy") || lowerMsg.includes("rls") || lowerMsg.includes("security policy")) {
+          displayedMsg = "Lead insert blocked by RLS policy.";
+        } else if (lowerMsg.includes("user record missing") || lowerMsg.includes("missing from users table") || lowerMsg.includes("missing from users")) {
+          displayedMsg = "User record missing from users table.";
+        } else if (lowerMsg.includes("session expired") || lowerMsg.includes("jwt expired")) {
+          displayedMsg = "Session expired.";
+        } else if (lowerMsg.includes("permission") || lowerMsg.includes("permission denied")) {
+          displayedMsg = "User does not have permission to create quotations.";
+        } else if (lowerMsg.includes("login") || lowerMsg.includes("unauthenticated") || lowerMsg.includes("jwt")) {
+          displayedMsg = "Please login again.";
+        } else {
+          displayedMsg = errMsg;
+        }
+        
+        showToastMsg(displayedMsg, "error");
+      } finally {
+        setIsSaving(false);
+      }
+    }
+
+    else if (wizardStep === 2) {
+      let finalEventsList = [...createEvents];
+      
+      // If eventForm is visible or there are no events in the list, validate and add
+      if (showEventForm || finalEventsList.length === 0) {
+        if (!eventForm.event_type || eventForm.event_type === '') {
+          showValidationError("input_event_type", "Please select Event Type.");
+          return;
+        }
+        if (!eventForm.event_date || eventForm.event_date === '') {
+          showValidationError("input_event_date", "Please select Event Date.");
+          return;
+        }
+        if (!eventForm.event_location || eventForm.event_location.trim() === '') {
+          showValidationError("input_event_location", "Please enter Event Location.");
+          return;
+        }
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
+        if (dateTimeErrMsg) {
+          showValidationError("input_event_end_time", dateTimeErrMsg);
+          return;
+        }
+
+        const guestPaxVal = eventForm.guest_pax !== '' ? Math.max(0, parseInt(String(eventForm.guest_pax)) || 0) : '';
+        const staffPaxVal = eventForm.staff_pax !== '' ? Math.max(0, parseInt(String(eventForm.staff_pax)) || 0) : '';
+
+        const eventData = {
+          ...eventForm,
+          guest_pax: guestPaxVal,
+          staff_pax: staffPaxVal,
+          event_start_date: eventForm.event_date,
+          event_end_date: eventForm.event_end_date || ''
+        };
+
+        if (editingEventId) {
+          finalEventsList = finalEventsList.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev);
+        } else {
+          finalEventsList.push({
+            ...eventData,
+            id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+          });
+        }
+        
+        setCreateEvents(finalEventsList);
+        setEditingEventId(null);
+        setShowEventForm(false);
+      }
+
+      if (finalEventsList.length === 0) {
+        showToastMsg("Please add at least one event.", "error");
+        return;
+      }
+
+      // Pre-validate and format all events in the finalEventsList
+      for (const ev of finalEventsList) {
+        if (!ev.event_type || ev.event_type.trim() === '') {
+          showToastMsg("Please select Event Type for all events.", "error");
+          return;
+        }
+        if (ev.event_type === 'Other' && (!ev.event_name || ev.event_name.trim() === '')) {
+          showToastMsg("Please enter Event Name for 'Other' event types.", "error");
+          return;
+        }
+        if (!ev.event_date || ev.event_date.trim() === '') {
+          showToastMsg("Please select Event Date for all events.", "error");
+          return;
+        }
+        if (!ev.event_start_time || ev.event_start_time.trim() === '') {
+          showToastMsg("Please select Event Start Time for all events.", "error");
+          return;
+        }
+        if (!ev.event_end_time || ev.event_end_time.trim() === '') {
+          showToastMsg("Please select Event End Time for all events.", "error");
+          return;
+        }
+        if (!ev.event_location || ev.event_location.trim() === '') {
+          showToastMsg("Please enter Event Location for all events.", "error");
+          return;
+        }
+        
+        try {
+          ev.event_start_time = validateAndFormatTime(ev.event_start_time, "Event Start Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          return;
+        }
+        try {
+          ev.event_end_time = validateAndFormatTime(ev.event_end_time, "Event End Time") || '';
+        } catch (err: any) {
+          showToastMsg(err.message, "error");
+          return;
+        }
+        
+        const dateTimeErrMsg = getEventDateTimeErrorMessage(ev.event_date, ev.event_end_date, ev.event_start_time, ev.event_end_time);
+        if (dateTimeErrMsg) {
+          showToastMsg(dateTimeErrMsg, "error");
+          return;
+        }
+      }
+
+      const firstEvent = finalEventsList[0];
+
+      try {
+        await handleSaveStep2Direct();
+      } catch (err: any) {
+        console.error("Step 2 saving failed:", err);
+  
+      const errMsg = err.message || String(err);
+      
+      if (errMsg.includes('FATAL_MISSING_COLUMN')) {
+        const parts = errMsg.split('||');
+        const table = parts[1] || 'leads';
+        const col = parts[2] || 'Unknown';
+        const sql = `ALTER TABLE "${table}" ADD COLUMN "${col}" numeric;`;
+        const colType = col === 'Specify_Custom_Lead_Source_Name' ? 'text' : 'numeric';
+        const properSql = `ALTER TABLE "${table}" ADD COLUMN "${col}" ${colType};`;
+        
+        showToastMsg(`CRITICAL DB ERROR:\nTable: ${table}\nMissing Column: ${col}\nSuggested SQL: ${properSql}`, "error");
+        setIsSaving(false);
+        return;
+      }
+
+        let displayedMsg = errMsg;
+        if (errMsg.toLowerCase().includes("database") || errMsg.toLowerCase().includes("connection") || errMsg.toLowerCase().includes("failed to fetch") || errMsg.toLowerCase().includes("supabase")) {
+          displayedMsg = "Database save failed: connection error.";
+        } else {
+          displayedMsg = `Unable to save event details: ${errMsg}`;
+        }
+        showToastMsg(displayedMsg, "error");
+      } finally {
+        setIsSaving(false);
+      }
+    }
+
+  };
+
+  const handleStatusSave = async () => {
+    if (isSaving) return;
+    const finalStatus = salesStatus || 'New Lead';
+    try {
+      setIsSaving(true);
+
+      // Save Packages
+      const selectedPkgs = PACKAGES_LIST.flatMap(cat => cat.items).filter(item => selectedPkgIds.includes(item.id));
+      if (selectedPkgIds.length > 0) {
+        const packagesPayload = selectedPkgs.map(pkg => ({
+          package_id: pkg.id,
+          package_name: pkg.name,
+          package_cost: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
+          quantity: 1,
+          total_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
+          discount: leadDiscount,
+          final_amount: pkgPrices[pkg.id] !== undefined ? pkgPrices[pkg.id] : pkg.cost,
+          deliverables_description: pkgDeliverables[pkg.id] || pkg.deliverables || 'N/A',
+          notes_special_customizations: pkgNotes[pkg.id] || '',
+          additional_services_cost: 0,
+          team_members: pkg.team_members || '',
+          deliverables: pkg.deliverables || ''
+        }));
+        await saveLeadPackages(createdLeadId!, packagesPayload);
+      }
+
+      const activePkgId = createForm.Select_Package_Option || selectedPkgIds[0] || 'Custom Package';
+      const activeEventsList = createEvents.length > 0 ? createEvents : [];
+      const { teamMembersText, deliverablesText } = buildStep3EventPayloads(
+        activePkgId,
+        activeEventsList,
+        editableInclusions,
+        editableDeliverables
+      );
+
+      await updateLead(createdLeadId!, {
+        status: finalStatus as CurrentStage,
+        budget: finalTotal,
+          package_price: finalTotal,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalTotal,
+        deliverables_description: deliverablesText || selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
+        notes_special_customizations: teamMembersText || selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
+        sales_staff_name: salesStaffName,
+        sales_staff_mobile: salesStaffMobile,
+        client_residence_address: createForm.client_residence_address,
+        city: createForm.city,
+        state: createForm.state,
+        pincode: createForm.pincode,
+        desired_event_shoot_type: createForm.desired_event_shoot_type,
+        remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+            next_follow_up_date: followUpDate || null,
+            follow_up_notes: internalNotes || null,
+        Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+      });
+      showToastMsg("‚úÖ Quotation created successfully.", "success");
+      setStep3FollowUpDate(followUpDate || '');
+      setStep3FollowUpTime('');
+      setStep3FollowUpNotes(internalNotes || '');
+      setShowStep3Popup(true);
+    } catch (err: any) {
+      console.error("Step 5 status save failed:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+
+      const targetLd = leads.find(l => l.lead_id === createdLeadId);
+      const oldStatus = targetLd ? (targetLd.current_status || targetLd.status || 'New Lead') : null;
+      const newStatus = finalStatus || null;
+
+      logStatusUpdateError({
+        leadId: createdLeadId || null,
+        orderId: null,
+        oldStatus,
+        newStatus,
+        updatePayload: {
+          status: finalStatus,
+          budget: finalTotal,
+          package_price: finalTotal,
+          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+          Final_Quotation_Amount: finalTotal,
+          Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+        },
+        insertPayload: null,
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Lead Stage Transition Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      alert(parsed.reason);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleOrderConfirmedSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (isSaving) return;
+
+    const targetLd = leads.find(l => l.lead_id === createdLeadId) || selectedLead;
+    if (targetLd && !areReportingDetailsComplete(targetLd)) {
+      openReportingDetailsModal(targetLd, "Please complete and save the Reporting Details before confirming the order.");
+      return;
+    }
+
+    if (!confirmedEventDate) {
+      showToastMsg("Please select Confirmed Event Date.", "error");
+      return;
+    }
+
+    if (finalPackageAmount === undefined || finalPackageAmount === 0 || isNaN(finalPackageAmount)) {
+      showToastMsg("Please enter Final Amount.", "error");
+      return;
+    }
+    if (advanceReceived === undefined || isNaN(advanceReceived)) {
+      showToastMsg("Please enter Advance Paid Amount.", "error");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const selectedPkgsNames = selectedPkgs.map(p => p.name).join(' + ') || 'Custom Configured Coverage';
+      await confirmOrder(
+        createdLeadId!,
+        selectedPkgsNames,
+        finalPackageAmount,
+        advanceReceived,
+        confirmedEventDate,
+        confirmedEventTime,
+        'UPI / Cash / Bank Transfer',
+        getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
+        reportingTime
+      );
+      
+      showToastMsg("Quotation created successfully.", "success");
+      resetForm();
+      setActiveTab('list');
+    } catch (err: any) {
+      console.error("Failed to commit confirmed order details:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+
+      const targetLd = leads.find(l => l.lead_id === createdLeadId);
+      const oldStatus = targetLd ? (targetLd.current_status || targetLd.status || 'New Lead') : null;
+
+      logStatusUpdateError({
+        leadId: createdLeadId || null,
+        orderId: null,
+        oldStatus,
+        newStatus: 'Order Confirmed',
+        updatePayload: {
+          status: 'Order Confirmed',
+          event_date: confirmedEventDate,
+          event_time: confirmedEventTime,
+          reporting_time: reportingTime,
+        },
+        insertPayload: {
+          order_status: 'Confirmed',
+          current_stage: 'Order Confirmed',
+          package_name: selectedPkgs.map(p => p.name).join(' + ') || 'Custom Configured Coverage',
+          quotation_amount: finalPackageAmount,
+          advance_received: advanceReceived,
+        },
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Order Confirmation Pipeline Transition Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      alert(parsed.reason);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle follow up submit
+  const handleFollowUpSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || isSaving) return;
+
+    if (followUpForm.status === 'Order Confirmed' || followUpForm.status === 'Confirm Order') {
+      if (!areReportingDetailsComplete(selectedLead)) {
+        openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
+        return;
+      }
+
+      if (!followUpForm.event_date) {
+        showToastMsg("Please select Confirmed Event Date.", "error");
+        return;
+      }
+
+      if (followUpForm.quotation_amount === undefined || followUpForm.quotation_amount === 0 || isNaN(followUpForm.quotation_amount)) {
+        showToastMsg("Please enter Final Amount.", "error");
+        return;
+      }
+      if (followUpForm.advance_received === undefined || isNaN(followUpForm.advance_received) || Number(followUpForm.advance_received) <= 0) {
+        showToastMsg("Please enter Advance Paid Amount.", "error");
+        return;
+      }
+      if (!followUpForm.transaction_id || !followUpForm.transaction_id.trim()) {
+        showToastMsg("Please enter Payment Tracking ID / Transaction Reference Number.", "error");
+        return;
+      }
+
+      const packageName = packages?.find(p => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || '';
+
+      try {
+        setIsSaving(true);
+        await confirmOrder(
+          selectedLead.lead_id,
+          packageName,
+          Number(followUpForm.quotation_amount),
+          Number(followUpForm.advance_received),
+          followUpForm.event_date,
+          followUpForm.event_time,
+          followUpForm.payment_mode || 'UPI',
+          followUpForm.call_notes || 'Confirmed from CRM activity logger',
+          followUpForm.reporting_time || '08:00',
+          followUpForm.transaction_id
+        );
+
+        setSelectedLead(null);
+        showToastMsg("Order Confirmed Successfully.", "success");
+      } catch (err: any) {
+        console.error("Failed to convert lead:", err);
+        const errMsg = err?.message || String(err);
+        const parsed = parseStatusUpdateError(errMsg);
+
+        const oldStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null;
+
+        logStatusUpdateError({
+          leadId: selectedLead?.lead_id || null,
+          orderId: null,
+          oldStatus,
+          newStatus: 'Order Confirmed',
+          updatePayload: {
+            status: 'Order Confirmed',
+            remarks: followUpForm.call_notes
+          },
+          insertPayload: {
+            order_status: 'Confirmed',
+            current_stage: 'Order Confirmed',
+            package_name: packageName,
+            quotation_amount: Number(followUpForm.quotation_amount),
+            advance_received: Number(followUpForm.advance_received),
+          },
+          dbResponse: null,
+          fullError: err
+        });
+
+        setStatusError({
+          title: "Follow-up Transition to Order Confirmed Failed",
+          reason: parsed.reason,
+          suggestedFix: parsed.suggestedFix
+        });
+        alert(parsed.reason);
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    if (!followUpForm.call_notes) {
+      alert('Please fill in some Call Notes to update lead follow-up.');
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await updateLeadFollowUp(
+        selectedLead.lead_id,
+        followUpForm.status,
+        followUpForm.call_notes,
+        followUpForm.next_follow_up_date || '',
+        Number(followUpForm.quotation_amount),
+        followUpForm.negotiation_notes
+      );
+
+      // Refresh selected lead state
+      setSelectedLead((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          status: followUpForm.status,
+          budget: Number(followUpForm.quotation_amount),
+        };
+      });
+
+      // Clear follow up text
+      setFollowUpForm(prev => ({ ...prev, call_notes: '', negotiation_notes: '' }));
+      alert('CRM Updated Successfully.');
+    } catch (err: any) {
+      console.error("Failed to update follow-up:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+
+      const oldStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null;
+
+      logStatusUpdateError({
+        leadId: selectedLead?.lead_id || null,
+        orderId: null,
+        oldStatus,
+        newStatus: followUpForm.status,
+        updatePayload: {
+          status: followUpForm.status,
+          budget: Number(followUpForm.quotation_amount),
+          remarks: followUpForm.call_notes
+        },
+        insertPayload: null,
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Follow-up Pipeline Status Update Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      alert(parsed.reason);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleFinalReportingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || isSaving) return;
+
+    try {
+      setIsSaving(true);
+      
+      const crmEvents = selectedLead.events || [];
+      let updatedLeadFields: any = {};
+
+      if (crmEvents.length > 0) {
+        // Validate all events have required reporting details
+        for (const ev of crmEvents) {
+          const fd = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
+          if (!fd.reporting_date || !fd.reporting_date.trim() || !fd.reporting_time || !fd.reporting_time.trim()) {
+            showToastMsg("Please complete Reporting Date and Reporting Time for all events.", "error");
+            setIsSaving(false);
+            return;
+          }
+        }
+
+        // Save event-wise reporting details
+        const updatedEvents = crmEvents.map(ev => {
+          const fd = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
+          return {
+            ...ev,
+            reporting_date: fd.reporting_date,
+            reporting_time: fd.reporting_time
+          };
+        });
+        
+        updatedLeadFields = {
+          events: updatedEvents,
+          Reporting_date: updatedEvents[0]?.reporting_date || '', // fallback
+          reporting_time: updatedEvents[0]?.reporting_time || ''
+        };
+        await updateLead(selectedLead.lead_id, updatedLeadFields);
+      } else {
+        // Fallback for leads without explicit events
+        const fd = finalReportingForm['default'] || { reporting_date: '', reporting_time: '' };
+        if (!fd.reporting_date || !fd.reporting_date.trim() || !fd.reporting_time || !fd.reporting_time.trim()) {
+          showToastMsg("Please complete Reporting Date and Reporting Time.", "error");
+          setIsSaving(false);
+          return;
+        }
+
+        updatedLeadFields = {
+          Reporting_date: fd.reporting_date,
+          reporting_time: fd.reporting_time
+        };
+        await updateLead(selectedLead.lead_id, updatedLeadFields);
+      }
+
+      const updatedLead = {
+        ...selectedLead,
+        ...updatedLeadFields
+      };
+
+      setShowFinalReportingModal(false);
+      setSelectedLead(updatedLead);
+      showToastMsg("Reporting Details Saved Successfully.", "success");
+
+      // Auto-open Confirm Order modal once reporting details are saved
+      const today = new Date().toISOString().split('T')[0];
+      const linkedOrder = orders?.find(o => o.lead_id === updatedLead.lead_id);
+      const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+      const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(updatedLead.advance_collected) || 0));
+
+      setConfirmForm(prev => ({
+        ...prev,
+        package_name: packages?.find((p) => String(p.package_id) === String(updatedLead.Select_Package_Option))?.package_name || updatedLead.Select_Package_Option || prev.package_name || '',
+        quotation_amount: Number(updatedLead.Final_Package_Amount) || Number((updatedLead as any).final_package_amount) || Number(updatedLead.Final_Quotation_Amount) || Number((updatedLead as any).final_amount) || Number(updatedLead.budget) || (updatedLead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || prev.quotation_amount || 0,
+        advance_received: calcAdvance || prev.advance_received || 0,
+        event_date: updatedLead.event_date || prev.event_date || today,
+        event_time: updatedLead.event_time || prev.event_time || ''
+      }));
+      setShowConfirmModal(true);
+    } catch (err) {
+      console.error(err);
+      showToastMsg("Failed to save Reporting Details.", "error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle Order Confirmation Process
+  const handleConfirmOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedLead || isSaving) return;
+
+    if (!confirmForm.event_date) {
+      showToastMsg("Please select Confirmed Event Date.", "error");
+      return;
+    }
+
+    const effectiveFinalAmt = Number(confirmForm.quotation_amount) || Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(selectedLead.Final_Quotation_Amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0);
+    if (!effectiveFinalAmt || effectiveFinalAmt <= 0 || isNaN(effectiveFinalAmt)) {
+      showToastMsg("Please enter Final Amount.", "error");
+      return;
+    }
+    if (confirmForm.advance_received === undefined || isNaN(confirmForm.advance_received) || Number(confirmForm.advance_received) <= 0) {
+      showToastMsg("Please enter Advance Paid Amount.", "error");
+      return;
+    }
+    if (!confirmForm.transaction_id || !confirmForm.transaction_id.trim()) {
+      showToastMsg("Please enter Payment Tracking ID / Transaction Reference Number.", "error");
+      return;
+    }
+
+    // Validate that each event has a Reporting Date and Reporting Time
+    if (selectedLead.events && selectedLead.events.length > 0) {
+      for (let i = 0; i < selectedLead.events.length; i++) {
+        const ev = selectedLead.events[i];
+        const key = ev.id || `ev_${i}`;
+        const rep = eventsReporting[key];
+        const evTitle = ev.event_name || ev.event_type || `Event ${i + 1}`;
+        if (!rep?.reporting_date || !rep.reporting_date.trim()) {
+          showToastMsg(`Please enter Reporting Date for ${evTitle}.`, "error");
+          return;
+        }
+        if (!rep?.reporting_time || !rep.reporting_time.trim()) {
+          showToastMsg(`Please enter Reporting Time for ${evTitle}.`, "error");
+          return;
+        }
+      }
+    } else {
+      const rep = eventsReporting['default'];
+      if (!rep?.reporting_date || !rep.reporting_date.trim()) {
+        showToastMsg("Please enter Reporting Date.", "error");
+        return;
+      }
+      if (!rep?.reporting_time || !rep.reporting_time.trim()) {
+        showToastMsg("Please enter Reporting Time.", "error");
+        return;
+      }
+    }
+
+    try {
+      setIsSaving(true);
+
+      // Save each event's reporting details to lead_events table in Supabase
+      if (selectedLead.events && selectedLead.events.length > 0) {
+        const updatedEvents = selectedLead.events.map((ev, idx) => {
+          const key = ev.id || `ev_${idx}`;
+          const rep = eventsReporting[key] || { reporting_date: '', reporting_time: '' };
+          return {
+            ...ev,
+            reporting_date: rep.reporting_date || ev.reporting_date || ev.event_date || '',
+            Reporting_date: rep.reporting_date || (ev as any).Reporting_date || ev.event_date || '',
+            reporting_time: rep.reporting_time || ev.reporting_time || ''
+          };
+        });
+
+        await updateLead(selectedLead.lead_id, {
+          events: updatedEvents,
+          Reporting_date: updatedEvents[0]?.reporting_date || '',
+          reporting_time: updatedEvents[0]?.reporting_time || ''
+        });
+      } else {
+        const rep = eventsReporting['default'] || { reporting_date: '', reporting_time: '' };
+        await updateLead(selectedLead.lead_id, {
+          Reporting_date: rep.reporting_date,
+          reporting_time: rep.reporting_time
+        });
+      }
+
+      const firstRepTime = (selectedLead.events && selectedLead.events.length > 0)
+        ? eventsReporting[selectedLead.events[0].id || 'ev_0']?.reporting_time
+        : eventsReporting['default']?.reporting_time;
+
+      await confirmOrder(
+        selectedLead.lead_id,
+        confirmForm.package_name,
+        effectiveFinalAmt,
+        Number(confirmForm.advance_received),
+        confirmForm.event_date,
+        confirmForm.event_time,
+        confirmForm.payment_mode,
+        confirmForm.notes,
+        firstRepTime,
+        confirmForm.transaction_id
+      );
+
+      setShowConfirmModal(false);
+      showToastMsg("Booking Confirmation saved successfully. Order transferred to Operations.", "success");
+      setWizardLeadData(prev => ({
+        ...prev,
+        advance_received: Number(confirmForm.advance_received)
+      }));
+      setSelectedLead(null);
+    } catch (err: any) {
+      console.error("Failed to convert order:", err);
+      const errMsg = err?.message || String(err);
+      const parsed = parseStatusUpdateError(errMsg);
+
+      const oldStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null;
+
+      logStatusUpdateError({
+        leadId: selectedLead?.lead_id || null,
+        orderId: null,
+        oldStatus,
+        newStatus: 'Order Confirmed',
+        updatePayload: {
+          status: 'Order Confirmed',
+          event_date: confirmForm.event_date,
+          event_time: confirmForm.event_time,
+          reporting_time: undefined,
+        },
+        insertPayload: {
+          order_status: 'Confirmed',
+          current_stage: 'Order Confirmed',
+          package_name: confirmForm.package_name,
+          quotation_amount: Number(confirmForm.quotation_amount),
+          advance_received: Number(confirmForm.advance_received),
+        },
+        dbResponse: null,
+        fullError: err
+      });
+
+      setStatusError({
+        title: "Action Button Order Confirmation Failed",
+        reason: parsed.reason,
+        suggestedFix: parsed.suggestedFix
+      });
+      alert(parsed.reason);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Companion lead metadata parse
+  const getFollowUpDate = (remarks?: string) => {
+    if (!remarks) return null;
+    const match = remarks.match(/Next follow-up:\s*(\d{4}-\d{2}-\d{2})/);
+    return match ? match[1] : null;
+  };
+
+  const todayStr = '2026-06-10';
+
+  const statCreatedQuotation = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Create Quote' || st === 'Created Quotation' || st === 'New Lead';
+  }).length;
+  const statQuotesSent = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Quote Sent' || st === 'Quotation Sent';
+  }).length;
+  const statQuoteFollowups = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Quote Follow-up' || st === 'Follow Up' || st === 'Follow-up';
+  }).length;
+  const statConfirmedOrders = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Confirm Order' || st === 'Order Confirmed';
+  }).length;
+  const statLeadLost = leads.filter(l => {
+    const st = getLeadCurrentStatus(l);
+    return st === 'Lead Lost' || st === 'Lost Lead';
+  }).length;
+
+  // Filter Leads List
+  const filteredLeads = leads.filter((lead) => {
+    const matchesSearch = 
+      lead.customer_name.toLowerCase().includes(filterQuery.toLowerCase()) || 
+      lead.lead_id.toLowerCase().includes(filterQuery.toLowerCase()) ||
+      lead.mobile.includes(filterQuery);
+
+    const matchesSource = filterSource === '' || lead.lead_source === filterSource;
+    const leadStatus = getLeadCurrentStatus(lead);
+    const matchesStatus = filterStatus === '' 
+      ? true 
+      : filterStatus === 'Overdue' 
+        ? (() => {
+            if (leadStatus !== 'Follow Up') return false;
+            const fDate = getFollowUpDate(lead.remarks);
+            return fDate ? fDate < todayStr : false;
+          })()
+        : (() => {
+            const statusLower = leadStatus.toLowerCase().trim();
+            const filterLower = filterStatus.toLowerCase().trim();
+            if (filterLower === 'create quote' || filterLower === 'created quotation') {
+              return statusLower === 'create quote' || statusLower === 'created quotation' || statusLower === 'new lead';
+            }
+            if (filterLower === 'quote sent') {
+              return statusLower === 'quote sent' || statusLower === 'quotation sent';
+            }
+            if (filterLower === 'quote follow-up') {
+              return statusLower === 'quote follow-up' || statusLower === 'follow up' || statusLower === 'follow-up';
+            }
+            if (filterLower === 'confirm order') {
+              return statusLower === 'confirm order' || statusLower === 'order confirmed';
+            }
+            if (filterLower === 'lead lost') {
+              return statusLower === 'lead lost' || statusLower === 'lost lead';
+            }
+            if (filterLower === 'customer review') {
+              return statusLower === 'customer review' || statusLower === 'client review' || statusLower === 'client review sent';
+            }
+            if (filterLower === 'project completed') {
+              return statusLower === 'project completed' || statusLower === 'project closed' || statusLower === 'completed' || statusLower === 'closed' || statusLower === 'project delivered' || statusLower === 'delivered' || statusLower === 'approved' || statusLower === 'final approval' || statusLower === 'client approved';
+            }
+            if (filterLower === 'approved') {
+              return statusLower === 'approved' || statusLower === 'client approved';
+            }
+            if (filterLower === 'project delivered') {
+              return statusLower === 'project delivered' || statusLower === 'delivered';
+            }
+            if (filterLower === 'project closed') {
+              return statusLower === 'project closed' || statusLower === 'closed';
+            }
+            if (filterLower === 'new project received') {
+              return statusLower === 'new project received' || statusLower === 'new order received';
+            }
+            if (filterLower === 'follow up') {
+              return statusLower === 'follow up' || statusLower === 'follow-up';
+            }
+            return statusLower === filterLower;
+          })();
+    const matchesSales = filterSalesPerson === '' || lead.sales_person === filterSalesPerson;
+    const matchesDate = filterDate === '' || lead.event_date === filterDate;
+
+    let matchesDateRange = true;
+    if (appliedStartDate) {
+      matchesDateRange = matchesDateRange && (lead.created_date >= appliedStartDate);
+    }
+    if (appliedEndDate) {
+      matchesDateRange = matchesDateRange && (lead.created_date <= appliedEndDate);
+    }
+
+    return matchesSearch && matchesSource && matchesStatus && matchesSales && matchesDate && matchesDateRange;
+  }).sort((a, b) => {
+    const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
+    const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
+    return timeB - timeA;
+  });
+
+  return (
+    <div id="sales_module" className="space-y-6">
+      {statusError && (
+        <div className="fixed inset-0 bg-slate-955/90 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-red-500/40 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-red-500/10 border-b border-red-500/20 px-6 py-4 flex items-center gap-3">
+              <span className="p-2.5 bg-red-500/20 text-red-400 rounded-xl text-lg">‚ö†Ô∏è</span>
+              <div>
+                <h3 className="font-bold text-slate-100 text-sm font-sans">{statusError.title || 'Status Update Failed'}</h3>
+                <p className="text-[10px] text-red-400 font-mono tracking-wider">DATABASE SCHEMA / INTEGRITY EXCEPTION</p>
+              </div>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Reason:</span>
+                <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3 text-xs text-red-300 font-mono leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto">
+                  {statusError.reason}
                 </div>
               </div>
 
-              {/* DataGrid & Controls */}
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-                <div className="p-4 md:p-5 border-b border-slate-200 bg-slate-50">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="relative w-full lg:w-96 flex-shrink-0 group">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={20} />
-                      <input
-                        type="text"
-                        placeholder="Search Leads, Names, Numbers..."
-                        value={filterQuery}
-                        onChange={e => setFilterQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium placeholder:font-normal shadow-inner"
-                      />
-                    </div>
-                    
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
-                        <button
-                          onClick={() => setSortOrder('latest')}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${sortOrder === 'latest' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
-                        >
-                          Newest First
-                        </button>
-                        <button
-                          onClick={() => setSortOrder('oldest')}
-                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-colors ${sortOrder === 'oldest' ? 'bg-slate-800 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}
-                        >
-                          Oldest First
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
-                        className={`flex items-center gap-2 px-4 py-2 border rounded-lg font-bold text-sm transition-all shadow-sm ${
-                          isFiltersExpanded || filterSource || filterStatus !== 'All' || filterSalesPerson || appliedStartDate 
-                          ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100' 
-                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                        }`}
-                      >
-                        <Filter size={16} className={isFiltersExpanded ? 'text-blue-500' : ''} />
-                        Filter
-                        {(filterSource || filterStatus !== 'All' || filterSalesPerson || appliedStartDate) && (
-                          <span className="w-2 h-2 rounded-full bg-blue-500 ml-1"></span>
-                        )}
-                        <ChevronDown size={14} className={`transition-transform duration-300 ${isFiltersExpanded ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      <button
-                        onClick={() => setIsDownloadReportsExpanded(!isDownloadReportsExpanded)}
-                        className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg hover:bg-emerald-100 font-bold text-sm transition-all shadow-sm"
-                      >
-                        <Download size={16} />
-                        Export
-                        <ChevronDown size={14} className={`transition-transform duration-300 ${isDownloadReportsExpanded ? 'rotate-180' : ''}`} />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Expanded Filter Panel */}
-                  {isFiltersExpanded && (
-                    <div className="mt-4 pt-4 border-t border-slate-200 animate-slide-up bg-white rounded-lg p-4 shadow-inner border">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Date Range From</label>
-                          <input
-                            type="date"
-                            value={dateRangeStart}
-                            onChange={(e) => setDateRangeStart(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 text-sm font-medium bg-slate-50"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Date Range To</label>
-                          <input
-                            type="date"
-                            value={dateRangeEnd}
-                            onChange={(e) => setDateRangeEnd(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 text-sm font-medium bg-slate-50"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Lead Source</label>
-                          <select
-                            value={filterSource}
-                            onChange={(e) => setFilterSource(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 text-sm font-medium bg-slate-50"
-                          >
-                            <option value="">All Sources</option>
-                            {LEAD_SOURCES.map(source => (
-                              <option key={source} value={source}>{source}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Current Status</label>
-                          <select
-                            value={filterStatus}
-                            onChange={(e) => setFilterStatus(e.target.value)}
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 text-sm font-medium bg-slate-50"
-                          >
-                            {statusOptions.map(s => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                        </div>
-                        {currentRole !== 'Sales Team' && (
-                          <div className="md:col-span-2">
-                            <label className="block text-xs font-bold text-slate-600 mb-1.5 uppercase tracking-wide">Sales Person</label>
-                            <select
-                              value={filterSalesPerson}
-                              onChange={(e) => setFilterSalesPerson(e.target.value)}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500/20 text-sm font-medium bg-slate-50"
-                            >
-                              <option value="All">All Sales Staff</option>
-                              {users.filter(u => u.role === 'Sales Team').map(u => (
-                                <option key={u.id} value={u.name}>{u.name}</option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        <div className="md:col-span-2 flex items-end gap-2">
-                          <button
-                            onClick={() => {
-                              setAppliedStartDate(dateRangeStart);
-                              setAppliedEndDate(dateRangeEnd);
-                            }}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm w-full md:w-auto"
-                          >
-                            Apply Filters
-                          </button>
-                          <button
-                            onClick={() => {
-                              setDateRangeStart('');
-                              setDateRangeEnd('');
-                              setAppliedStartDate('');
-                              setAppliedEndDate('');
-                              setFilterSource('');
-                              setFilterStatus('All');
-                              setFilterSalesPerson('All');
-                            }}
-                            className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-200 transition-colors border border-slate-300 w-full md:w-auto"
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Expanded Export Panel */}
-                  {isDownloadReportsExpanded && (
-                    <div className="mt-4 pt-4 border-t border-slate-200 animate-slide-up">
-                       <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-100">
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600">
-                              <Download size={16} />
-                            </div>
-                            <h3 className="font-bold text-emerald-900">Export Leads Data</h3>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                             <button
-                               onClick={handleDownloadCSV}
-                               className="flex flex-col items-center justify-center p-4 bg-white border border-emerald-200 rounded-lg hover:border-emerald-500 hover:shadow-md transition-all group"
-                             >
-                               <FileText size={24} className="text-emerald-500 mb-2 group-hover:scale-110 transition-transform" />
-                               <span className="font-bold text-slate-700">Download CSV</span>
-                               <span className="text-xs text-slate-500 mt-1">Comma separated values</span>
-                             </button>
-                             
-                             <button
-                               onClick={handleDownloadExcel}
-                               className="flex flex-col items-center justify-center p-4 bg-white border border-emerald-200 rounded-lg hover:border-emerald-500 hover:shadow-md transition-all group"
-                             >
-                               <FileSpreadsheet size={24} className="text-emerald-600 mb-2 group-hover:scale-110 transition-transform" />
-                               <span className="font-bold text-slate-700">Download Excel</span>
-                               <span className="text-xs text-slate-500 mt-1">.xls format spreadsheet</span>
-                             </button>
-                             
-                             <button
-                               onClick={handlePrintReport}
-                               className="flex flex-col items-center justify-center p-4 bg-white border border-emerald-200 rounded-lg hover:border-emerald-500 hover:shadow-md transition-all group"
-                             >
-                               <Printer size={24} className="text-slate-600 mb-2 group-hover:scale-110 transition-transform" />
-                               <span className="font-bold text-slate-700">Print Report</span>
-                               <span className="text-xs text-slate-500 mt-1">Formatted view for printing</span>
-                             </button>
-                          </div>
-                       </div>
-                    </div>
-                  )}
-                </div>
-                <div className="overflow-x-auto min-h-[500px]">
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                      <tr>
-                        <th className="px-4 py-3 font-bold">Ref ID</th>
-                        <th className="px-4 py-3 font-bold">Customer Info</th>
-                        <th className="px-4 py-3 font-bold">Event Details</th>
-                        <th className="px-4 py-3 font-bold">Status</th>
-                        <th className="px-4 py-3 font-bold">Lead Source</th>
-                        <th className="px-4 py-3 font-bold text-center">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredLeads.map((lead) => {
-                        const status = getLeadCurrentStatus(lead);
-                        const isLost = status === 'Lost Lead' || status === 'Lost';
-                        const isConverted = status === 'Order Confirmed';
-                        const ord = orders.find(o => o.lead_id === lead.lead_id);
-                        
-                        // Prevent unapproved editing unless it's a new lead
-                        const isFullyLocked = lead.quotation_locked && !unlockRequests.some(r => 
-                          (r.lead_id === lead.lead_id || r.order_id === lead.lead_id || r.project_id === lead.lead_id) && 
-                          (r.status === 'Approved' || r.request_status === 'Approved')
-                        );
-                        
-                        return (
-                          <tr 
-                            key={lead.lead_id} 
-                            className={`hover:bg-slate-50 transition-colors ${
-                              isLost ? 'bg-red-50/30' : isConverted ? 'bg-emerald-50/30' : 'bg-white'
-                            }`}
-                          >
-                            <td className="px-4 py-3">
-                              <div className="font-mono text-xs font-bold text-slate-700">{lead.lead_id}</div>
-                              {ord && (
-                                <div className="font-mono text-[10px] text-emerald-600 font-bold mt-0.5 px-1.5 py-0.5 bg-emerald-50 rounded inline-block border border-emerald-100">
-                                  {ord.order_id}
-                                </div>
-                              )}
-                              <div className="text-[10px] text-slate-400 mt-1">
-                                {new Date(lead.created_date).toLocaleDateString('en-IN', {
-                                  day: '2-digit', month: 'short', year: 'numeric'
-                                })}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="font-bold text-slate-800">{lead.customer_name}</div>
-                              <div className="text-xs text-slate-500 flex flex-col gap-0.5 mt-1">
-                                <span className="flex items-center gap-1.5"><Phone size={10} /> {lead.mobile}</span>
-                                {lead.whatsapp_number && lead.whatsapp_number !== lead.mobile && (
-                                  <span className="flex items-center gap-1.5 text-emerald-600"><Phone size={10} /> {lead.whatsapp_number} (WA)</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="font-semibold text-slate-700">{lead.event_type}</div>
-                              <div className="text-xs text-slate-500 mt-0.5 flex flex-col gap-0.5">
-                                {lead.custom_event_name && <span>{lead.custom_event_name}</span>}
-                                {lead.event_date && (
-                                  <span className="flex items-center gap-1 mt-1 font-medium text-slate-600">
-                                    <Calendar size={12} />
-                                    {new Date(lead.event_date).toLocaleDateString('en-IN', {
-                                      day: '2-digit', month: 'short', year: 'numeric'
-                                    })}
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <span className={`px-2.5 py-1 rounded-md text-[11px] font-bold inline-flex items-center gap-1 border ${
-                                isLost ? 'bg-red-50 text-red-700 border-red-200' :
-                                isConverted ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                status === 'Quote Sent' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                                status === 'New Lead' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                                'bg-blue-50 text-blue-700 border-blue-200'
-                              }`}>
-                                {status}
-                              </span>
-                              
-                              {/* Display locked status */}
-                              {isFullyLocked && !isLost && (
-                                <div className="mt-1 flex items-center gap-1 text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 w-max">
-                                  <Lock size={10} /> Locked
-                                </div>
-                              )}
-                              
-                              {/* Display unlock request pending status */}
-                              {unlockRequests.some(r => 
-                                (r.lead_id === lead.lead_id || r.order_id === lead.lead_id || r.project_id === lead.lead_id) && 
-                                (r.status === 'Pending' || r.request_status === 'Pending')
-                              ) && (
-                                <div className="mt-1 flex items-center gap-1 text-[10px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 w-max">
-                                  <Clock size={10} /> Unlock Pending
-                                </div>
-                              )}
-                              
-                              {/* Show Lost Reason if Lost */}
-                              {isLost && (
-                                <div className="mt-1 text-[10px] text-red-600 font-medium max-w-[150px] truncate" title={getLostReasonAndNotes(lead).reason}>
-                                  Reason: {getLostReasonAndNotes(lead).reason}
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="text-xs font-medium text-slate-600">{lead.lead_source}</div>
-                              {currentRole !== 'Sales Team' && (
-                                <div className="text-[10px] text-slate-400 mt-1 font-medium bg-slate-100 px-1.5 py-0.5 rounded inline-block">
-                                  Rep: {lead.sales_person}
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <div className="relative inline-block actions-dropdown-container">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (openDropdownLeadId === lead.lead_id) {
-                                      setOpenDropdownLeadId(null);
-                                    } else {
-                                      const rect = e.currentTarget.getBoundingClientRect();
-                                      const spaceBelow = window.innerHeight - rect.bottom;
-                                      const spaceAbove = rect.top;
-                                      
-                                      let top, bottom;
-                                      if (spaceBelow < 250 && spaceAbove > spaceBelow) {
-                                        top = 'auto';
-                                        bottom = '100%';
-                                      } else {
-                                        top = '100%';
-                                        bottom = 'auto';
-                                      }
-                                      
-                                      setDropdownCoords({ top, bottom, right: 0 });
-                                      setOpenDropdownLeadId(lead.lead_id);
-                                    }
-                                  }}
-                                  className="p-1.5 hover:bg-slate-100 rounded-lg transition-colors text-slate-400 hover:text-slate-600"
-                                >
-                                  <MoreVertical size={18} />
-                                </button>
-
-                                {openDropdownLeadId === lead.lead_id && (
-                                  <div 
-                                    className="absolute z-[100] w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-1 animate-fade-in actions-dropdown-menu"
-                                    style={{
-                                      top: dropdownCoords.top,
-                                      bottom: dropdownCoords.bottom,
-                                      right: dropdownCoords.right,
-                                      marginTop: dropdownCoords.top === '100%' ? '0.25rem' : 0,
-                                      marginBottom: dropdownCoords.bottom === '100%' ? '0.25rem' : 0,
-                                    }}
-                                  >
-                                    <button
-                                      onClick={() => {
-                                        setSelectedLead(lead);
-                                        
-                                        // Auto-calculate step based on status
-                                        let step = 1;
-                                        const currentStatus = getLeadCurrentStatus(lead);
-                                        
-                                        if (currentStatus === 'New Lead') step = 2; // Needs Follow-up
-                                        else if (currentStatus === 'Lead Contacted') step = 3; // Needs Office Visit/Quote
-                                        else if (currentStatus === 'Office Visit Scheduled') step = 3; // Needs Office Visit Complete
-                                        else if (currentStatus === 'Office Visit Completed' || currentStatus === 'Quote Sent') step = 4; // Negotiation
-                                        else if (currentStatus === 'Quote Follow-up') step = 4; // Still in Negotiation
-                                        else if (currentStatus === 'Order Confirmed' || currentStatus === 'Event Scheduled') step = 5; // Final Actions
-                                        
-                                        setCrmWizardStep(step);
-                                        setCrmHighestStep(step);
-                                        setShowLeadDetails(true);
-                                        setOpenDropdownLeadId(null);
-                                      }}
-                                      className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2 font-medium text-slate-700"
-                                    >
-                                      <Eye size={14} className="text-blue-500" />
-                                      View CRM Console
-                                    </button>
-
-                                    {/* Quick Quotation Generate option (Only if not lost/confirmed) */}
-                                    {!isLost && !isConverted && (
-                                      <button
-                                        onClick={() => {
-                                          openCustomPDFGenerator(lead);
-                                          setOpenDropdownLeadId(null);
-                                        }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 flex items-center gap-2 font-medium text-slate-700 border-t border-slate-100"
-                                      >
-                                        <FileText size={14} className="text-indigo-500" />
-                                        Generate Quotation
-                                      </button>
-                                    )}
-
-                                    {/* Request Unlock if Locked */}
-                                    {isFullyLocked && (
-                                      <button
-                                        onClick={() => {
-                                          setSelectedUnlockLead(lead);
-                                          setUnlockRequestReason('Customer requested additional discount');
-                                          setUnlockRequestCustomReason('');
-                                          setShowUnlockRequestModal(true);
-                                          setOpenDropdownLeadId(null);
-                                        }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-amber-50 flex items-center gap-2 font-medium text-amber-700 border-t border-slate-100"
-                                      >
-                                        <Unlock size={14} />
-                                        Request Unlock
-                                      </button>
-                                    )}
-
-                                    {/* Mark as Lost option */}
-                                    {!isLost && !isConverted && (
-                                      <button
-                                        onClick={() => {
-                                          setSelectedLead(lead);
-                                          setShowLostModal(true);
-                                          setOpenDropdownLeadId(null);
-                                        }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-2 font-medium text-red-600 border-t border-slate-100"
-                                      >
-                                        <XCircle size={14} />
-                                        Mark as Lost
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                      {filteredLeads.length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="px-4 py-12 text-center text-slate-500">
-                            <div className="flex flex-col items-center justify-center">
-                              <Users size={32} className="text-slate-300 mb-2" />
-                              <p className="font-medium text-slate-600">No leads found matching your criteria.</p>
-                              <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or search query.</p>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+              <div className="space-y-1.5">
+                <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">Suggested Fix / Schema Migration:</span>
+                <div className="bg-emerald-950/20 border border-emerald-500/25 rounded-xl p-3 text-xs text-emerald-300 font-sans leading-relaxed whitespace-pre-wrap max-h-36 overflow-y-auto">
+                  {statusError.suggestedFix}
                 </div>
               </div>
             </div>
-          )}
 
-          {activeTab === 'packages' && (
-            <div className="animate-fade-in space-y-6">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800">Sales Packages & Templates</h3>
-                  <p className="text-sm text-slate-500">Manage pre-defined quotation structures</p>
+            <div className="bg-slate-950/40 border-t border-slate-800 px-6 py-3.5 flex justify-end">
+              <button
+                onClick={() => setStatusError(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer border border-slate-700"
+              >
+                Dismiss Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Header Bar */}
+      {activeTab !== 'create' && activeTab !== 'custom_package_master' && !selectedLead && (
+        <div 
+          className={`${activeTab === 'calendar' ? 'hidden' : 'flex'} flex-col sm:flex-row sm:items-center justify-between gap-4`}
+          style={activeTab === 'calendar' ? { display: 'none' } : undefined}
+        >
+          <div>
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+              <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
+              <span>Sales & Lead Desk</span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Collect potential inbound queries, log CRM call reports, propose quotations and confirm contracts.
+            </p>
+          </div>
+
+          {/* Create and Tabs Controls */}
+          <div className="flex items-center gap-2">
+            <button
+              id="btn_lead_tab_profiles"
+              onClick={() => { setActiveTab('profiles'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
+              className={`hidden px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                activeTab === 'profiles'
+                  ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
+                  : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              üë• Customer Profiles
+            </button>
+
+            <button
+              id="btn_lead_tab_calendar"
+              onClick={() => { setActiveTab('calendar'); setSelectedLead(null); setSelectedCustomerProfileId(null); }}
+              className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                activeTab === 'calendar'
+                  ? 'bg-zinc-900 border-zinc-750 text-white font-black hover:border-zinc-700'
+                  : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5 text-zinc-405 group-hover:text-zinc-200" />
+              <span>Sales Calendar</span>
+            </button>
+            
+            {canEdit ? (
+              <button
+                id="btn_lead_create_flag"
+                onClick={() => { setActiveTab('create'); setSelectedLead(null); }}
+                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl shadow-sm cursor-pointer transition-all ${
+                  activeTab === 'create'
+                    ? 'bg-emerald-600 hover:bg-emerald-505 text-white'
+                    : 'bg-emerald-500/10 hover:bg-emerald-600/20 text-emerald-450 border border-emerald-500/25'
+                }`}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Quotation</span>
+              </button>
+            ) : (
+              <span className="text-[11px] bg-red-500/10 text-red-400 border border-red-500/20 rounded px-2.5 py-1 flex items-center gap-1.5" title="You are restricted from adding leads in this role.">
+                <Ban className="w-3 h-3" />
+                <span>Sales Access Blocked</span>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main Sandbox Area */}
+      {false && selectedLead && (
+        <div className="hidden lg:grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* Column A: Lead Details & Meta */}
+          <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <span className="text-[10px] bg-slate-800 text-slate-400 font-mono px-2 py-0.5 rounded font-black border border-slate-700">
+                  {selectedLead.lead_id}
+                </span>
+                <h3 className="text-base font-bold text-slate-100 mt-2">{selectedLead.customer_name}</h3>
+              </div>
+              <button 
+                onClick={() => setSelectedLead(null)}
+                className="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 text-slate-450 hover:text-slate-250 text-xs rounded transition-all cursor-pointer text-slate-400"
+              >
+                Close Back
+              </button>
+            </div>
+
+            {/* Informational Items */}
+            <div className="space-y-3.5 text-xs">
+              <div className="flex items-center gap-2.5 text-slate-350">
+                <Phone className="w-4 h-4 text-slate-500 flex-shrink-0" />
+                <span className="font-mono text-slate-200">{formatIndianPhoneNumber(selectedLead.mobile)}</span>
+              </div>
+              {selectedLead.alternate_mobile && (
+                <div className="flex items-center gap-2.5 text-slate-350">
+                  <Phone className="w-4 h-4 text-slate-505 flex-shrink-0" />
+                  <span>Alt: <span className="font-mono text-slate-200">{formatIndianPhoneNumber(selectedLead.alternate_mobile)}</span></span>
                 </div>
-                <div className="flex items-center gap-3">
-                  {canEdit && (
+              )}
+              <div className="flex items-center gap-2.5 text-slate-350">
+                <Mail className="w-4 h-4 text-slate-505 flex-shrink-0" />
+                <span className="text-slate-200 break-words">{selectedLead.email}</span>
+              </div>
+              <div className="flex items-center gap-2.5 text-slate-350">
+                <MapPin className="w-4 h-4 text-slate-505 flex-shrink-0" />
+                <span className="text-slate-200">{selectedLead.event_location}</span>
+              </div>
+            </div>
+
+            {/* Detailed Parameters */}
+            <div className="border-t border-slate-800 pt-3.5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+              <div>
+                <span className="text-slate-500 block">Event Type</span>
+                <strong className="text-slate-200 font-medium">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : selectedLead.event_type}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Lead Source</span>
+                <strong className="text-slate-200 font-medium">
+                  {selectedLead.lead_source === 'Other' && selectedLead.Specify_Custom_Lead_Source_Name 
+                    ? `Other: ${selectedLead.Specify_Custom_Lead_Source_Name}` 
+                    : selectedLead.lead_source}
+                </strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Events Scheduled</span>
+                <div className="flex flex-col gap-1 mt-1">
+                  {selectedLead.events && selectedLead.events.length > 0 ? (
+                    selectedLead.events.map((ev, i) => (
+                      <div key={i} className="text-xs">
+                        <span className="text-amber-500 font-semibold">{ev.event_name || ev.event_type || 'Event'}</span>
+                        <br/>
+                        <strong className="text-slate-200 font-medium font-mono text-[10px]">{ev.event_date} {ev.event_start_time ? `@ ${formatTime12Hour(ev.event_start_time)}` : ''}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <strong className="text-slate-200 font-medium">{selectedLead.event_date || 'N/A'} {selectedLead.event_time ? `@ ${formatTime12Hour(selectedLead.event_time)}` : ''}</strong>
+                  )}
+                </div>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Current Budget</span>
+                <strong className="text-amber-400 font-extrabold font-mono">{formatINR(selectedLead.budget)}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">City / State</span>
+                <strong className="text-slate-200 font-medium">{selectedLead.city || 'N/A'} / {selectedLead.state || 'N/A'}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500 block">Pincode</span>
+                <strong className="text-slate-200 font-medium">{selectedLead.pincode || 'N/A'}</strong>
+              </div>
+              <div className="col-span-2">
+                <span className="text-slate-500 block">Residence Address</span>
+                <strong className="text-slate-200 font-medium block break-words">{selectedLead.client_residence_address || 'N/A'}</strong>
+              </div>
+              <div className="col-span-2">
+                <span className="text-slate-500 block">Package Option</span>
+                <strong className="text-slate-200 font-medium block break-words">
+                  {(() => {
+                    const pkg = packages.find(p => p.package_id === selectedLead.Select_Package_Option);
+                    return pkg ? `${pkg.package_name} (${selectedLead.Select_Package_Option})` : (selectedLead.Select_Package_Option || 'Not selected');
+                  })()}
+                </strong>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-800 pt-3 text-[11px]">
+              <span className="text-slate-500 block mb-1">Remarks & Audits</span>
+              <div className="bg-slate-900/60 p-2.5 rounded border border-slate-800 font-mono text-[10px] text-slate-400 max-h-36 overflow-y-auto whitespace-pre-wrap">
+                {selectedLead.remarks || 'No remarks recorded.'}
+              </div>
+            </div>
+
+            {/* Action Area: Convert Lead */}
+            {canEdit && !isLeadConfirmed && (
+              <div className="border-t border-slate-800 pt-4">
+                <button
+                  id="btn_confirm_order"
+                  onClick={() => {
+                    if (!selectedLead) return;
+                    const today = new Date().toISOString().split('T')[0];
+                    const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+                    const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                    const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(selectedLead.advance_collected) || Number(wizardLeadData.advance_received) || 0));
+                    
+                    setConfirmForm({
+                      ...confirmForm,
+                      package_name: packages?.find((p) => String(p.package_id) === String(selectedLead.Select_Package_Option))?.package_name || selectedLead.Select_Package_Option || '',
+                      quotation_amount: Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || Number(wizardLeadData.final_amount) || 0,
+                      advance_received: calcAdvance,
+                      event_date: selectedLead.event_date || today,
+                      event_time: selectedLead.event_time || ''
+                    });
+                    initEventsReporting(selectedLead);
+                    setShowConfirmModal(true);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold py-2.5 px-4 rounded-xl shadow-lg shadow-emerald-950/20 text-xs transition-all cursor-pointer"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  <span>CONFIRM ORDER CONTRACT</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Column B: Follow-up Activity Logger */}
+          <div className="lg:col-span-8 bg-slate-850 rounded-xl border border-slate-800 p-5">
+            <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-1.5 pb-2.5 border-b border-slate-800 mb-4">
+              <span>üìù</span> Log Lead Follow-up activity & CRM notes
+            </h3>
+
+            {selectedLead && isLeadLocked && (
+              <div className="p-4 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-left animate-fade-in relative z-10">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider font-mono">
+                    <span className="animate-pulse">üîí</span> Stage-Locked: Order Confirmed
+                  </div>
+                  <p className="text-[11px] text-slate-350 leading-relaxed font-sans">
+                    This lead is lock-protected due to having officially transitioned to operations. Only payment schedules are editable.
+                  </p>
+                </div>
+                {currentRole === 'Business Owner' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUnlockReason('Data Correction');
+                      setUnlockingRecordId(selectedLead.lead_id);
+                    }}
+                    className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-lg transition-all cursor-pointer font-mono font-extrabold uppercase tracking-wide border border-amber-500/20 shadow-lg"
+                  >
+                    üîì Owner Override
+                  </button>
+                )}
+              </div>
+            )}
+
+            {canEdit ? (
+              <form onSubmit={handleFollowUpSubmit} className="space-y-4">
+                <fieldset disabled={isLeadLocked} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-1 gap-4">
+                    {/* Status Options */}
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        Transition ERP Stage *
+                      </label>
+                      <select
+                        value={followUpForm.status}
+                        onChange={(e) => setFollowUpForm({ ...followUpForm, status: e.target.value as CurrentStage })}
+                        className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      >
+                        <option value="Quote Sent">Quote Sent</option>
+                        <option value="Quote Follow-up">Quote Follow-up</option>
+                        <option value="Confirm Order">Confirm Order</option>
+                        {followUpForm.status && !['Quote Sent', 'Quote Follow-up', 'Confirm Order', 'Order Confirmed', 'Quotation Sent', 'Follow Up'].includes(followUpForm.status) && (
+                          <option value={followUpForm.status}>{followUpForm.status}</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
+
+                  {(followUpForm.status === 'Confirm Order' || followUpForm.status === 'Order Confirmed') ? (
+                    <div className="space-y-4 pt-2 border-t border-slate-800">
+                      <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Configure Confirmed Order Settings</h4>
+                      
+                      {/* Read-only multiple events display */}
+                      {selectedLead?.events && selectedLead.events.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <label className="block text-xs font-medium text-slate-400 mb-2">Confirmed Event Dates</label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {selectedLead.events.map(ev => (
+                              <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex flex-col">
+                                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-1">üé¨ {ev.event_name || ev.event_type || 'Event'}</span>
+                                <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-500 font-mono">Date:</span>
+                                    <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_date || 'N/A'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] text-slate-500 font-mono">Time:</span>
+                                    <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Hidden inputs to preserve existing API requirements silently */}
+                        <div className="hidden">
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Event Date * (Required)</label>
+                          <input
+                            type="date"
+                            value={followUpForm.event_date || (selectedLead?.events?.[0]?.event_date) || ''}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, event_date: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                          />
+                        </div>
+                        <div className="hidden">
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Event Time * (Required)</label>
+                          <input
+                            type="time"
+                            value={followUpForm.event_time || (selectedLead?.events?.[0]?.event_start_time) || ''}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, event_time: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Reporting Time * (Required)
+                          </label>
+                          <input
+                            type="time"
+                            required
+                            value={followUpForm.reporting_time}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, reporting_time: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Final Amount (‚Çπ) *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            value={followUpForm.quotation_amount}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Advance Amount Received (‚Çπ)
+                          </label>
+                          <input
+                            type="number"
+                            value={followUpForm.advance_received}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, advance_received: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Payment Mode
+                          </label>
+                          <select
+                            value={followUpForm.payment_mode}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, payment_mode: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          >
+                            <option value="UPI">UPI (GPay/PhonePe)</option>
+                            <option value="Cash">Cash Handover</option>
+                            <option value="Bank Transfer">Bank NFT/RTGS/IMPS</option>
+                            <option value="Card">Credit/Debit Card</option>
+                            <option value="Cheque">Cheque Deposit</option>
+                          </select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Payment Tracking ID / Transaction Reference Number *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="Enter Transaction Ref / Tracking ID (e.g. TXN12345678)"
+                            value={followUpForm.transaction_id || ''}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, transaction_id: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Next Date */}
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Next Follow-up Action Date *
+                          </label>
+                          <input
+                            type="date"
+                            required
+                            value={followUpForm.next_follow_up_date}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, next_follow_up_date: e.target.value })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+
+                        {/* Proposed budget */}
+                        <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">
+                            Negotiated Quotation Amount (‚Çπ) *
+                          </label>
+                          <input
+                            type="number"
+                            required
+                            value={followUpForm.quotation_amount}
+                            onChange={(e) => setFollowUpForm({ ...followUpForm, quotation_amount: Number(e.target.value) })}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Call reports */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Call / Conversation Notes *
+                        </label>
+                        <textarea
+                          rows={4}
+                          required
+                          placeholder="Log exact customer concerns, desired outputs, specific package selections, or callbacks."
+                          value={followUpForm.call_notes}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, call_notes: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        ></textarea>
+                      </div>
+
+                      {/* Negotiation notes */}
+                      <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">
+                          Negotiation Notes (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Specific price offsets, discount justifications, extra features offered..."
+                          value={followUpForm.negotiation_notes}
+                          onChange={(e) => setFollowUpForm({ ...followUpForm, negotiation_notes: e.target.value })}
+                          className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </>
+                  )}
+                </fieldset>
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLead(null)}
+                    className="px-4 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-lg transition-all cursor-pointer"
+                  >
+                    Discard Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLeadLocked || isSaving}
+                    className={`px-4 py-1.5 text-xs font-semibold rounded-lg shadow-sm transition-all border ${
+                      isLeadLocked || isSaving
+                      ? 'bg-slate-800/80 text-slate-500 border-slate-800/50 cursor-not-allowed opacity-50'
+                      : 'bg-indigo-650 hover:bg-indigo-550 text-white border-indigo-500/10 cursor-pointer text-shadow'
+                    }`}
+                  >
+                    {isSaving ? 'Saving...' : (isLeadLocked ? 'üîí Locked' : isLeadConfirmed ? 'Save' : followUpForm.status === 'Order Confirmed' ? 'üíç Confirm Order booking' : 'Save Follow-up Notes')}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="p-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl space-y-2">
+                <Ban className="w-10 h-10 text-slate-650 mx-auto" />
+                <h4 className="text-sm font-semibold text-slate-350">Access Restrictions Active</h4>
+                <p className="text-xs max-w-sm mx-auto">
+                  Only the **Sales Team** or the **Business Owner** possess authorized write clearances to log client interaction updates. Keep testing with another persona.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main Sandbox Area & Mobile Base view */}
+      <div className="space-y-6">
+        {selectedLead ? null : activeTab === 'calendar' ? (
+          <SalesCalendar />
+        ) : activeTab === 'profiles' ? (
+          /* NEW SCREEN: Customer Profiles & History Timeline sub-tab */
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* Left Column: Accounts Directory / Ledger */}
+            <div className="lg:col-span-4 bg-slate-850 rounded-xl border border-slate-800 p-4 space-y-4 text-left">
+              <div className="border-b border-slate-800 pb-3">
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5 font-mono">
+                  <span>üë•</span> CLIENT ACCOUNTS ({getCustomers(leads, orders, payments).length})
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Unified customer profiles compiled via CRM phone & email graphs.
+                </p>
+              </div>
+
+              {/* Search Customer Input */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by name, phone, email..."
+                  value={customerSearchQuery}
+                  onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 pl-8 pr-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans"
+                />
+                <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-500" />
+                {customerSearchQuery && (
+                  <button 
+                    onClick={() => setCustomerSearchQuery('')} 
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Roster List */}
+              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1">
+                {(() => {
+                  const items = getCustomers(leads, orders, payments);
+                  const filtered = items.filter(c => 
+                    c.customer_name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                    c.customer_id.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                    c.email.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                    c.mobile.includes(customerSearchQuery)
+                  );
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="p-8 text-center text-slate-500 text-xs">
+                        No clients match your query.
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((cust) => {
+                    const isSelected = selectedCustomerProfileId === cust.customer_id;
+                    return (
+                      <div
+                        key={cust.customer_id}
+                        onClick={() => {
+                          setSelectedCustomerProfileId(cust.customer_id);
+                          setIsQuickReorderView(false);
+                        }}
+                        className={`p-3 rounded-xl border transition-all text-left cursor-pointer ${
+                          isSelected 
+                            ? 'bg-indigo-600/10 border-indigo-500/40 shadow-sm shadow-indigo-505/10' 
+                            : 'bg-slate-900 border-slate-800 hover:bg-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] bg-slate-800 border border-slate-700 text-amber-500/90 px-2 py-0.5 rounded font-mono font-bold">
+                            {cust.customer_id}
+                          </span>
+                          {cust.totalOrders >= 2 && (
+                            <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full font-black uppercase">
+                              üî• REPEAT ({cust.totalOrders})
+                            </span>
+                          )}
+                        </div>
+                        
+                        <h4 className="text-xs font-black text-slate-100 mt-2 font-sans break-words">
+                          {cust.customer_name}
+                        </h4>
+                        
+                        <div className="text-[10px] text-slate-400 font-mono mt-1 space-y-0.5">
+                          <div className="break-words">{cust.email}</div>
+                          <div>{formatIndianPhoneNumber(cust.mobile)}</div>
+                        </div>
+
+                        <div className="border-t border-slate-800/60 mt-2.5 pt-2 flex items-center justify-between text-[10px]">
+                          <span className="text-slate-500">Total CLV:</span>
+                          <strong className="text-emerald-450 font-bold font-mono">{formatINR(cust.totalRevenue)}</strong>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+
+            {/* Right Column: In-depth Timeline & Historiography Ledger */}
+            <div className="lg:col-span-8 bg-slate-850 rounded-xl border border-slate-800 p-5 space-y-6 text-left">
+              {(() => {
+                const list = getCustomers(leads, orders, payments);
+                // default to first customer if none is explicitly clicked
+                const currentProfileId = selectedCustomerProfileId || (list.length > 0 ? list[0].customer_id : null);
+                const cust = list.find(c => c.customer_id === currentProfileId);
+
+                if (!cust) {
+                  return (
+                    <div className="p-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl space-y-2">
+                      <Users className="w-8 h-8 mx-auto text-slate-600 animate-pulse" />
+                      <h4 className="text-sm font-semibold text-slate-400">Select customer profile</h4>
+                      <p className="text-xs text-slate-505">Pick any client from the directory to review lifetime timeline history.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-6 animate-fade-in text-slate-200">
+                    {/* Header profile details */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-slate-900 border border-slate-750 font-mono text-amber-500 px-2.5 py-0.5 rounded font-black font-mono">
+                            {cust.customer_id}
+                          </span>
+                          {cust.totalOrders >= 2 && (
+                            <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-black">
+                              LOYAL RETIRED BUYER COHORT
+                            </span>
+                          )}
+                        </div>
+                        <h2 className="text-lg font-black text-white mt-1.5">{cust.customer_name}</h2>
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-400 font-mono text-[10px] mt-1.5">
+                          <span className="flex items-center gap-1"><Mail className="w-3.5 h-3.5 text-indigo-400" /> {cust.email}</span>
+                          <span className="text-slate-800">|</span>
+                          <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-indigo-400" /> {formatIndianPhoneNumber(cust.mobile)}</span>
+                          {cust.alternate_mobile && (
+                            <>
+                              <span className="text-slate-800">|</span>
+                              <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5 text-zinc-500" /> Alt: {formatIndianPhoneNumber(cust.alternate_mobile)}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsQuickReorderView(!isQuickReorderView);
+                            // Set event date default to next month
+                            const defaultReorderDate = new Date();
+                            defaultReorderDate.setMonth(defaultReorderDate.getMonth() + 1);
+                            setReorderForm(prev => ({
+                              ...prev,
+                              event_date: defaultReorderDate.toISOString().split('T')[0]
+                            }));
+                          }}
+                          className="flex items-center gap-1.5 bg-gradient-to-r from-indigo-650 to-indigo-750 hover:from-indigo-600 hover:to-indigo-700 text-white font-black text-xs px-4 py-2 rounded-xl shadow-lg transition-all cursor-pointer font-sans"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>{isQuickReorderView ? "Close Reorder Desk" : "Create New Reorder"}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Quick Reorder Config Section */}
+                    {isQuickReorderView && (
+                      <div className="bg-slate-900 border border-indigo-500/20 p-4 rounded-xl space-y-4 animate-fade-in-up">
+                        <div className="border-b border-slate-800 pb-2">
+                          <h4 className="text-xs font-black text-indigo-400 uppercase tracking-widest font-mono">
+                            ‚úçÔ∏è CONFIGURE REPEAT SHOOT CONTRACT
+                          </h4>
+                          <p className="text-[10px] text-slate-400">
+                            Book a new independent contract project. This generates a new Lead and verified Order ID, keeping customer ID intact.
+                          </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className={reorderForm.event_type === 'Other' ? "sm:col-span-2 space-y-2" : ""}>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Event Type</label>
+                            <select
+                              value={reorderForm.event_type}
+                              onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                            >
+                              {EVENT_TYPES.map(type => (
+                                <option key={type} value={type}>{type}</option>
+                              ))}
+                            </select>
+
+                            {reorderForm.event_type === 'Other' && (
+                              <div className="animate-fade-in-down mt-2">
+                                <label className="block text-[11px] font-mono font-bold text-amber-500 mb-1.5">
+                                  Custom Event Type *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  placeholder="Specify custom event type"
+                                  value={reorderForm.custom_event_name}
+                                  onChange={(e) => setReorderForm({ ...reorderForm, custom_event_name: e.target.value })}
+                                  className="w-full bg-slate-950 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all text-white"
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Shoot Date *</label>
+                            <input
+                              type="date"
+                              required
+                              value={reorderForm.event_date}
+                              onChange={(e) => setReorderForm({ ...reorderForm, event_date: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Execution Location</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Grand Hyatt, Goa"
+                              value={reorderForm.event_location}
+                              onChange={(e) => setReorderForm({ ...reorderForm, event_location: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">Package Designation</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Royal Gold Cinema"
+                              value={reorderForm.package_name}
+                              onChange={(e) => setReorderForm({ ...reorderForm, package_name: e.target.value })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Quotation Contract Sum (‚Çπ)</label>
+                            <input
+                              type="number"
+                              value={reorderForm.quotation_amount}
+                              onChange={(e) => setReorderForm({ ...reorderForm, quotation_amount: Number(e.target.value), advance_received: Math.round(Number(e.target.value)/3) })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-medium text-slate-440 mb-1">Advance Deposited (‚Çπ)</label>
+                            <input
+                              type="number"
+                              value={reorderForm.advance_received}
+                              onChange={(e) => setReorderForm({ ...reorderForm, advance_received: Number(e.target.value) })}
+                              className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+                          <button
+                            type="button"
+                            onClick={() => setIsQuickReorderView(false)}
+                            className="bg-slate-800 hover:bg-slate-750 px-4 py-1.5 text-xs rounded border border-slate-700 text-slate-350 cursor-pointer"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleExecuteQuickReorder(cust)}
+                            className="bg-indigo-600 hover:bg-indigo-555 px-4 py-1.5 text-xs text-white rounded font-bold shadow shadow-indigo-650/30 cursor-pointer"
+                          >
+                            Issue Repeat Order Contract
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Stats Summary widgets */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-750 text-indigo-400">
+                          <Calendar className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-mono block uppercase">Total Bookings</span>
+                          <span className="text-sm font-black text-slate-100 font-mono">{cust.totalOrders}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-750 text-emerald-400">
+                          <DollarSign className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-mono block uppercase">Lifetime Revenue</span>
+                          <span className="text-sm font-black text-emerald-400 font-mono">{formatINR(cust.totalRevenue)}</span>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-zinc-800 flex items-center justify-center border border-zinc-750 text-amber-500">
+                          <Clock className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-slate-500 font-mono block uppercase">Latest Event Date</span>
+                          <span className="text-sm font-bold text-slate-205 font-mono">{cust.lastEventDate || 'N/A'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Timelines history segments */}
+                    <div className="space-y-6">
+                      
+                      {/* Subsegment 1: Historical Inquiries Timeline */}
+                      <div>
+                        <h4 className="text-xs font-black text-slate-400 font-mono tracking-wider uppercase pb-2 border-b border-slate-800 mb-3 flex items-center gap-1.5">
+                          <span>Inquiries Timeline</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {cust.leads.map((ld, i) => (
+                            <div key={ld.lead_id} className="relative pl-6 before:absolute before:left-2 before:top-2 before:bottom-0 before:w-0.5 before:bg-slate-800">
+                              <span className="absolute left-[3px] top-[5px] w-1.5 h-1.5 rounded-full bg-indigo-505 ring-4 ring-slate-850" />
+                              <div className="bg-slate-900 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-xs w-full">
+                                <div className="flex-1 space-y-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-[10px] text-amber-400 font-bold">{ld.lead_id}</span>
+                                    <span className="text-[11px] text-slate-400">
+                                      Source: {ld.lead_source === 'Other' && ld.Specify_Custom_Lead_Source_Name ? `Other: ${ld.Specify_Custom_Lead_Source_Name}` : ld.lead_source}
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Render each event separately */}
+                                  <div className="space-y-2 mt-2">
+                                    {ld.events && ld.events.length > 0 ? ld.events.map((ev, evIdx) => (
+                                      <div key={ev.id || evIdx} className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-[10px] text-slate-500 font-mono">üìÖ {ev.event_name || ev.event_type || 'Event'}</span>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
+                                          <span className="text-slate-300">Date: {ev.event_date || 'N/A'}</span>
+                                          <span className="text-slate-300">Time: {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                        </div>
+                                      </div>
+                                    )) : (
+                                      <div className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <span className="text-[10px] text-slate-500 font-mono">üìÖ {ld.event_type || 'Event'}</span>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
+                                          <span className="text-slate-300">Date: {ld.event_date || 'N/A'}</span>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <span className="bg-slate-800 px-2 py-0.5 rounded text-[9px] font-mono text-indigo-400 font-semibold uppercase">
+                                    {ld.status}
+                                  </span>
+                                  <span className="font-mono text-[11px] text-emerald-450 font-black">
+                                    {formatINR(ld.budget)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                          {cust.leads.length === 0 && (
+                            <p className="text-[11px] text-slate-500 font-mono italic">No previous inquiries logged.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Subsegment 2: Confirmed Orders History */}
+                      <div>
+                        <h4 className="text-xs font-black text-slate-400 font-mono tracking-wider uppercase pb-2 border-b border-slate-800 mb-3 flex items-center gap-1.5">
+                          <span>Verified Orders & Contracts History</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {cust.orders.map((ord) => (
+                            <div key={ord.order_id} className="bg-slate-900 p-3 rounded-lg border border-slate-800 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                              <div className="flex-1 space-y-3">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-[10px] text-indigo-400 font-bold">{ord.order_id}</span>
+                                  <span className="text-[11px] text-slate-400">
+                                    Package: <strong className="text-slate-200">{ord.package_name}</strong> | Location: {ord.event_location}
+                                  </span>
+                                </div>
+
+                                {/* Render each event separately */}
+                                <div className="space-y-2 mt-2">
+                                  {(() => {
+                                    const ordLead = leads.find(l => l.lead_id === ord.lead_id);
+                                    if (ordLead && ordLead.events && ordLead.events.length > 0) {
+                                      return ordLead.events.map((ev, evIdx) => (
+                                        <div key={ev.id || evIdx} className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
+                                          <div className="flex items-center gap-2 mb-1">
+                                            <span className="text-[10px] text-slate-500 font-mono">üìÖ {ev.event_name || ev.event_type || 'Event'}</span>
+                                          </div>
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
+                                            <span className="text-slate-300">Date: {ev.event_date || 'N/A'}</span>
+                                            <span className="text-slate-300">Time: {ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
+                                          </div>
+                                        </div>
+                                      ));
+                                    } else {
+                                      return (
+                                        <div className="bg-slate-950/40 p-2 rounded border border-slate-800/50">
+                                          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 font-mono text-[11px]">
+                                            <span className="text-slate-300">Date: {ord.event_date || 'N/A'}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    }
+                                  })()}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <div className="text-slate-550 font-mono text-[10px] uppercase">Quotation</div>
+                                  <strong className="text-emerald-450 text-[11px] font-mono font-black">{formatINR(ord.quotation_amount)}</strong>
+                                </div>
+                                <span className="bg-slate-800 px-2 py-0.5 rounded text-[10px] font-mono text-amber-500 font-semibold uppercase">
+                                  {ord.order_status}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          {cust.orders.length === 0 && (
+                            <p className="text-[11px] text-slate-500 font-mono italic">No confirmed order folders detected.</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Subsegment 3: Payment History Ledger */}
+                      <div>
+                        <h4 className="text-xs font-black text-slate-400 font-mono tracking-wider uppercase pb-2 border-b border-slate-800 mb-3 flex items-center gap-1.5">
+                          <span>Financial Ledger Payments History</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {(() => {
+                            const customerOrdersIds = cust.orders.map(o => o.order_id);
+                            const customerPayments = payments.filter(p => customerOrdersIds.includes(p.order_id));
+                            
+                            if (customerPayments.length === 0) {
+                              return <p className="text-[11px] text-slate-550 font-mono italic">Awaiting payment ledger clearance logs...</p>;
+                            }
+
+                            return customerPayments.map(p => (
+                              <div key={p.payment_id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-xs grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                <div>
+                                  <span className="text-slate-500 text-[10px] block font-mono">Invoice Code</span>
+                                  <span className="font-mono text-indigo-400 font-bold">{p.payment_id} (Ref: {p.order_id})</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[10px] block font-mono">Deposited Cash</span>
+                                  <span className="font-mono text-emerald-445 font-bold">{formatINR(p.advance_received + p.final_payment_received)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-505 text-[10px] block font-mono">Balance Due</span>
+                                  <span className={`font-mono font-black ${p.balance_due > 0 ? 'text-red-405 animate-pulse' : 'text-slate-405'}`}>{formatINR(p.balance_due)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-500 text-[10px] block font-mono">Clearance Status</span>
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold leading-none inline-block mt-0.5 uppercase ${
+                                    p.payment_status === 'Cleared' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-455 border border-rose-500/20'
+                                  }`}>
+                                    {p.payment_status}
+                                  </span>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* Subsegment 4: Delivery History */}
+                      <div>
+                        <h4 className="text-xs font-black text-slate-400 font-mono tracking-wider uppercase pb-2 border-b border-slate-800 mb-3 flex items-center gap-1.5">
+                          <span>Operational Crews & Delivery History</span>
+                        </h4>
+                        <div className="space-y-3">
+                          {(() => {
+                            const customerOrdersIds = cust.orders.map(o => o.order_id);
+                            // Link production items
+                            const linkedProduction = production.filter(prod => customerOrdersIds.includes(prod.order_id));
+
+                            if (linkedProduction.length === 0) {
+                              return <p className="text-[11px] text-slate-550 font-mono italic">Roster operations not yet dispatched to editors...</p>;
+                            }
+
+                            return linkedProduction.map(prod => (
+                              <div key={prod.production_id} className="bg-slate-900 border border-slate-800 p-3 rounded-lg text-xs flex justify-between items-center text-zinc-300">
+                                <div>
+                                  <span className="font-mono text-[10px] text-indigo-400 font-black">PROD-{prod.production_id} / {prod.order_id}</span>
+                                  <div className="text-[11px] text-slate-450 mt-0.5">
+                                    Editor assigned: <strong className="text-slate-205">{prod.editor_assigned || 'Unassigned'}</strong>
+                                  </div>
+                                </div>
+
+                                <div className="text-right">
+                                  <div className="text-[10px] text-slate-550 font-mono uppercase">Delivery Stage</div>
+                                  <span className="text-amber-500 font-black font-mono text-[11px] uppercase">{prod.editing_status}</span>
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                      
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        ) : activeTab === 'custom_package_master' ? (
+          <CustomPackageMaster />
+        ) : activeTab === 'packages' ? (
+          /* NEW SCREEN: Package Management Catalog */
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6 text-left relative overflow-hidden font-sans">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                  <Package className="w-4 h-4 text-slate-400" />
+                  <span>Dynamic Package Catalog</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Manage core service offerings, pricing rates, and category bindings synced directly with Supabase.
+                </p>
+              </div>
+              
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingPackage(null);
+                    setPkgForm({ 
+                      package_name: '', 
+                      category: 'Weddings', 
+                      price: 0, 
+                      status: 'Active', 
+                      deliverables: '', 
+                      team_members: '', 
+                      seasonal_offer: '',
+                      terms_conditions: '',
+                      event_type: '',
+                      duration: '',
+                      package_includes: ''
+                    });
+                    setPkgTeamMembers([{ qty: 1, name: '' }]);
+                    setPkgDeliverablesList([{ qty: 1, name: '' }]);
+                    setPkgDeliverableInput('');
+                    setCustomCategory('');
+                    setIsAddFormOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-md transition-all cursor-pointer border border-transparent"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Create offering</span>
+                </button>
+              )}
+            </div>
+
+            {packageSuccessMsg && (
+              <div id="package_success_banner" className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3.5 text-xs text-emerald-300 font-medium flex items-center justify-between shadow-lg animate-fade-in">
+                <span className="font-bold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{packageSuccessMsg}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPackageSuccessMsg(null)}
+                  className="text-emerald-400 hover:text-emerald-200 p-1 rounded-lg hover:bg-emerald-900/40 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            {dbCategoryError && (
+              <div id="db_category_error_banner" className="bg-amber-950/20 border border-amber-500/20 rounded-xl p-4 text-xs text-amber-400 font-medium space-y-1">
+                <span className="font-bold flex items-center gap-1">‚ö†Ô∏è Database Schema Notice</span>
+                <p>{dbCategoryError}</p>
+              </div>
+            )}
+
+            {/* In-place Add / Edit Package Modal */}
+            {(isAddFormOpen || editingPackage) && (
+              <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 text-left text-xs bg-black/70 animate-fade-in">
+                <div id="add_edit_package_modal" className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl flex flex-col shadow-2xl relative text-slate-350 overflow-hidden" style={{ maxHeight: 'calc(100vh - 40px)' }}>
+                  {/* Modal Header */}
+                  <div className="border-b border-slate-800 p-4 sm:p-6 flex items-center justify-between shrink-0">
+                    <h4 className="text-sm sm:text-base font-bold text-slate-100 font-mono tracking-wide flex items-center gap-2">
+                      <span>{editingPackage ? '‚úèÔ∏è Edit Service Package' : '‚ú® Define New Service Package'}</span>
+                    </h4>
                     <button
+                      type="button"
                       onClick={() => {
+                        setIsAddFormOpen(false);
                         setEditingPackage(null);
-                        setPkgForm({
-                          package_name: '',
-                          category: 'Weddings',
-                          price: 0,
-                          status: 'Active',
-                          deliverables: '',
-                          team_members: '',
+                        setPkgForm({ 
+                          package_name: '', 
+                          category: 'Weddings', 
+                          price: 0, 
+                          status: 'Active', 
+                          deliverables: '', 
+                          team_members: '', 
                           seasonal_offer: '',
                           terms_conditions: '',
                           event_type: '',
                           duration: '',
                           package_includes: ''
                         });
-                        setPkgTeamMembers([{qty: 1, name: ''}]);
-                        setPkgDeliverablesList([]);
+                        setPkgTeamMembers([{ qty: 1, name: '' }]);
+                        setPkgDeliverablesList([{ qty: 1, name: '' }]);
+                        setPkgDeliverableInput('');
                         setCustomCategory('');
-                        setIsAddFormOpen(true);
                       }}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-sm hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-500/20 flex items-center gap-2"
+                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all cursor-pointer"
+                      title="Close modal"
                     >
-                      <Plus size={16} /> Create Template
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Scrollable Form Body */}
+                  <div className="overflow-y-auto overflow-x-hidden p-4 sm:p-6 space-y-5 text-xs text-slate-300 flex-1 min-h-0 w-full max-w-full">
+                    {/* SECTION 1: PACKAGE DETAILS */}
+                    <div className="space-y-3 w-full max-w-full">
+                      <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px] font-mono text-emerald-400">
+                        Package Details
+                      </label>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full">
+                        {/* Package Name */}
+                        <div>
+                          <label className="block text-slate-300 font-semibold mb-1 text-xs">
+                            Package Name <span className="text-rose-400">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="e.g. Traditional Wedding Photography"
+                            value={pkgForm.package_name}
+                            onChange={(e) => setPkgForm({ ...pkgForm, package_name: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-slate-200 focus:outline-none transition-colors text-xs font-sans"
+                          />
+                        </div>
+
+                        {/* Package Category */}
+                        <div>
+                          <label className="block text-slate-300 font-semibold mb-1 text-xs">
+                            Package Category <span className="text-rose-400">*</span>
+                          </label>
+                          <select
+                            value={pkgForm.category}
+                            onChange={(e) => setPkgForm({ ...pkgForm, category: e.target.value })}
+                            className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-slate-200 focus:outline-none transition-colors font-sans text-xs"
+                          >
+                            {categoriesList.filter(c => c !== 'CUSTOM_CATEGORY').map(cat => (
+                              <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                            <option value="CUSTOM_CATEGORY">‚ûï Create Custom Category...</option>
+                          </select>
+                          {pkgForm.category === 'CUSTOM_CATEGORY' && (
+                            <div className="animate-slide-down mt-2">
+                              <label className="block text-amber-400 font-semibold mb-1 text-[11px]">New Custom Category Name</label>
+                              <input
+                                type="text"
+                                placeholder="e.g. Newborn Baby shoot"
+                                value={customCategory}
+                                onChange={(e) => setCustomCategory(e.target.value)}
+                                className="w-full bg-slate-950 border border-amber-500/40 focus:border-amber-500 rounded-xl py-2 px-3 text-slate-200 focus:outline-none font-sans text-xs"
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Package Price */}
+                        <div>
+                          <label className="block text-slate-300 font-semibold mb-1 text-xs">
+                            Package Price (INR) <span className="text-rose-400">*</span>
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs">‚Çπ</span>
+                            <input
+                              type="number"
+                              placeholder="e.g. 25000"
+                              value={pkgForm.price || ''}
+                              onChange={(e) => setPkgForm({ ...pkgForm, price: parseFloat(e.target.value) || 0 })}
+                              className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 pl-7 pr-3 text-slate-200 focus:outline-none font-mono text-xs transition-colors"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 2: TEAM MEMBERS INCLUDED */}
+                    <div className="border-t border-slate-800/80 pt-4 space-y-3 w-full max-w-full">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px] font-mono">
+                          Team Members Included
+                        </label>
+                      </div>
+
+                      {/* Column Header */}
+                      <div className="flex items-center gap-2 sm:gap-3 px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <div className="flex-1 min-w-0">Team Member Name / Role</div>
+                        <div className="w-[60px] sm:w-[75px] text-center shrink-0">Qty</div>
+                        <div className="w-9 sm:w-10 text-center shrink-0">Remove</div>
+                      </div>
+
+                      <div className="space-y-2.5 w-full max-w-full">
+                        {pkgTeamMembers.map((member, index) => (
+                          <div 
+                            key={index} 
+                            className="flex items-center gap-2 sm:gap-3 w-full min-w-0 animate-fade-in"
+                          >
+                            {/* Member Name */}
+                            <div className="flex-1 min-w-0">
+                              <input
+                                type="text"
+                                placeholder="e.g. Candid Photographer"
+                                value={member.name}
+                                onChange={(e) => {
+                                  const newList = [...pkgTeamMembers];
+                                  newList[index] = { ...member, name: e.target.value };
+                                  setPkgTeamMembers(newList);
+                                }}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-slate-200 focus:outline-none font-sans text-xs"
+                              />
+                            </div>
+
+                            {/* Qty */}
+                            <div className="w-[60px] sm:w-[75px] shrink-0">
+                              <input
+                                type="number"
+                                min="1"
+                                value={member.qty || 1}
+                                onChange={(e) => {
+                                  const newList = [...pkgTeamMembers];
+                                  newList[index] = { ...member, qty: Math.max(1, parseInt(e.target.value) || 1) };
+                                  setPkgTeamMembers(newList);
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl py-2 px-1 text-xs font-mono font-bold text-center text-emerald-400 focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Remove */}
+                            <div className="w-9 sm:w-10 shrink-0 flex justify-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newList = pkgTeamMembers.filter((_, idx) => idx !== index);
+                                  setPkgTeamMembers(newList.length > 0 ? newList : [{ qty: 1, name: '' }]);
+                                }}
+                                className="w-9 h-9 sm:w-10 sm:h-10 text-slate-400 hover:text-rose-400 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                                title="Remove item"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setPkgTeamMembers([...pkgTeamMembers, { qty: 1, name: '' }])}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-xl transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add More</span>
+                      </button>
+                    </div>
+
+                    {/* SECTION 3: DELIVERABLES */}
+                    <div className="border-t border-slate-800/80 pt-4 space-y-3 w-full max-w-full">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-slate-300 font-bold uppercase tracking-wider text-[11px] font-mono">
+                          Deliverables
+                        </label>
+                      </div>
+
+                      {/* Column Header */}
+                      <div className="flex items-center gap-2 sm:gap-3 px-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <div className="flex-1 min-w-0">Deliverable Name / Description</div>
+                        <div className="w-[60px] sm:w-[75px] text-center shrink-0">Qty</div>
+                        <div className="w-9 sm:w-10 text-center shrink-0">Remove</div>
+                      </div>
+
+                      <div className="space-y-2.5 w-full max-w-full">
+                        {pkgDeliverablesList.map((del, index) => (
+                          <div 
+                            key={index} 
+                            className="flex items-center gap-2 sm:gap-3 w-full min-w-0 animate-fade-in"
+                          >
+                            {/* Deliverable Name */}
+                            <div className="flex-1 min-w-0">
+                              <input
+                                type="text"
+                                placeholder="e.g. Traditional 30 Edited Photos"
+                                value={del.name}
+                                onChange={(e) => {
+                                  const newList = [...pkgDeliverablesList];
+                                  newList[index] = { ...del, name: e.target.value };
+                                  setPkgDeliverablesList(newList);
+                                  setPkgForm({ ...pkgForm, deliverables: JSON.stringify(newList) });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl py-2 px-3 text-slate-200 focus:outline-none font-sans text-xs"
+                              />
+                            </div>
+
+                            {/* Qty */}
+                            <div className="w-[60px] sm:w-[75px] shrink-0">
+                              <input
+                                type="number"
+                                min="1"
+                                value={del.qty || 1}
+                                onChange={(e) => {
+                                  const newList = [...pkgDeliverablesList];
+                                  newList[index] = { ...del, qty: Math.max(1, parseInt(e.target.value) || 1) };
+                                  setPkgDeliverablesList(newList);
+                                  setPkgForm({ ...pkgForm, deliverables: JSON.stringify(newList) });
+                                }}
+                                className="w-full bg-slate-950 border border-slate-750 focus:border-emerald-500 rounded-xl py-2 px-1 text-xs font-mono font-bold text-center text-emerald-400 focus:outline-none"
+                              />
+                            </div>
+
+                            {/* Remove */}
+                            <div className="w-9 sm:w-10 shrink-0 flex justify-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newList = pkgDeliverablesList.filter((_, idx) => idx !== index);
+                                  const updatedList = newList.length > 0 ? newList : [{ qty: 1, name: '' }];
+                                  setPkgDeliverablesList(updatedList);
+                                  setPkgForm({ ...pkgForm, deliverables: JSON.stringify(updatedList) });
+                                }}
+                                className="w-9 h-9 sm:w-10 sm:h-10 text-slate-400 hover:text-rose-400 bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-rose-500/30 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+                                title="Remove item"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setPkgDeliverablesList([...pkgDeliverablesList, { qty: 1, name: '' }])}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-xl transition-all cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add More</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div className="flex items-center justify-end gap-3 p-4 sm:p-6 border-t border-slate-800 shrink-0 bg-slate-900 z-10">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddFormOpen(false);
+                        setEditingPackage(null);
+                        setPkgForm({ 
+                          package_name: '', 
+                          category: 'Weddings', 
+                          price: 0, 
+                          status: 'Active', 
+                          deliverables: '', 
+                          team_members: '', 
+                          seasonal_offer: '',
+                          terms_conditions: '',
+                          event_type: '',
+                          duration: '',
+                          package_includes: ''
+                        });
+                        setPkgTeamMembers([{ qty: 1, name: '' }]);
+                        setPkgDeliverablesList([{ qty: 1, name: '' }]);
+                        setPkgDeliverableInput('');
+                        setCustomCategory('');
+                      }}
+                      className="px-4 py-2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all cursor-pointer font-medium border border-transparent"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!pkgForm.package_name.trim()) {
+                           alert('Please supply a package name.');
+                          return;
+                        }
+                        if (pkgForm.price <= 0) {
+                          alert('Please enter a valid price greater than zero.');
+                          return;
+                        }
+
+                        let resolvedCategory = pkgForm.category;
+                        if (resolvedCategory === 'CUSTOM_CATEGORY') {
+                          if (!customCategory.trim()) {
+                            alert('Please enter a valid custom category name.');
+                            return;
+                          }
+                          resolvedCategory = customCategory.trim();
+                        }
+                        
+                        const filteredMembers = pkgTeamMembers.filter(item => item.name.trim() !== '');
+                        const teamMembersStr = filteredMembers.length > 0 ? JSON.stringify(filteredMembers) : '';
+                        
+                        const filteredDeliverables = pkgDeliverablesList.filter(item => item.name.trim() !== '');
+                        const deliverablesStr = filteredDeliverables.length > 0 ? JSON.stringify(filteredDeliverables) : '';
+                        
+                        const payload = {
+                          ...pkgForm,
+                          team_members: teamMembersStr,
+                          deliverables: deliverablesStr,
+                          category: resolvedCategory
+                        };
+                        
+                        try {
+                          setIsSaving(true);
+                          if (editingPackage) {
+                            await updatePackage(editingPackage.package_id, payload);
+                          } else {
+                            await addPackage(payload);
+                          }
+                          setIsAddFormOpen(false);
+                          setEditingPackage(null);
+                          setPkgForm({ 
+                            package_name: '', 
+                            category: 'Weddings', 
+                            price: 0, 
+                            status: 'Active', 
+                            deliverables: '', 
+                            team_members: '', 
+                            seasonal_offer: '',
+                            terms_conditions: '',
+                            event_type: '',
+                            duration: '',
+                            package_includes: ''
+                          });
+                          setPkgTeamMembers([{ qty: 1, name: '' }]);
+                          setPkgDeliverablesList([{ qty: 1, name: '' }]);
+                          setCustomCategory('');
+                        } catch (err: any) {
+                          alert(`Failed to save package: ${err.message || err}`);
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }}
+                      disabled={isSaving}
+                      className="px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-xl transition-all cursor-pointer border border-transparent disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                    >
+                      {isSaving ? 'Saving...' : 'Save Package'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Custom Multi-Search & Filters Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 items-center bg-slate-950/40 p-3.5 rounded-xl border border-slate-800">
+              {/* Search Package Field */}
+              <div className="relative w-full">
+                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-tight">Search Package</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Search package name..."
+                    value={catSearchQuery}
+                    onChange={(e) => setCatSearchQuery(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 pl-8 pr-4 text-xs text-slate-250 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                  <Search className="absolute left-2.5 top-2 w-3.5 h-3.5 text-slate-500 pointer-events-none" />
+                  {catSearchQuery && (
+                    <button
+                      onClick={() => setCatSearchQuery('')}
+                      className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3 h-3" />
                     </button>
                   )}
                 </div>
               </div>
-              {/* Packages Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {packages.map(pkg => (
-                  <div key={pkg.package_id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow group flex flex-col">
-                    <div className="p-5 border-b border-slate-100 flex-grow">
-                      <div className="flex justify-between items-start mb-3">
-                        <span className="text-[10px] font-bold tracking-wider uppercase bg-indigo-50 text-indigo-700 px-2 py-1 rounded">
-                          {pkg.category}
-                        </span>
-                        <span className={`text-[10px] font-bold tracking-wider uppercase px-2 py-1 rounded ${
-                          pkg.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'
+
+              {/* Filter by Category selection */}
+              <div className="w-full">
+                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-tight font-sans">Filter by Category</label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2.5 text-xs text-slate-250 focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Categories ({categoriesList.length})</option>
+                  {categoriesList.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Filter by Status selection */}
+              <div className="w-full">
+                <label className="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-tight font-sans">Filter by Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg py-1.5 px-2.5 text-xs text-slate-250 focus:outline-none cursor-pointer"
+                >
+                  <option value="All">All Statuses</option>
+                  <option value="Active">Active Packages Only</option>
+                  <option value="Inactive">Inactive Packages Only</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Category Listing Grid */}
+            <div className="space-y-6">
+              {categoriesList.map((cat) => {
+                // Respect category filter
+                if (categoryFilter !== 'All' && cat !== categoryFilter) return null;
+
+                const catPkgs = (packages || []).filter(
+                  p => normalizeCategory(p.category) === cat && 
+                  p.package_name.toLowerCase().includes(catSearchQuery.toLowerCase()) &&
+                  (statusFilter === 'All' || p.status === statusFilter)
+                );
+                
+                if (catPkgs.length === 0) return null;
+                
+                return (
+                  <div key={cat} className="space-y-2.5 text-left animate-fade-in">
+                    <h4 className="text-[10px] font-black font-mono tracking-wider text-slate-400 border-b border-slate-800 pb-1 uppercase flex justify-between items-center bg-slate-950/20 px-2 py-1 rounded">
+                      <span>{cat}</span>
+                      <span className="text-slate-500 font-mono">({catPkgs.length})</span>
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                      {catPkgs.map((pkg) => (
+                        <div
+                          key={pkg.package_id}
+                          className="bg-slate-955 border border-slate-850 p-4 rounded-xl flex flex-col justify-between hover:border-slate-800 transition-all space-y-4 hover:shadow-lg relative group"
+                        >
+                          <div className="space-y-1.5 text-left">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-[9px] text-slate-500 font-bold uppercase">{pkg.package_id}</span>
+                              <span className={`px-2 py-0.5 text-[9px] font-bold font-mono rounded ${
+                                pkg.status === 'Active'
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                              }`}>
+                                {pkg.status}
+                              </span>
+                            </div>
+                            <h5 className="text-xs font-bold text-slate-100 leading-tight">{pkg.package_name}</h5>
+                            <p className="text-[11px] text-slate-400 break-words leading-snug">
+                              {pkg.deliverables || 'No custom deliverables specified'}
+                            </p>
+                          </div>
+
+                          <div className="flex flex-col gap-3 pt-2.5 border-t border-slate-900/80">
+                            <div className="flex items-center justify-between">
+                              <span className="font-mono text-xs font-bold text-emerald-400">‚Çπ{pkg.price.toLocaleString('en-IN')}</span>
+                            </div>
+                            
+                            {canEdit && (
+                              <div className="grid grid-cols-3 gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPackage(pkg);
+                                    setPkgForm({
+                                      package_name: pkg.package_name,
+                                      category: pkg.category,
+                                      price: pkg.price,
+                                      status: pkg.status as 'Active' | 'Inactive',
+                                      deliverables: pkg.deliverables || '',
+                                      team_members: pkg.team_members || '',
+                                      seasonal_offer: pkg.seasonal_offer || '',
+                                      terms_conditions: pkg.terms_conditions || '',
+                                      event_type: pkg.event_type || '',
+                                      duration: pkg.duration || '',
+                                      package_includes: pkg.package_includes || ''
+                                    });
+                                    const parsed = parseTeamMembers(pkg.team_members);
+                                    setPkgTeamMembers(parsed.length > 0 ? parsed.map(s => { const r = parseQtyAndText(s); return { qty: r.qty, name: r.text }; }) : [{ qty: 1, name: '' }]);
+                                    const parsedDel = parseTeamMembers(pkg.deliverables);
+                                    setPkgDeliverablesList(parsedDel.length > 0 ? parsedDel.map(s => { const r = parseQtyAndText(s); return { qty: r.qty, name: r.text }; }) : []);
+                                    setCustomCategory('');
+                                    setIsAddFormOpen(true);
+                                  }}
+                                  className="py-1 px-1 bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] uppercase font-mono tracking-tight font-bold border border-slate-800 hover:border-slate-700 rounded transition-all cursor-pointer text-center"
+                                  title="Edit package details"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const nextStatus = pkg.status === 'Active' ? 'Inactive' : 'Active';
+                                    await updatePackage(pkg.package_id, { status: nextStatus });
+                                  }}
+                                  className={`py-1 px-1 text-center text-[10px] uppercase font-mono tracking-tight font-bold border rounded transition-all cursor-pointer ${
+                                    pkg.status === 'Active'
+                                      ? 'bg-amber-500/10 border-amber-550/20 text-amber-500 hover:bg-amber-500/20'
+                                      : 'bg-emerald-500/10 border-emerald-555/20 text-emerald-400 hover:bg-emerald-500/20'
+                                  }`}
+                                  title={pkg.status === 'Active' ? "Deactivate Package" : "Activate Package"}
+                                >
+                                  {pkg.status === 'Active' ? 'Deactivate' : 'Activate'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setDeletingPackageId(pkg.package_id);
+                                  }}
+                                  className="py-1 px-1 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 hover:text-rose-350 text-[10px] uppercase font-mono tracking-tight font-bold rounded transition-all cursor-pointer text-center"
+                                  title="Delete Package"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : activeTab === 'create' ? (
+          /* SCREEN 2: Create Lead Layout as dedicated Full Page inside the application */
+          <div 
+            id="create_lead_form"
+            className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative h-[calc(100vh-220px)] min-h-[500px]"
+          >
+            <button 
+              type="button"
+              onClick={() => { resetForm(); setActiveTab('list'); }}
+              className="absolute top-2 right-3 z-20 p-1 hover:bg-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition-all cursor-pointer inline-flex items-center justify-center border border-transparent hover:border-slate-700/50 bg-slate-950/80"
+              title="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {crmToast && (
+              <div id="crm-create-toast-container" className={`mx-4 mt-4 p-3 rounded-xl shadow-lg flex items-center gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200 shrink-0 ${
+                crmToast.type === 'success' 
+                  ? 'bg-emerald-950/90 border border-emerald-500/20 text-emerald-400' 
+                  : 'bg-red-950/90 border border-red-500/20 text-red-400'
+              }`}>
+                <span>{crmToast.type === 'success' ? '‚ö°' : '‚ö†Ô∏è'}</span>
+                <span className="text-[11px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
+              </div>
+            )}
+
+            {/* Wizard Progress Bar */}
+            <div className="bg-slate-955/30 px-4 sm:px-6 py-1.5 border-b border-slate-800/50 shrink-0">
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+                {[
+                  { step: 1, label: 'Customer' },
+                  { step: 2, label: 'Event Info' },
+                  { step: 3, label: 'CRM & Quotation' }
+                ].map((item) => {
+                  const isActive = wizardStep === item.step;
+                  const isCompleted = wizardStep > item.step;
+                  return (
+                    <div key={item.step} className="flex flex-col items-center sm:items-start text-center sm:text-left space-y-1">
+                      <div className="w-full flex items-center gap-1">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black font-mono transition-all duration-300 ${
+                          isActive 
+                            ? 'bg-cyan-500 text-slate-950 ring-4 ring-cyan-500/10' 
+                            : isCompleted 
+                              ? 'bg-emerald-500 text-slate-955' 
+                              : 'bg-slate-800 text-slate-500'
                         }`}>
-                          {pkg.status}
+                          {isCompleted ? '‚úì' : item.step}
                         </span>
+                        <div className={`hidden sm:block flex-1 h-0.5 rounded transition-all duration-300 ${
+                          isCompleted ? 'bg-emerald-500' : 'bg-slate-800'
+                        }`} />
                       </div>
-                      
-                      <h4 className="text-lg font-bold text-slate-800 mb-1">{pkg.package_name}</h4>
-                      {pkg.seasonal_offer && (
-                        <span className="inline-block bg-amber-50 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded border border-amber-200 mb-3">
-                          {pkg.seasonal_offer}
-                        </span>
+                      <span className={`text-[9px] sm:text-[10px] font-bold uppercase tracking-wider transition-colors duration-300 ${
+                        isActive ? 'text-cyan-400' : isCompleted ? 'text-emerald-400' : 'text-slate-500'
+                      }`}>
+                        {item.label}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Scrollable Body: Content Fields */}
+            <div className="p-3 sm:p-4 overflow-y-auto flex-1 space-y-3.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+              
+              {/* STEP 1: CUSTOMER DETAILS */}
+              {wizardStep === 1 && (
+                <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4 space-y-4 shadow-sm animate-fade-in">
+                  <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
+                    <Users className="w-4 h-4 text-cyan-405" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">1. Customer Details</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Customer Name */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Customer Full Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Rahul Sharma"
+                        value={createForm.customer_name}
+                        onChange={(e) => setCreateForm({ ...createForm, customer_name: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
+                      />
+                    </div>
+
+                    {/* Mobile Number */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Mobile Number *
+                      </label>
+                      <input
+                        id="input_mobile"
+                        type="text"
+                        required
+                        placeholder="e.g. 9876543210"
+                        value={createForm.mobile}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^\d]/g, '').slice(0, 10);
+                          setCreateForm({ ...createForm, mobile: val });
+                          if (val.length === 10) {
+                            handleCheckExistingCustomer('phone', val);
+                          }
+                        }}
+                        onBlur={(e) => handleCheckExistingCustomer('phone', e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* WhatsApp Number */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-slate-404">
+                          WhatsApp Number
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (createForm.mobile) {
+                              setCreateForm(prev => ({ ...prev, whatsapp_number: prev.mobile }));
+                            }
+                          }}
+                          className="text-[10px] text-cyan-400 hover:text-cyan-300 font-bold uppercase tracking-wider cursor-pointer hover:underline"
+                        >
+                          Copy Mobile
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="WhatsApp contact number"
+                        value={createForm.whatsapp_number}
+                        onChange={(e) => setCreateForm({ ...createForm, whatsapp_number: e.target.value })}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-mono"
+                      />
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                        Email (Optional)
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="customer@domain.com"
+                        value={createForm.email}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setCreateForm({ ...createForm, email: val });
+                          if (val.includes('@') && val.length > 5 && (val.endsWith('.com') || val.endsWith('.in') || val.endsWith('.org'))) {
+                            handleCheckExistingCustomer('email', val);
+                          }
+                        }}
+                        onBlur={(e) => handleCheckExistingCustomer('email', e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 placeholder-slate-650 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all font-sans"
+                      />
+                    </div>
+
+                    {/* Lead Source */}
+                    <div className="space-y-2 text-left">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-404 mb-1.5">
+                          Inbound Lead Channel Source *
+                        </label>
+                        <select
+                          value={createForm.lead_source}
+                          required
+                          onChange={(e) => setCreateForm({ ...createForm, lead_source: e.target.value })}
+                          className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer"
+                        >
+                          <option value="">Select Lead Source</option>
+                          {LEAD_SOURCES.map(source => (
+                            <option key={source} value={source}>{source}</option>
+                          ))}
+                        </select>
+                      </div>
+                      {createForm.lead_source === 'Other' && (
+                        <div className="animate-fade-in-down">
+                          <label className="block text-xs font-mono font-bold text-amber-500 mb-1.5">
+                            Specify Custom Lead Source Name *
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Billboard, Event Flyer"
+                            value={otherSource}
+                            onChange={(e) => setOtherSource(e.target.value)}
+                            className="w-full bg-slate-955 border border-amber-500/50 rounded-lg py-2 px-3 text-xs text-amber-200 focus:outline-none focus:ring-1 focus:ring-amber-500 transition-all"
+                          />
+                        </div>
                       )}
-                      
-                      <div className="mt-4 space-y-3">
-                        {pkg.team_members && (
-                          <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase mb-1.5 flex items-center gap-1"><Users size={12}/> Team</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {(() => {
-                                try {
-                                  const t = JSON.parse(pkg.team_members);
-                                  return Array.isArray(t) ? t.map((m:any, i:number) => (
-                                    <span key={i} className="text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-medium border border-slate-200">
-                                      {m.qty}x {m.name}
-                                    </span>
-                                  )) : null;
-                                } catch(e) { return null; }
-                              })()}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {pkg.deliverables && (
-                          <div>
-                            <p className="text-xs font-bold text-slate-500 uppercase mb-1.5 flex items-center gap-1"><FileImage size={12}/> Deliverables</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {(() => {
-                                try {
-                                  const d = JSON.parse(pkg.deliverables);
-                                  return Array.isArray(d) ? d.map((item:any, i:number) => (
-                                    <span key={i} className="text-[11px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-medium border border-blue-100">
-                                      {item.qty}x {item.name}
-                                    </span>
-                                  )) : null;
-                                } catch(e) { return null; }
-                              })()}
-                            </div>
-                          </div>
-                        )}
+                    </div>
+
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: EVENT DETAILS */}
+              {wizardStep === 2 && (
+                <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4 shadow-sm animate-fade-in text-left">
+                  <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1 text-left">
+                    <Calendar className="w-4 h-4 text-cyan-405" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">2. Event Details</span>
+                  </div>
+
+                  {renderEventDetailsSection(false)}
+                </div>
+              )}
+
+              {/* STEP 3: PACKAGE SELECTION */}
+              {wizardStep === 3 && (
+                <div className="bg-slate-950/30 border border-slate-800/60 rounded-xl p-4.5 space-y-4 shadow-sm animate-fade-in text-left">
+                  <div className="flex items-center gap-2 border-b border-slate-800/50 pb-2 mb-1">
+                    <CheckSquare className="w-4 h-4 text-cyan-405" />
+                    <span className="text-xs font-bold text-slate-200 uppercase tracking-wider font-mono">3. Package Selection</span>
+                  </div>
+
+                  {renderStep3Workspace(false)}
+                </div>
+              )}
+            </div>
+
+            {/* Sticky Footer */}
+            <div className="flex justify-between items-center gap-3 border-t border-slate-800/80 py-2 px-4 sm:px-5 bg-slate-950/40 backdrop-blur-md shrink-0">
+              {/* Back or Cancel */}
+              <div className="flex items-center gap-2">
+                {wizardStep > 1 ? (
+                  <button
+                    type="button"
+                    onClick={() => setWizardStep(wizardStep - 1)}
+                    className="px-4.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer border border-slate-850 hover:border-slate-700 transition-colors"
+                  >
+                    ‚Üê Back Step
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => { resetForm(); setActiveTab('list'); }}
+                    className="px-4.5 py-2 text-xs font-semibold bg-slate-805 hover:bg-slate-800 text-slate-300 rounded-xl cursor-pointer border border-slate-800 hover:border-slate-700/50 transition-colors"
+                  >
+                    Back
+                  </button>
+                )}
+                {wizardStep === 2 && (!createdLeadId || leads.find(l => l.lead_id === createdLeadId)?.status === 'New Lead') && (
+                  <div />
+                )}
+              </div>
+
+              {/* Next or Save */}
+              {wizardStep < 3 ? (
+                <button
+                  type="button"
+                  onClick={handleWizardNext}
+                  disabled={isSaving || (wizardStep === 3 && selectedPkgIds.length === 0)}
+                  className={`px-5.5 py-2 text-xs font-bold text-white rounded-xl shadow-lg border border-transparent transition-colors flex items-center gap-1.5 ${
+                    wizardStep === 3 && selectedPkgIds.length === 0
+                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                      : 'bg-cyan-600 hover:bg-cyan-500 shadow-cyan-500/10 cursor-pointer'
+                  }`}
+                >
+                  {isSaving ? 'Processing...' : 'Save & Continue ‚Üí'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    if (salesStatus === 'Order Confirmed') {
+                      handleOrderConfirmedSubmit(e);
+                    } else {
+                      handleStatusSave();
+                    }
+                  }}
+                  disabled={isSaving}
+                  className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
+                >
+                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? 'üéâ Confirm Order & Transition' : '‚úçÔ∏è Create Quotation'}
+                </button>
+              )}
+            </div>
+          </div>
+        ) : (
+        /* SCREEN 1: Lead List datagrid */
+        <div className="space-y-4">
+
+          {/* Sales Performance Dashboard Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-2">
+            {[
+              { label: 'Create Quote', val: statCreatedQuotation, theme: 'blue' as CameraLensTheme, filterValue: 'Create Quote', chartPoints: [10, 15, 12, 18, 14, 20, 16], trendText: 'Initial Lead' },
+              { label: 'Quote Sent', val: statQuotesSent, theme: 'purple' as CameraLensTheme, filterValue: 'Quote Sent', chartPoints: [12, 14, 18, 15, 21, 25, 22], trendText: 'Quotation Saved' },
+              { label: 'Quote Follow-up', val: statQuoteFollowups, theme: 'gold' as CameraLensTheme, filterValue: 'Quote Follow-up', chartPoints: [5, 12, 8, 15, 10, 19, 14], trendText: 'Scheduled CRM' },
+              { label: 'Confirm Order', val: statConfirmedOrders, theme: 'cyan' as CameraLensTheme, filterValue: 'Confirm Order', chartPoints: [8, 15, 12, 20, 16, 25, 24], trendText: 'To Operations' },
+              { label: 'Lead Lost', val: statLeadLost, theme: 'red' as CameraLensTheme, filterValue: 'Lead Lost', chartPoints: [4, 6, 3, 7, 5, 8, 4], trendText: 'Opportunity Closed' },
+            ].map((card, idx) => (
+              <CameraLensStatsCard
+                key={idx}
+                label={card.label}
+                val={card.val}
+                theme={card.theme}
+                trendText={card.trendText}
+                subText="SALES STATUS"
+                chartPoints={card.chartPoints}
+                activeFilterValue={filterStatus}
+                currentFilterValue={card.filterValue}
+                onClick={() => setFilterStatus(filterStatus === card.filterValue ? '' : card.filterValue)}
+                lensLabel={card.label.slice(0, 10).toUpperCase()}
+              />
+            ))}
+          </div>
+          
+          {/* Leads Directory Header Bar & Collapsible Utilities */}
+          {(() => {
+            const activeFilterCount = [
+              Boolean(filterQuery.trim()),
+              Boolean(filterSource),
+              Boolean(filterStatus),
+              Boolean(dateRangeStart || appliedStartDate),
+              Boolean(dateRangeEnd || appliedEndDate)
+            ].filter(Boolean).length;
+
+            return (
+              <div className="space-y-3">
+                {/* Leads Directory Title & Control Buttons Bar */}
+                <div className="bg-zinc-900/60 p-4 rounded-2xl border border-zinc-850 shadow-xl space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">üìÅ</span>
+                      <div>
+                        <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Leads Directory</h3>
+                        <p className="text-[10px] text-zinc-400">Export active pipeline registers using start and end filters</p>
                       </div>
                     </div>
                     
-                    <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between mt-auto">
-                      <div className="text-xl font-black text-slate-800">
-                        ‚Çπ{pkg.price?.toLocaleString('en-IN') || 0}
-                      </div>
-                      
-                      {canEdit && (
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => openEditPackage(pkg)}
-                            className="p-2 bg-white text-blue-600 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors shadow-sm"
-                            title="Edit Package"
-                          >
-                            <Edit3 size={16} />
-                          </button>
-                          <button 
-                            onClick={() => setDeletingPackageId(pkg.package_id)}
-                            className="p-2 bg-white text-red-600 rounded-lg border border-slate-200 hover:border-red-300 hover:bg-red-50 transition-colors shadow-sm"
-                            title="Delete Package"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {packages.length === 0 && (
-                  <div className="col-span-full py-12 text-center bg-white rounded-xl border border-slate-200 border-dashed">
-                    <Package size={32} className="mx-auto text-slate-300 mb-3" />
-                    <p className="text-slate-500 font-medium">No packages available.</p>
-                    <p className="text-xs text-slate-400 mt-1">Create predefined templates to speed up your quotation process.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'create' && (
-            <div className="animate-fade-in max-w-4xl mx-auto">
-               <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative">
-                  <div className="h-2 w-full bg-gradient-to-r from-blue-500 to-indigo-600 absolute top-0 left-0"></div>
-                  
-                  <div className="px-6 md:px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                    <div>
-                      <h3 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                        <UserPlus size={24} className="text-blue-600" />
-                        Create New Lead
-                      </h3>
-                      <p className="text-sm text-slate-500 mt-1 font-medium">Capture details for a new potential customer inquiry.</p>
-                    </div>
-                  </div>
-
-                  <form onSubmit={handleCreateLeadSubmit} className="p-6 md:p-8 space-y-8">
-                    {submitError && (
-                      <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r flex items-start gap-3 shadow-sm">
-                        <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
-                        <div>
-                          <p className="text-sm text-red-700 font-bold">Submission Error</p>
-                          <p className="text-xs text-red-600 mt-1 font-medium">{submitError}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Form sections are identical to original */}
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
-                        <User size={16} className="text-blue-500" /> Client Details
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Customer Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={form.customer_name}
-                            onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all text-sm font-medium"
-                            placeholder="Full Name"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Mobile Number *</label>
-                          <input
-                            type="tel"
-                            required
-                            value={form.mobile}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setForm(prev => ({ 
-                                ...prev, 
-                                mobile: val,
-                                whatsapp_number: prev.whatsapp_number === prev.mobile ? val : prev.whatsapp_number 
-                              }));
-                            }}
-                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all text-sm font-medium"
-                            placeholder="Primary Contact"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">WhatsApp Number</label>
-                          <input
-                            type="tel"
-                            value={form.whatsapp_number}
-                            onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 focus:bg-white transition-all text-sm font-medium"
-                            placeholder="Same as mobile if empty"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Location / City</label>
-                          <input
-                            type="text"
-                            value={form.location}
-                            onChange={(e) => setForm({ ...form, location: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white transition-all text-sm font-medium"
-                            placeholder="City or Area"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
-                        <Calendar size={16} className="text-indigo-500" /> Event Information
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Event Type *</label>
-                          <select
-                            required
-                            value={form.event_type}
-                            onChange={(e) => setForm({ ...form, event_type: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all text-sm font-medium"
-                          >
-                            <option value="">Select Event Type</option>
-                            {EVENT_TYPES.map(type => (
-                              <option key={type} value={type}>{type}</option>
-                            ))}
-                          </select>
-                        </div>
-                        {form.event_type === 'Other' && (
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Custom Event Name</label>
-                            <input
-                              type="text"
-                              required
-                              value={form.custom_event_name}
-                              onChange={(e) => setForm({ ...form, custom_event_name: e.target.value })}
-                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all text-sm font-medium"
-                              placeholder="Describe the event"
-                            />
-                          </div>
-                        )}
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Event Date</label>
-                          <input
-                            type="date"
-                            value={form.event_date}
-                            onChange={(e) => setForm({ ...form, event_date: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all text-sm font-medium"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Lead Source</label>
-                          <select
-                            value={form.lead_source}
-                            onChange={(e) => setForm({ ...form, lead_source: e.target.value })}
-                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all text-sm font-medium"
-                          >
-                            {LEAD_SOURCES.map(source => (
-                              <option key={source} value={source}>{source}</option>
-                            ))}
-                          </select>
-                        </div>
-                        {form.lead_source === 'Other' && (
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Custom Source</label>
-                            <input
-                              type="text"
-                              required
-                              value={form.custom_source}
-                              onChange={(e) => setForm({ ...form, custom_source: e.target.value })}
-                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 focus:bg-white transition-all text-sm font-medium"
-                              placeholder="Where did they find us?"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 flex items-center gap-2 pb-2 border-b border-slate-100">
-                        <FileText size={16} className="text-amber-500" /> Additional Notes
-                      </h4>
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Initial Requirements / Comments</label>
-                        <textarea
-                          value={form.remarks}
-                          onChange={(e) => setForm({ ...form, remarks: e.target.value })}
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 focus:bg-white transition-all text-sm font-medium resize-y min-h-[100px]"
-                          placeholder="Any specific requests, package interests, or initial conversation notes..."
-                        ></textarea>
-                      </div>
-                    </div>
-
-                    <div className="pt-6 border-t border-slate-100 flex justify-end gap-3">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      {/* Download Reports Button */}
                       <button
                         type="button"
-                        onClick={() => setActiveTab('list')}
-                        className="px-6 py-2.5 border border-slate-300 text-slate-700 font-bold rounded-lg hover:bg-slate-50 transition-colors"
+                        id="btn_toggle_download_reports"
+                        onClick={() => setIsDownloadReportsExpanded(!isDownloadReportsExpanded)}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                          isDownloadReportsExpanded
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
+                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                        }`}
                       >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isSaving}
-                        className="px-8 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-500/20 disabled:opacity-70 flex items-center gap-2"
-                      >
-                        {isSaving ? (
-                          <>
-                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                            Creating...
-                          </>
+                        <span>üì•</span>
+                        <span>Download Reports</span>
+                        {isDownloadReportsExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-amber-400 ml-0.5 shrink-0" />
                         ) : (
-                          <>
-                            <CheckCircle2 size={18} />
-                            Create Lead
-                          </>
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
                         )}
                       </button>
-                    </div>
-                  </form>
-               </div>
-            </div>
-          )}
 
-          {activeTab === 'profiles' && (
-            <div className="animate-fade-in space-y-6">
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                      <Users size={20} className="text-emerald-600" />
-                      Customer Directory
-                    </h3>
-                    <p className="text-sm text-slate-500">View all leads converted to customers</p>
-                  </div>
-                  <div className="relative w-full md:w-72">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                    <input
-                      type="text"
-                      placeholder="Search customers..."
-                      value={filterQuery}
-                      onChange={e => setFilterQuery(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filteredLeads
-                  .filter(l => getLeadCurrentStatus(l) === 'Order Confirmed')
-                  .map(customer => {
-                    const ord = orders.find(o => o.lead_id === customer.lead_id);
-                    return (
-                      <div key={customer.lead_id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-md transition-shadow group">
-                        <div className="flex justify-between items-start mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-lg">
-                              {customer.customer_name.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-slate-800">{customer.customer_name}</h4>
-                              <p className="text-xs font-mono text-emerald-600 mt-0.5">{customer.lead_id}</p>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2 mt-4 pt-4 border-t border-slate-100">
-                          <div className="flex items-center gap-3 text-sm text-slate-600">
-                            <Phone size={14} className="text-slate-400" />
-                            <a href={`tel:${customer.mobile}`} className="hover:text-blue-600 transition-colors">{customer.mobile}</a>
-                          </div>
-                          {customer.whatsapp_number && customer.whatsapp_number !== customer.mobile && (
-                            <div className="flex items-center gap-3 text-sm text-emerald-600">
-                              <Phone size={14} className="text-emerald-400" />
-                              <a href={`https://wa.me/${customer.whatsapp_number.replace(/\D/g,'')}`} target="_blank" rel="noreferrer" className="hover:underline">{customer.whatsapp_number} (WA)</a>
-                            </div>
-                          )}
-                          <div className="flex items-center gap-3 text-sm text-slate-600">
-                            <Calendar size={14} className="text-slate-400" />
-                            {customer.event_date ? new Date(customer.event_date).toLocaleDateString('en-IN') : 'N/A'}
-                          </div>
-                          <div className="flex items-center gap-3 text-sm text-slate-600">
-                            <MapPin size={14} className="text-slate-400" />
-                            {customer.location || 'No location set'}
-                          </div>
-                        </div>
-                        
-                        {ord && (
-                          <div className="mt-4 pt-4 border-t border-slate-100">
-                            <button 
-                              onClick={() => {
-                                setSelectedLead(customer);
-                                setCrmWizardStep(5);
-                                setShowLeadDetails(true);
-                              }}
-                              className="w-full py-2 bg-slate-50 hover:bg-emerald-50 text-emerald-700 text-sm font-bold rounded-lg transition-colors border border-slate-100 hover:border-emerald-200"
-                            >
-                              View Order #{ord.order_id}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                })}
-                {filteredLeads.filter(l => getLeadCurrentStatus(l) === 'Order Confirmed').length === 0 && (
-                  <div className="col-span-full py-12 text-center bg-white rounded-xl border border-slate-200">
-                    <Users size={32} className="mx-auto text-slate-300 mb-2" />
-                    <p className="text-slate-500 font-medium">No converted customers found.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'calendar' && (
-            <div className="animate-fade-in bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <Calendar size={20} className="text-amber-500" />
-                    Availability Calendar
-                  </h3>
-                  <p className="text-sm text-slate-500">Upcoming events and meetings</p>
-                </div>
-              </div>
-              
-              <div className="space-y-4">
-                {filteredLeads
-                  .filter(l => l.event_date && new Date(l.event_date) >= new Date())
-                  .sort((a, b) => new Date(a.event_date!).getTime() - new Date(b.event_date!).getTime())
-                  .slice(0, 10)
-                  .map(lead => {
-                    const eventDate = new Date(lead.event_date!);
-                    const isToday = eventDate.toDateString() === new Date().toDateString();
-                    const status = getLeadCurrentStatus(lead);
-                    
-                    return (
-                      <div key={lead.lead_id} className={`flex items-start gap-4 p-4 rounded-xl border ${
-                        isToday ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200'
-                      }`}>
-                        <div className={`w-14 h-14 rounded-lg flex flex-col items-center justify-center shrink-0 ${
-                          isToday ? 'bg-amber-500 text-white shadow-md' : 'bg-white text-slate-700 border border-slate-200'
-                        }`}>
-                          <span className="text-[10px] font-bold uppercase">{eventDate.toLocaleString('default', { month: 'short' })}</span>
-                          <span className="text-xl font-black leading-none">{eventDate.getDate()}</span>
-                        </div>
-                        
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <h4 className="font-bold text-slate-800">{lead.customer_name}</h4>
-                            <span className="text-xs font-bold text-slate-500">{lead.event_type}</span>
-                          </div>
-                          <p className="text-sm text-slate-600 mt-1 flex items-center gap-1">
-                            <MapPin size={12} className="text-slate-400" /> {lead.location || 'Location TBA'}
-                          </p>
-                          <div className="mt-2 flex items-center gap-2">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                              status === 'Order Confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
-                            }`}>
-                              {status}
-                            </span>
-                            <button
-                              onClick={() => {
-                                setSelectedLead(lead);
-                                setCrmWizardStep(status === 'Order Confirmed' ? 5 : 1);
-                                setShowLeadDetails(true);
-                              }}
-                              className="text-xs font-bold text-slate-500 hover:text-blue-600 underline"
-                            >
-                              View CRM
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                }
-                {filteredLeads.filter(l => l.event_date && new Date(l.event_date) >= new Date()).length === 0 && (
-                  <div className="py-12 text-center">
-                    <Calendar size={32} className="mx-auto text-slate-300 mb-2" />
-                    <p className="text-slate-500 font-medium">No upcoming events scheduled.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      {/* Lead Details / CRM Wizard Modal */}
-      {showLeadDetails && selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-slate-50 w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-fade-in border border-slate-200/50">
-            {/* Header */}
-            <div className="bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 text-lg font-bold">
-                  {selectedLead.customer_name.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <h3 className="text-xl font-black text-slate-800">{selectedLead.customer_name}</h3>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span className="text-xs font-mono font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200">
-                      {selectedLead.lead_id}
-                    </span>
-                    <span className="text-xs font-bold text-slate-500 flex items-center gap-1">
-                      <Phone size={12} /> {selectedLead.mobile}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  setShowLeadDetails(false);
-                  setCrmWizardStep(1);
-                  setCrmHighestStep(1);
-                }}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="flex flex-1 overflow-hidden">
-              {/* Wizard Sidebar */}
-              <div className="w-64 bg-white border-r border-slate-200 overflow-y-auto hidden md:block shrink-0">
-                <div className="p-4">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Sales Pipeline</h4>
-                  <div className="space-y-2">
-                    {[
-                      { step: 1, title: 'Lead Initialized', icon: <UserPlus size={16} /> },
-                      { step: 2, title: 'Follow-Up', icon: <Phone size={16} /> },
-                      { step: 3, title: 'Meeting / Visit', icon: <MapPin size={16} /> },
-                      { step: 4, title: 'Quotation', icon: <FileText size={16} /> },
-                      { step: 5, title: 'Confirmation', icon: <CheckCircle size={16} /> }
-                    ].map((item) => {
-                      const isActive = crmWizardStep === item.step;
-                      const isCompleted = getLeadCurrentStatus(selectedLead) === 'Order Confirmed' || crmHighestStep > item.step;
-                      const isClickable = item.step <= crmHighestStep || getLeadCurrentStatus(selectedLead) === 'Order Confirmed';
-                      
-                      return (
-                        <button
-                          key={item.step}
-                          disabled={!isClickable}
-                          onClick={() => setCrmWizardStep(item.step)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold transition-all text-left ${
-                            isActive ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                            isCompleted ? 'text-emerald-700 hover:bg-emerald-50' :
-                            isClickable ? 'text-slate-600 hover:bg-slate-50' :
-                            'text-slate-400 opacity-50 cursor-not-allowed'
-                          }`}
-                        >
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                            isActive ? 'bg-blue-600 text-white shadow-sm' :
-                            isCompleted ? 'bg-emerald-100 text-emerald-600' :
-                            'bg-slate-100 text-slate-500'
-                          }`}>
-                            {isCompleted && !isActive ? <CheckCircle size={12} /> : item.step}
-                          </div>
-                          <span className="flex-1 truncate">{item.title}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  
-                  {/* Current Status Badge */}
-                  <div className="mt-8 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Current Status</p>
-                    <div className="font-bold text-sm text-slate-800">
-                      {getLeadCurrentStatus(selectedLead)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Wizard Content Area */}
-              <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4 md:p-6 custom-scrollbar">
-                
-                {crmWizardStep === 1 && (
-                  <div className="animate-fade-in max-w-3xl mx-auto space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                      <div className="flex items-center gap-3 mb-6 pb-4 border-b border-slate-100">
-                        <div className="w-10 h-10 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
-                          <Info size={20} />
-                        </div>
-                        <div>
-                          <h4 className="text-lg font-bold text-slate-800">Lead Details</h4>
-                          <p className="text-sm text-slate-500">Initial information captured</p>
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
-                        <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Event Type</p>
-                          <p className="font-medium text-slate-800 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-                            {selectedLead.event_type} {selectedLead.custom_event_name ? `(${selectedLead.custom_event_name})` : ''}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Event Date</p>
-                          <p className="font-medium text-slate-800 flex items-center gap-2">
-                            <Calendar size={14} className="text-slate-400" />
-                            {selectedLead.event_date ? new Date(selectedLead.event_date).toLocaleDateString('en-IN', {
-                               weekday: 'short', year: 'numeric', month: 'long', day: 'numeric'
-                            }) : 'Not specified'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Location</p>
-                          <p className="font-medium text-slate-800 flex items-center gap-2">
-                            <MapPin size={14} className="text-slate-400" />
-                            {selectedLead.location || 'Not specified'}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Source</p>
-                          <p className="font-medium text-slate-800">
-                            {selectedLead.lead_source}
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {selectedLead.remarks && (
-                        <div className="mt-6 pt-4 border-t border-slate-100">
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Initial Remarks</p>
-                          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-sm text-slate-700 whitespace-pre-wrap font-medium">
-                            {selectedLead.remarks.split('\n')[0]} 
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex justify-end pt-4">
+                      {/* Filters Toggle Button */}
                       <button
-                        onClick={() => {
-                          setCrmHighestStep(Math.max(crmHighestStep, 2));
-                          setCrmWizardStep(2);
-                        }}
-                        className="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2"
+                        type="button"
+                        id="btn_toggle_filters"
+                        onClick={() => setIsFiltersExpanded(!isFiltersExpanded)}
+                        className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm ${
+                          isFiltersExpanded || activeFilterCount > 0
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/10'
+                            : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                        }`}
                       >
-                        Next Step <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {crmWizardStep === 2 && (
-                  <div className="animate-fade-in max-w-3xl mx-auto space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                            <PhoneCall size={20} />
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-bold text-slate-800">Initial Follow-up</h4>
-                            <p className="text-sm text-slate-500">Record conversation details</p>
-                          </div>
-                        </div>
-                        {getLeadCurrentStatus(selectedLead) === 'Lead Contacted' && (
-                          <span className="bg-emerald-50 text-emerald-700 text-xs font-bold px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Completed
+                        <Filter className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Filters</span>
+                        {activeFilterCount > 0 && (
+                          <span className="bg-emerald-500 text-zinc-950 text-[10px] font-black px-1.5 py-0.2 rounded-full font-mono">
+                            {activeFilterCount}
                           </span>
                         )}
-                      </div>
-                      
-                      <div className="space-y-5">
-                        <div>
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Discussion Notes</label>
-                          <textarea
-                            value={step2FollowUpNotes}
-                            onChange={(e) => setStep2FollowUpNotes(e.target.value)}
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium resize-y min-h-[100px] mt-1.5"
-                            placeholder="Summarize the phone conversation..."
-                          ></textarea>
-                        </div>
-                        <div>
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Next Follow-up Date (Optional)</label>
-                          <input
-                            type="date"
-                            value={step2FollowUpDate}
-                            onChange={(e) => setStep2FollowUpDate(e.target.value)}
-                            className="w-full md:w-1/2 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium mt-1.5"
-                          />
-                        </div>
-                      </div>
-                      
-                      <div className="mt-6 pt-4 border-t border-slate-100 flex justify-end">
-                        <button
-                          onClick={handleStep2Submit}
-                          disabled={isSaving || !step2FollowUpNotes.trim()}
-                          className="px-6 py-2.5 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-all shadow-md shadow-emerald-500/20 disabled:opacity-50 flex items-center gap-2"
-                        >
-                          {isSaving ? 'Saving...' : 'Mark as Contacted & Save'}
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between pt-4">
-                      <button
-                        onClick={() => setCrmWizardStep(1)}
-                        className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2"
-                      >
-                        <ChevronRight size={16} className="rotate-180" /> Back
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCrmHighestStep(Math.max(crmHighestStep, 3));
-                          setCrmWizardStep(3);
-                        }}
-                        className="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2"
-                      >
-                        Next Step <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {crmWizardStep === 3 && (
-                  <div className="animate-fade-in max-w-3xl mx-auto space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center">
-                            <MapPin size={20} />
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-bold text-slate-800">Office Visit / Meeting</h4>
-                            <p className="text-sm text-slate-500">Schedule and record meeting details</p>
-                          </div>
-                        </div>
-                        {getLeadCurrentStatus(selectedLead) === 'Office Visit Scheduled' && (
-                          <span className="bg-orange-50 text-orange-700 text-xs font-bold px-3 py-1 rounded-full border border-orange-200 flex items-center gap-1">
-                            <Clock size={12} /> Scheduled
-                          </span>
-                        )}
-                        {getLeadCurrentStatus(selectedLead) === 'Office Visit Completed' && (
-                          <span className="bg-emerald-50 text-emerald-700 text-xs font-bold px-3 py-1 rounded-full border border-emerald-200 flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Completed
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="space-y-5">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                          <div>
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Meeting Date (Optional)</label>
-                            <input
-                              type="date"
-                              value={step3FollowUpDate}
-                              onChange={(e) => setStep3FollowUpDate(e.target.value)}
-                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all text-sm font-medium mt-1.5"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Meeting Time (Optional)</label>
-                            <input
-                              type="time"
-                              value={step3FollowUpTime}
-                              onChange={(e) => setStep3FollowUpTime(e.target.value)}
-                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all text-sm font-medium mt-1.5"
-                            />
-                          </div>
-                        </div>
-                        
-                        <div>
-                          <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Meeting Notes / Agenda</label>
-                          <textarea
-                            value={step3FollowUpNotes}
-                            onChange={(e) => setStep3FollowUpNotes(e.target.value)}
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 transition-all text-sm font-medium resize-y min-h-[100px] mt-1.5"
-                            placeholder="What was discussed or what needs to be prepared..."
-                          ></textarea>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-6 pt-4 border-t border-slate-100 flex flex-wrap gap-3 justify-end">
-                        <button
-                          onClick={handleStep3Submit}
-                          disabled={isSaving}
-                          className="px-6 py-2.5 bg-orange-100 text-orange-700 font-bold rounded-lg hover:bg-orange-200 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
-                        >
-                          {isSaving ? 'Saving...' : 'Mark as Scheduled'}
-                        </button>
-                        <button
-                          onClick={handleStep3BSubmit}
-                          disabled={isSaving || !step3FollowUpNotes.trim()}
-                          className="px-6 py-2.5 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700 transition-all shadow-md shadow-orange-500/20 disabled:opacity-50 flex items-center gap-2"
-                        >
-                          {isSaving ? 'Saving...' : 'Mark Meeting Completed'}
-                        </button>
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between pt-4">
-                      <button
-                        onClick={() => setCrmWizardStep(2)}
-                        className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2"
-                      >
-                        <ChevronRight size={16} className="rotate-180" /> Back
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCrmHighestStep(Math.max(crmHighestStep, 4));
-                          setCrmWizardStep(4);
-                        }}
-                        className="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2"
-                      >
-                        Next Step <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {crmWizardStep === 4 && (
-                  <div className="animate-fade-in max-w-4xl mx-auto space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
-                            <FileText size={20} />
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-bold text-slate-800">Quotation Management</h4>
-                            <p className="text-sm text-slate-500">Build and send customized quotes</p>
-                          </div>
-                        </div>
-                        {getLeadCurrentStatus(selectedLead) === 'Quote Sent' && (
-                          <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full border border-indigo-200 flex items-center gap-1">
-                            <CheckCircle2 size={12} /> Quote Sent
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                         {/* Quotation History */}
-                         <div className="border border-slate-200 rounded-xl overflow-hidden flex flex-col">
-                            <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-                               <h5 className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                                  <History size={16} className="text-slate-500" />
-                                  Previous Quotes
-                               </h5>
-                            </div>
-                            <div className="p-4 flex-1 overflow-y-auto max-h-[300px] bg-white">
-                               {(selectedLead as any).quotations && (selectedLead as any).quotations.length > 0 ? (
-                                  <div className="space-y-3">
-                                     {(selectedLead as any).quotations.map((q: any, i: number) => (
-                                        <div key={i} className="p-3 border border-slate-100 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors group relative">
-                                           <div className="flex justify-between items-start mb-2">
-                                              <span className="text-xs font-bold text-slate-500">
-                                                 {new Date(q.created_at).toLocaleDateString('en-IN', {
-                                                    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit'
-                                                 })}
-                                              </span>
-                                              <span className="font-mono text-[10px] bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-500">
-                                                 v{i+1}
-                                              </span>
-                                           </div>
-                                           <div className="text-sm font-bold text-slate-800 flex items-center justify-between">
-                                              Total: ‚Çπ{(q.final_total || 0).toLocaleString('en-IN')}
-                                              
-                                              {/* Allow viewing/re-generating old quotes */}
-                                              <button 
-                                                onClick={() => {
-                                                  // Restore old quote structure
-                                                  if (q.services && Array.isArray(q.services)) {
-                                                     setQuoteServices(q.services);
-                                                     setQuoteDiscount(q.discount_amount || 0);
-                                                     setQuoteAdditional(q.additional_charges || 0);
-                                                     showToastMsg('Restored quotation v' + (i+1), 'success');
-                                                  }
-                                                }}
-                                                className="text-indigo-600 hover:text-indigo-800 opacity-0 group-hover:opacity-100 transition-opacity"
-                                              >
-                                                <RefreshCw size={14} />
-                                              </button>
-                                           </div>
-                                        </div>
-                                     ))}
-                                  </div>
-                               ) : (
-                                  <div className="h-full flex flex-col items-center justify-center text-center py-8">
-                                     <FileText size={24} className="text-slate-300 mb-2" />
-                                     <p className="text-sm text-slate-500 font-medium">No quotes generated yet.</p>
-                                  </div>
-                               )}
-                            </div>
-                         </div>
-                         
-                         {/* Action Area */}
-                         <div className="flex flex-col gap-4 justify-center">
-                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-6 text-center">
-                               <FileText size={32} className="text-indigo-500 mx-auto mb-3" />
-                               <h5 className="font-bold text-indigo-900 mb-2">Create New Quotation</h5>
-                               <p className="text-sm text-indigo-700/80 mb-5">Open the quote builder to configure services, discounts, and generate a PDF.</p>
-                               
-                               <button
-                                  onClick={() => openCustomPDFGenerator(selectedLead)}
-                                  className="w-full py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-md shadow-indigo-500/20 flex items-center justify-center gap-2"
-                               >
-                                  <FileText size={18} /> Open Quote Builder
-                               </button>
-                            </div>
-                            
-                            {/* Negotiation Note Area */}
-                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                               <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-2">Negotiation Notes</label>
-                               <textarea
-                                 value={step4FollowUpNotes}
-                                 onChange={(e) => setStep4FollowUpNotes(e.target.value)}
-                                 className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm font-medium min-h-[80px]"
-                                 placeholder="Record customer feedback on quotes..."
-                               ></textarea>
-                               <div className="mt-2 flex justify-end">
-                                 <button
-                                    onClick={handleUpdateFollowUp}
-                                    disabled={isSaving || !step4FollowUpNotes.trim()}
-                                    className="px-4 py-1.5 bg-slate-800 text-white text-xs font-bold rounded-md hover:bg-slate-700 disabled:opacity-50"
-                                 >
-                                    Save Note
-                                 </button>
-                               </div>
-                            </div>
-                         </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex justify-between pt-4">
-                      <button
-                        onClick={() => setCrmWizardStep(3)}
-                        className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2"
-                      >
-                        <ChevronRight size={16} className="rotate-180" /> Back
-                      </button>
-                      <button
-                        onClick={() => {
-                          setCrmHighestStep(Math.max(crmHighestStep, 5));
-                          setCrmWizardStep(5);
-                        }}
-                        className="px-6 py-2.5 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2"
-                      >
-                        Next Step <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
-                
-                {crmWizardStep === 5 && (
-                  <div className="animate-fade-in max-w-4xl mx-auto space-y-6">
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                            <CheckCircle size={20} />
-                          </div>
-                          <div>
-                            <h4 className="text-lg font-bold text-slate-800">Finalize Order</h4>
-                            <p className="text-sm text-slate-500">Confirm order and transition to active project</p>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {getLeadCurrentStatus(selectedLead) === 'Order Confirmed' || getLeadCurrentStatus(selectedLead) === 'Event Scheduled' ? (
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-8 text-center">
-                          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto mb-4">
-                            <CheckCircle size={32} />
-                          </div>
-                          <h4 className="text-xl font-bold text-emerald-800 mb-2">Order Confirmed</h4>
-                          <p className="text-emerald-700/80 mb-6 max-w-md mx-auto">This lead has been successfully converted into an active order. Further operations are managed in the respective dashboards.</p>
-                          
-                          <div className="flex flex-wrap items-center justify-center gap-4">
-                            {orders.find(o => o.lead_id === selectedLead.lead_id) && (
-                               <div className="bg-white border border-emerald-200 px-4 py-2 rounded-lg text-emerald-700 font-mono font-bold shadow-sm">
-                                  Order ID: {orders.find(o => o.lead_id === selectedLead.lead_id)?.order_id}
-                               </div>
-                            )}
-                            {getLeadCurrentStatus(selectedLead) === 'Order Confirmed' && (
-                               <button 
-                                 onClick={() => {
-                                   setShowLeadDetails(false);
-                                   setShowFinalReportingModal(true);
-                                 }}
-                                 className="px-6 py-2 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 shadow-md shadow-emerald-500/20 transition-all flex items-center gap-2"
-                               >
-                                 <Clock size={16} /> Finalize Reporting Time
-                               </button>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-6">
-                          <div className="bg-blue-50 border border-blue-100 rounded-xl p-6">
-                            <h5 className="font-bold text-blue-900 mb-4 flex items-center gap-2">
-                              <AlertCircle size={18} />
-                              Pre-Confirmation Checklist
-                            </h5>
-                            
-                            <div className="space-y-3">
-                              <label className="flex items-start gap-3 p-3 bg-white rounded-lg border border-blue-100 cursor-pointer hover:border-blue-300 transition-colors">
-                                <input 
-                                  type="checkbox" 
-                                  className="mt-1 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                                  checked={confirmForm.paymentReceived}
-                                  onChange={e => setConfirmForm({...confirmForm, paymentReceived: e.target.checked})}
-                                />
-                                <div>
-                                  <span className="font-bold text-slate-700 block text-sm">Advance Payment Received</span>
-                                  <span className="text-xs text-slate-500 mt-0.5 block">Confirm initial token/advance amount is processed.</span>
-                                </div>
-                              </label>
-                              
-                              <label className="flex items-start gap-3 p-3 bg-white rounded-lg border border-blue-100 cursor-pointer hover:border-blue-300 transition-colors">
-                                <input 
-                                  type="checkbox" 
-                                  className="mt-1 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                                  checked={confirmForm.contractSigned}
-                                  onChange={e => setConfirmForm({...confirmForm, contractSigned: e.target.checked})}
-                                />
-                                <div>
-                                  <span className="font-bold text-slate-700 block text-sm">Contract / Quote Accepted</span>
-                                  <span className="text-xs text-slate-500 mt-0.5 block">Customer has formally accepted the final quotation terms.</span>
-                                </div>
-                              </label>
-                              
-                              <label className="flex items-start gap-3 p-3 bg-white rounded-lg border border-blue-100 cursor-pointer hover:border-blue-300 transition-colors">
-                                <input 
-                                  type="checkbox" 
-                                  className="mt-1 w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                                  checked={confirmForm.datesFinalized}
-                                  onChange={e => setConfirmForm({...confirmForm, datesFinalized: e.target.checked})}
-                                />
-                                <div>
-                                  <span className="font-bold text-slate-700 block text-sm">Dates & Venues Finalized</span>
-                                  <span className="text-xs text-slate-500 mt-0.5 block">Event schedule is locked and venues are confirmed.</span>
-                                </div>
-                              </label>
-                            </div>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                             <div>
-                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Final Agreed Value (‚Çπ)</label>
-                                <input
-                                   type="number"
-                                   min="0"
-                                   value={confirmForm.agreedValue}
-                                   onChange={e => setConfirmForm({...confirmForm, agreedValue: Number(e.target.value)})}
-                                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-medium mt-1.5"
-                                   placeholder="0.00"
-                                />
-                             </div>
-                             <div>
-                                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Advance Payment Received (‚Çπ)</label>
-                                <input
-                                   type="number"
-                                   min="0"
-                                   value={confirmForm.advanceReceived}
-                                   onChange={e => setConfirmForm({...confirmForm, advanceReceived: Number(e.target.value)})}
-                                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-medium mt-1.5"
-                                   placeholder="0.00"
-                                />
-                             </div>
-                          </div>
-                          
-                          <div>
-                            <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Confirmation Notes</label>
-                            <textarea
-                              value={confirmForm.notes}
-                              onChange={e => setConfirmForm({...confirmForm, notes: e.target.value})}
-                              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-medium resize-y min-h-[100px] mt-1.5"
-                              placeholder="Any final handover notes for operations/production teams..."
-                            ></textarea>
-                          </div>
-                          
-                          <div className="pt-4 flex justify-end">
-                            <button
-                               onClick={handleConfirmOrderSubmit}
-                               disabled={isSaving || !confirmForm.paymentReceived || !confirmForm.contractSigned || !confirmForm.datesFinalized || confirmForm.agreedValue <= 0}
-                               className="px-8 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-500/30 disabled:opacity-50 disabled:shadow-none flex items-center gap-2 text-lg"
-                            >
-                               {isSaving ? (
-                                  <>
-                                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                                     Confirming...
-                                  </>
-                               ) : (
-                                  <>
-                                     <CheckCircle size={20} /> Convert to Order
-                                  </>
-                               )}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="flex justify-start pt-4">
-                      <button
-                        onClick={() => setCrmWizardStep(4)}
-                        className="px-6 py-2.5 bg-white border border-slate-200 text-slate-700 font-bold rounded-lg hover:bg-slate-50 transition-colors shadow-sm flex items-center gap-2"
-                      >
-                        <ChevronRight size={16} className="rotate-180" /> Back
-                      </button>
-                    </div>
-                  </div>
-                )}
-                
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Mark as Lost Modal */}
-      {showLostModal && selectedLead && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fade-in border border-slate-200">
-            <div className="bg-red-50 border-b border-red-100 p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center">
-                <XCircle size={20} />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-red-800">Mark Lead as Lost</h3>
-                <p className="text-sm text-red-600/80 font-medium">Record reason for losing the deal</p>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Reason for loss</label>
-                <select
-                  value={lostReason}
-                  onChange={(e) => setLostReason(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm font-medium mt-1.5"
-                >
-                  <option value="Price too high">Price too high</option>
-                  <option value="Went with competitor">Went with competitor</option>
-                  <option value="Event cancelled">Event cancelled</option>
-                  <option value="Unresponsive">Unresponsive</option>
-                  <option value="Timeline/Date unavailable">Timeline/Date unavailable</option>
-                  <option value="Other">Other (Specify below)</option>
-                </select>
-              </div>
-              
-              {lostReason === 'Other' && (
-                <div>
-                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Specify Reason</label>
-                  <input
-                    type="text"
-                    value={otherLostReason}
-                    onChange={(e) => setOtherLostReason(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm font-medium mt-1.5"
-                    placeholder="Enter custom reason..."
-                  />
-                </div>
-              )}
-              
-              <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Additional Notes (Optional)</label>
-                <textarea
-                  value={lostNotes}
-                  onChange={(e) => setLostNotes(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-sm font-medium resize-y min-h-[80px] mt-1.5"
-                  placeholder="Any learnings or details about why we lost this deal..."
-                ></textarea>
-              </div>
-            </div>
-            
-            <div className="bg-slate-50 p-4 border-t border-slate-100 flex justify-end gap-3">
-              <button
-                onClick={() => setShowLostModal(false)}
-                className="px-5 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleMarkLost}
-                disabled={isSaving || (lostReason === 'Other' && !otherLostReason.trim())}
-                className="px-6 py-2 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors shadow-md shadow-red-500/20 disabled:opacity-50"
-              >
-                {isSaving ? 'Processing...' : 'Confirm Lost'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Quote Builder Modal */}
-      {showStep3Popup && selectedLead && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-slate-50 w-full max-w-4xl h-[85vh] rounded-2xl shadow-2xl overflow-hidden animate-fade-in border border-slate-200 flex flex-col">
-            <div className="bg-indigo-600 p-4 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center text-white backdrop-blur-sm">
-                  <FileText size={20} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Quotation Builder</h3>
-                  <p className="text-xs text-indigo-100 font-medium tracking-wide">For: {selectedLead.customer_name}</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setShowStep3Popup(false)}
-                className="p-2 text-indigo-100 hover:text-white hover:bg-white/10 rounded-full transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-               <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                     <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Load from Template</h4>
-                     <Package size={16} className="text-slate-400" />
-                  </div>
-                  <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                     {packages.filter(p => p.status === 'Active').map(pkg => (
-                        <button
-                           key={pkg.package_id}
-                           onClick={() => handleLoadPackageToQuote(pkg.package_id)}
-                           className="shrink-0 px-4 py-2 border border-slate-200 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:border-indigo-200 text-sm font-medium text-slate-700 transition-colors text-left"
-                        >
-                           <span className="block font-bold text-indigo-700 mb-0.5">{pkg.package_name}</span>
-                           <span className="text-xs text-slate-500">‚Çπ{(pkg.price||0).toLocaleString('en-IN')}</span>
-                        </button>
-                     ))}
-                  </div>
-               </div>
-
-               <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                     <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Quote Line Items</h4>
-                  </div>
-                  
-                  <div className="p-4">
-                     {quoteServices.map(service => (
-                        <div key={service.id} className="flex flex-col md:flex-row gap-3 items-end mb-3 pb-3 border-b border-slate-100 last:border-0 last:mb-0 last:pb-0">
-                           <div className="flex-1 w-full">
-                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-1">Service / Deliverable</label>
-                              <input
-                                 type="text"
-                                 value={service.name}
-                                 onChange={e => handleUpdateQuoteService(service.id, 'name', e.target.value)}
-                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm font-medium"
-                              />
-                           </div>
-                           <div className="w-full md:w-24">
-                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-1">Qty</label>
-                              <input
-                                 type="number"
-                                 min="1"
-                                 value={service.qty}
-                                 onChange={e => handleUpdateQuoteService(service.id, 'qty', e.target.value)}
-                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm font-medium text-center"
-                              />
-                           </div>
-                           <div className="w-full md:w-32">
-                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-1">Price (‚Çπ)</label>
-                              <input
-                                 type="number"
-                                 min="0"
-                                 value={service.price}
-                                 onChange={e => handleUpdateQuoteService(service.id, 'price', e.target.value)}
-                                 className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded text-sm font-medium text-right"
-                              />
-                           </div>
-                           <div className="w-full md:w-32">
-                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide block mb-1">Total</label>
-                              <div className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded text-sm font-bold text-slate-700 text-right">
-                                 ‚Çπ{((service.qty||1) * (service.price||0)).toLocaleString('en-IN')}
-                              </div>
-                           </div>
-                           <button
-                              onClick={() => handleRemoveQuoteService(service.id)}
-                              className="p-2.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100 mb-px"
-                           >
-                              <Trash2 size={16} />
-                           </button>
-                        </div>
-                     ))}
-                     
-                     {quoteServices.length === 0 && (
-                        <div className="text-center py-8 bg-slate-50 rounded-lg border border-dashed border-slate-300">
-                           <p className="text-sm text-slate-500 font-medium">No items in quotation.</p>
-                           <p className="text-xs text-slate-400 mt-1">Load a package or add custom items below.</p>
-                        </div>
-                     )}
-
-                     <div className="mt-4 pt-4 border-t border-slate-200">
-                        {isAddingInline ? (
-                           <div className="flex flex-col md:flex-row gap-3 items-end bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-                              <div className="flex-1 w-full">
-                                 <input
-                                    type="text"
-                                    placeholder="Service / Deliverable Name"
-                                    value={newServiceName}
-                                    onChange={e => setNewServiceName(e.target.value)}
-                                    autoFocus
-                                    className="w-full px-3 py-2 border border-indigo-200 rounded text-sm font-medium"
-                                 />
-                              </div>
-                              <div className="w-full md:w-24">
-                                 <input
-                                    type="number"
-                                    placeholder="Qty"
-                                    min="1"
-                                    value={newServiceQty}
-                                    onChange={e => setNewServiceQty(e.target.value)}
-                                    className="w-full px-3 py-2 border border-indigo-200 rounded text-sm font-medium text-center"
-                                 />
-                              </div>
-                              <div className="w-full md:w-32">
-                                 <input
-                                    type="number"
-                                    placeholder="Price (‚Çπ)"
-                                    min="0"
-                                    value={newServicePrice}
-                                    onChange={e => setNewServicePrice(e.target.value)}
-                                    className="w-full px-3 py-2 border border-indigo-200 rounded text-sm font-medium text-right"
-                                 />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                 <button
-                                    onClick={handleAddCustomQuoteService}
-                                    className="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold hover:bg-indigo-700 shadow-sm"
-                                 >
-                                    Add
-                                 </button>
-                                 <button
-                                    onClick={() => setIsAddingInline(false)}
-                                    className="px-3 py-2 bg-white text-slate-600 rounded text-sm font-bold border border-slate-200 hover:bg-slate-50"
-                                 >
-                                    Cancel
-                                 </button>
-                              </div>
-                           </div>
+                        {isFiltersExpanded ? (
+                          <ChevronUp className="w-3.5 h-3.5 text-emerald-400 ml-0.5 shrink-0" />
                         ) : (
-                           <button
-                              onClick={() => {
-                                 setNewServiceName('');
-                                 setNewServiceQty(1);
-                                 setNewServicePrice(0);
-                                 setIsAddingInline(true);
-                              }}
-                              className="flex items-center gap-2 text-indigo-600 font-bold text-sm hover:text-indigo-800 transition-colors py-2 px-3 rounded hover:bg-indigo-50"
-                           >
-                              <Plus size={16} /> Add Custom Item
-                           </button>
+                          <ChevronDown className="w-3.5 h-3.5 text-zinc-400 ml-0.5 shrink-0" />
                         )}
-                     </div>
+                      </button>
+                    </div>
                   </div>
-               </div>
-               
-               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                     <div className="space-y-4">
-                        <div>
-                           <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1">Discount Amount (‚Çπ)</label>
-                           <input
-                              type="number"
-                              min="0"
-                              value={quoteDiscount}
-                              onChange={e => setQuoteDiscount(e.target.value)}
-                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-medium"
-                           />
-                        </div>
-                        <div>
-                           <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1">Additional Charges (‚Çπ)</label>
-                           <input
-                              type="number"
-                              min="0"
-                              value={quoteAdditional}
-                              onChange={e => setQuoteAdditional(e.target.value)}
-                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-medium"
-                           />
-                        </div>
-                     </div>
-                     
-                     <div className="bg-slate-800 rounded-xl p-5 text-white flex flex-col justify-center">
-                        <div className="flex justify-between items-center mb-2 text-sm text-slate-300">
-                           <span>Subtotal:</span>
-                           <span>‚Çπ{quoteServices.reduce((sum, item) => sum + ((item.qty||1) * (item.price||0)), 0).toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between items-center mb-2 text-sm text-emerald-400">
-                           <span>Discount:</span>
-                           <span>- ‚Çπ{(Number(quoteDiscount)||0).toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="flex justify-between items-center mb-4 text-sm text-amber-400">
-                           <span>Additional:</span>
-                           <span>+ ‚Çπ{(Number(quoteAdditional)||0).toLocaleString('en-IN')}</span>
-                        </div>
-                        <div className="border-t border-slate-600 pt-3 flex justify-between items-center">
-                           <span className="font-bold uppercase tracking-wider text-sm">Final Quote</span>
-                           <span className="text-2xl font-black">
-                              ‚Çπ{(
-                                 quoteServices.reduce((sum, item) => sum + ((item.qty||1) * (item.price||0)), 0)
-                                 - (Number(quoteDiscount)||0)
-                                 + (Number(quoteAdditional)||0)
-                              ).toLocaleString('en-IN')}
-                           </span>
-                        </div>
-                     </div>
-                  </div>
-               </div>
-            </div>
-            
-            <div className="bg-white p-4 border-t border-slate-200 flex justify-between shrink-0">
-               <button
-                  onClick={() => setShowStep3Popup(false)}
-                  className="px-6 py-2 border border-slate-300 text-slate-700 font-bold rounded-lg hover:bg-slate-50 transition-colors"
-               >
-                  Close
-               </button>
-               <button
-                  onClick={handleGeneratePDF}
-                  disabled={isSaving || quoteServices.length === 0}
-                  className="px-8 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-md shadow-indigo-500/20 flex items-center gap-2 disabled:opacity-50"
-               >
-                  {isSaving ? (
-                     <>
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        Generating...
-                     </>
-                  ) : (
-                     <>
-                        <Download size={18} /> Generate PDF & Save
-                     </>
-                  )}
-               </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Unlock Request Modal */}
-      {showUnlockRequestModal && selectedUnlockLead && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fade-in border border-slate-200">
-            <div className="bg-amber-50 border-b border-amber-100 p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
-                <Unlock size={20} />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-amber-800">Request Record Unlock</h3>
-                <p className="text-sm text-amber-600/80 font-medium">Require admin approval to edit this locked record.</p>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Reason for Request</label>
-                <select
-                  value={unlockRequestReason}
-                  onChange={(e) => setUnlockRequestReason(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-sm font-medium mt-1.5"
-                >
-                  <option value="Customer requested additional discount">Customer requested additional discount</option>
-                  <option value="Need to change deliverables/scope">Need to change deliverables/scope</option>
-                  <option value="Incorrect details entered">Incorrect details entered</option>
-                  <option value="Event date/venue changed">Event date/venue changed</option>
-                  <option value="Other">Other (Specify below)</option>
-                </select>
-              </div>
-              
-              {unlockRequestReason === 'Other' && (
-                <div>
-                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Specify Custom Reason</label>
-                  <input
-                    type="text"
-                    value={unlockRequestCustomReason}
-                    onChange={(e) => setUnlockRequestCustomReason(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-sm font-medium mt-1.5"
-                    placeholder="Provide details for the admin..."
-                  />
+                  {/* Collapsible Download Reports Options Panel */}
+                  <div 
+                    className={`grid transition-all duration-300 ease-in-out ${
+                      isDownloadReportsExpanded 
+                        ? 'grid-rows-[1fr] opacity-100 pt-3 border-t border-zinc-800/60' 
+                        : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={handlePrintReport}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Print lead report to paper"
+                        >
+                          <span>üñ®Ô∏è</span> Print Report
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={handlePrintReport}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-rose-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as PDF format"
+                        >
+                          <span>üìÑ</span> Download PDF
+                        </button>
+                        
+                        <button
+                          type="button"
+                          onClick={handleDownloadExcel}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-emerald-450 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as Excel spreadsheet"
+                        >
+                          <span>üìä</span> Excel (.xlsx)
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleDownloadCSV}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-indigo-400 border border-zinc-850 hover:border-zinc-800 rounded-lg transition-all cursor-pointer"
+                          title="Download report as CSV file"
+                        >
+                          <span>üìù</span> CSV
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
-            </div>
-            
-            <div className="bg-slate-50 p-4 border-t border-slate-100 flex justify-end gap-3">
-              <button
-                onClick={() => setShowUnlockRequestModal(false)}
-                className="px-5 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={submitUnlockRequest}
-                disabled={isSaving || (unlockRequestReason === 'Other' && !unlockRequestCustomReason.trim())}
-                className="px-6 py-2 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition-colors shadow-md shadow-amber-500/20 disabled:opacity-50"
-              >
-                {isSaving ? 'Submitting...' : 'Submit Request'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      {/* Final Reporting Finalize Modal */}
-      {showFinalReportingModal && selectedLead && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden animate-fade-in border border-slate-200">
-            <div className="bg-emerald-50 border-b border-emerald-100 p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                <Clock size={20} />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-emerald-800">Finalize Event Reporting</h3>
-                <p className="text-sm text-emerald-600/80 font-medium">Set arrival time for {selectedLead.customer_name}</p>
-              </div>
-            </div>
-            
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Reporting Time *</label>
-                <input
-                  type="time"
-                  value={reportingTime}
-                  onChange={(e) => setReportingTime(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium mt-1.5"
-                />
-              </div>
-              
-              <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Internal Notes (Optional)</label>
-                <textarea
-                  value={internalNotes}
-                  onChange={(e) => setInternalNotes(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-sm font-medium resize-y min-h-[100px] mt-1.5"
-                  placeholder="Any final notes for the production team..."
-                ></textarea>
-              </div>
-            </div>
-            
-            <div className="bg-slate-50 p-4 border-t border-slate-100 flex justify-end gap-3">
-              <button
-                onClick={() => setShowFinalReportingModal(false)}
-                className="px-5 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleFinalizeEventReporting}
-                disabled={isSaving || !reportingTime}
-                className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-500/20 disabled:opacity-50"
-              >
-                {isSaving ? 'Finalizing...' : 'Finalize Reporting'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Add Note Modal (General) */}
-      {showAddNoteModal && selectedLead && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-fade-in border border-slate-200">
-               <div className="bg-blue-50 border-b border-blue-100 p-4 flex items-center gap-3">
-                 <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
-                   <MessageSquare size={20} />
-                 </div>
-                 <div>
-                   <h3 className="text-lg font-bold text-blue-800">Add Quick Note</h3>
-                   <p className="text-sm text-blue-600/80 font-medium">For: {selectedLead.customer_name}</p>
-                 </div>
-               </div>
-               
-               <div className="p-6">
-                 <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Note Content</label>
-                 <textarea
-                   value={noteText}
-                   onChange={(e) => setNoteText(e.target.value)}
-                   className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-medium resize-y min-h-[120px] mt-1.5"
-                   placeholder="Enter your note here..."
-                   autoFocus
-                 ></textarea>
-               </div>
-               
-               <div className="bg-slate-50 p-4 border-t border-slate-100 flex justify-end gap-3">
-                 <button
-                   onClick={() => {
-                      setShowAddNoteModal(false);
-                      setNoteText('');
-                   }}
-                   className="px-5 py-2 text-slate-600 font-bold hover:bg-slate-200 rounded-lg transition-colors"
-                 >
-                   Cancel
-                 </button>
-                 <button
-                   onClick={handleSaveAddNote}
-                   disabled={isSaving || !noteText.trim()}
-                   className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 disabled:opacity-50"
-                 >
-                   {isSaving ? 'Saving...' : 'Save Note'}
-                 </button>
-               </div>
-            </div>
-         </div>
-      )}
-      
-    </div>
-  );
-};
-
-export default SalesModule;
+                {/* Collapsible Quick Filters Panel */}
+                <div 
+                  className={`grid transition-all duration-300 ease-in-out ${
+                    isFiltersExpanded 
+                  xúÏ}€r‹Hñÿªø"õ€n{X≈‚≠[Õ©†H™õ^â“íT˜N»2í$FUÖ %ä]√àâçõ76<;ˆ√∆:∆ª·ÿ?x#¸5˙Ô'8œ…ê	d&®"Eµà›i±p…ÎπﬂíBë˘Û(€Qx∑_-üEØI8ÚzAr’^Óv…‡™Ω:O˛—^ ∑]˘€.Ö¡0°Qõæ£√$n√!ù◊¥s˝Ê∫twKÛﬁC?xGz}/éº›úﬂ—Ë¨^∂/ﬂß√9›7ÂØNœ€?√^˚ªnwi≠K¢p<Ù©ﬂ^yﬂ'ßa‰”H¸√ﬂz∞ﬁ%ÒÖÁ≥^ÿÌ{IéíQ{Õ–!ì•Ø…NYK=ØúFÏìpHí†˜ñºËmLæ^*OX?XÔ4˚„Ñí$µWHüû%ÏüÀˆrgù\‡≈`ìÙètm:†ë◊˜€Î8œ9≤doEüQp~Q’i4ªNO√$	÷πûﬁ¿\≥n-”=uôÆc«Ä41ßˆ„ˆ2¯“œrÓç⁄´$HË n”°oÑ6oG‘ãz‰wc]Y¿´<÷-Î±èºa{’“	˚≤Ôù“æÇI˝êÅtBﬂ'åjtGÔ_ìÒhD£ûSrìˆ Ü¸Ø”∞ÔÛ7´÷Ä¨ú∂ó≠ítVO©Áì%≤3éŸ1¨Çﬁm]¬ëZÁRXÖØ+∆ÛPH˙Ú≤Ω∆Ädçœ-áuíA¬Ò*"”™2E¡p4N¨Øí\çXœ–„\≈õ£æ◊£lÌi¥9∑øªHÜl–ã$å»ËÇ„NßS’¬;Ø?¶õì≥†œ˘_xôaã_·pÁ¬û≥èZtÅlnëò&OÚœ[¥ìx—9M:ÿÙBUs Züç˚ÁSŒH≥ÅbßDùëÏQø˝ElFW≠qüﬁ«,ã;{„x#'˝`HëOâ[Q0<g»)˝êPûÉvÏc˚*Z˜¸·ÉEÛ‚±˘√q‘£ç—~Â6–>fF]ÒûœjJ<èiüˆÏ¯§@8Ô‘ìf Á_◊Ép-|Û’bJ¿˘˝o%Ôü\ìΩ*#É7õ¡˜“w]ÑVê§pÑÚ_ßππ≠m6F>”¯·hoaÚto{˜‰Ë˘À√ùΩ£Œ¿µb±lÌZËüˆ˛ñ^mN¯g◊Èñâü[Èn£Y∞n»√%2Sbd‚%„ò¥ÿøÁF~9òπ›CÒÁu€®âk⁄5ÒÎ;âö9!ΩqáQ[ËMf∂T?gçﬂ∞¡ÆËΩΩsºˇ„ﬁ…—Òˆ˜{'ﬂ>˘ÇcyÎú-≈hë˛˚W\«O8∂≥œÆ	¬—Êow«µ¥/ì7˘é∞ïˇRº«(åv‡≠Î⁄ﬂ\€ßÅS·ﬂÛY«8	ˆ∑ÀÿÂïƒ—≥ø9êe‰J∫#AÇ√ÂÙ˘Páa4˙s[¯:ü∞€6¿eßm8∆•tëÔïå≤ÀvÔD!•Iµv" ˛ı¶§î’:◊|÷ô]ê/ùƒ¡÷'©ª ˜wè®*[Y$°∂≤HÍ. Ω7Ùi‡úMÈÓ3Í†Ãææd∏ êAÃc∞13çπOﬂ„¿†E‚¡˛Öó`Ë ÓÉëã-ÅÍO«I@Üøh˝†˜ñÅ B¿§Ç]2Ÿç˙ıë‘¥¥TÍπkÁ&à©∞ü_◊ÖA\wn5ÏQ";éì‡Ï*˝âK†ö
+èﬂ00ª S˙∆©j›‡)Só%·bãÄhíDLÑ p⁄â*À⁄w%	í>õ¨”'7\jo.’bSVR≈°Â.Cûl5õüw4≈QÎÆ’˙ƒÎ”¯eõ<¨ı¢Ä€9£ÊG@—›>)°x≠œR¥Æ¸ËfêπäîÛ<êë9g:Zfî£8„@ELœÌ£´›Æäo†Â*Êî·˚!e´H†%Æ‚[Ì®v|«¶¶¬w´!÷Ú–¯»@{[sS¶ÎÖG§¿•èΩ”>%ÔzY`‘6óÁäìÀ≥‡ZM]†ÏãØ6˙dﬂ∑Ωqñ8˚√]Üu8ïd¢êì˙ﬁà	¥É`ÿælº˜q·arA=_ªI§]äıÓ“∑]≈%µ.±∑¢«/[ò*YõaHÔ-¯	.ˆù…%ù(>§Q{ê∞ﬂfÇöæ˜w.%ÓﬂŒm=«]¨ˇù‚S´˚Ò≥4`{y0ú“®Ó«{P∏Qƒ>ˆ’⁄_såzﬂÚmG◊0¯í÷…%ÉÅo$®‰R≥©ev?“Q‰>LNCˇJ	√4SÌ+"˛»P˙õÆŒÑ›î˙ SqßOáÁlj[§KÃYÍh¬Î≥?≠ÚJèÈ		Å◊Ñ—{ì0
+Zõ%Dl»ƒy#ΩÏÉs™kÊú∫¥ƒ‹HΩ?D	Ö5§∂ªπIÊÒ…ºΩ¶gΩ•>G¨MÇd ÓúL®hÖ∏"aFs¯ÿ&¸ùﬁ0é0¢…8Zåâ@≠,\-ãrO◊∂∑%ÿ…dÇhVªØÚv3'∂JÃâØ'l2Ö‰tY£O∞≈ŒC0MTX%‘5∞≤˝DÀ¨÷èˇ~Ñ}ö†Ò${ÂX%@z$ÉUÅ
+ hÉÃ,mœﬂÃL
+˙ö”“ˆ_8ÅÄé3˚√Sê»ã(åG¥óÃC‹ÿ<z˘Éõﬁë4Ü§j*g`KOˆTy√¿YRëŒ πWÖôª¡XU¨ C*º0/á¡(¿w£pƒƒ≠·eÇñ#˝uU$A˝—Vº Ò>fS"1˛…G"|q≥O”ùÊ0»˘˚	ÿW ”ä˜:1”◊òy<ø™˚˙∆êŒAV»ÂÎwAÄ@ÏÅ4iπYRV¯Ã2¶∑û˚WÉ~5¿t`ÆÛãd˛	∞ŸH∆£¸yâ?vÿfx=∂|¯Wí¸’8Lh˛€«·8ˇ∫√v´?ˆ)ÁˆºªJEZÊ⁄Ïœˆ•¡bó‰à!Ùõıß‹°Dô∆=ìÄãO‰,à….‹‡‘X‹fÛ”ù¸˛˜™EµPúñË;ÃÊtÊıc˙k≤¥DvÉ"ü†%?¢øÄåÀà4¬(‰«>agüÜq"≠!ÍpfˇÚÌ7môSG`FàìóC˙!9˚¡˙Àø´FLHáù≠V¥Aº·Bwdî¨`GZ2C˝Í+"ÒQ|]√`q'π0Kº˚…?*7°q¡Ê˙ìâ√(iµ<ú "9Õß4dáV¢”å$y	åÍ¥Ò• ÓÃÕ-tòÏ{(Cˆv˛©W¯‘≥
+DŒJ_P∆$áÁ|/Ÿ&j∂ˆQ'‡H >òá^µ/ã°ùË>r’!˝-Ú„>¨Ùãz„ ær¶U£QƒH∏40Ä—ﬂ•îÈÓRKàÍ~ï–£ohNç)¿i´r“ë’[ÄÏ´*Ø&$8#≠"@±±îÔvÔï)ÊB%øsP≠ÚÀ˝ÀÌ≠©â’t≠¥Á‡'»/wèA~>Ñ∫$√è3…¡NæT5!M"Ö˛ ù‘Iû»/&E%·à)#Ô·¥U…·•y0ÿGtò2y‡A˚˝π∆x–ˇº‘fk8Ó˜kåÏöP¿”:˝rb1¯eÄvÑ†pÃ=»ÏèA]b8¿Vö›?dÔ’Y™¥˝x‰ıËc
+BŸ&πdrx…xˆêF?P1€8Çœ_hÿ¸ˆ)√K÷<∂ƒv∑~3LbãmíÔ∫u®Ò*SΩ!é~ÉQè#øgJ	eßCÁã@~E÷Í ZÂ_Íû3v%ch8!¿iÉ Î»»Ω¥9[ ‘CK÷h"D,ã†ÒöÓJ§‡™G2≈9dB[‹ö¿‘yJœÜ2áü?πHßÄœ”…^◊BR=Òq2ñ/◊Ö©p$Êó)yŸ^˝Ü\¥pR Ñ	Ÿù}¡QÃ. Sö\R:Á‚
+”äπâ˝√Ímb5›πFAö®±=è»¸Èy€§∆$≠eaı‰w÷doi˛“JÍ0ïÓ≠vç)ê∫k£,Ô‘B<>n9Ω,yzoÕ∂!ç^æÀ∆_k e·¨÷˜È¢0¶ ¯ÒÜ2¯Ïï|‰Ÿ≠∫√∆ÑT%´‡πcµöΩ!¥›‰ÆCpø‹§JëyAøÈ5)‚	€Å˚ÛüˇIDsÕÎÄíøÚœ +Öm«W˛Ùø•W‡˜”ﬂÆ§Ë·RùŸ‡‘Ka“¬Ô:ËCÿ‚áˇ˛Î¥ô 8Ω>qSÅEsç¸S˚ΩæãÓÅC˝√y[•E8ﬁ3Ö≤Ωˆ@!◊Uaá Ûπü¸‹~ıª^åΩ„rEõÇ§¡êÈ≠>˛˚sÿøÌÔ÷â?Ê©Ãôò˚ÎÖN“ˆ≈jµAàq’lMÆ˙å?M∏dÁ+º#ÛÔ¬#Ökóû¶Ã‹<›—¨û∂WçÆÊJ\S)jpÕDØÇÎ¬˙}zÑ–ä›ã´ªú∑Ærl	H=Jî≠Ë!%ìñú§zY°˙¡º˙@®0`ó£ u≠Ñuw f ºwU¡Y≈\˜Uî”∏ÄVô™\h)Òèã¥s¯¨±ØMú·“p;W˙ã=÷∆‚ÊxLà/¨¸µ>™«Nø@ß@Ó“7]3¨äÔ∏ fGµ√0 /¡%!Í||kM>+^uÄäm”Óm¨ñg[zS¯˝…cx ‘~ΩpI…Î◊Öe∑ÿbıZ–Àfw†ßcM3`N3dOµHVk6TãK’«ÔTùSXUv≥k‘]¯ï‘F›
+À™Mˆ¸ ô1ﬂJ1õŒ\À∑ÖÛ˜nπfà‡¨)é›)qm&Üä¶á⁄!ı0"ã§Õ|≤ƒÛ}ƒ!Ø@è·^RùWP’Ô'ÌµQ{G·•“Ê≥–g⁄+8Ô≈À$ö¢ïn*Ÿ<ówÓ.•{¨Z?fHËÑpqª§Œ›Hiãéo˚ao°2àîv˙∆i y≤∂™PÂ∫Jô·ûr5Xg÷ÆÓL£>≥»‹“g{55ÙG7e6S0ôiléTO≈ﬂï‹˜R$s£q4Íc†H©Ko3Bï&ûà[VzWJÍ)¥3ùWGŒ"-{u\¿∆—\Î`¢(Æâ3Elj¨pß|≥"j*ÿõΩ!à™∑#‡A™3†7˘ˆ RîΩi x*ux˚!3˜°2˜°2w.Tf˘€˚X«Î>V¶Í∫èï—Ω◊0V∆$Ø›dúÃÍtQ2™˝∏vîL!àD\≤™±2jk!◊	€‡!S∏·
+N∑èØ1—Y|¯«?412ﬁ∆ãQ˛!ÕàÁØÔ√#Ú°‹áGH◊ßÖ)ñ;d€˜…AXQ
+≠x›^hEÆ¯˛…êç≥±z ◊/%PÉ5{ÜÊ‡È∏s±5LÊÄÊÚ‰¨GyŒ&uis≥ÿì⁄6nπﬂ‘*¢UNTûfFl≈ÎõÃo4êÂ¥?¶©ˇ?c¢¸&¿ØF=ãy÷∆›åfyÙ)¶(;Ÿã“˘7
+pI…⁄m∏0B∫“!©ïÍÆR(Ct“õ"%	Æ_
+!Ωèxªk4¬ŸúúÕ˝Œ¿1˙∞⁄!Y.˜]'}6–§
+~ ¶Ñ{BAî¿Ñ¶!	¨	ÄÅ¶0ï‰ÇFS∂üct™!Y˙"†ÖÜÅ7J,1E!ñ¸NWü–‚B+”n/ °%˚ÎâŒ’-—∆µ·’O>ÈiÄ#Ωóüƒu«Âß¯ÌUIœ¬{íöøÎQÖ¥Ö;*@9ƒ^*3oD$råmN%\ﬂˇúBçúc‹i_]ö7õ`°fÆ1ekNàú–}àêÊräƒππ†fäú+˘©*éuûm›ÿ
+“ÈKÃZ;æ÷U¸1á¶?4wÄµ¬˛[ÆÕ…ÚÚµZoYΩ(ÄCJ¡^∑V˜{»ã∆´{˝ Gî!3pÌ„Å^sé5Y±n∂ﬁ}ñ‚\°˙ éÔÄµÍ%Ωàsà–Ö3D Lq"\õ£+<ŒµCéŸ_T#ÁôDº∞y«GÊm5m©Jÿ´¿ù •≈±‰v°lwëÒn~fΩ©ááìé±Ø»á˙a[¸Ï,Ëåz\ëß·9aTî<√∑6T»N$y¸·∂ÔgVı¨« Irs2îÌÌ˘úÅ0%*=L°dò«™[“ıQïö„≤©‘ wP»Ú;˘+=…ó Ω'ª“óÛsÄ'1Sm≈Ò’ÅXIÂ«≤^˘∫|ü%Ôf0dse¥-˚^ÔÌ“ÉuÙXÆøÆ>-`ƒq6FÌ58Üe‘˛Üú≤6¿7fÒ®=Kïﬂ%f ˛rGÁäzÓ\ˆ±Lµ◊œÂ˚^x´ÿ‰¶1›æÙOÍSˇÙjs.≠lu ¿Ö!–	~wÇ‰ﬂ)ê[rGÙls"⁄yÃõ¡•?§g*÷0ëDﬂﬂú⁄†Z?^xçM«*¨´ˆãÎ9ﬁ∑/A¯g¿ˇf/	≠CÚB´ÁÁ¿ãlóªÔ.^√yÏHÊ\Ω—0†¥∫®4-ï  *ˇ¿¿ëMßMû ®y	9G%Õπ+ZŸR,¶üª›ôäµÜ ˘æΩáQ¨‚è+ïçÀK^>O‡bÕºçlî—ÍŒ¬ ˆÒ ¿›DX◊ﬂ†iÂ'6ÚíÆ:¶g2ÿl⁄ÉÇL,⁄˙∑?ˇÒoM\¢‹V4ˆ‡Ñ¨-‡*˛*'¥O¬h†oˆ·“≈ZÈób ·viøp∂ç∞Ë…dØDë”´∏@˘Èdí¯ oÆ ƒ†L)È–∫˙.9…¬ì KÁjf†5Ë3I°<W~:	ròÚ”úbâWàvp÷≈Ø5;[0∂·i‚·E/_ÍŒÚL~~∞Géˆæ ˛Ÿ9|˛ÙÈˆcˆÁŒÛÉ„Ì˝ÉΩCÚ‰˘!9˛aèÏÔÓëœ_º|ÅèŸçJÑœ(ö†C“ëÇ∆ÅÂDp@l`5ÔØaàΩ&∏h;Ó1n—?ı∏5Cs›C(ﬁÕ Îh|:íÕ	◊ƒî⁄ê¯Dë3”`ùµTã“‡eÈóbê,≈úeÚÌyqÿŒ/Úe‹{œâ…~CèÈ”(ﬁ\…9xN0Tí‰”“m’õ≈·‡îiW˛1C7≤IZ≤§–°P<.
+‚∂tæÉæàÁ#›WFO†Ô`¥Ùô◊Çˇ˝ÔÛ@ÃC” æ=ò¯5¥º¯[Üó-(LåuzÀ√ƒé0À£Î„˚6t´≈øƒßËÂ0á>*|Œ·ÙDùπ˘çlÑºÛd-√Ã'∏†Ø≥jµ‚h˝…‚ﬁ‡îa£ÚüŒÇ¨bTÀ™åDn¶°2”ÿèS‹‘„∏F˝÷ÅˆæEQ.tIb$d‡jô•|Á˘t•ámï14W2"ÑÎÅY5¥XΩ¥íùÏïèñ´π‘∆íK≥Éé$Z¨vìâÎ∏ãßïñÍä‰"îÕpí∆ÊÍ 	"t|äaπ π∏ƒ„ö€≤[YÓ\–wQ8|92∞‘yWò≠™À§ÓÜó∆§‚z]Z≠0sTxÚLk™Ë»•VÑ/EıS˛OÇ h]R"zô√F+,ò{cZ| µc≠L⁄…Æ Évˇ2¢S(:XuÓFÒlU£ñQ¯N´s‰(§ æÑNòﬂ7∑≈”ØƒY`.vœáq¬ Î‹–cvÄ≠J5·h∑àzo€ó`Fõ€öh∏jzÚ∞D<§Éçª™X∑j GZ⁄¬Yi3\‹¸àg√2√iNÖEÊgﬂ‹¬Í2§»∑∂(À3]Îmﬂèh4Ê"Wn{ïÅ‚ŸÈ›-Ì(1”mBàË≤	≤Ú4´≈Æx¡˙ÿ¿'çﬂh\4•s?˘*Îã(Ù«ΩÑ0ï˜-¯Ãë^∂…!É¿6úˆ£’@öŒ*µ-o~W≈1Ú∆£§“aæ√Ñ÷…◊∫!òè∑œUê^Äf ‚√jhZÀÚâ„ÂÖaÃh±‘kø„G‚\¿*2Gò€eØCñ6®†‚ÅB+∏k˘D¨Œ…ÛêåÖÖG•æ™øBB√≈'í¶Àn(”´|˘N…òZz‡vî}+ìk™SçSâÚ)ˆY¡Î∫"ÉíÜîö«—“¢€mç–j:ÏUm~⁄¯WmFaÑª]öxA?fKàâ[7çF9â„h‰†õ¢≈Ï2ÚF\O22ãÑ˜ﬂ˛¸˜ˇôœ4÷ŒÚkÅ∂¶Íx¡îC&mQ»ˆO˚JÇÂ«YEÙ“‹üç XlFkÜd	œ7K
+#·™a·f˛»ŸÍfQ¸t‚È™Ù›"	*‚X∏a-ΩÇ“	Ô:<)Í}wÚÂ$∏~c'Hk.åÑ{¯-ÙõA¿+÷‚kh AìÌ!ûü∑˝´∑0uãæÀ∑KO3caÈF«≠g∑ï5*7£PÕ¨ªÚ`4ÇX˙h~ﬁÌï7‡Zò*Bp±ıÚ„y≥yÒ⁄rpí(/ëû>œÿávñ››gœ~√Æña’î’µƒñH]¿·`ºãBõ8ãGÍ; ^óW~«Q±gxk¡d≈‘∑`xZô?~ºkãÁ„¶C_3jv∑rÃÈ;ÿó•†ÉËæÅûvÉx‘˜„ÚÆë7_N‰%º&˛˜‰ÀI˛Œı÷è¸äe◊BÚêÏ·ôøÏ?◊z»œ17–@‡ﬁ2ó2(®ﬂJı·ü≥sÙÇ“1≤IâRØ÷ÿﬂÃù± ·Îïà4jõD—óa«˜~ó#µ‰Wd∑wûﬂ⁄›;ﬁﬁzTy˛Å´d·¥5_àRpÆ
+ÿ≥ªπ?TÕu/HÈ&6ôÄEd¬´ÂuË‘eır pÜπCYTıW√d&kfíÏîfR,Í" zãPì√≥∞2)†ûÕoU(‚3 >∫R4¯Fd˝F±qWcJCKVµ^/	≠«£çzë„‹Væ¥ŒQíñéWJZæ™›€›êíÛÃ±ñÜSÏıYc ‹õYc©´â,Å¸˛Ê±(CÃn!])û§‰u[$}≥•z‹”±¬=-]ÔîÚ`’§ı|∑"ﬂˇ®ÄvÌTú∞∞|:SUa®fΩµ¢Ÿå•^‹®"ΩKbÖ84⁄Âp	a”J°F}öw:œ)Ó\x√sZ3#¶…û™Ñ∂Fè1iπf™u:¯∆5oµ‹çyp¨}TÆó4√˘yrΩ‡: ç›Ix›C‹«f‹≤ŸÆn(5Ekt¥Æ§Óe&√Kπ(2ÚñlÇ¸XKπë~dÁÒU„EeÆá3Î˙4à'ÌçXj‹± Õ-˜ƒ L¨8µiL¨ÑÏûX}*ƒjZW¶q7¥)bˆ¿#≥Ω˛fÃU∑o™∫-3ïbl≤nnïñÒ©ôò&”Ÿë*£+¥)–§éÿ&ı©0!ÌWYåÓÆµ®ô˛Q¨D”Xà¬øgÊ]Œ˝=BU\"¬∫å’d¸„o¶´9™π•‡˝2xı~)ÎÈjôö¬¥73g›ÙKÓBysΩf‘êxÜÑ∑ñ¡™Zˇ˚8∫_-#ïìŒÁ§Ôπ¶ı<°„cÊ}zÊç˚…¸ÎGU>˛
+®“:hï”jî5¥I±|Æ∫d¶GÊÎ>µÈkj≥WµﬁÁ†AVjèü≤Êh’ù¯ﬁ›&m&≠Yì63÷Mê6Á £{∫4•ïkj◊=]∫I∫d}ly®çµ7æœ)Ç¿yëÏ™¯.Iucå”®˜øÑ*8ûˇŒˆÙNÿ&r¨>à’L€o.–üê'uõNy{ ﬁí÷áø˘◊∑Ro+’Ê;«O†2cù∂fh√ˇóûôz‚Òπ1ò‡	]-5d"ãŒÁ± Ω≠ïP1âÄ}ñ˛{•œtùdÁ∏ ›¥ƒó¡œ^ÑØ£Ö∑ü∂ÀCñ]ﬁ‹ ]c ÁÃËîí>êdAà‘–ßîxe…]MÚÄ0¥‘…¨ì~T⁄dÍRDƒ£èÄE<4Ï$¢=º£æ	6J≤ì4vÚvZ`R√ã§ÿÚF
+ü*ó^`,ˆé§ûaJgbIÊò⁄`i∏m‡8WP®Íœ@ÏO˙ÛX¯»˛.ÆÛ†D›(∆p»Á
+0îÒ`H˙ﬁõ÷/í7…À“ ã8ÈuGëÔ P—Ÿ°á‹jQr˝TP¢BÜ4ä~!œq„k=˜Ú≈˛‹˚i}œvvÈ≈ÎÚ]x∏ƒ_sle«ã/Ê∂‡ø‰&úAèö-<ˆÜo∑ÜÒú}ã?û/¥¥ˇÏ≈QÌE>ìZÇdióû	V™€ }(kˇ%ªLÂâÉƒﬁ»√%„üw,µ%rHœØ∏!Y”úbZ)ié˙^è^∞i“hsévŒ;‰¯ØñWV◊÷ø˘ˆAæãÂd¯qrŸŸX≥#.jÎü*y˘˜±◊GYÕg´JÖ+ÖÜ¬ÒöÀ≈•*ú…)•4Ê"1î±_¸1Òß5ˆ˝zﬁläj(V/9§/Í•≥ﬂ”Knß!¡_>GTgJ‘Ue4•mrü·˛¡aÎôó\tﬁ˚VwëX∏6±…µ£Ç©∞ÄH¯Åã¸ºOÚÀ‡ËΩZ⁄XñzMá~Ê‰2Ç ˜§√0X™|UW¯ö¢$$\e¢¬&~…b’P®‰Eî≤èÖ\ﬂÆó‚S$Ù)‚“Â™ó´wI¨uì÷√Â¿T_HÊí·’kcıC˝⁄CAT®¥üEµΩõ÷@ÿúÒë˜é°Ùîry>îj'a;"gQ8»∞¸†Èa;°^ˇÊ;¶º≤û˛/¬ùtê©æüÓ≠dÃ,ûŒ\∑N}©F(¿≠¯W:Ba[…yS°X~#…äìÒÄrd/¢∞G„ò˝b|ÎíâCÖôNßT“∂;‰'_dç~ıy∏E·Â!IÆ/ïøÙDœ´ZÜ˘p	à±z∑V…ÒºË	OnX,/xé∆rÅb,∂ç/gÔ∫÷‹v(¥›ÖB€ﬂvù
+mÛ™∆÷˙⁄ºz™Byq$Äº‹˛ñª*DQÍ¶Ãu®W¥≈ß”†Àn›Z”+• fR]È.$-ÍÀ ^jF;◊É∂ÅÜRYH'‘óÒe”Å[=ËR)c6Ù`ËÁa*‚ƒ≠µ“>KÔÆdı´Á∂>¸›øXÀHo∞È∂ãDÎ\ÄBJ–†∞t~µ‚zÜÛ¶4.∑“fTU†^÷ñ˙î˜∞≤‰ßÿ<$,¯Ú»ã@ó≠"*.Ö®ÕjNÌ_Ø[sZæU¬xßõÚÀE®Ùeù’◊vRöR•o“r¯ﬂÆC9¸b9ÍbÅÈ*NVU÷x±óvÒﬂW‘{¶ÔDuñ3e`˝^a±£√{Qú£√èÍ™¡Xbª3ô¿–‰uó*¬Yn£˝¶™ÓÇΩ‹Á≈∫ÖÄK‘2ï–§p9>íNs6¿Ãp™ÏPñá{˛≈Ñ÷ì®RøX7=5⁄cLãaï·%Yﬁêj"ê÷‡˝?~r±`	≤,Új.3ÿ22n–¸W>À‚UƒU∆U[˛‡™p$√ï≈Uñ0∞¯Ë,mÀ›¢»S)*÷∂íqGBM=∂≤)Œº4∆8{p
+®+jâ6˛„äT%≤7ÒVô…Uu¨‹MC;ëW¬ÁÁÁÊÎ ˘eÿwç±˝ƒÄ›ˆTÙtG¿K∆≠[≤ÍÄÀF@&U4S»¨cÂg{nîxu£êp∞(˝ﬁ˙•{3%œ<SnÎ\M–‹»Â[nØ@´i∑Mπbò3§“±„èŒ˚¯§§·¥&&Y5Ω:ùNY1Z¨˙JhNùú|¯ã		‰⁄ﬁ™Ÿ˝…/äaÙÇrT/Yuå>NÈJ£äWÕ’ü,;õSzuáp±ÉÉ¬ñRP‰ﬂ'lj'ª∫,®G≈
+÷é¥ Ì£TáîŸÂ‚ëQÖ6¿‚∞pœM’«wÙÔúd7ÇÊ?e&§À>πgB≈kJπ∂÷#ÌÒÖ[˙¢'÷r'≥2ú6∂ﬂ’≤››§™Ya≥ªŸ=ódK%áä3äDÂQCÛü¨ô1•≠nñv:ÎΩYäÉmÆÇ±V0UI≤Rä4√∏c^ΩMÃ˚Ñ ‹»Tl<„#√ñÉanfŸ¶Ä∞§7ˇ¢!¨ö¿Œ“7sÛ€£G-ç«—‰vπBªË¢Ò¸€Àüÿ∞d:O}}'Ø–v¨Sö∆gSÄ~Y œù„Që∞¬⁄vGÂ¢≤9Ì≥eMw∞>∫04cÍÓ"}b‘ΩÆâÎû∫W»áN∑5ãX∏Å˘HŸπAv0îçQê≤®®çœ.D∫+ÒpLB\≥<˚@[S—úÈRïÁ‚ñπ¢éA‚òïmsûà¢ƒ_HÖ|G•õﬂV'¢»˘yj\"ÉôRFI> ‡VI
+a√ÆŸ,ºzÂ¿{_^1≠QQŒ9·•˘&Ï-Gâk®ì)7DùÂº˜$ê£Ñé»*yÀkèG"˚É'xr@‡›U˛bIï‹Fc˘÷{ßº4lè…	ù_hñ≤N~nØ€¬C•§êb6à>˚#Ü—üú·D«#[Ú«ÉıÍ‹ZcÓ«¿◊§~Ä©:≥C7O˚òin«©¶íD≠4éx`H‚Xñì8L9xÜ™à‘ï¿è[:Ω¡Ë◊(ãîÄﬂò7QÍ•V⁄ÑHë»!‹òF©Ø+%ÿ©“ò[ûB˝ÏÇ5∆©◊ÍfXÅ©î'cÀãÅ,k9?Cf‡‚Õ2¯Ú¢O!b<Ó]P‹ß$πÄ4√tÔQOBµ¸LIñYåEæÿaFôåcxS$@oAΩ&JéÿJfyƒù⁄êù`[¨Ì&ehkòπfØÏó≥
+èE‘Ç¯zMAcsÖ«ﬁËÕ£0∆¶Á∂æ&≠C!a/≥ôLBæQº∑Îãë>’È¯L^¬°$Z¥NH?*~X,hT!π:]ª¶§‰Í
++‘(® IDjí¥∂ÆÇÀuñÕªç®F⁄ÍjC•ö≠?a›ÎœMZ¶‚é!ïﬁC‹Å∏∆ ‚õ9hãqkOG‰¬Àxs≤™€}•LÕ—x0"`mpÚxØ˝d—3¶,{4^$Ù˝àW¶Ûi/àÅı,√ˆ.í0"Cò&”%\Åó•t„óü2xO‘F=+RQD'ˆVË‰Ê∫çÖ’¢¢æ&)ÍÊÂ#h¥• R2í…¥™¨Î¶*ÍxX*#Løä<;4q‚uÀW∂ÜÄ¶ƒ;—‡)#iﬂ/ú$òD1Õ˜BS›C≤£∞õL≥•≈‚»gµ=Ωè^€£M¨&h†JdÀ	ﬁô÷R“∏Z∆^1˙õ÷»(ŸG(<Nü6∂xºbTœ±Fµ—√≠ÆÕ—ï‚b€`[´≥m‰I‰Îw∆∂Qég≤€6`≤Ùf6OCy
+£5„√ˇ¯/©1CÅÖN$˝=®Uˇ°L˝˜§xaW;E°˛'•Í
+’Êàˇ¯ﬂÍî[&µ;≥*U)›£≠TÔ?§^72•ø∞ˆ>æ~∏4*U+Pﬁã√q‘√}©Ì#ºilõÉm_}Òå˝ó˙O∆C^§LÌ‰	>$ÈScoj#Ω2u‹√:+jª‚∂±£Ù;á.¿≥Ô:@c˛Æ±}˛ëCÎÒ¯¸ú2∆Í?	ﬁÎKîéòGâ(ˇá|‚ÑWãÙé?Q	^ ≤ô‰∞ª.“Å623xH√◊±,”dƒÀUuË]Á‡˘Óﬁ…ﬁ¡è‰0Æ≥'˛aaGÌ:a¨°˛íe±’Ú≤d| ãÄ
+!kñ#	µgòï0Ô/œ†Ÿ™9t®Ö˙2ïôëYπ&≠vÃ9ŸfÚ¸z*C!lÛ∂¢{’kﬂ4£ÒÓB’S8¿IÜ≈Ì/Õ∞‡ÿÏ=Kl•í l˜N•èÔT˙„üR9ÏôΩ%ÈY D≥¬éd–úâªhΩ‰.J7M&mÍ#9ã@b÷zä“n"xÕÊ#BD'√Ä!J¬Ëäpq}A˝ú€¬¿dq¡›eóêB§U1›hÙD¢…%_"{tjò2çÖ˜´Ω5@ÏxÁÆf≈ßŸ∑fNb1•A—RQ_+™µ‚Á∂⁄m¬ÎÁ•[’n€J≈+‡è}∂LPéî¡Æ«à¡‹VÈVçÊv.†ê›N8Q¶èÜ±WÔ‘hå'Op√(/Kåy«…à-¶üΩ™}X£ãÉê≠û§AYﬂ≥±&–∏ˆvçfwi¿Õù•/áﬁ;&îÅïlnÀÙ§F„xvÒ‹˛CZG#⁄c<ì0¸/-'(ò–õ¶%ÏSŒ_6
+˚⁄qœêíNt≥˜‹âì5ú‘JZïïh!Uú1{»by÷!ÅÖ∆‡^…(`k˛‘JıÑπ˙°5ºÉÙPí¬46ü‰¶ﬁÃıÄÏµ€aú‹Qÿêo⁄\Äf∏sır-ÉbË{Øó¬cÍ'è €RÇwƒ‘ÓàÆÂ˛{ö~I≤Èœ∆ÌW≠sΩ~ ΩﬁLa'˝‰.:˛`A5t˜˘}!±^(cÊƒ_ƒBˆπu^ZÉ_‘¶o÷—)àÅ]∑‰ƒ«≤Gêø4kè‡m∏ À≈˙Q£ º6°„·ŒÌΩ=˙›òiK-~g®õ≠ÒÂY0'zcGºR≤zÒß”Ÿæn‹«xoÈ∫aK◊c5∆Iÿwx´π⁄ ‡<µÏ<SÉ≥∑Ñï·ˆ34âeã_6äÂè*Ãb¸≈}fœÒE£§	õzÄ‘ñ2&&! çè«å^2¢Iû_±7[0<·ƒÎwÿ◊rHuÑáM≈§œ„X∆√Ñ…û¸eÍ;ò ¥%Á˘/ÆuµµL\ª}˚ŸG3ùçÂe©gC{Y˛Ùìî“”vDa†Ú)¯Ì<ê‰ö;6∑Âˆ^≥YπAqé4
+ú=D%mœ∫ßÎã~ê¬F¨ÌSyc∫ŒÍ»Ä‚—è∂.5ÔM◊±O˚„ ™Z;÷ºW£„Q–1≥FÌ	z»ÒwnÀÚ∞°=pfˆ?	π+Ü@nN˚MnV?eÂ9<÷µˇΩ45qo	T_õÅ%FWœl÷ñò2ÔÁiíômñπºfï$ÛÇ%–í:nX9ùÅ$ãmØêTï}√prêû∏≤OC8Ôm≈`÷ Éq;›˛xµ¶~)·’˙Åhø]»#±SÂÚ„ÂÆ£Ñ-G†r’FkY·/ä˜Ú,ˆF6î¶ÒC:€Ö—`ë«AhQáü>zSëFÒ‡ﬁ˛‚iÙ·˛Áˇ˚?wã±Fe¯˝‹,,˙¯pŒx‹>=KJ∂QréI<\z‹^2Ä=K¿¢“ó6ÓQÌaÕ∆Q4À2Õ@Â¶ÄŒ
+Vπ√‘AË<SØ7^Òe”ªÖ\”Zf.òl)ÒN”4≠∆>óÚ˙V¯[~©VßÀl#Ç+Ç{•3∂ËÛ»j∆OÉ>MŸ¢Ù¶ !_˝Ew˛Ôµ”ÈæeNòﬂÀ,4¢¨ô‡ÕHh 3Í$n´Ú§|Ø‘•ÃO˙› G	÷Ú·üì/^ÕÔ`±¥Û”˘E"~˚π·n–K‰QÛØ;¡∞◊˚4n1•nÌå#®CrÑîJeüÖùQ°@'oD:¬=“±È˜ÆfÙ1üZ¬D%8ÃÁäËƒ®~|¡¥œ∑ÏÒóÂÉ?ÉÜäÒl∞ΩhS≥˘X‹Ã#´ ﬂ)ﬁAZHñ√ê°‚“ja^©2üøñâVÛÖŒØﬂ\kJ¬b:ëøZ(‚ÏD! ?KEøá´%Æ	Ö≤Jj ä≥
+±±KCò a:ı”X\0À˛€TT⁄ŒÉÑâÁ\z?|F~
+£∑(]í¯Ÿ·¡.èC∂x≈‰b’0qmˆøHGôÍhŒÀ\˚ÏÊ…“≤dtznk'ÙÈF·,V§TÅo=ò¥8xÜRÔ!-^Ì≤î`ÉÃA≥+	GØA~I#aÜ|Ë5ﬁX-ßã*ËbhΩDTŒ©JS∏ÕÚ»Î”x^@Òù©ÆLã+mÍ1<g+á2H¸ˆJ¸.√G˙÷ÜB Â‚Cç£Qü*£∑ ëﬁµçö˝ôQ˝<Mï€√€ﬂvKté_Zj«/úﬂà2he>@\+Do¯¸≈°çi7 ﬂM≥åì≥Ì®fu›P6Sàã;É´dk•ùV¥‹—jF≈ˆV›De◊po$¡lÖ›≤.2O‹ /ÑØ5Æsa © Uä1ù’]≈ÂÄ$—·åÜª…≈yÙ¬ÇÌ$…RÇ÷+ÚÙ˘—1y∫∑ΩK^õfkY0-‰ö†Sc•4Ÿ_¥jµÑ1¶4NÉ¡zπ™ﬁJY£.ßËPØ8ÔË[•VãE≈⁄êõΩ˚1äò!2Äx3q—Ijë»88=Ü0€}%e’à…·¸πIáEíΩ‘N‡-¶‘ô:9dÚ¨Bh†’.‚%ßZÆõ(õ∆`˜¸£çAõ†ˆ¨(ñS´∂ìN™É«(°è{†ªœÎÄôs*:`ÇNﬂ«ot“'2ÕHÔ≠M‘¥…Y÷)µ'Âˇ…•5ú'N$&∂≤È|¯áBJÕm∞ÛFπ⁄J*uÙM*ö>ä®‡F˘hl åŒ˙s[&ÓùG¢ıÿã»Wdü)=»oåK–[R≤Ö=‚ÀIm}w•õk„.äØÊ˝\æñ…π∂üAl™€„i—íﬁ˙Â‰ÜÌlŒ’vú´é©ój#†?dùQZÜ˛X˛†⁄åa:IK+â*PNEfå‚è ÊTπó´˙UsÇXﬁâ‚8ÅóR[4úrç⁄,9aC™ç‰öÑgLî“2t£ ZkI2Û≥êsPÊIÖA¡≤50€B∫AÂí‰õ¢J*≠T∫÷´§ ÕäÊsA§Ë‘5c‹ƒIyíp∂Ì|´ï÷67È§ÂÔW‡{qÓ[≈«ÛyHsf?2úÒ‡ Œı≈ÌÔ*•Ìë(Ò÷Ì‰`ñ·°ENæ!©ÿàD“ƒŒ©√ùˆC[YQ—.˛a∏«C…}Î…Ç¶S+dúæ‡=d÷LXÇ•Æ…◊ª«ÀÕ|@≠£âì´>…Ñ\¬Å†‰Õóìñ⁄≈Y] _ìÂn˜˙ﬂø!◊˙Ülá@:ﬁæij¿ã¶‘\W*iK(UÃFS*≥Ä°ˇHZS∆`t1Qz4±´P∂Ë¨“™õ≥ô ∫[å%N"˚…[Ì(¯nı…B´áÁz°5’™.E⁄q/
+˚}Ωvïúåí\qakÑ˛$.uŒÚ*YM'ÉD\&Ì0IXŒ.?lßµ†MX–evBõÌ˚PDˆg≈Aı-ÂAe §‡xºàæ2ñÅ—9ñ©Ñ…öŸ)ivﬁS\l·8ˆ7]ùRY¥éÕ'•óê≥Æä{î {À 5?ê—fåï≤∑ñmºW¿VQ™˙ŒÏ◊¬ß#ì´Û	LvnÎô7ã§HGÃÎ%/ŸØ πZ$ê¸”ÁÓPP√áÚ”ã¢¥OV`±Œÿö«M≈|ÿ∂ÉÃúD:%¸õUÑ¥Ç®9∫={nØFﬁµV#áxwmIÚ¢˚3€mËÇ»e∆≠g¶· ÌÁ¶¡U}7øD¨:'ª¿1†ﬁ£Ê`mÀihpÈÇ◊R⁄l·ôej?ãDÈ®|FôÂ 2∏lÒÌÜê∆›™s»îàv[(|öát«∂ ∆ò⁄
+\∏+ê˙#e»¡svææ  ÉwA¶…Só^=(ó›íÕ<¬)Åê“Zzıü˛£ˇzÈú…ÕÛùò	≥¥’]d¬¸¬Ø+wD>Ω≈uE£›!õéG÷oGl«G»WÂôéü>J˝t·%Òˆh$êÍ.†‘%…çNÜœoêÍ∫˙îÈæLÍ‡∫á≤ﬂÕ»((W6X.êﬁ òb≥ŒªHpßNEsl0±ºZKï∆u+`ª?<Ö•ÅÉÜ¨O^•›Må1¶ÓÁó61~OâøAï∫˘§âh1@óΩÕ˛;–u®^¬ÇmãKIÿs[˛Ùˆˇ^B(xâ∞#`Ü?±etÁ◊ÃÒ'Gœ_ÓÏuﬁ®%¿ÅÌÆ…sP“[zµ9«dá5Òü[ìÏ8ó—,XÅ¡îRÆÃ«·ï˘‰Jg¢Q02µ˝rF	;¡ñ\=/¯5q¢É*+TzãVJPÅ˙ªÈÙl¨’‘_´ÊöpπJzp9 øî|w⁄9Ôê«Aø
+a’ãÑ˚ÿûÙØtâ´≈KO≈û%<Å˚'|	OÕp5•ï›◊¶üp’‚ıy≤ı0≥RYüÜ≈ù@O/ãÄWÖ @NDßØmOÕœ E “òæW,4iñ∂ÔYøo”˙}√ÊÔïjÛ∑∞+~¸ ØÏ÷oΩ˘{Yk˛^ÜáKEEúÑèdcí¿mïA/2íöû∆G-∆¬
+,!åÇÛ`h5W`ÉÈ˛$¢lï£=Óx¬%:‚•fZId¨ 2≤E;î"Œ0®Q-G∞îêY‰TªFÀ¢ªoÕ¢egÜúBµJ£6D≈ê›:¨"¢Á!ÍZL7≈ãöC‘ïH+§„—&H»Ù¿äÓ∆≠mñÒ`%<8ëUgÍ¢	ˇôñ∆8∆ﬂkWuVA¯NIfSÖ·KkX7_,b≈*õE;©$è‰Ãˆ‘JIôIÛ¯£
+o°ıÑè
+oc•	Ôñå!‚lâ4ÛÑ€ÚúÃ Nvå‡‡ÔùàJv'\3≠ê=ı Bfîµ‡¡©EïÇ˜'Êt"Ê‰¢Hî¥û–/Z⁄ç¬Ë°¸∑b[Ÿ•âø÷iı&+â1Á,ªæhπÆó€ÍÀ±_èÙçÈj∑.Î\+ÿï≤j9%\1•¥)óÜˇ-VK¥7léÛ√´är⁄ÌK=9,´Y«“D&≠ñìgS∏6{<ûÔ≈€Û}ül:nΩ;‚Uπ@≈(≤Sÿ8b6åñËœ¬MˇÓÙÈ<π [§¡˙Ÿ+dˇ`ˇx˚È…ãÌùø‹˛~Ô»µ◊T[]*CËú}ÜU≠Ëæuƒ—PlNÈﬂù$|^“há⁄ñH≈ÂŒc ‰Q:xk‘…ónÅæ(¨FbπÊÌ/Ûòàt˝ı/C∏ÑæÌJ4	ŒHKÅ®@ü/L'î/Évå0mÒ@neaa° ”m`zhSö=˙M∫Æú3üµË÷i†DÇïŒx_gI÷ÄC◊Ñˆz7Ì…È;BÚ’ŸPz±ﬁÁ<˙ÊM*|9ë€∫&≠ßÙ‹Î]-ºqm6
+¿!Q†ig=óK‹‰I0Ù˙'ôê~≤=Ä“ª^◊±◊X$0œosút˘ÍÍ‘x√+ß≠z•ÚÖà&„hXi˛gó±®ürM$¿CkÙˆ|¡≈¡êˆ"˚ÿ∑≤e˛Ü¬mßq·ÿ‰æ}¯õùÄá>0Y@™⁄Û˙T`ˆ<∂˜ÊÆD	úÑì‰ó›í∑©+:úíÿ4t/˝]c ˙âÍ+ Òz°eüÉã3áLJ¢·|ﬂò è™lé„ˆâınQ∑aí.Â$U&µ$ç∆}≥Î‚∆·Èü•#S©ÎîûÖädI0CY´*´∏Ÿ óãM‹b]pÎn_ò∫a!Ú◊ñ!§Oìåo∞æg'@X{Ÿ·π[»íø'Î˜§0ÊâôoX≤*®mÍƒC∂ÆÂóäBaûfó°NﬂëówÂÚÍqÈ}˘!º?7∑òÒÎ9ŒØÁ2flﬂ+Ò„¿)≠6BßÙ˚QGIªæ¬õ√Ñ®*˛<ÿœMB˝ Å©Ïg^)]æÜñ_ΩÆnY^ñB€ª“#CÎñÊù$gÁW%aÖ ¨ÕDˆﬁ”ﬁ+⁄	'E)›ßz"%PÆUædåHY„Ål8iØfïg1à[à¿TÙ99Ö—®%aeœQÅQI>0C
+òlã5Ê€›Ñ#Œ≠≥ˇı•÷Y√nTœ^Sv∂z«\≤4Vù‚,Ã•˘õÆv”,ë€˝lÇÚ≈WÙ(ÒŒŒ‹B>ƒ ›?ƒÀn·¸É+æ√–NbÚçÍ~’	#·ós0	ø“ò%Æ,úìNÙÅGJK5≥Ÿ•ûÏ–9Ô,íˇ‡íÑŒK7„Ë9óPπFG/®U	•Z¢µ¬C¯U≠ºóHëÙ≈O œô/w·yÆ»›EyæÜ≥Azﬁ÷—˛ªﬂ~≥æ∂∫≤¨ÕØ÷]ü0‚ßn¡èä¯NØÈœ2*^(u≤π2Mô« Ç¡iL≠M‰	§[ì÷\§|ƒc6Î+2 OÜZh,°ŒÂu¸ f–uµAÊaSÊ…µÉ°¨Ç¨È$Nﬁ7•¿YK¢¸„ø§•qâ´…¢3It&áúåÒÙ!÷;ô-ú)Äãgµ–'Rı2‘©`zµÌ5¶¿´∫'.™ùNT´vÚ"øÃ)åfÓÏ{∂∫?bÿX†îZóMJÿpŸ}ª9—•=B	¥T;:: ¢æqÙy0è≤Óá¬Ó¡¡ı„”±œñ∫ÓWgË˙Äs6©‚°ﬂ#m¬©Ök'ªbÔ≈hÿÇCÍı!|±U∂f,j≠ã3¥Ú-ä˘9º"√ï_ö”⁄2≥.P,‹O„ëmÍ5/üy÷(3Ü7∞⁄’ñÔrôÖ≥‡V…ﬁ›Ÿ1Üß∂
+‚Bi[F)´VÔªÒﬁjŒa´ÿy, 9ÒíÕ€xÄñzÂü¢G√ÅyTæˇæ6∆ˇí^12˙ÊÀâb«ª>˘rÇè;Å˝¶ef†Y’&˛7´ﬂ ﬂ√
+ô¿É^·±œ7mÜPwb9…–[E”ŸøVπ´#]|dm“±∆Ç5≠à,åKﬂcˆ.ò„ãÄï±+ÿà7»´◊@ïÎ.®LoM∆‡Y-™æ—˙À™¥Sπ∞˙∑mK[2í7X\å‚gÏúÃl]°∞ìóÏÓ>{ˆvµdÏ¿7O|®òV¿∏Á»h≈éÅ“CÔ∂Rjâ=»z‡ùßa\Çì=ˆ¬Æx¡!¢™‹'ü¶4ÄG•9gœÑæÉ•ÌZ˝‡23ÒAÙTZA-XØÏm∂w…q∏ºÚC8é4K/6õÅ~ ∞º›ßØ5Í¸T«ﬁ{.!ÛfÒÜﬁÛ¿,å‹“=A≈¡LAô¬ÛlòN„t6¡U\IyRˇåÔ)u…«Ãä1•}Èõ.i(U œ=L‡åªú©÷£Ó„«Ω√ﬂê£g€OüíùÁœ^lÔìΩ˜é…—Àgœ∂Ÿ≥jÅ¢0gÌƒ÷qÙ¶â}€UäÕ…‚\·‹&ûÂ< [›_(-≠À˝®e‹ùhs¨Èe≤ |–°˝“J&ox÷ó[®ë_ëÂäà€ÚÑ™ì@Ï£Aô®:ä•‹qEVGÆ™P:üd™?Y{ı	yUöÚµ+ªœÊ€`°ùÌ≥ºg∑Ä¯@w‰£úÈóØ9dËÂG∂Taﬂ ^WÆÎh5ìÜUùñà©˛z†*b†uÃmMd·Êz¢pfdD¿4;yC~œ–L~|˝ÜÁÕ5Ÿ’F('I»]rû‘%ò¨<ò˙»`[‰u@Ø¯Á&sÃ⁄Æˇ!LÓ´ø˝í»'o∑t{É® ¢[˜@Úá”Ä.C£Ôb$ï´yππ}o¥ÁﬂÉlGòY◊%Ùñ∑&iv3Iàw«‘êgL_1ŸÁÖ®˝Z2]ø≤ÙÅR¯‘°ˆH±ç˙æú‹=ÌíΩß]òZÆÊt§u¨îrÉà¨üªZ’‰ÿÑÓ5≥–˝†KdY;=Z’ñ≤]_F“Ñ)ßˆX¨ ˆ\8ã2ËÕm∞]Ç]à]Ò|Ä’+öX≥ˇç=Œ#ÆºÏW^ÖbÏÆÓÂRBÇE„´NßS k@§πÒºŸŒh_¥ÊÊ≠0⁄QéG>Vøﬂl6UtDi<&Õ⁄ ÕnÚ<õ∂ñö”î∆ö¥u›hÅcöÏïV¶%ºŸûÈ=V¢IΩõ™IGN¶¬e”9§»PÈ∏q7sÈ ,’;»Œ2(-+≤˛ó3j8(ÍâÍ'÷ÉjçíÌØ»∂Ô˛Uõ2œ+®¯¨.£3ùGiÌ≈CÌg°^%Vã>(`qã$ﬁß∫#ƒQÓÑ6∞‰Øí´}÷ÿaxŸà¬†yêç£∂ê,f”¨ûfoä¥∑g^Ã†˜0d8ﬂ¨=≈e|†0≠=H†Y≤$À£éæ„ÚÂı@:Ÿ	˚aÒ{ÄóÕí¢AÜÙºÁç96πa¶Mæ˝ä¡Ãk÷<u„g√ø…lY8ô5'≥d‰§)/'7¬Œ…≠qt“å©¿2÷7MËT1πU¸Íƒ#¨Aœ–lë,7ﬁö{kt›#Xù´¶u.«§mÂ“˙—RÛ ˙dî‘võâñõ*Ídj]ùÃF]'∑Kú¶R⁄…=Y∫'KıÆÜ|ˇÛ’ÁI#ïûLß’ì∆ä=i¢€7˙®ﬂ©€:x;îhø]˜¢Ä◊YY"ÄYyÔﬁ≤’d›n”W"˜{Ô-…º%Jà{oâVˆíAÁÁ/Q≤IÓ=&ä®%ØÕM¯LtY>St3kè	∞π˜˝¢àïﬁ∂»XÈ+E!KæÔ*eæπ#n	4Ó}'∆K√zÔΩ'“•ıû»À5{'ä‘˙lº'?Ôº˚dz.N> x:˘L)≥„Ô‰ñX<π€.îY„ÿ]v¢‹#ôÂ˙,ëÏﬁçrÁ›(3'Pw“ërOö,◊gIö>{EüLÁOôB›'ü∑S•÷Îé(·PÜﬁ’ˆa∂ÂﬂbµT4m dõZæ•i˝JüFÇM=xù®EC¶›Y/—«…ßi$[N!TN+MöƒH>ÍÀê3g 5Œ*Ó¶P}*—ÆæL7„∏ò[à©+æ}û!05Eû¶A/≥zÏ§ÆfvÓó"#õÅﬂe>óÊ˛ñ©|-Õ≤T˛?   ˇˇÏ}]s‹Fí‡˚¸ä≤n÷›´õdì¥=¥$ER6c$í&)y/ºlÄlÑ∫m -äÊa˜uÔf¬;wq·{Ÿ}∫áªßù˝;˛Îüpôı
+UÖBêîD:¬"ÅB°êïôïﬂ©ˇπÅïôdßÃŒµ2Ø£êÃÿü2[ Rgy6í	M≥èΩô®—	Ã≥pq‹Æœ¿ØqèÏöüŸÎ÷c©[êe..ÜI›”πf‡V∏!¶0ç/·ûh~>v°™âd´˛ìÚÎ◊œ´ßc∫⁄ÜÎíL“∆»˛‘*}ô5ç÷j9Ê{≥ı¨ﬁ≥µä!ÔÖ·z 8á;c∫ûM¬‹fi∫~œC&≤_Od>±K€Ω{∂ÈÛLòMö¿¸Ìÿ”üç‰Æ[≤ßèºc˙¸ÃB˜n"lÔéŸ≤gçÔw—ö}è∆9Ô"¬ﬂ€≥ùÊhœû9c∏SÌ{ñ`úÛ.≤ÑZ$ì∂'U¨€3Z˘f7Éz…ûù∂VI˘ r≥rª9uôÏXeÀÔG¿∏!{ÿøtŸ?LÈ|–nx<ûª<%AHnUÙ^ïÚ”%=ï2Fp—]Z∂÷KÕûr`hÕÀm¬íûÁG2wQuM]ª;ŸØG#Ø¶ó∞®¸'˛aî"/à.’◊}3‡í“`ø¡◊¿Æ0∏g¬˚–®ÜΩ+π;vöÖÉ ˙ı8JiŸÕ°èG Íòg3ç«AEU“•Âÿπ^hZf∑Œlˇ>Í;ﬁ9 kdwÔxÁÀ√Õ„ùm“‹:|±∞éÕ°“qB^“Së,í}z8–n∫ÿÿùB€AÍÖ˝Ñx)y∫|ºˇÇDg!CV,4ì	mïx√pÄ>ó3œZ·PjnåÂS)9vÿvZÓôº® T˜®∑RØW'S=%U0æRûm–∆€µï’™œ[4r+q÷p’•ÎÎ$TÿÓÍ«-ˆV,˚a«v3d;n€’∑çÁÿÓ{~7í˛K
+˝ˇ˝é≈Ø¯ <™MƒŸw˛ÒèDºxkC∫ﬁîoàF©m.ü‰çÙ?∫Ë*L‡ø"q‡%—pùÙaëáÙ˜c¯‚áXiê∞À{¯+^%◊†úÈQá›Ùyˆp:¶∞Œ
+©’±9'›ò–¸ rÇ˝Î¯Áû0·¯$aÔÅ‚Eç£Ñ9Q;™ïﬁA‰]Yí˝ß£÷
+∂≥‰˚éø⁄≤‰ˇc‡_òò¯ºw´„‘â∞äd´Íé0#èÓ£ﬁ™I¥gL£Ô	w=]C—/_8ø©•ßÅπ∏;çˇ˙Û?˝3'míŸ≤VΩ°ìÏÑøÍ	}ß ﬂÛFïÚ‰‡@’∆å?®∂∏t∞Ã Í∆˙÷sê8Å¡≠ùôk`ää±ÁqË¸
+j	Ëi∏ﬂH'˘ô»&7ºtW ‘}+Dò,eJ*çK0Öï‰{¡∫≈R»2ÓUßú-^√¨!KΩ¨inΩ
+}ÌTŸ⁄ö¯sUd·nöú≥"Áœtvè£[⁄Wvø#4&ê”®4∆NñQ∞f´ı{_èb<Ì˜"åµ°⁄ì◊g'6≈—‡’~€A'°_^f2ÃaêU|@˝›‰ﬂ6
+:@@e/÷N˘®€¸qøp	[Ä –5çnz	;≤>ã@ü:Ä1tÉä Pztw|¸0xÚ1!îM>çËá]Èˆi·°,?å;k‰ ¿Ò}Dë5ŸhüÅlﬁåPå⁄T|.ég‰w*√◊ö⁄ï“%®{a¸.:Z›¶ªıôí‰Ÿ≈Wûè„‡§+^~B_kí=Ö’D+~ FÃ;%Å™Ÿjµ4õŸ]ƒî…RÊˇªE—wñ˝ ·å⁄¥z⁄È˙∏¿∫º÷÷É√&˛˛¬ùœÌh√«≥:Ü˚aBÿü≈—Äé≈ƒ;Ösãtd¨µ7∏˙æ´íG„î[1"DËåû"©¶DØ¨´∫∏ß∞∫úvä√çk9ËÑiÆ◊◊n> ¬∫ácå17¨ún·…àôÎNºê]Z˛ÇgtTfU;ŸÃ∆)_√¶ÀßY∫ëè¸7ﬁ∞ã|®œ.kV&∆ƒ¸õnu3Sí¡z˛gÁnÍk.&eå!1-≠ñòô§qrÇ ã$∂(&œ:òü>4CÕÅôî∑vÆÖ_ 63˚´ìùXR#y‡™®ê`∑˚ÏJˇ§V }˛8Xﬁ¨£Öå∆,ÆFQ5cÈ«”∏√‡M;ÙØçEã÷äÅ¯†
+ò¥j0¡ˇ! ÈÔqtAâaï€Rhõzº+õVj≈Jh£/≤˜@v∏hº∑5„/∆âÑ<3•!È–7zÇ%1)£;…'dy≤>Ó⁄•Åﬁ•Õ;°¬Ó*;Ü∞H≤»Ï≤a¶\-n6&XO}≠nø(J‘›¢IäóŸ¯„Ôk≤«Oû2˘Äl;YÏı“sH∂y+íV-	â˘vfRÖÿ=g÷)-°~∏;˙„pp;†ßúÎcYÄsÉ¥˜&à”„hπÛU4éõöQ®¿ﬂË6Õµî^uç<:¨Fl=úöì†#4˘x"‰≤£c«v-Éa	1å‚˜ΩóíﬂÜF\èËV◊j`ÅSÏÃ≠õQ›˜û*CY~%SÖf!Ï2AaU
+åè¸ÚˇqµG%µÊÕ*nÌ4zuΩ~Ä^Õ·y≥[ª{çÖZ®‚nEΩÌ]›d˙!ÏÎÂ òÕÜ Fó-ùXç˝–ˆäÔy˘ıºµYÓàΩÈd oöL~zw†zå!gµ‹í›Ì√’’ô”¥¿ü∫Ω§ß±âóÓßΩ ¶qt”P¬(>íÊﬂãVqòíO"ÃÊ#‘çGmf”ÊvÛÊdÜıç|ñ““3„ªnItÌé—ßsCKsGùÜ˘…c‘XuÀ\Æ◊8(K$zT·Ac¶nFÓ~Ñybèyë]8e˚◊s$Vés∞$¡ıI™S”ÿ·Ã„∫ÒΩ5ìôdJgqÙÿ–Ôáßì@Úí¨’5ÀLiµ¨g6€ô›.ºöŸÖ'≥±’0ò8í{=Ãñ®_˛”ˇ!Ê®⁄V®∫önÌπÛanÃ8°Ì®⁄z1É—;
+Í√`≈È¶∫⁄‡é≈3êﬂÔÅÿÉù°√h}y(Âù¿2N∂˘≈fÈ E°oè“¢\†<∫Q∏≠ﬁ]rﬁ∏…fß 4jª)∫™c(´c)´úÏ∫æw∫›Á"Z¨-UGcg÷qÁÌ∆6†Â⁄öäñ≈ò“O∂º~w‹ßIæ¿1gbŸì®%§Ñ1ëõB…CD◊8¢êö∑c$-2c”ïŸvu{:Ô{›ZUô Å_»n≠‰ÖÏe5†ÇÖiè°;ıπªê*æR…Ã.h§ÂØ’‰k◊¸‚g„~ˇíx°_„c]Ú*goL·jÚ~EÑŒ+tÓ—†[˙yåè˝ò˚ÿ∑Vπ≈á÷çÂÔ≈I·ü›8–4ÊaN]øE•ØQ˘cfjjè/€‰∏Î>|ÅwŒ¬~ c^8L≤b∆$<£1§]c?å	È“Ωƒ%§‘1ÖxÒwd;LF}Ôí^∑G®f L~‰@´’gge{3•_v‹ªU¢’ÌÊ)Ãoó‚Uö†œä§› ˇr”Eù‚≥EM÷∞£ñº‡Õ¨Lxe”\'?*‡fT°÷‰6_õ]uLõãMèÍet&
+2”}~)sV›BKnS◊/.È¢ƒ0ØuZ$™ıI#öÙo\VﬁX–¢ã˘xV[a˝P≈…BÀÓ‘~†„nÏ«TgÛﬂªy∆õ›ñµ≈iXµIfÍtdG˘Ê+öCxÇEBWêÒõÄúéìp$	ÈGÁatÃ¥¡ÁÒŒ9¡^Ó:›ü&Ôf°eπ*T'ñêﬂ’ëK(¿ú∞’!:˙Dó‡„VÖãeæ∏èÁπ1é	FMóLÉÏÚ∑Kﬂ…‹~]$`6”i•<õÄzMì ˝¶∞–Êñ…+.˛!—≠~ùm`^ÁA⁄¶üLÆçE>]¥Œ@Ô&’˘Ãk≈|fV
+‘¸ïÃÆ©+ Â≤a3N3∫U∫¢J%aëë‹‡’¸Â˛ca˛‰%[—ÍêO(õÇ∞ πns•˘uÎ‰Öóˆ@Åy€\zH@1MÇ›a⁄,í≈7*ﬁÍ–Ñ∂J‰¥:T¯√8p©¯·NXï√nïÆîê‘,˚˛¶HK5)ﬂ,yÈ6ÁJbÍ+ﬂ52”øÑvã—l∆¸Õw?ÃMäfô2‡çô…\ã≥jq0⁄˙T»~LÓ@ÑE√π^∞c∂¸gÚ–æïõÌsF}¿ı9GÏMîZ”™2ü3π VÎñ◊∆4Ôöf"<öØæ/åù¸ñ£‹˜µ+[KÍeÌï#€1~≠q]˚•#|Ç¬ÎjÌvÖ•a€úô˛“Ê·˚ò¿K®|@Ô<$≈O,kü¿\Ë»I™ûÉd≤%ñ5yıÙÎ˙ æ[∫p·GH 5ø©V˜Ü˜ÅÂ·ë∑«Éƒq~ª|(5ÍB“Ø˚\°g’ﬁ‚fm4∑S‡‚ßF"ƒ.ó.t®sLRºÛ¡Q˙un˜úGÕ‘ÙÖìÃÊúœ¬gﬂõcøË˛Xˇ èızµ,‹ˆœÕtª›?ÊËÌXs—…lÈﬂ]J;òC|˜¥—›4l[≠t™V’çúvävµÉø£Å¡üÁkπ[vl¶=fÁ©™¢L„]yø«≤g˙Ì £V4ıäˆ"[€êÕ7Ì¿Í‘¶¢≤É t=Rjﬁ”æÌ—‚YÙ}8ßÀœ¿Ω(®◊5/–1_Ø¿r…  ß¥±MÇZ¬ÓÎr‹®ä¥Àm?î÷·ﬂ5ÅÈ$‹∏†L¨.ëÑ-‚4ÇEZK‰«êk“ŒÒ˛:ı∫Ø˝8µN˚cxœ†ÑcnÒV∫2 hJfﬁ⁄pÊ	Y6$$ÿ⁄JU7íR:2	,o≥∏äY6`a±‘äËæñÅÛsπªÙŸ⁄í™qI›‡ò‹T¢9m_®¨Kå≠áõñe|∂î°Àí@z≤y
+€Æ•SS&øõıﬁI∂¸Ê‰ÿ˚›öd∑ @S®ï£NŸ∑b-_np¥Õz—≈ =}˛ÓÉh4ŸZx…ΩﬂÄ¯A8z¯UxsıΩå8Sm<Î›ÜBÙoMz≠¥0¨LS¿SÂî.õjà‘‚çøk⁄vMtj)Ù©=YdN¡N>èxvqy≠°]˙µÇ«Ù”G6Z“ö$Ùlk‹RçıZè9¯ù∂ñò‰∞BXô¬cú≈i:<I∞Â)Oì ¢›úhƒàcg§˘Q°Â˜höX˙ lefÙ‚rüh’PÏ_µ`1⁄D£`®ŒÚ"ÚΩ~aäá‰¡A?@BÍÚ7oË”‚Ò4¿¥‰∑&ßàdÅàÅ®hm[c_˚wõƒPfaJa›ó‰1‘ÃﬁDÖk˜hük[¥·x⁄l7æ]26)fsıA 
+|∆Iì:5§≤ÚP./J“„¬7\
+[Id7∞«≥◊˛j–@ª"TÈ±≤l∫V∏b–e…'D'ímYY/5´u]_(ˇiz<§IØ-g◊“à>≤BÁ¡?∆Õ1\F·î°Ú3–4öfzj∑E¸.4˜ãI…Ëu_âÌné(ª‡x;jã¡∏¡∏ı¸Ü⁄ÉÖ√Ë$Æ&;∑ôîv¬kaûÏè(ƒBfÚz4… œÕÏŒf8¸ê•]ã@I›é≥m13≥…õÆÌ+®Mˇ∂†älŸëáiV¢&ãªÆEö|…ìrTõD±Ê«‰xÎ¬öãŒ} %´favÕ,π/¡ƒ¢ç§%$DFÏê°≤°˛CÁÔrª`\é,•aH“Gn¯[=™§6h2≤kòj(≤ÈÍÏ$”ÅoÓOòÈ#N¬´q√g(‘ﬁ1∑›òÙõLs˜o5æô	ˆuzPÎ≈˚b¢ΩA¬Ø!«?⁄Í›◊G?å±P¡ÁÑöTˇˇ¿‰πa.˜∑w…÷˛ﬁ≥›√;ñr£µ¥[≥H^%êq‰ˇD©\Æ®·y£Ú≤ïIKﬂn«§ÜÃ˜µKΩ£å®öÕõ	›ÙÓLˆôs„Kå+ÒÊ÷üÆILI\≥Ò$›¨:ﬁ£crﬂyΩ€•‰˚êXí EG¸BóóWiâﬂu†ã⁄"…(>xbfTB[“∫ËCÚÍÏ7—|£C(≥˘já|LûÌ?æˇMÎÂµÙ ØÅã{ _s∆ÆâköΩ∆y⁄Í2∆ù8ébjä+⁄E≤*0î{8ÍdÑ√
+E_Œ¬∑Än·§7Ù:»>äœ◊/0â[ﬂ~∂Ùù≈€¡ˇŸz“Ã<6wú¡a)üÈºÌW1ﬁ∂.–”À	¶Cuü é∫,{@-’°.‚¢µ‹ÖˇYº©§¨Ñ»‡mÀß¢[n_ÔTUê„óˇıﬂÏòaÆHR.ß®∑RvA‘ rFo∆“Êµñ∞±ùÜi?([
+{+•ïïÀ⁄àN†)˝‹áAK.-˙`±√íAí C//jTAÇ&IFc%/ºQÔ*)ç∞Ü«µ¢≈8(Iî•ŒÀ∂Ûçﬂ ëüÁŸŸ_´T0nı£$P¿Sff
+»
+"«˙Õo–˚b{Û˘:Ÿy&¨-I≤0YI*pk/Àù≥W	®ïŸ˝å”˘ÙJ‡gSËπﬂ —ìÄø§ÀGü¯bBgv®:e;¸tÓÏ<4«¢4jù“ÊùáÑk¶h2~ˆWqL@âc"-•!h»:3Qkv‡NnNi·ß~xﬁK	¨*˝Èﬁiı«ËÕ.¸vd±≠’œÅŸ¬ˇrÅ˝ÌR{iÂª"õ•Äòc†_Z‘rëPâÍ8÷5H[≈Zÿï‹ÙJVW.ÕçN10K¿›ıZßºÊÏØ¡yÕÈfı
+™îƒÆÛ¬JÁø¥Z:o•±ù%π·ó–%§:πŒÀÉÁª[õ«ª˚{‰õÕ√Ω›Ω/-⁄$Ω±Û∑ªG«0élΩ<:ﬁäËˆŒÒŒ÷±Y’ù#Üiy’˛A+Yâ¥äˆÊXm‘ºé‡Ù£ò`¥>íı› É◊«òıK†ßQÇ’; ÿ3êƒÎv—"ÿ÷,øTM0√Où≤›Zu=	Û[ëO6œº~,|Åw∑~…é¶/tÜ8}§“™∆1Ø*‰ö-˘€‚q∑ä§Æ±EËdùc—$Ú¨âSç)¿ïüÅv’bÇXôvYYªÚŸú1jAËòÄ≠Œ£lÕ*•=@-Íß±QU¿Æ˘å
+≥≥ﬁo.2Äé^≈d¡Ï≈±è”ﬁÙSP¬aVÛŸÃH-Ó[¥z°H¥ô≈¥[„8¶-ﬁyõ\˝úp=÷±!√ˆ>JO#ˇ≤÷∂≥∞∞"÷∑÷w¸<9á‚Jô⁄ô4Ñ~!–]S-¢÷ØÚ]zﬂ :˚≥ë¡,R~?jâNxdw‰ÏuãÒ9s@g’⁄Ì∂aF⁄ù§ü7'…ûÌ∑YŒ<˚zi°}§òﬁ“\XX∞:∑mˆiZ8L‹Ä}.¿∂¿ Çdœiîëh”0a≈i≥ÈÒ¶ ß†üZÅNZ˘Hœæ=∞f˜ƒDõ`‰/:>óÒ∞rã~›dz;^ìJ)›‹ˇYà ¡–gÒ:Ñ
+ï˙òX&c≠íëÆ º…-`w
+8Ñ€X• ˝xÉ\§ºIÂ∫cÔ¥ŸËÉF©+a`óßÑŸæì	ˆ–»5µ™ß>z±ê1§∏úıﬂX~§å},⁄œ(®Ωõ:¡f…ÍxÃ‘qŸ âø>À∂S≥∂¥&ÑË(nMV•ùÃΩ3≥€S«ÅqWãWUñReÊaøI¶ûß¢Ç·˛≈˛rHSt/A[@fî ∂û1ΩGﬁa–ﬂı≠fùƒÎ	R¿–ˆËî÷m ±ªjœ…◊[Õ9UÊú*Î∑ãù&_Ã§fy7g≤±h¸wﬂxì]®∑y!7Æ‘±‹Ï≥∑sHˆ_ÌÓnÔTm^Ó=ﬂﬂ˙9‹Ÿ<⁄ﬂÉæ~π{8cÉMÆ;ŸkÄùº»è£HÿeiSiDs`eGqƒNB˘a¸„Üå4/U◊ƒBH˘∆õÙD≥±óûyÖ1ÏT#Ô§S∫ @G„”Aò”œÉˆ(¶åc;8Û∆˝¥Y:√YÃ+çø„á cæŸ‚œº˘,Ë„ A\ó«´Û”Xliz	†∫d§±âY˙°/P.fo	ì,·∫≠ıë—Í∂äï"Í4KgÂCtFF7  )ΩÃàÖ¶q%|34#ØÚ{;ˇ*§«q∑≤¬m¡rÜÊV?D∑ÕGÍ◊◊.¿⁄ºﬁ^∫BÍ¢‹U,⁄•æVÃhWp¢jYãÆ%˚@ô1≤0éõø”0%C·ãG,lE37/!cπN7’Ui,l´Rg—°‰^Ó`I-w–1÷NÈ,·–'Î—8E0'¯%U%*Î⁄≥,bÅÃHÃ•e˝ÂèŸxá©2õÍ!Îç"YY˘ïìm˙ê1z`-R˘ÔQNG=˛Cö«ÿ‚ÅY9£Z0œG;E1√°®\Ω2ram˙NI-ä◊z9ÈˆËïp◊µ"iîÈ’B±ƒVñWâÅ5Îsè¨eAµêv®º…O£¬r€Ì∂~Ú«êπøﬁ¶eÊÖì√ÅÃ®`äéÉ0]Ç˙SjKûòßh¢h≈ƒrª≠¶S≤≤a*dö«»imíçøºîâ#poUzù hVÚ˝ôçc&sZ±ôá”I¢µñŸ‚•´∂&°≤±nk™`√‘øB Q¶⁄MM†⁄*¢êÄGbOâ0*p…R]\ù&Í«_˛ÁøàÙfn/r™6úR≠·n√˙Ú˘˛”ÕÁÃîuD6∑∂véévü>ﬂ![á˚GG≠„ÕßíÌJznπMæÏGß^Â8øÖÂÏ»´}<í¶«LÉQo v≈)\}∑;ûQÌuD¢3tfà∞Çñ`í›ÎÄ¡≥¡êt∏kî∞S…¶ˆﬁ˚tZdÄ≤íÕ˘˚⁄TÒPù•%gZÊíød±ëFìöå€‘j±¯È“§Q§e©≥dC°£Y¸ì÷§fı‘Ω0ï∂†òëWû∂{e¨ÄΩ§ÖD2ï»^®F_öfÂ-{`	Îkuø¸Àˇ˛œø˛Ÿh›—4S,[…∞ñit ˚|ÙRåF)Ò§™6∫vàñ8—L¨{Évx7B@]fÄG–Õ‰ûÑt£1,
+_zä£ì®èi©r;¿	}Û¬ôù§@LØT|0◊‘–Ú˙B“ö.	©‡R»˜AÂ ,Ú{«≥ÆJ!‰ŒïiˆØﬁÂ≥∏Hvq%ÿªÑ÷¯èI/Ë√©ìhM?ÁËÌÈA∆à:Øh≠¿«§9z}Œ¡ØÉÀuíP?∫¡≈ƒÛÀ¸…∂üœò∞|HV›Î"à∑‡Ï+õ°ƒ$îú˘$j“≠√$•h~Ç`˙”®•Q“–'¸≥˜ˇÏˆ`Õèâ˙mzØπÿ¸;ˇìøK>A”J‡√/l÷?‚’O6ÚøA¯Ö!ã°÷ﬂÜk‰Ôïƒ:â¯¯Çªª˝±$Mˆm4ÆTDöB´ o*w¿æ?AFrÖ "œq‡^(Ñ$•ù5§¶Jê$èÛyÚvR@¶§∏£÷™[5®Î˝–oòí€≥](ÓÅn∞éÕgG)º∆ã}ÚUxﬁk w(¢êÌ<D·‰ÄÌÉ∆óZÆzX¿^4Õ±WÉtºËÆtAç√íi]Ì›K]ƒÔ&IÄ®‰àn
+xÃ3HMçr9Ç≠˛Ålâ˜S$c‰ØËG÷≈÷=8¡wŸr˝	PÁ~å√À(Öw¥7íHÿÔ™Âﬂa#>iÜ8qàÄ%B&¥l®ùx» ÖÙ·x¿>FπÈáh™æy[ƒ∫h¡ù+ûxÒ%I¢nË°ÄãÇeXw±3B]ØJøŒu≈2ÜûF—k˝Å¯Ú°ÆÙÖÊA˘«Zc˛›3ƒÔ¸PÖˇuQXg«(Ÿ§ãæa‘9ãÅj∞=:^Œz√7ﬁ;$ìI_bï≥ÿGÕñ…7ßıﬂO—TØ ”nùÀ-ìÁhó'€ó0 õ›¯ÙUi…7Ä°Ÿìãõ•ÆøP«g™¢“t>äÜ ÌN/πæF>!¯Ô£V8ç.ó⁄	íiDy¯„èKÇ.Fö°¡5È¬‡*îË0˛ƒ«'§πå8/}Hñ…q>ÌB-Ïu˙-óaäO%ƒ—Yê$ÏãŸÇ2Õj'fb3[è€T´ ùD2,ÌûœdPÒâ¢◊ìÚ˝oØÑíø¸›5µ:æ≠ô,|è°ÀSmDC∑Yúî–˙«gb+æ•öÿ^I„±—ŒîÿJü`QõIª˝s}O˛P“îU¡©>Œ˚JÎA=‚ï◊_k¡x|tΩ48è‚ÀçJ;`◊GzkH’róH3ßêKB=O\Ørá∞Å°V||È˘1ñ∞q¶91ººÅ^ÉÊÑxAå—hΩ¬Ÿ»Aÿ¡§ô„#`‡&ù-© uVáüPi.Ñ„ŸÙ˝V4‘ÕW©”§P“zùÙHR‘¥¢∑Xå‚»≥Ã†Å7Ùp£Ö†€Ü]@ÜgXÆülfØwÖØQ/∏0Ø;íæ≈⁄ú=n?ˆ“ñèÛN¡Ÿspds]≤à¯ÏŸ'de!ˇ¸≈9ÇﬂG‰cÚúB6ˇ~ùA¥}2µp÷∫`?b˛)G‹ôPdﬁB˝6|
+±ñ)úÇ©Õ”Kbßö^4ém⁄¨™3≈AÎ"±råVmJzQîjÔPˇX≈⁄õúû™âh›˚kÑˆ¢"G¯2Ú˝Ç[◊yjP4Nà¿“|9¬ı.wÿ"Îs…gËVﬂˆ.IÛs:—íy¢*ˆ»2HjÏÙL†Úb‹OCñΩ"ÅÂ «"–ø·øQ”N‡Or“æ¬!Ö”N·MÄ	Ω— ¡J`à∆©P:ªW¢ù∑H™1˚Ï!ÚúÛ≤zx]\úï‡¬°q·˘sU+F#ÕwÈThó
+à±Ï¥Oé“±FpÌ0H@Ó  ë£Ó∂~uyä›¶õO£¥'ﬁÚ‘˛0R8C®æÑ# .æ¿√`4_ﬁøv∆ú?¬	∏w9°!|^ˇÑ]§ºªÆDÃaAX6;àƒÏóè±=&r(–∫Ω…ÕQDºÎ}“¢,˜Ä9Â}V5©ueˇ@’'òé , H˚gqT‚∂(f©lá¥f<=ñÈÔò˜n¬ÿà'p6`»W=W
+≤O¡4è©ìQ“€.Å6ñô·—ü‹T*ñ˜y˝’âï=˚±ºÊr#Óôßjkú÷ÁÒô¥'¸\€≤9qs4Í_ŒèˆYÙƒ+*k"fö• µáy∏â>ÂäπÛÎÕ(B Ù3R«ZΩ	πGV?ı’õè;ëIf‘oRoB·k±mW©≥â3õ∂yW2ÛÖeoÍM[¥äËß•*π„|\}7ÏåPõ'ì¥\ ©êÕVPq¥3r•Aø<&h÷òMH¶˙ÈP ´1ìﬂﬂ)é±l>ÈD◊Œñ∞˙≈ÁYï#´¥XŒ¢4i>⁄*¬ãø#_È™’I¯S∂D	ë.ßà€S¬i◊¶¥@~OçîUãrï∫† ôR‹<ÀQú≤.§Ü∑≤ªΩÆ	›n+W7ÑœÓy8|m®8C∑,M"±ª…Ä•üfπQy@1ö7œ≥ÃsR¥èXæÓ◊üˇÚè∂œÀ¨‚∞<*Z>U9ÃÓ7wÚ^ä¸y5huˆ¨°™åö™øYNæ±Õ!e8…·XQs”Qò\ÍPê◊ %‰—¶ÏGÍvV®ì,öù)Uú≈8Û§◊ﬂ_õ1GÉ4à.RÇ•Å˛T7√ü©¢ΩŸèR˙AIpRJÀ+)˝y© c÷ìyÌ¥fÛ„4ºõ%©ò∆ö7»µX@6ﬁò ≈Ó»÷‹iè–∫(¬c≥-a¢’{Ë|∆ú£Êéˇ√åãvb˛gá≤Ñ’RWWπy˜€æ)]q«è‹\ #È©¢$\(Ö"Â&ÿ¸¯…`Û%¨zTA⁄%HÂcï∑cÎÒ´aº~¯c ﬁTñ'2ÚÇ±|æ {«¯èıö<KJﬁ!≠SY¨2cV;{–∫-¸ú∂ú±ÿ‡\s¬RΩxCs¶–;¶&Êˆ™vvŒ:!ŸÜgZÔœ";	_ipã˜µ¬<w8 ˜˝qÏâNfiã€^LΩ'ÎÚè ?V&‰9}vC≥Ô åﬂ æ√åSÑ≥$ßÇ\
+ÈµÒ0”7÷$®nkn[F'£ô¿«@"VpXô}ï≠∫Ò◊º3√µª∫€|ÅÛø ≈Õ_%Â;ª	.…3¨>0ˇ]Pa2ó›0>S.à@áO"áÅöÖ©ªΩ÷∑kKozﬂï2ãG±¶#
+˚°'çlâ=ÜAﬂp¬ÿ2çi+7#«—ÜGk∫ã@øø%]“\-ºÿΩEµA¨$k‘JÇ≈QÍï≠c?†ŸˇA. UO¶ó*æw*œ¡™Dj9OúøÀ˘.ô;lçL1.©YÈn€ô3ç
+K≠©ûF90gƒ ≤2OÆ27¡tú‡=;|õÿ◊J|ô{RÓÅÆúç¸ÃÁ6/ËØ”=%ê”º§πÅ\8ÊÓA.Åú˙ªÁáÊôÛr:†€å0Feû	Yá4œvf<Æ≥ê«èÛà*WyÀTƒ∏¯.:;O13N}√¬‹ª)Œ°@˜”øbƒ hÖ0W%ŒM&„ª{ˆB@%&`ù…ï§_‹<ìüOŒ[¨”j
+Ø†Ò5U¡S¢	*)Ωí¡ﬁax2IÊO%å‚ΩÜ'Kêÿáõ^Õ¢"Ç‰Ωeñ0/( ·3”C“Âº∑µ‚•ºÓè€)è€ø¸5*∑‘ÕÏ§≠c:©w√ø∞LÑùê‡™J≈ yñR05ù)›“DHŸ<x’ù$Îœáı%)HyÊáã˙QòYH›{M—ø»C˝~Œò<†fX≠[vá.ã*≠Ô à_õ
+Õ!¡CîX^”7©Õˆ’tRTª:gÖÒ0…aë=-åH¯Îœ˙˚,ñ É_!¸íÏ"¶ˆ…‚îü@[aµ®ÕÀµªÕf!e=xr$29(8*@[– ä∆.EÿVòùzn [e4òy!jx‰ ôêgÒ °Ü¢!À¬Ø¡7r·r•∫r<≠˘ã.X∆≤à›¨…4ƒ.Æ’ç!rj;@ƒüX¶ö◊M«@D›DS3É¬yI%éƒW˚ÁFh2/lß\€[t‚∑a˘d¨)-Åj≈ßu‰ß¯π'˘«b‰é≈ë_(å,√.Q®ÕﬁUJ¸d°]‘ÃBñ òÒ®:áXh$ƒ√Tûu≤∂Ù7ƒÛﬂ`Ux⁄À¶ÀJö”∞áádeÌo∞∏7À+ıΩÀá4TqÆ˙cº"ºÿ–eõÏ`‹5À-≈SÄ •§€√öM¥Z≤Âx◊î1f?u}ıv"eÂÃüEQJç14â“ïNÕï¬ïHõ∆&Á~◊b˝RˆDÔN^zâ™â°	_Ï<"ÇÕqﬁYZ–ÎsÚ∏é¶ØV¿~í ›aÕí∏¥Ä…ùÜ˙Ÿ0ı≥(4m+"Dé…_'jŒ˛CÎ≥"¥ì='˛≤?C„◊Û,D˚h¸ÕÜ≥ﬂÌ„Â"^Î•*…,ã’>É\'åÕPÆV±ÊBÊÏ∫1õ∂jEF(÷RfèU3Â¡pléb–d’”"ñãCS
+®¨zRç?*bW©Eg≤Ltm≈sNRXƒ7U î7–Åh
+è”âÂ÷·¸e¥˘w¬zßGÒ˛Ø”ÀÕ°«Pﬁ'“•Æ»)PJ‹ÜFnqõ÷®ª˛æí¨ìo˘òeqø— ◊ﬂ9ˇv–ü¢£9∫Áyò§ÕÏ:P‡Ây@√˛Â∞“›d”˜ë«ÌèÇ°•g∞Ùà![√¸î∂}á}πx?äï5⁄◊î¢t™§0Ï^cÔ,ÑZ√™Õ2=IÌI{2áIÍ∞û≤.gÏ‘97Êç ˚,,È˙,˙Èh˚,ÿ7#oÒl›”¶∞LLé3	˝Ê˝0{èJô:jÛ≈Öf1tS€P'Á¸~‘£Ÿ∆Vˆ¸*N¿Âò¿O:∂$Qô,í#Ô,H/…V/ uä…ö([äÁ}|8|xœhU÷í%+!˚±Ú±#8í3+Q@,Õ*AÅ6E˘J*ƒ-)	ñΩ+L^≤#G”Ë"[Õ.(ΩÎã“P‰¥ÑµnÌMj)ü¥∏àΩâ ±bcRzœñº;§˜M}˙L¨∂ùDÉÄ^)K±º:k5»ük≥¶ñ'¸´NˆGπ\`Z´<ß(d¡'}¸ò¡´¯≠ñëè»¿$Ou]¬f?â@Ö`‡+¥ACó˝]ÄÕ®˛˝Ç±ÕGÂU∫Wµõu>≤#v˙Îqîz™a@˛¿| ~ﬁ˘_Ú«·Â¿¯}™EGõ>Y;ñ5ó¸ì:ÈQÃÚX≥∏∞z.Ãµ`á˛äÄ˛>Œ&»≥õıà˝&CúùÓFà”€≥«>ΩÃ`Z%dWø. å¸a˘k–ê^√_¢ÔB¶1L‘ál˘∆˚êŸ-iı;ë¡∑LŸà¨é¡E∏ŒÏ’t]ƒ‹Ë]€›3(˜<˘ıÁˇ˘ì•ÎòÕ ˛®∑Rö2/eêõcYÙ'EDﬂ¨ûNklXØîÉ†% ÚŒıy«3Z◊°†Ê˙◊CùQ@”^æ˙(L∂ãÇÑ…¥e∏´≈mGsVBK‰ T˘bv‚8äÌ∫îxDÖlO4/É∑∂ò'œ˚¡∂ñeY]óiüÀÎ›®≈’”L“zùƒx≥‹^RaÌó˝Ï›/Û¨TπúÉ°Ä√J¡yí◊|XY Te˛À*≥ò+iº)É™ﬁÉÊ ìü≤Hƒígù!œ@cƒ É˝¸—Ëâæ≥ „rN‹W# ="ÎGkxWﬁ"WlòÍß©Úç˜B©NBº>È˛%úNgAå=:h{”‡mò U√eÏúp≈‚!ì‚‡_¿N& -¥…ç∆§®‡‘dè=M√ˇUöÕ†€% Ó4ä√n˛∂DÁ1ÌKmOƒJE'fsí¿Ù&?L–ÿÊ?æ*±yìQ√ŸÔ0´Æœ¨-Ü2SèK≥ëlIo$´g{…§9S.HM[åæ4˛T‘8πU‰íÀaóT°à(?∆t¥‹‘Ú∏h≤˜Õ¯Bç&Â	∞49|at¶ôú÷˙dUI8∞¸8WuLıŸèΩª√7^?Ã{ƒÓn∑q±+Ï(é∫∞Æã0ÌqÎL4lók®…?L•±òâçw“¯≤j˝ªÍ∂6”x\i ÆO‘Ñxp€¬È÷4Ç›Â˝Ó¸Å?≈Gçª¿œì…y3´∆ñÂìÑ›CMÈ≤b[`¬„pD„¥ôáÀo†ÎzH÷∞V®e—üŸÌëf«¥pÓ$xœ∂Z¸¿i^gÆ⁄¿yMŒ¬°á≈äk#Jï”√Ñóµπ5˛
+fÚ¨ÿt6r¡ßs[π‡wÎoòÇf¨i.è?∆∏í≤Æ¥A‚Rª›n`¡∂{Üö7ô÷u"∂Bûóh◊ôB¥€år	≤X2Êø\`N»_å
+I*â~ÓbóÊíf7úÎÏXB2•Na“ç˚h®[‡Ô08ô≥∑uQ‘‡0$•Gˇ/ÊOF·–VÎå™0‚[≥ìÁ,éƒ˜R-Ä|Sr+ßq/‰æÛBÆŒ<â†õøejvz/˙ﬁãæ˜¢oÈ˝˜¢ÔΩË{¢Ø%”pz°ÿZmÕ<2âL(0πäKt¢Ç»T!—å”È%mÕã*2∂å¡”3Rä”ó∆®Ò5˙…A]ÿ¡põNõÖ~–:Ωl·øIº8L¢°^√áá	øKÉ©hŸ<Ω◊v6>€•˜ŸŒ÷cªFÛH¶rŸ˛∞‘∆ü ≤ûcWÔ]ùS!|QÌµõ„"–Èáâ1ÖﬁP∫~Ü’Í˘óˇÒü˝sëZä•Ëe‚i^e‚Fü$<ˆ:8ÀΩ+(WÆ◊≤ì»lñÀíªE¬Êáeôµôs_o¿õ™Ÿs≈ãä¯öÊ—scù≥îU1»6ÒKLÑ<¶]=´(.cBo2pã≈œ9©JÕﬂ2Ÿ•ÙÂÖØd&bLà˜Vº@ÿ˜FI`…S{îˆÄ{hè§4.∞=#oÄı~˚_ñû-÷Ÿ¸Œ§˘ÉÆ†¯êsÏRjAb9É∏h≠~ûyùıvà-í´\•òöˆA
+ÖbTz3Ù≠*`›–—–7 úÜ»Q˝`cÏØÉKP}˝Îö_Œ∑h◊¥fKE¥∏UQ¸¨¶>{NüuM3$•(ÎﬂØi∫UÄ¸ç⁄º…Ü(Îñ£îía…ä¶Î[\¸û3T¨Pß\À^Nj≤Ùs†ﬂÍR†∑¶çLP7nê£Ê\~x]©A¡◊p¢¨’Ñøî±ö”e©Ωr¥~ª‹¡≥&Üã¨Iü∑ó€»ìº&≠;Ô
+‹ J&ÜQ
+?◊⁄áâbùúo`√èRŸuo¶ßG-r]ò“)π8í¥rÛ™;Rõëª˚*w)"ænÂ+LÉ˛˛¸Ô(sâèÿiœØ[ÁÂÏŸ7≤g3åVKºWY•r#ämÿJzHs@miÌÀ`à‘n°7Û~LD*‘\>,ÃˇßˇK?\¥πG|◊ì»ä˝¸–ŸòÂ©s3T ÿø^,§˛·–¬_˛¥≤∏ÿ&ıû$§≥¿VR£‚<PvcŸlú@®rœd˙Q¥∞ E‡ÎT;Éù@•T˚í ™-–Ò‡…^î≤˙Á„º8ôM$¨˜näzïs?Í˝È_YÊ√‡áqH˜Ïûrs√£;•2∫QL∏“MV≥' ^‘;π¡œù8ﬁäıº>$˘”ﬂÁO´~‹üo%*…Jì9PâRBÂ„èuÖUh`≈6ßÊÇ†r›ç∏÷PÇsêU∫KÙƒj£äV^9˝ÚÁˇáVÉÏªüáÉ0ΩßßiNa`≥@Ù˚&}ë§¬ÎüÊ∑e{‰F1π- ˚4I/ä“FŸ%&ˇlê∆
+∆ûÆ±bø]i˛Í€3Ùòl{ó§˘ykyâ=µp7∫£n4
+ÚäÜâÇN˜Ô‰7õÅ‡û:gAù%—ÆçÖöÙ˜f¢ß∞qR5—nÅ≤àÖ\∫Ñ≠≠ín3ëı≈∏üÜ-™D4i˜åE:√°a˜∫§E2~g(ı'Õ'ﬁ¨´˘≈^„ﬂŸ¸¢‚âT∑\lÄûÃO◊^b∂ﬂX1.€ZÆÅñÀ
+∫i°≤â(#Ó.Ø_K‚q_îLΩsfÕUù∑.£A´v†…q‡"G„¡ À7W≈ö∞(å≥Âœ:ﬁw∆∞4ååì"Mä—í¡:˝=é.Ïı?hK’ :"JÄÅ¡h≠ü/%'©ûg)+kˇ≈¡Ê·Ó—˛Ÿz˘‚ÂÛÕ„›W;‰ËÂcXXE-}πláB≈û<ç“^ØÂ≈çHcËµœB‘0πÕwœì.6y¡‘˜Å7Ñg0B7Vÿøƒƒ˜¥¿u¯ÖñÕ≈—YÿH$	
+~S"Zı¡_∆N˜$È≈·µ6R£™PµràÌ†∆OÅ[¯‰ éFQ¸ ÎèÉug»W9p§^ˆX=5…¯4Eÿö|3Ü‰pôhê*ﬁÏÍœmk\%fIa~Tô<n/,oÙ∂Ea:≥®X¯∂Pì∞çÆƒ™õ{(jñÜ’/ÃôbiS›Ç¯&¨@XxàÎ/~Ûõˇ  ˇˇ D√ú…
