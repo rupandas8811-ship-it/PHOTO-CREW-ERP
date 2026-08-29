@@ -11533,13 +11533,21 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   </div>
                 </div>
 
-                
-              </div>
-            );
-          })()}
-        </div>
-        )}
-      </div>
-    </div>
-  );
-};
+                {/* Collapsible Quick Filters Panel */}
+                <div 
+                  className={`grid transition-all duration-300 ease-in-out ${
+                    isFiltersExpanded 
+                      ? 'grid-rows-[1fr] opacity-100 my-3' 
+                      : 'grid-rows-[0fr] opacity-0 pointer-events-none'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="bg-zinc-900/40 rounded-2xl border border-zinc-850 shadow-xl relative p-4">
+                      {/* Corner calibration tick marks */}
+                      {/*
+                     xœ|SKrÓ@İç]Ù`SÆ&|Š*T9‰\ØV°å€—£™–3d<35Ÿ-Lq6¬XqÎ“pZc³”¢…%kÔı^¿÷ nüüıëÌ‹Åóùb–Áí×ï]d³eñv4=ƒ£lœ zÃq>™dÓ>ç0\ù£³lšÍ†EvGKª.N²=h¹Š&ÃwuÊàt4ÎšnçtïÃ¨ j>ÍXæ‹ä³ÑÙh:Ó'Y¯µáÒDÆÉ•ÔLA%ÂóÀsÑp#Ã%”têj,0ğ¹ õ
+¨è2 «:—Òƒ5R‡V¤Î_Us&jJj„ƒƒçÏ^€©¨‚':{ µ—Ó«c£³^–Dí}”ü
+N¥"LßŠtÎ4ª—À@Èë-®˜÷S¶Æ×û¬ôFÅ€Ğï÷÷¡2®™UÓœ)Y:¤Ñ˜5sW¾Ûo…É®ÑÕ48IQ9³nÈ:¢lk¤ñv3İU·óåÉÓÇirßMRôÁ™E+£^ÜD%@› %‚CnœÜib.Y Á¸ŠÔ*!:j¹E'Wîh¶Ñ¦wÔn¢Ô”“b;ƒe‘šs³¶F£½DìÎ«A5O
+re<õ¹'y&àSôÍXÊÜ€—kKùhªI¸¶Z$h¶òò‡£XæP{
+K:N²Êö8øZF¬xŠŞ5Ù, ˜Lì/dÀú2JR—3Û'ú?
+ª´S$(Ù·õ•ğíú•1£}LeV’ïÂ´QèI&ÑÈëq+™T7È¬¥¤*EHZÜÙä¼XBÔAªV,*LN‡;×‰$7:ĞI‘\‘m”ú¤&· dü*ÚDîiÏÔ´í;ë#'½}ÅÔ*Sw“j–jp‰&ô=Â¶Šñmp(s>Ä²mq6{¯´šoşÿíÂ¦Ûénvÿ6ÿ~¶ÆbS±¨Ì™B?1"*<ü  ÿÿ ÛÆ¦ì
