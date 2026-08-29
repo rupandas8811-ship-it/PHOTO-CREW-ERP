@@ -129,11 +129,11 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
       />
 
       {showFinalReportingModal && selectedLead && (
-        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 sm:p-6 backdrop-blur-md overflow-y-auto">
-          <div id="final_reporting_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-2xl w-full shadow-2xl space-y-0 my-auto animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto">
+          <div id="final_reporting_modal" className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden max-w-2xl w-full shadow-2xl space-y-0 my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-900/90">
-              <h4 className="font-bold text-slate-100 text-base flex items-center gap-2.5 font-sans leading-none m-0">
+            <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-6 py-3.5 sm:py-4 bg-slate-900/90 shrink-0">
+              <h4 className="font-bold text-slate-100 text-sm sm:text-base flex items-center gap-2.5 font-sans leading-none m-0">
                 <span className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-sm">⏰</span>
                 <span>Final Reporting Details</span>
               </h4>
@@ -151,7 +151,7 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
             </div>
             
             {/* Form Body */}
-            <form onSubmit={handleFinalReportingSubmit} className="p-6 space-y-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+            <form onSubmit={handleFinalReportingSubmit} className="p-4 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto custom-scrollbar flex-1">
               {(selectedLead.events && selectedLead.events.length > 0) ? (
                 selectedLead.events.map((ev, idx) => {
                   const evData = finalReportingForm[ev.id] || { reporting_date: '', reporting_time: '' };
@@ -354,81 +354,83 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
 
       {/* Step 3 Follow-up Popup Modal */}
       {showStep3Popup && (selectedLead || activeTab === 'create') && (
-        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
-          <div id="step3_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto">
+          <div id="step3_followup_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-4 sm:p-5 space-y-4 my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans truncate">
                 <span>📅</span> Follow-up Date &amp; Time
               </h4>
               <button
                 type="button"
                 onClick={() => setShowStep3Popup(false)}
-                className="text-slate-500 hover:text-slate-300 cursor-pointer border-0 bg-transparent"
+                className="text-slate-500 hover:text-slate-300 cursor-pointer border-0 bg-transparent shrink-0 ml-2"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg text-xs text-indigo-200">
-              Please schedule the follow-up date to finalize quotation and set lead status to <strong>Quote Sent</strong>.
+            <div className="overflow-y-auto custom-scrollbar flex-1 space-y-3.5 pr-0.5">
+              <div className="bg-indigo-500/10 border border-indigo-500/20 p-3 rounded-lg text-xs text-indigo-200">
+                Please schedule the follow-up date to finalize quotation and set lead status to <strong>Quote Sent</strong>.
+              </div>
+
+              <div className="space-y-3.5 text-xs text-slate-300">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                    Follow-up Date <span className="text-rose-400">* (Required)</span>
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={step3FollowUpDate}
+                    onChange={(e) => setStep3FollowUpDate(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                    Follow-up Time <span className="text-slate-500">(Optional)</span>
+                  </label>
+                  <input
+                    type="time"
+                    value={step3FollowUpTime}
+                    onChange={(e) => setStep3FollowUpTime(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
+                    Follow-up Notes <span className="text-slate-500">(Optional)</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Summarize key client preferences, expected decision timeline, or notes..."
+                    value={step3FollowUpNotes}
+                    onChange={(e) => setStep3FollowUpNotes(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="space-y-3.5 text-xs text-slate-300">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
-                  Follow-up Date <span className="text-rose-400">* (Required)</span>
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={step3FollowUpDate}
-                  onChange={(e) => setStep3FollowUpDate(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
-                  Follow-up Time <span className="text-slate-500">(Optional)</span>
-                </label>
-                <input
-                  type="time"
-                  value={step3FollowUpTime}
-                  onChange={(e) => setStep3FollowUpTime(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
-                  Follow-up Notes <span className="text-slate-500">(Optional)</span>
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Summarize key client preferences, expected decision timeline, or notes..."
-                  value={step3FollowUpNotes}
-                  onChange={(e) => setStep3FollowUpNotes(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowStep3Popup(false)}
-                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border-0 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveStep3FollowUp}
-                  disabled={isSaving || isCrmLocked || !step3FollowUpDate}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
-                >
-                  {isSaving ? 'Submitting...' : 'Submit'}
-                </button>
-              </div>
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowStep3Popup(false)}
+                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl text-xs border-0 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveStep3FollowUp}
+                disabled={isSaving || isCrmLocked || !step3FollowUpDate}
+                className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
+              >
+                {isSaving ? 'Submitting...' : 'Submit'}
+              </button>
             </div>
           </div>
         </div>
@@ -436,20 +438,20 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
 
       {/* Error Details Modal */}
       {errorDetails && (
-        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-slate-900 border border-red-900/50 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
-              <h4 className="font-bold text-red-400 text-lg flex items-center gap-2">
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto">
+          <div className="bg-slate-900 border border-red-900/50 rounded-xl overflow-hidden max-w-lg w-full shadow-2xl p-4 sm:p-6 space-y-4 my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <h4 className="font-bold text-red-400 text-base sm:text-lg flex items-center gap-2 truncate">
                 <span>❌</span> {errorDetails.title}
               </h4>
               <button 
                 onClick={() => setErrorDetails(null)}
-                className="text-slate-400 hover:text-white transition-colors"
+                className="text-slate-400 hover:text-white transition-colors shrink-0 ml-2"
               >
                 ✕
               </button>
             </div>
-            <div className="space-y-3 text-sm text-slate-300">
+            <div className="space-y-3 text-xs sm:text-sm text-slate-300 overflow-y-auto custom-scrollbar flex-1 pr-0.5">
               <p><strong>Reason:</strong> {errorDetails.reason}</p>
               {errorDetails.source && <p><strong>Source:</strong> {errorDetails.source}</p>}
               {errorDetails.failedFunction && <p><strong>Failed Function:</strong> {errorDetails.failedFunction}</p>}
@@ -466,11 +468,11 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
                 </div>
               )}
             </div>
-            <div className="pt-4 flex justify-end">
+            <div className="pt-3 border-t border-slate-800 flex justify-end shrink-0">
               <button
                 type="button"
                 onClick={() => setErrorDetails(null)}
-                className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
+                className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors"
               >
                 Close
               </button>
@@ -481,93 +483,95 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
 
       {/* Lost Lead Popup Modal */}
       {showLostModal && selectedLead && (
-        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md">
-          <div id="lost_lead_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto">
+          <div id="lost_lead_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-4 sm:p-5 space-y-4 my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans truncate">
                 <span>💔</span> Mark Lead as Lost
               </h4>
               <button 
                 onClick={() => setShowLostModal(false)}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0 shrink-0 ml-2"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-xs text-red-200">
-              Please select a mandatory reason and log notes to set lead status to <strong>Lost</strong>.
-            </div>
-
-            <div className="space-y-3.5 text-xs text-slate-300">
-              <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Lost Reason * (Required)
-                </label>
-                <select
-                  required
-                  value={lostReason}
-                  onChange={(e) => setLostReason(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
-                >
-                  <option value="">-- Select Reason --</option>
-                  <option value="Budget Constraint">Budget Constraint</option>
-                  <option value="Chose Competitor">Chose Competitor</option>
-                  <option value="Event Cancelled / Postponed">Event Cancelled / Postponed</option>
-                  <option value="No Response / Ghosted">No Response / Ghosted</option>
-                  <option value="Desired Date Unavailable">Desired Date Unavailable</option>
-                  <option value="Other">Other (Specify below)</option>
-                </select>
+            <div className="overflow-y-auto custom-scrollbar flex-1 space-y-3.5 pr-0.5">
+              <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-lg text-xs text-red-200">
+                Please select a mandatory reason and log notes to set lead status to <strong>Lost</strong>.
               </div>
 
-              {lostReason === 'Other' && (
+              <div className="space-y-3.5 text-xs text-slate-300">
                 <div>
                   <label className="block font-medium text-slate-400 mb-1">
-                    Specify Custom Lost Reason * (Required)
+                    Lost Reason * (Required)
                   </label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    placeholder="Enter custom lost reason..."
-                    value={otherLostReason}
-                    onChange={(e) => setOtherLostReason(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                    value={lostReason}
+                    onChange={(e) => setLostReason(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value="">-- Select Reason --</option>
+                    <option value="Budget Constraint">Budget Constraint</option>
+                    <option value="Chose Competitor">Chose Competitor</option>
+                    <option value="Event Cancelled / Postponed">Event Cancelled / Postponed</option>
+                    <option value="No Response / Ghosted">No Response / Ghosted</option>
+                    <option value="Desired Date Unavailable">Desired Date Unavailable</option>
+                    <option value="Other">Other (Specify below)</option>
+                  </select>
+                </div>
+
+                {lostReason === 'Other' && (
+                  <div>
+                    <label className="block font-medium text-slate-400 mb-1">
+                      Specify Custom Lost Reason * (Required)
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter custom lost reason..."
+                      value={otherLostReason}
+                      onChange={(e) => setOtherLostReason(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 font-sans"
+                    />
+                  </div>
+                )}
+
+                <div>
+                  <label className="block font-medium text-slate-400 mb-1">
+                    Lost Notes * (Required)
+                  </label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Detail the exact reason client decided otherwise..."
+                    value={lostNotes}
+                    onChange={(e) => setLostNotes(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
                   />
                 </div>
-              )}
-
-              <div>
-                <label className="block font-medium text-slate-400 mb-1">
-                  Lost Notes * (Required)
-                </label>
-                <textarea
-                  required
-                  rows={3}
-                  placeholder="Detail the exact reason client decided otherwise..."
-                  value={lostNotes}
-                  onChange={(e) => setLostNotes(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-amber-500 text-xs"
-                />
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowLostModal(false)}
-                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveLostLead}
-                  disabled={isSaving || !lostReason || (lostReason === 'Other' && !otherLostReason) || !lostNotes}
-                  className="px-4 py-2 bg-gradient-to-r from-red-650 to-rose-650 hover:from-red-600 hover:to-rose-600 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
-                >
-                  {isSaving ? 'Processing...' : 'Mark as Lost'}
-                  <CheckSquare className="w-3.5 h-3.5" />
-                </button>
-              </div>
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowLostModal(false)}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs animate-none border-0"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveLostLead}
+                disabled={isSaving || !lostReason || (lostReason === 'Other' && !otherLostReason) || !lostNotes}
+                className="px-4 py-2 bg-gradient-to-r from-red-650 to-rose-650 hover:from-red-600 hover:to-rose-600 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center gap-1.5 cursor-pointer shadow-lg text-xs border-0"
+              >
+                {isSaving ? 'Processing...' : 'Mark as Lost'}
+                <CheckSquare className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </div>
@@ -575,25 +579,25 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
 
       {/* Unlock Request Modal */}
       {showUnlockRequestModal && selectedUnlockLead && (
-        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
-                <Ban className="w-4 h-4 text-amber-500" /> Request Quotation Unlock
+        <div className="fixed inset-0 bg-black/85 z-[100] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto">
+          <div className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-md w-full shadow-2xl p-4 sm:p-5 space-y-4 my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans truncate">
+                <Ban className="w-4 h-4 text-amber-500 shrink-0" /> Request Quotation Unlock
               </h4>
               <button 
                 onClick={() => setShowUnlockRequestModal(false)}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0 shrink-0 ml-2"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-amber-200/80">
+            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg text-xs text-amber-200/80 shrink-0">
               This request will be sent to the Business Owner for approval. The quotation remains locked until approved.
             </div>
 
-            <form onSubmit={handleSubmitUnlockRequest} className="space-y-4 text-xs">
+            <form onSubmit={handleSubmitUnlockRequest} className="space-y-4 text-xs overflow-y-auto custom-scrollbar flex-1 pr-0.5">
               <div>
                 <label className="block font-medium text-slate-400 mb-1">
                   Reason * (Required)
@@ -658,25 +662,25 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
 
       {/* Lead Cancel Confirmation Modal */}
       {showCancelConfirmPopup && (
-        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-4 backdrop-blur-md animate-in fade-in duration-200">
-          <div id="lead_cancel_confirm_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-sm w-full shadow-2xl p-5 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans">
+        <div className="fixed inset-0 bg-black/85 z-55 flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto">
+          <div id="lead_cancel_confirm_modal" className="bg-slate-850 border border-slate-750 rounded-xl overflow-hidden max-w-sm w-full shadow-2xl p-4 sm:p-5 space-y-4 my-auto max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+              <h4 className="font-bold text-slate-100 text-sm flex items-center gap-1.5 font-sans truncate">
                 <span>⚠️</span> Mark Lead as Lost
               </h4>
               <button 
                 onClick={() => setShowCancelConfirmPopup(false)}
-                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0"
+                className="text-slate-500 hover:text-slate-350 cursor-pointer animate-none border-0 shrink-0 ml-2"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="text-sm text-slate-300 py-2 text-left">
+            <div className="text-sm text-slate-300 py-2 text-left overflow-y-auto custom-scrollbar flex-1">
               Are you sure you want to mark this lead as Lost?
             </div>
 
-            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3">
+            <div className="flex justify-end gap-2 border-t border-slate-800 pt-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setShowCancelConfirmPopup(false)}
@@ -697,8 +701,8 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
         </div>
       )}
       {viewingPkgDetails && createPortal(
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20000] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-6 space-y-5 shadow-2xl relative text-slate-300">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20000] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl p-4 sm:p-6 space-y-4 my-auto max-h-[90vh] flex flex-col shadow-2xl relative text-slate-300">
             
             {!viewingPkgDetails.package_name ? (
               <div className="flex flex-col items-center justify-center py-10 space-y-4 text-center">
@@ -1185,14 +1189,14 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
         })();
 
         return createPortal(
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20001] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-5 shadow-2xl relative text-slate-300">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <span className="text-xl">🗑️</span>
-                  <div>
-                    <h3 className="text-base font-bold text-white">Delete Package</h3>
-                    <p className="text-[11px] font-mono text-zinc-400 mt-0.5">Package ID: {pkg.package_id}</p>
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20001] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-4 sm:p-6 space-y-4 my-auto max-h-[90vh] flex flex-col shadow-2xl relative text-slate-300">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3 shrink-0">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-xl shrink-0">🗑️</span>
+                  <div className="min-w-0 truncate">
+                    <h3 className="text-base font-bold text-white truncate">Delete Package</h3>
+                    <p className="text-[11px] font-mono text-zinc-400 mt-0.5 truncate">Package ID: {pkg.package_id}</p>
                   </div>
                 </div>
                 {!isDeletingPackage && (
@@ -1202,129 +1206,131 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
                       setDeletePackageError(null);
                       setDeletingPackageId(null);
                     }}
-                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0 ml-2"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
 
-              {deletePackageError && (
-                <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-start gap-2">
-                  <span className="text-sm">⚠️</span>
-                  <div className="space-y-1">
-                    <p className="font-bold">Deletion Failed</p>
-                    <p>{deletePackageError}</p>
-                  </div>
-                </div>
-              )}
-
-              {isUsed ? (
-                <div className="space-y-4">
-                  <p className="text-slate-300 text-xs leading-relaxed font-sans">
-                    This package is already referenced in existing records (leads, quotes, or orders). You can deactivate it instead to preserve historic references.
-                  </p>
-                  <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/60">
-                    <button
-                      type="button"
-                      disabled={isDeletingPackage}
-                      onClick={() => {
-                        setDeletePackageError(null);
-                        setDeletingPackageId(null);
-                      }}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg cursor-pointer transition-all text-xs border border-transparent"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isDeletingPackage}
-                      onClick={async () => {
-                        const selectedPackageId = pkg.package_id;
-                        if (!selectedPackageId || typeof selectedPackageId !== 'string' || !selectedPackageId.trim()) {
-                          setDeletePackageError('Invalid package ID. Cannot proceed with deletion.');
-                          return;
-                        }
-                        try {
-                          setIsDeletingPackage(true);
-                          setDeletePackageError(null);
-                          await deletePackage(selectedPackageId.trim());
-                          setDeletingPackageId(null);
-                          setPackageSuccessMsg('Package deleted successfully.');
-                          setTimeout(() => setPackageSuccessMsg(null), 5000);
-                        } catch (err: any) {
-                          setDeletePackageError(err.message || String(err));
-                        } finally {
-                          setIsDeletingPackage(false);
-                        }
-                      }}
-                      className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg cursor-pointer transition-all text-xs shadow-md disabled:opacity-50"
-                    >
-                      {isDeletingPackage ? 'Deleting...' : 'Delete'}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <p className="text-slate-200 text-xs leading-relaxed font-sans">
-                    Are you sure you want to delete this package?
-                  </p>
-                  
-                  {isDeletingPackage && (
-                    <div className="text-indigo-400 font-mono text-[10px] animate-pulse flex items-center gap-2">
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      <span>Deleting package from database...</span>
+              <div className="overflow-y-auto custom-scrollbar flex-1 space-y-4 pr-0.5">
+                {deletePackageError && (
+                  <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-300 text-xs flex items-start gap-2">
+                    <span className="text-sm">⚠️</span>
+                    <div className="space-y-1">
+                      <p className="font-bold">Deletion Failed</p>
+                      <p>{deletePackageError}</p>
                     </div>
-                  )}
-
-                  <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/60">
-                    <button
-                      type="button"
-                      disabled={isDeletingPackage}
-                      onClick={() => {
-                        setDeletePackageError(null);
-                        setDeletingPackageId(null);
-                      }}
-                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-lg cursor-pointer transition-all text-xs border border-slate-700 disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isDeletingPackage}
-                      onClick={async () => {
-                        const selectedPackageId = pkg.package_id;
-                        if (!selectedPackageId || typeof selectedPackageId !== 'string' || !selectedPackageId.trim()) {
-                          setDeletePackageError('Invalid package ID. Cannot proceed with deletion.');
-                          return;
-                        }
-                        try {
-                          setIsDeletingPackage(true);
-                          setDeletePackageError(null);
-                          await deletePackage(selectedPackageId.trim());
-                          setDeletingPackageId(null);
-                          setPackageSuccessMsg('Package deleted successfully.');
-                          setTimeout(() => setPackageSuccessMsg(null), 5000);
-                        } catch (err: any) {
-                          setDeletePackageError(err.message || String(err));
-                        } finally {
-                          setIsDeletingPackage(false);
-                        }
-                      }}
-                      className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg cursor-pointer transition-all text-xs shadow-md disabled:opacity-50 flex items-center gap-1.5"
-                    >
-                      {isDeletingPackage ? (
-                        <>
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                          <span>Deleting...</span>
-                        </>
-                      ) : (
-                        <span>Delete</span>
-                      )}
-                    </button>
                   </div>
-                </div>
-              )}
+                )}
+
+                {isUsed ? (
+                  <div className="space-y-4">
+                    <p className="text-slate-300 text-xs leading-relaxed font-sans">
+                      This package is already referenced in existing records (leads, quotes, or orders). You can deactivate it instead to preserve historic references.
+                    </p>
+                    <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/60">
+                      <button
+                        type="button"
+                        disabled={isDeletingPackage}
+                        onClick={() => {
+                          setDeletePackageError(null);
+                          setDeletingPackageId(null);
+                        }}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-lg cursor-pointer transition-all text-xs border border-transparent"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isDeletingPackage}
+                        onClick={async () => {
+                          const selectedPackageId = pkg.package_id;
+                          if (!selectedPackageId || typeof selectedPackageId !== 'string' || !selectedPackageId.trim()) {
+                            setDeletePackageError('Invalid package ID. Cannot proceed with deletion.');
+                            return;
+                          }
+                          try {
+                            setIsDeletingPackage(true);
+                            setDeletePackageError(null);
+                            await deletePackage(selectedPackageId.trim());
+                            setDeletingPackageId(null);
+                            setPackageSuccessMsg('Package deleted successfully.');
+                            setTimeout(() => setPackageSuccessMsg(null), 5000);
+                          } catch (err: any) {
+                            setDeletePackageError(err.message || String(err));
+                          } finally {
+                            setIsDeletingPackage(false);
+                          }
+                        }}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg cursor-pointer transition-all text-xs shadow-md disabled:opacity-50"
+                      >
+                        {isDeletingPackage ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-slate-200 text-xs leading-relaxed font-sans">
+                      Are you sure you want to delete this package?
+                    </p>
+                    
+                    {isDeletingPackage && (
+                      <div className="text-indigo-400 font-mono text-[10px] animate-pulse flex items-center gap-2">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Deleting package from database...</span>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-800/60">
+                      <button
+                        type="button"
+                        disabled={isDeletingPackage}
+                        onClick={() => {
+                          setDeletePackageError(null);
+                          setDeletingPackageId(null);
+                        }}
+                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold rounded-lg cursor-pointer transition-all text-xs border border-slate-700 disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isDeletingPackage}
+                        onClick={async () => {
+                          const selectedPackageId = pkg.package_id;
+                          if (!selectedPackageId || typeof selectedPackageId !== 'string' || !selectedPackageId.trim()) {
+                            setDeletePackageError('Invalid package ID. Cannot proceed with deletion.');
+                            return;
+                          }
+                          try {
+                            setIsDeletingPackage(true);
+                            setDeletePackageError(null);
+                            await deletePackage(selectedPackageId.trim());
+                            setDeletingPackageId(null);
+                            setPackageSuccessMsg('Package deleted successfully.');
+                            setTimeout(() => setPackageSuccessMsg(null), 5000);
+                          } catch (err: any) {
+                            setDeletePackageError(err.message || String(err));
+                          } finally {
+                            setIsDeletingPackage(false);
+                          }
+                        }}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg cursor-pointer transition-all text-xs shadow-md disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {isDeletingPackage ? (
+                          <>
+                            <RefreshCw className="w-3 h-3 animate-spin" />
+                            <span>Deleting...</span>
+                          </>
+                        ) : (
+                          <span>Delete</span>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>,
           document.body
@@ -1333,28 +1339,28 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
 
       {/* 2. Side-by-Side Comparison Modal */}
       {isComparingPkgs && createPortal(
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20000] flex items-center justify-center p-4 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl p-6 space-y-5 shadow-2xl relative text-slate-300">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[20000] flex items-center justify-center p-2.5 sm:p-4 md:p-6 overflow-y-auto animate-fade-in text-left text-xs bg-black/60">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl p-4 sm:p-6 space-y-4 my-auto max-h-[90vh] flex flex-col shadow-2xl relative text-slate-300">
             
             {/* Header */}
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <div>
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3 shrink-0">
+              <div className="min-w-0 pr-2">
                 <span className="font-mono text-[10px] text-zinc-500 font-bold uppercase block mb-0.5">Dynamic comparison checklist</span>
-                <h4 className="text-sm font-extrabold text-slate-100 font-sans tracking-tight">
+                <h4 className="text-sm font-extrabold text-slate-100 font-sans tracking-tight truncate">
                   ⚖️ Side-by-Side Specifications Comparison ({selectedPkgIds.length} packages selected)
                 </h4>
               </div>
               <button
                 type="button"
                 onClick={() => setIsComparingPkgs(false)}
-                className="text-slate-450 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                className="text-slate-450 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Comparison Grid Table */}
-            <div className="overflow-x-auto border border-slate-800/85 rounded-xl bg-slate-950/40">
+            <div className="overflow-x-auto border border-slate-800/85 rounded-xl bg-slate-950/40 flex-1 overflow-y-auto custom-scrollbar">
               <table className="w-full min-w-max border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-800 bg-[#0F172A]">
@@ -1507,7 +1513,7 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
             </div>
 
             {/* Footer Actions */}
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end pt-2 border-t border-slate-800 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsComparingPkgs(false)}

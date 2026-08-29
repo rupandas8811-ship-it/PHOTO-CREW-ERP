@@ -92,27 +92,27 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, lea
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-black/75 backdrop-blur-sm overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh] my-auto relative"
       >
-        <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
-          <div>
-            <h3 className="text-sm font-bold text-white uppercase font-mono tracking-wider flex items-center gap-2">
-              <FileText className="w-4 h-4 text-amber-500" />
-              Add Note
+        <div className="p-3.5 sm:p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/60 shrink-0">
+          <div className="min-w-0 pr-2">
+            <h3 className="text-sm font-bold text-white uppercase font-mono tracking-wider flex items-center gap-2 truncate">
+              <FileText className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>Add Note</span>
             </h3>
-            <p className="text-[11px] text-zinc-400 mt-0.5">For {customerName} {orderId ? `(${orderId})` : `(${leadId})`}</p>
+            <p className="text-[11px] text-zinc-400 mt-0.5 truncate">For {customerName} {orderId ? `(${orderId})` : `(${leadId})`}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white">
+          <button onClick={onClose} className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-4 flex flex-col gap-4 overflow-y-auto">
+        <div className="p-3.5 sm:p-4 flex flex-col gap-4 overflow-y-auto custom-scrollbar flex-1">
           {/* Add Note Section */}
           <div className="space-y-2">
             <label className="text-[11px] font-mono text-zinc-450 uppercase tracking-wider block">New Note</label>
