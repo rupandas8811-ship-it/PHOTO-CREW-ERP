@@ -355,68 +355,168 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     return filteredOrders.filter(o => o.current_stage !== 'Order Closed' && o.current_stage !== 'Closed' && o.current_stage !== 'Event Cancelled').length;
   }, [filteredOrders]);
 
+  // Unified Ecosystem Master Dataset based on Lead ID + Order ID relationships
+  const allEcosystemRecords = useMemo(() => {
+    const leadList = Array.isArray(leads) ? leads : [];
+    const orderList = Array.isArray(orders) ? orders : [];
+    const opList = Array.isArray(operations) ? operations : [];
+    const prodList = Array.isArray(production) ? production : [];
+    const payList = Array.isArray(payments) ? payments : [];
+    const edList = Array.isArray(editorAssignments) ? editorAssignments : [];
+
+    const recordMap = new Map<string, any>();
+
+    // 1. Process Leads
+    leadList.forEach(lead => {
+      const matchingOrder = orderList.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
+      const matchingOp = opList.find(op => op.order_id === lead.lead_id || (matchingOrder && (op.order_id === matchingOrder.order_id || (op as any).tracking_id === matchingOrder.order_id)));
+      const matchingProd = prodList.find(p => p.tracking_id === lead.lead_id || p.order_id === lead.lead_id || (matchingOrder && (p.tracking_id === matchingOrder.order_id || p.order_id === matchingOrder.order_id)));
+      const matchingPay = payList.find(p => p.lead_id === lead.lead_id || (matchingOrder && p.order_id === matchingOrder.order_id));
+      const matchingEds = edList.filter(e => e.order_id === lead.lead_id || (matchingOrder && e.order_id === matchingOrder.order_id));
+
+      const key = `lead_${lead.lead_id}`;
+      recordMap.set(key, {
+        rawLead: lead,
+        rawOrder: matchingOrder,
+        rawOp: matchingOp,
+        rawProd: matchingProd,
+        rawPay: matchingPay,
+        rawEds: matchingEds,
+        lead_id: lead.lead_id,
+        order_id: matchingOrder?.order_id || 'N/A',
+        customer_name: matchingOrder?.customer_name || lead.customer_name || 'Client',
+        mobile: matchingOrder?.mobile || matchingOrder?.customer_phone || lead.mobile || lead.phone || 'N/A',
+        custom_event_name: matchingOrder?.custom_event_name || lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
+        event_type: matchingOrder?.event_type || lead.event_type || 'Photography & Videography',
+        event_date: matchingOrder?.event_date || lead.event_date || matchingOp?.event_date || matchingProd?.event_date || 'N/A',
+        quotation_amount: matchingOrder?.quotation_amount || lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
+        sales_person: matchingOrder?.sales_person || lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
+        created_at: matchingOrder?.created_at || lead.created_date || lead.created_at || new Date().toISOString()
+      });
+    });
+
+    // 2. Process Orders
+    orderList.forEach(order => {
+      let existingKey: string | null = null;
+      for (const [k, v] of recordMap.entries()) {
+        if ((order.lead_id && v.lead_id === order.lead_id) || (order.order_id && (v.order_id === order.order_id || v.lead_id === order.order_id))) {
+          existingKey = k;
+          break;
+        }
+      }
+
+      const matchingLead = leadList.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
+      const matchingOp = opList.find(op => op.order_id === order.order_id || op.order_id === order.lead_id || (op as any).tracking_id === order.lead_id);
+      const matchingProd = prodList.find(p => p.tracking_id === order.lead_id || p.order_id === order.order_id || p.tracking_id === order.order_id || p.order_id === order.lead_id || p.production_id === order.order_id);
+      const matchingPay = payList.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
+      const matchingEds = edList.filter(e => e.order_id === order.order_id || e.order_id === order.lead_id);
+
+      const existingRecord = existingKey ? recordMap.get(existingKey) : null;
+
+      const itemData = {
+        rawLead: matchingLead || existingRecord?.rawLead,
+        rawOrder: order,
+        rawOp: matchingOp || existingRecord?.rawOp,
+        rawProd: matchingProd || existingRecord?.rawProd,
+        rawPay: matchingPay || existingRecord?.rawPay,
+        rawEds: matchingEds.length > 0 ? matchingEds : (existingRecord?.rawEds || []),
+        lead_id: order.lead_id || matchingLead?.lead_id || existingRecord?.lead_id || 'N/A',
+        order_id: order.order_id,
+        customer_name: order.customer_name || matchingLead?.customer_name || existingRecord?.customer_name || 'Client',
+        mobile: order.mobile || order.customer_phone || matchingLead?.mobile || existingRecord?.mobile || 'N/A',
+        custom_event_name: order.custom_event_name || matchingLead?.custom_event_name || matchingLead?.event_type || existingRecord?.custom_event_name || 'Event',
+        event_type: order.event_type || matchingLead?.event_type || existingRecord?.event_type || 'Photography & Videography',
+        event_date: order.event_date || matchingLead?.event_date || existingRecord?.event_date || 'N/A',
+        quotation_amount: order.quotation_amount || matchingLead?.quotation_amount || existingRecord?.quotation_amount || 0,
+        sales_person: order.sales_person || matchingLead?.sales_person || existingRecord?.sales_person || 'Unassigned',
+        created_at: order.created_at || matchingLead?.created_date || existingRecord?.created_at || new Date().toISOString()
+      };
+
+      if (existingKey) {
+        recordMap.set(existingKey, { ...recordMap.get(existingKey), ...itemData });
+      } else {
+        recordMap.set(`order_${order.order_id}`, itemData);
+      }
+    });
+
+    // 3. Transform map into enriched unified records
+    return Array.from(recordMap.values()).map(rec => {
+      const { rawLead, rawOrder, rawOp, rawProd, rawEds } = rec;
+
+      const opCrewList = rawOp ? [rawOp.photographer_assigned, rawOp.videographer_assigned, rawOp.drone_operator_assigned, rawOp.assistant_assigned].filter(Boolean) : [];
+      const assignedCrew = opCrewList.length > 0 ? opCrewList.join(', ') : (rawOp?.assigned_crew || rawOp?.assigned_staff || 'Unassigned');
+
+      const editorList = rawProd?.editor_assigned || rawProd?.assigned_editor || (rawEds && rawEds.length > 0 ? rawEds.map((e: any) => e.editor_name || e.assigned_editor).filter(Boolean).join(', ') : 'Unassigned');
+
+      const opsStatus = rawOp?.event_status || rawOp?.operations_status || (rawOrder?.current_stage && ['Event Scheduled', 'Assigned Crew', 'Event Started', 'Event Completed', 'Raw Footage Received'].includes(rawOrder.current_stage) ? rawOrder.current_stage : (rawOrder ? 'Completed' : 'Pending'));
+
+      const prodStatus = rawProd?.editing_status || rawProd?.production_status || (rawOrder?.current_stage && ['Editing Started', 'Editing In Progress', 'Customer Review', 'Client Acceptance', 'Editing Complete', 'Order Closed', 'Closed'].includes(rawOrder.current_stage) ? rawOrder.current_stage : 'Pending');
+
+      let currentStatus = 'Active Lead';
+      if (rawOrder) {
+        if (['Order Closed', 'Closed', 'Completed & Closed'].includes(rawOrder.current_stage) || rawOrder.order_status === 'Closed') {
+          currentStatus = 'Order Closed';
+        } else if (['Client Acceptance', 'Customer Review', 'Client Review', 'Business Owner Review', 'Final Approval', 'Approved'].includes(rawOrder.current_stage) || ['Client Acceptance', 'Customer Review', 'Approved'].includes(rawProd?.editing_status)) {
+          currentStatus = 'Client Acceptance';
+        } else if (['Editing Started', 'Editing In Progress', 'Raw Footage Received', 'Assigned Editor', 'Internal QC Review', 'Editing Complete'].includes(rawOrder.current_stage) || rawProd) {
+          currentStatus = rawProd?.editing_status || rawOrder.current_stage || 'In Production';
+        } else if (['Operations Assigned', 'Assigned Crew', 'Event Scheduled', 'Event Started', 'Event Completed', 'Staff Assigned'].includes(rawOrder.current_stage) || rawOp) {
+          currentStatus = rawOp?.event_status || rawOrder.current_stage || 'Operations Active';
+        } else {
+          currentStatus = rawOrder.current_stage || 'Order Confirmed';
+        }
+      } else if (rawLead) {
+        const sLower = (rawLead.current_status || rawLead.status || '').toLowerCase();
+        if (sLower.includes('lost')) {
+          currentStatus = 'Lost Lead';
+        } else if (sLower.includes('confirm')) {
+          currentStatus = 'Order Confirmed';
+        } else {
+          currentStatus = rawLead.current_status || rawLead.status || 'Active Lead';
+        }
+      }
+
+      return {
+        ...rec,
+        id: rec.order_id !== 'N/A' ? rec.order_id : rec.lead_id,
+        assigned_crew: assignedCrew,
+        editor: editorList || 'Unassigned',
+        ops_status: opsStatus,
+        prod_status: prodStatus,
+        delivery_date: rawProd?.expected_delivery_date || rawProd?.target_delivery_date || rawProd?.delivery_date || 'N/A',
+        current_status: currentStatus,
+        status: currentStatus
+      };
+    });
+  }, [leads, orders, operations, production, payments, editorAssignments]);
+
   const boCardsData = useMemo(() => {
-    // SALES
-    const salesTotalLeads = filteredLeads;
-    const salesConverted = filteredLeads.filter(l => {
-      const matchingOrder = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
-      const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower.includes('confirm') || !!matchingOrder;
-    });
-    const salesLost = filteredLeads.filter(l => {
-      const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower === 'lost lead' || sLower === 'lost';
-    });
-    const salesFollowup = filteredLeads.filter(l => {
-      const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower.includes('quotation');
-    });
+    // SALES CARDS
+    const salesTotalLeads = allEcosystemRecords;
+    const salesConverted = allEcosystemRecords.filter(r => r.rawOrder || (r.rawLead?.status || '').toLowerCase().includes('confirm') || (r.rawLead?.current_status || '').toLowerCase().includes('confirm'));
+    const salesLost = allEcosystemRecords.filter(r => (r.rawLead?.status || '').toLowerCase().includes('lost') || (r.rawLead?.current_status || '').toLowerCase().includes('lost'));
+    const salesFollowup = allEcosystemRecords.filter(r => (r.rawLead?.status || '').toLowerCase().includes('quotation') || (r.rawLead?.current_status || '').toLowerCase().includes('quotation'));
 
-    // OPERATIONS
-    const opsNew = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return !sLower || sLower === 'pending' || sLower === 'assigned' || sLower === 'new order received' || sLower === 'operations assigned';
-    });
-    const opsCompleted = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
-    });
-    const opsUpcoming = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      const o = orders.find(ord => ord.order_id === op.order_id || ord.lead_id === op.tracking_id);
-      if (!o || !o.event_date) return false;
-      const isComplete = sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
-      return !isComplete && new Date(o.event_date) >= new Date();
-    });
-    const opsScheduled = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower === 'event scheduled' || sLower === 'assigned crew' || sLower === 'staff assigned';
-    });
+    // OPERATIONS CARDS
+    const opsInPipeline = allEcosystemRecords.filter(r => r.rawOrder || r.rawOp || (r.rawLead?.status || '').toLowerCase().includes('confirm'));
+    const opsNew = opsInPipeline.filter(r => !r.ops_status || r.ops_status === 'Pending' || r.ops_status === 'Assigned' || r.ops_status === 'New Order Received' || r.ops_status === 'Operations Assigned');
+    const opsCompleted = opsInPipeline.filter(r => (r.rawOp?.event_status || r.ops_status || '').toLowerCase().includes('complete') || ['Raw Footage Received', 'Editing Started', 'Editing In Progress', 'Client Acceptance', 'Order Closed', 'Closed'].includes(r.current_status));
+    const opsUpcoming = opsInPipeline.filter(r => r.event_date !== 'N/A' && !(r.rawOp?.event_status || r.ops_status || '').toLowerCase().includes('complete') && new Date(r.event_date) >= new Date());
+    const opsScheduled = opsInPipeline.filter(r => ['Event Scheduled', 'Assigned Crew', 'Staff Assigned'].includes(r.ops_status) || (r.rawOp?.event_status || '').toLowerCase().includes('schedule'));
 
-    // PRODUCTION
-    const prodNew = filteredProduction.filter(prod => {
-      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower === 'raw footage received' || sLower === 'new' || sLower === 'pending' || !sLower;
-    });
-    const prodInProgress = filteredProduction.filter(prod => {
-      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('in progress') || sLower.includes('editing started') || sLower.includes('assigned');
-    });
-    const prodEditingCompleted = filteredProduction.filter(prod => {
-      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('review') || sLower === 'ready for delivery';
-    });
-    const prodClientAcceptance = filteredProduction.filter(prod => {
-      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('client acceptance') || sLower.includes('customer review');
-    });
+    // PRODUCTION CARDS
+    const prodInPipeline = allEcosystemRecords.filter(r => r.rawProd || ['Raw Footage Received', 'Editing Started', 'Editing In Progress', 'Assigned Editor', 'Internal QC Review', 'Editing Complete', 'Customer Review', 'Client Review', 'Client Acceptance', 'Order Closed', 'Closed'].includes(r.current_status) || (r.rawOp?.event_status || '').toLowerCase().includes('complete'));
+    const prodNew = prodInPipeline.filter(r => (r.prod_status || '').toLowerCase().includes('raw') || r.prod_status === 'New' || r.prod_status === 'Pending' || r.current_status === 'Raw Footage Received');
+    const prodInProgress = prodInPipeline.filter(r => (r.prod_status || '').toLowerCase().includes('progress') || (r.prod_status || '').toLowerCase().includes('editing started') || (r.current_status || '').toLowerCase().includes('progress') || (r.current_status || '').toLowerCase().includes('editing'));
+    const prodEditingCompleted = prodInPipeline.filter(r => (r.prod_status || '').toLowerCase().includes('complete') || (r.prod_status || '').toLowerCase().includes('review') || r.prod_status === 'Ready for Delivery');
+    const prodClientAcceptance = prodInPipeline.filter(r => r.current_status === 'Client Acceptance' || (r.prod_status || '').toLowerCase().includes('client acceptance') || (r.prod_status || '').toLowerCase().includes('customer review'));
 
     return {
       salesTotalLeads, salesConverted, salesLost, salesFollowup,
-      opsNew, opsCompleted, opsUpcoming, opsScheduled,
-      prodNew, prodInProgress, prodEditingCompleted, prodClientAcceptance
+      opsNew, opsCompleted, opsUpcoming, opsScheduled, opsInPipeline,
+      prodNew, prodInProgress, prodEditingCompleted, prodClientAcceptance, prodInPipeline
     };
-  }, [filteredLeads, orders, filteredOperations, filteredProduction]);
+  }, [allEcosystemRecords]);
 
   const outstandingPaymentTotal = useMemo(() => {
     return filteredOrders.reduce((sum, o) => {
@@ -451,147 +551,38 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
     // SALES CARDS
     if (selectedCard === 'sales_total_leads' || selectedCard === 'overview_sales') {
-      return boCardsData.salesTotalLeads.map(lead => {
-        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-        return {
-          ...lead,
-          id: lead.lead_id,
-          lead_id: lead.lead_id,
-          customer_name: lead.customer_name || 'Client',
-          mobile: lead.mobile || lead.phone || 'N/A',
-          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
-          event_date: lead.event_date || 'N/A',
-          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
-          status: lead.current_status || lead.status || 'Active Lead',
-          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+      return boCardsData.salesTotalLeads;
     }
     if (selectedCard === 'sales_total_converted') {
-      return boCardsData.salesConverted.map(lead => {
-        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-        return {
-          ...lead,
-          id: lead.lead_id,
-          lead_id: lead.lead_id,
-          customer_name: lead.customer_name || 'Client',
-          mobile: lead.mobile || lead.phone || 'N/A',
-          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
-          event_date: lead.event_date || 'N/A',
-          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
-          status: lead.current_status || lead.status || 'Confirmed',
-          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+      return boCardsData.salesConverted;
     }
     if (selectedCard === 'sales_total_lost') {
-      return boCardsData.salesLost.map(lead => {
-        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-        return {
-          ...lead,
-          id: lead.lead_id,
-          lead_id: lead.lead_id,
-          customer_name: lead.customer_name || 'Client',
-          mobile: lead.mobile || lead.phone || 'N/A',
-          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
-          event_date: lead.event_date || 'N/A',
-          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
-          status: lead.current_status || lead.status || 'Lost Lead',
-          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+      return boCardsData.salesLost;
     }
     if (selectedCard === 'sales_quotation_followup') {
-      return boCardsData.salesFollowup.map(lead => {
-        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-        return {
-          ...lead,
-          id: lead.lead_id,
-          lead_id: lead.lead_id,
-          customer_name: lead.customer_name || 'Client',
-          mobile: lead.mobile || lead.phone || 'N/A',
-          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
-          event_date: lead.event_date || 'N/A',
-          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
-          status: lead.current_status || lead.status || 'Quotation Follow-up',
-          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+      return boCardsData.salesFollowup;
     }
 
     // OPERATIONS CARDS
-    if (selectedCard === 'ops_new' || selectedCard === 'ops_completed' || selectedCard === 'ops_upcoming' || selectedCard === 'ops_scheduled' || selectedCard === 'overview_ops') {
-      const rawList = selectedCard === 'ops_new' ? boCardsData.opsNew
-        : selectedCard === 'ops_completed' ? boCardsData.opsCompleted
-        : selectedCard === 'ops_upcoming' ? boCardsData.opsUpcoming
-        : selectedCard === 'ops_scheduled' ? boCardsData.opsScheduled
-        : filteredOperations;
-
-      return rawList.map(op => {
-        const order = orders.find(o => o.order_id === op.order_id || o.lead_id === (op as any).tracking_id || o.lead_id === op.order_id);
-        const lead = leads.find(l => l.lead_id === op.order_id || l.lead_id === (op as any).tracking_id || l.lead_id === order?.lead_id);
-        const crewList = [op.photographer_assigned, op.videographer_assigned, op.drone_operator_assigned, op.assistant_assigned].filter(Boolean);
-        const assignedCrew = crewList.length > 0 ? crewList.join(', ') : ((op as any).assigned_photographer || (op as any).assigned_crew || (op as any).assigned_staff || 'Unassigned');
-
-        return {
-          ...op,
-          id: op.operation_id || op.order_id || (op as any).tracking_id,
-          order_id: op.order_id || (op as any).tracking_id || order?.order_id || 'N/A',
-          customer_name: order?.customer_name || lead?.customer_name || (op as any).customer_name || 'Client',
-          event_type: order?.event_type || lead?.event_type || (op as any).event_type || 'Event Shoot',
-          custom_event_name: order?.custom_event_name || lead?.custom_event_name || (op as any).custom_event_name || order?.event_type || lead?.event_type || 'Photography Shoot',
-          event_date: order?.event_date || lead?.event_date || (op as any).event_date || 'N/A',
-          status: op.event_status || (op as any).operations_status || (op as any).status || order?.current_stage || 'Active',
-          assigned_crew: assignedCrew,
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
-    }
+    if (selectedCard === 'ops_new') return boCardsData.opsNew;
+    if (selectedCard === 'ops_completed') return boCardsData.opsCompleted;
+    if (selectedCard === 'ops_upcoming') return boCardsData.opsUpcoming;
+    if (selectedCard === 'ops_scheduled') return boCardsData.opsScheduled;
+    if (selectedCard === 'overview_ops') return boCardsData.opsInPipeline;
 
     // PRODUCTION CARDS
-    if (selectedCard === 'prod_new' || selectedCard === 'prod_inprogress' || selectedCard === 'prod_editing_completed' || selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_prod' || selectedCard === 'overview_acceptance') {
-      const rawList = selectedCard === 'prod_new' ? boCardsData.prodNew
-        : selectedCard === 'prod_inprogress' ? boCardsData.prodInProgress
-        : selectedCard === 'prod_editing_completed' ? boCardsData.prodEditingCompleted
-        : (selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_acceptance') ? boCardsData.prodClientAcceptance
-        : filteredProduction;
-
-      return rawList.map(prod => {
-        const order = orders.find(o => o.order_id === prod.order_id || o.lead_id === prod.tracking_id || o.order_id === prod.tracking_id || (prod as any).production_id === o.order_id);
-        const lead = leads.find(l => l.lead_id === prod.tracking_id || l.lead_id === (prod as any).order_id || l.lead_id === order?.lead_id);
-
-        return {
-          ...prod,
-          id: prod.production_id || prod.order_id || prod.tracking_id,
-          order_id: prod.order_id || prod.tracking_id || order?.order_id || 'N/A',
-          customer_name: order?.customer_name || lead?.customer_name || (prod as any).customer_name || 'Client',
-          event_type: order?.event_type || lead?.event_type || (prod as any).project_type || 'Video Editing',
-          custom_event_name: order?.custom_event_name || lead?.custom_event_name || (prod as any).custom_event_name || order?.event_type || 'Deliverable',
-          event_date: order?.event_date || (prod as any).event_date || lead?.event_date || 'N/A',
-          delivery_date: prod.expected_delivery_date || prod.target_delivery_date || (prod as any).delivery_date || 'N/A',
-          status: prod.editing_status || prod.production_status || (prod as any).status || order?.current_stage || 'In Production',
-          editor: prod.editor_assigned || (prod as any).assigned_editor || (prod as any).assigned_staff || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
-    }
+    if (selectedCard === 'prod_new') return boCardsData.prodNew;
+    if (selectedCard === 'prod_inprogress') return boCardsData.prodInProgress;
+    if (selectedCard === 'prod_editing_completed') return boCardsData.prodEditingCompleted;
+    if (selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_acceptance') return boCardsData.prodClientAcceptance;
+    if (selectedCard === 'overview_prod') return boCardsData.prodInPipeline;
 
     if (selectedCard === 'overview_closed') {
-      return filteredOrders.filter(o => o.current_stage === 'Order Closed' || o.current_stage === 'Closed');
+      return allEcosystemRecords.filter(r => ['Order Closed', 'Closed', 'Completed & Closed'].includes(r.current_status) || r.rawOrder?.current_stage === 'Order Closed' || r.rawOrder?.current_stage === 'Closed');
     }
 
     return [];
-  }, [selectedCard, filteredOrders, waitingApprovalOrders, payments, boCardsData, orders, leads, filteredOperations, filteredProduction]);
+  }, [selectedCard, filteredOrders, waitingApprovalOrders, payments, boCardsData, allEcosystemRecords]);
 
   const modalColumns = useMemo(() => {
     const actionCol = { 
@@ -619,6 +610,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
     const baseLeadCols = [
       { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.lead_id}</span> },
+      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-amber-400/80 text-xs">{item.order_id || 'N/A'}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => (
         <div>
           <span className="font-bold text-white block">{item.customer_name}</span>
@@ -629,46 +621,88 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
       { key: 'sales_person', label: 'Sales Staff', render: (item: any) => <span className="text-amber-400 font-mono text-xs">{item.sales_person || 'Unassigned'}</span> },
       { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold text-xs">{formatINR(item.quotation_amount || 0)}</span> },
-      { key: 'status', label: 'Status', render: (item: any) => (
+      { key: 'current_status', label: 'Current Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
-          (item.status || '').toLowerCase().includes('confirm') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-          (item.status || '').toLowerCase().includes('lost') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+          (item.current_status || '').toLowerCase().includes('confirm') || (item.current_status || '').toLowerCase().includes('completed') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.current_status || '').toLowerCase().includes('lost') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
           'bg-amber-500/10 text-amber-400 border-amber-500/20'
         }`}>
-          {item.status || 'Active'}
+          {item.current_status || 'Active'}
         </span>
       )}
     ];
 
     const baseOpsCols = [
-      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.order_id}</span> },
-      { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+      { key: 'order_id', label: 'Order & Lead ID', render: (item: any) => (
+        <div>
+          <span className="font-mono text-zinc-300 font-bold block">{item.order_id}</span>
+          {item.lead_id && item.lead_id !== 'N/A' && item.lead_id !== item.order_id && (
+            <span className="text-[10px] text-zinc-500 font-mono block">Lead: {item.lead_id}</span>
+          )}
+        </div>
+      )},
+      { key: 'customer_name', label: 'Customer Name', render: (item: any) => (
+        <div>
+          <span className="font-bold text-white block">{item.customer_name}</span>
+          {item.mobile && item.mobile !== 'N/A' && <span className="text-[10px] text-zinc-400 font-mono">{item.mobile}</span>}
+        </div>
+      )},
       { key: 'custom_event_name', label: 'Event / Shoot Type', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
       { key: 'event_date', label: 'Shoot Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
       { key: 'assigned_crew', label: 'Assigned Crew', render: (item: any) => <span className="text-blue-400 font-mono text-xs">{item.assigned_crew}</span> },
-      { key: 'status', label: 'Operational Status', render: (item: any) => (
+      { key: 'ops_status', label: 'Operations Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
-          (item.status || '').toLowerCase().includes('complete') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.ops_status || '').toLowerCase().includes('complete') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
           'bg-blue-500/10 text-blue-400 border-blue-500/20'
         }`}>
-          {item.status || 'Active'}
+          {item.ops_status || 'Active'}
+        </span>
+      )},
+      { key: 'current_status', label: 'Current Status', render: (item: any) => (
+        <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
+          (item.current_status || '').toLowerCase().includes('close') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.current_status || '').toLowerCase().includes('acceptance') ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+          (item.current_status || '').toLowerCase().includes('edit') || (item.current_status || '').toLowerCase().includes('production') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+          'bg-blue-500/10 text-blue-400 border-blue-500/20'
+        }`}>
+          {item.current_status || 'Active'}
         </span>
       )}
     ];
 
     const baseProdCols = [
-      { key: 'order_id', label: 'Project / Order ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.order_id}</span> },
-      { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
+      { key: 'order_id', label: 'Project & Lead ID', render: (item: any) => (
+        <div>
+          <span className="font-mono text-zinc-300 font-bold block">{item.order_id}</span>
+          {item.lead_id && item.lead_id !== 'N/A' && item.lead_id !== item.order_id && (
+            <span className="text-[10px] text-zinc-500 font-mono block">Lead: {item.lead_id}</span>
+          )}
+        </div>
+      )},
+      { key: 'customer_name', label: 'Customer Name', render: (item: any) => (
+        <div>
+          <span className="font-bold text-white block">{item.customer_name}</span>
+          {item.mobile && item.mobile !== 'N/A' && <span className="text-[10px] text-zinc-400 font-mono">{item.mobile}</span>}
+        </div>
+      )},
       { key: 'custom_event_name', label: 'Project Deliverable', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
       { key: 'delivery_date', label: 'Target Delivery', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.delivery_date ? item.delivery_date.split('T')[0] : 'N/A'}</span> },
       { key: 'editor', label: 'Assigned Editor', render: (item: any) => <span className="text-purple-400 font-mono text-xs">{item.editor}</span> },
-      { key: 'status', label: 'Production Status', render: (item: any) => (
+      { key: 'prod_status', label: 'Production Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
-          (item.status || '').toLowerCase().includes('acceptance') || (item.status || '').toLowerCase().includes('approved') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-          (item.status || '').toLowerCase().includes('complete') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+          (item.prod_status || '').toLowerCase().includes('complete') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
           'bg-pink-500/10 text-pink-400 border-pink-500/20'
         }`}>
-          {item.status || 'In Progress'}
+          {item.prod_status || 'In Progress'}
+        </span>
+      )},
+      { key: 'current_status', label: 'Current Status', render: (item: any) => (
+        <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
+          (item.current_status || '').toLowerCase().includes('close') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.current_status || '').toLowerCase().includes('acceptance') ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+          'bg-purple-500/10 text-purple-400 border-purple-500/20'
+        }`}>
+          {item.current_status || 'In Production'}
         </span>
       )}
     ];
