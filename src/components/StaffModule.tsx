@@ -52,26 +52,26 @@ const StaffActionDropdown: React.FC<{
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
 
-      const dropdownWidth = Math.min(240, viewportWidth - 24);
+      const dropdownWidth = Math.min(220, viewportWidth - 24);
       const spaceBelow = viewportHeight - rect.bottom;
       const spaceAbove = rect.top;
-      const openUpward = spaceBelow < 220 && spaceAbove > spaceBelow;
+      const openUpward = spaceBelow < 200 && spaceAbove > spaceBelow;
 
       const calculatedLeft = Math.min(
         Math.max(12, rect.right - dropdownWidth),
         viewportWidth - dropdownWidth - 12
       );
 
-      const calculatedTop = openUpward ? Math.max(12, rect.top - 6) : Math.min(viewportHeight - 12, rect.bottom + 6);
+      const calculatedTop = openUpward ? rect.top - 6 : rect.bottom + 6;
       const maxHeight = openUpward
-        ? Math.min(280, rect.top - 20)
-        : Math.min(280, viewportHeight - rect.bottom - 20);
+        ? Math.min(280, rect.top - 16)
+        : Math.min(280, viewportHeight - rect.bottom - 16);
 
       setMenuPosition({
         top: calculatedTop,
         left: calculatedLeft,
         openUpward,
-        maxHeight: Math.max(160, maxHeight),
+        maxHeight,
         width: dropdownWidth,
       });
       setIsOpen(true);
@@ -831,10 +831,6 @@ export const StaffModule: React.FC = () => {
     booking: any;
     stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete';
   } | null>(null);
-  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
-  const [calendarModalEvents, setCalendarModalEvents] = useState<any[]>([]);
 
   // Photos attached in modal & raw footage link
   const [modalPhotos, setModalPhotos] = useState<Record<string, string>>({});
@@ -842,37 +838,10 @@ export const StaffModule: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Refs for responsive auto-scrolling & viewport positioning
-  const photoModalBodyRef = useRef<HTMLDivElement>(null);
-  const photoModalSubmitBtnRef = useRef<HTMLButtonElement>(null);
-  const calendarModalBodyRef = useRef<HTMLDivElement>(null);
-  const footageLinkInputRef = useRef<HTMLInputElement>(null);
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
-
-  // Lock body scroll when any modal is open
-  useEffect(() => {
-    if (photoModalData || calendarModalDate || selectedBookingDetails) {
-      const prevOverflow = document.body.style.overflow;
-      document.body.style.overflow = 'hidden';
-      return () => {
-        document.body.style.overflow = prevOverflow;
-      };
-    }
-  }, [photoModalData, calendarModalDate, selectedBookingDetails]);
-
-  // Auto-scroll photo modal to top on open
-  useEffect(() => {
-    if (photoModalData) {
-      const timer = setTimeout(() => {
-        photoModalBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-      }, 60);
-      return () => clearTimeout(timer);
-    }
-  }, [photoModalData?.stage]);
 
   // Build assigned bookings list for logged in staff
   useEffect(() => {
@@ -1486,21 +1455,6 @@ export const StaffModule: React.FC = () => {
         }
         return next;
       });
-
-      // Auto-scroll to the next required section or to the submit button
-      setTimeout(() => {
-        if (!photoModalBodyRef.current) return;
-        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:')) {
-          const eventStartCard = photoModalBodyRef.current.querySelector('[data-card="event-start"]') as HTMLElement;
-          if (eventStartCard) {
-            eventStartCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            return;
-          }
-        }
-        // If all uploaded or last photo captured, scroll smoothly to the action button
-        photoModalSubmitBtnRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 120);
-
     } catch (err) {
       console.error('Error processing photo:', err);
       showToast('❌ Failed to process photo. Please try again.');
@@ -1524,24 +1478,18 @@ export const StaffModule: React.FC = () => {
 
       if (hasEquipment) {
         if (!hasAssetColl && hasEventStart) {
-          const assetCard = photoModalBodyRef.current?.querySelector('[data-card="asset-collection"]') as HTMLElement;
-          assetCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
           showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
           return;
         }
 
         if (!hasAssetColl && !hasEventStart) {
-          const assetCard = photoModalBodyRef.current?.querySelector('[data-card="asset-collection"]') as HTMLElement;
-          assetCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           alert("Please upload at least the Equipment Received / Asset Picture.");
           showToast("⚠️ Please upload at least the Equipment Received / Asset Picture.");
           return;
         }
       } else {
         if (!hasEventStart) {
-          const eventStartCard = photoModalBodyRef.current?.querySelector('[data-card="event-start"]') as HTMLElement;
-          eventStartCard?.scrollIntoView({ behavior: 'smooth', block: 'center' });
           alert("Please upload the Event Start Image.");
           showToast("⚠️ Please upload the Event Start Image.");
           return;
@@ -2144,6 +2092,11 @@ export const StaffModule: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+  // Calendar View & Navigation state
+  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
+  const [calendarModalEvents, setCalendarModalEvents] = useState<any[]>([]);
 
   const handlePrevMonth = () => {
     setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -2383,14 +2336,14 @@ export const StaffModule: React.FC = () => {
           {/* Selected Date Events Popup (Rendered as Modal via createPortal) */}
           {calendarModalDate && createPortal(
             <div 
-              className="fixed inset-0 z-[120] flex items-center justify-center p-2.5 sm:p-4 md:p-6 bg-zinc-950/85 backdrop-blur-md animate-in fade-in zoom-in-95 duration-200 overflow-y-auto"
+              className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200"
               onClick={() => setCalendarModalDate(null)}
             >
               <div 
-                className="bg-zinc-900 border border-zinc-800 w-full max-w-4xl rounded-2xl sm:rounded-3xl shadow-2xl relative flex flex-col max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] overflow-hidden my-auto" 
+                className="bg-zinc-900 border border-zinc-800 w-full max-w-4xl rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between p-4 sm:p-6 border-b border-zinc-800/80 shrink-0 bg-zinc-950/60">
+                <div className="flex items-center justify-between p-4 md:p-6 border-b border-zinc-800/80 shrink-0">
                   <div>
                     <span className="text-[10px] font-mono uppercase tracking-wider text-amber-500 block font-extrabold">
                       EVENT DETAILS
@@ -2405,55 +2358,53 @@ export const StaffModule: React.FC = () => {
                     </span>
                     <button
                       onClick={() => setCalendarModalDate(null)}
-                      className="p-2 hover:bg-zinc-800 rounded-xl text-zinc-400 hover:text-white transition cursor-pointer"
-                      title="Close"
-                      type="button"
+                      className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
                     >
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
                 
-                <div ref={calendarModalBodyRef} className="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar min-h-0">
+                <div className="p-4 md:p-6 overflow-y-auto">
                   {calendarModalEvents.length === 0 ? (
-                    <div className="p-6 sm:p-10 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
+                    <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
                       No events assigned on {calendarModalDate}.
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      <div className="overflow-x-auto w-full max-w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
-                        <table className="w-full text-left border-collapse min-w-[650px]">
+                      <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
+                        <table className="w-full text-left border-collapse min-w-[700px]">
                           <thead>
                             <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
-                              <th className="p-3 sm:p-3.5 pl-4">Event Name</th>
-                              <th className="p-3 sm:p-3.5">Event Date</th>
-                              <th className="p-3 sm:p-3.5">Event Time</th>
-                              <th className="p-3 sm:p-3.5">Customer</th>
-                              <th className="p-3 sm:p-3.5">Status</th>
-                              <th className="p-3 sm:p-3.5 pr-4">Target Delivery Date</th>
+                              <th className="p-3.5 pl-4">Event Name</th>
+                              <th className="p-3.5">Event Date</th>
+                              <th className="p-3.5">Event Time</th>
+                              <th className="p-3.5">Customer</th>
+                              <th className="p-3.5">Status</th>
+                              <th className="p-3.5 pr-4">Target Delivery Date</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
                             {calendarModalEvents.map((ev, idx) => (
                               <tr key={ev.key || idx} className="bg-zinc-950/30 select-text hover:bg-zinc-900/40 transition-colors">
-                                <td className="p-3 sm:p-3.5 pl-4 font-bold text-zinc-100">
+                                <td className="p-3.5 pl-4 font-bold text-zinc-100">
                                   {ev.eventName || 'Photography Event'}
                                 </td>
-                                <td className="p-3 sm:p-3.5 font-mono text-zinc-300">
+                                <td className="p-3.5 font-mono text-zinc-300">
                                   {formatDateDMY(ev.eventDate || calendarModalDate)}
                                 </td>
-                                <td className="p-3 sm:p-3.5 font-mono text-zinc-300">
+                                <td className="p-3.5 font-mono text-zinc-300">
                                   {formatTime12Hour(ev.eventStartTime || '10:00 AM')}
                                 </td>
-                                <td className="p-3 sm:p-3.5 text-zinc-200 font-medium">
+                                <td className="p-3.5 text-zinc-200 font-medium">
                                   {ev.customerName || '—'}
                                 </td>
-                                <td className="p-3 sm:p-3.5">
+                                <td className="p-3.5">
                                   <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
                                     {ev.status || 'Active'}
                                   </span>
                                 </td>
-                                <td className="p-3 sm:p-3.5 pr-4 font-mono font-bold text-pink-400">
+                                <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
                                   {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
                                 </td>
                               </tr>
@@ -2593,35 +2544,33 @@ export const StaffModule: React.FC = () => {
       <ViewDetailsModal
         isOpen={!!selectedBookingDetails}
         onClose={() => setSelectedBookingDetails(null)}
-        orderId={selectedBookingDetails?.orderId || selectedBookingDetails?.key || ''}
+        orderId={selectedBookingDetails?.orderId || selectedBookingDetails?.key}
+        booking={selectedBookingDetails}
         isStaffView={true}
-        staffName={staffName}
       />
 
       {/* EQUIPMENT PHOTO PROOF VERIFICATION MODAL (EVENT START / EVENT COMPLETE) */}
-      {photoModalData && createPortal(
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4 md:p-6 z-[130] animate-in fade-in duration-200 overflow-y-auto">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] max-h-[92dvh] sm:max-h-[85vh] my-auto">
-            <div className="p-4 sm:p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start shrink-0">
-              <div className="pr-2">
-                <span className="text-[10px] sm:text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
+      {photoModalData && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
+              <div>
+                <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
                   {photoModalData.stage === 'Event Complete' ? 'Event End Workflow' : photoModalData.stage === 'Equipment Handover' ? 'Footage Handover Workflow' : `Verification • ${photoModalData.stage}`}
                 </span>
-                <h3 className="text-lg sm:text-xl font-black text-white leading-tight">{photoModalData.booking.eventName}</h3>
+                <h3 className="text-xl font-black text-white">{photoModalData.booking.eventName}</h3>
                 <p className="text-zinc-400 text-xs mt-0.5">Order ID: {photoModalData.booking.orderId} | Staff: <strong className="text-white">{staffName}</strong></p>
               </div>
               <button
                 onClick={() => setPhotoModalData(null)}
-                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-xl sm:rounded-full transition-colors shrink-0"
-                title="Close"
-                type="button"
+                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div ref={photoModalBodyRef} className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1 custom-scrollbar min-h-0">
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 text-xs text-amber-300 flex items-start gap-3">
+            <div className="p-6 overflow-y-auto space-y-5">
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-300 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
                 <div>
                   {photoModalData.stage === 'Event Complete' ? (
@@ -2641,13 +2590,12 @@ export const StaffModule: React.FC = () => {
               </div>
 
               {/* Equipment / Proof Items list with photo inputs */}
-              <div className="space-y-3.5 sm:space-y-4">
+              <div className="space-y-4">
                 {(photoModalData.stage === 'Event Start'
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
                       ? [
                           {
                             name: 'Asset Collection Photo Proof',
-                            cardKey: 'asset-collection',
                             displayName: '1. Equipment Received / Asset Picture',
                             assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
                             optional: false,
@@ -2655,7 +2603,6 @@ export const StaffModule: React.FC = () => {
                           },
                           {
                             name: 'Event Start Photo Proof',
-                            cardKey: 'event-start',
                             displayName: '2. Event Start Image',
                             assetId: 'Event Start',
                             optional: false,
@@ -2665,23 +2612,21 @@ export const StaffModule: React.FC = () => {
                       : [
                           { 
                             name: 'Event Start Photo Proof', 
-                            cardKey: 'event-start',
                             displayName: 'Event Start Image', 
                             assetId: 'Event Start', 
-                            optional: false, 
+                            optional: false,
                             isEventStart: true 
                           }
                         ])
                   : photoModalData.stage === 'Event Complete'
                   ? [
-                      { name: 'Event Completion Photo Proof', cardKey: 'Event Completion Photo Proof', displayName: 'Event Completion Photo Proof', assetId: 'Event Complete', optional: false }
+                      { name: 'Event Completion Photo Proof', displayName: 'Event Completion Photo Proof', assetId: 'Event Complete', optional: false }
                     ]
                   : photoModalData.stage === 'Equipment Handover'
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
                       ? [
                           {
                             name: 'Asset Return Photo Proof',
-                            cardKey: 'Asset Return Photo Proof',
                             displayName: 'Equipment Handover Photo Proof',
                             assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Equipment Handover',
                             optional: true
@@ -2693,7 +2638,6 @@ export const StaffModule: React.FC = () => {
                       ? [
                           {
                             name: 'Asset Collection Photo Proof',
-                            cardKey: 'asset-collection',
                             displayName: 'Equipment Received / Asset Picture',
                             assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
                             optional: false,
@@ -2709,29 +2653,25 @@ export const StaffModule: React.FC = () => {
                     (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
 
                   return (
-                    <div 
-                      key={idx} 
-                      data-card={item.cardKey || item.name}
-                      className="bg-zinc-950/80 border border-zinc-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 space-y-3"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                    <div key={idx} className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
+                      <div className="flex justify-between items-center">
                         <div>
-                          <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
-                            <Camera className="w-4 h-4 text-amber-500 shrink-0" />
-                            <span>{item.displayName || item.name} {item.optional ? <span className="text-zinc-500 text-xs font-normal">(Optional)</span> : <span className="text-rose-400 text-xs font-normal">(Required)</span>}</span>
+                          <div className="font-bold text-white text-sm flex items-center gap-2">
+                            <Camera className="w-4 h-4 text-amber-500" />
+                            {item.displayName || item.name} {item.optional ? <span className="text-zinc-500 text-xs font-normal">(Optional)</span> : <span className="text-rose-400 text-xs font-normal">(Required)</span>}
                           </div>
-                          <div className="text-[10px] font-mono text-zinc-400 mt-0.5">Asset ID: {item.assetId}</div>
+                          <div className="text-[10px] font-mono text-zinc-400">Asset ID: {item.assetId}</div>
                         </div>
                         {currentPhoto ? (
-                          <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
-                            <CheckCircle className="w-3.5 h-3.5" /> Photo Attached ✓
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                            <CheckCircle className="w-3.5 h-3.5" /> Previously Uploaded Image ✓
                           </span>
                         ) : item.optional ? (
-                          <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-zinc-400 bg-zinc-800/80 px-2.5 py-1 rounded-full border border-zinc-700">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-zinc-400 bg-zinc-800/80 px-2.5 py-1 rounded-full border border-zinc-700">
                             Photo Optional
                           </span>
                         ) : (
-                          <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
                             <AlertCircle className="w-3.5 h-3.5" /> Photo Required
                           </span>
                         )}
@@ -2739,32 +2679,32 @@ export const StaffModule: React.FC = () => {
 
                       {currentPhoto ? (
                         <div className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900">
-                          <img src={currentPhoto} alt={item.name} className="w-full h-36 sm:h-44 object-cover" />
+                          <img src={currentPhoto} alt={item.name} className="w-full h-40 object-cover" />
                           <label className="absolute bottom-2 right-2 bg-zinc-900/90 hover:bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-700 cursor-pointer flex items-center gap-1.5 shadow-lg">
                             <Upload className="w-3.5 h-3.5" /> Change Photo
                             <input
                               type="file"
                               accept="image/*"
-                              onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
-                              onChange={(e) => handlePhotoCapture(item.name, e)}
+                              
+                              onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
                               className="hidden"
                             />
                           </label>
                         </div>
                       ) : (
-                        <label className="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 bg-zinc-900/50 hover:bg-zinc-900 rounded-xl sm:rounded-2xl p-4 sm:p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group">
+                        <label className="border-2 border-dashed border-zinc-800 hover:border-amber-500/50 bg-zinc-900/50 hover:bg-zinc-900 rounded-2xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors group">
                           <div className="w-10 h-10 rounded-full bg-zinc-800 group-hover:bg-amber-500/20 text-zinc-400 group-hover:text-amber-400 flex items-center justify-center transition-colors">
                             <Camera className="w-5 h-5" />
                           </div>
-                          <span className="text-xs font-bold text-zinc-300 group-hover:text-amber-400 transition-colors text-center">
+                          <span className="text-xs font-bold text-zinc-300 group-hover:text-amber-400 transition-colors">
                             Capture or Upload {item.displayName || item.name}
                           </span>
-                          <span className="text-[10px] text-zinc-500 font-mono text-center">Use device camera or choose photo file</span>
+                          <span className="text-[10px] text-zinc-500 font-mono">Use phone camera or choose file</span>
                           <input
                             type="file"
                             accept="image/*"
-                            onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
-                            onChange={(e) => handlePhotoCapture(item.name, e)}
+                            
+                            onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
                             className="hidden"
                           />
                         </label>
@@ -2775,27 +2715,26 @@ export const StaffModule: React.FC = () => {
 
                 {/* Raw Footage Link Input for Footage Handover stage */}
                 {photoModalData.stage === 'Equipment Handover' && (
-                  <div data-card="raw-footage" className="bg-zinc-950/80 border border-zinc-800 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                  <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
                       <div>
-                        <div className="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
-                          <Video className="w-4 h-4 text-indigo-400 shrink-0" />
-                          <span>Raw Footage Drive Link <span className="text-rose-400 text-xs font-normal">(Required)</span></span>
+                        <div className="font-bold text-white text-sm flex items-center gap-2">
+                          <Video className="w-4 h-4 text-indigo-400" />
+                          Raw Footage Drive Link <span className="text-rose-400 text-xs font-normal">(Required)</span>
                         </div>
-                        <div className="text-[10px] font-mono text-zinc-400 mt-0.5">Google Drive / Cloud folder URL for raw footage handover</div>
+                        <div className="text-[10px] font-mono text-zinc-400">Google Drive / Cloud folder URL for raw footage handover</div>
                       </div>
                       {modalRawFootageLink.trim() ? (
-                        <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
                           <CheckCircle className="w-3.5 h-3.5" /> Link Provided
                         </span>
                       ) : (
-                        <span className="inline-flex items-center self-start sm:self-auto gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
                           <AlertCircle className="w-3.5 h-3.5" /> Link Required
                         </span>
                       )}
                     </div>
                     <input
-                      ref={footageLinkInputRef}
                       type="url"
                       value={modalRawFootageLink}
                       onChange={(e) => setModalRawFootageLink(e.target.value)}
@@ -2807,22 +2746,19 @@ export const StaffModule: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-3.5 sm:p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-between items-center shrink-0">
+            <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-between items-center">
               <button
                 onClick={() => setPhotoModalData(null)}
                 disabled={isSubmitting}
-                className="px-3.5 sm:px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors"
-                type="button"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors"
               >
                 Cancel
               </button>
 
               <button
-                ref={photoModalSubmitBtnRef}
                 onClick={handleConfirmStatusUpdate}
                 disabled={isSubmitting}
-                type="button"
-                className={`px-4 sm:px-6 py-2 sm:py-2.5 font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-lg cursor-pointer ${
+                className={`px-6 py-2.5 font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-lg ${
                   photoModalData.stage === 'Event Start'
                     ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-amber-500/20'
                     : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
@@ -2858,8 +2794,7 @@ export const StaffModule: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
 
       {/* Inline Selected Date Event Details are rendered directly below calendar grid */}

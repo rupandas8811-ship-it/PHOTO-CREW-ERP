@@ -365,18 +365,13 @@ export const mapFromDbEquipmentId = (uuid: string): string => {
 
 export const mapUserFieldsFromDb = (u: any): any => {
   if (!u) return u;
-  const resolvedFullName = (u.full_name && String(u.full_name).trim()) || 
-    (u.name && String(u.name).trim()) || 
-    (u.user_metadata?.full_name && String(u.user_metadata.full_name).trim()) || 
-    (u.user_metadata?.name && String(u.user_metadata.name).trim()) || 
-    '';
   return {
     ...u,
     id: mapFromDbUserId(u.id),
-    name: resolvedFullName || u.name || '',
-    full_name: resolvedFullName || u.full_name || '',
-    mobile: u.mobile || u.phone || u.user_metadata?.mobile || '',
-    phone: u.phone || u.mobile || u.user_metadata?.phone || ''
+    name: u.name || u.full_name || '',
+    full_name: u.full_name || u.name || '',
+    mobile: u.mobile || u.phone || '',
+    phone: u.phone || u.mobile || ''
   };
 };
 
@@ -2874,7 +2869,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbUser) {
           isActive = dbUser.active !== false && dbUser.active !== 'false';
           roleToSync = dbUser.role || currentUser.role;
-          nameToSync = dbUser.full_name || dbUser.name || currentUser.full_name || currentUser.name;
+          nameToSync = dbUser.name || currentUser.name;
           found = true;
         }
       }
@@ -2883,8 +2878,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (!isActive) {
           logout();
           alert('Your account is no longer active. You have been logged out.');
-        } else if (roleToSync !== currentUser.role || nameToSync !== (currentUser.full_name || currentUser.name)) {
-          setCurrentUser({ ...currentUser, role: roleToSync, name: nameToSync, full_name: nameToSync });
+        } else if (roleToSync !== currentUser.role || nameToSync !== currentUser.name) {
+          setCurrentUser({ ...currentUser, role: roleToSync, name: nameToSync });
           setCurrentRoleState(roleToSync);
           setCurrentUserNameState(nameToSync);
         }
@@ -2895,14 +2890,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   // Sync username with role switcher for smooth demo
   const setCurrentRole = (role: UserRole) => {
     setCurrentRoleState(role);
-    if (currentUser?.full_name || currentUser?.name) {
-      setCurrentUserNameState(currentUser.full_name || currentUser.name);
-    } else {
-      if (role === 'Business Owner') setCurrentUserNameState('Rupand Das');
-      else if (role === 'Sales Team') setCurrentUserNameState('Sarah Jenkins');
-      else if (role === 'Operations Team') setCurrentUserNameState('Robert O\'Connor');
-      else if (role === 'Production Team') setCurrentUserNameState('Emily Watson');
-    }
+    if (role === 'Business Owner') setCurrentUserNameState('Rupand Das');
+    else if (role === 'Sales Team') setCurrentUserNameState('Sarah Jenkins');
+    else if (role === 'Operations Team') setCurrentUserNameState('Robert O\'Connor');
+    else if (role === 'Production Team') setCurrentUserNameState('Emily Watson');
   };
 
   const setCurrentUserName = (name: string) => {
@@ -7903,11 +7894,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     if (currentRole === 'Sales Team' && currentUser) {
       return leads.filter(l => 
         l.sales_person === currentUserName || 
-        l.sales_person === currentUser.name || 
-        (currentUser.full_name && l.sales_person === currentUser.full_name) ||
         l.created_by === currentUserName || 
-        l.created_by === currentUser.name ||
-        (currentUser.full_name && l.created_by === currentUser.full_name) ||
         l.sales_staff_id === currentUser.id
       );
     }

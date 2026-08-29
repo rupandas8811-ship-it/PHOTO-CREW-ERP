@@ -1,0 +1,292 @@
+                      <div className="absolute top-2 left-2 w-1.5 h-1.5 border-t border-l border-emerald-500/40" />
+                      <div className="absolute top-2 right-2 w-1.5 h-1.5 border-t border-r border-emerald-500/40" />
+                      <div className="absolute bottom-2 left-2 w-1.5 h-1.5 border-b border-l border-emerald-500/40" />
+                      <div className="absolute bottom-2 right-2 w-1.5 h-1.5 border-b border-r border-emerald-500/40" />
+
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        {/* Search query */}
+                        <div className="md:col-span-3">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-zinc-400 mb-1">
+                            Search Lead / Customer Name
+                          </label>
+                          <div className="relative">
+                            <Search className="w-4 h-4 text-emerald-505 absolute left-3 top-3" />
+                            <input
+                              type="text"
+                              placeholder="ID, name, or phone..."
+                              value={filterQuery}
+                              onChange={(e) => setFilterQuery(e.target.value)}
+                              className="w-full bg-zinc-950 border border-zinc-850 rounded-xl pl-9 pr-3 py-2 text-xs text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-sans"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Source */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Lead Source
+                          </label>
+                          <select
+                            value={filterSource}
+                            onChange={(e) => setFilterSource(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90"
+                          >
+                            <option value="">All Sources</option>
+                            {LEAD_SOURCES.map(source => (
+                              <option key={source} value={source}>{source}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Status (Stage) */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Active Stage
+                          </label>
+                          <select
+                            value={filterStatus}
+                            onChange={(e) => setFilterStatus(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="">All Stages</option>
+                            {ACTIVE_STAGE_GROUPS.map((group, idx) => (
+                              <optgroup key={idx} label={group.label} className={`bg-slate-950 ${group.colorClass} font-bold`}>
+                                {group.options.map(opt => (
+                                  <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Start Date */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Start Date (Created)
+                          </label>
+                          <input
+                            type="date"
+                            value={dateRangeStart}
+                            onChange={(e) => setDateRangeStart(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                          />
+                        </div>
+
+                        {/* End Date */}
+                        <div className="md:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            End Date (Created)
+                          </label>
+                          <input
+                            type="date"
+                            value={dateRangeEnd}
+                            onChange={(e) => setDateRangeEnd(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                          />
+                        </div>
+
+                        {/* Actions */}
+                        <div className="md:col-span-1 flex flex-col sm:flex-row md:flex-col gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAppliedStartDate(dateRangeStart);
+                              setAppliedEndDate(dateRangeEnd);
+                            }}
+                            className="w-full flex items-center justify-center gap-1 bg-emerald-600 hover:bg-emerald-500 py-1.5 text-[10px] font-bold text-white rounded transition-all cursor-pointer"
+                            title="Apply Date Filter"
+                          >
+                            Apply
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFilterQuery('');
+                              setFilterSource('');
+                              setFilterStatus('');
+                              setFilterSalesPerson('');
+                              setFilterDate('');
+                              setDateRangeStart('');
+                              setDateRangeEnd('');
+                              setAppliedStartDate('');
+                              setAppliedEndDate('');
+                            }}
+                            className="w-full flex items-center justify-center gap-0.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 py-1.5 px-1.5 text-[10px] text-zinc-300 rounded transition-all cursor-pointer animate-none"
+                            title="Reset all filters"
+                          >
+                            Reset
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Table view */}
+          <div className="bg-zinc-900/20 rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-max">
+                <thead>
+                  <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
+                    <th className="p-3.5 pl-5">Lead ID</th>
+                    <th className="p-3.5">Order ID</th>
+                    <th className="p-3.5">Customer Name</th>
+                    <th className="p-3.5">Mobile Number</th>
+                    <th className="p-3.5">Event</th>
+                    <th className="p-3.5">Current Status</th>
+                    <th className="p-3.5">Created Date</th>
+                    <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900/60">
+                  {filteredLeads.length > 0 ? (
+                    filteredLeads.map((lead) => {
+                      const leadStatus = getLeadCurrentStatus(lead);
+                      const currentStage = getLeadCurrentStage(lead);
+                      const isActiveInSales = currentStage === 'Sales';
+                      const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
+                      return (
+                        <tr 
+                          key={lead.lead_id} 
+                          className="hover:bg-zinc-900/30 text-zinc-300 transition-all"
+                        >
+                          <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-indigo-400">
+                            {lead.lead_id}
+                          </td>
+                          <td className="p-3.5 font-mono text-[11px] text-violet-400 font-bold">
+                            {linkedOrder ? linkedOrder.order_id : 'N/A'}
+                          </td>
+                          <td className="p-3.5 font-bold text-white">
+                            {lead.customer_name === 'Inbound Prospect' ? '' : lead.customer_name}
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {formatIndianPhoneNumber(lead.mobile)}
+                          </td>
+                          <td className="p-3.5 text-zinc-300 font-sans">
+                            <UnifiedEventDropdownCell lead={lead} />
+                          </td>
+                          <td className="p-3.5">
+                            <StatusText status={leadStatus} />
+                          </td>
+                          <td className="p-3.5 font-mono text-zinc-400">
+                            {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
+                          </td>
+                          <td className="p-3.5 text-right pr-5 w-[160px] min-w-max overflow-visible relative">
+                            {(() => {
+                              const isManageCrmOnlyStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Contacted', 'Create Quote', 'Created Quotation'].includes(leadStatus);
+                              const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
+                              const isConfirmOrderStatus = false; // Disabled lock requirement for confirmed orders
+                              const isLeadLostStatus = ['Lead Lost', 'Lost Lead'].includes(leadStatus);
+
+                              const latestUnlockRequest = unlockRequests
+                                .filter((r: any) => r.lead_id === lead.lead_id || (linkedOrder && r.order_id === linkedOrder.order_id) || ((lead as any).order_id && r.order_id === (lead as any).order_id))
+                                .sort((a: any, b: any) => new Date(b.created_at || b.requested_at || "").getTime() - new Date(a.created_at || a.requested_at || "").getTime())[0];
+                              const isPendingUnlock = latestUnlockRequest?.status === 'Pending' || latestUnlockRequest?.request_status === 'Pending';
+                              const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected' || latestUnlockRequest?.request_status === 'Rejected';
+                              const isApprovedUnlock = lead.quotation_locked === false || (
+                                lead.quotation_locked !== true && (latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved')
+                              );
+
+                               if (isPendingUnlock || isApprovedUnlock || isRejectedUnlock || isConfirmOrderStatus) {
+                                return (
+                                  <div className="relative flex justify-end">
+                                    <button
+                                      type="button"
+                                      id={`btn_actions_confirm_${lead.lead_id}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (openDropdownLeadId === lead.lead_id) {
+                                          setOpenDropdownLeadId(null);
+                                        } else {
+                                          const rect = e.currentTarget.getBoundingClientRect();
+                                          const spaceBelow = window.innerHeight - rect.bottom;
+                                          const spaceAbove = rect.top;
+                                          const menuHeight = 90;
+                                          
+                                          let top: number | string = rect.bottom + 4;
+                                          let bottom: number | string = 'auto';
+                                          
+                                          if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+                                            top = 'auto';
+                                            bottom = window.innerHeight - rect.top + 4;
+                                          }
+                                          
+                                          setDropdownCoords({ top, right: window.innerWidth - rect.right, bottom });
+                                          setOpenDropdownLeadId(lead.lead_id);
+                                        }
+                                      }}
+                                      className={`w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2.5 shadow shrink-0 ${
+                                        isPendingUnlock 
+                                          ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 border-amber-500/30' 
+                                          : isApprovedUnlock 
+                                            ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30'
+                                            : isRejectedUnlock 
+                                              ? 'bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border-rose-500/30'
+                                              : 'bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border-slate-700'
+                                      }`}
+                                    >
+                                      <span>
+                                        {isPendingUnlock ? '🟡 Action' : isApprovedUnlock ? '🟢 Action' : isRejectedUnlock ? '🔴 Action' : '🔒 Action'}
+                                      </span>
+                                      <span className="text-[10px] ml-1">▼</span>
+                                    </button>
+
+                                    {openDropdownLeadId === lead.lead_id && createPortal(
+                                      <div 
+                                        className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
+                                        style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
+                                      >
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenDropdownLeadId(null);
+                                            handleSelectLead(lead);
+                                          }}
+                                          className="w-full h-8 px-3 text-xs font-bold bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white rounded-lg border border-zinc-850/40 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                        >
+                                          <Eye className="w-3.5 h-3.5 shrink-0" />
+                                          <span>View CRM</span>
+                                        </button>
+
+                                        {isPendingUnlock ? (
+                                          <button
+                                            type="button"
+                                            disabled
+                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950/40 text-amber-400/60 rounded-lg border border-amber-900/20 flex items-center gap-2 cursor-not-allowed opacity-70"
+                                          >
+                                            <Clock className="w-3.5 h-3.5 shrink-0 text-amber-400/60" />
+                                            <span>Waiting for Approval</span>
+                                          </button>
+                                        ) : isApprovedUnlock ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenDropdownLeadId(null);
+                                              handleSelectLead(lead, 3);
+                                            }}
+                                            className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                          >
+                                            <Edit className="w-3.5 h-3.5 shrink-0" />
+                                            <span>Edit Quotation</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenDropdownLeadId(null);
+                                              setSelectedUnlockLead(lead);
+                                              setUnlockRequestReason('Customer requested additional discount');
+                                              setUnlockRequestCustomReason('');
+                                              setShowUnlockRequestModal(true);
+                                            }}
+                                            className="w-full h-8 px-3 text-xs font-bold bg-amber-950 hover:bg-amber-900 text-amber-400 hover:text-white rounded-lg border border-amber-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
+                                          >
+                                            <Ban className="w-3.5 h-3.5 shrink-0" />
+                                            <span>Unlock Quotation</span>
+                                          </button>
