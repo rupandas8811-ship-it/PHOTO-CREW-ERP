@@ -450,17 +450,24 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                           <td className="p-3.5 text-right pr-5 w-[160px] min-w-max overflow-visible relative">
                             {(() => {
                               const isManageCrmOnlyStatus = ['New Lead', 'Follow-up', 'Follow Up', 'Contacted', 'Create Quote', 'Created Quotation'].includes(leadStatus);
-                              const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
                               const isLeadLostStatus = ['Lead Lost', 'Lost Lead'].includes(leadStatus);
+                              const isLeadConfirmedRecord = 
+                                ['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Order Close'].includes(leadStatus) ||
+                                ['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed', 'Order Close'].includes(lead.status || '') ||
+                                (lead as any).current_status === 'Order Confirmed' ||
+                                (lead as any).booking_status === 'Confirmed' ||
+                                Boolean(linkedOrder && linkedOrder.status !== 'Cancelled') ||
+                                (lead as any).is_confirmed === true;
+                              const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
                               
                               const latestUnlockRequest = unlockRequests
                                 .filter((r: any) => r.lead_id === lead.lead_id || (linkedOrder && r.order_id === linkedOrder.order_id) || ((lead as any).order_id && r.order_id === (lead as any).order_id))
                                 .sort((a: any, b: any) => new Date(b.created_at || b.requested_at || "").getTime() - new Date(a.created_at || a.requested_at || "").getTime())[0];
                               const isPendingUnlock = latestUnlockRequest?.status === 'Pending' || latestUnlockRequest?.request_status === 'Pending';
                               const isRejectedUnlock = latestUnlockRequest?.status === 'Rejected' || latestUnlockRequest?.request_status === 'Rejected';
-                              const isApprovedUnlock = lead.quotation_locked === false || (
+                              const isApprovedUnlock = !isLeadConfirmedRecord && (lead.quotation_locked === false || (
                                 lead.quotation_locked !== true && (latestUnlockRequest?.status === 'Approved' || latestUnlockRequest?.request_status === 'Approved')
-                              );
+                              ));
                               
                               return (
                                   <div className="relative flex justify-end actions-dropdown-container">
@@ -511,7 +518,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                             e.stopPropagation();
                                             setOpenDropdownLeadId(null);
                                             setNoteModalLeadId(lead.lead_id);
-                                            setNoteModalOrderId('');
+                                            setNoteModalOrderId(linkedOrder ? linkedOrder.order_id : '');
                                             setNoteModalCustomerName(lead.customer_name);
                                             setNoteModalOpen(true);
                                           }}
@@ -537,7 +544,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                         </button>
                                         
                                         {/* CONFIRM ORDER - only show before confirmation */}
-                                        {isActionsDropdownStatus && leadStatus !== 'Order Confirmed' && leadStatus !== 'Order Close' && currentStage === 'Sales' && (
+                                        {!isLeadConfirmedRecord && isActionsDropdownStatus && leadStatus !== 'Order Close' && currentStage === 'Sales' && (
                                           <button
                                             type="button"
                                             id={`btn_confirm_order_direct_${lead.lead_id}`}
@@ -568,7 +575,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                         )}
                                         
                                         {/* UNLOCK QUOTATION (if pending/rejected/locked) - ONLY before Order Confirmed */}
-                                        {(!isApprovedUnlock && !isPendingUnlock && lead.quotation_locked && leadStatus !== 'Order Confirmed' && !['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(leadStatus)) && (
+                                        {(!isLeadConfirmedRecord && !isApprovedUnlock && !isPendingUnlock && lead.quotation_locked) && (
                                           <button
                                             type="button"
                                             onClick={(e) => {
@@ -587,7 +594,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                         )}
                                         
                                         {/* LOST LEAD */}
-                                        {!isLeadLostStatus && leadStatus !== 'Order Confirmed' && leadStatus !== 'Order Close' && (
+                                        {!isLeadLostStatus && (
                                           <button
                                             type="button"
                                             id={`btn_lost_lead_direct_${lead.lead_id}`}
