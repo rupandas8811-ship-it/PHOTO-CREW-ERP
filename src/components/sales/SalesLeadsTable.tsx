@@ -108,6 +108,23 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safePackages = Array.isArray(packages) ? packages : [];
 
+  const [openDropdownDirection, setOpenDropdownDirection] = useState<'up' | 'down'>('down');
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (openDropdownLeadId) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.actions-dropdown-container')) {
+          setOpenDropdownLeadId(null);
+        }
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [openDropdownLeadId, setOpenDropdownLeadId]);
+
   return (
         <div className="space-y-4">
 
@@ -400,7 +417,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
 
           {/* Table view */}
           <div className="bg-zinc-900/20 rounded-2xl border border-zinc-850 overflow-hidden shadow-2xl">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto min-h-[220px]">
               <table className="w-full text-left text-xs border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
@@ -424,7 +441,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                       return (
                         <tr 
                           key={lead.lead_id} 
-                          className="hover:bg-zinc-900/30 text-zinc-300 transition-all"
+                          className={`hover:bg-zinc-900/30 text-zinc-300 transition-all ${openDropdownLeadId === lead.lead_id ? 'relative z-30' : ''}`}
                         >
                           <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-indigo-400">
                             {lead.lead_id}
@@ -461,7 +478,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                               const isActionsDropdownStatus = ['Quote Sent', 'Quotation Sent', 'Quote Follow-up', 'Negotiation', 'Confirm Order', 'Order Confirmed'].includes(leadStatus) || currentStage !== 'Sales';
                               
                               return (
-                                  <div className="relative flex justify-end actions-dropdown-container">
+                                  <div className="relative inline-block text-right actions-dropdown-container">
                                     <button
                                       type="button"
                                       id={`btn_actions_confirm_${lead.lead_id}`}
@@ -473,17 +490,13 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                           const rect = e.currentTarget.getBoundingClientRect();
                                           const spaceBelow = window.innerHeight - rect.bottom;
                                           const spaceAbove = rect.top;
-                                          const menuHeight = 160;
-                                          
-                                          let top: number | string = rect.bottom + 4;
-                                          let bottom: number | string = 'auto';
+                                          const menuHeight = 170;
                                           
                                           if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-                                            top = 'auto';
-                                            bottom = window.innerHeight - rect.top + 4;
+                                            setOpenDropdownDirection('up');
+                                          } else {
+                                            setOpenDropdownDirection('down');
                                           }
-                                          
-                                          setDropdownCoords({ top, right: window.innerWidth - rect.right, bottom });
                                           setOpenDropdownLeadId(lead.lead_id);
                                         }
                                       }}
@@ -493,10 +506,14 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                       <span className="text-[10px] ml-1">▼</span>
                                     </button>
                                     
-                                    {openDropdownLeadId === lead.lead_id && createPortal(
+                                    {openDropdownLeadId === lead.lead_id && (
                                       <div 
-                                        className="fixed w-48 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[9999] p-1.5 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 text-left actions-dropdown-menu"
-                                        style={{ top: dropdownCoords.top, right: dropdownCoords.right, bottom: dropdownCoords.bottom }}
+                                        className={`absolute right-0 w-48 max-w-[calc(100vw-32px)] rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[100] p-1.5 space-y-1.5 text-left actions-dropdown-menu animate-in fade-in zoom-in-95 duration-100 ${
+                                          openDropdownDirection === 'up'
+                                            ? 'bottom-full mb-1.5'
+                                            : 'top-full mt-1.5'
+                                        }`}
+                                        onClick={(e) => e.stopPropagation()}
                                       >
                                         {/* ALWAYS SHOW ADD NOTE */}
                                         <button
@@ -581,8 +598,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                             <span>Lost Lead</span>
                                           </button>
                                         )}
-                                      </div>,
-                                      document.body
+                                      </div>
                                     )}
                                   </div>
                               );

@@ -706,7 +706,7 @@ const MainAppContent: React.FC = () => {
               { id: 'custom_package_master', label: 'Custom Package Master', icon: Layers, color: 'text-amber-400' },
               { id: 'pending_payments', label: 'Pending Payment Report', icon: DollarSign, color: 'text-amber-500' },
               { id: 'notifications', label: 'Notifications', icon: Bell, color: 'text-rose-400' }
-            ].filter(tab => !['sales_analytics', 'sales_calendar', 'notifications'].includes(tab.id)).map(tab => {
+            ].filter(tab => !['sales_analytics', 'notifications'].includes(tab.id)).map(tab => {
               const IconComponent = tab.icon;
               let isSelected = false;
               if (tab.id === 'sales_list') isSelected = activeTab === 'sales' && activeSalesSubTab === 'list';

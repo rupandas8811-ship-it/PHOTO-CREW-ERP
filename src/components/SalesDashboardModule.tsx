@@ -9,7 +9,7 @@ import { SalesCrmWizard } from './sales/SalesCrmWizard';
 import { SalesModals } from './sales/SalesModals';
 import { SalesCalendar } from './SalesCalendar';
 import { CustomPackageMaster } from './CustomPackageMaster';
-import { Plus, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Plus, AlertTriangle, RefreshCw, FileText, Calendar, Users, Layers, Sparkles } from 'lucide-react';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -120,10 +120,7 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
 
         {/* Header Bar */}
         {state.activeTab !== 'create' && state.activeTab !== 'custom_package_master' && !state.selectedLead && (
-          <div 
-            className={`${state.activeTab === 'calendar' ? 'hidden' : 'flex'} flex-col sm:flex-row sm:items-center justify-between gap-4`}
-            style={state.activeTab === 'calendar' ? { display: 'none' } : undefined}
-          >
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-xl font-black text-white flex items-center gap-2">
                 <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
@@ -135,6 +132,65 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap">
+              {/* Sub-tab pills */}
+              <div className="flex items-center gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 flex-wrap">
+                <button
+                  id="btn_lead_tab_list"
+                  type="button"
+                  onClick={() => { state.setActiveTab('list'); state.setSelectedLead(null); if (state.setSelectedCustomerProfileId) state.setSelectedCustomerProfileId(null); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                    state.activeTab === 'list' || (!['calendar', 'profiles', 'packages', 'create', 'custom_package_master'].includes(state.activeTab))
+                      ? 'bg-zinc-800 border-zinc-700 text-white shadow-sm font-black'
+                      : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Leads Directory</span>
+                </button>
+
+                <button
+                  id="btn_lead_tab_calendar"
+                  type="button"
+                  onClick={() => { state.setActiveTab('calendar'); state.setSelectedLead(null); if (state.setSelectedCustomerProfileId) state.setSelectedCustomerProfileId(null); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                    state.activeTab === 'calendar'
+                      ? 'bg-zinc-800 border-zinc-700 text-white shadow-sm font-black'
+                      : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                  <span>Sales Calendar</span>
+                </button>
+
+                <button
+                  id="btn_lead_tab_profiles"
+                  type="button"
+                  onClick={() => { state.setActiveTab('profiles'); state.setSelectedLead(null); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                    state.activeTab === 'profiles'
+                      ? 'bg-zinc-800 border-zinc-700 text-white shadow-sm font-black'
+                      : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <Users className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Customer Profiles</span>
+                </button>
+
+                <button
+                  id="btn_lead_tab_packages"
+                  type="button"
+                  onClick={() => { state.setActiveTab('packages'); state.setSelectedLead(null); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                    state.activeTab === 'packages'
+                      ? 'bg-zinc-800 border-zinc-700 text-white shadow-sm font-black'
+                      : 'border-transparent text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Package Catalog</span>
+                </button>
+              </div>
+
               {state.canEdit && (
                 <button
                   id="btn_create_new_lead"
