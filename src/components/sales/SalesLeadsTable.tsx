@@ -67,8 +67,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
     unlockRequests,
     openDropdownLeadId,
     setOpenDropdownLeadId,
-    dropdownCoords,
-    setDropdownCoords,
+    dropdownCoords: externalDropdownCoords,
+    setDropdownCoords: externalSetDropdownCoords,
     setNoteModalOpen,
     setNoteModalLeadId,
     setNoteModalOrderId,
@@ -108,22 +108,75 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safePackages = Array.isArray(packages) ? packages : [];
 
-  const [openDropdownDirection, setOpenDropdownDirection] = useState<'up' | 'down'>('down');
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+
+  const updateDropdownPos = React.useCallback((leadId: string) => {
+    const btn = document.getElementById(`btn_actions_confirm_${leadId}`);
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const menuWidth = 192; // 12rem / w-48
+    const menuHeight = 175; // approx height
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    let top: number;
+    if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+      top = rect.top - menuHeight - 6;
+      if (top < 8) top = 8;
+    } else {
+      top = rect.bottom + 6;
+      if (top + menuHeight > viewportHeight - 8) {
+        top = viewportHeight - menuHeight - 8;
+      }
+    }
+
+    let left = rect.right - menuWidth;
+    if (left + menuWidth > viewportWidth - 12) {
+      left = viewportWidth - menuWidth - 12;
+    }
+    if (left < 12) {
+      left = 12;
+    }
+
+    setDropdownStyle({
+      position: 'fixed',
+      top: `${top}px`,
+      left: `${left}px`,
+      width: `${menuWidth}px`,
+      zIndex: 99999,
+    });
+  }, []);
 
   useEffect(() => {
+    if (!openDropdownLeadId) return;
+
+    updateDropdownPos(openDropdownLeadId);
+
+    const handleScroll = () => {
+      updateDropdownPos(openDropdownLeadId);
+    };
+
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleScroll);
+
     const handleOutsideClick = (e: MouseEvent) => {
-      if (openDropdownLeadId) {
-        const target = e.target as HTMLElement;
-        if (!target.closest('.actions-dropdown-container')) {
-          setOpenDropdownLeadId(null);
-        }
+      const target = e.target as HTMLElement;
+      if (!target.closest('.actions-dropdown-menu') && !target.closest('.actions-dropdown-btn')) {
+        setOpenDropdownLeadId(null);
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
+
     return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleScroll);
       document.removeEventListener('mousedown', handleOutsideClick);
     };
-  }, [openDropdownLeadId, setOpenDropdownLeadId]);
+  }, [openDropdownLeadId, updateDropdownPos, setOpenDropdownLeadId]);
 
   return (
         <div className="space-y-4">
@@ -487,32 +540,19 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                         if (openDropdownLeadId === lead.lead_id) {
                                           setOpenDropdownLeadId(null);
                                         } else {
-                                          const rect = e.currentTarget.getBoundingClientRect();
-                                          const spaceBelow = window.innerHeight - rect.bottom;
-                                          const spaceAbove = rect.top;
-                                          const menuHeight = 170;
-                                          
-                                          if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
-                                            setOpenDropdownDirection('up');
-                                          } else {
-                                            setOpenDropdownDirection('down');
-                                          }
                                           setOpenDropdownLeadId(lead.lead_id);
                                         }
                                       }}
-                                      className="w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2.5 shadow shrink-0 bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border-zinc-850"
+                                      className="actions-dropdown-btn w-36 h-8 text-[11px] font-bold rounded-xl border transition-all cursor-pointer inline-flex items-center justify-between px-2.5 shadow shrink-0 bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border-zinc-850"
                                     >
                                       <span>⚡ Actions</span>
                                       <span className="text-[10px] ml-1">▼</span>
                                     </button>
                                     
-                                    {openDropdownLeadId === lead.lead_id && (
+                                    {openDropdownLeadId === lead.lead_id && createPortal(
                                       <div 
-                                        className={`absolute right-0 w-48 max-w-[calc(100vw-32px)] rounded-xl bg-slate-900 border border-slate-800 shadow-2xl z-[100] p-1.5 space-y-1.5 text-left actions-dropdown-menu animate-in fade-in zoom-in-95 duration-100 ${
-                                          openDropdownDirection === 'up'
-                                            ? 'bottom-full mb-1.5'
-                                            : 'top-full mt-1.5'
-                                        }`}
+                                        className="fixed rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-1.5 space-y-1.5 text-left actions-dropdown-menu animate-in fade-in zoom-in-95 duration-100"
+                                        style={dropdownStyle}
                                         onClick={(e) => e.stopPropagation()}
                                       >
                                         {/* ALWAYS SHOW ADD NOTE */}
@@ -598,7 +638,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                             <span>Lost Lead</span>
                                           </button>
                                         )}
-                                      </div>
+                                      </div>,
+                                      document.body
                                     )}
                                   </div>
                               );

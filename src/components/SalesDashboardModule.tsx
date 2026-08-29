@@ -132,22 +132,8 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap">
-              {/* Sub-tab pills */}
+              {/* Sub-tab pills - Keep ONLY Sales Calendar */}
               <div className="flex items-center gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 flex-wrap">
-                <button
-                  id="btn_lead_tab_list"
-                  type="button"
-                  onClick={() => { state.setActiveTab('list'); state.setSelectedLead(null); if (state.setSelectedCustomerProfileId) state.setSelectedCustomerProfileId(null); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                    state.activeTab === 'list' || (!['calendar', 'profiles', 'packages', 'create', 'custom_package_master'].includes(state.activeTab))
-                      ? 'bg-zinc-800 border-zinc-700 text-white shadow-sm font-black'
-                      : 'border-transparent text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Leads Directory</span>
-                </button>
-
                 <button
                   id="btn_lead_tab_calendar"
                   type="button"
@@ -161,34 +147,6 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
                   <Calendar className="w-3.5 h-3.5 text-blue-400" />
                   <span>Sales Calendar</span>
                 </button>
-
-                <button
-                  id="btn_lead_tab_profiles"
-                  type="button"
-                  onClick={() => { state.setActiveTab('profiles'); state.setSelectedLead(null); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                    state.activeTab === 'profiles'
-                      ? 'bg-zinc-800 border-zinc-700 text-white shadow-sm font-black'
-                      : 'border-transparent text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Customer Profiles</span>
-                </button>
-
-                <button
-                  id="btn_lead_tab_packages"
-                  type="button"
-                  onClick={() => { state.setActiveTab('packages'); state.setSelectedLead(null); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                    state.activeTab === 'packages'
-                      ? 'bg-zinc-800 border-zinc-700 text-white shadow-sm font-black'
-                      : 'border-transparent text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <Layers className="w-3.5 h-3.5 text-teal-400" />
-                  <span>Package Catalog</span>
-                </button>
               </div>
 
               {state.canEdit && (
@@ -198,7 +156,7 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
                   className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" />
-                  <span>Create New Lead</span>
+                  <span>Create Quotation</span>
                 </button>
               )}
             </div>
@@ -210,15 +168,15 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
           <CustomPackageMaster />
         )}
 
-        {state.activeTab === 'calendar' && (
+        {state.activeTab === 'calendar' && !state.selectedLead && (
           <SalesCalendar onSelectLead={(lead) => state.handleSelectLead(lead)} />
         )}
 
-        {state.activeTab === 'profiles' && (
+        {state.activeTab === 'profiles' && !state.selectedLead && (
           <SalesCustomerProfiles {...state} />
         )}
 
-        {state.activeTab === 'packages' && (
+        {state.activeTab === 'packages' && !state.selectedLead && (
           <SalesPackagesManager {...state} />
         )}
 
