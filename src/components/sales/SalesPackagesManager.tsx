@@ -31,7 +31,6 @@ export const SalesPackagesManager: React.FC<SalesPackagesManagerProps> = (props)
     pkgForm,
     setPkgForm,
     categoriesList,
-    PACKAGE_CATEGORIES,
     customCategory,
     setCustomCategory,
     pkgTeamMembers,

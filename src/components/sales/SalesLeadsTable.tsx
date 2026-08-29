@@ -89,7 +89,6 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
     setLostNotes,
     setShowLostModal,
     wizardLeadData,
-    LEAD_SOURCES,
     statCreatedQuotation,
     statQuotesSent,
     statQuoteFollowups,
@@ -103,6 +102,11 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
     categoriesList,
     users
   } = props;
+
+  const leadSourcesList = props.LEAD_SOURCES || LEAD_SOURCES || [];
+  const safeFilteredLeads = Array.isArray(filteredLeads) ? filteredLeads : [];
+  const safeOrders = Array.isArray(orders) ? orders : [];
+  const safePackages = Array.isArray(packages) ? packages : [];
 
   return (
         <div className="space-y-4">
@@ -301,7 +305,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                             className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90"
                           >
                             <option value="">All Sources</option>
-                            {LEAD_SOURCES.map(source => (
+                            {(leadSourcesList || []).map(source => (
                               <option key={source} value={source}>{source}</option>
                             ))}
                           </select>
@@ -318,9 +322,9 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                             className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
                           >
                             <option value="">All Stages</option>
-                            {ACTIVE_STAGE_GROUPS.map((group, idx) => (
+                            {(ACTIVE_STAGE_GROUPS || []).map((group, idx) => (
                               <optgroup key={idx} label={group.label} className={`bg-slate-950 ${group.colorClass} font-bold`}>
-                                {group.options.map(opt => (
+                                {(group.options || []).map(opt => (
                                   <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
                                 ))}
                               </optgroup>
@@ -411,12 +415,12 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
-                  {filteredLeads.length > 0 ? (
-                    filteredLeads.map((lead) => {
-                      const leadStatus = getLeadCurrentStatus(lead);
-                      const currentStage = getLeadCurrentStage(lead);
+                  {safeFilteredLeads.length > 0 ? (
+                    safeFilteredLeads.map((lead) => {
+                      const leadStatus = getLeadCurrentStatus ? getLeadCurrentStatus(lead) : lead.status;
+                      const currentStage = getLeadCurrentStage ? getLeadCurrentStage(lead) : 'Sales';
                       const isActiveInSales = currentStage === 'Sales';
-                      const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
+                      const linkedOrder = safeOrders.find((o) => o.lead_id === lead.lead_id);
                       return (
                         <tr 
                           key={lead.lead_id} 

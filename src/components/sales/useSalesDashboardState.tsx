@@ -8069,6 +8069,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     validateStep3Data,
     viewingPkgDetails,
     wizardLeadData,
-    wizardStep
+    wizardStep,
+    LEAD_SOURCES,
+    EVENT_TYPES,
+    SHOOT_TYPES,
+    PACKAGE_CATEGORIES,
+    ACTIVE_STAGE_GROUPS
   };
 };

@@ -89,9 +89,6 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
     currentUser,
     users,
     canEdit,
-    LEAD_SOURCES,
-    EVENT_TYPES,
-    SHOOT_TYPES,
     activeMasterRoles,
     activeMasterDeliverables,
     eventsReporting,
@@ -197,6 +194,10 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
     handleSavePackageOnly,
     renderQuotationAndStep4Section
   } = props;
+
+  const leadSourcesList = props.LEAD_SOURCES || LEAD_SOURCES || [];
+  const eventTypesList = props.EVENT_TYPES || EVENT_TYPES || [];
+  const shootTypesList = props.SHOOT_TYPES || SHOOT_TYPES || [];
 
   if (activeTab === 'create' && !selectedLead) {
     return (
@@ -371,7 +372,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                           className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer"
                         >
                           <option value="">Select Lead Source</option>
-                          {LEAD_SOURCES.map(source => (
+                          {(leadSourcesList || []).map(source => (
                             <option key={source} value={source}>{source}</option>
                           ))}
                         </select>
@@ -652,7 +653,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                             required
                           >
                             <option value="">── Choose Lead Source ──</option>
-                            {LEAD_SOURCES.map(source => (
+                            {(leadSourcesList || []).map(source => (
                               <option key={source} value={source}>{source}</option>
                             ))}
                           </select>

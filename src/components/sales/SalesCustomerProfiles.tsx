@@ -41,12 +41,13 @@ export const SalesCustomerProfiles: React.FC<SalesCustomerProfilesProps> = (prop
     handleQuickReorderSubmit,
     canEdit,
     isSaving,
-    EVENT_TYPES,
-    SHOOT_TYPES,
     packages,
     formatDDMMYYYY,
     convertTo12Hour
   } = props;
+
+  const eventTypesList = props.EVENT_TYPES || EVENT_TYPES || [];
+  const shootTypesList = props.SHOOT_TYPES || SHOOT_TYPES || [];
 
   return (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -234,7 +235,7 @@ export const SalesCustomerProfiles: React.FC<SalesCustomerProfilesProps> = (prop
                               onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
                               className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
                             >
-                              {EVENT_TYPES.map(type => (
+                              {eventTypesList.map(type => (
                                 <option key={type} value={type}>{type}</option>
                               ))}
                             </select>
