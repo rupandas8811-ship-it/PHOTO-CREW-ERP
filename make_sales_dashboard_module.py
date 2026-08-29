@@ -1,4 +1,6 @@
-import React from 'react';
+import os
+
+sales_dashboard_code = """import React from 'react';
 import { SalesModuleProps } from './SalesUtils';
 import { useSalesDashboardState } from './sales/useSalesDashboardState';
 import { SalesBookingConfirmationModal } from './sales/SalesBookingConfirmationModal';
@@ -127,3 +129,9 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
 };
 
 export const SalesModule = SalesDashboardModule;
+"""
+
+with open('src/components/SalesDashboardModule.tsx', 'w', encoding='utf-8') as f:
+    f.write(sales_dashboard_code)
+
+print(f"SalesDashboardModule.tsx written successfully with {len(sales_dashboard_code.splitlines())} lines.")
