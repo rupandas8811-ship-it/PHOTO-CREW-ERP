@@ -133,7 +133,7 @@ const PackageCatalogueView: React.FC = () => {
               <div className="pt-3 border-t border-zinc-900 flex items-center justify-between mt-4">
                 <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider">STANDARD TARIFF</span>
                 <span className="text-sm font-black text-white font-mono flex items-center">
-                  <span className="text-amber-500 font-light pr-0.5">₹</span>
+                  <span className="text-amber-500 font-light pr-0.5">Rs. </span>
                   <span>{pkg.price.toLocaleString('en-IN')}</span>
                 </span>
               </div>

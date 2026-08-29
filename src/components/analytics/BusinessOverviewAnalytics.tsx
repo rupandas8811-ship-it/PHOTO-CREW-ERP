@@ -188,7 +188,7 @@ export const BusinessOverviewAnalytics: React.FC = () => {
             Finances Overview
           </div>
           <div className="flex items-center gap-2">
-            <div className="p-1 px-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-xs font-bold">₹</div>
+            <div className="p-1 px-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-xs font-bold">Rs. </div>
             <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">Revenue Analytics</h3>
           </div>
           

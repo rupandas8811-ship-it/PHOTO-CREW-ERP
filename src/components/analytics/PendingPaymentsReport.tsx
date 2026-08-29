@@ -82,7 +82,7 @@ export const PendingPaymentsReport: React.FC = () => {
 
   // Format date cleanly and timezone-safely e.g. "2026-08-20" -> "20 Aug 2026"
   const formatEventDate = (dateStr?: string) => {
-    if (!dateStr || dateStr === 'N/A' || dateStr === '—' || dateStr === 'null' || dateStr === 'undefined') return 'N/A';
+    if (!dateStr || dateStr === 'N/A' || dateStr === '-' || dateStr === 'null' || dateStr === 'undefined') return 'N/A';
     const clean = dateStr.split('T')[0].trim();
     const parts = clean.split('-');
     if (parts.length === 3 && parts[0].length === 4) {
@@ -592,7 +592,7 @@ export const PendingPaymentsReport: React.FC = () => {
             <span className="text-sm font-semibold">{updateSuccessMsg}</span>
           </div>
           <button onClick={() => setUpdateSuccessMsg('')} className="text-emerald-500 hover:text-emerald-300 transition-colors">
-            ✕
+            x
           </button>
         </div>
       )}
@@ -641,7 +641,7 @@ export const PendingPaymentsReport: React.FC = () => {
             {formatPercentageOrINR(stats.overdueAmount)}
           </p>
           <p className="text-[8px] text-zinc-500 font-mono">
-            AF CONTINUOUS • CINE 35mm
+            AF CONTINUOUS * CINE 35mm
           </p>
           {activeCardFilter === 'Overdue' && (
             <div className="absolute bottom-0 right-0 w-2 h-2 bg-amber-500 rounded-tl-md" />
@@ -935,7 +935,7 @@ export const PendingPaymentsReport: React.FC = () => {
                     {/* Pending Amount */}
                     <td className="px-4 py-4 text-xs font-black text-right font-mono bg-zinc-900/20">
                       {rec.paymentStatus === 'Fully Paid' ? (
-                        <span className="text-emerald-400 font-mono font-bold">₹0</span>
+                        <span className="text-emerald-400 font-mono font-bold">Rs. 0</span>
                       ) : (
                         <span className="text-rose-400 font-mono font-bold">{formatPercentageOrINR(rec.remainingAmount)}</span>
                       )}
@@ -990,15 +990,15 @@ export const PendingPaymentsReport: React.FC = () => {
                     <td className="px-4 py-4 text-xs text-center">
                       {rec.paymentStatus === 'Fully Paid' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          🟢 Fully Paid
+                           Fully Paid
                         </span>
                       ) : rec.paymentStatus === 'Partial' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                          🟡 Partially Paid
+                           Partially Paid
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-rose-500/10 text-rose-400 border border-rose-500/20">
-                          🟠 Pending
+                           Pending
                         </span>
                       )}
                     </td>
@@ -1117,7 +1117,7 @@ export const PendingPaymentsReport: React.FC = () => {
               
               {currentRecord && currentRecord.remainingAmount === 0 ? (
                 <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-xl text-center text-emerald-400 text-xs font-bold">
-                  🎉 This order is Fully Paid. No outstanding dues remain.
+                   This order is Fully Paid. No outstanding dues remain.
                 </div>
               ) : (
                 <>
@@ -1213,18 +1213,18 @@ export const PendingPaymentsReport: React.FC = () => {
                   setModalErrorMsg('');
 
                   if (!paymentType || paymentType.trim() === '') {
-                    setModalErrorMsg('❌ Please select a Payment Type.');
+                    setModalErrorMsg(' Please select a Payment Type.');
                     return;
                   }
 
                   if (!paymentAmount || amt <= 0) {
-                    setModalErrorMsg('❌ Please enter a valid payment amount.');
+                    setModalErrorMsg(' Please enter a valid payment amount.');
                     return;
                   }
 
                   const maxAllowed = currentRecord ? currentRecord.remainingAmount : paymentModalRecord.remainingAmount;
                   if (amt > maxAllowed) {
-                    setModalErrorMsg(`❌ Payment cannot exceed the pending amount of ₹${maxAllowed.toLocaleString('en-IN')}`);
+                    setModalErrorMsg(` Payment cannot exceed the pending amount of Rs. ${maxAllowed.toLocaleString('en-IN')}`);
                     return;
                   }
 
@@ -1242,8 +1242,8 @@ export const PendingPaymentsReport: React.FC = () => {
                     );
                     
                     // Show success message inside popup
-                    setModalSuccessMsg('✅ Payment updated successfully.');
-                    setUpdateSuccessMsg('✅ Payment updated successfully.');
+                    setModalSuccessMsg(' Payment updated successfully.');
+                    setUpdateSuccessMsg(' Payment updated successfully.');
                     
                     // Reset input fields
                     setPaymentAmount('');
@@ -1258,7 +1258,7 @@ export const PendingPaymentsReport: React.FC = () => {
                     }, 2500);
                   } catch (err: any) {
                     console.error(err);
-                    setModalErrorMsg('❌ Payment update failed.');
+                    setModalErrorMsg(' Payment update failed.');
                   } finally {
                     setIsSaving(false);
                   }
@@ -1345,7 +1345,7 @@ export const PendingPaymentsReport: React.FC = () => {
                     Payment Details & History
                   </h3>
                   <p className="text-[10px] text-zinc-400 mt-1 uppercase font-mono tracking-widest">
-                    Order: {viewDetailsRecord.orderId} • {viewDetailsRecord.customerName}
+                    Order: {viewDetailsRecord.orderId} * {viewDetailsRecord.customerName}
                   </p>
                 </div>
                 <button 
@@ -1399,7 +1399,7 @@ export const PendingPaymentsReport: React.FC = () => {
                       {viewDetailsRecord.events.map((ev: any, idx: number) => (
                         <div key={ev.id || idx} className="p-3 bg-zinc-900 rounded-xl border border-zinc-850 space-y-1">
                           <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-                            <span className="text-indigo-400">🎬</span>
+                            <span className="text-indigo-400"></span>
                             {ev.event_name || ev.event_type || `Event ${idx + 1}`}
                           </span>
                           <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1 border-t border-zinc-800/60">

@@ -293,7 +293,7 @@ export const OwnerRevenueDetailed: React.FC = () => {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" opacity={0.2} />
                 <XAxis dataKey="name" stroke="#71717a" fontSize={10} tickLine={false} />
-                <YAxis stroke="#71717a" fontSize={10} tickLine={false} tickFormatter={(val) => `₹${(val / 100000).toFixed(1)}L`} />
+                <YAxis stroke="#71717a" fontSize={10} tickLine={false} tickFormatter={(val) => `Rs. ${(val / 100000).toFixed(1)}L`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px', fontSize: '12px' }}
                   formatter={(val: number) => [formatINR(val), '']}
@@ -348,7 +348,7 @@ export const OwnerRevenueDetailed: React.FC = () => {
               <BarChart data={revenueByPackage} margin={{ top: 10, right: 30, left: 20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" opacity={0.2} vertical={false} />
                 <XAxis dataKey="name" stroke="#71717a" fontSize={10} tickLine={false} />
-                <YAxis stroke="#71717a" fontSize={10} tickLine={false} tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`} />
+                <YAxis stroke="#71717a" fontSize={10} tickLine={false} tickFormatter={(val) => `Rs. ${(val / 1000).toFixed(0)}k`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px', fontSize: '12px' }}
                   formatter={(val: number) => [formatINR(val), 'Revenue']}
@@ -367,7 +367,7 @@ export const OwnerRevenueDetailed: React.FC = () => {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={revenueBySalesPerson} layout="vertical" margin={{ top: 10, right: 30, left: 40, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#27272a" opacity={0.2} horizontal={false} />
-                <XAxis type="number" stroke="#71717a" fontSize={10} tickLine={false} tickFormatter={(val) => `₹${(val / 1000).toFixed(0)}k`} />
+                <XAxis type="number" stroke="#71717a" fontSize={10} tickLine={false} tickFormatter={(val) => `Rs. ${(val / 1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" stroke="#71717a" fontSize={10} tickLine={false} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#09090b', borderColor: '#27272a', borderRadius: '12px', fontSize: '12px' }}

@@ -82,7 +82,7 @@ export interface CalendarEvent {
 }
 
 export const normalizeToYYYYMMDD = (dateStr: string | null | undefined): string => {
-  if (!dateStr || dateStr === '—' || dateStr === 'N/A' || dateStr === 'undefined' || dateStr === 'null') return '';
+  if (!dateStr || dateStr === '-' || dateStr === 'N/A' || dateStr === 'undefined' || dateStr === 'null') return '';
   const clean = String(dateStr).includes('T') ? String(dateStr).split('T')[0] : String(dateStr).trim();
   if (!clean) return '';
   const parts = clean.split(/[-/]/);
@@ -142,8 +142,8 @@ const parseEventTimes = (timeStr: string) => {
 };
 
 const formatDateDMY = (dateStr: string | null | undefined): string => {
-  if (!dateStr || dateStr === '—' || dateStr === 'N/A') return '—';
-  return formatDateDDMMYY(dateStr) || '—';
+  if (!dateStr || dateStr === '-' || dateStr === 'N/A') return '-';
+  return formatDateDDMMYY(dateStr) || '-';
 };
 
 const getProductionAssignedDate = (
@@ -167,7 +167,7 @@ const getProductionAssignedDate = (
   if (prodRecord?.editing_start_date) return formatDateDMY(prodRecord.editing_start_date);
   if (prodRecord?.created_at) return formatDateDMY(prodRecord.created_at);
 
-  return '—';
+  return '-';
 };
 
 export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelectLead }) => {
@@ -1142,8 +1142,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                       const linkedOrder = orders.find(o => o.lead_id === leadId || o.order_id === ev.orderId);
                       const prodRecord = production?.find(p => p.tracking_id === leadId || p.order_id === leadId || p.tracking_id === ev.orderId || (p as any).order_id === ev.orderId);
                       
-                      const oId = linkedOrder?.order_id || prodRecord?.order_id || ev.orderId || leadId || '—';
-                      const cName = leadObj?.customer_name || linkedOrder?.client_name || ev.customerName || '—';
+                      const oId = linkedOrder?.order_id || prodRecord?.order_id || ev.orderId || leadId || '-';
+                      const cName = leadObj?.customer_name || linkedOrder?.client_name || ev.customerName || '-';
                       const aDate = getProductionAssignedDate(oId, leadId, prodRecord, editorAssignments);
                       const tDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || leadObj?.delivery_target_date || ev.targetDeliveryDate);
                       const cStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || leadObj?.status || ev.currentStage || 'Active';
@@ -1619,7 +1619,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                               <div className="flex items-center gap-1.5 text-[10px] text-zinc-450 font-mono">
                                 <Clock className="w-3 h-3 text-zinc-650" />
                                 <span>{formatTime12Hour(ev.eventTime)}</span>
-                                <span className="text-zinc-700">•</span>
+                                <span className="text-zinc-700">*</span>
                                 <MapPin className="w-3 h-3 text-zinc-650" />
                                 <span className="break-words max-w-[200px]">{ev.eventLocation}</span>
                               </div>
@@ -1879,7 +1879,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                       const prodRecord = production?.find(p => p.tracking_id === lead.lead_id || p.order_id === lead.lead_id || p.tracking_id === orderIdDisplay || (p as any).order_id === orderIdDisplay);
 
                       if (role === 'production') {
-                        const customerName = lead.customer_name || linkedOrder?.client_name || '—';
+                        const customerName = lead.customer_name || linkedOrder?.client_name || '-';
                         const assignedDate = getProductionAssignedDate(orderIdDisplay, lead.lead_id, prodRecord, editorAssignments);
                         const targetDeliveryDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || lead.delivery_target_date || popupDate);
                         const currentStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || lead.status || 'Active';
@@ -1957,7 +1957,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                 </span>
                               </td>
                               <td className="p-3.5 text-right font-mono text-[11px] font-bold text-zinc-200">
-                                ₹{Number(balanceDue).toLocaleString("en-IN")}
+                                Rs. {Number(balanceDue).toLocaleString("en-IN")}
                               </td>
                             </>
                           )}
@@ -2088,14 +2088,14 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                       </thead>
                       <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
                         {selectedEvs.map((ev, idx) => {
-                          const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.tracking_id || ev.raw?.lead_id || '—';
+                          const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.tracking_id || ev.raw?.lead_id || '-';
                           const evName = ev.eventName || ev.raw?.event_name || ev.eventType || 'Event';
                           const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
                           const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
-                          const custName = ev.customerName || ev.raw?.customer_name || '—';
-                          const location = ev.eventLocation || ev.raw?.event_location || '—';
+                          const custName = ev.customerName || ev.raw?.customer_name || '-';
+                          const location = ev.eventLocation || ev.raw?.event_location || '-';
                           const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
-                          const targetDelDate = formatDateDMY(ev.targetDeliveryDate || ev.raw?.targetDeliveryDate || ev.raw?.delivery_target_date || ev.raw?.expected_delivery_date || '—');
+                          const targetDelDate = formatDateDMY(ev.targetDeliveryDate || ev.raw?.targetDeliveryDate || ev.raw?.delivery_target_date || ev.raw?.expected_delivery_date || '-');
 
                           return (
                             <tr 

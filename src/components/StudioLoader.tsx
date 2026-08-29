@@ -97,7 +97,7 @@ export const StudioLoader: React.FC<StudioLoaderProps> = ({
             >
               <div className="absolute -top-1 text-[8px] font-mono font-bold text-zinc-600 tracking-widest uppercase">AF-S</div>
               <div className="absolute -bottom-1 text-[8px] font-mono font-bold text-zinc-600 tracking-widest uppercase">85mm F/1.2</div>
-              <div className="absolute -left-1 text-[8px] font-mono font-bold text-amber-500/40">Ø 82</div>
+              <div className="absolute -left-1 text-[8px] font-mono font-bold text-amber-500/40">0 82</div>
               <div className="absolute -right-1 text-[8px] font-mono font-bold text-zinc-600">∞</div>
             </motion.div>
 

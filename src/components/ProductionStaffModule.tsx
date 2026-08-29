@@ -453,7 +453,7 @@ const getAssignedDeliverableQty = (
     ''
   ).toString().trim();
 
-  // 1. Direct check: If assignment speciality itself starts with or contains quantity (e.g. "2 x Photobook Album", "2 × Photobook Album", "Photobook Album - Qty: 2")
+  // 1. Direct check: If assignment speciality itself starts with or contains quantity (e.g. "2 x Photobook Album", "2 x Photobook Album", "Photobook Album - Qty: 2")
   const directParsed = parseQtyAndText(rawSpeciality);
   if (directParsed.qty > 1) {
     return directParsed.qty;
@@ -1241,7 +1241,7 @@ export const ProductionStaffModule: React.FC = () => {
       setEditingStartedModal(null);
       setEditingStartedForm({ expected_delivery_date: '', estimated_completion_date: '', estimated_completion_time: '', selectedIds: [] });
       await refreshData();
-      showToast('🚀 Status updated to Editing Started!');
+      showToast(' Status updated to Editing Started!');
     } catch (err: any) {
       console.error('Error submitting Editing Started:', err);
       alert('Failed to update status: ' + (err.message || 'Please try again.'));
@@ -1366,10 +1366,10 @@ export const ProductionStaffModule: React.FC = () => {
       });
 
       await refreshData();
-      showToast("✅ Edited Folder Server Upload Confirmed & Saved!");
+      showToast(" Edited Folder Server Upload Confirmed & Saved!");
     } catch (err: any) {
       console.error("Error saving server upload confirmation:", err);
-      alert("❌ Failed to save confirmation: " + (err.message || String(err)));
+      alert(" Failed to save confirmation: " + (err.message || String(err)));
     } finally {
       setIsSubmitting(false);
     }
@@ -1535,7 +1535,7 @@ Thank you.`;
         event_configs: {} 
       });
       await refreshData();
-      showToast('📁 Customer Review saved & moved to Customer Review!');
+      showToast(' Customer Review saved & moved to Customer Review!');
 
       // Automatically open 2nd popup: WhatsApp review message
       setWhatsappModal({
@@ -1723,11 +1723,11 @@ Thank you.`;
         event_configs: {}
       });
       await refreshData();
-      showToast("✅ Customer Review Proof & Server Upload confirmed!");
-      alert("✅ Customer Review Proof and Server Upload confirmed successfully!");
+      showToast(" Customer Review Proof & Server Upload confirmed!");
+      alert(" Customer Review Proof and Server Upload confirmed successfully!");
     } catch (err: any) {
       console.error("[ProductionStaffModule] Error saving confirmation proof:", err);
-      alert("❌ Failed to save Customer Review Proof: " + (err.message || String(err)));
+      alert(" Failed to save Customer Review Proof: " + (err.message || String(err)));
     } finally {
       setIsSubmitting(false);
     }
@@ -1856,7 +1856,7 @@ Thank you.`;
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 pl-1">
             <h2 className="text-xs font-mono font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
-              <span>🎬 My Assigned Deliverables</span>
+              <span> My Assigned Deliverables</span>
               <span className="px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 text-[10px]">{activeBookings.length}</span>
             </h2>
             <ListSortFilter value={sortOrder} onChange={setSortOrder} />
@@ -1881,7 +1881,7 @@ Thank you.`;
                         <div className="flex items-center justify-between mb-3 border-b border-zinc-800/80 pb-2">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-mono font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
-                              📋 Customer & Order Details
+                               Customer & Order Details
                             </span>
                             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-bold">
                               {grp.orderId}
@@ -1908,7 +1908,7 @@ Thank you.`;
                             </div>
                             {grp.customerMobile ? (
                               <div className="text-xs text-emerald-400 font-mono font-semibold flex items-center gap-1 mt-0.5 break-all">
-                                <span>📞</span>
+                                <span></span>
                                 <span>{grp.customerMobile}</span>
                               </div>
                             ) : (
@@ -1956,7 +1956,7 @@ Thank you.`;
                     <div className="p-4 bg-zinc-950/90 w-full max-w-full">
                       <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <span className="flex items-center gap-2 flex-wrap">
-                          <span>📦 Assigned Deliverables</span>
+                          <span> Assigned Deliverables</span>
                           <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px]">
                             {grp.deliverables.length} {grp.deliverables.length === 1 ? 'Deliverable' : 'Deliverables'}
                           </span>
@@ -2007,7 +2007,7 @@ Thank you.`;
                                     <div>{delivItem.customerName}</div>
                                     {delivItem.customerMobile && (
                                       <div className="text-[10px] text-emerald-400 font-mono font-normal flex items-center gap-1 mt-0.5">
-                                        <span>📞</span>
+                                        <span></span>
                                         <span>{delivItem.customerMobile}</span>
                                       </div>
                                     )}
@@ -2026,7 +2026,7 @@ Thank you.`;
                                   {/* 4. Assigned Task (Deliverable) */}
                                   <td className="px-3.5 py-3 font-bold text-zinc-300">
                                     <div className="flex items-center gap-1.5">
-                                      <span>🎯 {delivName}</span>
+                                      <span> {delivName}</span>
                                       {delivQty > 1 && (
                                         <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 font-mono text-[10px] border border-zinc-800">
                                           x{delivQty}
@@ -2188,7 +2188,7 @@ Thank you.`;
                                     })()}
                                     {Boolean(delivItem.serverUploadFolderName) && (
                                       <div className="text-[9px] font-mono text-zinc-400 mt-1 flex items-center gap-1" title={`Server Folder: ${delivItem.serverUploadFolderName} (Event Date: ${delivItem.serverUploadEventDate || 'N/A'})`}>
-                                        <span className="text-emerald-400">📁</span>
+                                        <span className="text-emerald-400"></span>
                                         <span className="truncate max-w-[120px]">{delivItem.serverUploadFolderName}</span>
                                       </div>
                                     )}
@@ -2205,7 +2205,7 @@ Thank you.`;
                                         rel="noopener noreferrer"
                                         className="text-purple-400 hover:text-purple-300 underline font-semibold flex items-center gap-1 cursor-pointer"
                                       >
-                                        View Row Footage ↗
+                                        View Row Footage 
                                       </a>
                                     ) : (
                                       <span className="text-zinc-500 italic text-[11px]">Pending</span>
@@ -2222,7 +2222,7 @@ Thank you.`;
                                       buttonClassName="px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center gap-1.5 shadow-md cursor-pointer mx-auto"
                                       buttonContent={
                                         <>
-                                          <span>⚡ Action</span>
+                                          <span> Action</span>
                                           <ChevronDown className="w-3.5 h-3.5" />
                                         </>
                                       }
@@ -2418,7 +2418,7 @@ Thank you.`;
                                 <div className="space-y-1 min-w-0">
                                   <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Assigned Task</div>
                                   <div className="text-xs font-bold text-purple-300 break-words flex items-start gap-1.5">
-                                    <span className="shrink-0 mt-0.5">🎯</span>
+                                    <span className="shrink-0 mt-0.5"></span>
                                     <span className="flex-1">{delivName}</span>
                                   </div>
                                   <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">{delivItem.assignmentId}</span>
@@ -2606,7 +2606,7 @@ Thank you.`;
                                   {Boolean(delivItem.serverUploadFolderName) && (
                                     <div className="text-[10px] font-mono text-zinc-300 bg-zinc-950/80 px-2.5 py-1.5 rounded-lg border border-zinc-800 flex items-center justify-between gap-2 mt-1">
                                       <span className="flex items-center gap-1.5 truncate">
-                                        <span className="text-emerald-400">📁</span>
+                                        <span className="text-emerald-400"></span>
                                         <span className="truncate">{delivItem.serverUploadFolderName}</span>
                                       </span>
                                       {delivItem.serverUploadEventDate && (
@@ -2627,7 +2627,7 @@ Thank you.`;
                                   buttonClassName="w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white transition-all flex items-center justify-center gap-2 shadow-md cursor-pointer"
                                   buttonContent={
                                     <>
-                                      <span>⚡ Action Menu</span>
+                                      <span> Action Menu</span>
                                       <ChevronDown className="w-4 h-4" />
                                     </>
                                   }
@@ -2930,7 +2930,7 @@ Thank you.`;
                   <div className="space-y-3 pt-2 border-t border-zinc-800">
                     <div className="flex items-center justify-between">
                       <label className="block text-xs font-mono font-bold text-zinc-200 uppercase flex items-center gap-1.5">
-                        <span>📁</span>
+                        <span></span>
                         <span>Server Upload Confirmation</span>
                       </label>
                       <span className="text-[10px] text-zinc-500 font-mono">Server Checklist</span>
@@ -2962,7 +2962,7 @@ Thank you.`;
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm">
                                       <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                                      <span>✓ Edited Folder Uploaded in Server</span>
+                                      <span>v Edited Folder Uploaded in Server</span>
                                     </div>
                                     <button
                                       type="button"
@@ -3341,7 +3341,7 @@ Thank you.`;
                     <div className="p-4 bg-zinc-950 border border-indigo-500/30 rounded-xl space-y-4 animate-in fade-in duration-200">
                       <div className="text-[11px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
                         <span className="flex items-center gap-1.5">
-                          <span className="text-emerald-400">📁</span>
+                          <span className="text-emerald-400"></span>
                           <span>Server Upload Confirmation</span>
                         </span>
                         <span className="text-[10px] text-rose-400 font-normal">* Mandatory Checklist</span>
@@ -3510,7 +3510,7 @@ Thank you.`;
                   }
                   className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer shadow-lg shadow-indigo-600/20"
                 >
-                  {isSubmitting ? 'Uploading Proof & Saving...' : 'Submit & Confirm Server Upload 🎯'}
+                  {isSubmitting ? 'Uploading Proof & Saving...' : 'Submit & Confirm Server Upload '}
                 </button>
               </div>
             </div>

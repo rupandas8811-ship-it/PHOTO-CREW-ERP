@@ -174,14 +174,14 @@ export function convertTimeToDbFormat(timeStr: string): string {
  */
 
 /**
- * Formats a number to Indian Rupee (₹) format (Lakhs/Crores formatting).
- * Example: 150000 -> ₹1,50,000
+ * Formats a number to Indian Rupee (Rs. ) format (Lakhs/Crores formatting).
+ * Example: 150000 -> Rs. 1,50,000
  */
 export function formatINR(amount: number): string {
   if (typeof amount !== 'number' || isNaN(amount)) {
-    return '₹0';
+    return 'Rs. 0';
   }
-  return '₹' + Math.round(amount).toLocaleString('en-IN');
+  return 'Rs. ' + Math.round(amount).toLocaleString('en-IN');
 }
 
 /**
@@ -256,7 +256,7 @@ export function formatDateDDMMYY(dateInput?: string | null | Date): string {
   if (!dateInput && (dateInput as any) !== 0) return '';
   if (typeof dateInput === 'string') {
     const trimmed = dateInput.trim();
-    if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
+    if (!trimmed || trimmed === '-' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
       return trimmed;
     }
     
@@ -325,7 +325,7 @@ export function formatTime12Hour(timeStr?: string | null | Date): string {
   }
 
   const trimmed = String(timeStr).trim();
-  if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
+  if (!trimmed || trimmed === '-' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
     return trimmed;
   }
 
@@ -768,23 +768,23 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 2. Check for dimension / size specifications at the start of the string:
-  // e.g. "16×6", "16x6", "12×8 Album", "16×6 Frame", "16 × 6", "12 x 18", "8x24", "8*12", "12×36"
-  // If the string starts with a dimension (digits x/× digits), it is deliverable text, NOT a leading quantity!
-  const isLeadingDimension = /^\d+\s*[\*xX×]\s*\d+/.test(text);
+  // e.g. "16x6", "16x6", "12x8 Album", "16x6 Frame", "16 x 6", "12 x 18", "8x24", "8*12", "12x36"
+  // If the string starts with a dimension (digits x/x digits), it is deliverable text, NOT a leading quantity!
+  const isLeadingDimension = /^\d+\s*[\*xXx]\s*\d+/.test(text);
   if (isLeadingDimension) {
     return { qty: 1, text };
   }
 
   // 3. Check for technical specifications / units starting with numbers:
-  // e.g. "4K Cinematic Video", "8K Video", "20 Pages × 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
+  // e.g. "4K Cinematic Video", "8K Video", "20 Pages x 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
   const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
   if (isUnitOrSpec) {
     return { qty: 1, text };
   }
 
   // 4. Check for leading quantity with explicit multiplier:
-  // e.g. "2 x Traditional Photos", "2 × Cinematic Video", "2 * Album", "2 x 16×6 Frame", "2 × 16×6"
-  const multiplierMatch = text.match(/^(\d+)\s*[xX×\*]\s+(.+)$/);
+  // e.g. "2 x Traditional Photos", "2 x Cinematic Video", "2 * Album", "2 x 16x6 Frame", "2 x 16x6"
+  const multiplierMatch = text.match(/^(\d+)\s*[xXx\*]\s+(.+)$/);
   if (multiplierMatch) {
     const parsedQty = parseInt(multiplierMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
@@ -793,8 +793,8 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 5. Check for leading quantity followed by dimension:
-  // e.g. "2 16×6", "3 12×8 Album", "2 16×6 Frame"
-  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX×]\s*\d+.*)$/);
+  // e.g. "2 16x6", "3 12x8 Album", "2 16x6 Frame"
+  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xXx]\s*\d+.*)$/);
   if (qtyDimensionMatch) {
     const parsedQty = parseInt(qtyDimensionMatch[1], 10);
     if (!isNaN(parsedQty) && parsedQty >= 1) {
@@ -803,7 +803,7 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
   }
 
   // 6. Check for leading quantity with space followed by item name:
-  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12×18)"
+  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12x18)"
   const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
   if (wordMatch) {
     const parsedQty = parseInt(wordMatch[1], 10);
@@ -913,7 +913,7 @@ export function parseDeliverablesWithQty(
     }
 
     if (text) {
-      text = text.replace(/^[\*\-•xX×]\s*/, '').trim();
+      text = text.replace(/^[\*\-*xXx]\s*/, '').trim();
       const existingQty = map.get(text) || 0;
       map.set(text, existingQty + qty);
     }
@@ -932,7 +932,7 @@ export function formatQtyItem(raw: string | undefined | null): string {
   if (!trimmed) return "";
   const { qty, text } = parseQtyAndText(trimmed);
   if (!text) return trimmed;
-  return `${qty} × ${text}`;
+  return `${qty} x ${text}`;
 }
 
 export function formatQtyArray(raw: string | string[] | undefined | null): string[] {
@@ -1941,7 +1941,7 @@ export function generateWhatsAppAssignmentMessage(params: {
 
   groups.forEach((group, idx) => {
     if (totalGroups > 1) {
-      msg += `Event ${idx + 1} — ${group.eventName}\n`;
+      msg += `Event ${idx + 1} - ${group.eventName}\n`;
     } else {
       msg += `Event Name: ${group.eventName}\n`;
       msg += `Event Type: ${group.eventType}\n`;
@@ -1969,10 +1969,10 @@ export function generateWhatsAppAssignmentMessage(params: {
     msg += `\nTeam Members Included:\n`;
     if (group.mappings.length > 0) {
       group.mappings.forEach(m => {
-        msg += `• ${m.teamMemberRole} — ${m.assignedStaffName}\n`;
+        msg += `* ${m.teamMemberRole} - ${m.assignedStaffName}\n`;
       });
     } else {
-      msg += `• Team details will be updated shortly\n`;
+      msg += `* Team details will be updated shortly\n`;
     }
 
     // Equipment assigned to targetStaffName or overall in this event
