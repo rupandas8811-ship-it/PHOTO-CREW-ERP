@@ -7,11 +7,11 @@ import { SalesAnalytics } from './components/analytics/SalesAnalytics';
 import { OperationsAnalytics } from './components/analytics/OperationsAnalytics';
 import { ProductionAnalytics } from './components/analytics/ProductionAnalytics';
 import { BusinessOverviewAnalytics } from './components/analytics/BusinessOverviewAnalytics';
-import { SalesModule } from './components/SalesModule';
+import { SalesDashboard } from './components/SalesDashboard';
 import { OperationsModule } from './components/OperationsModule';
 import { StaffModule } from './components/StaffModule';
 import { ProductionStaffModule } from './components/ProductionStaffModule';
-import { ProductionModule } from './components/ProductionModule';
+import { ProductionDashboard } from './components/ProductionDashboard';
 import { StaffManagementModule } from './components/StaffManagementModule';
 import { PaymentsModule } from './components/PaymentsModule';
 import { PendingPaymentsReport } from './components/analytics/PendingPaymentsReport';
@@ -986,14 +986,14 @@ const MainAppContent: React.FC = () => {
                     {activeTab === 'production_analytics' && <ProductionAnalytics />}
                     {activeTab === 'business_overview_analytics' && <BusinessOverviewAnalytics />}
                     {activeTab === 'revenue_analytics' && <BusinessOverviewAnalytics />}
-                    {activeTab === 'staff_performance_analytics' && <ProductionModule activeSubTab="staff_performance" />}
+                    {activeTab === 'staff_performance_analytics' && <ProductionDashboard activeSubTab="staff_performance" />}
                     {activeTab === 'dashboard' && currentRole === 'Business Owner' && <BusinessOwnerDashboard activeSection="overview" onSectionChange={(sec) => setActiveTab(sec as any)} />}
-                    {activeTab === 'sales' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <SalesModule activeSubTab={activeSalesSubTab} setActiveSubTab={setActiveSalesSubTab} />}
+                    {activeTab === 'sales' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <SalesDashboard activeSubTab={activeSalesSubTab} setActiveSubTab={setActiveSalesSubTab} />}
                     {activeTab === 'operations' && (currentRole === 'Business Owner' || currentRole === 'Operations Team') && (
                       <OperationsModule activeSubTab={activeOpSubTab} setActiveSubTab={setActiveOpSubTab} />
                     )}
                     {activeTab === 'production' && (currentRole === 'Business Owner' || currentRole === 'Production Team') && (
-                      <ProductionModule activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} />
+                      <ProductionDashboard activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} />
                     )}
                     {activeTab === 'staff_management' && (currentRole === 'Business Owner' || currentRole === 'Production Team') && <StaffManagementModule />}
                     {activeTab === 'notifications' && <NotificationsModule />}
