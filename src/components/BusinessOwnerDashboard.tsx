@@ -1939,6 +1939,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   const [selectedPaymentHistoryOrder, setSelectedPaymentHistoryOrder] = useState<any | null>(null);
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<any | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [paymentTab, setPaymentTab] = useState<'all' | 'pending' | 'history'>('all');
 
   // Combined detailed records
   const records = useMemo(() => {
@@ -1979,7 +1980,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
     });
   }, [orders, payments, production]);
 
-  // Filtered by Search & Date
+  // Filtered by Search & Date & Payment Tab
   const filtered = useMemo(() => {
     return records.filter(r => {
       const matchSearch = 
@@ -1989,9 +1990,16 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
       const matchDate = !startDate || !endDate || (r.eventDate >= startDate && r.eventDate <= endDate);
 
-      return matchSearch && matchDate;
+      let matchTab = true;
+      if (paymentTab === 'pending') {
+        matchTab = r.outstanding > 0 || r.paymentStatus === 'Pending' || r.paymentStatus === 'Partially Paid';
+      } else if (paymentTab === 'history') {
+        matchTab = r.paymentReceived > 0 || r.paymentStatus === 'Fully Paid';
+      }
+
+      return matchSearch && matchDate && matchTab;
     });
-  }, [records, searchTerm, startDate, endDate]);
+  }, [records, searchTerm, startDate, endDate, paymentTab]);
 
   // Totals for summary header
   const totalRevSum = useMemo(() => filtered.reduce((s, r) => s + r.totalRevenue, 0), [filtered]);
@@ -2030,10 +2038,10 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           type="button"
           onClick={() => {
             const fullOrder = orders.find(o => o.order_id === item.orderId || o.lead_id === item.leadId) || item;
-            setSelectedHistoryOrder(fullOrder);
+            setSelectedPaymentHistoryOrder(fullOrder);
           }}
           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-          title="View Project History & Timeline"
+          title="View Payment Details & History"
         >
           <History className="w-3.5 h-3.5" />
           <span>History</span>
@@ -2379,6 +2387,43 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
           {/* Filter & Search Bar */}
           <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Subtab Selector */}
+            <div className="flex items-center gap-1.5 bg-zinc-900 p-1 rounded-xl border border-zinc-800 w-full sm:w-auto overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setPaymentTab('all')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  paymentTab === 'all'
+                    ? 'bg-amber-500 text-black shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                All Records
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentTab('pending')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  paymentTab === 'pending'
+                    ? 'bg-rose-500 text-white shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Pending Payments
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentTab('history')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
+                  paymentTab === 'history'
+                    ? 'bg-emerald-500 text-black shadow-sm'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Payment History
+              </button>
+            </div>
+
             {/* Search */}
             <div className="relative w-full sm:w-72">
               <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
@@ -2476,10 +2521,10 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                         type="button"
                         onClick={() => {
                           const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
-                          setSelectedHistoryOrder(fullOrder);
+                          setSelectedPaymentHistoryOrder(fullOrder);
                         }}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-                        title="View Complete Project History & Timeline"
+                        title="View Payment Details & History"
                       >
                         <History className="w-3.5 h-3.5" />
                         <span>History</span>
@@ -2513,6 +2558,8 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         onClose={() => setSelectedPaymentHistoryOrder(null)}
         order={selectedPaymentHistoryOrder}
         payments={payments}
+        orders={orders}
+        leads={leads}
       />
 
       {/* ORDER HISTORY & TIMELINE AUDIT MODAL */}

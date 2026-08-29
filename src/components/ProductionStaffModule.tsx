@@ -720,11 +720,27 @@ export const ProductionStaffModule: React.FC = () => {
 
     const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
       const vOrd = String(v.order_id || '').trim().toLowerCase();
-      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
-      return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
+      const vTask = String((v as any).task_id || (v as any).assignment_id || '').trim().toLowerCase();
+      const delivTaskId = String(delivItem.assignmentId || '').trim().toLowerCase();
+      if (cleanOrdId && vOrd === cleanOrdId && vTask && delivTaskId && vTask === delivTaskId) {
+        return true;
+      }
+      return false;
     });
 
-    const existingImage = (savedTargetVerif?.client_communication_consent_proof || delivItem.assignmentObj?.customer_review_image || delivItem.confirmationProof || '').trim();
+    const taskProofCandidate = (
+      delivItem.assignmentObj?.confirmation_proof ||
+      delivItem.assignmentObj?.customer_review_image ||
+      delivItem.assignmentObj?.customer_communication_proof ||
+      delivItem.assignmentObj?.client_communication_proof ||
+      delivItem.assignmentObj?.proof_url ||
+      delivItem.assignmentObj?.proof_image ||
+      delivItem.assignmentObj?.uploaded_proof ||
+      (savedTargetVerif ? savedTargetVerif.client_communication_consent_proof : '') ||
+      ''
+    ).trim();
+
+    const existingImage = taskProofCandidate;
     const existingEditedLink = (
       savedTargetVerif?.upload_link_path ||
       delivItem.editedDriveLink || 
@@ -842,11 +858,27 @@ export const ProductionStaffModule: React.FC = () => {
 
     const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
       const vOrd = String(v.order_id || '').trim().toLowerCase();
-      const vEvt = String(v.event_id || 'default').trim().toLowerCase();
-      return cleanOrdId && vOrd === cleanOrdId && (vEvt === 'default' || vEvt === String(currentEvtKey).toLowerCase() || (delivItem.eventId && vEvt === String(delivItem.eventId).toLowerCase()));
+      const vTask = String((v as any).task_id || (v as any).assignment_id || '').trim().toLowerCase();
+      const delivTaskId = String(delivItem.assignmentId || '').trim().toLowerCase();
+      if (cleanOrdId && vOrd === cleanOrdId && vTask && delivTaskId && vTask === delivTaskId) {
+        return true;
+      }
+      return false;
     });
 
-    const existingProof = (savedTargetVerif?.client_communication_consent_proof || delivItem.confirmationProof || '').trim();
+    const taskProofCandidate = (
+      delivItem.assignmentObj?.confirmation_proof ||
+      delivItem.assignmentObj?.customer_communication_proof ||
+      delivItem.assignmentObj?.client_communication_proof ||
+      delivItem.assignmentObj?.customer_review_image ||
+      delivItem.assignmentObj?.proof_url ||
+      delivItem.assignmentObj?.proof_image ||
+      delivItem.assignmentObj?.uploaded_proof ||
+      (savedTargetVerif ? savedTargetVerif.client_communication_consent_proof : '') ||
+      ''
+    ).trim();
+
+    const existingProof = taskProofCandidate;
 
     setEditingCompletedModal({ group: grp, actionItem: delivItem });
     setEditingCompletedForm({
@@ -1078,7 +1110,6 @@ export const ProductionStaffModule: React.FC = () => {
           eventDate: item.eventDate,
           targetFinishDate: item.targetFinishDate,
           rawFootageLink: item.rawFootageLink,
-          confirmationProof: item.confirmationProof,
           serverUploadConfirmed: item.serverUploadConfirmed,
           serverUploadEventDate: item.serverUploadEventDate,
           serverUploadFolderName: item.serverUploadFolderName,
@@ -1094,9 +1125,6 @@ export const ProductionStaffModule: React.FC = () => {
       grp.deliverables.push(item);
       if (!grp.rawFootageLink && item.rawFootageLink) {
         grp.rawFootageLink = item.rawFootageLink;
-      }
-      if (!grp.confirmationProof && item.confirmationProof) {
-        grp.confirmationProof = item.confirmationProof;
       }
       if (!grp.serverUploadConfirmed && item.serverUploadConfirmed) {
         grp.serverUploadConfirmed = item.serverUploadConfirmed;
@@ -1336,10 +1364,6 @@ export const ProductionStaffModule: React.FC = () => {
         };
         if (customerReviewForm.edited_drive_link?.trim()) {
           prodUpdate.edited_drive_link = customerReviewForm.edited_drive_link.trim();
-        }
-        if (imgUrl) {
-          prodUpdate.client_communication_proof = imgUrl;
-          prodUpdate.customer_communication_proof = imgUrl;
         }
         await updateProduction(prodId, prodUpdate);
       }
@@ -1663,9 +1687,6 @@ Thank you.`;
           server_upload_confirmed: true,
           server_upload_event_date: serverEventDate,
           server_upload_folder_name: serverFolderName,
-          client_communication_proof: mainProofUrl || proofInput,
-          customer_communication_proof: mainProofUrl || proofInput,
-          proof_url: mainProofUrl || proofInput,
           remarks: `Editing Completed & Customer Review Proof (${mainProofUrl || proofInput}) uploaded. Server Folder: "${serverFolderName}" (Event Date: ${serverEventDate}) by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }
@@ -1695,12 +1716,14 @@ Thank you.`;
             await saveClientAcceptanceVerification({
               order_id: orderId,
               event_id: deliv.eventId || evtKey || 'default',
+              assignment_id: deliv.assignmentId,
+              task_id: deliv.assignmentId,
               folder_name: fName,
               upload_link_path: lPath,
               client_communication_consent_proof: mainProofUrl || proofInput,
               proof_file_name: mainProofUrl ? (mainProofUrl.split('/').pop()?.split('?')[0] || `Proof_${orderId}`) : '',
               consent_proof_verified: true
-            });
+            } as any);
           }
         }
       }
