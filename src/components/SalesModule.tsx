@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import {
-  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw, AlertCircle, Activity, PhoneCall, LayoutDashboard, UserPlus, TrendingUp, Flame, CheckCircle, Download, FileSpreadsheet, Printer, MoreVertical, Unlock, XCircle, FileImage, Edit3, User, Info, ChevronRight, MessageSquare, History
+  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw, AlertCircle, Activity, PhoneCall, LayoutDashboard, UserPlus, TrendingUp, Flame, CheckCircle, Download, FileSpreadsheet, Printer, MoreVertical, Unlock, Lock, XCircle, FileImage, Edit3, User, Info, ChevronRight, MessageSquare, History
 } from "lucide-react";
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../types';
 import { StatusText } from './ui/StatusText';

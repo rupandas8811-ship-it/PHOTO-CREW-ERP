@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { supabaseClient } from './supabaseClient';
 import { RoleProvider, useRole } from './components/RoleContext';
@@ -1028,8 +1029,8 @@ const ChevronRightIcon: React.FC<{ active: boolean }> = ({ active }) => {
 
 export default function App() {
   return (
-    <RoleProvider>
+    <ErrorBoundary><RoleProvider>
       <MainAppContent />
-    </RoleProvider>
+    </RoleProvider></ErrorBoundary>
   );
 }
