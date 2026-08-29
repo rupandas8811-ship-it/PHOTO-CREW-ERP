@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Camera } from 'lucide-react';
 
-export const MicroSparkline: React.FC<{ points: number[]; color: string }> = ({ points, color }) => {
+export const MicroSparkline: React.FC<{ points?: number[]; color: string }> = ({ points = [10, 15, 12, 18, 14, 20, 16], color }) => {
+  const safePoints = Array.isArray(points) && points.length > 1 ? points : [10, 15, 12, 18, 14, 20, 16];
   const width = 120;
   const height = 18;
-  const max = Math.max(...points, 1);
-  const min = Math.min(...points, 0);
+  const max = Math.max(...safePoints, 1);
+  const min = Math.min(...safePoints, 0);
   const range = max - min || 1;
   
-  const widthStep = width / (points.length - 1);
-  const svgPoints = points.map((p, i) => {
+  const widthStep = width / (safePoints.length - 1);
+  const svgPoints = safePoints.map((p, i) => {
     const x = i * widthStep;
     const y = height - ((p - min) / range) * (height - 4) - 2;
     return { x, y };
