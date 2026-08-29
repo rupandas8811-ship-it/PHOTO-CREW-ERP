@@ -2714,27 +2714,43 @@ export const OperationsLeads: React.FC = () => {
         </table>
       </div>    </div>
 
-      {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
+      {/* Full-Screen Page View for Crew and Equipment Assignment */}
       {assigningOrderId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-[96vw] sm:w-full sm:max-w-4xl h-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
-                <h3 className="text-sm font-sans font-black text-white">
-                  Project Staffing & Handover Dossier ~ {assigningOrderId}
-                </h3>
+        <div className="fixed inset-0 bg-zinc-950 z-[100] flex flex-col w-full h-full min-h-screen overflow-hidden animate-fade-in">
+          <div id="assign_staff_modal" className="w-full h-full flex flex-col bg-zinc-950 overflow-hidden">
+            {/* Header */}
+            <div className="p-4 sm:px-6 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/80 backdrop-blur-md sticky top-0 z-30 shrink-0">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <button
+                  type="button"
+                  onClick={() => setAssigningOrderId(null)}
+                  className="px-3.5 py-2 text-xs font-mono font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer border border-zinc-700/50 shadow-sm"
+                >
+                  <span>←</span>
+                  <span className="hidden sm:inline">Back to Operations</span>
+                  <span className="sm:hidden">Back</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="p-1 px-2.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
+                  <div>
+                    <h3 className="text-xs sm:text-base font-sans font-black text-white flex items-center gap-2">
+                      <span>Project Staffing & Handover Dossier</span>
+                      <span className="text-amber-400 font-mono text-xs">• {assigningOrderId}</span>
+                    </h3>
+                  </div>
+                </div>
               </div>
               <button 
                 onClick={() => setAssigningOrderId(null)}
-                className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer transition-colors p-2 text-xl rounded-xl hover:bg-zinc-800/80"
                 type="button"
+                title="Close Full-Screen View"
               >
                 ✕
               </button>
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-6">
+              <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-h-0 space-y-6 max-w-7xl mx-auto w-full">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
