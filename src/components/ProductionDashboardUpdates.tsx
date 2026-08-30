@@ -5,6 +5,7 @@ import { ProductionProofUpload, ProductionProofUploadProps } from './production/
 import { ProductionTaskActions, ProductionTaskActionsProps } from './production/ProductionTaskActions';
 import { ProductionTaskDetails, ProductionTaskDetailsProps } from './production/ProductionTaskDetails';
 import { ProductionReassign, ProductionReassignProps } from './production/ProductionReassign';
+import { ProductionFullScreenManager } from './production/ProductionFullScreenManager';
 
 /**
  * ProductionDashboardUpdates.tsx
@@ -27,8 +28,12 @@ export const ProductionExtensionContainer: React.FC<ProductionExtensionContainer
   children,
   className = ''
 }) => {
-  if (!children) return null;
-  return <div className={`production-dashboard-extension ${className}`}>{children}</div>;
+  return (
+    <div className={`production-dashboard-extension ${className}`}>
+      <ProductionFullScreenManager />
+      {children}
+    </div>
+  );
 };
 
 // Re-export modular components for seamless import by future features
@@ -38,7 +43,8 @@ export {
   ProductionProofUpload,
   ProductionTaskActions,
   ProductionTaskDetails,
-  ProductionReassign
+  ProductionReassign,
+  ProductionFullScreenManager
 };
 
 export type {

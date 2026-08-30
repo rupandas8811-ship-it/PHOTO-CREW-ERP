@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
@@ -18,6 +18,8 @@ import {
   CheckCircle2, 
   ChevronLeft, 
   ChevronRight, 
+  ChevronDown,
+  ChevronUp,
   X, 
   Eye, 
   ShieldCheck, 
@@ -354,68 +356,261 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     return filteredOrders.filter(o => o.current_stage !== 'Order Closed' && o.current_stage !== 'Closed' && o.current_stage !== 'Event Cancelled').length;
   }, [filteredOrders]);
 
+  // Unified Lifecycle Pipeline across Sales, Operations, Production, Acceptance & Closed
+  const unifiedPipeline = useMemo(() => {
+    const safeLeads = Array.isArray(leads) ? leads : [];
+    const safeOrders = Array.isArray(orders) ? orders : [];
+    const safeOps = Array.isArray(operations) ? operations : [];
+    const safeProd = Array.isArray(production) ? production : [];
+
+    const itemMap = new Map<string, any>();
+
+    const getOrCreate = (key: string) => {
+      if (!itemMap.has(key)) {
+        itemMap.set(key, {
+          id: key,
+          lead_id: key,
+          order_id: '',
+          customer_name: 'Client',
+          mobile: '',
+          custom_event_name: 'Event',
+          event_type: '',
+          event_date: '',
+          delivery_date: '',
+          quotation_amount: 0,
+          sales_person: 'Unassigned',
+          sales_status: 'New Lead',
+          ops_status: 'Not Started',
+          prod_status: 'Not Started',
+          acceptance_status: 'Pending',
+          closed_status: 'Active',
+          current_status: 'New Lead',
+          assigned_crew: 'Unassigned',
+          editor: 'Unassigned',
+          hasEnteredSales: true,
+          hasEnteredOps: false,
+          hasEnteredProd: false,
+          hasEnteredAcceptance: false,
+          isClosed: false,
+          created_at: '',
+          rawLead: undefined,
+          rawOrder: undefined,
+          rawOps: undefined,
+          rawProd: undefined
+        });
+      }
+      return itemMap.get(key);
+    };
+
+    // 1. Process Leads
+    safeLeads.forEach(lead => {
+      if (!lead || !lead.lead_id) return;
+      const item = getOrCreate(lead.lead_id);
+      item.lead_id = lead.lead_id;
+      item.customer_name = lead.customer_name || item.customer_name;
+      item.mobile = lead.mobile || lead.phone || item.mobile;
+      item.custom_event_name = lead.custom_event_name || lead.event_name || lead.event_type || item.custom_event_name;
+      item.event_type = lead.event_type || item.event_type;
+      item.event_date = lead.event_date || item.event_date;
+      item.quotation_amount = lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || item.quotation_amount;
+      item.sales_person = lead.sales_person || lead.sales_staff_name || lead.created_by || item.sales_person;
+      item.sales_status = lead.current_status || lead.status || 'Active Lead';
+      item.current_status = item.sales_status;
+      item.created_at = lead.created_date || lead.created_at || item.created_at;
+      item.rawLead = lead;
+    });
+
+    // 2. Process Orders
+    safeOrders.forEach(order => {
+      if (!order) return;
+      const key = order.lead_id || order.order_id;
+      if (!key) return;
+      const item = getOrCreate(key);
+
+      if (order.lead_id) item.lead_id = order.lead_id;
+      if (order.order_id) item.order_id = order.order_id;
+
+      item.customer_name = order.customer_name || item.customer_name;
+      item.mobile = (order as any).customer_phone || (order as any).mobile || item.mobile;
+      item.custom_event_name = order.custom_event_name || order.event_type || item.custom_event_name;
+      item.event_type = order.event_type || item.event_type;
+      item.event_date = order.event_date || item.event_date;
+      item.quotation_amount = order.quotation_amount || order.grand_total || item.quotation_amount;
+      item.created_at = order.created_at || item.created_at;
+      item.rawOrder = order;
+
+      item.hasEnteredSales = true;
+      item.hasEnteredOps = true;
+
+      const oStage = (order.current_stage || order.order_status || '').trim();
+      const oLower = oStage.toLowerCase();
+
+      if (oLower.includes('confirm')) {
+        item.sales_status = 'Order Confirmed';
+      }
+
+      if (oLower.includes('closed') || oLower.includes('completed')) {
+        item.hasEnteredProd = true;
+        item.hasEnteredAcceptance = true;
+        item.isClosed = true;
+        item.closed_status = 'Order Closed';
+        item.ops_status = 'Operations Completed';
+        item.prod_status = 'Production Completed';
+        item.acceptance_status = 'Client Accepted';
+        item.current_status = 'Order Closed';
+      } else if (oLower.includes('acceptance') || oLower.includes('approved') || oLower.includes('customer review')) {
+        item.hasEnteredProd = true;
+        item.hasEnteredAcceptance = true;
+        item.ops_status = 'Operations Completed';
+        item.prod_status = 'Proof Uploaded';
+        item.acceptance_status = 'Acceptance Pending';
+        item.current_status = 'Acceptance Pending';
+      } else if (oLower.includes('production') || oLower.includes('editing') || oLower.includes('proof')) {
+        item.hasEnteredProd = true;
+        item.ops_status = 'Operations Completed';
+        item.prod_status = oStage || 'In Production';
+        item.current_status = oStage || 'Production Started';
+      } else if (oLower.includes('operation')) {
+        item.ops_status = oStage || 'Operations Assigned';
+        item.current_status = oStage || 'Operations Assigned';
+      } else if (oStage) {
+        item.current_status = oStage;
+      }
+    });
+
+    // 3. Process Operations
+    safeOps.forEach(op => {
+      if (!op) return;
+      const opOrderId = op.order_id || (op as any).tracking_id;
+      if (!opOrderId) return;
+
+      let item = Array.from(itemMap.values()).find(i => i.order_id === opOrderId || i.lead_id === opOrderId || i.id === opOrderId);
+      if (!item) {
+        item = getOrCreate(opOrderId);
+        item.order_id = opOrderId;
+      }
+
+      item.rawOps = op;
+      item.hasEnteredOps = true;
+
+      if (op.event_date) item.event_date = op.event_date;
+      if ((op as any).customer_name) item.customer_name = (op as any).customer_name;
+
+      const crewList = [op.photographer_assigned, op.videographer_assigned, op.drone_operator_assigned, op.assistant_assigned].filter(Boolean);
+      const assignedCrew = crewList.length > 0 ? crewList.join(', ') : ((op as any).assigned_photographer || (op as any).assigned_crew || (op as any).assigned_staff || item.assigned_crew);
+      item.assigned_crew = assignedCrew;
+
+      const rawOpStatus = op.event_status || (op as any).operations_status || (op as any).status || 'Assigned';
+      item.ops_status = rawOpStatus;
+
+      const opLower = rawOpStatus.toLowerCase();
+      if (opLower.includes('complete') || opLower.includes('delivered') || opLower.includes('closed') || opLower.includes('handover')) {
+        item.ops_status = 'Operations Completed';
+        item.hasEnteredProd = true;
+        if (item.current_status === 'New Lead' || item.current_status === 'Order Confirmed' || item.current_status.toLowerCase().includes('operation')) {
+          item.current_status = 'Production Started';
+        }
+      } else {
+        if (!item.hasEnteredProd && !item.isClosed && !item.hasEnteredAcceptance) {
+          item.current_status = `Operations: ${rawOpStatus}`;
+        }
+      }
+    });
+
+    // 4. Process Production
+    safeProd.forEach(prod => {
+      if (!prod) return;
+      const pOrderId = prod.order_id || prod.tracking_id || (prod as any).production_id;
+      if (!pOrderId) return;
+
+      let item = Array.from(itemMap.values()).find(i => i.order_id === pOrderId || i.lead_id === pOrderId || i.id === pOrderId);
+      if (!item) {
+        item = getOrCreate(pOrderId);
+        item.order_id = pOrderId;
+      }
+
+      item.rawProd = prod;
+      item.hasEnteredOps = true;
+      item.hasEnteredProd = true;
+
+      if (prod.expected_delivery_date || (prod as any).delivery_date || prod.target_delivery_date) {
+        item.delivery_date = prod.expected_delivery_date || (prod as any).delivery_date || prod.target_delivery_date;
+      }
+      if (prod.editor_assigned || (prod as any).assigned_editor || (prod as any).assigned_staff) {
+        item.editor = prod.editor_assigned || (prod as any).assigned_editor || (prod as any).assigned_staff;
+      }
+      if (prod.proof_url || (prod as any).proof_link) {
+        item.proof_url = prod.proof_url || (prod as any).proof_link;
+      }
+      if (prod.footage_url) {
+        item.footage_url = prod.footage_url;
+      }
+
+      const rawProdStatus = prod.editing_status || prod.production_status || (prod as any).status || 'Editing Started';
+      item.prod_status = rawProdStatus;
+
+      const prLower = rawProdStatus.toLowerCase();
+      if (prLower.includes('client acceptance') || prLower.includes('customer review') || prLower.includes('proof uploaded')) {
+        item.hasEnteredAcceptance = true;
+        item.acceptance_status = 'Acceptance Pending';
+        if (!item.isClosed) {
+          item.current_status = 'Proof Uploaded (Acceptance Pending)';
+        }
+      } else if (prLower.includes('closed') || (prLower.includes('complete') && prLower.includes('project'))) {
+        item.hasEnteredAcceptance = true;
+        item.isClosed = true;
+        item.closed_status = 'Order Closed';
+        item.current_status = 'Order Closed';
+      } else {
+        if (!item.isClosed && !item.hasEnteredAcceptance) {
+          item.current_status = rawProdStatus;
+        }
+      }
+    });
+
+    // Date range filtering helper
+    const isWithinDate = (dateStr?: string) => {
+      if (datePreset === 'all' || (!startDate && !endDate)) return true;
+      if (!dateStr) return true;
+      const cleanDate = dateStr.split('T')[0];
+      if (startDate && cleanDate < startDate) return false;
+      if (endDate && cleanDate > endDate) return false;
+      return true;
+    };
+
+    return Array.from(itemMap.values()).filter(item => {
+      const d = item.created_at || item.event_date || '';
+      return isWithinDate(d);
+    });
+  }, [leads, orders, operations, production, startDate, endDate, datePreset]);
+
   const boCardsData = useMemo(() => {
     // SALES
-    const salesTotalLeads = filteredLeads;
-    const salesConverted = filteredLeads.filter(l => {
-      const matchingOrder = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
-      const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower.includes('confirm') || !!matchingOrder;
-    });
-    const salesLost = filteredLeads.filter(l => {
-      const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower === 'lost lead' || sLower === 'lost';
-    });
-    const salesFollowup = filteredLeads.filter(l => {
-      const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower.includes('quotation');
-    });
+    const salesTotalLeads = unifiedPipeline.filter(i => i.hasEnteredSales);
+    const salesConverted = salesTotalLeads.filter(i => (i.sales_status || '').toLowerCase().includes('confirm') || i.order_id);
+    const salesLost = salesTotalLeads.filter(i => (i.sales_status || '').toLowerCase().includes('lost'));
+    const salesFollowup = salesTotalLeads.filter(i => (i.sales_status || '').toLowerCase().includes('quotation'));
 
     // OPERATIONS
-    const opsNew = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return !sLower || sLower === 'pending' || sLower === 'assigned' || sLower === 'new order received' || sLower === 'operations assigned';
-    });
-    const opsCompleted = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
-    });
-    const opsUpcoming = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      const o = orders.find(ord => ord.order_id === op.order_id || ord.lead_id === op.tracking_id);
-      if (!o || !o.event_date) return false;
-      const isComplete = sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
-      return !isComplete && new Date(o.event_date) >= new Date();
-    });
-    const opsScheduled = filteredOperations.filter(op => {
-      const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower === 'event scheduled' || sLower === 'assigned crew' || sLower === 'staff assigned';
-    });
+    const opsAll = unifiedPipeline.filter(i => i.hasEnteredOps);
+    const opsNew = opsAll.filter(i => (i.ops_status || '').toLowerCase().includes('pending') || (i.ops_status || '').toLowerCase().includes('assigned') || (i.ops_status || '').toLowerCase() === 'not started');
+    const opsCompleted = opsAll.filter(i => (i.ops_status || '').toLowerCase().includes('complete') || (i.ops_status || '').toLowerCase().includes('delivered'));
+    const opsUpcoming = opsAll.filter(i => i.event_date && new Date(i.event_date) >= new Date() && !(i.ops_status || '').toLowerCase().includes('complete'));
+    const opsScheduled = opsAll.filter(i => (i.ops_status || '').toLowerCase().includes('scheduled') || i.assigned_crew !== 'Unassigned');
 
     // PRODUCTION
-    const prodNew = filteredProduction.filter(prod => {
-      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower === 'raw footage received' || sLower === 'new' || sLower === 'pending' || !sLower;
-    });
-    const prodInProgress = filteredProduction.filter(prod => {
-      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('in progress') || sLower.includes('editing started') || sLower.includes('assigned');
-    });
-    const prodEditingCompleted = filteredProduction.filter(prod => {
-      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('review') || sLower === 'ready for delivery';
-    });
-    const prodClientAcceptance = filteredProduction.filter(prod => {
-      const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('client acceptance') || sLower.includes('customer review');
-    });
+    const prodAll = unifiedPipeline.filter(i => i.hasEnteredProd);
+    const prodNew = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('raw') || (i.prod_status || '').toLowerCase().includes('new') || i.prod_status === 'Not Started');
+    const prodInProgress = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('progress') || (i.prod_status || '').toLowerCase().includes('started') || (i.prod_status || '').toLowerCase().includes('editing'));
+    const prodEditingCompleted = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('complete') || (i.prod_status || '').toLowerCase().includes('proof'));
+    const prodClientAcceptance = unifiedPipeline.filter(i => i.hasEnteredAcceptance);
 
     return {
       salesTotalLeads, salesConverted, salesLost, salesFollowup,
-      opsNew, opsCompleted, opsUpcoming, opsScheduled,
-      prodNew, prodInProgress, prodEditingCompleted, prodClientAcceptance
+      opsNew, opsCompleted, opsUpcoming, opsScheduled, opsAll,
+      prodNew, prodInProgress, prodEditingCompleted, prodClientAcceptance, prodAll
     };
-  }, [filteredLeads, orders, filteredOperations, filteredProduction]);
+  }, [unifiedPipeline]);
 
   const outstandingPaymentTotal = useMemo(() => {
     return filteredOrders.reduce((sum, o) => {
@@ -450,147 +645,42 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
     // SALES CARDS
     if (selectedCard === 'sales_total_leads' || selectedCard === 'overview_sales') {
-      return boCardsData.salesTotalLeads.map(lead => {
-        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-        return {
-          ...lead,
-          id: lead.lead_id,
-          lead_id: lead.lead_id,
-          customer_name: lead.customer_name || 'Client',
-          mobile: lead.mobile || lead.phone || 'N/A',
-          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
-          event_date: lead.event_date || 'N/A',
-          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
-          status: lead.current_status || lead.status || 'Active Lead',
-          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+      return boCardsData.salesTotalLeads;
     }
     if (selectedCard === 'sales_total_converted') {
-      return boCardsData.salesConverted.map(lead => {
-        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-        return {
-          ...lead,
-          id: lead.lead_id,
-          lead_id: lead.lead_id,
-          customer_name: lead.customer_name || 'Client',
-          mobile: lead.mobile || lead.phone || 'N/A',
-          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
-          event_date: lead.event_date || 'N/A',
-          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
-          status: lead.current_status || lead.status || 'Confirmed',
-          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+      return boCardsData.salesConverted;
     }
     if (selectedCard === 'sales_total_lost') {
-      return boCardsData.salesLost.map(lead => {
-        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-        return {
-          ...lead,
-          id: lead.lead_id,
-          lead_id: lead.lead_id,
-          customer_name: lead.customer_name || 'Client',
-          mobile: lead.mobile || lead.phone || 'N/A',
-          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
-          event_date: lead.event_date || 'N/A',
-          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
-          status: lead.current_status || lead.status || 'Lost Lead',
-          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+      return boCardsData.salesLost;
     }
     if (selectedCard === 'sales_quotation_followup') {
-      return boCardsData.salesFollowup.map(lead => {
-        const order = orders.find(o => o.lead_id === lead.lead_id || o.order_id === lead.lead_id);
-        return {
-          ...lead,
-          id: lead.lead_id,
-          lead_id: lead.lead_id,
-          customer_name: lead.customer_name || 'Client',
-          mobile: lead.mobile || lead.phone || 'N/A',
-          custom_event_name: lead.custom_event_name || lead.event_name || lead.event_type || 'Event',
-          event_date: lead.event_date || 'N/A',
-          quotation_amount: lead.quotation_amount || lead.grand_total || lead.final_quotation_amount || lead.package_price || lead.budget || 0,
-          status: lead.current_status || lead.status || 'Quotation Follow-up',
-          sales_person: lead.sales_person || lead.sales_staff_name || lead.created_by || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+      return boCardsData.salesFollowup;
     }
 
     // OPERATIONS CARDS
     if (selectedCard === 'ops_new' || selectedCard === 'ops_completed' || selectedCard === 'ops_upcoming' || selectedCard === 'ops_scheduled' || selectedCard === 'overview_ops') {
-      const rawList = selectedCard === 'ops_new' ? boCardsData.opsNew
+      return selectedCard === 'ops_new' ? boCardsData.opsNew
         : selectedCard === 'ops_completed' ? boCardsData.opsCompleted
         : selectedCard === 'ops_upcoming' ? boCardsData.opsUpcoming
         : selectedCard === 'ops_scheduled' ? boCardsData.opsScheduled
-        : filteredOperations;
-
-      return rawList.map(op => {
-        const order = orders.find(o => o.order_id === op.order_id || o.lead_id === (op as any).tracking_id || o.lead_id === op.order_id);
-        const lead = leads.find(l => l.lead_id === op.order_id || l.lead_id === (op as any).tracking_id || l.lead_id === order?.lead_id);
-        const crewList = [op.photographer_assigned, op.videographer_assigned, op.drone_operator_assigned, op.assistant_assigned].filter(Boolean);
-        const assignedCrew = crewList.length > 0 ? crewList.join(', ') : ((op as any).assigned_photographer || (op as any).assigned_crew || (op as any).assigned_staff || 'Unassigned');
-
-        return {
-          ...op,
-          id: op.operation_id || op.order_id || (op as any).tracking_id,
-          order_id: op.order_id || (op as any).tracking_id || order?.order_id || 'N/A',
-          customer_name: order?.customer_name || lead?.customer_name || (op as any).customer_name || 'Client',
-          event_type: order?.event_type || lead?.event_type || (op as any).event_type || 'Event Shoot',
-          custom_event_name: order?.custom_event_name || lead?.custom_event_name || (op as any).custom_event_name || order?.event_type || lead?.event_type || 'Photography Shoot',
-          event_date: order?.event_date || lead?.event_date || (op as any).event_date || 'N/A',
-          status: op.event_status || (op as any).operations_status || (op as any).status || order?.current_stage || 'Active',
-          assigned_crew: assignedCrew,
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+        : boCardsData.opsAll;
     }
 
     // PRODUCTION CARDS
     if (selectedCard === 'prod_new' || selectedCard === 'prod_inprogress' || selectedCard === 'prod_editing_completed' || selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_prod' || selectedCard === 'overview_acceptance') {
-      const rawList = selectedCard === 'prod_new' ? boCardsData.prodNew
+      return selectedCard === 'prod_new' ? boCardsData.prodNew
         : selectedCard === 'prod_inprogress' ? boCardsData.prodInProgress
         : selectedCard === 'prod_editing_completed' ? boCardsData.prodEditingCompleted
         : (selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_acceptance') ? boCardsData.prodClientAcceptance
-        : filteredProduction;
-
-      return rawList.map(prod => {
-        const order = orders.find(o => o.order_id === prod.order_id || o.lead_id === prod.tracking_id || o.order_id === prod.tracking_id || (prod as any).production_id === o.order_id);
-        const lead = leads.find(l => l.lead_id === prod.tracking_id || l.lead_id === (prod as any).order_id || l.lead_id === order?.lead_id);
-
-        return {
-          ...prod,
-          id: prod.production_id || prod.order_id || prod.tracking_id,
-          order_id: prod.order_id || prod.tracking_id || order?.order_id || 'N/A',
-          customer_name: order?.customer_name || lead?.customer_name || (prod as any).customer_name || 'Client',
-          event_type: order?.event_type || lead?.event_type || (prod as any).project_type || 'Video Editing',
-          custom_event_name: order?.custom_event_name || lead?.custom_event_name || (prod as any).custom_event_name || order?.event_type || 'Deliverable',
-          event_date: order?.event_date || (prod as any).event_date || lead?.event_date || 'N/A',
-          delivery_date: prod.expected_delivery_date || prod.target_delivery_date || (prod as any).delivery_date || 'N/A',
-          status: prod.editing_status || prod.production_status || (prod as any).status || order?.current_stage || 'In Production',
-          editor: prod.editor_assigned || (prod as any).assigned_editor || (prod as any).assigned_staff || 'Unassigned',
-          rawOrder: order,
-          rawLead: lead
-        };
-      });
+        : boCardsData.prodAll;
     }
 
     if (selectedCard === 'overview_closed') {
-      return filteredOrders.filter(o => o.current_stage === 'Order Closed' || o.current_stage === 'Closed');
+      return unifiedPipeline.filter(i => i.isClosed);
     }
 
     return [];
-  }, [selectedCard, filteredOrders, waitingApprovalOrders, payments, boCardsData, orders, leads, filteredOperations, filteredProduction]);
+  }, [selectedCard, filteredOrders, waitingApprovalOrders, payments, boCardsData, unifiedPipeline]);
 
   const modalColumns = useMemo(() => {
     const actionCol = { 
@@ -618,6 +708,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
     const baseLeadCols = [
       { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.lead_id}</span> },
+      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-300 font-bold">{item.order_id || 'N/A'}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => (
         <div>
           <span className="font-bold text-white block">{item.customer_name}</span>
@@ -628,48 +719,77 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
       { key: 'sales_person', label: 'Sales Staff', render: (item: any) => <span className="text-amber-400 font-mono text-xs">{item.sales_person || 'Unassigned'}</span> },
       { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold text-xs">{formatINR(item.quotation_amount || 0)}</span> },
-      { key: 'status', label: 'Status', render: (item: any) => (
+      { key: 'sales_status', label: 'Sales Status', render: (item: any) => <span className="text-zinc-300 font-mono text-xs">{item.sales_status}</span> },
+      { key: 'current_status', label: 'Current Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
-          (item.status || '').toLowerCase().includes('confirm') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-          (item.status || '').toLowerCase().includes('lost') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+          (item.current_status || '').toLowerCase().includes('closed') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.current_status || '').toLowerCase().includes('lost') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+          (item.current_status || '').toLowerCase().includes('production') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
           'bg-amber-500/10 text-amber-400 border-amber-500/20'
         }`}>
-          {item.status || 'Active'}
+          {item.current_status || item.sales_status || 'Active'}
         </span>
       )}
     ];
 
     const baseOpsCols = [
-      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.order_id}</span> },
+      { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.lead_id}</span> },
+      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-300 font-bold">{item.order_id || 'N/A'}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
       { key: 'custom_event_name', label: 'Event / Shoot Type', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
       { key: 'event_date', label: 'Shoot Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
       { key: 'assigned_crew', label: 'Assigned Crew', render: (item: any) => <span className="text-blue-400 font-mono text-xs">{item.assigned_crew}</span> },
-      { key: 'status', label: 'Operational Status', render: (item: any) => (
+      { key: 'ops_status', label: 'Ops Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
-          (item.status || '').toLowerCase().includes('complete') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.ops_status || '').toLowerCase().includes('complete') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
           'bg-blue-500/10 text-blue-400 border-blue-500/20'
         }`}>
-          {item.status || 'Active'}
+          {item.ops_status || 'Active'}
+        </span>
+      )},
+      { key: 'current_status', label: 'Current Status', render: (item: any) => (
+        <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
+          (item.current_status || '').toLowerCase().includes('closed') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.current_status || '').toLowerCase().includes('production') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+          (item.current_status || '').toLowerCase().includes('acceptance') ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+          'bg-blue-500/10 text-blue-400 border-blue-500/20'
+        }`}>
+          {item.current_status || 'Active'}
         </span>
       )}
     ];
 
     const baseProdCols = [
-      { key: 'order_id', label: 'Project / Order ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.order_id}</span> },
+      { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.lead_id}</span> },
+      { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-300 font-bold">{item.order_id || 'N/A'}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
-      { key: 'custom_event_name', label: 'Project Deliverable', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
+      { key: 'custom_event_name', label: 'Deliverable / Project', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
       { key: 'delivery_date', label: 'Target Delivery', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.delivery_date ? item.delivery_date.split('T')[0] : 'N/A'}</span> },
       { key: 'editor', label: 'Assigned Editor', render: (item: any) => <span className="text-purple-400 font-mono text-xs">{item.editor}</span> },
-      { key: 'status', label: 'Production Status', render: (item: any) => (
+      { key: 'ops_status', label: 'Ops Status', render: (item: any) => <span className="text-zinc-400 font-mono text-xs">{item.ops_status || 'N/A'}</span> },
+      { key: 'prod_status', label: 'Production Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
-          (item.status || '').toLowerCase().includes('acceptance') || (item.status || '').toLowerCase().includes('approved') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-          (item.status || '').toLowerCase().includes('complete') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+          (item.prod_status || '').toLowerCase().includes('acceptance') || (item.prod_status || '').toLowerCase().includes('approved') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.prod_status || '').toLowerCase().includes('complete') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
           'bg-pink-500/10 text-pink-400 border-pink-500/20'
         }`}>
-          {item.status || 'In Progress'}
+          {item.prod_status || 'In Production'}
         </span>
-      )}
+      )},
+      { key: 'current_status', label: 'Current Status', render: (item: any) => (
+        <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
+          (item.current_status || '').toLowerCase().includes('closed') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.current_status || '').toLowerCase().includes('acceptance') ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+          'bg-purple-500/10 text-purple-400 border-purple-500/20'
+        }`}>
+          {item.current_status || 'In Production'}
+        </span>
+      )},
+      { key: 'proof_url', label: 'Proof Link', render: (item: any) => item.proof_url ? (
+        <a href={item.proof_url} target="_blank" rel="noreferrer" className="text-xs text-indigo-400 hover:underline font-mono">
+          View Proof
+        </a>
+      ) : <span className="text-zinc-500 text-xs">No Proof</span> }
     ];
 
     if (selectedCard === 'overview_revenue') return [...baseOrderCols, { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold">{formatINR(item.quotation_amount || 0)}</span> }, { key: 'advance_received', label: 'Advance Received', render: (item: any) => <span className="font-mono text-zinc-400">{formatINR(item.advance_received || 0)}</span> }, actionCol];
@@ -1700,6 +1820,38 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
 }) => {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
+  // Filter state (Hidden by default)
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [activeFilters, setActiveFilters] = useState({
+    eventDates: true,
+    deliveryDates: true,
+    clientAcceptance: true,
+    waitingApproval: true,
+  });
+  const [draftFilters, setDraftFilters] = useState({
+    eventDates: true,
+    deliveryDates: true,
+    clientAcceptance: true,
+    waitingApproval: true,
+  });
+
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close filter dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    if (isFilterOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isFilterOpen]);
+
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -1713,19 +1865,32 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
   const todayMonth = () => setCurrentDate(new Date());
 
+  // Filter actions
+  const handleApplyFilters = () => {
+    setActiveFilters(draftFilters);
+    setIsFilterOpen(false);
+  };
+
+  const handleResetFilters = () => {
+    const allEnabled = {
+      eventDates: true,
+      deliveryDates: true,
+      clientAcceptance: true,
+      waitingApproval: true,
+    };
+    setDraftFilters(allEnabled);
+    setActiveFilters(allEnabled);
+  };
+
   // Generate Days Grid
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayIndex = new Date(year, month, 1).getDay();
 
-  // Combine events from orders & production
+  // Combine events from orders & production filtered by activeFilters
   const eventsByDate = useMemo(() => {
     const map: Record<string, any[]> = {};
 
     orders.forEach(order => {
-      if (!order.event_date) return;
-      const dateStr = order.event_date.split('T')[0];
-      if (!map[dateStr]) map[dateStr] = [];
-
       const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
       
       const isWaitingApproval = [
@@ -1755,23 +1920,35 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
       }
 
-      map[dateStr].push({
-        id: `event-${order.order_id}`,
-        type: typeCategory,
-        badgeColor,
-        title: `${order.customer_name} - ${order.event_type || 'Event'}`,
-        customerName: order.customer_name,
-        orderId: order.order_id,
-        eventName: order.custom_event_name || order.event_type || 'Photography Event',
-        currentStatus: prod?.editing_status || order.current_stage || 'Event Scheduled',
-        eventDate: order.event_date,
-        location: order.event_location || 'Studio',
-        rawOrder: order,
-        rawProd: prod
-      });
+      // Check if this type of event should be shown based on activeFilters
+      const shouldShowEvent =
+        (typeCategory === 'event_date' && activeFilters.eventDates) ||
+        (typeCategory === 'client_acceptance' && activeFilters.clientAcceptance) ||
+        (typeCategory === 'waiting_approval' && activeFilters.waitingApproval);
+
+      if (order.event_date && shouldShowEvent) {
+        const dateStr = order.event_date.split('T')[0];
+        if (dateStr) {
+          if (!map[dateStr]) map[dateStr] = [];
+          map[dateStr].push({
+            id: `event-${order.order_id}`,
+            type: typeCategory,
+            badgeColor,
+            title: `${order.customer_name} - ${order.event_type || 'Event'}`,
+            customerName: order.customer_name,
+            orderId: order.order_id,
+            eventName: order.custom_event_name || order.event_type || 'Photography Event',
+            currentStatus: prod?.editing_status || order.current_stage || 'Event Scheduled',
+            eventDate: order.event_date,
+            location: order.event_location || 'Studio',
+            rawOrder: order,
+            rawProd: prod
+          });
+        }
+      }
 
       // Target delivery date event
-      if (prod?.expected_delivery_date || prod?.target_delivery_date) {
+      if ((prod?.expected_delivery_date || prod?.target_delivery_date) && activeFilters.deliveryDates) {
         const delDate = (prod.expected_delivery_date || prod.target_delivery_date || '').split('T')[0];
         if (delDate) {
           if (!map[delDate]) map[delDate] = [];
@@ -1794,12 +1971,12 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
     });
 
     return map;
-  }, [orders, production]);
+  }, [orders, production, activeFilters]);
 
   return (
     <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
       
-      {/* Calendar Header Navigation */}
+      {/* Calendar Header Navigation & Filters */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-zinc-850">
         <div className="flex items-center gap-3">
           <h3 className="text-base sm:text-lg font-black font-mono tracking-tight text-white">
@@ -1807,7 +1984,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
           </h3>
           <button
             onClick={todayMonth}
-            className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-mono hover:bg-zinc-850 cursor-pointer"
+            className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-mono hover:bg-zinc-850 cursor-pointer transition-colors"
           >
             Today
           </button>
@@ -1816,16 +1993,114 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={prevMonth}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer"
+            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer transition-colors"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
             onClick={nextMonth}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer"
+            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer transition-colors"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+
+          {/* Calendar Filter Dropdown Container */}
+          <div className="relative" ref={filterDropdownRef}>
+            <button
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
+                isFilterOpen
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-lg'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:bg-zinc-850 hover:border-zinc-700'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5 text-purple-400" />
+              <span>Filters</span>
+              {isFilterOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-purple-400" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
+              )}
+            </button>
+
+            {/* Filter Panel Dropdown */}
+            {isFilterOpen && (
+              <div className="absolute top-full right-0 mt-2 w-64 max-w-[calc(100vw-2rem)] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-4 z-50 font-mono text-xs space-y-3.5 animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-850">
+                  <span className="font-bold text-zinc-200 uppercase text-[11px] tracking-wider flex items-center gap-1.5">
+                    <Filter className="w-3 h-3 text-purple-400" />
+                    Filter Options
+                  </span>
+                  {(!draftFilters.eventDates || !draftFilters.deliveryDates || !draftFilters.clientAcceptance || !draftFilters.waitingApproval) && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                      Modified
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2.5 text-zinc-300 hover:text-white cursor-pointer select-none py-1.5 px-2 rounded-lg hover:bg-zinc-900 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={draftFilters.eventDates}
+                      onChange={(e) => setDraftFilters(prev => ({ ...prev, eventDates: e.target.checked }))}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-500"
+                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+                    <span className="text-xs font-medium">Event Dates</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 text-zinc-300 hover:text-white cursor-pointer select-none py-1.5 px-2 rounded-lg hover:bg-zinc-900 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={draftFilters.deliveryDates}
+                      onChange={(e) => setDraftFilters(prev => ({ ...prev, deliveryDates: e.target.checked }))}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-indigo-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-indigo-500"
+                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
+                    <span className="text-xs font-medium">Delivery Dates</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 text-zinc-300 hover:text-white cursor-pointer select-none py-1.5 px-2 rounded-lg hover:bg-zinc-900 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={draftFilters.clientAcceptance}
+                      onChange={(e) => setDraftFilters(prev => ({ ...prev, clientAcceptance: e.target.checked }))}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-emerald-500"
+                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-xs font-medium">Client Acceptance</span>
+                  </label>
+
+                  <label className="flex items-center gap-2.5 text-zinc-300 hover:text-white cursor-pointer select-none py-1.5 px-2 rounded-lg hover:bg-zinc-900 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={draftFilters.waitingApproval}
+                      onChange={(e) => setDraftFilters(prev => ({ ...prev, waitingApproval: e.target.checked }))}
+                      className="w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-500"
+                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                    <span className="text-xs font-medium">Waiting Approval</span>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-zinc-850">
+                  <button
+                    onClick={handleResetFilters}
+                    className="px-2.5 py-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-850 text-xs font-mono cursor-pointer transition-colors"
+                  >
+                    Reset
+                  </button>
+                  <button
+                    onClick={handleApplyFilters}
+                    className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-xs font-mono font-bold cursor-pointer transition-colors shadow-sm"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

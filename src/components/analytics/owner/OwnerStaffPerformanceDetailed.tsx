@@ -57,6 +57,191 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
     }>;
   } | null>(null);
 
+  // Unified Pipeline calculation matching BusinessOwnerDashboard
+  const unifiedPipeline = useMemo(() => {
+    const itemMap = new Map<string, any>();
+
+    (leads || []).forEach((lead: any) => {
+      const key = lead.lead_id || lead.id || lead.order_id;
+      if (!key) return;
+      const status = lead.status || lead.current_status || 'New Lead';
+      itemMap.set(key, {
+        id: key,
+        lead_id: lead.lead_id || key,
+        order_id: lead.order_id || null,
+        customer_name: lead.customer_name || 'N/A',
+        event_name: lead.events?.[0]?.event_name || lead.event_type || 'Event',
+        event_date: lead.event_date || lead.events?.[0]?.event_date || null,
+        created_at: lead.created_at || lead.created_date || null,
+        quotation_amount: lead.quotation_amount || lead.grand_total || 0,
+        sales_person: lead.sales_person || lead.created_by || 'Unassigned',
+        sales_status: status,
+        ops_status: null,
+        prod_status: null,
+        isClosed: status === 'Order Closed' || status === 'Closed',
+        hasEnteredSales: true,
+        hasEnteredOps: false,
+        hasEnteredProd: false,
+        hasEnteredAcceptance: false,
+        rawLead: lead
+      });
+    });
+
+    (orders || []).forEach((order: any) => {
+      const key = order.lead_id || order.order_id || order.id;
+      if (!key) return;
+      const existing = itemMap.get(key) || {
+        id: key,
+        lead_id: order.lead_id || key,
+        order_id: order.order_id || key,
+        customer_name: order.customer_name || 'N/A',
+        event_name: order.custom_event_name || order.event_type || 'Event',
+        event_date: order.event_date || null,
+        created_at: order.created_at || null,
+        quotation_amount: order.quotation_amount || order.grand_total || 0,
+        sales_person: order.sales_person || 'Unassigned',
+        sales_status: 'Order Confirmed',
+        ops_status: null,
+        prod_status: null,
+        isClosed: order.current_stage === 'Order Closed' || order.current_stage === 'Closed',
+        hasEnteredSales: true,
+        hasEnteredOps: false,
+        hasEnteredProd: false,
+        hasEnteredAcceptance: false
+      };
+
+      existing.order_id = order.order_id || existing.order_id;
+      existing.customer_name = order.customer_name || existing.customer_name;
+      existing.quotation_amount = order.quotation_amount || order.grand_total || existing.quotation_amount;
+      if (order.current_stage === 'Order Closed' || order.current_stage === 'Closed') {
+        existing.isClosed = true;
+      }
+      existing.rawOrder = order;
+      itemMap.set(key, existing);
+    });
+
+    (operations || []).forEach((ops: any) => {
+      const key = ops.tracking_id || ops.order_id || ops.lead_id || ops.id;
+      if (!key) return;
+      let existing = itemMap.get(key);
+      if (!existing) {
+        for (const [k, val] of itemMap.entries()) {
+          if ((ops.order_id && val.order_id === ops.order_id) || (ops.lead_id && val.lead_id === ops.lead_id)) {
+            existing = val;
+            break;
+          }
+        }
+      }
+
+      const opsStatus = ops.event_status || ops.status || ops.ops_status || 'Pending Allocation';
+
+      if (existing) {
+        existing.ops_status = opsStatus;
+        existing.hasEnteredOps = true;
+        existing.assigned_crew = ops.photographers || ops.videographers || ops.crew_assigned || existing.assigned_crew || 'Assigned';
+        if (opsStatus === 'Order Closed' || opsStatus === 'Closed') existing.isClosed = true;
+        existing.rawOps = ops;
+      } else {
+        itemMap.set(key, {
+          id: key,
+          lead_id: ops.lead_id || key,
+          order_id: ops.order_id || key,
+          customer_name: ops.customer_name || 'N/A',
+          event_name: ops.event_name || ops.event_type || 'Event Shoot',
+          event_date: ops.event_date || null,
+          created_at: ops.created_at || null,
+          quotation_amount: 0,
+          sales_person: 'N/A',
+          sales_status: 'Order Confirmed',
+          ops_status: opsStatus,
+          prod_status: null,
+          isClosed: opsStatus === 'Order Closed' || opsStatus === 'Closed',
+          hasEnteredSales: true,
+          hasEnteredOps: true,
+          hasEnteredProd: false,
+          hasEnteredAcceptance: false,
+          assigned_crew: ops.photographers || ops.videographers || 'Assigned',
+          rawOps: ops
+        });
+      }
+    });
+
+    (production || []).forEach((prod: any) => {
+      const key = prod.tracking_id || prod.order_id || prod.lead_id || prod.id;
+      if (!key) return;
+      let existing = itemMap.get(key);
+      if (!existing) {
+        for (const [k, val] of itemMap.entries()) {
+          if ((prod.order_id && val.order_id === prod.order_id) || (prod.lead_id && val.lead_id === prod.lead_id)) {
+            existing = val;
+            break;
+          }
+        }
+      }
+
+      const prodStatus = prod.editing_status || prod.production_status || prod.status || 'Raw Footage Ingest';
+      const isAcceptance = prodStatus === 'Client Acceptance' || prod.status === 'Client Acceptance';
+
+      if (existing) {
+        existing.prod_status = prodStatus;
+        existing.hasEnteredProd = true;
+        if (isAcceptance) existing.hasEnteredAcceptance = true;
+        if (prodStatus === 'Order Closed' || prodStatus === 'Closed') existing.isClosed = true;
+        existing.assigned_editor = prod.assigned_editor || prod.editor_name || existing.assigned_editor || 'Assigned Editor';
+        existing.rawProd = prod;
+      } else {
+        itemMap.set(key, {
+          id: key,
+          lead_id: prod.lead_id || key,
+          order_id: prod.order_id || key,
+          customer_name: prod.customer_name || 'N/A',
+          event_name: prod.event_name || prod.project_name || 'Editing Project',
+          event_date: prod.event_date || null,
+          created_at: prod.created_at || null,
+          quotation_amount: 0,
+          sales_person: 'N/A',
+          sales_status: 'Order Confirmed',
+          ops_status: 'Completed',
+          prod_status: prodStatus,
+          isClosed: prodStatus === 'Order Closed' || prodStatus === 'Closed',
+          hasEnteredSales: true,
+          hasEnteredOps: true,
+          hasEnteredProd: true,
+          hasEnteredAcceptance: isAcceptance,
+          assigned_editor: prod.assigned_editor || 'Assigned Editor',
+          rawProd: prod
+        });
+      }
+    });
+
+    return Array.from(itemMap.values());
+  }, [leads, orders, operations, production]);
+
+  const boCardsData = useMemo(() => {
+    const salesTotalLeads = unifiedPipeline.filter(i => i.hasEnteredSales);
+    const salesConverted = salesTotalLeads.filter(i => (i.sales_status || '').toLowerCase().includes('confirm') || i.order_id);
+    const salesLost = salesTotalLeads.filter(i => (i.sales_status || '').toLowerCase().includes('lost'));
+    const salesFollowup = salesTotalLeads.filter(i => (i.sales_status || '').toLowerCase().includes('quotation'));
+
+    const opsAll = unifiedPipeline.filter(i => i.hasEnteredOps);
+    const opsNew = opsAll.filter(i => (i.ops_status || '').toLowerCase().includes('pending') || (i.ops_status || '').toLowerCase().includes('assigned') || (i.ops_status || '').toLowerCase() === 'not started');
+    const opsCompleted = opsAll.filter(i => (i.ops_status || '').toLowerCase().includes('complete') || (i.ops_status || '').toLowerCase().includes('delivered'));
+    const opsUpcoming = opsAll.filter(i => i.event_date && new Date(i.event_date) >= new Date() && !(i.ops_status || '').toLowerCase().includes('complete'));
+    const opsScheduled = opsAll.filter(i => (i.ops_status || '').toLowerCase().includes('scheduled') || i.assigned_crew !== 'Unassigned');
+
+    const prodAll = unifiedPipeline.filter(i => i.hasEnteredProd);
+    const prodNew = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('raw') || (i.prod_status || '').toLowerCase().includes('new') || i.prod_status === 'Not Started');
+    const prodInProgress = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('progress') || (i.prod_status || '').toLowerCase().includes('started') || (i.prod_status || '').toLowerCase().includes('editing'));
+    const prodEditingCompleted = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('complete') || (i.prod_status || '').toLowerCase().includes('proof'));
+    const prodClientAcceptance = unifiedPipeline.filter(i => i.hasEnteredAcceptance);
+
+    return {
+      salesTotalLeads, salesConverted, salesLost, salesFollowup,
+      opsNew, opsCompleted, opsUpcoming, opsScheduled, opsAll,
+      prodNew, prodInProgress, prodEditingCompleted, prodClientAcceptance, prodAll
+    };
+  }, [unifiedPipeline]);
+
   // Quick Date Range Handler
   const handleQuickDateChange = (type: 'all' | 'today' | 'week' | 'month' | 'last_month' | 'custom') => {
     setQuickDateFilter(type);
@@ -859,8 +1044,8 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <DollarSign className="w-3.5 h-3.5 text-amber-400" />
             </div>
             <div>
-              <div className="text-lg font-black text-white">{salesData.summary.totalLeads} Leads</div>
-              <div className="text-[11px] font-mono text-amber-400">{salesData.summary.totalOrdersConfirmed} Orders Confirmed ({salesData.summary.overallConversionRate}%)</div>
+              <div className="text-lg font-black text-white">{boCardsData.salesTotalLeads.length} Leads</div>
+              <div className="text-[11px] font-mono text-amber-400">{boCardsData.salesConverted.length} Orders Confirmed ({boCardsData.salesTotalLeads.length > 0 ? Math.round((boCardsData.salesConverted.length / boCardsData.salesTotalLeads.length) * 100) : 0}%)</div>
             </div>
             <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
               <span>Rev: {formatCurrency(salesData.summary.grandRevenue)}</span>
@@ -877,11 +1062,11 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <Briefcase className="w-3.5 h-3.5 text-blue-400" />
             </div>
             <div>
-              <div className="text-lg font-black text-white">{opsData.summary.totalEventsAssigned} Events</div>
-              <div className="text-[11px] font-mono text-blue-400">{opsData.summary.totalEventsCompleted} Completed ({opsData.summary.overallCompletionRate}%)</div>
+              <div className="text-lg font-black text-white">{boCardsData.opsAll.length} Events</div>
+              <div className="text-[11px] font-mono text-blue-400">{boCardsData.opsCompleted.length} Completed ({boCardsData.opsAll.length > 0 ? Math.round((boCardsData.opsCompleted.length / boCardsData.opsAll.length) * 100) : 0}%)</div>
             </div>
             <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
-              <span>Pending: {opsData.summary.totalPending}</span>
+              <span>Pending: {boCardsData.opsUpcoming.length}</span>
             </div>
           </div>
 
@@ -895,11 +1080,11 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <Layers className="w-3.5 h-3.5 text-purple-400" />
             </div>
             <div>
-              <div className="text-lg font-black text-white">{prodData.summary.totalDeliverablesAssigned} Deliverables</div>
-              <div className="text-[11px] font-mono text-purple-400">{prodData.summary.totalEditingCompleted} Edited ({prodData.summary.overallCompletionRate}%)</div>
+              <div className="text-lg font-black text-white">{boCardsData.prodAll.length} Deliverables</div>
+              <div className="text-[11px] font-mono text-purple-400">{boCardsData.prodEditingCompleted.length} Edited ({boCardsData.prodAll.length > 0 ? Math.round((boCardsData.prodEditingCompleted.length / boCardsData.prodAll.length) * 100) : 0}%)</div>
             </div>
             <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
-              <span>In Review: {prodData.summary.totalCustomerReview}</span>
+              <span>In Review: {boCardsData.prodInProgress.length}</span>
             </div>
           </div>
 
@@ -913,11 +1098,11 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <div>
-              <div className="text-lg font-black text-white">{prodData.summary.totalClientAcceptance} Approved</div>
+              <div className="text-lg font-black text-white">{boCardsData.prodClientAcceptance.length} Approved</div>
               <div className="text-[11px] font-mono text-emerald-400">Client Accepted</div>
             </div>
             <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
-              <span>Pending: {prodData.summary.totalDeliverablesAssigned - prodData.summary.totalClientAcceptance}</span>
+              <span>Pending: {boCardsData.prodAll.length - boCardsData.prodClientAcceptance.length}</span>
             </div>
           </div>
 
@@ -931,7 +1116,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <div>
-              <div className="text-lg font-black text-white">{salesData.summary.totalOrdersConfirmed} Orders</div>
+              <div className="text-lg font-black text-white">{unifiedPipeline.filter(i => i.isClosed).length} Orders</div>
               <div className="text-[11px] font-mono text-emerald-400">Pipeline Fulfilled</div>
             </div>
             <div className="text-[9px] text-zinc-500 font-mono border-t border-zinc-800/60 pt-1.5 flex justify-between">
@@ -1150,35 +1335,35 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
             <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
               className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Total Events</span>
-              <div className="text-xl font-black text-blue-400 mt-1">{opsData.summary.totalEventsAssigned}</div>
+              <div className="text-xl font-black text-blue-400 mt-1">{boCardsData.opsAll.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Assigned Events</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'ops_scheduled' }))}
               className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Events Started</span>
-              <div className="text-xl font-black text-purple-400 mt-1">{opsData.summary.totalEventsStarted}</div>
+              <div className="text-xl font-black text-purple-400 mt-1">{boCardsData.opsScheduled.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">In Progress</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'ops_completed' }))}
               className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Events Completed</span>
-              <div className="text-xl font-black text-emerald-400 mt-1">{opsData.summary.totalEventsCompleted}</div>
+              <div className="text-xl font-black text-emerald-400 mt-1">{boCardsData.opsCompleted.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Footage Captured</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'ops_upcoming' }))}
               className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Pending Events</span>
-              <div className="text-xl font-black text-amber-400 mt-1">{opsData.summary.totalPending}</div>
+              <div className="text-xl font-black text-amber-400 mt-1">{boCardsData.opsUpcoming.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Upcoming</span>
             </div>
 
             <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_ops' }))}
               className="bg-zinc-950 p-4 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-blue-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Completion Rate</span>
-              <div className="text-xl font-black text-emerald-400 mt-1">{opsData.summary.overallCompletionRate}%</div>
+              <div className="text-xl font-black text-emerald-400 mt-1">{boCardsData.opsAll.length > 0 ? Math.round((boCardsData.opsCompleted.length / boCardsData.opsAll.length) * 100) : 0}%</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Fulfillment %</span>
             </div>
 
@@ -1401,56 +1586,56 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
             <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
               className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Deliverables</span>
-              <div className="text-xl font-black text-purple-400 mt-1">{prodData.summary.totalDeliverablesAssigned}</div>
+              <div className="text-xl font-black text-purple-400 mt-1">{boCardsData.prodAll.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Assigned Projects</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'prod_inprogress' }))}
               className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Editing Started</span>
-              <div className="text-xl font-black text-blue-400 mt-1">{prodData.summary.totalEditingStarted}</div>
+              <div className="text-xl font-black text-blue-400 mt-1">{boCardsData.prodInProgress.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Timeline Active</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'prod_editing_completed' }))}
               className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Customer Review</span>
-              <div className="text-xl font-black text-amber-400 mt-1">{prodData.summary.totalCustomerReview}</div>
+              <div className="text-xl font-black text-amber-400 mt-1">{boCardsData.prodEditingCompleted.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Sent to Client</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'prod_editing_completed' }))}
               className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Editing Completed</span>
-              <div className="text-xl font-black text-cyan-400 mt-1">{prodData.summary.totalEditingCompleted}</div>
+              <div className="text-xl font-black text-cyan-400 mt-1">{boCardsData.prodEditingCompleted.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Export Done</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'prod_client_acceptance' }))}
               className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Client Acceptance</span>
-              <div className="text-xl font-black text-emerald-400 mt-1">{prodData.summary.totalClientAcceptance}</div>
+              <div className="text-xl font-black text-emerald-400 mt-1">{boCardsData.prodClientAcceptance.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Approved</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'prod_client_acceptance' }))}
               className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Completed Total</span>
-              <div className="text-xl font-black text-emerald-400 mt-1">{prodData.summary.totalCompletedDeliverables}</div>
+              <div className="text-xl font-black text-emerald-400 mt-1">{boCardsData.prodClientAcceptance.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Finalized</span>
             </div>
 
-            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
+            <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'prod_new' }))}
               className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Pending</span>
-              <div className="text-xl font-black text-rose-400 mt-1">{prodData.summary.totalPendingDeliverables}</div>
+              <div className="text-xl font-black text-rose-400 mt-1">{boCardsData.prodNew.length}</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">In Queue</span>
             </div>
 
             <div onClick={() => window.dispatchEvent(new CustomEvent('open-business-owner-card', { detail: 'overview_prod' }))}
               className="bg-zinc-950 p-3.5 rounded-xl border border-zinc-800 flex flex-col justify-between cursor-pointer hover:border-purple-500/40 hover:bg-zinc-900 transition-colors">
               <span className="text-[10px] font-mono text-zinc-400 uppercase">Completion Rate</span>
-              <div className="text-xl font-black text-purple-400 mt-1">{prodData.summary.overallCompletionRate}%</div>
+              <div className="text-xl font-black text-purple-400 mt-1">{boCardsData.prodAll.length > 0 ? Math.round((boCardsData.prodClientAcceptance.length / boCardsData.prodAll.length) * 100) : 0}%</div>
               <span className="text-[9px] text-zinc-500 font-mono mt-1">Output %</span>
             </div>
           </div>

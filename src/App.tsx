@@ -12,6 +12,7 @@ import { OperationsModule } from './components/OperationsModule';
 import { StaffModule } from './components/StaffModule';
 import { ProductionStaffModule } from './components/ProductionStaffModule';
 import { ProductionModule } from './components/ProductionModule';
+import { ProductionExtensionContainer } from './components/ProductionDashboardUpdates';
 import { StaffManagementModule } from './components/StaffManagementModule';
 import { PaymentsModule } from './components/PaymentsModule';
 import { PendingPaymentsReport } from './components/analytics/PendingPaymentsReport';
@@ -993,7 +994,10 @@ const MainAppContent: React.FC = () => {
                       <OperationsModule activeSubTab={activeOpSubTab} setActiveSubTab={setActiveOpSubTab} />
                     )}
                     {activeTab === 'production' && (currentRole === 'Business Owner' || currentRole === 'Production Team') && (
-                      <ProductionModule activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} />
+                      <>
+                        <ProductionModule activeSubTab={activeSubTab} setActiveSubTab={setActiveSubTab} />
+                        <ProductionExtensionContainer />
+                      </>
                     )}
                     {activeTab === 'staff_management' && (currentRole === 'Business Owner' || currentRole === 'Production Team') && <StaffManagementModule />}
                     {activeTab === 'notifications' && <NotificationsModule />}
