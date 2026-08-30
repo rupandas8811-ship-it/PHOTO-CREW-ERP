@@ -256,18 +256,20 @@ export function buildStep3EventPayloads(
     const keysToTry = isMultiEvent
       ? [
           `${effectivePkgId}_${evId}`,
-          `${effectivePkgId}_${evName}`,
           `Custom Package_${evId}`,
-          `Custom Package_${evName}`,
           `custom_package_${evId}`,
+          `${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evName}`,
           `custom_package_${evName}`
         ]
       : [
           `${effectivePkgId}_${evId}`,
-          `${effectivePkgId}_${evName}`,
           `Custom Package_${evId}`,
-          `Custom Package_${evName}`,
           `custom_package_${evId}`,
+          `${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evName}`,
           `custom_package_${evName}`,
           effectivePkgId,
           'Custom Package',
@@ -275,9 +277,11 @@ export function buildStep3EventPayloads(
         ];
 
     let list: any[] = [];
+    let found = false;
     for (const k of keysToTry) {
-      if (editableInclusions[k] !== undefined && Array.isArray(editableInclusions[k]) && editableInclusions[k].length > 0) {
+      if (editableInclusions[k] !== undefined && Array.isArray(editableInclusions[k])) {
         list = editableInclusions[k];
+        found = true;
         break;
       }
     }
@@ -296,18 +300,20 @@ export function buildStep3EventPayloads(
     const keysToTry = isMultiEvent
       ? [
           `${effectivePkgId}_${evId}`,
-          `${effectivePkgId}_${evName}`,
           `Custom Package_${evId}`,
-          `Custom Package_${evName}`,
           `custom_package_${evId}`,
+          `${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evName}`,
           `custom_package_${evName}`
         ]
       : [
           `${effectivePkgId}_${evId}`,
-          `${effectivePkgId}_${evName}`,
           `Custom Package_${evId}`,
-          `Custom Package_${evName}`,
           `custom_package_${evId}`,
+          `${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evName}`,
           `custom_package_${evName}`,
           effectivePkgId,
           'Custom Package',
@@ -315,9 +321,11 @@ export function buildStep3EventPayloads(
         ];
 
     let list: any[] = [];
+    let found = false;
     for (const k of keysToTry) {
-      if (editableDeliverables[k] !== undefined && Array.isArray(editableDeliverables[k]) && editableDeliverables[k].length > 0) {
+      if (editableDeliverables[k] !== undefined && Array.isArray(editableDeliverables[k])) {
         list = editableDeliverables[k];
+        found = true;
         break;
       }
     }
@@ -385,7 +393,7 @@ export function parseTeamMembersJsonToRecord(
 
   if (Array.isArray(parsed)) {
     let generalList: string[] = [];
-    parsed.forEach((item: any) => {
+    parsed.forEach((item: any, idx: number) => {
       if (typeof item === 'string') {
         const { qty, text } = parseQtyAndText(item);
         if (text) generalList.push(combineQtyAndText(qty, text));
@@ -400,28 +408,22 @@ export function parseTeamMembersJsonToRecord(
             return text ? combineQtyAndText(qty, text) : '';
           }).filter(Boolean);
 
-          if (evName === 'General' || !evName) {
+          if (evName === 'General' || (!evName && !evId)) {
             generalList = [...generalList, ...members];
           } else {
-            if (members.length > 0) {
-              result[`${pkgId}_${evName}`] = members;
-              result[`Custom Package_${evName}`] = members;
-              result[`custom_package_${evName}`] = members;
-              if (evId) {
-                result[`${pkgId}_${evId}`] = members;
-                result[`Custom Package_${evId}`] = members;
-                result[`custom_package_${evId}`] = members;
-              }
-              const matchedEv = (eventsList || []).find(e =>
-                (e.id && String(e.id) === String(evId)) ||
-                (e.event_name && e.event_name === evName) ||
-                (e.event_type && e.event_type === evName)
-              );
-              if (matchedEv) {
-                result[`${pkgId}_${matchedEv.id}`] = members;
-                result[`Custom Package_${matchedEv.id}`] = members;
-                result[`custom_package_${matchedEv.id}`] = members;
-              }
+            const matchedEv = (eventsList || []).find((e, eIdx) =>
+              (evId && (e.id && String(e.id) === String(evId) || e.event_id && String(e.event_id) === String(evId))) ||
+              (eIdx === idx) ||
+              (e.event_name && e.event_name === evName) ||
+              (e.event_type && e.event_type === evName)
+            );
+            const targetId = matchedEv?.id || matchedEv?.event_id || evId || `event_${idx + 1}`;
+
+            if (targetId) {
+              result[`${pkgId}_${targetId}`] = members;
+              result[`Custom Package_${targetId}`] = members;
+              result[`custom_package_${targetId}`] = members;
+              result[targetId] = members;
             }
           }
         } else {
@@ -440,23 +442,6 @@ export function parseTeamMembersJsonToRecord(
       result[pkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
-      if (eventsList && eventsList.length === 1) {
-        const singleEv = eventsList[0];
-        if (singleEv) {
-          const evId = singleEv.id || singleEv.event_id;
-          const evName = singleEv.event_name || singleEv.event_type;
-          if (evId) {
-            result[`${pkgId}_${evId}`] = generalList;
-            result[`Custom Package_${evId}`] = generalList;
-            result[`custom_package_${evId}`] = generalList;
-          }
-          if (evName) {
-            result[`${pkgId}_${evName}`] = generalList;
-            result[`Custom Package_${evName}`] = generalList;
-            result[`custom_package_${evName}`] = generalList;
-          }
-        }
-      }
     }
   } else if (parsed && typeof parsed === 'object') {
     Object.keys(parsed).forEach(k => {
@@ -500,7 +485,7 @@ export function parseDeliverablesJsonToRecord(
 
   if (Array.isArray(parsed)) {
     let generalList: string[] = [];
-    parsed.forEach((item: any) => {
+    parsed.forEach((item: any, idx: number) => {
       if (typeof item === 'string') {
         const { qty, text } = parseQtyAndText(item);
         if (text) generalList.push(combineQtyAndText(qty, text));
@@ -522,28 +507,22 @@ export function parseDeliverablesJsonToRecord(
             }).filter(Boolean);
           }
 
-          if (evName === 'General' || !evName || evName === 'Unnamed Event') {
+          if (evName === 'General' || (!evName && !evId) || evName === 'Unnamed Event') {
             generalList = [...generalList, ...deliverables];
           } else {
-            if (deliverables.length > 0) {
-              result[`${pkgId}_${evName}`] = deliverables;
-              result[`Custom Package_${evName}`] = deliverables;
-              result[`custom_package_${evName}`] = deliverables;
-              if (evId) {
-                result[`${pkgId}_${evId}`] = deliverables;
-                result[`Custom Package_${evId}`] = deliverables;
-                result[`custom_package_${evId}`] = deliverables;
-              }
-              const matchedEv = (eventsList || []).find(e =>
-                (e.id && String(e.id) === String(evId)) ||
-                (e.event_name && e.event_name === evName) ||
-                (e.event_type && e.event_type === evName)
-              );
-              if (matchedEv) {
-                result[`${pkgId}_${matchedEv.id}`] = deliverables;
-                result[`Custom Package_${matchedEv.id}`] = deliverables;
-                result[`custom_package_${matchedEv.id}`] = deliverables;
-              }
+            const matchedEv = (eventsList || []).find((e, eIdx) =>
+              (evId && (e.id && String(e.id) === String(evId) || e.event_id && String(e.event_id) === String(evId))) ||
+              (eIdx === idx) ||
+              (e.event_name && e.event_name === evName) ||
+              (e.event_type && e.event_type === evName)
+            );
+            const targetId = matchedEv?.id || matchedEv?.event_id || evId || `event_${idx + 1}`;
+
+            if (targetId) {
+              result[`${pkgId}_${targetId}`] = deliverables;
+              result[`Custom Package_${targetId}`] = deliverables;
+              result[`custom_package_${targetId}`] = deliverables;
+              result[targetId] = deliverables;
             }
           }
         } else {
@@ -562,23 +541,6 @@ export function parseDeliverablesJsonToRecord(
       result[pkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
-      if (eventsList && eventsList.length === 1) {
-        const singleEv = eventsList[0];
-        if (singleEv) {
-          const evId = singleEv.id || singleEv.event_id;
-          const evName = singleEv.event_name || singleEv.event_type;
-          if (evId) {
-            result[`${pkgId}_${evId}`] = generalList;
-            result[`Custom Package_${evId}`] = generalList;
-            result[`custom_package_${evId}`] = generalList;
-          }
-          if (evName) {
-            result[`${pkgId}_${evName}`] = generalList;
-            result[`Custom Package_${evName}`] = generalList;
-            result[`custom_package_${evName}`] = generalList;
-          }
-        }
-      }
     }
   } else if (parsed && typeof parsed === 'object') {
     Object.keys(parsed).forEach(k => {

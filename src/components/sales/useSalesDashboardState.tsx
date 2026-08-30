@@ -3202,40 +3202,25 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           <div>
             {currentEvents && currentEvents.length > 0 ? (
               currentEvents.map((event, eventIdx) => {
-                const eventKey = `${selectedPkgId}_${event.id}`;
-                const nameKey = `${selectedPkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
-                const customKey = `Custom Package_${event.id}`;
-                const customNameKey = `Custom Package_${event.event_name || event.event_type || 'Unnamed Event'}`;
-                const customLowerKey = `custom_package_${event.id}`;
-                const customLowerNameKey = `custom_package_${event.event_name || event.event_type || 'Unnamed Event'}`;
+                const evId = event.id || event.event_id || `EV-${eventIdx + 1}`;
+                const eventKey = `${selectedPkgId}_${evId}`;
+                const altKey = `Custom Package_${evId}`;
 
                 const eventInclusions = editableInclusions[eventKey] !== undefined
                   ? editableInclusions[eventKey]
-                  : (editableInclusions[nameKey] !== undefined
-                    ? editableInclusions[nameKey]
-                    : (editableInclusions[customKey] !== undefined
-                      ? editableInclusions[customKey]
-                      : (editableInclusions[customNameKey] !== undefined
-                        ? editableInclusions[customNameKey]
-                        : (editableInclusions[customLowerKey] !== undefined
-                          ? editableInclusions[customLowerKey]
-                          : (editableInclusions[customLowerNameKey] !== undefined
-                            ? editableInclusions[customLowerNameKey]
-                            : (currentEvents.length === 1 ? inclusionsList : []))))));
+                  : (editableInclusions[evId] !== undefined
+                      ? editableInclusions[evId]
+                      : (editableInclusions[altKey] !== undefined
+                          ? editableInclusions[altKey]
+                          : (inclusionsList.length > 0 ? [...inclusionsList] : [])));
 
                 const eventDeliverables = editableDeliverables[eventKey] !== undefined
                   ? editableDeliverables[eventKey]
-                  : (editableDeliverables[nameKey] !== undefined
-                    ? editableDeliverables[nameKey]
-                    : (editableDeliverables[customKey] !== undefined
-                      ? editableDeliverables[customKey]
-                      : (editableDeliverables[customNameKey] !== undefined
-                        ? editableDeliverables[customNameKey]
-                        : (editableDeliverables[customLowerKey] !== undefined
-                          ? editableDeliverables[customLowerKey]
-                          : (editableDeliverables[customLowerNameKey] !== undefined
-                            ? editableDeliverables[customLowerNameKey]
-                            : (currentEvents.length === 1 ? deliverablesList : []))))));
+                  : (editableDeliverables[evId] !== undefined
+                      ? editableDeliverables[evId]
+                      : (editableDeliverables[altKey] !== undefined
+                          ? editableDeliverables[altKey]
+                          : (deliverablesList.length > 0 ? [...deliverablesList] : [])));
 
                 const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
                 const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
@@ -3245,7 +3230,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 const guestPaxVal = event.guest_pax !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
 
                 return (
-                  <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                  <div key={evId} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
                     {/* VERY SMALL COMPACT EVENT SUMMARY */}
                     <div className="bg-slate-950/60 border border-slate-800/70 p-2.5 sm:p-3 rounded-lg text-left font-mono">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -3292,8 +3277,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                               currentList.push("");
                               const updated = {
                                 ...editableInclusions,
-                                [eventKey]: currentList,
-                                [nameKey]: currentList
+                                [eventKey]: currentList
                               };
                               setEditableInclusions(updated);
                               saveStep3DataRealtime(updated, editableDeliverables);
@@ -3317,8 +3301,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList[idx] = newVal;
                                 const updated = {
                                   ...editableInclusions,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
+                                  [eventKey]: currentList
                                 };
                                 setEditableInclusions(updated);
                                 saveStep3DataRealtime(updated, editableDeliverables);
@@ -3328,8 +3311,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList.splice(idx, 1);
                                 const updated = {
                                   ...editableInclusions,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
+                                  [eventKey]: currentList
                                 };
                                 setEditableInclusions(updated);
                                 saveStep3DataRealtime(updated, editableDeliverables);
@@ -3344,8 +3326,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList.push("");
                                 const updated = {
                                   ...editableInclusions,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
+                                  [eventKey]: currentList
                                 };
                                 setEditableInclusions(updated);
                                 saveStep3DataRealtime(updated, editableDeliverables);
@@ -3374,8 +3355,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                               currentList.push("");
                               const updated = {
                                 ...editableDeliverables,
-                                [eventKey]: currentList,
-                                [nameKey]: currentList
+                                [eventKey]: currentList
                               };
                               setEditableDeliverables(updated);
                               saveStep3DataRealtime(editableInclusions, updated);
@@ -3399,8 +3379,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList[idx] = newVal;
                                 const updated = {
                                   ...editableDeliverables,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
+                                  [eventKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
                                 saveStep3DataRealtime(editableInclusions, updated);
@@ -3410,8 +3389,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList.splice(idx, 1);
                                 const updated = {
                                   ...editableDeliverables,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
+                                  [eventKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
                                 saveStep3DataRealtime(editableInclusions, updated);
@@ -3426,8 +3404,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList.push("");
                                 const updated = {
                                   ...editableDeliverables,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
+                                  [eventKey]: currentList
                                 };
                                 setEditableDeliverables(updated);
                                 saveStep3DataRealtime(editableInclusions, updated);
