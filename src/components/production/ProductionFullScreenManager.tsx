@@ -1,35 +1,83 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 /**
  * ProductionFullScreenManager.tsx
  * 
- * ENHANCEMENT CONTROLLER FOR PRODUCTION ASSIGNMENT POPUPS
+ * SCROLL-LOCKING & FULL-SCREEN VIEWPORT MANAGER FOR PRODUCTION ASSIGNMENT INTERFACES
  * 
- * Mandated Full-Screen Page-Like Interfaces:
+ * Target Interfaces:
  * 1. Production Lead • Assigned Team
- * 2. Reassign popup (reassign_staff)
- * 3. Assign Editor popup (assign_editor)
+ * 2. Reassign
+ * 3. Assign Editor
+ * 4. Assign Operations Staff
  * 
- * STRICT ARCHITECTURAL CONSTRAINTS:
+ * STRICT CONSTRAINTS:
  * - src/components/ProductionModule.tsx is UNTOUCHED (0 edits).
- * - Only affects the 3 requested Production interfaces.
- * - Leaves all other Production modals, workflows, and dashboards intact.
+ * - Background Production Dashboard is LOCKED when open.
+ * - Scroll position restored cleanly when closed.
  */
 export const ProductionFullScreenManager: React.FC = () => {
+  const isLockedRef = useRef(false);
+  const savedScrollYRef = useRef(0);
+
   useEffect(() => {
+    const checkIsTargetOverlay = (overlay: HTMLElement): boolean => {
+      const text = (overlay.textContent || '').toLowerCase();
+      
+      const isAssignedTeam = text.includes('assigned team') || text.includes('assigned team members');
+      const isReassign = text.includes('reassign staff') || 
+                         text.includes('reassign editor') || 
+                         text.includes('reassign production task') || 
+                         text.includes('reassign staff (deliverable-wise)') || 
+                         (text.includes('reassign') && text.includes('step workflow wizard'));
+      const isAssignEditor = text.includes('assign editor');
+      const isAssignOps = text.includes('assign operations staff') || 
+                          text.includes('assign operations') || 
+                          (text.includes('operations staff') && text.includes('assign'));
+
+      return isAssignedTeam || isReassign || isAssignEditor || isAssignOps;
+    };
+
+    const lockBackground = () => {
+      if (isLockedRef.current) return;
+      savedScrollYRef.current = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+      
+      document.body.style.position = 'fixed';
+      document.body.style.top = `-${savedScrollYRef.current}px`;
+      document.body.style.left = '0';
+      document.body.style.right = '0';
+      document.body.style.width = '100%';
+      document.body.style.height = '100%';
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+
+      isLockedRef.current = true;
+    };
+
+    const unlockBackground = () => {
+      if (!isLockedRef.current) return;
+
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.right = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+
+      window.scrollTo(0, savedScrollYRef.current);
+      isLockedRef.current = false;
+    };
+
     const handleDOMCheck = () => {
-      // Find all fixed modal overlays in the document
       const overlays = document.querySelectorAll<HTMLElement>('div.fixed.inset-0');
+      let hasActiveTargetModal = false;
 
       overlays.forEach((overlay) => {
-        const textContent = overlay.textContent || '';
+        if (checkIsTargetOverlay(overlay)) {
+          hasActiveTargetModal = true;
 
-        // Check if this overlay corresponds strictly to one of the 3 requested interfaces:
-        const isAssignedTeam = textContent.includes('Production Lead • Assigned Team');
-        const isReassign = textContent.includes('Reassign Staff') || textContent.includes('Reassign Production Task');
-        const isAssignEditor = textContent.includes('Assign Editor');
-
-        if (isAssignedTeam || isReassign || isAssignEditor) {
           // 1. Mark overlay as full screen page view
           if (!overlay.classList.contains('prod-fullscreen-overlay')) {
             overlay.classList.add('prod-fullscreen-overlay');
@@ -63,23 +111,54 @@ export const ProductionFullScreenManager: React.FC = () => {
             if (body && !body.classList.contains('prod-fullscreen-body')) {
               body.classList.add('prod-fullscreen-body');
             }
-          }
 
-          // Disable background page scrolling while full-screen view is active
-          document.body.style.overflow = 'hidden';
+            // 5. Ensure internal tables are wrapped for horizontal scrolling if needed
+            if (body) {
+              const tables = body.querySelectorAll('table');
+              tables.forEach((table) => {
+                const parent = table.parentElement;
+                if (parent && !parent.classList.contains('prod-fullscreen-table-wrapper')) {
+                  parent.classList.add('prod-fullscreen-table-wrapper');
+                }
+              });
+            }
+          }
         }
       });
 
-      // Restore scroll if no target full-screen overlay is active
-      const activeFullScreenModal = document.querySelector('.prod-fullscreen-overlay');
-      if (!activeFullScreenModal) {
-        if (document.body.style.overflow === 'hidden') {
-          document.body.style.overflow = '';
-        }
+      if (hasActiveTargetModal) {
+        lockBackground();
+      } else {
+        unlockBackground();
       }
     };
 
-    // Run check immediately and on DOM updates
+    // Prevent mouse wheel scrolling on backdrop when locked
+    const handleWheel = (e: WheelEvent) => {
+      if (!isLockedRef.current) return;
+      const activeModal = document.querySelector('.prod-fullscreen-overlay');
+      if (!activeModal) return;
+
+      const bodyElem = activeModal.querySelector('.prod-fullscreen-body');
+      if (bodyElem && bodyElem.contains(e.target as Node)) {
+        return;
+      }
+      e.preventDefault();
+    };
+
+    // Prevent touch dragging on backdrop when locked
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isLockedRef.current) return;
+      const activeModal = document.querySelector('.prod-fullscreen-overlay');
+      if (!activeModal) return;
+
+      const bodyElem = activeModal.querySelector('.prod-fullscreen-body');
+      if (bodyElem && bodyElem.contains(e.target as Node)) {
+        return;
+      }
+      e.preventDefault();
+    };
+
     handleDOMCheck();
 
     const observer = new MutationObserver(() => {
@@ -93,12 +172,16 @@ export const ProductionFullScreenManager: React.FC = () => {
     });
 
     window.addEventListener('resize', handleDOMCheck);
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
 
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', handleDOMCheck);
-      if (document.body.style.overflow === 'hidden') {
-        document.body.style.overflow = '';
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('touchmove', handleTouchMove);
+      if (isLockedRef.current) {
+        unlockBackground();
       }
     };
   }, []);

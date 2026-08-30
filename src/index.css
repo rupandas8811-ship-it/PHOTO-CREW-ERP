@@ -559,6 +559,7 @@ html, body {
    1. Production Lead • Assigned Team
    2. Reassign popup (reassign_staff)
    3. Assign Editor popup (assign_editor)
+   4. Assign Operations Staff popup
    ========================================================================== */
 
 .prod-fullscreen-overlay {
@@ -582,6 +583,9 @@ html, body {
   align-items: stretch !important;
   justify-content: flex-start !important;
   overflow: hidden !important;
+  box-sizing: border-box !important;
+  overscroll-behavior: contain !important;
+  touch-action: none !important;
 }
 
 .prod-fullscreen-card {
@@ -590,25 +594,29 @@ html, body {
   max-width: 100vw !important;
   max-height: 100vh !important;
   margin: 0 !important;
+  padding: 0 !important;
   border-radius: 0 !important;
   border: none !important;
   box-shadow: none !important;
   background-color: #09090b !important;
   display: flex !important;
   flex-direction: column !important;
-  flex: 1 1 100% !important;
   overflow: hidden !important;
+  box-sizing: border-box !important;
 }
 
 .prod-fullscreen-header {
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 50 !important;
+  flex-shrink: 0 !important;
+  width: 100% !important;
+  max-width: 100vw !important;
+  box-sizing: border-box !important;
   background-color: #0c0d10 !important;
   border-bottom: 1px solid #1f1f23 !important;
   padding: 1rem 1.25rem !important;
-  flex-shrink: 0 !important;
-  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  z-index: 60 !important;
 }
 
 @media (min-width: 640px) {
@@ -619,49 +627,63 @@ html, body {
 
 @media (min-width: 1024px) {
   .prod-fullscreen-header {
-    padding: 1.5rem 3rem !important;
+    padding: 1.25rem 3rem !important;
   }
 }
 
+.prod-fullscreen-header h3,
+.prod-fullscreen-header span {
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  max-width: 100% !important;
+}
+
 .prod-fullscreen-body {
-  flex: 1 1 auto !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
   width: 100% !important;
-  max-width: 1400px !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-  height: calc(100vh - 75px) !important;
-  max-height: calc(100vh - 75px) !important;
+  max-width: 100% !important;
+  margin: 0 auto !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   padding: 1.25rem 1rem !important;
   background-color: #09090b !important;
+  box-sizing: border-box !important;
   -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+  touch-action: pan-y !important;
 }
 
 @media (min-width: 640px) {
   .prod-fullscreen-body {
-    padding: 2rem 2rem !important;
+    padding: 1.75rem 2rem !important;
   }
 }
 
 @media (min-width: 1024px) {
   .prod-fullscreen-body {
-    padding: 2.5rem 3rem !important;
+    padding: 2rem 3rem !important;
   }
 }
 
-/* Responsive grid & table adjustments within full-screen view */
-@media (max-width: 639px) {
+.prod-fullscreen-body table {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.prod-fullscreen-table-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow-x: auto !important;
+  box-sizing: border-box !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* Responsive grid stacking for mobile & tablet */
+@media (max-width: 768px) {
   .prod-fullscreen-body .grid {
-    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
-  }
-
-  .prod-fullscreen-body table {
-    min-width: 600px !important;
-  }
-
-  .prod-fullscreen-header h3 {
-    font-size: 0.85rem !important;
+    grid-template-columns: 1fr !important;
   }
 }
+
 
