@@ -2336,6 +2336,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                   reporting_time: e.reporting_time || ''
                 }));
             }
+            if (evts.length === 0 && l.events && Array.isArray(l.events) && l.events.length > 0) {
+              evts = l.events;
+            }
             if (evts.length === 0 && l.notes_special_customizations) {
               evts = deserializeLeadEvents(l.notes_special_customizations).events || [];
             }
@@ -2709,7 +2712,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                 if (table === 'notifications') mappedItem = mapNotificationFromDb(item);
                 if (table === 'leads') {
                   const existingLead = prev.find((l: any) => l.lead_id === mappedItem.lead_id);
-                  let finalEvents = existingLead?.events || [];
+                  let finalEvents = mappedItem.events && Array.isArray(mappedItem.events) && mappedItem.events.length > 0 
+                    ? mappedItem.events 
+                    : (existingLead?.events || []);
                   if (finalEvents.length === 0) {
                     finalEvents = deserializeLeadEvents(mappedItem.notes_special_customizations).events || [];
                   }

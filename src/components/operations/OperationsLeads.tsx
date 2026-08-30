@@ -417,7 +417,7 @@ export const OperationsLeads: React.FC = () => {
     const lines: string[] = [];
     events.forEach((ev: any, idx: number) => {
       const roles = getEventRolesForEvent(ev, idx, configs, events.length);
-      const evLabel = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || ev.event_name || `Event ${idx + 1}`);
+      const evLabel = ev.event_name || ev.event_type || `Event ${idx + 1}`;
       if (roles && roles.length > 0) {
         const formatted = roles.map((r: any) => formatQtyItem(typeof r === 'string' ? r : (r.name || r.role || JSON.stringify(r))));
         if (events.length > 1) {
@@ -2912,7 +2912,7 @@ export const OperationsLeads: React.FC = () => {
 
                     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
                     const isCollapsed = collapsedAssignEvents[evId] === undefined ? false : collapsedAssignEvents[evId];
-                    const eventNameDisplay = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
+                    const eventNameDisplay = ev.event_name || ev.event_type || 'N/A';
 
                     return (
                       <div key={evId} id={`assign-event-${evId}`} className="bg-zinc-950/60 border border-zinc-850 rounded-2xl relative overflow-hidden transition-all duration-300">
@@ -2953,9 +2953,15 @@ export const OperationsLeads: React.FC = () => {
                                  </h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-xs bg-zinc-900/50 p-4 rounded-xl border border-zinc-800/80">
                           <div>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Type</span>
+                            <span className="font-semibold text-white uppercase text-[11px] block">
+                              {ev.event_type || 'N/A'}
+                            </span>
+                          </div>
+                          <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Name</span>
                             <span className="font-semibold text-white uppercase text-[11px] block">
-                              {ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A')}
+                              {ev.event_name || 'N/A'}
                             </span>
                           </div>
                           <div>
@@ -5145,7 +5151,7 @@ export const OperationsLeads: React.FC = () => {
             lead.events.forEach((ev: any) => {
               roster.push({
                 orderId: order?.order_id || lead.lead_id,
-                eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
+                eventName: ev.event_name || ev.event_type || 'N/A',
                 date: ev.event_date || 'N/A',
                 time: ev.reporting_time || ev.event_start_time || 'N/A'
               });
