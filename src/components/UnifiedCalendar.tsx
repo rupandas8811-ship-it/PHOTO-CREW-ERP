@@ -2082,8 +2082,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           <th className="p-3.5">Event Time</th>
                           <th className="p-3.5">Location</th>
                           <th className="p-3.5">Status</th>
-                          <th className="p-3.5">Target Delivery Date</th>
-                          <th className="p-3.5 pr-4 text-right">Action</th>
+                          <th className={`p-3.5 ${role === 'production' ? 'pr-4' : ''}`}>Target Delivery Date</th>
+                          {role !== 'production' && (
+                            <th className="p-3.5 pr-4 text-right">Action</th>
+                          )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
@@ -2128,20 +2130,22 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                   {status}
                                 </span>
                               </td>
-                              <td className="p-3.5 font-mono font-bold text-pink-400 whitespace-nowrap">
+                              <td className={`p-3.5 font-mono font-bold text-pink-400 whitespace-nowrap ${role === 'production' ? 'pr-4' : ''}`}>
                                 {targetDelDate}
                               </td>
-                              <td className="p-3.5 pr-4 text-right whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    handleEventAction(ev);
-                                  }}
-                                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
-                                >
-                                  Details
-                                </button>
-                              </td>
+                              {role !== 'production' && (
+                                <td className="p-3.5 pr-4 text-right whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleEventAction(ev);
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
+                                  >
+                                    Details
+                                  </button>
+                                </td>
+                              )}
                             </tr>
                           );
                         })}
