@@ -579,7 +579,21 @@ async function startServer() {
         }
       }
 
-      const result = await executeWithSelfHealing(table, 'update', updates, matchColumn, matchValue);
+      let result = await executeWithSelfHealing(table, 'update', updates, matchColumn, matchValue);
+      
+      // If table is production and 0 rows were updated, upsert to ensure production state persists
+      if (result.success && (!result.data || (Array.isArray(result.data) && result.data.length === 0)) && table === 'production') {
+        console.log(`[Server DB Update] No existing row found in ${table} for ${matchColumn}=${matchValue}. Upserting record...`);
+        const fallbackRecord = {
+          [matchColumn]: matchValue,
+          ...updates
+        };
+        const upsertResult = await executeWithSelfHealing(table, 'upsert', fallbackRecord);
+        if (upsertResult.success) {
+          result = upsertResult;
+        }
+      }
+
       if (!result.success) {
         return res.status(400).json({ success: false, error: result.error });
       }
