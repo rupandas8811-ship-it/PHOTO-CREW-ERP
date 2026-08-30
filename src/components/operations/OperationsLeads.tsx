@@ -2764,12 +2764,12 @@ export const OperationsLeads: React.FC = () => {
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
         <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] overflow-hidden overscroll-none animate-in fade-in duration-150"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden overscroll-none animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget) setAssigningOrderId(null);
           }}
         >
-          <div id="assign_staff_modal" className="bg-zinc-900 w-full h-full flex flex-col shadow-2xl relative overflow-hidden text-left max-w-full min-w-0">
+          <div id="assign_staff_modal" className="bg-zinc-900 w-full h-full flex-1 flex flex-col min-h-0 max-h-full shadow-2xl relative overflow-hidden text-left max-w-full min-w-0">
             <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 max-w-full min-w-0">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <span className="p-1 px-2.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono shrink-0">Operations</span>
@@ -2786,9 +2786,9 @@ export const OperationsLeads: React.FC = () => {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden max-w-full min-w-0">
+            <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 max-h-full overflow-hidden max-w-full min-w-0">
               <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
-                <div className="w-full max-w-7xl mx-auto space-y-6 pb-16">
+                <div className="w-full max-w-7xl mx-auto space-y-6 pb-20">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -4738,12 +4738,12 @@ export const OperationsLeads: React.FC = () => {
 
         return (
           <div 
-            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] overflow-hidden overscroll-none animate-in fade-in duration-150"
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden overscroll-none animate-in fade-in duration-150"
             onClick={(e) => {
               if (e.target === e.currentTarget) setViewingStaffOrderId(null);
             }}
           >
-            <div className="bg-zinc-900 w-full h-full flex flex-col shadow-2xl relative overflow-hidden text-left max-w-full min-w-0">
+            <div className="bg-zinc-900 w-full h-full flex-1 flex flex-col min-h-0 max-h-full shadow-2xl relative overflow-hidden text-left max-w-full min-w-0">
               <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 max-w-full min-w-0">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span className="text-xl shrink-0">👥</span>
