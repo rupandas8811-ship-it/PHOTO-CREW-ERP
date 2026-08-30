@@ -507,6 +507,25 @@ export const OperationsLeads: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewingStaffOrderId]);
 
+  useEffect(() => {
+    if (assigningOrderId || viewingStaffOrderId) {
+      document.body.style.overflow = 'hidden';
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          if (assigningOrderId) setAssigningOrderId(null);
+          if (viewingStaffOrderId) setViewingStaffOrderId(null);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => {
+        document.body.style.overflow = '';
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [assigningOrderId, viewingStaffOrderId]);
+
   const handleVerifyFootage = async (ord: Order, staffName: string, eventId: string | undefined, status: 'Verified' | 'Not Verified') => {
     try {
       if (!currentUserName || !ord) return;
@@ -2716,25 +2735,31 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div id="assign_staff_modal" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-[96vw] sm:w-full sm:max-w-4xl h-auto max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl relative animate-in zoom-in duration-200 overflow-hidden">
-            <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/40">
-              <div className="flex items-center gap-2">
-                <span className="p-1 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono">Operations</span>
-                <h3 className="text-sm font-sans font-black text-white">
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full overflow-hidden animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setAssigningOrderId(null);
+          }}
+        >
+          <div id="assign_staff_modal" className="bg-zinc-900 w-full h-full flex flex-col shadow-2xl relative overflow-hidden text-left">
+            <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 sticky top-0 z-30">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <span className="p-1 px-2.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono shrink-0">Operations</span>
+                <h3 className="text-sm sm:text-base font-sans font-black text-white truncate">
                   Project Staffing & Handover Dossier ~ {assigningOrderId}
                 </h3>
               </div>
               <button 
                 onClick={() => setAssigningOrderId(null)}
-                className="text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+                className="text-zinc-400 hover:text-white font-bold cursor-pointer transition-colors p-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-sm ml-2 shrink-0 flex items-center justify-center w-8 h-8"
                 type="button"
+                title="Close Modal"
               >
                 ✕
               </button>
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="p-4 sm:p-5 overflow-y-auto flex-1 min-h-0 space-y-6">
+              <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-h-0 space-y-6 w-full max-w-7xl mx-auto scrollbar-thin">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -3773,18 +3798,18 @@ export const OperationsLeads: React.FC = () => {
                     </div>
                  </div>
               )}
-                            <div className="sticky bottom-0 z-50 p-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/90 backdrop-blur-md">
+                            <div className="sticky bottom-0 z-30 p-4 sm:px-6 sm:py-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/95 backdrop-blur-md shrink-0">
                 <button
                   type="button"
                   onClick={() => setAssigningOrderId(null)}
-                  className="px-4 py-3 sm:py-2 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto bg-zinc-900 sm:bg-transparent rounded-xl sm:rounded-none border border-zinc-800 sm:border-none"
+                  className="px-5 py-2.5 text-xs font-mono font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer w-full sm:w-auto bg-zinc-900 hover:bg-zinc-800 rounded-xl border border-zinc-800"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-3 sm:py-2 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl sm:rounded-lg transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]"
                 >
                   {isSaving ? 'Saving Assignments...' : 'Save All Assignments'}
                 </button>
@@ -4681,29 +4706,36 @@ export const OperationsLeads: React.FC = () => {
         const eventNames = Object.keys(groupedByEvent);
 
         return (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-4xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
-              <button 
-                onClick={() => setViewingStaffOrderId(null)}
-                className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
-                type="button"
-              >
-                ✕
-              </button>
-              
-              <div className="flex items-center gap-2 mb-4 border-b border-zinc-800 pb-3">
-                <span className="text-xl">👥</span>
-                <div className="text-left">
-                  <h3 className="text-base font-bold text-white font-sans">
-                    Assigned Team Members
-                  </h3>
-                  <p className="text-[11px] text-zinc-400">
-                    Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • {ord.customer_name}
-                  </p>
+          <div 
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full overflow-hidden animate-in fade-in duration-150"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setViewingStaffOrderId(null);
+            }}
+          >
+            <div className="bg-zinc-900 w-full h-full flex flex-col shadow-2xl relative overflow-hidden text-left">
+              <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 sticky top-0 z-30">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className="text-xl shrink-0">👥</span>
+                  <div className="text-left min-w-0">
+                    <h3 className="text-base sm:text-lg font-bold text-white font-sans truncate">
+                      Assigned Team Members
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
+                      Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • {ord.customer_name}
+                    </p>
+                  </div>
                 </div>
+                <button 
+                  onClick={() => setViewingStaffOrderId(null)}
+                  className="text-zinc-400 hover:text-white font-bold cursor-pointer transition-colors p-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-sm ml-2 shrink-0 flex items-center justify-center w-8 h-8"
+                  type="button"
+                  title="Close Modal"
+                >
+                  ✕
+                </button>
               </div>
 
-              <div className="overflow-y-auto space-y-4 flex-1 pr-1 text-left">
+              <div className="overflow-y-auto space-y-6 flex-1 min-h-0 p-4 sm:p-6 lg:p-8 text-left w-full max-w-7xl mx-auto scrollbar-thin">
                 {eventNames.length === 0 ? (
                   <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                     No staff assigned yet.
@@ -5034,11 +5066,11 @@ export const OperationsLeads: React.FC = () => {
                 )}
               </div>
 
-              <div className="pt-4 border-t border-zinc-800 mt-4">
+              <div className="p-4 sm:px-6 sm:py-4 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md shrink-0 sticky bottom-0 z-30 flex justify-end">
                 <button
                   type="button"
                   onClick={() => setViewingStaffOrderId(null)}
-                  className="w-full py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-350 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-200 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
                 >
                   Close
                 </button>
