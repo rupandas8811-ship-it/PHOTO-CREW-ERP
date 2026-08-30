@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDateDDMMYY, formatTime12Hour } from '../../utils';
+import { useRole } from '../RoleContext';
 
 interface EventItem {
   event_name: string;
@@ -28,104 +29,243 @@ interface ModalState {
  * 2. Hides separate "Event Details" column from Production Leads table.
  * 3. Integrates "Event Details" as an option inside the existing "Action" dropdown.
  * 4. Displays Event Details in a proper centered responsive modal popup with backdrop overlay.
- * 5. Shows ALL events for orders with multiple events (Event 1, Event 2, Event 3...).
+ * 5. Shows ALL events for orders with multiple events (Event 1, Event 2, Event 3...) using exact database values.
+ * 6. Correctly isolates selected row's lead/order data (Customer Name, Event Name, Event Date, Event Time).
  */
 export const ProductionEventManager: React.FC = () => {
+  const { leads, orders, production, rawFootage } = useRole();
   const [modalState, setModalState] = useState<ModalState | null>(null);
 
   useEffect(() => {
-    // Helper: traverse React Fiber tree starting from element to retrieve lead, order, prod objects
-    const findObjectsFromFiber = (el: HTMLElement | null): { lead?: any; order?: any; prod?: any } => {
-      const res: { lead?: any; order?: any; prod?: any } = {};
-      if (!el) return res;
-
-      let curr: any = el;
-      while (curr && curr !== document.body && curr !== document.documentElement) {
-        const fiberKey = Object.keys(curr).find(
-          (k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$')
-        );
-        if (fiberKey) {
-          let fiber = curr[fiberKey];
-          let depth = 0;
-          while (fiber && depth < 35) {
-            const props = fiber.memoizedProps || fiber.pendingProps;
-            if (props) {
-              if (props.lead && !res.lead) res.lead = props.lead;
-              if (props.order && !res.order) res.order = props.order;
-              if (props.prod && !res.prod) res.prod = props.prod;
-              if (props.openActionDropdown) {
-                if (props.openActionDropdown.order && !res.order) res.order = props.openActionDropdown.order;
-                if (props.openActionDropdown.prod && !res.prod) res.prod = props.openActionDropdown.prod;
-              }
-            }
-            fiber = fiber.return;
-            depth++;
-          }
-        }
-        curr = curr.parentElement;
-      }
-      return res;
+    // Helper to get React Fiber node from DOM element
+    const getReactFiber = (domEl: HTMLElement | null): any => {
+      if (!domEl) return null;
+      const key = Object.keys(domEl).find(
+        (k) => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$')
+      );
+      return key ? (domEl as any)[key] : null;
     };
 
-    // Helper: parse extracted objects into standard ModalState with all events
-    const extractModalState = (
-      leadObj: any,
-      orderObj: any,
-      prodObj: any,
-      targetRow?: HTMLTableRowElement | null
+    // Helper to extract lead/order object from React Fiber tree
+    const extractLeadFromFiber = (startFiber: any): any => {
+      let curr = startFiber;
+      let depth = 0;
+      while (curr && depth < 40) {
+        const props = curr.memoizedProps || curr.pendingProps;
+        if (props) {
+          if (props.lead) return props.lead;
+          if (props.order) return props.order;
+        }
+        if (curr.child) {
+          let child = curr.child;
+          let childDepth = 0;
+          while (child && childDepth < 10) {
+            const childProps = child.memoizedProps || child.pendingProps;
+            if (childProps) {
+              if (childProps.lead) return childProps.lead;
+              if (childProps.order) return childProps.order;
+            }
+            child = child.sibling;
+            childDepth++;
+          }
+        }
+        curr = curr.return;
+        depth++;
+      }
+      return null;
+    };
+
+    // Function to construct accurate ModalState for the selected row
+    const buildModalStateForSelection = (
+      rawIdText: string,
+      targetRow: HTMLTableRowElement | null
     ): ModalState => {
-      const target = leadObj || orderObj || prodObj || {};
+      let fiberLead: any = null;
+      let rowCustomerName = '';
+      let rowOrderId = '';
+
+      if (targetRow) {
+        const cells = targetRow.querySelectorAll('td');
+        if (cells[0]) {
+          rowOrderId = (cells[0].textContent || '').trim();
+        }
+        if (cells[1]) {
+          const firstChild = cells[1].querySelector('div');
+          const rawText = firstChild?.textContent || cells[1].textContent || '';
+          rowCustomerName = rawText.split('\n')[0].trim();
+        }
+        if (cells[2]) {
+          const fiber = getReactFiber(cells[2] as HTMLElement);
+          if (fiber) {
+            fiberLead = extractLeadFromFiber(fiber);
+          }
+        }
+      }
+
+      const lookupId = rawIdText || rowOrderId;
+
+      const prodItem = (production || []).find(
+        (p) =>
+          p.tracking_id === lookupId ||
+          p.production_id === lookupId ||
+          (p as any).order_id === lookupId
+      );
+
+      const rfItem = (rawFootage || []).find(
+        (f) =>
+          f.tracking_id === lookupId ||
+          f.order_id === lookupId ||
+          (prodItem &&
+            (f.tracking_id === prodItem.tracking_id ||
+              f.order_id === prodItem.tracking_id ||
+              f.order_id === prodItem.order_id))
+      );
+
+      const targetOrder = (orders || []).find(
+        (o) =>
+          o.order_id === lookupId ||
+          o.lead_id === lookupId ||
+          (prodItem &&
+            (o.order_id === prodItem.order_id ||
+              o.lead_id === prodItem.tracking_id ||
+              o.lead_id === prodItem.lead_id)) ||
+          (rfItem && o.order_id === rfItem.order_id) ||
+          (fiberLead && (o.order_id === fiberLead.order_id || o.lead_id === fiberLead.lead_id))
+      );
+
+      const targetLead = (leads || []).find(
+        (l) =>
+          l.lead_id === lookupId ||
+          (prodItem && (l.lead_id === prodItem.tracking_id || l.lead_id === prodItem.lead_id)) ||
+          (targetOrder && l.lead_id === targetOrder.lead_id) ||
+          (fiberLead && l.lead_id === fiberLead.lead_id) ||
+          (rowCustomerName &&
+            rowCustomerName !== 'Client' &&
+            l.customer_name?.toLowerCase() === rowCustomerName.toLowerCase())
+      );
 
       const customerName =
-        target.customer_name || target.client_name || prodObj?.customer_name || 'Customer';
+        targetOrder?.customer_name ||
+        targetLead?.customer_name ||
+        fiberLead?.customer_name ||
+        prodItem?.customer_name ||
+        (rowCustomerName && rowCustomerName !== 'Client' ? rowCustomerName : '') ||
+        'Customer';
 
       const orderId =
-        target.order_id || target.lead_id || target.tracking_id || prodObj?.order_id || prodObj?.tracking_id || '';
+        targetOrder?.order_id ||
+        targetLead?.lead_id ||
+        prodItem?.order_id ||
+        prodItem?.tracking_id ||
+        fiberLead?.order_id ||
+        fiberLead?.lead_id ||
+        lookupId ||
+        '';
+
+      const rawEventsList =
+        (targetLead?.events && Array.isArray(targetLead.events) && targetLead.events.length > 0
+          ? targetLead.events
+          : null) ||
+        (targetOrder?.events && Array.isArray(targetOrder.events) && targetOrder.events.length > 0
+          ? targetOrder.events
+          : null) ||
+        (fiberLead?.events && Array.isArray(fiberLead.events) && fiberLead.events.length > 0
+          ? fiberLead.events
+          : null) ||
+        (prodItem?.events && Array.isArray(prodItem.events) && prodItem.events.length > 0
+          ? prodItem.events
+          : null);
 
       let eventsList: EventItem[] = [];
 
-      const rawEvents = target.events || orderObj?.events || prodObj?.events || leadObj?.events;
-
-      if (rawEvents && Array.isArray(rawEvents) && rawEvents.length > 0) {
-        eventsList = rawEvents.map((ev: any, idx: number) => ({
-          event_name: ev.event_name || ev.event_type || ev.Event_Name || `Event ${idx + 1}`,
-          event_date: ev.event_date || ev.Event_Date || '—',
-          event_start_time: ev.event_start_time || ev.event_time || ev.Event_Start_Time || '',
+      if (rawEventsList && rawEventsList.length > 0) {
+        eventsList = rawEventsList.map((ev: any, idx: number) => ({
+          event_name:
+            ev.event_name ||
+            ev.event_type ||
+            ev.Event_Name ||
+            ev.custom_event_name ||
+            `Event ${idx + 1}`,
+          event_date:
+            ev.event_date ||
+            ev.event_start_date ||
+            ev.Event_Date ||
+            targetLead?.event_date ||
+            targetOrder?.event_date ||
+            '',
+          event_start_time:
+            ev.event_start_time ||
+            ev.event_time ||
+            ev.reporting_time ||
+            ev.Event_Start_Time ||
+            targetLead?.event_time ||
+            targetOrder?.event_time ||
+            '',
           event_end_date: ev.event_end_date || ev.Event_End_Date || '',
           event_end_time: ev.event_end_time || '',
-          shoot_type: ev.event_shoot_type || ev.shoot_type || target.shoot_type || '',
-          location: ev.location || ev.venue || ev.google_maps_link || target.location || '',
+          shoot_type:
+            ev.event_shoot_type ||
+            ev.shoot_type ||
+            targetLead?.shoot_type ||
+            targetOrder?.desired_event_shoot_type ||
+            '',
+          location:
+            ev.event_location ||
+            ev.location ||
+            ev.venue ||
+            ev.google_maps_link ||
+            targetLead?.event_location ||
+            targetOrder?.event_location ||
+            '',
         }));
-      } else if (
-        target.event_name ||
-        target.Event_Name ||
-        target.event_date ||
-        target.Event_Date ||
-        target.event_type ||
-        prodObj?.event_date
-      ) {
-        eventsList = [
-          {
-            event_name: target.event_name || target.Event_Name || target.event_type || 'Event 1',
-            event_date: target.event_date || target.Event_Date || prodObj?.event_date || '—',
-            event_start_time:
-              target.event_start_time || target.event_time || target.Event_Start_Time || prodObj?.event_time || '',
-            event_end_date: target.event_end_date || target.Event_End_Date || '',
-            event_end_time: target.event_end_time || '',
-            shoot_type: target.shoot_type || target.event_shoot_type || '',
-            location: target.location || target.venue || '',
-          },
-        ];
       } else {
-        // Fallback default item
-        eventsList = [
-          {
-            event_name: 'Event 1',
-            event_date: '—',
-            event_start_time: '',
-            shoot_type: target.shoot_type || '',
-          },
-        ];
+        const singleName =
+          targetLead?.event_name ||
+          targetLead?.custom_event_name ||
+          targetLead?.event_type ||
+          targetOrder?.event_type ||
+          fiberLead?.event_name ||
+          fiberLead?.event_type ||
+          prodItem?.event_type ||
+          prodItem?.event_name;
+
+        const singleDate =
+          targetLead?.event_date ||
+          targetOrder?.event_date ||
+          fiberLead?.event_date ||
+          prodItem?.event_date;
+
+        const singleTime =
+          targetLead?.event_time ||
+          targetLead?.reporting_time ||
+          targetOrder?.event_time ||
+          fiberLead?.event_time ||
+          prodItem?.event_time;
+
+        const singleShootType =
+          targetLead?.shoot_type ||
+          targetLead?.desired_event_shoot_type ||
+          targetOrder?.desired_event_shoot_type ||
+          fiberLead?.shoot_type;
+
+        const singleLocation =
+          targetLead?.event_location ||
+          targetOrder?.event_location ||
+          fiberLead?.event_location;
+
+        if (singleName || singleDate || singleTime) {
+          eventsList = [
+            {
+              event_name: singleName || 'Event',
+              event_date: singleDate || '',
+              event_start_time: singleTime || '',
+              shoot_type: singleShootType || '',
+              location: singleLocation || '',
+            },
+          ];
+        } else {
+          eventsList = [];
+        }
       }
 
       return {
@@ -212,31 +352,16 @@ export const ProductionEventManager: React.FC = () => {
               e.stopPropagation();
 
               // Close action dropdown
-              const backdrop = actionDropdown.parentElement?.querySelector('div.fixed.inset-0.bg-transparent') as HTMLElement;
+              const backdrop = actionDropdown.parentElement?.querySelector(
+                'div.fixed.inset-0.bg-transparent'
+              ) as HTMLElement;
               if (backdrop) {
                 backdrop.click();
               } else {
                 actionDropdown.style.display = 'none';
               }
 
-              // Extract objects using React Fiber starting from actionDropdown, targetRow, and td cells
-              let extracted = findObjectsFromFiber(actionDropdown);
-              if (!extracted.lead && !extracted.order && targetRow) {
-                const rowExtracted = findObjectsFromFiber(targetRow);
-                extracted = { ...extracted, ...rowExtracted };
-              }
-
-              if (targetRow) {
-                const cells = targetRow.querySelectorAll('td');
-                cells.forEach((td) => {
-                  const cellExtracted = findObjectsFromFiber(td as HTMLElement);
-                  if (cellExtracted.lead && !extracted.lead) extracted.lead = cellExtracted.lead;
-                  if (cellExtracted.order && !extracted.order) extracted.order = cellExtracted.order;
-                  if (cellExtracted.prod && !extracted.prod) extracted.prod = cellExtracted.prod;
-                });
-              }
-
-              const state = extractModalState(extracted.lead, extracted.order, extracted.prod, targetRow);
+              const state = buildModalStateForSelection(targetId, targetRow);
               setModalState(state);
             };
 
@@ -273,7 +398,7 @@ export const ProductionEventManager: React.FC = () => {
       window.removeEventListener('resize', handleProductionDOMUpdates);
       window.removeEventListener('scroll', handleProductionDOMUpdates, { capture: true });
     };
-  }, []);
+  }, [leads, orders, production, rawFootage]);
 
   return (
     <>
@@ -327,8 +452,10 @@ export const ProductionEventManager: React.FC = () => {
                   </div>
                 ) : (
                   modalState.events.map((ev, idx) => {
-                    const formattedDate = formatDateDDMMYY(ev.event_date);
-                    const formattedTime = formatTime12Hour(ev.event_start_time || ev.event_time);
+                    const rawTime = ev.event_start_time || ev.event_end_time;
+                    const formattedDate = ev.event_date ? formatDateDDMMYY(ev.event_date) : '';
+                    const formattedTime = rawTime ? formatTime12Hour(rawTime) : '';
+
                     return (
                       <div
                         key={idx}
@@ -350,24 +477,26 @@ export const ProductionEventManager: React.FC = () => {
                             <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block mb-0.5">
                               Event Name
                             </span>
-                            <span className="font-bold text-white text-sm">{ev.event_name || 'Event'}</span>
+                            <span className="font-bold text-white text-sm">
+                              {ev.event_name || 'Not specified'}
+                            </span>
                           </div>
                           <div>
                             <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block mb-0.5">
                               Event Date
                             </span>
                             <span className="font-bold font-mono text-amber-400 text-sm">
-                              {formattedDate || '—'}
+                              {formattedDate || ev.event_date || 'Not specified'}
                             </span>
                           </div>
-                          {formattedTime && (
-                            <div>
-                              <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block mb-0.5">
-                                Event Time
-                              </span>
-                              <span className="font-semibold font-mono text-zinc-200">{formattedTime}</span>
-                            </div>
-                          )}
+                          <div>
+                            <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block mb-0.5">
+                              Event Time
+                            </span>
+                            <span className="font-semibold font-mono text-zinc-200">
+                              {formattedTime || 'Not specified'}
+                            </span>
+                          </div>
                           {ev.location && (
                             <div className="sm:col-span-2">
                               <span className="text-[10px] uppercase font-mono tracking-wider text-zinc-500 block mb-0.5">
@@ -385,8 +514,8 @@ export const ProductionEventManager: React.FC = () => {
 
               {/* Modal Footer */}
               <div className="px-5 py-3 border-t border-zinc-800 bg-zinc-900 flex items-center justify-between">
-                <span className="text-[11px] font-mono text-zinc-500">
-                  Total Events: {modalState.events.length}
+                <span className="text-[11px] font-mono text-zinc-400">
+                  Total Events: <span className="font-bold text-amber-400">{modalState.events.length}</span>
                 </span>
                 <button
                   type="button"
