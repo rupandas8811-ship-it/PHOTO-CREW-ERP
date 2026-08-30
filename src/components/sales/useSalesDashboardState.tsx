@@ -3291,7 +3291,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                         <div className="space-y-1.5">
                           {eventInclusions.map((item, idx) => (
                             <CompactQtyItemRow
-                              key={idx}
+                              key={`inc_ev_${evId}_${idx}`}
                               value={item}
                               options={activeMasterRoles}
                               placeholder="Type or select Role / Team Member..."
@@ -3369,7 +3369,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                         <div className="space-y-1.5">
                           {eventDeliverables.map((item, idx) => (
                             <CompactQtyItemRow
-                              key={idx}
+                              key={`del_ev_${evId}_${idx}`}
                               value={item}
                               options={activeMasterDeliverables}
                               placeholder="Type or select Deliverable..."
@@ -3451,7 +3451,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                     <div className="space-y-1.5">
                       {inclusionsList.map((item, idx) => (
                         <CompactQtyItemRow
-                          key={idx}
+                          key={`inc_single_${selectedPkgId}_${idx}`}
                           value={item}
                           options={activeMasterRoles}
                           placeholder="Type or select Role / Team Member..."
@@ -3529,7 +3529,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                     <div className="space-y-1.5">
                       {deliverablesList.map((item, idx) => (
                         <CompactQtyItemRow
-                          key={idx}
+                          key={`del_single_${selectedPkgId}_${idx}`}
                           value={item}
                           options={activeMasterDeliverables}
                           placeholder="Type or select Deliverable..."

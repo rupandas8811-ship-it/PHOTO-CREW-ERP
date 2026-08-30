@@ -134,69 +134,59 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
 
   if (!text) return { qty: 1, text: "" };
 
-  // 1. Check for explicit (Qty: X), (quantity: X), (count: X), (Qty X) anywhere in the string
-  let foundQtyFromPattern: number | null = null;
-  const qtyPatterns = /\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/gi;
-  let match;
-  while ((match = qtyPatterns.exec(text)) !== null) {
-    if (match[1]) {
-      const parsedQty = parseInt(match[1], 10);
-      if (!isNaN(parsedQty) && parsedQty >= 1) {
-        if (foundQtyFromPattern === null) {
-          foundQtyFromPattern = parsedQty;
-        }
-      }
+  // 1. Check for explicit (Qty: X), (quantity: X), (count: X), (Qty X) pattern anywhere in the string
+  const mQty = text.match(/[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*(\d+)\s*[\)\]\-]?/i);
+  if (mQty && mQty[1]) {
+    const parsedQty = parseInt(mQty[1], 10);
+    const cleanText = text.replace(/[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
+    return { qty: !isNaN(parsedQty) && parsedQty >= 1 ? parsedQty : 1, text: cleanText };
+  }
+
+  // 2. Explicit multiplier prefix: e.g. "2 x 4K Video", "2 × 16x20 Frame", "3 * Album"
+  const multiplierMatch = text.match(/^(\d+)\s*[xX×\*]\s+(.+)$/);
+  if (multiplierMatch) {
+    const parsedQty = parseInt(multiplierMatch[1], 10);
+    return { qty: !isNaN(parsedQty) && parsedQty >= 1 ? parsedQty : 1, text: multiplierMatch[2].trim() };
+  }
+
+  // 3. Pure digits alone: e.g. "2"
+  if (/^\d+$/.test(text)) {
+    const num = parseInt(text, 10);
+    if (!isNaN(num) && num >= 1 && num <= 999) {
+      return { qty: num, text: "" };
     }
   }
 
-  if (foundQtyFromPattern !== null) {
-    text = text.replace(/\s*[\(\[-]?\s*(?:qty|quantity|count)\s*[:=]?\s*\d+\s*[\)\]\-]?/gi, "").trim();
-    return { qty: foundQtyFromPattern, text };
+  // 4. Leading quantity followed by space and dimension: e.g. "2 16x20 Frame"
+  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX×]\s*\d+.*)$/);
+  if (qtyDimensionMatch) {
+    const parsedQty = parseInt(qtyDimensionMatch[1], 10);
+    return { qty: !isNaN(parsedQty) && parsedQty >= 1 ? parsedQty : 1, text: qtyDimensionMatch[2].trim() };
   }
 
-  // 2. Check for dimension / size specifications at the start of the string:
-  // e.g. "16×6", "16x6", "12×8 Album", "16×6 Frame", "16 × 6", "12 x 18", "8x24", "8*12", "12×36"
-  // If the string starts with a dimension (digits x/× digits), it is deliverable text, NOT a leading quantity!
+  // 5. Dimension specification alone: e.g. "16x20 Frame"
   const isLeadingDimension = /^\d+\s*[\*xX×]\s*\d+/.test(text);
   if (isLeadingDimension) {
     return { qty: 1, text };
   }
 
-  // 3. Check for technical specifications / units starting with numbers:
-  // e.g. "4K Cinematic Video", "8K Video", "20 Pages × 2", "400 Edited Candid Photos", "50 Photos", "3 Hours", "10 Sheets"
-  const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos|image|images|pic|pics|picture|pictures|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
+  // 6. Leading quantity followed by space and tech spec: e.g. "2 4K Video", "2 50 Edited Photos", "2 15-20 Min Teaser"
+  const qtySpecMatch = text.match(/^(\d+)\s+(\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos\b|image|images\b|pic|pics\b|picture|pictures\b|gb\b|mb\b|tb\b|day\b|days\b|edited\b).*)$/i);
+  if (qtySpecMatch) {
+    const parsedQty = parseInt(qtySpecMatch[1], 10);
+    return { qty: !isNaN(parsedQty) && parsedQty >= 1 ? parsedQty : 1, text: qtySpecMatch[2].trim() };
+  }
+
+  const isUnitOrSpec = /^\d+\s*(?:[kK]\b|min\b|mins\b|minute|minutes|sec\b|secs\b|second|seconds|hr\b|hrs\b|hour|hours|page|pages|sheet|sheets|photo|photos\b|image|images\b|pic|pics\b|picture|pictures\b|gb\b|mb\b|tb\b|day\b|days\b|edited\b)/i.test(text);
   if (isUnitOrSpec) {
     return { qty: 1, text };
   }
 
-  // 4. Check for leading quantity with explicit multiplier:
-  // e.g. "2 x Traditional Photos", "2 × Cinematic Video", "2 * Album", "2 x 16×6 Frame", "2 × 16×6"
-  const multiplierMatch = text.match(/^(\d+)\s*[xX×\*]\s+(.+)$/);
-  if (multiplierMatch) {
-    const parsedQty = parseInt(multiplierMatch[1], 10);
-    if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: multiplierMatch[2].trim() };
-    }
-  }
-
-  // 5. Check for leading quantity followed by dimension:
-  // e.g. "2 16×6", "3 12×8 Album", "2 16×6 Frame"
-  const qtyDimensionMatch = text.match(/^(\d+)\s+(\d+\s*[\*xX×]\s*\d+.*)$/);
-  if (qtyDimensionMatch) {
-    const parsedQty = parseInt(qtyDimensionMatch[1], 10);
-    if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: qtyDimensionMatch[2].trim() };
-    }
-  }
-
-  // 6. Check for leading quantity with space followed by item name:
-  // e.g. "2 Lead Photographer", "1 Drone Operator", "2 Albums", "2 Frames (12×18)"
-  const wordMatch = text.match(/^(\d+)\s+([a-zA-Z\(\[\{].+)$/);
+  // 7. Leading quantity followed by space and text: e.g. "2 Traditional Photos", "2 Photographer"
+  const wordMatch = text.match(/^(\d+)\s+(.+)$/);
   if (wordMatch) {
     const parsedQty = parseInt(wordMatch[1], 10);
-    if (!isNaN(parsedQty) && parsedQty >= 1) {
-      return { qty: parsedQty, text: wordMatch[2].trim() };
-    }
+    return { qty: !isNaN(parsedQty) && parsedQty >= 1 ? parsedQty : 1, text: wordMatch[2].trim() };
   }
 
   return { qty: 1, text };
@@ -205,12 +195,15 @@ export function parseQtyAndText(raw: any): { qty: number; text: string } {
 export function combineQtyAndText(qty: number | string, text: string): string {
   const qNum = parseInt(String(qty), 10);
   const validQty = !isNaN(qNum) && qNum >= 1 ? qNum : 1;
-  const cleanText = (text || "").trim();
-  if (!cleanText) return validQty > 1 ? `${validQty}` : "";
+  const cleanText = (text || "").replace(/^\(Qty:\s*\d+\)\s*/i, "").trim();
+
+  if (!cleanText) {
+    return validQty > 1 ? `(Qty: ${validQty})` : "";
+  }
   if (validQty <= 1) {
     return cleanText;
   }
-  return `${validQty} ${cleanText}`.trim();
+  return `(Qty: ${validQty}) ${cleanText}`.trim();
 }
 
 export function formatListToStructuredObjects(list: any[]): { name: string; qty: number }[] {
@@ -577,18 +570,42 @@ export const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
   onDelete,
 }) => {
   const { qty, text } = React.useMemo(() => parseQtyAndText(value), [value]);
+  const [localQty, setLocalQty] = React.useState<string | number>(qty);
+
+  React.useEffect(() => {
+    setLocalQty(qty);
+  }, [qty]);
 
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (disabled) return;
     const rawVal = e.target.value;
+    setLocalQty(rawVal);
+
+    if (rawVal === '') return;
+
     const newQty = parseInt(rawVal, 10);
-    const validQty = isNaN(newQty) || newQty < 1 ? 1 : newQty;
-    onChange(combineQtyAndText(validQty, text));
+    if (!isNaN(newQty) && newQty >= 1) {
+      onChange(combineQtyAndText(newQty, text));
+    }
+  };
+
+  const handleQtyBlur = () => {
+    if (disabled) return;
+    const parsed = parseInt(String(localQty), 10);
+    if (isNaN(parsed) || parsed < 1) {
+      setLocalQty(1);
+      onChange(combineQtyAndText(1, text));
+    } else {
+      setLocalQty(parsed);
+      onChange(combineQtyAndText(parsed, text));
+    }
   };
 
   const handleTextChange = (newText: string) => {
     if (disabled) return;
-    onChange(combineQtyAndText(qty, newText));
+    const currentQ = parseInt(String(localQty), 10);
+    const validQ = !isNaN(currentQ) && currentQ >= 1 ? currentQ : qty;
+    onChange(combineQtyAndText(validQ, newText));
   };
 
   return (
@@ -599,8 +616,9 @@ export const CompactQtyItemRow: React.FC<CompactQtyItemRowProps> = ({
           type="number"
           min="1"
           disabled={disabled}
-          value={qty}
+          value={localQty}
           onChange={handleQtyChange}
+          onBlur={handleQtyBlur}
           className="w-12 sm:w-16 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:outline-none rounded-md py-1 px-1.5 text-xs font-mono font-bold text-center text-white shrink-0 disabled:opacity-50"
           placeholder="Qty"
           title="Quantity"
