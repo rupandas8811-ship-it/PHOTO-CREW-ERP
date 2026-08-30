@@ -2002,3 +2002,29 @@ export function generateWhatsAppAssignmentMessage(params: {
 
   return msg.trim();
 }
+
+export const parseTimeToMinutes = (timeStr: string | null | undefined): number | null => {
+  if (!timeStr) return null;
+  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM|am|pm))?$/);
+  if (!match) return null;
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const modifier = match[3] ? match[3].toUpperCase() : null;
+
+  if (modifier === 'PM' && hours < 12) hours += 12;
+  if (modifier === 'AM' && hours === 12) hours = 0;
+  
+  return hours * 60 + minutes;
+};
+
+export const checkTimeOverlap = (startA: string | null | undefined, endA: string | null | undefined, startB: string | null | undefined, endB: string | null | undefined): boolean => {
+  const sA = parseTimeToMinutes(startA);
+  const eA = parseTimeToMinutes(endA);
+  const sB = parseTimeToMinutes(startB);
+  const eB = parseTimeToMinutes(endB);
+  
+  if (sA === null || eA === null || sB === null || eB === null) return true; // If any time is missing, default to overlap if on same day
+  
+  // Overlap condition: start of A is before end of B AND start of B is before end of A.
+  return sA < eB && sB < eA;
+};

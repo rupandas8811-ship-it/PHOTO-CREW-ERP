@@ -17,6 +17,7 @@ import { ListSortFilter, SortOrder, compareRecordsByDate } from '../ui/ListSortF
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { 
   convertTimeToDbFormat, 
+  checkTimeOverlap, 
   triggerAutoScrollAndFocus, 
   convertTo12Hour, 
   formatDateDDMMYY,
@@ -168,7 +169,24 @@ const EquipmentAssignedCell = ({ equipmentList, equipmentStatusText }: { equipme
   );
 };
 
+
+export interface EquipmentConflictDetails {
+  staffName: string;
+  eventName: string;
+  eventDate: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface EquipmentAvailability {
+  isBusy: boolean;
+  statusText?: string;
+  conflicts: EquipmentConflictDetails[];
+  schedule: EquipmentConflictDetails[];
+}
+
 export const OperationsLeads: React.FC = () => {
+
   const { 
     currentRole, 
     currentUserName,
@@ -833,14 +851,27 @@ export const OperationsLeads: React.FC = () => {
     });
   };
 
-  const isEquipmentBusy = (equipmentName: string, currentOrderId?: string, targetDate?: string): boolean => {
-    if (!equipmentName) return false;
+
+  const checkEquipmentAvailability = (
+    equipmentName: string, 
+    currentOrderId?: string, 
+    targetDate?: string,
+    targetStartTime?: string,
+    targetEndTime?: string
+  ): EquipmentAvailability => {
+    const result: EquipmentAvailability = {
+      isBusy: false,
+      conflicts: [],
+      schedule: []
+    };
+    if (!equipmentName) return result;
     const cleanEqName = equipmentName.trim().toLowerCase();
 
-    // Check if equipment item is under maintenance, damaged or inactive in inventory
     const eqItem = (equipment || []).find(e => e.equipment_name.toLowerCase() === cleanEqName);
     if (eqItem && (eqItem.status === 'Under Maintenance' || eqItem.status === 'Damaged' || eqItem.status === 'Inactive')) {
-      return true;
+      result.isBusy = true;
+      result.statusText = eqItem.status;
+      return result;
     }
 
     const completedStages = [
@@ -849,7 +880,6 @@ export const OperationsLeads: React.FC = () => {
       'footage handover', 'equipment handover completed', 'returned'
     ];
 
-    // Helper to check if equipment was returned for an order
     const isReturnedForOrder = (ordId?: string, ldId?: string) => {
       if (!ordId && !ldId) return false;
       const hasHistoryReturn = (leadEquipmentHistory || []).some(h => {
@@ -874,25 +904,26 @@ export const OperationsLeads: React.FC = () => {
       return hasHandoverReturn;
     };
 
-    // 1. Check staff assignments across all other active orders
-    const hasConflictingStaffAssignment = (staffAssignments || []).some(sa => {
-      // Exclude the current order being edited from conflict checks
-      if (currentOrderId && sa.order_id === currentOrderId) return false;
+    const allSchedules: EquipmentConflictDetails[] = [];
+
+    // 1. Staff Assignments
+    (staffAssignments || []).forEach(sa => {
+      if (currentOrderId && sa.order_id === currentOrderId) return;
+      
       const assignStatus = (sa.assignment_status || '').toLowerCase();
       const taskStatus = ((sa as any).task_status || '').toLowerCase();
-      if (completedStages.includes(assignStatus) || completedStages.includes(taskStatus)) return false;
+      if (completedStages.includes(assignStatus) || completedStages.includes(taskStatus)) return;
 
       const relatedOrder = orders.find(o => o.order_id === sa.order_id);
-      if (!relatedOrder || isCompletedEvent(relatedOrder)) return false;
+      if (!relatedOrder || isCompletedEvent(relatedOrder)) return;
 
       const op = operations?.find(o => o.order_id === relatedOrder.order_id);
-      if (op && ['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return false;
+      if (op && ['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return;
 
       const relatedLead = leads.find(l => l.lead_id === relatedOrder.lead_id);
-      if (!relatedLead || relatedLead.status === 'Lost Lead') return false;
+      if (!relatedLead || relatedLead.status === 'Lost Lead') return;
 
-      // Check if equipment was returned
-      if (isReturnedForOrder(sa.order_id, relatedOrder.lead_id)) return false;
+      if (isReturnedForOrder(sa.order_id, relatedOrder.lead_id)) return;
 
       let saEqList: string[] = [];
       if (Array.isArray(sa.equipment)) {
@@ -907,68 +938,124 @@ export const OperationsLeads: React.FC = () => {
       }
 
       const match = saEqList.some(eq => eq.trim().toLowerCase() === cleanEqName);
-      if (!match) return false;
+      if (!match) return;
 
-      if (targetDate) {
-        if (relatedLead.events && relatedLead.events.length > 0) {
-          return relatedLead.events.some((ev: any) => ev.event_date === targetDate);
+      let evDate = relatedOrder.event_date || relatedLead.event_date;
+      let evStart = relatedOrder.reporting_time || '';
+      let evEnd = relatedOrder.event_end_time || '';
+      let evName = relatedOrder.event_type || 'Event';
+      
+      if (sa.event_id && relatedLead.events && Array.isArray(relatedLead.events)) {
+        const ev = relatedLead.events.find(e => e.id === sa.event_id);
+        if (ev) {
+          evDate = ev.event_date || evDate;
+          evStart = ev.event_start_time || ev.reporting_time || evStart;
+          evEnd = ev.event_end_time || evEnd;
+          evName = ev.event_name || ev.event_type || evName;
         }
-        return (relatedLead.event_date === targetDate || relatedOrder.event_date === targetDate);
+      } else if (sa.event_name && relatedLead.events && Array.isArray(relatedLead.events)) {
+        const ev = relatedLead.events.find(e => (e.event_name || e.event_type || '').toLowerCase() === sa.event_name?.toLowerCase());
+        if (ev) {
+          evDate = ev.event_date || evDate;
+          evStart = ev.event_start_time || ev.reporting_time || evStart;
+          evEnd = ev.event_end_time || evEnd;
+          evName = ev.event_name || ev.event_type || evName;
+        }
       }
-      return true;
+
+      allSchedules.push({
+        staffName: sa.staff_name || 'Assigned Crew',
+        eventName: evName,
+        eventDate: evDate || '',
+        startTime: evStart,
+        endTime: evEnd
+      });
     });
 
-    if (hasConflictingStaffAssignment) return true;
+    // 2. Operations equipment kit (if not already handled by staff assignments)
+    (operations || []).forEach(op => {
+      if (currentOrderId && op.order_id === currentOrderId) return;
+      if (!op.equipment_kit || !op.equipment_kit.trim()) return;
 
-    // 2. Check operations equipment_kit across all other active orders
-    const hasConflictingOperation = (operations || []).some(op => {
-      // Exclude the current order being edited
-      if (currentOrderId && op.order_id === currentOrderId) return false;
-      if (!op.equipment_kit || !op.equipment_kit.trim()) return false;
-
-      if (['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return false;
-      if (['equipment handover completed', 'returned', 'equipment returned'].includes((op.equipment_status || '').toLowerCase())) return false;
+      if (['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return;
+      if (['equipment handover completed', 'returned', 'equipment returned'].includes((op.equipment_status || '').toLowerCase())) return;
 
       const relatedOrder = orders.find(o => o.order_id === op.order_id);
-      if (!relatedOrder || isCompletedEvent(relatedOrder)) return false;
+      if (!relatedOrder || isCompletedEvent(relatedOrder)) return;
 
       const relatedLead = leads.find(l => l.lead_id === relatedOrder.lead_id);
-      if (!relatedLead || relatedLead.status === 'Lost Lead') return false;
+      if (!relatedLead || relatedLead.status === 'Lost Lead') return;
 
-      if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id)) return false;
+      if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id)) return;
 
       const opKits = op.equipment_kit.split(',').map((s: string) => s.trim().toLowerCase()).filter(Boolean);
       const match = opKits.includes(cleanEqName);
-      if (!match) return false;
+      if (!match) return;
 
-      if (targetDate) {
-        if (relatedLead.events && relatedLead.events.length > 0) {
-          return relatedLead.events.some((ev: any) => ev.event_date === targetDate);
-        }
-        return (relatedLead.event_date === targetDate || relatedOrder.event_date === targetDate);
+      let evDate = relatedOrder.event_date || relatedLead.event_date;
+      let evStart = relatedOrder.reporting_time || '';
+      let evEnd = relatedOrder.event_end_time || '';
+      let evName = relatedOrder.event_type || 'Event';
+      
+      // Assume operation applies to all events or the first one if we can't pinpoint it,
+      // but usually operations are 1-1 with order. If the order has multiple events, it applies to the whole order.
+      // To be safe, we add a general schedule for the order dates.
+      if (relatedLead.events && relatedLead.events.length > 0) {
+        relatedLead.events.forEach((ev: any) => {
+          allSchedules.push({
+            staffName: 'Crew',
+            eventName: ev.event_name || ev.event_type || evName,
+            eventDate: ev.event_date || evDate || '',
+            startTime: ev.event_start_time || ev.reporting_time || evStart,
+            endTime: ev.event_end_time || evEnd
+          });
+        });
+      } else {
+        allSchedules.push({
+          staffName: 'Crew',
+          eventName: evName,
+          eventDate: evDate || '',
+          startTime: evStart,
+          endTime: evEnd
+        });
       }
-      return true;
     });
 
-    if (hasConflictingOperation) return true;
-
-    // 3. Check active unreturned lead_equipment_history on other active orders
-    const hasConflictingHistory = (leadEquipmentHistory || []).some(h => {
-      // Exclude the current order being edited
-      if (currentOrderId && (h.order_id === currentOrderId || (h.lead_id && orders.find(o => o.order_id === currentOrderId)?.lead_id === h.lead_id))) return false;
-      if (h.returned_at || h.equipment_status === 'Returned' || h.equipment_status === 'Equipment Handover Completed') return false;
-      if (h.equipment_name.trim().toLowerCase() !== cleanEqName) return false;
-
-      const relatedOrder = orders.find(o => o.order_id === h.order_id || o.lead_id === h.lead_id);
-      if (relatedOrder && isCompletedEvent(relatedOrder)) return false;
-
-      return true;
-    });
-
-    if (hasConflictingHistory) return true;
-
-    return false;
+    if (targetDate) {
+      result.schedule = allSchedules.filter(s => s.eventDate === targetDate);
+      
+      for (const s of result.schedule) {
+         if (targetStartTime && s.startTime) {
+            // We have both requested start time and existing start time. Let's check overlap.
+            // If checkTimeOverlap returns true, it means they overlap
+            if (checkTimeOverlap(targetStartTime, targetEndTime, s.startTime, s.endTime)) {
+              result.isBusy = true;
+              result.conflicts.push(s);
+            }
+         } else {
+            // If either is missing, we must assume conflict on the same date to be safe.
+            result.isBusy = true;
+            result.conflicts.push(s);
+         }
+      }
+    } else {
+      // If we don't have a targetDate, we just check if it's currently busy at all (for generic listing)
+      // Usually generic listing doesn't know the date, so we assume available unless we find an assignment for TODAY?
+      // Actually `isEquipmentBusy` was previously returning true if *any* assignment existed.
+      // Let's keep that behavior for general checks (when targetDate is not provided)
+      if (allSchedules.length > 0) {
+        result.isBusy = true;
+        result.statusText = "Assigned to another active event";
+      }
+    }
+    
+    return result;
   };
+
+  const isEquipmentBusy = (equipmentName: string, currentOrderId?: string, targetDate?: string): boolean => {
+    return checkEquipmentAvailability(equipmentName, currentOrderId, targetDate).isBusy;
+  };
+
 
   const getAssignedStaffDetailsForOrder = (ord: Order): AssignedStaffDetails[] => {
     const lead = leads.find(l => l.lead_id === ord.lead_id);
@@ -1745,6 +1832,31 @@ export const OperationsLeads: React.FC = () => {
     }
 
     // Equipment Availability Validation for the current assignment
+    for (const [evId, alloc] of Object.entries(eventAllocations)) {
+      const staffList = (alloc as any).staff || [];
+      for (const st of staffList) {
+        const eqList = st.equipment || [];
+        for (const kitName of eqList) {
+          const found = equipment.find(eq => eq.equipment_name.toLowerCase() === kitName.toLowerCase());
+          if (!found) {
+            alert(`Equipment "${kitName}" not found in inventory.`);
+            return;
+          }
+          
+          // Find the exact event to get its time
+          const ev = parentLeadInstance?.events?.find((e: any) => e.id === evId);
+          const tDate = ev?.event_date || assignForm.event_date;
+          const tStart = ev?.event_start_time || ev?.reporting_time;
+          const tEnd = ev?.event_end_time;
+          
+          const availability = checkEquipmentAvailability(kitName, assigningOrderId, tDate, tStart, tEnd);
+          if (availability.isBusy) {
+            alert(`Equipment "${kitName}" is currently busy / assigned to another active order and cannot be assigned.`);
+            return;
+          }
+        }
+      }
+    }
     const allAssignedEquipment = Array.from(
       new Set(
         Object.values(eventAllocations).flatMap((alloc: any) =>
@@ -1752,18 +1864,6 @@ export const OperationsLeads: React.FC = () => {
         )
       )
     ) as string[];
-
-    for (const kitName of allAssignedEquipment) {
-      const found = equipment.find(eq => eq.equipment_name.toLowerCase() === kitName.toLowerCase());
-      if (!found) {
-        alert(`Equipment "${kitName}" not found in inventory.`);
-        return;
-      }
-      if (isEquipmentBusy(kitName, assigningOrderId, assignForm.event_date)) {
-        alert(`Equipment "${kitName}" is currently busy / assigned to another active order and cannot be assigned.`);
-        return;
-      }
-    }
 
     setAssignValidationError(null);
     setValidationAttempted(false);
@@ -3301,9 +3401,11 @@ export const OperationsLeads: React.FC = () => {
                                                      return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
                                                    });
                                                  }}
-                                                 isEquipmentBusy={isEquipmentBusy}
+                                                 checkEquipmentAvailability={checkEquipmentAvailability}
                                                  currentOrderId={assigningOrderId}
-                                                 targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date}
+                                                 targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date || activeOrderInstance?.event_date}
+                                                 targetStartTime={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_start_time || parentLeadInstance?.events?.find((e: any) => e.id === evId)?.reporting_time}
+                                                 targetEndTime={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_end_time}
                                                />
                                              </div>
                                            </div>
@@ -3637,9 +3739,11 @@ export const OperationsLeads: React.FC = () => {
                                                         return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
                                                       });
                                                     }}
-                                                    isEquipmentBusy={isEquipmentBusy}
-                                                    currentOrderId={assigningOrderId}
-                                                    targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date || activeOrderInstance?.event_date}
+                                                    checkEquipmentAvailability={checkEquipmentAvailability}
+                                                 currentOrderId={assigningOrderId}
+                                                 targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date || activeOrderInstance?.event_date}
+                                                 targetStartTime={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_start_time || parentLeadInstance?.events?.find((e: any) => e.id === evId)?.reporting_time}
+                                                 targetEndTime={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_end_time}
                                                   />
                                                 </div>
                                               </div>
