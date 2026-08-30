@@ -930,7 +930,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     { speciality_id: 'SPC-012', name: 'QC Reviewer', active: true }
   ]);
 
-  const [editorAssignments, setEditorAssignments] = useState<EditorAssignment[]>([]);
+  const [editorAssignments, setEditorAssignments] = useState<EditorAssignment[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_editor_assignments');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (_) {}
+    return [];
+  });
 
   const [equipmentHandovers, setEquipmentHandovers] = useState<EquipmentHandover[]>([]);
 
@@ -1402,7 +1411,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       editor_assignments: [
         'assignment_id', 'production_id', 'staff_id', 'staff_name', 'speciality', 
         'assigned_date', 'target_finish_date', 'status', 'created_at', 'event_id', 
-        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link'
+        'order_id', 'deliverable_id', 'Edited_Drive_Link', 'edited_drive_link',
+        'confirmation_proof', 'customer_communication_proof', 'client_communication_proof',
+        'customer_review_image', 'proof_url', 'proof_image', 'uploaded_proof',
+        'customer_proof', 'client_proof', 'remarks', 'notes',
+        'server_upload_confirmed', 'server_upload_event_date', 'server_upload_folder_name',
+        'server_upload_confirmed_at', 'server_upload_confirmed_by',
+        'edited_folder_uploaded_to_server', 'server_upload_validated',
+        'server_upload_validated_at', 'server_upload_validated_by'
       ],
       operations_staff: [
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
@@ -1821,15 +1837,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               });
             }
             if (table === 'editor_assignments') {
-              const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link;
+              const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link || updates.Edited_Drive_Link || updates.edited_drive_link;
               setEditorAssignments(prev => {
                 const updated = prev.map(a => a.assignment_id === finalMatchValue ? {
                   ...a,
+                  ...updates,
                   ...sanitized,
                   Edited_Drive_Link: linkVal || a.Edited_Drive_Link,
                   edited_drive_link: linkVal || a.edited_drive_link
                 } : a);
-                localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+                try {
+                  localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+                } catch (_) {}
                 return updated;
               });
             }
@@ -1994,15 +2013,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
 
           if (table === 'editor_assignments') {
-            const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link;
+            const linkVal = sanitized.Edited_Drive_Link || sanitized.edited_drive_link || updates.Edited_Drive_Link || updates.edited_drive_link;
             setEditorAssignments(prev => {
               const updated = prev.map(a => a.assignment_id === matchValue ? {
                 ...a,
+                ...updates,
                 ...sanitized,
                 Edited_Drive_Link: linkVal || a.Edited_Drive_Link,
                 edited_drive_link: linkVal || a.edited_drive_link
               } : a);
-              localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+              try {
+                localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+              } catch (_) {}
               return updated;
             });
           }
@@ -2382,11 +2404,37 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbHandovers) setEquipmentHandovers(dbHandovers);
         if (dbSpecList) setSpecialities(dbSpecList);
         if (dbAssignList) {
-          setEditorAssignments(dbAssignList.map((item: any) => ({
-            ...item,
-            Edited_Drive_Link: item.Edited_Drive_Link || item.edited_drive_link || null,
-            edited_drive_link: item.edited_drive_link || item.Edited_Drive_Link || null
-          })));
+          let cachedAssignments: EditorAssignment[] = [];
+          try {
+            const saved = localStorage.getItem('erp_editor_assignments');
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed)) cachedAssignments = parsed;
+            }
+          } catch (_) {}
+
+          setEditorAssignments(dbAssignList.map((item: any) => {
+            const cached = cachedAssignments.find(c => c.assignment_id === item.assignment_id);
+            return {
+              ...cached,
+              ...item,
+              Edited_Drive_Link: item.Edited_Drive_Link || item.edited_drive_link || cached?.Edited_Drive_Link || cached?.edited_drive_link || null,
+              edited_drive_link: item.edited_drive_link || item.Edited_Drive_Link || cached?.edited_drive_link || cached?.Edited_Drive_Link || null,
+              confirmation_proof: item.confirmation_proof || cached?.confirmation_proof || null,
+              customer_communication_proof: item.customer_communication_proof || cached?.customer_communication_proof || null,
+              client_communication_proof: item.client_communication_proof || cached?.client_communication_proof || null,
+              customer_review_image: item.customer_review_image || cached?.customer_review_image || null,
+              proof_url: item.proof_url || cached?.proof_url || null,
+              proof_image: item.proof_image || cached?.proof_image || null,
+              uploaded_proof: item.uploaded_proof || cached?.uploaded_proof || null,
+              server_upload_confirmed: item.server_upload_confirmed ?? cached?.server_upload_confirmed ?? false,
+              server_upload_event_date: item.server_upload_event_date || cached?.server_upload_event_date || '',
+              server_upload_folder_name: item.server_upload_folder_name || cached?.server_upload_folder_name || '',
+              server_upload_confirmed_at: item.server_upload_confirmed_at || cached?.server_upload_confirmed_at || '',
+              server_upload_confirmed_by: item.server_upload_confirmed_by || cached?.server_upload_confirmed_by || '',
+              edited_folder_uploaded_to_server: item.edited_folder_uploaded_to_server ?? cached?.edited_folder_uploaded_to_server ?? false
+            };
+          }));
         }
         
         if (dbStaff) {
@@ -8011,6 +8059,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         editorAssignments,
         assignEditorToProject,
         updateEditorAssignmentStatus,
+        updateEditorAssignment,
         deleteEditorAssignment,
         globalDateRange,
         setGlobalDateRange,

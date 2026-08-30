@@ -554,6 +554,7 @@ export const ProductionStaffModule: React.FC = () => {
     rawFootage,
     editorAssignments, 
     quotations,
+    updateEditorAssignment,
     updateEditorAssignmentStatus, 
     updateProduction,
     updateOrderStage,
@@ -1343,6 +1344,7 @@ export const ProductionStaffModule: React.FC = () => {
           assignPayload.edited_drive_link = customerReviewForm.edited_drive_link.trim();
         }
 
+        await updateEditorAssignment(deliv.assignmentId, assignPayload);
         await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, assignPayload);
       }
 
@@ -1418,8 +1420,6 @@ export const ProductionStaffModule: React.FC = () => {
       const deliverablesToUpdate = b.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
 
       for (const deliv of deliverablesToUpdate) {
-        await updateEditorAssignmentStatus(deliv.assignmentId, 'Customer Review' as any);
-
         const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
         const cfg = customerReviewForm.event_configs[evtKey] || {
           confirmed: customerReviewForm.server_upload_confirmed,
@@ -1448,6 +1448,8 @@ export const ProductionStaffModule: React.FC = () => {
           assignPayload.server_upload_confirmed_at = timestamp;
           assignPayload.server_upload_confirmed_by = staffName || 'Production Staff';
         }
+
+        await updateEditorAssignmentStatus(deliv.assignmentId, 'Customer Review' as any, assignPayload);
 
         const saveRes = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, assignPayload);
 

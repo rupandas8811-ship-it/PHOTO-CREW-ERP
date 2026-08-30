@@ -1059,6 +1059,12 @@ export function parseCustomerProof(
     assignment.proof_url,
     assignment.proof_link,
     assignment.confirmation_link,
+    assignment.client_communication_consent_proof,
+    assignment.consent_proof,
+    assignment.customer_proof_url,
+    assignment.client_proof_url,
+    assignment.proof_storage_path,
+    assignment.upload_link_path,
     assignment.proof,
     assignment.proof_file,
     assignment.raw?.confirmation_proof,
@@ -1082,16 +1088,32 @@ export function parseCustomerProof(
   // If assignment is provided, strictly evaluate ONLY that specific assignment.
   // Do NOT fall back to prodRec or orderRec as that causes proofs from one staff member to leak to all others.
   if (assignment) {
-    if (!rawImageUrl && !rawLinkUrl && assignment.remarks && typeof assignment.remarks === 'string') {
-      const match = assignment.remarks.match(/Proof \((https?:\/\/[^\s)]+)\)/i) || 
-                    assignment.remarks.match(/Confirmation Proof:?\s*(https?:\/\/[^\s)]+)/i) || 
-                    assignment.remarks.match(/(https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif|svg|bmp))/i);
+    const textSources = [assignment.remarks, assignment.notes, assignment.raw?.remarks, assignment.raw?.notes].filter(Boolean);
+    for (const txt of textSources) {
+      if (typeof txt !== 'string') continue;
+      
+      // Check system fallback annotations: [System Fallback - confirmation_proof]: ...
+      const fallbackMatch = txt.match(/\[System Fallback - [^\]]+\]:\s*([^\r\n]+)/i);
+      if (fallbackMatch && fallbackMatch[1]) {
+        const val = fallbackMatch[1].trim();
+        if (isImageValue(val)) {
+          if (!rawImageUrl) rawImageUrl = val;
+        } else if (isLinkValue(val)) {
+          if (!rawLinkUrl) rawLinkUrl = val;
+        }
+      }
+
+      const match = txt.match(/Proof \((https?:\/\/[^\s)]+)\)/i) || 
+                    txt.match(/Confirmation Proof:?\s*(https?:\/\/[^\s)]+)/i) ||
+                    txt.match(/Customer Proof:?\s*(https?:\/\/[^\s)]+)/i) ||
+                    txt.match(/(https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif|svg|bmp|avif)(?:\?[^\s)]*)?)/i) ||
+                    txt.match(/(https?:\/\/[^\s)]*storage\/v1\/object\/public\/[^\s)]+)/i);
       if (match && match[1]) {
         const pUrl = match[1].trim();
         if (isImageValue(pUrl)) {
-          rawImageUrl = pUrl;
+          if (!rawImageUrl) rawImageUrl = pUrl;
         } else if (isLinkValue(pUrl)) {
-          rawLinkUrl = pUrl;
+          if (!rawLinkUrl) rawLinkUrl = pUrl;
         }
       }
     }

@@ -3,6 +3,7 @@ import re
 with open('src/components/operations/EquipmentSelectorDropdown.tsx', 'r') as f:
     content = f.read()
 
+# 1. Update interface props
 props_replacement = """
 interface EquipmentSelectorDropdownProps {
   equipment: Equipment[];
@@ -16,8 +17,6 @@ interface EquipmentSelectorDropdownProps {
   targetStartTime?: string;
   targetEndTime?: string;
   targetStaffName?: string;
-  disabled?: boolean;
-  placeholder?: string;
 }
 """
 
@@ -28,6 +27,7 @@ content = re.sub(
     flags=re.DOTALL
 )
 
+# 2. Add targetStaffName to function arguments
 func_replacement = """
 export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps> = ({
   equipment,
@@ -40,9 +40,7 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
   targetEventDate,
   targetStartTime,
   targetEndTime,
-  targetStaffName,
-  disabled = false,
-  placeholder = "Select equipment..."
+  targetStaffName
 }) => {
 """
 

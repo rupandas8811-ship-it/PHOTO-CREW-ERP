@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
-  X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
+  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';
@@ -1851,7 +1851,14 @@ export const OperationsLeads: React.FC = () => {
           
           const availability = checkEquipmentAvailability(kitName, assigningOrderId, tDate, tStart, tEnd);
           if (availability.isBusy) {
-            alert(`Equipment "${kitName}" is currently busy / assigned to another active order and cannot be assigned.`);
+            let conflictMsg = `⚠️ Cannot Assign "${kitName}"\n\nIt is currently busy / assigned to another active order during the requested time:\n${tDate || 'Unknown Date'} ${tStart || '?'} - ${tEnd || '?'}\n\n`;
+            if (availability.conflicts && availability.conflicts.length > 0) {
+              conflictMsg += "Conflicts:\n";
+              availability.conflicts.forEach((c: any) => {
+                conflictMsg += `- Staff: ${c.staffName}, Event: ${c.eventName}, Time: ${c.startTime || '?'} - ${c.endTime || '?'}\n`;
+              });
+            }
+            alert(conflictMsg);
             return;
           }
         }
@@ -3406,6 +3413,7 @@ export const OperationsLeads: React.FC = () => {
                                                  targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date || activeOrderInstance?.event_date}
                                                  targetStartTime={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_start_time || parentLeadInstance?.events?.find((e: any) => e.id === evId)?.reporting_time}
                                                  targetEndTime={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_end_time}
+                                                 targetStaffName={slot.name || slot.staff_name}
                                                />
                                              </div>
                                            </div>
@@ -3744,6 +3752,7 @@ export const OperationsLeads: React.FC = () => {
                                                  targetEventDate={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_date || assignForm.event_date || activeOrderInstance?.event_date}
                                                  targetStartTime={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_start_time || parentLeadInstance?.events?.find((e: any) => e.id === evId)?.reporting_time}
                                                  targetEndTime={parentLeadInstance?.events?.find((e: any) => e.id === evId)?.event_end_time}
+                                                 targetStaffName={assignedStaff.name || assignedStaff.staff_name}
                                                   />
                                                 </div>
                                               </div>
@@ -3950,9 +3959,16 @@ export const OperationsLeads: React.FC = () => {
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto shadow-[0_0_20px_rgba(245,158,11,0.2)]"
+                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-black text-xs font-mono font-bold uppercase rounded-xl transition-colors cursor-pointer disabled:opacity-50 w-full sm:w-auto flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.2)]"
                 >
-                  {isSaving ? 'Saving Assignments...' : 'Save All Assignments'}
+                  {isSaving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                      <span>Saving Assignments...</span>
+                    </>
+                  ) : (
+                    'Save All Assignments'
+                  )}
                 </button>
               </div>
             </form>

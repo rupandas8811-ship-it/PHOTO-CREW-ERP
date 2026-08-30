@@ -551,9 +551,14 @@ export interface EditorAssignment {
   customer_communication_proof?: string;
   client_communication_proof?: string;
   confirmation_proof?: string;
+  customer_review_image?: string;
+  customer_proof?: string;
+  client_proof?: string;
   proof_url?: string;
   proof_image?: string;
   uploaded_proof?: string;
+  remarks?: string;
+  notes?: string;
   server_upload_confirmed?: boolean;
   server_upload_event_date?: string;
   server_upload_folder_name?: string;
