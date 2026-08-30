@@ -2072,7 +2072,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
 
                 return (
                   <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
-                    <table className={`w-full text-left border-collapse ${role === 'production' ? 'min-w-[700px]' : 'min-w-[850px]'}`}>
+                    <table className="w-full text-left border-collapse min-w-[850px]">
                       <thead>
                         <tr className="border-b border-zinc-850 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
                           <th className="p-3.5 pl-4">Order ID</th>
@@ -2083,7 +2083,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           <th className="p-3.5">Location</th>
                           <th className="p-3.5">Status</th>
                           <th className="p-3.5">Target Delivery Date</th>
-                          {role !== 'production' && <th className="p-3.5 pr-4 text-right">Action</th>}
+                          <th className="p-3.5 pr-4 text-right">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
@@ -2131,19 +2131,17 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                               <td className="p-3.5 font-mono font-bold text-pink-400 whitespace-nowrap">
                                 {targetDelDate}
                               </td>
-                              {role !== 'production' && (
-                                <td className="p-3.5 pr-4 text-right whitespace-nowrap">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleEventAction(ev);
-                                    }}
-                                    className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
-                                  >
-                                    Details
-                                  </button>
-                                </td>
-                              )}
+                              <td className="p-3.5 pr-4 text-right whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleEventAction(ev);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
+                                >
+                                  Details
+                                </button>
+                              </td>
                             </tr>
                           );
                         })}

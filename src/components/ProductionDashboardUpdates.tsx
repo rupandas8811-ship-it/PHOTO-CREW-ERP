@@ -7,7 +7,6 @@ import { ProductionTaskDetails, ProductionTaskDetailsProps } from './production/
 import { ProductionReassign, ProductionReassignProps } from './production/ProductionReassign';
 import { ProductionFullScreenManager } from './production/ProductionFullScreenManager';
 import { ProductionNoteManager } from './production/ProductionNoteManager';
-import { ProductionEventDetailsModal, ProductionEventDetailsModalProps } from './production/ProductionEventDetailsModal';
 
 /**
  * ProductionDashboardUpdates.tsx
@@ -48,8 +47,7 @@ export {
   ProductionTaskDetails,
   ProductionReassign,
   ProductionFullScreenManager,
-  ProductionNoteManager,
-  ProductionEventDetailsModal
+  ProductionNoteManager
 };
 
 export type {
@@ -58,6 +56,5 @@ export type {
   ProductionProofUploadProps,
   ProductionTaskActionsProps,
   ProductionTaskDetailsProps,
-  ProductionReassignProps,
-  ProductionEventDetailsModalProps
+  ProductionReassignProps
 };
