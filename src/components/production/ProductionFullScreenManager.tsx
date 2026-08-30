@@ -21,6 +21,28 @@ export const ProductionFullScreenManager: React.FC = () => {
   const savedScrollYRef = useRef(0);
 
   useEffect(() => {
+    const updateHeaderHeight = () => {
+      const headerElem = document.querySelector<HTMLElement>('header');
+      if (headerElem) {
+        const rect = headerElem.getBoundingClientRect();
+        const height = Math.round(rect.height || headerElem.offsetHeight || 64);
+        if (height > 0) {
+          document.documentElement.style.setProperty('--prod-nav-header-height', `${height}px`);
+        }
+      }
+    };
+
+    updateHeaderHeight();
+
+    let headerObserver: ResizeObserver | null = null;
+    const headerElem = document.querySelector<HTMLElement>('header');
+    if (headerElem && typeof ResizeObserver !== 'undefined') {
+      headerObserver = new ResizeObserver(() => {
+        updateHeaderHeight();
+      });
+      headerObserver.observe(headerElem);
+    }
+
     const checkIsTargetOverlay = (overlay: HTMLElement): boolean => {
       const text = (overlay.textContent || '').toLowerCase();
       
@@ -71,12 +93,18 @@ export const ProductionFullScreenManager: React.FC = () => {
     };
 
     const handleDOMCheck = () => {
+      updateHeaderHeight();
       const overlays = document.querySelectorAll<HTMLElement>('div.fixed.inset-0');
       let hasActiveTargetModal = false;
 
       overlays.forEach((overlay) => {
         if (checkIsTargetOverlay(overlay)) {
           hasActiveTargetModal = true;
+
+          // Teleport overlay directly to document.body to un-nest from sidebar / container bounds
+          if (overlay.parentElement && overlay.parentElement !== document.body) {
+            document.body.appendChild(overlay);
+          }
 
           // 1. Mark overlay as full screen page view
           if (!overlay.classList.contains('prod-fullscreen-overlay')) {
@@ -184,6 +212,7 @@ export const ProductionFullScreenManager: React.FC = () => {
     window.addEventListener('touchmove', handleTouchMove, { passive: false });
 
     return () => {
+      if (headerObserver) headerObserver.disconnect();
       observer.disconnect();
       window.removeEventListener('resize', handleDOMCheck);
       window.removeEventListener('wheel', handleWheel);
