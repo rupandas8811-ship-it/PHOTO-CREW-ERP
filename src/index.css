@@ -562,6 +562,17 @@ html, body {
    4. Assign Operations Staff popup
    ========================================================================== */
 
+#production-action-dropdown {
+  z-index: 999999 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.7) !important;
+}
+
+div.fixed.inset-0:has(#production-action-dropdown) {
+  background-color: transparent !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
 :root {
   --prod-nav-header-height: 64px;
 }

@@ -44,20 +44,31 @@ export const ProductionFullScreenManager: React.FC = () => {
     }
 
     const checkIsTargetOverlay = (overlay: HTMLElement): boolean => {
-      const text = (overlay.textContent || '').toLowerCase();
-      
-      const isAssignedTeam = text.includes('assigned team') || text.includes('assigned team members');
-      const isReassign = text.includes('reassign staff') || 
-                         text.includes('reassign editor') || 
-                         text.includes('reassign production task') || 
-                         text.includes('reassign staff (deliverable-wise)') || 
-                         (text.includes('reassign') && text.includes('step workflow wizard'));
-      const isAssignEditor = text.includes('assign editor');
-      const isAssignOps = text.includes('assign operations staff') || 
-                          text.includes('assign operations') || 
-                          (text.includes('operations staff') && text.includes('assign'));
+      // Never match Action Dropdown Menu or any backdrop created for dropdown menus
+      if (
+        overlay.id === 'production-action-dropdown' ||
+        overlay.querySelector('#production-action-dropdown') !== null ||
+        overlay.querySelector('[id*="action-dropdown"]') !== null
+      ) {
+        return false;
+      }
 
-      return isAssignedTeam || isReassign || isAssignEditor || isAssignOps;
+      const text = (overlay.textContent || '').toLowerCase();
+
+      // If text contains 'action menu' header of dropdown, exclude it
+      if (text.includes('action menu') && !text.includes('step workflow wizard')) {
+        return false;
+      }
+
+      const hasWorkflowModalCard = overlay.querySelector('#production_workflow_modal') !== null;
+      const isAssignedTeamModal = text.includes('production lead • assigned team') || 
+                                  (text.includes('assigned team') && text.includes('prd-'));
+      const isWorkflowWizardModal = text.includes('step workflow wizard') || hasWorkflowModalCard;
+      
+      const isAssignOpsModal = (text.includes('assign operations staff') || text.includes('assign operations')) && 
+                               (text.includes('order id') || text.includes('customer') || text.includes('step workflow wizard'));
+
+      return hasWorkflowModalCard || isAssignedTeamModal || isWorkflowWizardModal || isAssignOpsModal;
     };
 
     const lockBackground = () => {
@@ -168,6 +179,10 @@ export const ProductionFullScreenManager: React.FC = () => {
                 }
               });
             }
+          }
+        } else {
+          if (overlay.classList.contains('prod-fullscreen-overlay')) {
+            overlay.classList.remove('prod-fullscreen-overlay');
           }
         }
       });
