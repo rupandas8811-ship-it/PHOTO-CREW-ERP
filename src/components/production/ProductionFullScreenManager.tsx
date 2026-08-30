@@ -112,8 +112,16 @@ export const ProductionFullScreenManager: React.FC = () => {
               body.classList.add('prod-fullscreen-body');
             }
 
-            // 5. Ensure internal tables are wrapped for horizontal scrolling if needed
+            // 5. Mark footer / action button containers if present
             if (body) {
+              const actionContainers = body.querySelectorAll<HTMLElement>('div.flex.gap-3, div.flex.items-center.gap-3, div.pt-2, div.pt-4');
+              actionContainers.forEach((container) => {
+                const buttons = container.querySelectorAll('button');
+                if (buttons.length > 0 && !container.classList.contains('prod-fullscreen-footer')) {
+                  container.classList.add('prod-fullscreen-footer');
+                }
+              });
+
               const tables = body.querySelectorAll('table');
               tables.forEach((table) => {
                 const parent = table.parentElement;
