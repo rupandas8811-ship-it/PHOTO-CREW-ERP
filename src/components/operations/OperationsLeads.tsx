@@ -2764,13 +2764,13 @@ export const OperationsLeads: React.FC = () => {
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
         <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] overflow-hidden overscroll-none touch-none animate-in fade-in duration-150"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] overflow-hidden overscroll-none animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget) setAssigningOrderId(null);
           }}
         >
-          <div id="assign_staff_modal" className="bg-zinc-900 w-full h-full flex flex-col shadow-2xl relative overflow-hidden text-left">
-            <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 sticky top-0 z-30">
+          <div id="assign_staff_modal" className="bg-zinc-900 w-full h-full flex flex-col shadow-2xl relative overflow-hidden text-left max-w-full min-w-0">
+            <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 max-w-full min-w-0">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0">
                 <span className="p-1 px-2.5 py-0.5 rounded-md bg-amber-500/10 border border-amber-500/25 text-amber-500 text-xs font-bold font-mono shrink-0">Operations</span>
                 <h3 className="text-sm sm:text-base font-sans font-black text-white truncate">
@@ -2786,8 +2786,9 @@ export const OperationsLeads: React.FC = () => {
                 ✕
               </button>
             </div>
-            <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-h-0 space-y-6 w-full max-w-7xl mx-auto scrollbar-thin overscroll-contain pb-8">
+            <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden max-w-full min-w-0">
+              <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
+                <div className="w-full max-w-7xl mx-auto space-y-6 pb-16">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -3816,17 +3817,19 @@ export const OperationsLeads: React.FC = () => {
                 })
                 })()}
                 
+                </div>
               </div>
               
               {assignValidationError && (
-                 <div className="p-4 mx-6 my-4 bg-red-500/10 border border-red-500/50 rounded-xl flex items-start gap-3 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                 <div className="p-4 mx-4 sm:mx-6 my-2 bg-red-500/10 border border-red-500/50 rounded-xl flex items-start gap-3 shadow-[0_0_15px_rgba(239,68,68,0.1)] shrink-0">
                     <span className="text-red-400 font-bold text-lg leading-none mt-0.5">❌</span>
                     <div className="text-[13px] text-red-200 font-sans whitespace-pre-wrap flex-1 leading-relaxed">
                        {assignValidationError}
                     </div>
                  </div>
               )}
-                            <div className="sticky bottom-0 z-30 p-4 sm:px-6 sm:py-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/95 backdrop-blur-md shrink-0">
+
+              <div className="z-30 p-4 sm:px-6 sm:py-4 border-t border-zinc-800 flex flex-col sm:flex-row justify-end gap-3 bg-zinc-950/95 backdrop-blur-md shrink-0 max-w-full min-w-0">
                 <button
                   type="button"
                   onClick={() => setAssigningOrderId(null)}
@@ -4735,13 +4738,13 @@ export const OperationsLeads: React.FC = () => {
 
         return (
           <div 
-            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] overflow-hidden overscroll-none touch-none animate-in fade-in duration-150"
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] overflow-hidden overscroll-none animate-in fade-in duration-150"
             onClick={(e) => {
               if (e.target === e.currentTarget) setViewingStaffOrderId(null);
             }}
           >
-            <div className="bg-zinc-900 w-full h-full flex flex-col shadow-2xl relative overflow-hidden text-left">
-              <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 sticky top-0 z-30">
+            <div className="bg-zinc-900 w-full h-full flex flex-col shadow-2xl relative overflow-hidden text-left max-w-full min-w-0">
+              <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 max-w-full min-w-0">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span className="text-xl shrink-0">👥</span>
                   <div className="text-left min-w-0">
@@ -4763,7 +4766,8 @@ export const OperationsLeads: React.FC = () => {
                 </button>
               </div>
 
-              <div className="overflow-y-auto space-y-6 flex-1 min-h-0 p-4 sm:p-6 lg:p-8 text-left w-full max-w-7xl mx-auto scrollbar-thin overscroll-contain pb-8">
+              <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 text-left scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
+                <div className="w-full max-w-7xl mx-auto space-y-6 pb-16">
                 {eventNames.length === 0 ? (
                   <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                     No staff assigned yet.
@@ -5092,9 +5096,10 @@ export const OperationsLeads: React.FC = () => {
                     );
                   })
                 )}
+                </div>
               </div>
 
-              <div className="p-4 sm:px-6 sm:py-4 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md shrink-0 sticky bottom-0 z-30 flex justify-end">
+              <div className="p-4 sm:px-6 sm:py-4 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 flex justify-end max-w-full min-w-0">
                 <button
                   type="button"
                   onClick={() => setViewingStaffOrderId(null)}
