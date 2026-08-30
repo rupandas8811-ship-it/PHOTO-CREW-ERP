@@ -8,6 +8,7 @@ import { ProductionReassign, ProductionReassignProps } from './production/Produc
 import { ProductionFullScreenManager } from './production/ProductionFullScreenManager';
 import { ProductionNoteManager } from './production/ProductionNoteManager';
 import { ProductionEventManager } from './production/ProductionEventManager';
+import { ProductionAssignedTeamManager } from './production/ProductionAssignedTeamManager';
 
 /**
  * ProductionDashboardUpdates.tsx
@@ -35,6 +36,7 @@ export const ProductionExtensionContainer: React.FC<ProductionExtensionContainer
       <ProductionFullScreenManager />
       <ProductionNoteManager />
       <ProductionEventManager />
+      <ProductionAssignedTeamManager />
       {children}
     </div>
   );
@@ -50,7 +52,8 @@ export {
   ProductionReassign,
   ProductionFullScreenManager,
   ProductionNoteManager,
-  ProductionEventManager
+  ProductionEventManager,
+  ProductionAssignedTeamManager
 };
 
 export type {

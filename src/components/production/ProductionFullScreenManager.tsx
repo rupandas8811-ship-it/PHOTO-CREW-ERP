@@ -54,6 +54,19 @@ export const ProductionFullScreenManager: React.FC = () => {
       }
 
       const text = (overlay.textContent || '').toLowerCase();
+      // Never match Image Preview / Proof Viewer as a fullscreen card, and ensure it always sits on top
+      if (
+        text.includes('uploaded proof / image') ||
+        text.includes('uploaded proof') ||
+        text.includes('image preview') ||
+        text.includes('view full confirmation image') ||
+        overlay.classList.contains('z-[130]') ||
+        overlay.classList.contains('z-[140]') ||
+        overlay.classList.contains('z-[150]')
+      ) {
+        overlay.style.setProperty('z-index', '1000005', 'important');
+        return false;
+      }
 
       // If text contains 'action menu' header of dropdown, exclude it
       if (text.includes('action menu') && !text.includes('step workflow wizard')) {
@@ -190,6 +203,20 @@ export const ProductionFullScreenManager: React.FC = () => {
       document.querySelectorAll('.prod-fullscreen-ancestor').forEach((elem) => {
         if (!activeAncestors.has(elem as HTMLElement)) {
           elem.classList.remove('prod-fullscreen-ancestor');
+        }
+      });
+
+      // Guarantee any proof preview or image popups get top layer z-index
+      overlays.forEach((overlay) => {
+        const text = (overlay.textContent || '').toLowerCase();
+        if (
+          text.includes('uploaded proof / image') ||
+          text.includes('uploaded proof') ||
+          text.includes('image preview') ||
+          overlay.classList.contains('z-[130]') ||
+          overlay.classList.contains('z-[140]')
+        ) {
+          overlay.style.setProperty('z-index', '1000005', 'important');
         }
       });
 

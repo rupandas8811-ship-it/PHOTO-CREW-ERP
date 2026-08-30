@@ -1351,18 +1351,8 @@ export const ProductionStaffModule: React.FC = () => {
       const uniqueProdIds: string[] = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean))) as string[];
       for (const prodId of uniqueProdIds) {
         const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
-        const evtKey = (matchingDeliv?.eventId || matchingDeliv?.eventName || 'default').trim();
-        const cfg = customerReviewForm.event_configs[evtKey] || {
-          eventDate: customerReviewForm.server_upload_event_date,
-          folderName: customerReviewForm.server_upload_folder_name
-        };
-        const serverEventDate = (cfg.eventDate || matchingDeliv?.eventDate || '').trim();
-        const serverFolderName = (cfg.folderName || '').trim();
-
         const prodUpdate: any = {
-          server_upload_confirmed: true,
-          server_upload_event_date: serverEventDate,
-          server_upload_folder_name: serverFolderName
+          remarks: `Server Upload updated for ${matchingDeliv?.deliverableName || 'deliverable'} by ${staffName || 'Staff'} on ${new Date().toLocaleDateString()}`
         };
         await updateProduction(prodId, prodUpdate);
       }
@@ -1478,12 +1468,6 @@ export const ProductionStaffModule: React.FC = () => {
         if (imgUrl) {
           prodPayload.client_communication_proof = imgUrl;
           prodPayload.customer_communication_proof = imgUrl;
-        }
-
-        if (cfg.confirmed && cfg.eventDate && cfg.folderName) {
-          prodPayload.server_upload_confirmed = true;
-          prodPayload.server_upload_event_date = cfg.eventDate.trim();
-          prodPayload.server_upload_folder_name = cfg.folderName.trim();
         }
 
         await updateProduction(prodId, prodPayload);
@@ -1683,10 +1667,7 @@ Thank you.`;
         await updateProduction(prodId, {
           editing_status: 'Editing Completed' as any,
           production_status: 'Editing Completed' as any,
-          server_upload_confirmed: true,
-          server_upload_event_date: serverEventDate,
-          server_upload_folder_name: serverFolderName,
-          remarks: `Editing Completed & Customer Review Proof (${mainProofUrl || proofInput}) uploaded. Server Folder: "${serverFolderName}" (Event Date: ${serverEventDate}) by ${staffName} on ${new Date().toLocaleDateString()}`
+          remarks: `Editing Completed & Customer Review Proof (${mainProofUrl || proofInput}) uploaded for ${matchingDeliv?.deliverableName || 'deliverable'} by ${staffName} on ${new Date().toLocaleDateString()}`
         });
       }
 

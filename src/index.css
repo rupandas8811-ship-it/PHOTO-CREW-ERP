@@ -768,4 +768,18 @@ div.fixed.inset-0:has(#production-action-dropdown) {
   }
 }
 
+/* ==========================================================================
+   Proof & Image Preview Modals (Always render on top of full-screen overlays)
+   ========================================================================== */
+div.fixed.inset-0.z-\[130\],
+div.fixed.inset-0.z-\[140\],
+div.fixed.inset-0.z-\[150\],
+div.fixed.inset-0.z-\[200\],
+div.fixed.inset-0:has(span:is([class*="text-emerald-400"])),
+div.fixed.inset-0:has(h4 span.text-purple-300),
+.proof-preview-modal-layer {
+  z-index: 1000005 !important;
+}
+
+
 
