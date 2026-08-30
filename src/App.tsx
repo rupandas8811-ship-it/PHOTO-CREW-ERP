@@ -11,7 +11,7 @@ import { SalesDashboardModule } from './components/SalesDashboardModule';
 import { OperationsModule } from './components/OperationsModule';
 import { StaffModule } from './components/StaffModule';
 import { ProductionStaffModule } from './components/ProductionStaffModule';
-import { ProductionDashboardModule as ProductionModule } from './components/ProductionDashboardModule';
+import { ProductionModule } from './components/ProductionModule';
 import { StaffManagementModule } from './components/StaffManagementModule';
 import { PaymentsModule } from './components/PaymentsModule';
 import { PendingPaymentsReport } from './components/analytics/PendingPaymentsReport';
@@ -911,7 +911,7 @@ const MainAppContent: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">
-                    Date Range
+                    Global Temporal Range
                   </h3>
                   <p className="text-[10px] text-zinc-500 font-sans">
                     Refined analytical bound parameters: <span className="text-amber-400 font-bold font-mono">{globalDateRange.start}</span> to <span className="text-amber-400 font-bold font-mono">{globalDateRange.end}</span>

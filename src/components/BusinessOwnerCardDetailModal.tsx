@@ -36,13 +36,6 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Reset search term whenever modal opens or title changes so table always shows full matching dataset initially
-  useEffect(() => {
-    if (isOpen) {
-      setSearchTerm('');
-    }
-  }, [isOpen, title]);
-
   // Search filter inside the modal for ease of review
   const filteredData = useMemo(() => {
     if (!searchTerm.trim()) return data;

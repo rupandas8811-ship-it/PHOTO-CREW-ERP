@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
@@ -18,7 +18,6 @@ import {
   CheckCircle2, 
   ChevronLeft, 
   ChevronRight, 
-  ChevronDown,
   X, 
   Eye, 
   ShieldCheck, 
@@ -133,69 +132,41 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     }
   };
 
-  // Filter orders based on active date range with deduplication
+  // Filter orders based on active date range
   const filteredOrders = useMemo(() => {
-    const list = orders.filter(order => {
-      const dateToCheck = order.created_at ? order.created_at.split('T')[0] : (order.event_date ? order.event_date.split('T')[0] : '');
+    return orders.filter(order => {
+      const dateToCheck = order.created_at ? order.created_at.split('T')[0] : order.event_date;
       if (datePreset === 'all') return true;
       if (!startDate || !endDate) return true;
-      if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
-    const map = new Map<string, Order>();
-    list.forEach(o => {
-      const id = o.order_id || o.lead_id;
-      if (id && !map.has(id)) map.set(id, o);
-    });
-    return Array.from(map.values());
   }, [orders, startDate, endDate, datePreset]);
 
   const filteredLeads = useMemo(() => {
-    const list = leads.filter(lead => {
-      const dateToCheck = lead.created_date || (lead.created_at ? lead.created_at.split('T')[0] : (lead.event_date ? lead.event_date.split('T')[0] : ''));
+    return leads.filter(lead => {
+      const dateToCheck = lead.created_date || lead.created_at?.split('T')[0] || '';
       if (datePreset === 'all') return true;
       if (!startDate || !endDate) return true;
-      if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
-    const map = new Map<string, Lead>();
-    list.forEach(l => {
-      const id = l.lead_id;
-      if (id && !map.has(id)) map.set(id, l);
-    });
-    return Array.from(map.values());
   }, [leads, startDate, endDate, datePreset]);
 
   const filteredOperations = useMemo(() => {
-    const list = operations.filter(op => {
-      const dateToCheck = op.created_at ? op.created_at.split('T')[0] : (op.event_date ? op.event_date.split('T')[0] : '');
+    return operations.filter(op => {
+      const dateToCheck = op.created_at ? op.created_at.split('T')[0] : '';
       if (datePreset === 'all') return true;
       if (!startDate || !endDate) return true;
-      if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
-    const map = new Map<string, any>();
-    list.forEach(op => {
-      const id = op.operation_id || op.order_id || (op as any).tracking_id;
-      if (id && !map.has(id)) map.set(id, op);
-    });
-    return Array.from(map.values());
   }, [operations, startDate, endDate, datePreset]);
 
   const filteredProduction = useMemo(() => {
-    const list = production.filter(prod => {
-      const dateToCheck = prod.created_at ? prod.created_at.split('T')[0] : (prod.event_date || prod.target_delivery_date || '');
+    return production.filter(prod => {
+      const dateToCheck = prod.created_at ? prod.created_at.split('T')[0] : '';
       if (datePreset === 'all') return true;
       if (!startDate || !endDate) return true;
-      if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
-    const map = new Map<string, Production>();
-    list.forEach(p => {
-      const id = p.production_id || p.order_id || p.tracking_id;
-      if (id && !map.has(id)) map.set(id, p);
-    });
-    return Array.from(map.values());
   }, [production, startDate, endDate, datePreset]);
 
   const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
@@ -389,15 +360,15 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     const salesConverted = filteredLeads.filter(l => {
       const matchingOrder = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
       const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower.includes('confirm') || sLower.includes('convert') || !!matchingOrder;
+      return sLower.includes('confirm') || !!matchingOrder;
     });
     const salesLost = filteredLeads.filter(l => {
       const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower === 'lost lead' || sLower === 'lost' || sLower.includes('lost');
+      return sLower === 'lost lead' || sLower === 'lost';
     });
     const salesFollowup = filteredLeads.filter(l => {
       const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower.includes('quotation') || sLower.includes('follow') || sLower.includes('negotiation');
+      return sLower.includes('quotation');
     });
 
     // OPERATIONS
@@ -407,20 +378,18 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     });
     const opsCompleted = filteredOperations.filter(op => {
       const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed') || sLower.includes('wrapped');
+      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
     });
     const opsUpcoming = filteredOperations.filter(op => {
       const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      const o = orders.find(ord => ord.order_id === op.order_id || ord.lead_id === (op as any).tracking_id);
+      const o = orders.find(ord => ord.order_id === op.order_id || ord.lead_id === op.tracking_id);
+      if (!o || !o.event_date) return false;
       const isComplete = sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
-      const eventDateStr = o?.event_date || (op as any).event_date;
-      if (isComplete) return false;
-      if (!eventDateStr) return false;
-      return new Date(eventDateStr) >= new Date(new Date().setHours(0,0,0,0));
+      return !isComplete && new Date(o.event_date) >= new Date();
     });
     const opsScheduled = filteredOperations.filter(op => {
       const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower === 'event scheduled' || sLower === 'assigned crew' || sLower === 'staff assigned' || sLower.includes('scheduled');
+      return sLower === 'event scheduled' || sLower === 'assigned crew' || sLower === 'staff assigned';
     });
 
     // PRODUCTION
@@ -434,11 +403,11 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     });
     const prodEditingCompleted = filteredProduction.filter(prod => {
       const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('review') || sLower === 'ready for delivery' || sLower.includes('render');
+      return sLower.includes('complete') || sLower.includes('review') || sLower === 'ready for delivery';
     });
     const prodClientAcceptance = filteredProduction.filter(prod => {
       const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('client acceptance') || sLower.includes('customer review') || sLower.includes('client approved') || sLower.includes('accepted');
+      return sLower.includes('client acceptance') || sLower.includes('customer review');
     });
 
     return {
@@ -1350,6 +1319,9 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 <CalendarIcon className="w-4 h-4" />
                 <span>EVENT CALENDAR</span>
               </h2>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Single unified calendar displaying Event Dates, Delivery Dates, Client Acceptance, and Orders Waiting for Approval.
+              </p>
             </div>
 
             {/* Calendar Legend */}
@@ -1727,37 +1699,6 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   onSelectEvent
 }) => {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
-  
-  // Calendar event type filter panel state
-  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
-  const filterDropdownRef = useRef<HTMLDivElement>(null);
-  const [tempFilters, setTempFilters] = useState<Record<string, boolean>>({
-    event_date: true,
-    delivery_date: true,
-    client_acceptance: true,
-    waiting_approval: true
-  });
-  const [appliedFilters, setAppliedFilters] = useState<Record<string, boolean>>({
-    event_date: true,
-    delivery_date: true,
-    client_acceptance: true,
-    waiting_approval: true
-  });
-
-  // Close filter dropdown on outside click
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
-        setFilterPanelOpen(false);
-      }
-    };
-    if (filterPanelOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [filterPanelOpen]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1772,36 +1713,20 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
   const todayMonth = () => setCurrentDate(new Date());
 
-  const handleApplyFilters = () => {
-    setAppliedFilters({ ...tempFilters });
-    setFilterPanelOpen(false);
-  };
-
-  const handleResetFilters = () => {
-    const defaultState = {
-      event_date: true,
-      delivery_date: true,
-      client_acceptance: true,
-      waiting_approval: true
-    };
-    setTempFilters(defaultState);
-    setAppliedFilters(defaultState);
-    setFilterPanelOpen(false);
-  };
-
   // Generate Days Grid
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayIndex = new Date(year, month, 1).getDay();
 
-  // Combine events from orders & production, filtered by appliedFilters
+  // Combine events from orders & production
   const eventsByDate = useMemo(() => {
     const map: Record<string, any[]> = {};
 
-    (orders || []).forEach(order => {
-      if (!order || !order.event_date) return;
+    orders.forEach(order => {
+      if (!order.event_date) return;
       const dateStr = order.event_date.split('T')[0];
+      if (!map[dateStr]) map[dateStr] = [];
 
-      const prod = (production || []).find(p => p && (p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id));
+      const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
       
       const isWaitingApproval = [
         'Client Acceptance',
@@ -1830,28 +1755,25 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
       }
 
-      if (appliedFilters[typeCategory] !== false) {
-        if (!map[dateStr]) map[dateStr] = [];
-        map[dateStr].push({
-          id: `event-${order.order_id}`,
-          type: typeCategory,
-          badgeColor,
-          title: `${order.customer_name} - ${order.event_type || 'Event'}`,
-          customerName: order.customer_name,
-          orderId: order.order_id,
-          eventName: order.custom_event_name || order.event_type || 'Photography Event',
-          currentStatus: prod?.editing_status || order.current_stage || 'Event Scheduled',
-          eventDate: order.event_date,
-          location: order.event_location || 'Studio',
-          rawOrder: order,
-          rawProd: prod
-        });
-      }
+      map[dateStr].push({
+        id: `event-${order.order_id}`,
+        type: typeCategory,
+        badgeColor,
+        title: `${order.customer_name} - ${order.event_type || 'Event'}`,
+        customerName: order.customer_name,
+        orderId: order.order_id,
+        eventName: order.custom_event_name || order.event_type || 'Photography Event',
+        currentStatus: prod?.editing_status || order.current_stage || 'Event Scheduled',
+        eventDate: order.event_date,
+        location: order.event_location || 'Studio',
+        rawOrder: order,
+        rawProd: prod
+      });
 
       // Target delivery date event
       if (prod?.expected_delivery_date || prod?.target_delivery_date) {
         const delDate = (prod.expected_delivery_date || prod.target_delivery_date || '').split('T')[0];
-        if (delDate && appliedFilters['delivery_date'] !== false) {
+        if (delDate) {
           if (!map[delDate]) map[delDate] = [];
           map[delDate].push({
             id: `delivery-${order.order_id}`,
@@ -1872,7 +1794,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
     });
 
     return map;
-  }, [orders, production, appliedFilters]);
+  }, [orders, production]);
 
   return (
     <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
@@ -1892,118 +1814,6 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Filters Dropdown Container */}
-          <div className="relative" ref={filterDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setFilterPanelOpen(!filterPanelOpen)}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all flex items-center gap-2 cursor-pointer ${
-                filterPanelOpen 
-                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-md shadow-purple-500/10' 
-                  : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-850 hover:text-white'
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5 text-purple-400" />
-              <span>Filters</span>
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${filterPanelOpen ? 'rotate-180' : ''}`} />
-            </button>
-
-            {/* Dropdown Panel directly UNDER Filters button */}
-            {filterPanelOpen && (
-              <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] p-4 bg-zinc-900/95 border border-zinc-800 rounded-xl space-y-3 z-50 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
-                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-                  <span className="text-xs font-mono font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
-                    <Filter className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Filter Event Types</span>
-                  </span>
-                </div>
-
-                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
-                  {/* Event Dates */}
-                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                    tempFilters.event_date 
-                      ? 'bg-blue-500/10 border-blue-500/40 text-blue-200' 
-                      : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={tempFilters.event_date}
-                      onChange={(e) => setTempFilters(prev => ({ ...prev, event_date: e.target.checked }))}
-                      className="w-4 h-4 rounded border-zinc-700 text-blue-500 focus:ring-0 cursor-pointer"
-                    />
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
-                    <span className="text-xs font-mono font-bold">Event Dates</span>
-                  </label>
-
-                  {/* Delivery Dates */}
-                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                    tempFilters.delivery_date 
-                      ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-200' 
-                      : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={tempFilters.delivery_date}
-                      onChange={(e) => setTempFilters(prev => ({ ...prev, delivery_date: e.target.checked }))}
-                      className="w-4 h-4 rounded border-zinc-700 text-indigo-500 focus:ring-0 cursor-pointer"
-                    />
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
-                    <span className="text-xs font-mono font-bold">Delivery Dates</span>
-                  </label>
-
-                  {/* Client Acceptance */}
-                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                    tempFilters.client_acceptance 
-                      ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200' 
-                      : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={tempFilters.client_acceptance}
-                      onChange={(e) => setTempFilters(prev => ({ ...prev, client_acceptance: e.target.checked }))}
-                      className="w-4 h-4 rounded border-zinc-700 text-emerald-500 focus:ring-0 cursor-pointer"
-                    />
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-                    <span className="text-xs font-mono font-bold">Client Acceptance</span>
-                  </label>
-
-                  {/* Waiting Approval */}
-                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
-                    tempFilters.waiting_approval 
-                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-200' 
-                      : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={tempFilters.waiting_approval}
-                      onChange={(e) => setTempFilters(prev => ({ ...prev, waiting_approval: e.target.checked }))}
-                      className="w-4 h-4 rounded border-zinc-700 text-amber-500 focus:ring-0 cursor-pointer"
-                    />
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 animate-pulse" />
-                    <span className="text-xs font-mono font-bold">Waiting Approval</span>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800">
-                  <button
-                    type="button"
-                    onClick={handleResetFilters}
-                    className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold transition-colors cursor-pointer"
-                  >
-                    Reset Filters
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleApplyFilters}
-                    className="px-4 py-1.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-black text-xs font-mono font-bold transition-all cursor-pointer shadow-lg shadow-purple-500/20"
-                  >
-                    Apply Filters
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
           <button
             onClick={prevMonth}
             className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer"
