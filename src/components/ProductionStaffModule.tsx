@@ -200,6 +200,13 @@ const compressImage = (file: File): Promise<string> => {
 
 // Helper to extract Raw Footage Drive Link matching the exact Final Consolidated link from Assign Editor notes / Operations verification
 const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: any, operations: any[], rawFootage?: any[]): string => {
+  if (assignment?.raw_footage_link && typeof assignment.raw_footage_link === 'string' && assignment.raw_footage_link.trim() !== '') {
+    return assignment.raw_footage_link.trim();
+  }
+  if (assignment?.rawFootageLink && typeof assignment.rawFootageLink === 'string' && assignment.rawFootageLink.trim() !== '') {
+    return assignment.rawFootageLink.trim();
+  }
+
   const orderId = order?.order_id || prod?.order_id || assignment?.order_id || prod?.tracking_id;
   const leadId = lead?.lead_id || order?.lead_id || prod?.lead_id || assignment?.production_id;
   const trackingId = prod?.tracking_id || assignment?.production_id;
@@ -712,7 +719,7 @@ export const ProductionStaffModule: React.FC = () => {
       eventId: delivItem.eventId || '',
       eventName: delivItem.eventName || grp.eventName || 'Event',
       eventDate: formatDateToDDMMYY(delivItem.eventDate || grp.eventDate || '') || (delivItem.eventDate || grp.eventDate || ''),
-      folderName: (delivItem.serverUploadFolderName || delivItem.assignmentObj?.server_upload_folder_name || delivItem.prodObj?.server_upload_folder_name || '').trim(),
+      folderName: (delivItem.serverUploadFolderName || delivItem.assignmentObj?.server_upload_folder_name || '').trim(),
       confirmed: Boolean(delivItem.serverUploadConfirmed || delivItem.assignmentObj?.server_upload_confirmed),
       isSaved: Boolean(delivItem.serverUploadConfirmed && (delivItem.serverUploadFolderName || delivItem.assignmentObj?.server_upload_folder_name)),
       confirmedAt: ''
@@ -746,7 +753,6 @@ export const ProductionStaffModule: React.FC = () => {
       delivItem.editedDriveLink || 
       delivItem.assignmentObj?.edited_drive_link || 
       delivItem.assignmentObj?.Edited_Drive_Link || 
-      delivItem.prodObj?.edited_drive_link || 
       ''
     ).trim();
 
@@ -816,13 +822,11 @@ export const ProductionStaffModule: React.FC = () => {
           savedVerif?.consent_proof_verified ||
           item.serverUploadConfirmed ||
           item.assignmentObj?.server_upload_confirmed ||
-          item.assignmentObj?.edited_folder_uploaded_to_server ||
-          item.prodObj?.server_upload_confirmed
+          item.assignmentObj?.edited_folder_uploaded_to_server
         );
         const existingEventDate = (
           item.serverUploadEventDate ||
           item.assignmentObj?.server_upload_event_date ||
-          item.prodObj?.server_upload_event_date ||
           item.eventDate ||
           grp.eventDate ||
           ''
@@ -831,7 +835,6 @@ export const ProductionStaffModule: React.FC = () => {
           savedVerif?.folder_name ||
           item.serverUploadFolderName ||
           item.assignmentObj?.server_upload_folder_name ||
-          item.prodObj?.server_upload_folder_name ||
           ''
         ).trim();
 
@@ -1028,7 +1031,7 @@ export const ProductionStaffModule: React.FC = () => {
         const customerMobile = (lead?.mobile || order?.customer_phone || prod?.customer_mobile || '').trim();
 
         // Edited Drive Link resolution
-        const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || prod?.edited_drive_link || '').trim();
+        const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || '').trim();
 
         // Customer Confirmation Image / Proof resolution
         const confirmationProof = (
@@ -1044,18 +1047,15 @@ export const ProductionStaffModule: React.FC = () => {
         // Server Upload Confirmation resolution
         const serverUploadConfirmed = Boolean(
           assignment.server_upload_confirmed ||
-          assignment.edited_folder_uploaded_to_server ||
-          prod?.server_upload_confirmed
+          assignment.edited_folder_uploaded_to_server
         );
         const serverUploadEventDate = (
           assignment.server_upload_event_date ||
-          prod?.server_upload_event_date ||
           eventDate ||
           ''
         ).trim();
         const serverUploadFolderName = (
           assignment.server_upload_folder_name ||
-          prod?.server_upload_folder_name ||
           ''
         ).trim();
         const serverUploadConfirmedAt = (assignment.server_upload_confirmed_at || '').trim();
@@ -1362,9 +1362,6 @@ export const ProductionStaffModule: React.FC = () => {
           server_upload_event_date: serverEventDate,
           server_upload_folder_name: serverFolderName
         };
-        if (customerReviewForm.edited_drive_link?.trim()) {
-          prodUpdate.edited_drive_link = customerReviewForm.edited_drive_link.trim();
-        }
         await updateProduction(prodId, prodUpdate);
       }
 

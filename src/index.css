@@ -567,6 +567,11 @@ html, body {
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7), 0 8px 10px -6px rgba(0, 0, 0, 0.7) !important;
 }
 
+/* Hide Upload Name field in Production Verification / Client Acceptance modal */
+div:has(> input[placeholder*="Client_Consent_Proof"]) {
+  display: none !important;
+}
+
 div.fixed.inset-0:has(#production-action-dropdown) {
   background-color: transparent !important;
   background: transparent !important;
