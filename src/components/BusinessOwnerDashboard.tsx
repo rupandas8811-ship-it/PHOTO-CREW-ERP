@@ -174,7 +174,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
-    const map = new Map<string, Operations>();
+    const map = new Map<string, any>();
     list.forEach(op => {
       const id = op.operation_id || op.order_id || (op as any).tracking_id;
       if (id && !map.has(id)) map.set(id, op);

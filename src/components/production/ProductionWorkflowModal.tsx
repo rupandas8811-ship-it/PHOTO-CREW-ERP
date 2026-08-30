@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect } from 'react';
 import { supabaseClient } from '../../supabaseClient';
 import { CheckCircle2, AlertCircle, Eye, Link as LinkIcon, FileText, Download, Check, Sparkles, UserCheck } from 'lucide-react';

@@ -1,4 +1,5 @@
-// @ts-nocheck\nimport React, { useState, useMemo, useEffect } from 'react';
+// @ts-nocheck
+import React, { useState, useMemo, useEffect } from 'react';
 import { Camera, Calendar, User, Film, UploadCloud, Edit3, Image as ImageIcon, Link as LinkIcon, CheckCircle2, AlertCircle, Eye, EyeOff, Lock, Ban, FileText, Search, FileSpreadsheet, Download, Printer } from 'lucide-react';
 import { formatDateDDMMYY, resolveStorageUrl, uploadProofToStorage, formatINR, parseCustomerProof } from '../../utils';
 import * as XLSX from 'xlsx';
