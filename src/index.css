@@ -572,6 +572,14 @@ html, body {
   }
 }
 
+.prod-fullscreen-ancestor {
+  transform: none !important;
+  filter: none !important;
+  perspective: none !important;
+  contain: none !important;
+  will-change: auto !important;
+}
+
 .prod-fullscreen-overlay {
   position: fixed !important;
   inset: 0 !important;

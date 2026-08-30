@@ -89,6 +89,9 @@ export const ProductionFullScreenManager: React.FC = () => {
       document.documentElement.style.overflow = '';
 
       window.scrollTo(0, savedScrollYRef.current);
+      document.querySelectorAll('.prod-fullscreen-ancestor').forEach((elem) => {
+        elem.classList.remove('prod-fullscreen-ancestor');
+      });
       isLockedRef.current = false;
     };
 
@@ -96,14 +99,21 @@ export const ProductionFullScreenManager: React.FC = () => {
       updateHeaderHeight();
       const overlays = document.querySelectorAll<HTMLElement>('div.fixed.inset-0');
       let hasActiveTargetModal = false;
+      const activeAncestors = new Set<HTMLElement>();
 
       overlays.forEach((overlay) => {
         if (checkIsTargetOverlay(overlay)) {
           hasActiveTargetModal = true;
 
-          // Teleport overlay directly to document.body to un-nest from sidebar / container bounds
-          if (overlay.parentElement && overlay.parentElement !== document.body) {
-            document.body.appendChild(overlay);
+          // Add ancestor class to all parent elements up to document.body
+          // to neutralize transform/filter/will-change containing blocks
+          let parent = overlay.parentElement;
+          while (parent && parent !== document.body && parent !== document.documentElement) {
+            activeAncestors.add(parent);
+            if (!parent.classList.contains('prod-fullscreen-ancestor')) {
+              parent.classList.add('prod-fullscreen-ancestor');
+            }
+            parent = parent.parentElement;
           }
 
           // 1. Mark overlay as full screen page view
@@ -159,6 +169,12 @@ export const ProductionFullScreenManager: React.FC = () => {
               });
             }
           }
+        }
+      });
+
+      document.querySelectorAll('.prod-fullscreen-ancestor').forEach((elem) => {
+        if (!activeAncestors.has(elem as HTMLElement)) {
+          elem.classList.remove('prod-fullscreen-ancestor');
         }
       });
 
