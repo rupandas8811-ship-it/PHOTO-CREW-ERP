@@ -367,7 +367,7 @@ export const OperationsLeads: React.FC = () => {
     staff: { staff_role: string, staff_id: string, staff_name: string }[];
   }>>({});
   const [collapsedAssignEvents, setCollapsedAssignEvents] = useState<Record<string, boolean>>({});
-  const [collapsedCustomerDetails, setCollapsedCustomerDetails] = useState<boolean>(true);
+  const [collapsedCustomerDetails, setCollapsedCustomerDetails] = useState<boolean>(false);
   const [assignValidationError, setAssignValidationError] = useState<string | null>(null);
   const [validationAttempted, setValidationAttempted] = useState(false);
   const [busyRosterStaff, setBusyRosterStaff] = useState<string | null>(null);
@@ -508,21 +508,49 @@ export const OperationsLeads: React.FC = () => {
   }, [viewingStaffOrderId]);
 
   useEffect(() => {
+    if (assigningOrderId) {
+      setCollapsedCustomerDetails(false);
+      setCollapsedAssignEvents({});
+    }
+  }, [assigningOrderId]);
+
+  useEffect(() => {
     if (assigningOrderId || viewingStaffOrderId) {
+      const prevBodyOverflow = document.body.style.overflow;
+      const prevHtmlOverflow = document.documentElement.style.overflow;
+      const prevTouchAction = document.body.style.touchAction;
+
       document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+
+      const handleTouchMove = (e: TouchEvent) => {
+        const target = e.target as HTMLElement | null;
+        if (target && target.closest('.overflow-y-auto')) {
+          return;
+        }
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      };
+
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           if (assigningOrderId) setAssigningOrderId(null);
           if (viewingStaffOrderId) setViewingStaffOrderId(null);
         }
       };
+
       window.addEventListener('keydown', handleKeyDown);
+      document.addEventListener('touchmove', handleTouchMove, { passive: false });
+
       return () => {
-        document.body.style.overflow = '';
+        document.body.style.overflow = prevBodyOverflow;
+        document.documentElement.style.overflow = prevHtmlOverflow;
+        document.body.style.touchAction = prevTouchAction;
         window.removeEventListener('keydown', handleKeyDown);
+        document.removeEventListener('touchmove', handleTouchMove);
       };
-    } else {
-      document.body.style.overflow = '';
     }
   }, [assigningOrderId, viewingStaffOrderId]);
 
@@ -2736,7 +2764,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
         <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full overflow-hidden animate-in fade-in duration-150"
+          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] overflow-hidden overscroll-none touch-none animate-in fade-in duration-150"
           onClick={(e) => {
             if (e.target === e.currentTarget) setAssigningOrderId(null);
           }}
@@ -2759,7 +2787,7 @@ export const OperationsLeads: React.FC = () => {
               </button>
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-h-0 space-y-6 w-full max-w-7xl mx-auto scrollbar-thin">
+              <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto flex-1 min-h-0 space-y-6 w-full max-w-7xl mx-auto scrollbar-thin overscroll-contain pb-8">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -2882,7 +2910,7 @@ export const OperationsLeads: React.FC = () => {
                     }
 
                     const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
-                    const isCollapsed = collapsedAssignEvents[evId] === undefined ? (isMobile ? true : index !== 0) : collapsedAssignEvents[evId];
+                    const isCollapsed = collapsedAssignEvents[evId] === undefined ? false : collapsedAssignEvents[evId];
                     const eventNameDisplay = ev.event_type === 'Other' ? (ev.event_name || 'Other') : (ev.event_type || 'N/A');
 
                     return (
@@ -4707,7 +4735,7 @@ export const OperationsLeads: React.FC = () => {
 
         return (
           <div 
-            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full overflow-hidden animate-in fade-in duration-150"
+            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] overflow-hidden overscroll-none touch-none animate-in fade-in duration-150"
             onClick={(e) => {
               if (e.target === e.currentTarget) setViewingStaffOrderId(null);
             }}
@@ -4735,7 +4763,7 @@ export const OperationsLeads: React.FC = () => {
                 </button>
               </div>
 
-              <div className="overflow-y-auto space-y-6 flex-1 min-h-0 p-4 sm:p-6 lg:p-8 text-left w-full max-w-7xl mx-auto scrollbar-thin">
+              <div className="overflow-y-auto space-y-6 flex-1 min-h-0 p-4 sm:p-6 lg:p-8 text-left w-full max-w-7xl mx-auto scrollbar-thin overscroll-contain pb-8">
                 {eventNames.length === 0 ? (
                   <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                     No staff assigned yet.
