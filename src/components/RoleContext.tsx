@@ -1378,7 +1378,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'target_delivery_date', 'actual_delivery_date', 'assigned_staff', 'project_notes',
         'internal_comments', 'raw_footage_status', 'production_status', 'approval_status',
         'editing_progress', 'order_id', 'lead_id', 'customer_name',
-        'event_id', 'assigned_team', 'final_consolidated_drive_link', 'current_status'
+        'event_id', 'assigned_team', 'final_consolidated_drive_link', 'current_status',
+        'client_communication_proof', 'customer_communication_proof', 'proof_url',
+        'upload_name', 'proof_name', 'client_communication_proof_name',
+        'checklist_client_communication_proof', 'checklist_customer_acceptance',
+        'checklist_content_usage', 'checklist_footage_deleted_7_days',
+        'checklist_payment_from_sales', 'checklist_edited_files_uploaded',
+        'server_upload_validated', 'server_upload_folder_name', 'server_upload_event_date',
+        'server_upload_confirmed', 'edited_drive_link', 'delivery_link'
+      ],
+      client_acceptance_verifications: [
+        'id', 'order_id', 'event_id', 'client_communication_consent_proof',
+        'folder_name', 'upload_link_path', 'proof_file_name', 'proof_storage_path',
+        'consent_proof_verified', 'created_at', 'updated_at'
       ],
       payments: [
         'payment_id', 'order_id', 'quotation_amount', 'advance_received', 'balance_due', 

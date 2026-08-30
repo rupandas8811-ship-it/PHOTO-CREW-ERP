@@ -81,7 +81,10 @@ export const ProductionFullScreenManager: React.FC = () => {
       const isAssignOpsModal = (text.includes('assign operations staff') || text.includes('assign operations')) && 
                                (text.includes('order id') || text.includes('customer') || text.includes('step workflow wizard'));
 
-      return hasWorkflowModalCard || isAssignedTeamModal || isWorkflowWizardModal || isAssignOpsModal;
+      const isClientAcceptanceModal = text.includes('client acceptance verification deck') ||
+                                      (text.includes('client acceptance') && (text.includes('project id') || text.includes('tracking id') || text.includes('approve client acceptance')));
+
+      return hasWorkflowModalCard || isAssignedTeamModal || isWorkflowWizardModal || isAssignOpsModal || isClientAcceptanceModal;
     };
 
     const lockBackground = () => {
@@ -165,7 +168,10 @@ export const ProductionFullScreenManager: React.FC = () => {
             }
 
             // 4. Mark body element
-            const body = modalCard.querySelector<HTMLElement>('div.overflow-y-auto') ||
+            const body = modalCard.querySelector<HTMLElement>('form.overflow-y-auto') ||
+              modalCard.querySelector<HTMLElement>('form') ||
+              modalCard.querySelector<HTMLElement>('div.overflow-y-auto') ||
+              modalCard.querySelector<HTMLElement>('div.p-6.space-y-5') ||
               modalCard.querySelector<HTMLElement>('div.p-5') ||
               modalCard.querySelector<HTMLElement>('div.p-4') ||
               modalCard.querySelector<HTMLElement>('div.p-3\\.5');
