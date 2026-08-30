@@ -133,41 +133,69 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     }
   };
 
-  // Filter orders based on active date range
+  // Filter orders based on active date range with deduplication
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
-      const dateToCheck = order.created_at ? order.created_at.split('T')[0] : order.event_date;
+    const list = orders.filter(order => {
+      const dateToCheck = order.created_at ? order.created_at.split('T')[0] : (order.event_date ? order.event_date.split('T')[0] : '');
       if (datePreset === 'all') return true;
       if (!startDate || !endDate) return true;
+      if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
+    const map = new Map<string, Order>();
+    list.forEach(o => {
+      const id = o.order_id || o.lead_id;
+      if (id && !map.has(id)) map.set(id, o);
+    });
+    return Array.from(map.values());
   }, [orders, startDate, endDate, datePreset]);
 
   const filteredLeads = useMemo(() => {
-    return leads.filter(lead => {
-      const dateToCheck = lead.created_date || lead.created_at?.split('T')[0] || '';
+    const list = leads.filter(lead => {
+      const dateToCheck = lead.created_date || (lead.created_at ? lead.created_at.split('T')[0] : (lead.event_date ? lead.event_date.split('T')[0] : ''));
       if (datePreset === 'all') return true;
       if (!startDate || !endDate) return true;
+      if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
+    const map = new Map<string, Lead>();
+    list.forEach(l => {
+      const id = l.lead_id;
+      if (id && !map.has(id)) map.set(id, l);
+    });
+    return Array.from(map.values());
   }, [leads, startDate, endDate, datePreset]);
 
   const filteredOperations = useMemo(() => {
-    return operations.filter(op => {
-      const dateToCheck = op.created_at ? op.created_at.split('T')[0] : '';
+    const list = operations.filter(op => {
+      const dateToCheck = op.created_at ? op.created_at.split('T')[0] : (op.event_date ? op.event_date.split('T')[0] : '');
       if (datePreset === 'all') return true;
       if (!startDate || !endDate) return true;
+      if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
+    const map = new Map<string, Operations>();
+    list.forEach(op => {
+      const id = op.operation_id || op.order_id || (op as any).tracking_id;
+      if (id && !map.has(id)) map.set(id, op);
+    });
+    return Array.from(map.values());
   }, [operations, startDate, endDate, datePreset]);
 
   const filteredProduction = useMemo(() => {
-    return production.filter(prod => {
-      const dateToCheck = prod.created_at ? prod.created_at.split('T')[0] : '';
+    const list = production.filter(prod => {
+      const dateToCheck = prod.created_at ? prod.created_at.split('T')[0] : (prod.event_date || prod.target_delivery_date || '');
       if (datePreset === 'all') return true;
       if (!startDate || !endDate) return true;
+      if (!dateToCheck) return true;
       return dateToCheck >= startDate && dateToCheck <= endDate;
     });
+    const map = new Map<string, Production>();
+    list.forEach(p => {
+      const id = p.production_id || p.order_id || p.tracking_id;
+      if (id && !map.has(id)) map.set(id, p);
+    });
+    return Array.from(map.values());
   }, [production, startDate, endDate, datePreset]);
 
   const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
@@ -361,15 +389,15 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     const salesConverted = filteredLeads.filter(l => {
       const matchingOrder = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id);
       const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower.includes('confirm') || !!matchingOrder;
+      return sLower.includes('confirm') || sLower.includes('convert') || !!matchingOrder;
     });
     const salesLost = filteredLeads.filter(l => {
       const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower === 'lost lead' || sLower === 'lost';
+      return sLower === 'lost lead' || sLower === 'lost' || sLower.includes('lost');
     });
     const salesFollowup = filteredLeads.filter(l => {
       const sLower = (l.current_status || l.status || '').toLowerCase();
-      return sLower.includes('quotation');
+      return sLower.includes('quotation') || sLower.includes('follow') || sLower.includes('negotiation');
     });
 
     // OPERATIONS
@@ -379,18 +407,20 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     });
     const opsCompleted = filteredOperations.filter(op => {
       const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
+      return sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed') || sLower.includes('wrapped');
     });
     const opsUpcoming = filteredOperations.filter(op => {
       const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      const o = orders.find(ord => ord.order_id === op.order_id || ord.lead_id === op.tracking_id);
-      if (!o || !o.event_date) return false;
+      const o = orders.find(ord => ord.order_id === op.order_id || ord.lead_id === (op as any).tracking_id);
       const isComplete = sLower.includes('complete') || sLower.includes('delivered') || sLower.includes('closed');
-      return !isComplete && new Date(o.event_date) >= new Date();
+      const eventDateStr = o?.event_date || (op as any).event_date;
+      if (isComplete) return false;
+      if (!eventDateStr) return false;
+      return new Date(eventDateStr) >= new Date(new Date().setHours(0,0,0,0));
     });
     const opsScheduled = filteredOperations.filter(op => {
       const sLower = (op.operations_status || op.status || op.event_status || '').toLowerCase();
-      return sLower === 'event scheduled' || sLower === 'assigned crew' || sLower === 'staff assigned';
+      return sLower === 'event scheduled' || sLower === 'assigned crew' || sLower === 'staff assigned' || sLower.includes('scheduled');
     });
 
     // PRODUCTION
@@ -404,11 +434,11 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     });
     const prodEditingCompleted = filteredProduction.filter(prod => {
       const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('complete') || sLower.includes('review') || sLower === 'ready for delivery';
+      return sLower.includes('complete') || sLower.includes('review') || sLower === 'ready for delivery' || sLower.includes('render');
     });
     const prodClientAcceptance = filteredProduction.filter(prod => {
       const sLower = (prod.production_status || prod.editing_status || prod.status || '').toLowerCase();
-      return sLower.includes('client acceptance') || sLower.includes('customer review');
+      return sLower.includes('client acceptance') || sLower.includes('customer review') || sLower.includes('client approved') || sLower.includes('accepted');
     });
 
     return {
