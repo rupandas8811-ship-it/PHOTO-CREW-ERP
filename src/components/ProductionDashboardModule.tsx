@@ -4,11 +4,12 @@ import { ProductionHeader } from './production/ProductionHeader';
 import { ProductionTaskTable } from './production/ProductionTaskTable';
 import { ProductionStaffDirectory } from './production/ProductionStaffDirectory';
 import { ProductionWorkloadAnalytics } from './production/ProductionWorkloadAnalytics';
-import { AssignEditorModal } from './production/AssignEditor';
-import { AssignOperationsStaffModal } from './production/AssignOperationsStaff';
-import { ReassignStaffModal } from './production/ReassignStaff';
-import { ProductionProofUploadModal } from './production/ProductionProofUpload';
+
+
+
+
 import { ProductionDetailsModal } from './production/ProductionDetails';
+import { ProductionWorkflowModal } from './production/ProductionWorkflowModal';
 import { X, Eye } from 'lucide-react';
 
 export interface ProductionDashboardModuleProps {
@@ -58,13 +59,21 @@ export const ProductionDashboardModule: React.FC<ProductionDashboardModuleProps>
   const [selectedProduction, setSelectedProduction] = useState<any | null>(null);
   const [selectedOperation, setSelectedOperation] = useState<any | null>(null);
   const [selectedTaskToEdit, setSelectedTaskToEdit] = useState<any | null>(null);
-  const [selectedAssignmentForReassign, setSelectedAssignmentForReassign] = useState<any | null>(null);
-  const [selectedAssignmentForProof, setSelectedAssignmentForProof] = useState<any | null>(null);
+  
+  const [workflowActionType, setWorkflowActionType] = useState<string | null>(null);
+  const [activeWorkflowProd, setActiveWorkflowProd] = useState<any | null>(null);
+  
+  const handleOpenAssignEditor = (prod: any) => {
+    setActiveWorkflowProd(prod);
+    setWorkflowActionType('assign_editor');
+  };
 
-  const [isAssignEditorOpen, setIsAssignEditorOpen] = useState(false);
-  const [isAssignOpsOpen, setIsAssignOpsOpen] = useState(false);
-  const [isReassignOpen, setIsReassignOpen] = useState(false);
-  const [isProofUploadOpen, setIsProofUploadOpen] = useState(false);
+  
+
+  
+  
+  
+  
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
 
   const [imagePreview, setImagePreview] = useState<{ url: string; title: string } | null>(null);
@@ -188,7 +197,8 @@ export const ProductionDashboardModule: React.FC<ProductionDashboardModuleProps>
           searchTerm={searchTerm}
           statusFilter={statusFilter}
           onSelectProject={openProjectDetails}
-          onAssignEditor={openAssignEditor}
+          setWorkflowActionType={setWorkflowActionType}
+          setActiveWorkflowProd={setActiveWorkflowProd}
           onAssignOps={openAssignOps}
           onReassignStaff={openReassign}
           onUploadProof={openUploadProof}
