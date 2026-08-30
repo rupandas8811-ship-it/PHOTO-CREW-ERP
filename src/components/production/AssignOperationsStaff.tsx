@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect } from 'react';
 import { X, UserCheck, Calendar, Clock, Camera, Video, Shield, AlertCircle, Check, ArrowLeft } from 'lucide-react';
 import { useRole } from '../RoleContext';
@@ -111,7 +112,8 @@ export const AssignOperationsStaffModal: React.FC<AssignOperationsStaffModalProp
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="fixed inset-0 bg-zinc-950 z-[220] flex flex-col w-full h-full min-h-screen overflow-y-auto animate-in fade-in duration-200">
       
       {/* Full-screen Top Header */}
@@ -283,6 +285,7 @@ export const AssignOperationsStaffModal: React.FC<AssignOperationsStaffModalProp
         </form>
       </main>
     </div>
-  );
+  ,
+  document.body
+);
 };
-

@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState } from 'react';
 import { 
   X, Calendar, Clock, User, Phone, MapPin, Tag, Film, Layers, CheckCircle, 
@@ -81,7 +82,8 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[210] flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200">
       <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden">
         
@@ -415,5 +417,7 @@ export const ProductionDetailsModal: React.FC<ProductionDetailsModalProps> = ({
 
       </div>
     </div>
-  );
+  ,
+  document.body
+);
 };

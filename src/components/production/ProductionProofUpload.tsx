@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState } from 'react';
 import { X, Upload, Image as ImageIcon, Check, AlertCircle, FileText, ExternalLink, Sparkles } from 'lucide-react';
 import { useRole } from '../RoleContext';
@@ -98,7 +99,8 @@ export const ProductionProofUploadModal: React.FC<ProductionProofUploadProps> = 
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[240] flex items-center justify-center p-4 animate-in fade-in duration-200">
       <div className="bg-zinc-950 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-4">
         
@@ -231,5 +233,7 @@ export const ProductionProofUploadModal: React.FC<ProductionProofUploadProps> = 
         </form>
       </div>
     </div>
-  );
+  ,
+  document.body
+);
 };

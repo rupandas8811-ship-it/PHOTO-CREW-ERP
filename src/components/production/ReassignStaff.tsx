@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState } from 'react';
 import { X, RefreshCw, UserCheck, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useRole } from '../RoleContext';
@@ -78,7 +79,8 @@ export const ReassignStaffModal: React.FC<ReassignStaffModalProps> = ({
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="fixed inset-0 bg-zinc-950 z-[230] flex flex-col w-full h-full min-h-screen overflow-y-auto animate-in fade-in duration-200">
       
       {/* Full-screen Top Header */}
@@ -182,6 +184,7 @@ export const ReassignStaffModal: React.FC<ReassignStaffModalProps> = ({
         </form>
       </main>
     </div>
-  );
+  ,
+  document.body
+);
 };
-

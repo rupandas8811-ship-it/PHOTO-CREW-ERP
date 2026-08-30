@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import React, { useState, useEffect } from 'react';
 import { X, UserCheck, Calendar, Link as LinkIcon, FileText, Check, AlertCircle, Sparkles, ArrowLeft } from 'lucide-react';
 import { useRole } from '../RoleContext';
@@ -130,7 +131,8 @@ export const AssignEditorModal: React.FC<AssignEditorModalProps> = ({
     }
   };
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <div className="fixed inset-0 bg-zinc-950 z-[220] flex flex-col w-full h-full min-h-screen overflow-y-auto animate-in fade-in duration-200">
       
       {/* Full-screen Top Header */}
@@ -286,6 +288,7 @@ export const AssignEditorModal: React.FC<AssignEditorModalProps> = ({
         </form>
       </main>
     </div>
-  );
+  ,
+  document.body
+);
 };
-

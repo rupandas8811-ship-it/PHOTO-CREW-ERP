@@ -24,7 +24,13 @@ export const ProductionDashboardModule: React.FC<ProductionDashboardModuleProps>
     orders = [], 
     production = [], 
     editorAssignments = [], 
-    operations = [], 
+    operations = [],
+    staff = [],
+    productionStaff = [],
+    rawFootage = [],
+    logs = [],
+    payments = [],
+    leads = [],
     refreshData,
     pushUpdate,
     logActivity,
@@ -174,6 +180,11 @@ export const ProductionDashboardModule: React.FC<ProductionDashboardModuleProps>
           productionList={production}
           editorAssignments={editorAssignments}
           operationsList={operations}
+          productionStaff={productionStaff}
+          rawFootage={rawFootage}
+          logs={logs}
+          payments={payments}
+          leadsData={leads}
           searchTerm={searchTerm}
           statusFilter={statusFilter}
           onSelectProject={openProjectDetails}

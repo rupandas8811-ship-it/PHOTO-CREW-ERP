@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
@@ -1730,6 +1730,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   
   // Calendar event type filter panel state
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
   const [tempFilters, setTempFilters] = useState<Record<string, boolean>>({
     event_date: true,
     delivery_date: true,
@@ -1742,6 +1743,21 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
     client_acceptance: true,
     waiting_approval: true
   });
+
+  // Close filter dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+        setFilterPanelOpen(false);
+      }
+    };
+    if (filterPanelOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [filterPanelOpen]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -1758,6 +1774,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
 
   const handleApplyFilters = () => {
     setAppliedFilters({ ...tempFilters });
+    setFilterPanelOpen(false);
   };
 
   const handleResetFilters = () => {
@@ -1769,6 +1786,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
     };
     setTempFilters(defaultState);
     setAppliedFilters(defaultState);
+    setFilterPanelOpen(false);
   };
 
   // Generate Days Grid
@@ -1874,19 +1892,117 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Filters Toggle Button */}
-          <button
-            onClick={() => setFilterPanelOpen(!filterPanelOpen)}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all flex items-center gap-2 cursor-pointer ${
-              filterPanelOpen 
-                ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-md shadow-purple-500/10' 
-                : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-850 hover:text-white'
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5 text-purple-400" />
-            <span>Filters</span>
-            <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${filterPanelOpen ? 'rotate-180' : ''}`} />
-          </button>
+          {/* Filters Dropdown Container */}
+          <div className="relative" ref={filterDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setFilterPanelOpen(!filterPanelOpen)}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                filterPanelOpen 
+                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 shadow-md shadow-purple-500/10' 
+                  : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-850 hover:text-white'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5 text-purple-400" />
+              <span>Filters</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${filterPanelOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Dropdown Panel directly UNDER Filters button */}
+            {filterPanelOpen && (
+              <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] p-4 bg-zinc-900/95 border border-zinc-800 rounded-xl space-y-3 z-50 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-150">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-xs font-mono font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
+                    <Filter className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Filter Event Types</span>
+                  </span>
+                </div>
+
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                  {/* Event Dates */}
+                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    tempFilters.event_date 
+                      ? 'bg-blue-500/10 border-blue-500/40 text-blue-200' 
+                      : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={tempFilters.event_date}
+                      onChange={(e) => setTempFilters(prev => ({ ...prev, event_date: e.target.checked }))}
+                      className="w-4 h-4 rounded border-zinc-700 text-blue-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
+                    <span className="text-xs font-mono font-bold">Event Dates</span>
+                  </label>
+
+                  {/* Delivery Dates */}
+                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    tempFilters.delivery_date 
+                      ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-200' 
+                      : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={tempFilters.delivery_date}
+                      onChange={(e) => setTempFilters(prev => ({ ...prev, delivery_date: e.target.checked }))}
+                      className="w-4 h-4 rounded border-zinc-700 text-indigo-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
+                    <span className="text-xs font-mono font-bold">Delivery Dates</span>
+                  </label>
+
+                  {/* Client Acceptance */}
+                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    tempFilters.client_acceptance 
+                      ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200' 
+                      : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={tempFilters.client_acceptance}
+                      onChange={(e) => setTempFilters(prev => ({ ...prev, client_acceptance: e.target.checked }))}
+                      className="w-4 h-4 rounded border-zinc-700 text-emerald-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+                    <span className="text-xs font-mono font-bold">Client Acceptance</span>
+                  </label>
+
+                  {/* Waiting Approval */}
+                  <label className={`flex items-center gap-2.5 p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    tempFilters.waiting_approval 
+                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-200' 
+                      : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={tempFilters.waiting_approval}
+                      onChange={(e) => setTempFilters(prev => ({ ...prev, waiting_approval: e.target.checked }))}
+                      className="w-4 h-4 rounded border-zinc-700 text-amber-500 focus:ring-0 cursor-pointer"
+                    />
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 animate-pulse" />
+                    <span className="text-xs font-mono font-bold">Waiting Approval</span>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800">
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold transition-colors cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApplyFilters}
+                    className="px-4 py-1.5 rounded-lg bg-purple-500 hover:bg-purple-400 text-black text-xs font-mono font-bold transition-all cursor-pointer shadow-lg shadow-purple-500/20"
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
             onClick={prevMonth}
@@ -1902,102 +2018,6 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
           </button>
         </div>
       </div>
-
-      {/* Expandable Filter Panel */}
-      {filterPanelOpen && (
-        <div className="p-4 bg-zinc-900/90 border border-zinc-800 rounded-xl space-y-4 animate-in fade-in duration-200 shadow-inner">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-2">
-            <span className="text-xs font-mono font-bold text-zinc-200 uppercase tracking-wider flex items-center gap-2">
-              <Filter className="w-3.5 h-3.5 text-purple-400" />
-              <span>Filter Calendar Event Types</span>
-            </span>
-            <span className="text-[11px] font-mono text-zinc-400">Select event categories to display on the calendar grid</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Event Dates */}
-            <label className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-              tempFilters.event_date 
-                ? 'bg-blue-500/10 border-blue-500/40 text-blue-200' 
-                : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
-            }`}>
-              <input
-                type="checkbox"
-                checked={tempFilters.event_date}
-                onChange={(e) => setTempFilters(prev => ({ ...prev, event_date: e.target.checked }))}
-                className="w-4 h-4 rounded border-zinc-700 text-blue-500 focus:ring-0 cursor-pointer"
-              />
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" />
-              <span className="text-xs font-mono font-bold">Event Dates</span>
-            </label>
-
-            {/* Delivery Dates */}
-            <label className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-              tempFilters.delivery_date 
-                ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-200' 
-                : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
-            }`}>
-              <input
-                type="checkbox"
-                checked={tempFilters.delivery_date}
-                onChange={(e) => setTempFilters(prev => ({ ...prev, delivery_date: e.target.checked }))}
-                className="w-4 h-4 rounded border-zinc-700 text-indigo-500 focus:ring-0 cursor-pointer"
-              />
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 shrink-0" />
-              <span className="text-xs font-mono font-bold">Delivery Dates</span>
-            </label>
-
-            {/* Client Acceptance */}
-            <label className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-              tempFilters.client_acceptance 
-                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200' 
-                : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
-            }`}>
-              <input
-                type="checkbox"
-                checked={tempFilters.client_acceptance}
-                onChange={(e) => setTempFilters(prev => ({ ...prev, client_acceptance: e.target.checked }))}
-                className="w-4 h-4 rounded border-zinc-700 text-emerald-500 focus:ring-0 cursor-pointer"
-              />
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
-              <span className="text-xs font-mono font-bold">Client Acceptance</span>
-            </label>
-
-            {/* Waiting Approval */}
-            <label className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-              tempFilters.waiting_approval 
-                ? 'bg-amber-500/10 border-amber-500/40 text-amber-200' 
-                : 'bg-zinc-950/60 border-zinc-850 text-zinc-500 hover:border-zinc-700'
-            }`}>
-              <input
-                type="checkbox"
-                checked={tempFilters.waiting_approval}
-                onChange={(e) => setTempFilters(prev => ({ ...prev, waiting_approval: e.target.checked }))}
-                className="w-4 h-4 rounded border-zinc-700 text-amber-500 focus:ring-0 cursor-pointer"
-              />
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 animate-pulse" />
-              <span className="text-xs font-mono font-bold">Waiting Approval</span>
-            </label>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800">
-            <button
-              type="button"
-              onClick={handleResetFilters}
-              className="px-4 py-2 rounded-xl bg-zinc-950 border border-zinc-800 text-zinc-400 hover:text-white text-xs font-mono font-bold transition-colors cursor-pointer"
-            >
-              Reset Filters
-            </button>
-            <button
-              type="button"
-              onClick={handleApplyFilters}
-              className="px-5 py-2 rounded-xl bg-purple-500 hover:bg-purple-400 text-black text-xs font-mono font-bold transition-all cursor-pointer shadow-lg shadow-purple-500/20"
-            >
-              Apply Filters
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Weekday Labels */}
       <div className="grid grid-cols-7 gap-1 text-center font-mono text-[11px] font-bold text-zinc-400 uppercase py-1">
