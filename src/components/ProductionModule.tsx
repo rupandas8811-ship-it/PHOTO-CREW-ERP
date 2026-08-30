@@ -8086,102 +8086,46 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         const advanceReceived = payment?.advance_received !== undefined ? payment.advance_received : (payment?.advance_paid || 0);
         const balanceDue = payment?.balance_due !== undefined ? payment.balance_due : (totalAmount - advanceReceived);
 
-        const isFullScreenAssignment = workflowActionType === 'assign_editor' || workflowActionType === 'reassign_staff';
-
         return (
-          <div className={`fixed inset-0 z-[100] animate-fade-in ${
-            isFullScreenAssignment
-              ? 'bg-zinc-950 flex flex-col w-full h-full min-h-screen overflow-hidden'
-              : 'flex items-center justify-center p-4 bg-black/80 backdrop-blur-md'
-          }`}>
-            <div id="production_workflow_modal" className={`${
-              isFullScreenAssignment
-                ? 'w-full h-full flex flex-col bg-zinc-950 overflow-hidden'
-                : `bg-zinc-950 border border-zinc-900 rounded-2xl ${
-                    workflowActionType === 'manage_status'
-                      ? 'max-w-4xl w-full'
-                      : 'max-w-sm w-full'
-                  } overflow-hidden shadow-2xl flex flex-col transition-all duration-300`
-            }`}>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+            <div id="production_workflow_modal" className={`bg-zinc-950 border border-zinc-900 rounded-2xl ${
+              workflowActionType === 'assign_editor'
+                ? 'w-full md:w-[90%] lg:w-[85%] max-w-5xl'
+                : workflowActionType === 'manage_status'
+                  ? 'max-w-4xl w-full'
+                  : 'max-w-sm w-full'
+            } overflow-hidden shadow-2xl flex flex-col transition-all duration-300`}>
+              
               {/* Header */}
-              {isFullScreenAssignment ? (
-                <div className="p-4 sm:px-6 border-b border-zinc-900 bg-zinc-900/60 backdrop-blur-md flex items-center justify-between shrink-0 sticky top-0 z-30">
-                  <div className="flex items-center gap-3 sm:gap-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setActiveWorkflowProd(null);
-                        setWorkflowActionType(null);
-                      }}
-                      className="px-3.5 py-2 text-xs font-mono font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl transition-all flex items-center gap-2 cursor-pointer border border-zinc-700/50 shadow-sm"
-                    >
-                      <span>‚Üê</span>
-                      <span className="hidden sm:inline">Back to Production</span>
-                      <span className="sm:hidden">Back</span>
-                    </button>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono font-black uppercase tracking-widest text-violet-400 block">
-                          Production Workflow ‚Ä¢ Order ID: {orderId}
-                        </span>
-                        <span className="hidden sm:inline-block text-[9px] font-mono px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-bold uppercase tracking-wider">
-                          {workflowActionType === 'assign_editor' ? 'Assign Editor' : 'Reassign Staff'}
-                        </span>
-                      </div>
-                      <h3 className="text-sm sm:text-base md:text-lg font-black text-white uppercase tracking-wider font-mono flex items-center gap-2 mt-0.5">
-                        {workflowActionType === 'assign_editor' && 'Assign Editor Interface'}
-                        {workflowActionType === 'reassign_staff' && 'Reassign Production Staff'}
-                        <span className="text-zinc-400 text-xs font-sans font-normal normal-case hidden md:inline">
-                          ‚Äî Client: {customerName}
-                        </span>
-                      </h3>
-                    </div>
-                  </div>
-                  <button 
-                    type="button"
-                    onClick={() => {
-                      setActiveWorkflowProd(null);
-                      setWorkflowActionType(null);
-                    }}
-                    className="text-zinc-400 hover:text-white transition-colors p-2 text-xl font-bold rounded-xl hover:bg-zinc-800/80 cursor-pointer"
-                    title="Close Full-Screen View"
-                  >
-                    ‚úï
-                  </button>
+              <div className="p-4 border-b border-zinc-900 bg-zinc-900/30 flex items-center justify-between">
+                <div>
+                  <span className="text-[9px] font-mono font-black uppercase tracking-widest text-violet-400 block mb-0.5">
+                    Step Workflow Wizard ‚Ä¢ {orderId}
+                  </span>
+                  <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono">
+                    {workflowActionType === 'assign_editor' && 'Assign Editor'}
+                    {workflowActionType === 'reassign_staff' && 'Reassign Staff'}
+                    {workflowActionType === 'delivery_checklist' && 'Delivery Checklist'}
+                    {workflowActionType === 'send_review' && 'Step 4: Send For Review'}
+                    {workflowActionType === 'request_revision' && 'Step 5: Request Revision'}
+                    {workflowActionType === 'deliver_project' && 'Step 8: Deliver Project'}
+                    {workflowActionType === 'manage_payment_close' && 'Release & Close Options'}
+                    {workflowActionType === 'manage_status' && 'CRM Status Management'}
+                  </h3>
                 </div>
-              ) : (
-                <div className="p-4 border-b border-zinc-900 bg-zinc-900/30 flex items-center justify-between">
-                  <div>
-                    <span className="text-[9px] font-mono font-black uppercase tracking-widest text-violet-400 block mb-0.5">
-                      Step Workflow Wizard ‚Ä¢ {orderId}
-                    </span>
-                    <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono">
-                      {workflowActionType === 'delivery_checklist' && 'Delivery Checklist'}
-                      {workflowActionType === 'send_review' && 'Step 4: Send For Review'}
-                      {workflowActionType === 'request_revision' && 'Step 5: Request Revision'}
-                      {workflowActionType === 'deliver_project' && 'Step 8: Deliver Project'}
-                      {workflowActionType === 'manage_payment_close' && 'Release & Close Options'}
-                      {workflowActionType === 'manage_status' && 'CRM Status Management'}
-                    </h3>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      setActiveWorkflowProd(null);
-                      setWorkflowActionType(null);
-                    }}
-                    className="text-zinc-500 hover:text-white transition-colors p-1"
-                  >
-                    ‚úï
-                  </button>
-                </div>
-              )}
+                <button 
+                  onClick={() => {
+                    setActiveWorkflowProd(null);
+                    setWorkflowActionType(null);
+                  }}
+                  className="text-zinc-500 hover:text-white transition-colors p-1"
+                >
+                  ‚úï
+                </button>
+              </div>
 
               {/* Form Body wrapper */}
-              <div className={`${
-                isFullScreenAssignment
-                  ? 'flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full space-y-6'
-                  : `${workflowActionType === 'assign_editor' ? 'p-3.5 sm:p-4 pb-2' : 'p-4'} overflow-y-auto max-h-[85vh]`
-              }`}>
+              <div className={`${workflowActionType === 'assign_editor' ? 'p-3.5 sm:p-4 pb-2' : 'p-4'} overflow-y-auto max-h-[85vh]`}>
                 <p className="text-[11px] text-zinc-400 mb-2.5">
                   Step workflow update for <strong className="text-white">{customerName}</strong>.
                 </p>
@@ -9601,90 +9545,2434 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           {selectedStage === 'Completed' && (
                             <div className="space-y-3">
                               <div>
-                                <label className="block text-[10px] font-black uppercase tracking-xúÏ}Îr‹Vöÿˇ<≈1◊q7=Ïn^%πáîBëîÕYJdëîùâFEÅ›ËnXh†@ÛböUªU©¸…èdgfk∑RS5I*?˜Ú<~ÅÃ#‰˚Œ9 ÄsC≥)—c° 2ós˝Œwø\z}7NH‚^%≠º†◊⁄X^&„Û÷J{É¬ iç√ \x˙ÔàÒ⁄Ò√ÿÜ‰Uò∏±Ò˝ÕéÔúªæπ·Möπé≈.Ín›ÙÿHË@n->Éùë·À¶ªH∂ûíÿMvÑ6önF0tì6Ì`—¶Õ(ºå∑n÷l^Ì˘Nør∆Ó÷¬ek0ı}r>d{ÒÏ≈yı›àˇè›~≤±ÌOÉæ€o]˘d“ZÖÕ¢;x;π
-_¬ﬁ4ÓÜ”ƒ˜∑ÑÅÀoE0π÷ä¯„¬}7¡˝_∞ÙƒwzÓ(ÙaP[È÷«”Òÿâ<7^"N‘y.ÈG/¸#“w}¯;∫&ë€sΩI∑€msWàlv˙ﬁÖ˛%„+ö-Âﬂ*üﬂtæ$«˚_sJv^ø|’%8Ô£(ÏO{â‰‘ª∏¸‰Àé¶ËEÑÑxÎ€∫n≠ìqøÀ7ﬂ˛N·£ÛhÔN¸÷#2›+˙O´˙‰˚iúxÉÎ÷πõ\∫n†=√™ﬁ◊'”∏Ù4àçS}≥≤<πzÀPÃ9¿“{2ùL‹®Áƒ.I"¯ç y)CNÁ~o#ä™Ö†v¬Ò‡[∫3F√)Á9ZØÃŒ#õ!akp∆Ã#~È˘0{8≤1˘Ç∏˝!†ÅSæ4∆è÷≠éÑqw≈)Öpz~x	Ä·Lìêåù´÷®ıfÌ	› 	•ì®µJ2‡5ŒÚ&Nú°ü∏øü∫AœmèùI≥IÔaóKƒÎ_Qå|c\≠^ ®åù§7r˚·êlëÅ‡_/¬Ë[Ã€]¸µes^º3ç"7H†5`Ê¬˝.åﬁ„ µ›æó¿fúA√…4&[[[$Î√æã]ƒ [‰≥œÑ¡ˇ¯cﬁ˜ØıªÑW‰&”( MƒM7ıΩ{ΩuìıV‹däDÜŒ§µ≠˙ŒŸä¸3LxÄx&∏=\2ŒaXá˝
-Õ¿ûìMRﬂÜ…à¥»
-˘‚´âfìÕ'wÛŒ9èC
-X¿w	£õ·§µ‰5I¬qkô\fBhƒb	D¶aìœÕ0ò^|OüëPÚa‰Ù=ÿ∆V∂Œ… Çn‚˜◊ï¡ùè7Hóæù˝∂ÏÏˆ›≠ôD≤àúı>Ó√í˝†ÔıúH˜nòXÔ_eÕ/a}G_ ≤PáÇôó∏„∏’É≈‘ñ“+˛≥B%bÿèÄWy˚ÙCkeY‹$⁄¥ﬁ!∂?÷€…ˆëoZg•Ãìeªâ#∆ÎîÒÇ!√ç»°∏?9}@úoñœñœûLÆŒ¢·π”\Y_Zy¥±¥∫∂∂¥‹^›X|kªÈÄ%C÷ﬂ§q∆Á0jÈT≤Gl2˘O' ;π≠…‘è›“‰ÏGMJ@ﬁy¢‰osb˘»ˆ0¿Q∞;àc≤˙”üˇàgëŒØ»ä%à[œ¨+8Mªn‚xæ=
-,^ ”≠ 2Zó ˚@cW,q≤º-˘¡„å"E˛ˆÌWºõw¸ÏÆ‰ûÅå[ªr%UÆÒÖ~™´á¥QØπnäÊk}ï#ï—jvKœêp:6¨IE≠Çó¿!ÿÉØ,Ù!0=5;ÌJ.X|ïAÉµÇ@Eﬁpî‘ p:ŒA¡PSâˇ´3û4ÛÒ∑ìÙ¶ïÜ õFÕ≥n‹B0ŒØ“>≥rò¨Tks6'ä})ÓÜó8æ◊#„§µ,™õUV@„zà®0>Óv‰RUEÛ›ÎI(X_îˇ>øë0ıìÏ˘ô◊øÌíwK§—®±£õùâÌê-[µﬁHÀç‚œ≠a`∆~/ËÈß˛)“”aàÑkõÓíé¨Jâ“∑’åÍπAü0	Ä2 	))XDe\gU'∑oûOAà4Àí\O`Ï5ùÊ´Ô≈ŒπÔˆ∑ÄO9q.@ê“ÌGÏ¿)zøu”¥ïc7ŸÆ¿|3 ñ‹ a˙	[˜Sòå˘√[›»Öùô\µ÷…‰6FT~éPÂ–MÔ _(cóEvq=˚åﬁªØ#†AÀ$çSîI*˛∞,b§;”'NœKêÒWo§ÓÑÏ8 ’˙ö¬†‰Ó–Oœ«^2?h+ÓŸF∂g¢ò11˜‹ü∫»††úÎÅ,9È/∂;¬˘éÂÔ•{:Á˝Ùç\$ÉwÊ∂©Ÿ"ì«˛j∑€T¥á_.9az"Fâ:ù≥~˜5Ëu≥ÉåäÏô‰òﬁ.6eJäbè_v©MájLøw{	ôÑìÈDämo.+®Åj√häqœ&¨Å2UäKY5Ó“Í∂6q∂ÄO(îgtÅ∫ª •ªÓ¿ô˙ISâªºi~ª>€ÌSı·¢≥:æ%ÕÖ#ﬂE»dü>k¬¥É4…¶®zÆT€0bè…Bá/në&≈å1jﬂº]l£¥‚öÑm˙ò∫5Œ'=E¯
-|∂a:}ª˜ïì+åÒ ⁄√!bª≈˙8Bø–aSúÿ≥Ï|eä›XéúÎ1SÏ6'Ïœ‚à&8¢IqÕJC ûô«ÑØL§”√5…fác◊˛f@»ºn¿Ñ˛œß1Àq|x∏—±{·πóÖÅ.âÀø$ÈRiM‘É†ß"C€ãø≈Ê£!|2Rå«I}¶?Ê|z”ƒ•/iôû¢ñpq∫`ÑÆaK÷X“4πc'zﬂæì~KéÄãÑ.∫ Q3ù∞ª˚®lizA≥Òk¢ƒ;eO∑öUôâsõâkõÕu€*õ∆%H}Õ^e;%:((W›Xj±>√âu≥üªõ`ÁÒÔÊb;	˜OO4§√Øx‚{I≥q⁄X|≥¸VµåÍS6√N◊ﬁÁ€[ôΩwµΩ°pî≤îŒ g2oR/±Yfﬁ-´rÍôà«ÁEÖÇAáêÚ7˚ªZë÷Ë∞R^°¢+F¡ ÃF%S?T„÷Nå÷Á¡Ø=àÆz∆Ω¨{ÑˇpÏFT∑yóU6h2Ù¸ıOıËL0—,Åa§;P“≥Á⁄ÿ´X˙EúØﬂÛ¬ã„F¿u·?hoà[+$wÛü´Ãﬁ˝—òΩè*SÛÀ;û(&¬h;‰ŒvIØ6î˘ŸùàüóÌàì=lZµ‰ùÈ¸!™2®ÀUÓP«çX˘æ¨ÃÍT'l§vë˚˚©π}ÕKœûpBÂ∂?ôz„)[k.è∂€ÌÕ{µV{€qÏ∑Ow&åûñn‰çñ>‰;â¡Ü/<-›P~∏√ë5g∂ûñn{L]øÑ>≥[Í^)a"€Ωû;IPY˝ñoŸ,‡fáùêü∑«=|5qıêæ#ÓÒÇ…TèzòfÒù˛,q%ÚÌı1‘Æu=O‡ø|§q-˙˘ÒE∂ -Ä≥ﬁô›ÃY8Ø£+Â‹!Õ;5€ÁÈ–ŒŸW-M≥¡9p`rËæˆÇÎ˙vøOú‡}EüT[Fô˚:Ù˘^ÔßÆ<!ı8Tïe2—Z¿Ágr¸[1"Æ•XÛ√öø™cÖ˙Ÿ[%v[æ‰+ ?îèñ5v@Å,ï-Å∂ñ¿Z[ 5Œ∂/‘≤˜0Myí∆+∑J7≤¶¢Ep˚‰dˇÎW{ªdowˇÙ¯Ñt»ÈﬁˆKrtxÙ˙H∞
-ﬁ8\ `Ú@¸2Ï;~fÁÀ:™ @Ô
-d/ A›{Å,ø5ª	O ¸ ÓËNvæÇÉˇÔG·MÀQk‹œ<WNﬂò* ”Ú2ú!«àJRàZΩÚ	'v¸qŸZÉ˚Yúƒ»Î˜› 0¸§¢√(æZæΩ≠xL#jEêã‡n|„:8º≤1∂<#¡≥Â\ÊŸÚÊÔñ{À}˝J´à‰\úùWû=«—¿∫˘≥¨PSÆ]‘‘¯”?¸oíâßßÆ3ÆéV·|∑9Z´Ã!ã√píbë8ﬂ ÍRZ/ù]¡ß cTrPSªﬁhåÍ©=ÒÜÑÃDàHrK∂H‰∆°·RsÀv–«ul™Ü¢ ⁄¨È V⁄ô≠4’∏û—€?˛H;,›ñ∑∆ÌˇÙªg
- Hv)@ˇ
-–i”œµé7S˙“e#]Ç‹á¨gÜ +õ”≠UÇá´®mâ—BVJ±∫å/™A:˘øRı≥F˛≤7ç‚0jMBè¢Ëﬂ∂QÊïDîwUa\$ÁÊ?•Åu2j≠/Tôd9Yî,§ªïÉ“`^ÛŸWÙÖ*KP;&bËBbúPfB‡÷“w&p‹ôC>`q…9ﬁLF ·“ÛùD¢£Aœ)5Í<.Û¶%ï:˜ÉRa"Öc,.ÁZÓÆøÙ$qÇè6;…hñˆ–’f÷è3ƒÕ0∏K≥∂U¥sÃ÷
-°gäYJÉ2r&∞Dn##Ø'~ËÙg˚CÁﬁœodôé0I8Pµ˜#	Ëv∞ªôúá˝kqp æZ◊Ñˇëo!ÿ5?îR@¥!THÙ0SÅ+uÑà´}ÍxD[qbî¯Ó;âˇ”§BluΩÿQ“	£ööv®{Z|‡≈‘5©8bˆ˘ËÌ(rÆ€^Lˇ/}kë≤€íi(ÂS≤º®JûI?Tº‹e˛\œî£√ß‚†Ñﬂc¡—_(ﬂÍrœ7ı8Ëcq ‚´ë‡Xƒè4/v…õ∑⁄}∫	EèØõ‘§-Ó˜üuIL›Hñ» ƒ gˆ˚W»•†5^\÷Íg–Aã∑§s bC aá&sêcÆoM∑K˜;r€‹_ç∑ä√e”?+>—hppT¥≥≈îõ£øx3)G(ﬁCMﬁ{G◊à|~#,ç”{ßÓMà'ŸË⁄Ùw≥≥˜Ìik˘ÀÊÔ˙øZÏxÜ!”OtÀò≈p√†∂»ƒâbw?HÿwoVﬁ.ëÿ≠Y—È∂≤£öz´Ô2„àK_ïVS˛¥≤Æûy=—ÂÀ8ò:™öS›/-ë 
-⁄•™.ì¯•zπ$oÕé™9Ò¡Q√Ñ†≥‚ÄDdVÓE—›≠„DŒ%„©ò≥+‚JE≈õô¨¢A”A†ò@”)“Fä
-™$ZTmê¨ÅîVÎæ*∏‰÷˛@BÈÎ|Y2RÃ∆π2Ç2“˘*79ÖQÒ˛≈ΩKâéjY}åY!6e‹ü¯∏†„üÄ†ºuÛ¯∂»>b,û≠_éÎì∏˝hÒ⁄´0„Ô–IÑè<krˇ1ßX∏ùåºò”b›:âTÀû*ÁØrõîo_È“.—d&Nv√úÕÑùS:ıc∑ó2¨<‘c™?h”◊3/˝¨∑¸>|∑ô6FˆF†Kà"åà3*“Ôi|ÿœ⁄Èù∆Î ›œÜE«°è‰ÌDx£–≤p˙·Y<q{¿ZrM˚cRÅM_,BEhôÕ%≈≥Õl8¸¨M◊ˇÏîø–ÿZﬂÑ”ÿmˆ]Å«Y>.2nj	≥~Ï¬aêlGa1Ñ¬WÇL≠\.”*Ç$}
-Á¡¥i.úF*¬7∞œœ*/-bòT…}É•*/*◊∏”!{æè^M8˚`4ŸÊ(¬Ω¬áyãa10†Ì<aœNxÀ˘—FQùNõÒ…)ÀÆ7ú“ÿ	'„Ä uœUú†è°.“Í7,Á¥qÌ‹˛Ÿ.&[;√—ÈÇÍh	Ø”‹lgæÌÎÊßTìaÒbÕûŸÎ”»◊øù)ì#Íf—æ≈îLùŒ?Ñ!∫/“ï/øUÔ7Bk3ﬂtÑÕ◊KUÙêg{ÒOŸ˘c`Ÿ0…¨gxw<vQƒ⁄¯SówŒ?√ì%Òw^2j6FI2Èv:ˆ§z!ÆºÏÉ?Ìªq≥A7º=√°Ô∂{·X˝^89ØtØå›°”~(>ŒÑ˝˚î^¸¿Úoı+¢ìî‘œ‘Oå»B≈Úßªä yíDå˙»1ôÄΩ‰g‰ƒı=Å¸:Aì7Øée}Ñr1)*$â”C‘ãH3	…4ÄQË˘·∏”ã¬8&'”âsN√)Å,¿È"_p|≠RªdäBhûK„iß¥œ+6°qoîÅTﬁÜÅfπ‘íïˇ…â-p}ﬁπbaÈ¨/WM5˙|ç»ô¥¡â÷ˆbVBf.J-´7øgäçê5]àÀ.à≥ôC}1”h∆.j¨üïœäû2Çˇ
-)…“yå˜ŸæòKD¿óòe˝°ÔÎ<ﬂ[1L¢q˚4ˇﬁjfy8tÚèé™BõLïœ⁄±›dúØ'÷†	–À[Ì‘oêB‹ek‡%‘ü]ññôÀí¯¡Ò˚ÚÑh‚√Un’HÔ≠Á∂—Ç˚bŸÀ¡ºV∞Z%Œﬁî≈˜æÆ7Ôƒe¥\söØ7çÃ3ø±ƒ∫ÇªæÏf„mNÓs±Dß≈gÀÜW⁄˛ Î‡¡úy´ã3*Ü+‡x$øqßÒ≤˘ï‚Æ…˝¨G^ä–¿ëÔH¿áë«‚^à∑Ô4ä≈Ÿ§≥4ôÏ=ªπdY´^ûGØ«¶îÉâ‘nÚπ¯√,≥Î±µ÷õ_å«brﬁ~0Å—ÚbfgflÙÜÏW8-c∆)î$ÚV€^ÃZsµV¨Ù™õ˝V¯lõfLK^*MΩQFìe¥≥QÌ¨-ﬂô⁄fÛÙß˝ßz9ËÿgÈ/ Í¥RÁ›2‘oü*øfœ\MA^Jà;êD”†á!ïÃ±ÛÕ #|}Å$^‚˝ìé©Fz≈ø˛Âèˇ®òŸ=$¯≥ 47∑ÙqvµyÛÊv⁄$n)ä–îeÌÒä›±g}ƒ“„ıﬂÌÅù}¬”âd~Ev_€Ωgÿ=π◊£ÿ…úÀõT©ÃõÊ £»l›p≠DEÂ‘@çs™Èíw©ÍÛÙ†Î∆.X‰‘÷¬ŸπÔÔÕ,"◊ﬂZ¬p‚b¬ò Ñ∫Q‰F6_≤7èBﬂÎ]c#-˚èÎûö6MÂ∂"ûö<£*	œRπH‘<Q˘›ÇËòãñ’¢s™yöß˚gxﬂ‚—3Ù◊ø¸È_»!Ï˜ ≥<Ä{W0Ê¿Ò)<‘kmÃÅˇJ|a+Õt˝+ãËÏTWÂ!µ–Jrc‘«=s∆ıy◊œ®ŒØàÑÈ-0I=¬rèd≈ÇêlÓ–∏á"<!4ì§[@VâæXÍ∏l@  ím˝7WÄùá…à¶˝cOΩ±3t_G~~.ﬁ∞ÿ≥gƒj‘ˇ€~h„∆ÿ∏Ù≤®LØ™øˇ3OQX•¨Mª‰ÁÈ‚uKã˘ôŒ@ï_ôR◊ÓıíB Ó£LÁg˜:wﬁÈ ˝Ü“«Mô≥´˛y_#´ ¢LìoRjîHÚ˘b8¥ÅH¶ÒeÒò(Ó9æ_∑óWﬂÚºgÈΩÂˆWOﬁJ0¨‡SJª@°ç64Ò›4{a00C:_Q»4∑i≈Ô]ª≥ìR⁄E_ﬂ‚h˜q\ˆÏ¥)†6{”¶6„LHœfÎrõw·7Ô»qŒ„ÄYŒÏ|ÈπM5g˙3;\u¡√Ó ÕÖ)•M—ÉSü-6Ò≥Vö%ãAëçå«∞`),©~=ö?/ä'z_ã⁄œ@ÎkQ˙9—y*G±˜£–yA¯É†!)Öß¶Ò˙‘›FZæeüçÆ€Qu%≤A‘‹òIz±’]’$øm‘Á÷ë¨LQU8ÉÂÄSª√8M◊á ‚VÙz@˝ıJmcºƒÎJ5õ`'Ç◊÷Ã®®≠ò£v@üW]xã∏X›0ﬂG~‡l∑ÒêKxŸF‹Zl`â4~Fóâ˘.Â»∑a7<3ÉÙ°¯£…4ö¯n∑SDÃoU±¯Óœ/PTGÈ†ùë€{ø„E=ﬂ]ùÆÖ|≠8°Ÿï˚≥ÑWIÔ´2±–l’Ã"4üGΩ¨WÖü≈¥WØè∑w˜v…—Ò··“!˚/∑øﬁÉ_{ﬂÓÔ}WÕ~5)#Ú∫iØ÷Z⁄´'Ú¥WÃ-buN˘ÆÓí‚j˝a§∏*ªì‰8Mô ™*@öR\e^7Ã‘’a≤è‰p®ÚZ©ã‘ósYe∏™ü◊™r@⁄¢ªπ
-sÈÌô4≥S›è9¢˘’$£*{‰~–±1_M’–r◊jÂ>wFÎwJS•ÁñmT\u≤WI≥m2&$œ>•œTE-¨5›	Ó)Uì—3Jv‡h°◊Ø°=™fµbπ¨äËTG ƒ‰QO™U+À}FÆÔ üƒ±zÜ‡[?⁄@l-lC›+HÜ@RJe§kº°ÛLM”ò†f*°°k’≥íäCöË≤Œ¿Û›Nø”ê;)?”µöñóÌ¸é∂ÚªNˇwùÊßı√vÎ?-∑æ:kΩ˝’b˚À˝ùiÔô{5	£d˚¬Îo}æ¢Ë≤;„DP≤xﬂi&Ì/°Ö˚ùÉåÀì‹“ó˛Û∆CwGΩ≠õ,T¨„'[7ÔJµE>◊R(≈eb°Ù#Œ\·|]≤sûc%"8›A‚x≥úuÇÙ•;¬`/ä¬»XëF‰Ω‡ŸKP‘•[Bh≤©W~«£D©æÛÍ¥y—∏SzG-¿ÚL„qr@⁄˜bÄ≤k¯æÅôºç1–'bE˙x+Ï˜ûÔ¢oπ>{ˇ∏ÔœÿüÌﬂO›Ëö¡£f†qÿrq’Z„xÿX¥…ÙØÔÊ‹"˝∞7•·~Ω»>õèé§w°óÊYÌ5a	∫˜Dë[CZKG≥ÜYo^∏—7ß/†∑wiqnÄ¿Û4Ûz∆nﬁ<ÛpeTã√:ôŒ¿çõgö,tù∑%©≥ŒL¨¥n¿⁄5æ@ B[^ Á.PëÃ–êå‹‹ùÄ©O∞mb"æ±ŒKÌÌå<øﬂd3÷lÅ2˚ê¸ÅT˛V&`.ﬁSÁ_Æ∞º§µô7X≥®TÃëQ÷Q‘<íÿ)RªÑ
-ôW◊Õdî∞7B‘2:‘‘me©‚g≤˝ô4DπN`n”€k≤√,˙»ﬁùôùUÕ/˙ÛÛ*5$*¸è)RàÈËã€öÒ•E±·±*Ω¸}l≠^YGíPﬁ–(¨XzvÚ›7€ß'€GG‰‰õÌ„˝W_W5U,˚◊w#'âÅ“¶[^7M˚∆”WŸ§iüó⁄Jó¶}vÖ÷œ=g˚õø[Y>ˇÍ… €Ç>+€„…‘è]©äË‰:ÜŸê}òÀê≠+Õ·Nat{2!€¿3/ÑØπfróõ•. áy2rh>†#'êTÏ∏s
-ÒZàT∆”¬·›ì˛Ê¿ÅΩërOïèvùƒQ◊n©ºNÂ’˚Ê´p"üW3ì“ü†d1™f€0‚Óü˛¸œw“1[¿sÃü<ã(T}îb£«àç*–x„≈_#SÂ`Tvq˝•N*“2DV
-&$≤´Ÿ∞‰5ÄÀ≠_Çd3Çˇ8R[ópOw€¢{ƒÖ∏Bûéçƒ†r˛<KäZnÖ µÙÖõÙFx`}L∏îê>@6M=√Œ–ZâôñUrj—g¡≠Bæ’ÚpSILrï=ÓiÑ†íÀ∂AÂ[¢^ô¢»VÊßˇÒ?ˇﬂˇ˝oÑŒ†[fË›[È Ë›2ÃÆñÓ43laLòuSü˚Ñ*	.ì∂T/±´Bàîp®´$›ÏG"Sön2ë‡±+ø∞%ÁOë31G“…ç≥«n]ìê√·D»6Vi7∂<∏÷Ú” eii÷€òknp◊«S?Ò&æÀÛˆ˜
-¶ó+o°⁄}ªú±\ÒJ%9¯ä:Í\…•≤Oä2x»KÚZ^}B]ê]√µ)cŒ÷ÚMë¡°åö&PÍe∫‡{lÕv›Ñ÷Ì˛ÏOÑñe€ƒ
-˘∑´∂÷;AOêLY¢T[ùÓ#Õ»Í^–¥ç4köX›Ë‰≈}«iΩb‘ÄV˚Jã!”ïÿáMΩ¢n£–ëNãeoÁÊFìëa¬1√{uú·jª¬U±2]Ù‡zVN†l„Yeã±≥^äù∞ºªf+”öΩ´ƒÏHï2ÍK%Í$B(aÌ¡#‹óUv~ÃòKâ‡j± òG¬éÈ3$≠ô2Â∞´õµùW`Ñx•!8+ Ècù=4Kèˆ£áîŸ§ç©†iA≈~„^TÚ–óRæ7(.iXf∫≥vN)π(‰°U‰±_@Ï∂ΩZ%πê'Q˘8Eù©ƒ'“?ˇë§Õ¡ô“+ô›‹t÷•ú∂r£‚QµD#}]ëîH.T…©ªïR∏~ûk\EUhßπP1.kJõÇqY∑`\L'k‹Ô“ø£ˇ6Z1TÎ§Ó´µíÿtÑÔÉÀ*Âº∂Jı(FQ?]¿òº+Äöè›‚$õ≥IñVˆÊ≤ı8W¨(|÷Ñ*•Ω-VS∂Ü5(dZ9Ùø¡d‡ØX)ùõœ`i&£0pyÆc5VJÖ≤ÖßÕc˜˜S/r˚ãñ»«XÓûÿºO6çâ]„µ¬”…ôòñJ≠p3[¡Î;∫óGÿıÀâõ9-π*-åub->√≤|Í™2é ¡Ûbò[Ω›nc[)’dÍŒØºZ_öπ!–NÈˆ°õ–ÕWÎ÷¶q>'⁄"élâqWπESÊ¿#W[(óÓ∂ámÚ´G‰… ÍYﬂxÙÿé¶Xbø©™ËVï'3{ÌjAıQ©o¡óè}-÷8”¡m§ÖÈKÍR–˘Ubáøí2∏O ]|¯]9_mPÅÅK—™N¥ïh$≈Ï—≠‰´êå√sœw”Íh1&ülì#˘Ån0ÜÅ?:wa‰¢ç-3runzibT¨⁄™(È%®‹S8i ‡Ëπ˚Æ`ëô´dàìJ7)yzÈ∆1˙˝pÎªNå‡.Ω"æË!ƒÂ¿ó4w≠˝á”B’´b⁄•Œ£
-™`Vô^Ü
-ÿ•r∞©9eMjN)^HS«lyÙQ10¯ôœèî5Nπ^7–g¥QŸ´~˙^åÓ^˝≠ ô÷cóö
-£ío T∞'∞˜Œén ∆1Ó≠ô»Hﬂ∏ﬂ^–D^∆CdWËè◊«˚òA⁄ífæ≥ñ^rŒ£ø∑ÚLÇŒƒkßè®Gn[ˆåétÎÛõ‚oø¿s ∑Û¡ÈÀ·%∆
-c»#M˘ı[W4TldÜäÈlU≥ùÃ†'÷£÷X/D#áŒê°9Aq
-Ø›PàóÄ0∫¨p˝aˇÎ_˛oLëkûåH&HiOæI◊†=¸öáã“#ß¯`≥BﬁyùÛí›π˙y-Wƒu≠+b…ME@a*◊√OÓaôC
-*TπI…V3èC¯@\›
->n{U∑A“c\pp+<°…∫^o-J”∆ÎmÌì◊õxwÓ^oŒ„'ÁÁ≠9ä3ØJv›¯}—…m'§ïëûõ£ÜbπXJw"âòaù‹‡\~'=Î¡PÔ≤ø_2Ë	 í»…t<v¢kÚ‹¡Hâ£ÖŒ˚¡⁄à0åº>˝P‹ZAÌ˛sM©ÏóüÔ˚—›ß+“·Óÿp›Ë^ç⁄~ú∞∫D\{_°SÇπP¸+«wpï“l@re≤Úè}qæˆ√s8øª@Y’]◊Ë¬}‡L÷K´$¢s…zÈ0Œ˙|‘Ë˚™≥≠6˙ Ò∑G’3i rà
-ØúÆññÿ§¯R≤ìsÖQfòCöFæ Bô‹j`$ã±óBíΩ5W≤/q±\8∑Èﬁ∞DMK≈Çÿ∑¨≠ZÕ¬´ä≤PÕóL[ \ó‹>-iÃÓ≈ohÎY—Ë∑‰≥≠-Çày‡·z($÷g6-)æÌÚ*ÀmÆ√ESi/RÔ´ó,K0ÃÊÒYabYÕRi/´‹^ø“4^â´∞·h∂ ˜pM„H·`8]ÔªnÇ¿
-7J’ Î/OSP∑Â]äA⁄RêïT—É ìñ∏¥µåK{+ï‰ŸD0ﬂB≈€3}&Ê…GJ≈ÛJ‚GÜÚ,<ç¯§“≤È‹‘Ü…º7ó:ì b·|` g"*ÕÀs˜ÓÙ¶Å82ÒsSã/YmÉ±Öé≠πEŒu€ãÈˇõ"z≈r1t€%oﬁ.2|‹W8ëZT5RzﬁSÉå·ºp[X yi";o¨˝C
-ﬂ÷¨¯∫4Âv∫ÿ£»s{◊774π&µF#rÜGº‹èΩ·*3f|A∂ô∞è.(p<gE±´Ñª‹<@7õ≤wMôXˇM9◊ÿé{∞·⁄‰"cï9»X•M=G,^-sl›íCè±â€≈On&Â´ˇ˚0‹LÚƒú˜ÍeB§(¬òÏ˜æúE®ªuÍ$¬ #ÈùD2$«¥q£Q>g⁄7ñ{•Cv-red§Ã?ç]:!M1y0ñ˚éÆ+su>ò…âÄ€A2‰u‰Fq8æ˜É€Á^-MâmD]y*
-ÜçySX<Õ’%π∏aF»|›Ù”)úß≈≠Ω1À„ö“Ú®©~wÄªò˚ˇÈM§GÓ•qÌmÓÀßÑ9kπ„ /“˜›8Ùßajsíûã:p≥~û"˜
-*˜·-ÇàÙ¬s2Sﬁù†gfWy
-eYeµ:Wr´bÖ‚~"mí@"åiDntù–p˙˚s!πÁëªô≈S¿ô®¬!»+e*Ùy;KY˙iLŒ“¨%˜Á∫ÒrÔ‰DL®}Ú˙yKïT[§øu6VÎ;ll|táX€_„…F’ñ˚sÃ¶=≥F≠t⁄&oÁ:ÓôÊyNÓ/Ä…óAæêçTfì˙∞n2Œÿ"M[keûÈ|*Ö•≠\0Í˚®UU
->‘„yxeÁÂTHÕ¨Jıú«®5ªRˇ˙ä˛¯¡¯ÿo(|Ï•@Æp¥ó:◊¥Uu4ö…◊πrÄ•˚_‰‘õt…o√)ÈéÍáS`[=öŒhúaöµ€ÅÂ∏Bà≠BßNÆÈ≥T"•Ôåù`
-Îs›ÆN™ÀE›Æ(∑…ı ˜ƒhRÖ~\Ú7‡$˚‹aÖˆº∏¨¢V…˜Ê$Õ(©ÔŸíÿe*é	/Ë7õ±ì;!ƒ¸-™Í†πO¥L*´`lg⁄ï*AàZàÖè⁄\öÕ~’=2QWô3xtˇºb)Ã∞õKº ¿
-ÅwÓR√À√›ÌÉÚıˆÈﬁw€ø%/è…—·…iÎË¯p˜ıŒÈ˛·+rø˜é)F>\iì√Wœ∑èw—qowˇîúúnøx“«ÀÁ6mW¿¢õ€åœ à›†'Ãb¡l2“t©&I$.ûîΩ¡„1à)⁄ƒÕπåRB≈õ„7∏ç=óv¿ÎÂ…pòâgåc/Ô∞ î8˛÷Õ°µ≤∫dπ˝’∆·⁄¯YÖq.	ﬂ¨¨T?pØº§V2ÎkqEd¬ãµø∫9{èHtÎx¥›ºaCö÷∏ ÅËå¿KÒQÎ¬3“x=°…aé¢p »–C›::¡*"‰ƒ48Á°ı…+Vå,ırß-I}QdΩ/„ÈV<ùJÃ£ÊÈÅ7úø^∆K&aú¥Ú√A‚âã˜œçó÷	Ì·@hHè€∂˚ÃA™Ãæ±iÿÊá‘iÖM∫‡*Û¥_BGJM’uyó´KmãÎh∏π≥)∆U¬⁄úLœ«à_8s@—’π-Œ˝ë‡íWI¯≠8åb7ıx,∏©ØjÔêa
-[ù“—I‘*?ôÏ#ıùÂ…4…;sd◊∏Th])Ã.wÓP<ÊûîBΩÄ˝îÎ7ÿUÒ®ÄÉp"~ÿ,:0(MUßÉﬂÑ£ÄÏÜ ˙÷ .∫T8∑<…cnXÉˇIò8Åac∂xLRÄıûÚ¨"√xe˘`Âôqïfgöhs<Ò√k◊%˚ªDÖë=  MGµØ,2§’¸ÛŸvÔÂQkuym˝ó	∞‹sdN∞jtL6i∏≥ñÊı|zÃßŒ‡Ô&c⁄¥5f?Nq3)S.2äÖÉî=¢‘¯ß?êò»DÕ#7;ò~AùÉGÔ˙©8&∫Ã|wCπ˛y˙Æ4´ãÆ<ªëÎÙˇz¶èÀòGo¯◊bˆÈÏÁW_≠êØû<~¥A÷◊VWîFsùGﬁ«√<:◊=π‘ì∫<ZNôﬁ §jÓ≤™*/A§"ë çNÂ>7Ãbá—ŒÜeÅ¿Óx2ÀÁ#µ„œtB“èg:#ÆsÅ©ñúÄÍv©%Äy˛2IÙﬁdÊ∫Äâ"HS-ƒ˛ P†áGØŸ\∑˚˝»ç„OÙ∫|›ΩvqÕ>¡¶†1£î _ŒNÆYÊ»ˇ0ÖIàÓ¬ò˝Õ˛¯4õcâ˚¡ås¬gœÒv:–/»¨Èá$‚ºÁôNˇvˆss2E^æD^~MéCßøÑŸ/ÜéFøPJ˛õ––≠s≠ ã”ávWE#á-ÑÚ~±€ô†T¯ﬁRˇ∂aL∞áÛ”ÏÃ	Ã £;·&#VdNAñ ÖœK¯·Ωë}Ù¿X≈Eo^@•‰·√	›∂ûOyU"aèÿJÜ¯\CñpÉF—k„π”i(7æ~õÓ%˝Òî˝œ‘´:π4°√dÎÿ!,µN	˛ûjÎL;]™˙ßU⁄ŸG´*∆UÄsÍ!‘–Ωa_q´èdÖr‘°≈ök≈?C`≤MH≤¡X!D+„ptŸ‡‘±=2≥Sm¿—»8´8‡X≈µGé]◊èyı<Î +∂a_}©DòÕ£•2T
-[≥P9@˜…¥∂‘A¨sË»«7Gz»úâ"≤OK†Júò∫+˛rI#:_∏OŸˇÒ";'®°’´RC˚Å√õJˇÇ∆N¶Òƒ≈iﬂôË(nWÔ◊Ùv∂∆W≠GÔ9¸KUe46…îr}ÆıMÎ9ÚÃ‰mpx@µûYÆ◊9zS¯[9AOR˚Z¯h^”ò:ı»◊TÂo;åúæ®©ïÑ-8mQ8é‹ªvQ/î˚◊f^ÜRØ:ıB±5•ÆçÄA€À+okózé˚È_Ÿ(:“¿ÂY|ÛË]¬n¸ÒtxµÍπnv–€™Ï—õ{†j{3`ﬁÏT¸k˘§p´¿!º>9=|Iéˆ–…˜e=›ú]π≥ón9p>^∫•%˝%∏ﬁ‘Úº5{ﬁÓD.c.Pî‘“√˚Aºg_πó˛5&q∞z# µò˚6NL‚	<ú¿qÜ8xßÖqúz–>,gY	j¯‰1[ÙòÕóhŒn≥zad^¢¬æ¨Ÿ€$wkeÓäº≠vb’ãŸˆ>¨UÈz7B·Ù[@2a™åb3ÀÙ∞u…rM≤UnÊGyx¢Ñ˜Æa›∏ãë‡co:&ﬂπ}åâÂ â%r0ΩöF◊d€?ááª.Õ∑OFaîTV[éÙ¥Yï?ÄTÛdöz¯ˆì`SK∞IìålTìå<*R4	?#á∆⁄H3z—%OYRGv·‹çíóy`Ç»Zõº‹;=ﬁﬂ!ª{ß€˚'d˜xˇ‡†µ{¯›´:IÃÎUøtì»Î±,ÀüíO±Ä?âD
-ΩmDZ∑<a89áÛM6¨Eì}3.º˛T–Ád°Í 1SµF
-Æ!cH07∏l∆,…‚+}™‰è%ÿúHF¨ °pØbçoﬁ}¨Rúíe	ô˝†Rè§6OM≤˛àäÂ\,c»RñHaÑ≤~æìµl.ìgR”ey B"Â! ¢ø¢2eæ
-	WøOxuÙ›`$L {FK:‹°c:t9´*ÖX¨"h3ùr˙Â*“èt–îH"yéQû|gªcK1≈ÕÿP„‰\©-ø…»u˙j«◊Õ$*ênWâ•X`DÃÁ_NT%¶ Z7dUXaˆÌHhLx”öDóåÓ⁄ Ñ^‡h-Ó1ï5*°áÓ<<äº0¢ŒàwmãÁ∆lÌOO©º-Ê—µO#%|u¥ ∂ôúc¬(adîÜπ≠k¬ˇH!LD *0¶Œıa∫=∫ﬂØh¬“xº¬ÀÄ0(hËrÀ≤î1ò<Í•ìÙ Â—øcÃÛåÂÜÒ±‹>Û˙<L¯};=xÛ«…ª£„›÷Á7Ÿã∑ÔÚWÖÏ^_õÍÛ∆dÉQ%é…∆.N˙Ùù~ÿfOX)“"‚#V{ã¶ä∆˙\E––WÌΩ%.»ª¶·–•§ÿ%]À&˝cOXtÇÆgàÎ∂È›ÇÜ⁄%7$∆uÃGbZ»ÍRÊﬂñ◊í„)Cëc´+u+[Ñ∆ÚÉÇ˝7·πûÂyÄÚgöáÜ‚BÏB™Bù≈™Äç„-œ°†~≠∞hùsmìÕ§oÖ˛shŒé€ú±õH^YÃ4ﬁN¢! 6s¬4y2gî#◊yﬂ∫§ºﬂ¨./[N4∂{ùCΩÂﬂd˛-ßòZ.¶r–‚&‚3vì.ˇ±sI≥«a.∫c∑Á≥ÿo‹öRÙﬂm:6S(	c7Ôƒ≤J≈ HÃ`QzÅdî±ÕŸÑ3ÃŸp˛Ùzéﬂ» U˛ﬁ7¿ò
- ∞À6Ûí+Àb-ÇäÇ"{o’X_Å]]⁄<?ˆ*uá†›∞h¯ˆ›≠ysÑ^\ ®ó d”±ÒHõB¬Ú∑Ózl(W.õîÈB¨±ô{5°\’Ow}F+2¥FYƒÍ√∆ÈÛ›9‡7SâóÜtÀR|gç"ø©Ú√¢X7¨J?∂“∂∆~Q©Ga“â=ÂI}≈∆Ü÷BQP∫ó5+ïÑym8+µ
-Kı-S÷‘(≈[Û‘∞Ø∑…—Ò·ãΩìì˝√W€Ù«˛¡9¸vÔ¯`˚∑dˆ’–¥c∂FIHm5ÎeñÌ2âY±˙	sÇD™7´M—úñÖ(Â˙,5˘≤r≥jÚu∫¸Ÿ¥˘3ËÛg–Ëœ™”_SËÙ◊ııÌ1Ω1uW-√Ï∫ê~Yi=GS+o	Íg1 FÚí†Âq8ÁqËO—‘PÎÅ$˛Ÿ˙Í·?ÁC—´0[0f⁄G(√•„•E≈ŸòŸ‹Âú†≈ê‰ÒÂÎŸbPØJo ©P©’À÷
-Œ˛Ì8%gŒsô7'˚Ò®ÍÃi:VÙı5Í≥êPr\À¡HÄ¢2,(9	V¢®§›9—v“\Vn’ˆÿÑ“d:ô„È *ìk¨¨*vUw†∂6ŸÔΩÆ:·Êhµö7ø∞‰wœõoZwMï¨ŒhU3ˆ≤J©zAö`ù∆ç‰¬w>A≠T#ôóÏ®§¬‹¯·òê"‰Œ‰°^Ç°AyRV~´EÉ®!€•XÚa)ÙÖs™÷«Ç¶@Ê©DùrV2+AOÇîg<ﬂ(®$dÖ|Àä¨‹—H)r(k◊)WG˘@ˆÓúÖæ≠L^ÕÄﬂØ˝≤@∂Ï=[ÏMñ~.Uk#∞ ˚¡ $_cÊQYËóÃ¥YIS:ÓiJ◊(Æ~§LSäu¡…KuYﬂ=5gı‚ŒÏEi£ı∫æüe£öË™‚¬&ÁöÚ‰_ª¢¬¨î-ØáÆ8F£u;V&]µ:LY8hYRKºXòcMîÖJÏ:lÂ5â∆Á≤õ-í,ybBΩÜGﬁc%W¬©2‘…Úg
-AÎÒ~˝‚Lou+y”Ó{}”Zgº6™ú˝¬v°îÃÎN{ xÛ≤}†π¨~1\L⁄rﬂ0˛=ÎçjlÔ≤ƒ≤∂ù4Eí6€⁄õ9ÌÕ˝tˆXQ¿éÌA0Íã/˙˝	áCæu|yªfÿ∑∫…ÁÙô/éQı“Ÿ·9∆&méùxΩ :±∏K;~	8≥<_Ö,ÃÊsM,@Çπ˙c£w<˘MÌÑÈ”uÏìˇd ∂_‡j◊µ™Tç3˝›˘rk_©a.ﬂ”ö:πª^môù<·HÍıÃ„È4LÄ3›¶n}Zo82√U•¢Ö∆‹Pux€·}pG∆€YÎ–˛lª§)Ç'r'ƒê°déª!ñÆ,ÏI/Ìj&˘•nâ‡£}‰®Põ€ Á*‰¬∫OX7m’≠í∑ﬁ}˝ûÇÖÄxémX4€≈Ê¡C9îÎ‘ÉR§DûRﬂÍóN2j”%j6˘{t¿¸ú ”"˝zë|IVñó—ù˛w˚Ôg„'t:t%Îê%π£˛∫X˜O¡!Ãƒ.ä∂¥¡§åÑ&ñ1ß∞ÑU‘±i¡]ùÄ%©ÿŒ]‘Â$l%µ|∫ Ò¸∫PwtuïN'[2âêç`ıJ©ıKÁe+Ö?ùwøjt‚û\∑ûà1™B
-!;„u˙¸Ñ¿c‡ø8™"ﬂáÁ1Iáã	»©Ø?Õ¶DXπv•™˘ök†^ê^•C_dÙú1y"ãæ»ß^‚Sg‰˙úÇOÚ«ˆG<íKKéã≤ÕÙÆ œxÒ›ØuN®ñn®2gıDïfOÆâ”‡p1‹îú›† .èﬂ∆}≠bØ,Ü¡‰R†˘¬ÈâΩÆ•®≠çb+_˚ª][Ô⁄[Úc±–˝ Nlt“v´c˚öù´ï∑™±CÌëΩUg∂◊x◊ô¯ ÎsIP◊ïÓ!YÛ“Ëˆˆ∆‹Ç˛m\Í4ét PvÍLá•0—≤„D≤å µ#⁄Âæuí◊(æ]lZz€müúÏ˝joóúnü¸˝	9:<z}T/Ç=Õ¨xÍƒÔcìk›`¿^€"o⁄Ìvì’!»πæ4≤Â-êfv£È`KÖiÛb“î<∂ì ºt£ÿ&ÏË±tT•˜`åÖ&Ω8súh:KDfÉ*.µÎìÀ_·˙`.™0~Kó?∂ƒ¯Í	S¡‡…∆≈Ë≠ŸœŒ7@aaxv∂˜u‘QŒ-)¿äk´…é11Äò@Ó√uÁ+*T>˝Î_˛¯_π¯ñÈ-	=¢*ç∞4]Ä‘eG™„F]Ç≈Ëh·ÔÆ6@:@U,rÙßµF(‹o‘¡úIâlƒˆTò¶™]—S·ek*ÏMeËãz>ê¨ÈO˛gFãg!ø“ì˛CsOiP∫›i_Æ§†xFÆ◊∫…	£ù.°⁄ﬂìÇ*PÂ∫fí¶0g@¶%†tö&ê+‘y™ï  ª§ ãÛ¸ 3‰∞çı◊¯◊ ÓΩøÊ.’*å≠S¥ìî∂†Ç™÷’Ê8ù:ùTÇŸyÙI!0˛ê—˙y dm±‹]–‹+öMÔÓ“|sk≠@SÊ—`˝œ§bÓñp˜ve°óÛŸü(3ÆÙd⁄‹5C2É-¢∆1íIc»ç^Q&œÌQ-#iVòy¶˚õ`{ìí>q/ˆUC≠«∫Ωa¡˙KT≈Hn°_êöBˇ¬•'p;Ë¿˝fqpÕ¶Ë`ÜVö⁄3QÈcnâè6Cˇzñ' ë®|Î3Ù#ı˙‡†°~∫üUû˙∆úz[Ã¥«±À+¿èÀ¯¨ùﬁ§Md¿∫´‹//MÂÖÜu˛
-™lÂ£‡›ıØÖ1ú±gY7‹îc—O‰\r,p‡ÔY‘Ÿqvo7¥Ä™0£iπ^⁄
-Ëyf säÅµÂj>ß⁄Iä®ã’§,Ú{^ËÉ§ºNï∞nog	.vªc/ÔÑ≤§®‰‡nùåit¡ÆI1›MVsÓÑI(+¥∫°≈0Çs«iÃ£W-ìvœu…ÄbΩxîií+®K•q˛È˛t∑±⁄vóéÍ≠ä∑⁄4/˛ŒKFÕ∆(I&›Nß±à4º”ñ¿léïÚπÉ≠CœÏ¥4±.yóÍÛ“˜™¬ïÂãm‘÷¬-`¨Æ…#^∞”[AN–û!ﬂÖÌ◊TÙ)~Õﬁ>
-AÜΩ∆ÜZı†¬haEÕ[LZ|EïÀ(›íj<TÜ≈˚´’8©í≤™Ùv*ˆé≥ƒ+Y4√G:aÿnŒ	© 0b≥√vÊßÕûÔ≤§∆a]RFÙﬂxAè≠eeàa•I™,A” bª‰ºÖΩ+Xü¿Ò)¨«Ö£ ∆î* [èmá∑ŸqÃØôﬂÖô⁄CeIÇØÄåÖ+@÷Ûuøê,M!vÕ=≥Ùµ>≥|SS4,mË^ÈB5†ìÔÛb±éÓîg\-jM≠“÷0z.Ñvf.Üu2—Ç<5»ke√6%Me§«ÓÖF≥k¿ê4ß2»¸=À¶¡™y0|⁄CÆ·ïé≥Ì√6é∞N.SŒGL"£+hW˝Ë#ÿ@è˜Z'{Øv·ˇﬂÓÔ}W'∑H*8 §ªó«¯ô€æ÷j©&P4]ÿ(©ÿ¨íè‚t#’È5™-UäI”∫Õ-%J9π˘'˚Ë=ß97ÿGøZæ˚Ë/ﬁ0˙R√Ë	:Ëdävv⁄Ú∑ŸHzt|¯õΩùSÍá&∑îÊJõÇ©Tâ8
+                                <label className="block text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-1.5 font-mono">
+                                  Closing Notes
+                                </label>
+                                <textarea
+                                  value={closingNotes}
+                                  onChange={(e) => setClosingNotes(e.target.value)}
+                                  rows={3}
+                                  className="w-full bg-zinc-900 border border-zinc-850 rounded-xl p-2.5 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                  placeholder="Closing summaries, archive drives, or delivery receipts..."
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
-÷‘vJ~˙áˇMNè∑w˛~ˇ’◊öŒ‰fŸc=h[ÏébI>ôcÛ's,sï„å9ìÙïó∂r‚Î†Gxë%9ÓpRu›Æ;p¶~“T0HIt≠4H∞
-ûŒÄc3â¶Æí«r./$“ß\Fz&î,@Ò‹,i"Eg…nNÎ9ZQ1µ∑ °fâÄs}ø.∞83 ﬁ–tﬂÂñ™S@≈ã*nw:‰4ÚÜCh9ã†ˇŒ='ó^2"¿ÕÖ©ß¯ûÒA4ä1AÕÂ≥ıîy!z∑π¥V≥Ûª›Œ¶§û72∞ﬁ_∆Chê˝x}ºè‚¥$•ÌÈ∆1,ù°Õ4hˇu‰£Ky™˘s&^œèÅc•gˆ÷Á7≈Ÿ›~ÅÀ∑ÛÒ©ìY_z∞mTÛ5ÖæaˆLY®^ıô—„Fy{∑§GSd7›(Í“RŒJ†¶+Jö{QF21D"=!‰W¥ëˆò≠72¥sQŸÔ¿ ]⁄!VÂJ—í‰ÆÑ,e∫ÎÔ…=Nr?	ÀBw.^Ê^.ìû"£$…—™eF
-é
-Ø+7.Û–OŸæ¢ë(R/∫àd’ªEœb9GÆNW∞<)¶Q;›-]è^e…˘,ìô¿·£!•)§CXF•ÚBDW/SMHº¥u!Ò*‘Ü,µbH]$≤–Ä]•Hº™ûUÚ§Y+äÍèYΩF~7/'≠u/âiSëÓ˙Åî?#h=qV˚Ñl≤˙ã	»}t9õ^e-]Ê"F+(~s›0ûYQ©ÇπÈ_ÜÙ4ì¸Î_˛oeQV9ΩôCf~æTl7r	·¨Õ1åﬂ‘ÃR–íÍ≤w∞Û~ Òê)|4ÆqÜã8˜¸)ç+E91sÂv|‘˘∆Ü^vÎàﬁhµÅ¡:ë´2à–i^∆[7+À*L'E∂|ÈUﬂòë-o¿›~tdK®‹œéH∏≠À»ôd©HQÛwÂˆÂYë∑PóÁ9ïÌmfEiaÏâ2X\ßâ±—≈ÃKC Cæä˙…ÿ©≠âö´jÿYµàYÍ˚
-(è∫™r≠N5CüZlÉÆ~-!}/F\—ﬂ∫Ò∏|T°≈Ãœ<Ò≥XÏ6la¡˘aH±Ωﬂ“ÄfofÊv°0¶†ûmá∏r›ö≠Lü\ÆªÀó™õ:1»ã´∑9U2ˇ·ﬂR%k∂Ëhueµ€ÌöH©˛˘¬s2ÜZ˛´-n¨
-f≠÷ÁΩ˚ﬁŒ¡˛ﬁ´S≤Ω≥≥wt∫˝jgØNò# ﬂÓı‹IÇáe^Ê=I≥—¥'ç—¨'∏ ~∞?·UvJmÌ
-|ÅÌ¥·–Ïå‹ﬁ{Lg¸˜Ó5∂,Ù”¯NÚ“ô4á∏√6=O‘E‹√^˚Ω{ΩXtíÌtêªÇa@€ÑÜÁ&!¡lvè÷+ù≈Ô˚.z;1‚è˛„n∏Wßó¥Ÿ-VÒõ”ó˚(%Ó˘.:œ>ïËìπ˛–£)2&«œ⁄oñﬂïA®]˝.r£iÒ1í*Áıƒ)πÜµ2≈≤¬M¨™‡Ô¡≤ »'¥1∫Ên_÷&˜WfΩ- Wà+tLoîï„Ïµv‡õ¿
-JuÌ|„Ò4XRA6)ﬁ ú©èÖKIúD0„äÍL∂ 2%€≠b|.U™F«5Ö/ò(MõÇﬂ—Ω\òÛH€4)…Î„∫_ÖœnÁn¸…úNÊ`NgvÙµ;Ÿ—W?Ÿ—ÁoGˇÈœL9^≤6ß5‰[7Úœê]@u
-∂Ê¡€”e‘˙jK◊ò] åà…ÜT@‚@ö≈`A„Êç  *µ–|2’≥Î#öÍ•/RÓ™'„xå÷¬#‡∞+ıu R}‰á>“ò2R`b»ÑwBh/çvïaH/üó^äÚ≤Ÿ< |≤È“¿À{„Ê¢qö6ì!^ú©‚⁄Ñ/ÃîÃ9«Ú" ó=°/SﬁÛ>füÛ∑|÷˘€Ÿ≤/®Q:)L	‘Êr·¯„¸Ú—Ûù–\\H∑1€uòcÄFtR`!x&X”œ/…àSG|@oüÜ'I°ÍU6à%“‡iÙúˇÎ"P3ˇÅÈû—Å /AÔÿBp‡P9°K>ø¡FRÇ€w⁄¿W[˜ vÈ†ãNCÒDYßöâuÃ?'¶ÛÜµÆ„OTf≤K è˘ÜÙƒÕ:£X¢[ŸqM+©í„éÌ–Œ¶ë_Á#ˆ&’ØtâÂò∫õ·Cı™Õ‘Z™U9”ÌÜîFZ5önN~Í∞5 x_ß ®X¨ödF±≥)&>4ºÒã\öMcaÜ1ßAsˆ¯¨Ô\«ÿjrÕ<ﬁÖ€6Núk6çjÂ≥∞Búœ˜à=;¡ª6m··Ç1Q›–Y
-ì¥9§>p@˜Ë®v—¥ª0é¸˚≥˛i˝v≤/œ
--∆bC˝˙à¡ü‹;π¢Ò»/qV8CÖû•è’%í\!JUs“Ï¿`ò££¶iO38N¶ü.…P/* êr©]':,’cÊi¿œÌõ§Á»Ì—∫5 Æ3Õ¨f∫±s·ñe1±1›2‡˜¢Ê7Oı≠ßœ W ◊B˜uà_ ”B;˙èÛ4"¡Ä2KëmñeÖÿÔø’Ì¥π1rpÓ@2£:Tﬂ‡Y{@ßå,kñi¥iäÆ“ŒﬂZ,"∆"`‰ô24_LX_T˜795©17û≈¢©öæ≥»(«ƒQbaú˘∫7≥,È[∂„◊>dß–¿MSgäH∫íQ„]v±å"¯EŒËƒ˙LÃ’pZÏ6Ω[>”ójp))<t≈˝5},e,zåü®œ¶±ãÒ;Hgaz¯∏ƒ!ú]–˝C∫àbïˆSµ3<}™ë)\‡Áıbƒ<‡´.tÂ∞e	J@í‚9¢˝X™†)–\0á~(ÛÙªÉ˘å@ÆÒ⁄2%pØ)ﬂB!±/∏;¡‘ÒSÅπ'T™Uc@ë>Á,®ßt3πïü#ÖgMy1Ì4cç°ŸÁaËª∞Æ
-Üπ‘ÖPìÆÀ˜$,í[\Å¯Í˘dÆ5!ˇìû)gª÷ö,ÌÈΩ{]ößÏ-q<ÙıÚ‚ZÒ$y+3ı∆≠°b’xQﬁåC®NAú^ÂﬁJ(1k	ÄáQ?csá”C∂E°òA¶'ºcÀ"ÓÊMÁÏÊ€Œ·ÃI∏é∏	¯6‹?9<°F~√V£óÛk™ES"æéséπ!÷Õ∆$ÉÜ"í.Saù≠VäÊœíêãÀV€¨D°Ï¢Á≥x–Óá¬ëùÊZÇ˚‹—ºóyÌ®≈ ûc?ƒXq≥<æEkAîŒNêÂ˜JÔY¢Œ*^¢Ë<Mß¬˚• :Vó^D√∑÷%¯∏Zë;à‹xÑ.,fµÜ≤6T√¯Pñ›#
-i<†˜zVVt(?„¬ç9ÖRÃ4 ‰9ç±∞Û∑
-b#•Lï :zÎ¢Wœ¸BﬂÏjÏjí=ÛbibE…b∆Â:•œ4!@bÖ£bÚÀ˙Q8e•ä$Ä¶?÷Æñ"%€=$˙®Ã›À≥¨S¸V5Ìî¯ÆÆ8î‹®h££ƒq?@”˝Î%+K9È=|f™á,lHAyúπˆZ˝úT˘€*Uu5ãa?çe«‘`k®≠,li9Zåπ¿…™$20R•ß4UÛ|˙”ø˛SÍÌe\pÂﬁcÂeM'™Iór¬#ﬂµH#<I‹â Ädôµ∞í: ÌÀÌWª€ßá«øÌ+oU©Nôofë>U
-ÂM0SÂ£\í
-Ôk©s©˙*ªï`F∫hŒXfUr£ä}π}P4^ÃÉèZ5œ√+}Ê“≥,o›HŒ˙‰x“–<©7{Êuœª3§ò,ÑË≠ì¸« Ù4j\ß€D™æ√π3_J3*æyºáBQK¬√.m2N`/s‹f(ü´àºõ	!f-J±D {î¯n§∞÷úÈ™bL\%ª¯L∏±0∞B‰ì’©ñœ'ÀDYˆjé«Oø¥M’hıV%ÈáŒ<*=í*üØ;g][nÏúµ”¬ßÜ…X%Êî„ ›ÑwR=˙K' â<åÆç≈2m ¿¢h•ä0ØTKÀ§ÒΩ&˙ÒÁl<;|z‹ÃA
-fé‘ñûÊË9r0Í€ÖG=ÊFIﬂIc∫⁄¬6+bXè,:^Õ+i˝=_x.‡$5Ò÷5ò+‹T¢‹&üÄ≤ˆAú◊†‘oñ81=Ê≤BSÜLÙ[F@ü!/cñºhf≠U∂n-∏Ìaõ£Ò3~fœË©<[]ﬂûWóWµøüı›¶È €,áfgùq/M"Äçô§Lâ&†K¿>ß	ïy±‡π§¨«läé'«K8ä¬ä“q™ÀÚÃt*uµÂïqì•|„ºö˛—w‚`∑Únxé'øQ‡;O q\s7 £O3ñó”Ç>LûäSÂügÏ„l¨÷&ﬂR	˚úÛwÎVâÊ≥CôFR"µÖ?zn£^ï≠Æ$Œ,t7∞]o0p£<"I∂‰€äxÎDfEFñÖßGØæ^"ø9¢ˇÏ¡øﬂÌ=?Z"Gª/xˆ¡òƒ@¬(¡JaÉ0cËG”àVìÉ*ô∂º±3t;_.9ìâœ◊º3ÈLüÁ»≥]m‚ñÚ4e®0})ñ1¢¡ô˙AÍE.#É¡À)'âÉéRú)ö::å∆YOYxÖ°ÜSEø∞&I+ ÖU©ra5Ωmy ÀÜˇœÍdØjµ…ác*ã·R¸ cãf®€ Èﬁ^hÑÊ(ˇø„E=ﬂ]U‚4A∂A¥∆©X
-]rSSj ‹[!—îÖEºl„àóeòeÒRÖÛkR°JX™z î?ÊòöÙRÑrØ2Rœπ†…»÷JŸ.’-Óc∞«ÓF¿ –ºt©}ƒ˜Ùúª§Ë´Põ
-cßÀjgIﬂ•ﬁ•ÕŒÔ⁄ÕÔ'ÓG‡›zÉ'¡«K˜|≤ÿ¸›≥ˆóãœ>ÔxvUµ ®(ãƒò„r‡æå…$ ¢ı◊Ÿ?ç…ÏPå7⁄¡v‘€∫·9dxÃ€Î»óÜΩ)óÿÆ–ó„ÖóÍ«h#ævW∂˙yI`Røå∆9@£Ú-µi›¢»ëÖÍ≈∂Óìô$≤¥¯ü_
-ÅOå Øt∂UUÖ—IŸ‘åO«öˇπFÅßJk—4Ë9<Ÿ™K™‘5◊q¬π2)˙∂4¥ÈJ›÷*ü˜!—áØñß⁄BNîh"ÛÂ•Ál˙∞+Fπ±≠¸Èø¸ãÕÊŸîX≥;è&©Õ–ÜÊ{Ì∑z
-â¡JõY:Øs∑!®Jc=¥5‚Mä915µ!ëÕU%eDU)ÒxŸ^·`5ÌmÇÇEP4™€iπéN’R=À†Ÿ.ògº7À†NÌ¶∂
-ÍucuLw4∫Ö˘@ıZ9€®úæW≥GjÙHFNˇ∏Y∏9µo0iûõ6ú	Êá@+º∆ÉH‡W8M‡0ËÏ¶9é^Å(gµù¶&Ø”ƒ¬ôÀ„'îS∫äN“–Ú˙(G’“'îCøªî£Ö˙ü ·v÷âçΩÀf“ÿû8ƒBﬁ´};K EÔ]ÙÓ[¬T;®Äîíx^¢ù£¢ùµvZ¡ó4
-‰≥«s)|¬:•K¿:í‘ıé§ëO∏Ü~w∏FÍ’l˜ﬁ·•Ôˆa‹p≤Çæı…„Vﬂπ∆™ÒÑgG¡,C∞·àÅXy'rÓ*r	ÙÄ⁄KÛkM'◊¨g¸%œ≤BìökÂÆ)]°JÃL3´8%∂Ò	”–ÔÓ”Ë ˝cöù(å„KóxÓ˘>öÌ”ú1(<]∞9ıx-s¬Û(¡MÒ˜$#6œèäi6`x¯!a1Ÿ4ÒuL2Âeµb–é<Î0d‡:t°V53ºV6æRÕÛ,N3sp#ØÂù`ÁJ^ƒr’zìÓ∂ÇÍ,<diîy‡^Bwbrw>≥Õëa”ÍXõ¨M´e:Ñ+Láè°Ì§›n´bÎ’ô∏Ú´êe?åˆúﬁàeŸ∑1 ÛqºÊ)∂¯˙ÿ`”D˛iøûΩ·9ÌŸc	ÍÙ √¨K9ÚãπÍ¥¨œcˇNLä[⁄‰„4∂b4nâ≤‡≠}üÅF›¨‘ô~{Á(—õΩ®`ÁXMÃ4≈hóü%Ü`ﬁ‚$üÑ@“3Õ)ãtßz”‘úcôh2›∏√Ú'ƒX\ø·πPÒ·
-`ËHÔ;>'züÁ1jÔx°ynŸÉ!•b≤8ãçŸ‚,‰i«i(≈ˇ  ˇˇÏ]Õn7æ˚)∂F YÄ%•n‹§™‡&ó†Fa @z0W±÷ç )kh7M¡«û{HÄ^Ù“7ËÂ	˙ÂpHÓêÀüŸïÎ¢ny“Æ∏$w»ùgæ	îdÖ_Ú¬ò˜íΩü‰Øe˙∏Áﬂ'Í≈TÒÇˇ„'y5ôÕ∂PÊpâzÊ≠¸»É	î†á2∆?‚ eù£G©s{k@êÔÅˆX˙
-ÅI˙6|(%?»”HJ@%)M+RpÛ⁄¸@s9hC7AZñ≈"◊àÅ3S;)„,$¬'ç”hõ¢»ú˛a˝;åEXCÓ¯≤!%Gdp£c˙p[ΩÖBxåæ√≠¢<&∞úÈr|E~∏BåÁ˙ß…¸ÏﬁJ2Ç˝Eºmõ—ºz'Nˇƒsá∞ûóŒç«j™vô∫ê2∆òhÅŒ—ÍûÓ¡≈Ëgìëé0§t4éiáÔ)ƒrfÑB∆”◊EˆMÒ.·¡m˙HÅñîãh…N”-G“ÿM7.à^Hãi`µqgü·ScÍzWäÒ|•Åm_Ú‰n†¥;ÊOY¢w≥&5∂…Ê¡ä∞ˇ^dL/#Uı∂iß$4∞&ÒV∂,öô•;6ö'>9R©ΩŸo0´ÑwÆ˛fÑŸÍ‚åDJ‘¢“)7¶ŸU^1¸‰’[ﬁëy∆≠Ωf=àa≥ÓÑªÍñ;ÂZG=øûÑP≠f◊”ÌßèÔkõÈÀ+µ?î]~˙ÂèLo
-‘∂k˛ÁñÄö{©.ç≤ ∏m∑ VTO„¯ õ·Ûi±†;-È r˜UUó=‘ßcg?¿˝r<›£O
-µ™E«]úk±¨Ábã≈ù\˜ClDÍÆ‡6Æ∑4e<e©¸Ó˘__ñ˝˘€á_≠•¿ß1À'œ	ﬁ4ˇ>Pêl|Wd”Ÿ¬1•é_
-f¿x$„‚™éÃØõYëÁ®ú@låé=—Cj>º¯pΩ”∂RSØ≠ÇäΩL'Ùô‡ÚÛ\ô_F≥J…?…ıÀ•!∂àÍ«ŸÌ∂ﬂC˜ ≈Ìï4IR{’⁄ê¡âÓ¡«a”&fTµîà±`0€õ``j¿0Ym≈ïBZ£°%‘Z.≤|≈vı˜45ÉÛYkMüÓ∆¿÷»Á¨4X;Ñµ ò ÌÃòÃÑ◊€Œjc\«Y6bèA‹xâÏ¨-2zx1≥L¥√ª”ﬂx&.€ÁúãCiw6•>Lo3ùYŸ·pJt¬‚°ôd‚]ÜCô„3ï‚Cgèô„U=i∏=eÙªp= òm¥ïÎF∞S≠e≥:‰’gæ˙ã~,5¿‚øªàFûÌnêà‹p⁄Ê—i€òhN 'WΩãZB˝∏π·ìa?Ñ˜DäO¿`˛yTêXk˜∞Õ4Vâ⁄À‚“aæîˆr◊π2ã•G≈Û√ÀP‘Üm∏çŸó	•¿—ﬁ90 Põ∆ÚêçªﬁbÛ¡√åcA˛¬á›Q
-]~¿_pP`hnÖÁ·RÿŸyûÉÊ±É∏pÖpŸhfu∑‘∆Á<⁄.çº^⁄iÄTÊäv((ﬁ·∞ëk –0j]‰;çáfÂ·>√F[SÙ∑˛>Òoƒ:UZmº6¶ñÇò[ı¶Aﬁ®tµqﬁ§sb6†x+à!P€òLÓ„ '/ˇ.ŒëÜ]¨À∫ú£âÕ∏sÁ¡‡˛Ó‡Ûù≥ÔÛ)òıœûã˘(¢àÇ¥PfTÔ+Ô7¢{ÊˇŸ-7…énA"íAÔFm}}o∞Û!|f»òÁu$Q—NU0 é0∆Ac#âuJÏ”%µOdóÏ–GË€èìÇÛÿa]è¨/«∆‘‘K?√MLPv\k;ZçèÅrÛ¿¢äqÊ∫|Ûr1äñ¨q¶í!ñ∏1L¸ó‚iBØä¡RF@ÊÛ%Ï∑ãAïOÊÚ7NèUÖ‡≥©äª⁄ÔıÌ´Yeõçªœô Œ 8`
-L˘˝86BMºq!î•Yu%FŸn‚U>êèÔçKïôÖ√¨˜LŒè+Ë‘ﬁ"X4ÛTé›c´'¿ÆˆF ^Íﬁﬂ-
- €∞ÒL£Ú	_˜∑#›·ñ˜dôóπ≤⁄íõÁ≈s◊_oËdïbŸhÿq!1›˜≥-Lés8ŒJô°Æ?íNÊØ‘,
-ÇB>√Z}mÆñvo6ÓØXcX«≈€|˘X¨Lh¶û8Ì]bœ&“m⁄€Œz÷ÖÅÅ]›{Û\~ÿs’FÛB˝ûï‘~Œ‹A°ÆÆ_ÀöøôÊÂVâ‰⁄»ﬂ¶Ä…ÒYß©;:ó¯yÇrì1¶¢´≥›œ Jﬁ<Ö¯ò”bNbt‹öIæ"H¿ÎR⁄8µ)ß2Ÿ¥Mº¥E ?-∫4≠∆bøøs
-6÷üÕL÷F|_¯Kº≤”Ät†Ωä]⁄g˚˚˚çÒ´–„Ä.ùE.Ô;π†˙u
-;˜•–
-}]Ø\Ã	kbc„/   ˇˇ Ô2‚_
+                        {/* RIGHT COLUMN: Live Production Timeline */}
+                        <div className="space-y-4 md:border-l md:border-zinc-900/60 md:pl-6 flex flex-col justify-between">
+                          <div className="space-y-3">
+                            <div>
+                              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500 block mb-1 font-mono">
+                                Complete Production Timeline
+                              </span>
+                              <h4 className="text-xs font-bold text-zinc-300">
+                                Milestones & Ledger Tracking
+                              </h4>
+                            </div>
+
+                            <div className="overflow-y-auto max-h-[380px] p-1.5 pr-2 space-y-4">
+                              {stagesSequence.map((stageName, idx) => {
+                                const matchedLog = findLogForStage(stageName);
+                                const isCurrent = activeWorkflowProd.editing_status === stageName;
+                                const isDone = !!matchedLog || isCurrent;
+
+                                return (
+                                  <div key={stageName} className="flex gap-3 relative">
+                                    {/* Line connecting milestones */}
+                                    {idx < stagesSequence.length - 1 && (
+                                      <div className={`absolute left-2.5 top-5 bottom-0 w-[1px] transition-colors ${
+                                        isDone ? 'bg-gradient-to-b from-sky-500 to-zinc-900' : 'bg-zinc-900'
+                                      }`} />
+                                    )}
+
+                                    {/* Icon Indicator Dot */}
+                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-sans shrink-0 z-10 transition-all ${
+                                      isDone
+                                        ? 'bg-sky-500/10 border border-sky-500 text-sky-400 font-extrabold shadow-[0_0_8px_rgba(14,165,233,0.25)]'
+                                        : isCurrent
+                                          ? 'bg-amber-500/10 border border-amber-500 text-amber-500 animate-pulse font-extrabold'
+                                          : 'bg-zinc-900/80 border border-zinc-850 text-zinc-600'
+                                    }`}>
+                                      {isDone ? '‚úì' : idx + 1}
+                                    </div>
+
+                                    {/* Details */}
+                                    <div className="flex-1 min-w-0 pr-1">
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className={`text-[11px] font-bold font-mono transition-colors ${
+                                          isCurrent 
+                                            ? 'text-amber-400 font-extrabold' 
+                                            : isDone 
+                                              ? 'text-zinc-200' 
+                                              : 'text-zinc-650'
+                                        }`}>
+                                          {stageName}
+                                        </span>
+                                        {matchedLog && (
+                                          <span className="text-[9px] font-mono text-zinc-500 text-right">
+                                            {formatTimelineTimestamp(matchedLog.timestamp)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {matchedLog && matchedLog.action && (
+                                        <p className="text-[9px] text-zinc-500 italic mt-0.5 font-mono line-clamp-1">
+                                          {matchedLog.action.replace(`Updated Production ${activeWorkflowProd.production_id}: `, '')}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="flex gap-2 justify-end p-5 border-t border-zinc-900 bg-zinc-900/20">
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={() => {
+                            setActiveWorkflowProd(null);
+                            setWorkflowActionType(null);
+                          }}
+                          className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white font-mono uppercase text-[10px] tracking-wider rounded-lg transition-all disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSaving}
+                          className="px-5 py-2 bg-gradient-to-r from-blue-650 to-indigo-650 hover:from-blue-600 hover:to-indigo-600 text-white font-mono uppercase text-[10px] tracking-wider rounded-lg transition-all font-black shadow-lg disabled:opacity-50"
+                        >
+                          {isSaving ? 'Saving...' : 'Save Status Update'}
+                        </button>
+                      </div>
+                    </form>
+                  );
+                })()}
+
+                {/* FORM: Close Project popup */}
+                {workflowActionType === 'close_project' && activeWorkflowProd && (() => {
+                  return (
+                    <form onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!selectedStage) {
+                        alert("Please select project status");
+                        return;
+                      }
+
+                      const currentOrder = (orders || []).find(o => o.order_id === activeWorkflowProd.tracking_id || o.lead_id === activeWorkflowProd.tracking_id);
+                      const currentLead = (leads || []).find(l => l.lead_id === (currentOrder?.lead_id || activeWorkflowProd.tracking_id));
+                      const currentPayment = (payments || []).find(p => p.order_id === (currentOrder?.order_id || activeWorkflowProd.tracking_id) || p.lead_id === (currentLead?.lead_id));
+
+                      const validation = performBusinessOwnerReview(currentOrder, currentLead, activeWorkflowProd, currentPayment);
+
+                      if (!validation.isValid) {
+                        alert(validation.message);
+                        updateProduction(activeWorkflowProd.production_id, {
+                          editing_status: 'Business Owner Review',
+                          remarks: `Business Owner Review Pending: ${validation.pendingItems.join('; ')}`
+                        });
+                        setActiveWorkflowProd(null);
+                        setWorkflowActionType(null);
+                        return;
+                      }
+
+                      updateProduction(activeWorkflowProd.production_id, {
+                        editing_status: 'Order Closed',
+                        remarks: closingNotes || activeWorkflowProd.remarks,
+                        delivery_date: deliveryDate || new Date().toISOString().split('T')[0]
+                      });
+
+                      setActiveWorkflowProd(null);
+                      setWorkflowActionType(null);
+                    }} className="space-y-2.5">
+                      <div className="flex gap-4">
+                        <div>
+                          <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5 font-mono">
+                            Project ID
+                          </label>
+                          <div className="text-zinc-200 text-xs font-mono">{activeWorkflowProd.tracking_id}</div>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5 font-mono">
+                            Client
+                          </label>
+                          <div className="text-zinc-200 text-xs font-mono">{customerName}</div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5 font-mono">
+                          Current Status
+                        </label>
+                        <div className="text-amber-400 font-mono text-xs">{activeWorkflowProd.editing_status}</div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1 font-mono">
+                            Update Status *
+                          </label>
+                          <select
+                            value={selectedStage}
+                            onChange={(e) => setSelectedStage(e.target.value as EditingStatus)}
+                            className="w-full bg-zinc-900 border border-zinc-850 rounded-lg py-1.5 px-2.5 text-[11px] text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
+                            required
+                          >
+                            <option value="" disabled>Select status...</option>
+                            <option value="Assigned Editor">Assigned Editor</option>
+<option value="Editing Started">Editing Started</option>
+<option value="Customer Review">Customer Review</option>
+<option value="Editing Completed">Editing Completed</option>
+<option value="Client Acceptance">Client Acceptance</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1 font-mono">
+                            Completion Date
+                          </label>
+                          <input
+                            type="date"
+                            value={deliveryDate}
+                            onChange={(e) => setDeliveryDate(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-850 rounded-lg py-1.5 px-2.5 text-[11px] text-zinc-100 focus:outline-none focus:ring-1 focus:ring-violet-500 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-1 font-mono">
+                          Completion Notes
+                        </label>
+                        <textarea
+                          autoFocus
+                          value={closingNotes}
+                          onChange={(e) => setClosingNotes(e.target.value)}
+                          rows={2}
+                          className="w-full bg-zinc-900 border border-zinc-850 rounded-lg p-2 text-[11px] text-zinc-200 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          placeholder="Add any final notes or archive links..."
+                        />
+                      </div>
+
+                      <div className="flex gap-2 justify-end pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveWorkflowProd(null);
+                            setWorkflowActionType(null);
+                          }}
+                          className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-400 hover:text-white font-mono uppercase text-[9px] tracking-wider rounded-lg transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          className="px-4 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-650 hover:from-violet-500 hover:to-indigo-500 text-white font-mono uppercase text-[9px] tracking-wider rounded-lg transition-all font-black shadow-lg"
+                        >
+                          Save 
+                        </button>
+                      </div>
+                    </form>
+                  );
+                })()}
+
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ASSIGNED EDITORS / TEAM POPUP */}
+      {assignedEditorsModalProd && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
+                  Production Lead ‚Ä¢ Assigned Team
+                </span>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                  <span>{assignedEditorsModalProd.production_id}</span>
+                  {(() => {
+                    const { order, lead } = resolveOrderAndLead(assignedEditorsModalProd);
+                    const name = order?.customer_name || lead?.customer_name;
+                    return name ? <span className="text-zinc-400 font-sans font-normal text-xs">‚Ä¢ {name}</span> : null;
+                  })()}
+                </h3>
+              </div>
+              <button
+                onClick={() => setAssignedEditorsModalProd(null)}
+                className="text-zinc-500 hover:text-white transition-colors p-2 cursor-pointer bg-zinc-900/50 hover:bg-zinc-900 rounded-xl"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto font-sans flex-1 overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse min-w-max">
+                <thead>
+                  <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-400 font-mono text-[10px] uppercase tracking-wider">
+                    <th className="p-3 font-bold">Staff Name</th>
+                    <th className="p-3 font-bold">Event</th>
+                    <th className="p-3 font-bold">Assigned Deliverable</th>
+                    <th className="p-3 font-bold">Current Status</th>
+                    <th className="p-3 font-bold whitespace-nowrap">Server Upload</th>
+                    <th className="p-3 font-bold">Upload Link</th>
+                    <th className="p-3 font-bold whitespace-nowrap">Customer Proof</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
+                  {(() => {
+                    const prod = assignedEditorsModalProd;
+                    const orderId = (prod as any).order_id || prod.tracking_id || prod.production_id;
+                    const { order, lead } = resolveOrderAndLead(prod);
+
+                    const eventsList = ((prod as any).events && Array.isArray((prod as any).events) && (prod as any).events.length > 0)
+                      ? (prod as any).events
+                      : (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
+                        ? lead.events
+                        : (order?.events && Array.isArray(order.events) && order.events.length > 0)
+                          ? order.events
+                          : [];
+
+                    const getEventName = (eventId?: string, fallbackIdx: number = 0) => {
+                      if (eventId) {
+                        const found = eventsList.find((e: any) => e.id === eventId || e.event_id === eventId);
+                        if (found) return found.event_name || found.event_type || `Event ${fallbackIdx + 1}`;
+                        const match = eventId.match(/EVT-0*(\d+)/i);
+                        if (match) {
+                          const idx = parseInt(match[1], 10) - 1;
+                          if (eventsList[idx]) {
+                            return eventsList[idx].event_name || eventsList[idx].event_type || `Event ${idx + 1}`;
+                          }
+                          return `Event ${idx + 1}`;
+                        }
+                      }
+                      if (eventsList[fallbackIdx]) {
+                        return eventsList[fallbackIdx].event_name || eventsList[fallbackIdx].event_type || `Event ${fallbackIdx + 1}`;
+                      }
+                      return prod.custom_event_name || order?.event_type || `Event 1`;
+                    };
+
+                    const rawAssignments = (editorAssignments || []).filter(a => 
+                      (a.production_id === prod.production_id ||
+                       a.production_id === orderId ||
+                       a.order_id === orderId ||
+                       a.order_id === prod.tracking_id ||
+                       a.order_id === prod.production_id) &&
+                      isProductionStaffAssignment(a)
+                    );
+
+                    if (rawAssignments.length === 0) {
+                      return (
+                        <tr>
+                          <td colSpan={7} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
+                            No assigned staff or deliverables found for this order.
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    return rawAssignments.map((assignment, idx) => {
+                      const staffRec = (productionStaff || []).find(s => s.staff_id === assignment.staff_id || s.name === assignment.staff_name);
+                      const staffName = assignment.staff_name || staffRec?.name || 'Unassigned';
+                      const staffRole = staffRec?.role || staffRec?.production_role_speciality || 'Editor';
+                      const staffType = staffRec?.staff_type || (staffRec as any)?.Staff_Type || 'In-House';
+
+                      const eventName = getEventName(assignment.event_id, 0);
+                      const deliverableName = assignment.speciality || assignment.deliverable_id || 'Deliverable';
+                      
+                      const statusText = (assignment.status === 'Assigned' || !assignment.status) ? 'Assigned Editor' : assignment.status;
+
+                      // Extract specific link for this exact assignment/deliverable record
+                      const getSpecificAssignmentLink = (a: any): string => {
+                        if (!a) return '';
+                        const candidates = [
+                          a.Edited_Drive_Link,
+                          a.edited_drive_link,
+                          a.edited_link,
+                          a.upload_link,
+                          a.drive_link,
+                          a.edited_drive_url,
+                          a.customer_review_link,
+                          a.link,
+                          a.url,
+                          a.raw_footage_link
+                        ];
+                        for (const cand of candidates) {
+                          if (cand && typeof cand === 'string') {
+                            const trimmed = cand.trim();
+                            if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.includes('drive.google.com') || trimmed.includes('dropbox.com') || trimmed.includes('mega.nz') || trimmed.length > 10) {
+                              return trimmed;
+                            }
+                          }
+                        }
+                        return '';
+                      };
+
+                      const linkStr = getSpecificAssignmentLink(assignment);
+                      const hasLink = Boolean(linkStr);
+
+                      // Parse Customer Proof according to unified logic across Supabase storage & records
+                      const proof = parseCustomerProof(assignment, prod, order);
+
+                      return (
+                        <tr key={assignment.assignment_id || idx} className="hover:bg-zinc-900/40 transition-colors">
+                          <td className="p-3">
+                            <div className="font-bold text-white mb-0.5">{staffName}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono flex items-center gap-2">
+                              <span>{staffRole}</span>
+                              <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
+                              <span className={staffType === 'In-House' ? 'text-blue-400' : 'text-amber-400'}>{staffType}</span>
+                            </div>
+                          </td>
+                          <td className="p-3 font-mono text-xs text-zinc-300 font-bold">
+                            {eventName}
+                          </td>
+                          <td className="p-3">
+                            <span className="inline-flex w-fit px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[11px] font-mono font-bold">
+                              {deliverableName}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+                              ['Completed', 'Editing Completed', 'Editing Complete'].includes(statusText)
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : ['Customer Review', 'Client Review'].includes(statusText)
+                                ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                : ['Editing Started', 'In Progress', 'Editing In Progress'].includes(statusText)
+                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
+                            }`}>
+                              {statusText}
+                            </span>
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            {(() => {
+                              const uploadInfo = isServerUploadSaved(assignment, prod);
+                              if (uploadInfo.isUploaded) {
+                                return (
+                                  <div className="space-y-1">
+                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[11px] font-mono font-bold">
+                                      <span>‚òë</span>
+                                      <span>Uploaded in Server</span>
+                                    </span>
+                                    {uploadInfo.folderName && (
+                                      <div className="text-[10px] font-mono text-zinc-400 truncate max-w-[160px]" title={uploadInfo.folderName}>
+                                        üìÅ {uploadInfo.folderName}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono font-semibold">
+                                  <span>‚òê</span>
+                                  <span>Pending Upload</span>
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="p-3">
+                            {hasLink ? (
+                              <a
+                                href={linkStr.startsWith('http') ? linkStr : `https://${linkStr}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 font-bold text-xs transition-colors cursor-pointer"
+                                title={linkStr}
+                              >
+                                <span>üîó Open Link</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            ) : (
+                              <span className="text-zinc-500 italic text-xs font-mono">Pending Upload</span>
+                            )}
+                          </td>
+                          <td className="p-3 whitespace-nowrap">
+                            {!proof.hasProof ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                <Clock className="w-3 h-3 text-zinc-600" />
+                                <span>Pending</span>
+                              </span>
+                            ) : proof.proofType === 'both' && proof.imageUrl && proof.linkUrl ? (
+                              <div className="inline-flex items-center gap-1.5 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewProofModal({
+                                    imageUrl: proof.imageUrl!,
+                                    staffName,
+                                    deliverableName,
+                                    eventName,
+                                    orderId: prod.production_id || orderId
+                                  })}
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 font-bold font-mono text-[11px] transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                  title="Click to view uploaded confirmation image"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>View Image</span>
+                                </button>
+                                <a
+                                  href={proof.linkUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  referrerPolicy="no-referrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 font-bold font-mono text-[11px] transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                  title={proof.linkUrl}
+                                >
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                  <span>Open Link</span>
+                                </a>
+                              </div>
+                            ) : proof.proofType === 'image' && proof.imageUrl ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewProofModal({
+                                  imageUrl: proof.imageUrl!,
+                                  staffName,
+                                  deliverableName,
+                                  eventName,
+                                  orderId: prod.production_id || orderId
+                                })}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                title="Click to view full confirmation image"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                                <span>View Image</span>
+                              </button>
+                            ) : proof.proofType === 'link' && proof.linkUrl ? (
+                              <a
+                                href={proof.linkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                title={proof.linkUrl}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                                <span>View Customer Proof</span>
+                              </a>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (proof.imageUrl) {
+                                    setPreviewProofModal({
+                                      imageUrl: proof.imageUrl,
+                                      staffName,
+                                      deliverableName,
+                                      eventName,
+                                      orderId: prod.production_id || orderId
+                                    });
+                                  } else if (proof.linkUrl) {
+                                    window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
+                                title="View Proof"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>View Proof</span>
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* UPLOADED PROOF / IMAGE PREVIEW POPUP */}
+      {previewProofModal && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all">
+            {/* Header */}
+            <div className="p-4 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-emerald-400 block mb-0.5">
+                  Uploaded Proof / Image
+                </span>
+                <h4 className="text-xs font-mono font-black text-white uppercase tracking-wider flex items-center gap-2">
+                  <span>{previewProofModal.staffName}</span>
+                  <span className="text-zinc-500">‚Ä¢</span>
+                  <span className="text-purple-300">{previewProofModal.deliverableName}</span>
+                  <span className="text-zinc-500">‚Ä¢</span>
+                  <span className="text-amber-300">{previewProofModal.eventName}</span>
+                </h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewProofModal(null)}
+                className="text-zinc-400 hover:text-white p-1.5 rounded-xl bg-zinc-900/50 hover:bg-zinc-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Image Content */}
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col items-center justify-center bg-zinc-950/80">
+              <div className="relative max-w-full max-h-[65vh] rounded-xl overflow-hidden border border-zinc-800 shadow-2xl bg-black flex items-center justify-center">
+                {(() => {
+                  const formatted = previewProofModal.imageUrl.includes('drive.google.com/file/d/')
+                    ? previewProofModal.imageUrl.replace(/\/file\/d\/([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
+                    : previewProofModal.imageUrl.includes('drive.google.com/open?id=')
+                    ? previewProofModal.imageUrl.replace(/.*id=([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
+                    : previewProofModal.imageUrl;
+                  
+                  return (
+                    <img
+                      src={formatted}
+                      alt={`Uploaded Proof - ${previewProofModal.staffName} - ${previewProofModal.deliverableName}`}
+                      className="max-h-[65vh] w-auto object-contain mx-auto rounded-lg"
+                      onError={(e) => {
+                        // Fallback if image load fails
+                        const target = e.currentTarget;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent && !parent.querySelector('.img-error-msg')) {
+                          const errDiv = document.createElement('div');
+                          errDiv.className = 'img-error-msg p-8 text-center text-zinc-400 font-mono text-xs';
+                          errDiv.innerHTML = `<p class="mb-2 text-rose-400 font-bold">Image preview unavailable inline</p><p class="text-zinc-500 text-[11px]">Click "Open Full Image" below to view the uploaded proof.</p>`;
+                          parent.appendChild(errDiv);
+                        }
+                      }}
+                    />
+                  );
+                })()}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-zinc-900 bg-zinc-950 flex items-center justify-between gap-3">
+              <a
+                href={previewProofModal.imageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 font-mono text-xs font-bold transition-colors cursor-pointer"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Open Full Image</span>
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewProofModal(null)}
+                className="px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDITOR WHATSAPP SHARING POPUP */}
+      {editorWhatsappModalOpen && (
+        <div className="fixed inset-0 z-[115] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-[#10b981] block mb-0.5 animate-pulse">
+                  System Integration ‚Ä¢ WhatsApp Automation
+                </span>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
+                  Editor WhatsApp Sharing Panel
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditorWhatsappModalOpen(false);
+                  setEditorWhatsappData(null);
+                  setEditorWhatsappError(null);
+                }}
+                className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer transition-colors"
+              >
+                ‚úï
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 max-h-[70vh]">
+              {isGeneratingEditorWhatsapp ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  <p className="text-xs text-zinc-400 font-mono">Fetching latest database records...</p>
+                </div>
+              ) : editorWhatsappError ? (
+                <div className="bg-rose-500/10 border border-rose-500/20 p-5 rounded-xl space-y-4 text-center">
+                  <p className="text-xs text-rose-400 font-mono">‚ö†Ô∏è Error: {editorWhatsappError}</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (editorWhatsappProdId) {
+                        prepareEditorWhatsappData(editorWhatsappProdId);
+                      }
+                    }}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-mono font-bold transition-all cursor-pointer"
+                  >
+                    Retry Loading
+                  </button>
+                </div>
+              ) : editorWhatsappData ? (
+                <>
+                  {/* Event selector if multiple events exist */}
+                  {editorWhatsappData.lead?.events && editorWhatsappData.lead.events.length > 1 && (
+                    <div className="bg-zinc-900/40 border border-zinc-850 p-4 rounded-xl space-y-3 text-left">
+                      <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">
+                        Multiple Events Detected ‚Äî Select Event to Share:
+                      </span>
+                      <div className="flex flex-col gap-2">
+                        {editorWhatsappData.lead.events.map((ev: any, idx: number) => {
+                          const isSelected = editorWhatsappData.selectedEventIndex === idx;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                if (editorWhatsappData.prod?.production_id) {
+                                  prepareEditorWhatsappData(editorWhatsappData.prod.production_id, idx);
+                                }
+                              }}
+                              className={`w-full text-left p-2.5 rounded-lg border transition-all text-xs flex justify-between items-center ${
+                                isSelected
+                                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-300'
+                                  : 'border-zinc-850 bg-zinc-950 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                              }`}
+                            >
+                              <div className="flex flex-col gap-1">
+                                <span className="font-bold">{ev.event_name || ev.event_type || 'Event'}</span>
+                                <span className="text-[10px] font-mono text-zinc-500">{ev.event_date || '‚Äî'}</span>
+                              </div>
+                              {isSelected && <span className="text-emerald-400 font-bold font-mono">‚úì Selected</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-4">
+                    {editorWhatsappData.editors.map((ed, idx) => (
+                      <div key={idx} className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl space-y-4 text-left">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          <div className="flex-1 space-y-1">
+                            <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Assigned Editor</span>
+                            <span className="text-xs font-bold text-zinc-200 block">{ed.name}</span>
+                          </div>
+                          <div className="md:w-72 space-y-1.5">
+                            <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                              WhatsApp Contact Number {!ed.phone.trim() && <span className="text-rose-500">(Required)</span>}
+                            </label>
+                            <input
+                              type="text"
+                              value={ed.phone}
+                              onChange={(e) => {
+                                const newPhone = e.target.value;
+                                setEditorWhatsappData(prev => {
+                                  if (!prev) return null;
+                                  const newEditors = [...prev.editors];
+                                  newEditors[idx] = { ...newEditors[idx], phone: newPhone };
+                                  return { ...prev, editors: newEditors };
+                                });
+                              }}
+                              placeholder="e.g. +65 8123 4567"
+                              className={`w-full bg-zinc-950 border text-xs text-zinc-200 rounded-xl px-3 py-2 font-mono focus:outline-none ${
+                                !ed.phone.trim()
+                                  ? 'border-rose-500/50 focus:border-rose-500' 
+                                  : 'border-zinc-900 hover:border-zinc-850 focus:border-emerald-500'
+                              }`}
+                            />
+                          </div>
+                        </div>
+                        {!ed.phone.trim() && (
+                          <p className="text-[10px] text-rose-400 font-mono">‚ö†Ô∏è No mobile number saved. Please enter number before sharing.</p>
+                        )}
+                        <div className="space-y-2 text-left pt-2 border-t border-zinc-900/50">
+                          <span className="text-[10px] text-emerald-400 font-black tracking-widest font-mono uppercase block">
+                            Message Preview
+                          </span>
+                          <pre className="text-xs text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-zinc-900/60 p-4 rounded-xl border border-zinc-900 select-all overflow-x-auto max-h-[30vh]">
+                            {ed.message}
+                          </pre>
+                        </div>
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            disabled={!ed.phone.trim()}
+                            onClick={() => {
+                              const formattedPhone = formatSingaporeWhatsAppNumber(ed.phone);
+                              const encodedMsg = encodeURIComponent(ed.message);
+                              const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
+                              window.open(whatsappUrl, '_blank');
+                            }}
+                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                          >
+                            üí¨ Share with {ed.name}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+            {/* Footer */}
+            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditorWhatsappModalOpen(false);
+                  setEditorWhatsappData(null);
+                  setEditorWhatsappError(null);
+                }}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WHATSAPP SHARE POPUP */}
+      {whatsappShareModalOpen && whatsappShareData && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-[#a78bfa] block mb-0.5">
+                  Production Desk ‚Ä¢ WhatsApp Coordination
+                </span>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">
+                  Share Assignments with Crew
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWhatsappShareModalOpen(false)}
+                className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer"
+              >
+                ‚úï
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 max-h-[70vh]">
+              {/* Project Summary Banner */}
+              <div className="bg-zinc-900/30 border border-zinc-900 p-4 rounded-xl grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Project / Event Name</span>
+                  <span className="text-xs font-bold text-zinc-200 mt-0.5 block">{whatsappShareData.event_name}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Customer</span>
+                  <span className="text-xs font-bold text-zinc-200 mt-0.5 block">{whatsappShareData.customer_name}</span>
+                </div>
+                <div>
+                  <span className="text-[9px] text-zinc-500 uppercase font-mono tracking-wider block">Global Deadline</span>
+                  <span className="text-xs font-bold text-violet-400 mt-0.5 block font-mono">{whatsappShareData.global_deadline || 'N/A'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-[10px] text-[#a78bfa] uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-2">
+                  Assigned Crew & Deliverables
+                </h4>
+
+                <div className="space-y-4">
+                  {whatsappShareData.staffAssignments.map(({ staff, deliverables }: any) => {
+                    const currentMobile = editedStaffMobiles[staff.staff_id] !== undefined 
+                      ? editedStaffMobiles[staff.staff_id] 
+                      : (staff.mobile || '');
+                    const isMissingMobile = !currentMobile.trim();
+
+                    return (
+                      <div key={staff.staff_id} className="bg-zinc-900/20 border border-zinc-900 rounded-xl p-4 space-y-4 text-left">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                          {/* Left: Crew Details */}
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-zinc-100 font-sans">{staff.name}</span>
+                              <span className="px-2 py-0.5 bg-purple-950/40 border border-purple-900/30 text-purple-300 rounded text-[9px] font-mono uppercase">
+                                {staff.role || 'Crew'}
+                              </span>
+                            </div>
+                            
+                            {/* Deliverables for this crew */}
+                            <div className="space-y-1 pl-2 border-l border-purple-900/50">
+                              {(Array.isArray(deliverables) ? deliverables : []).map((d: any, idx: number) => (
+                                <div key={idx} className="text-[11px] text-zinc-400 flex items-center justify-between font-sans">
+                                  <span>‚Ä¢ {d.name}</span>
+                                  <span className="text-[10px] text-zinc-500 font-mono">Deadline: {d.deadline || whatsappShareData.global_deadline}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Right: Phone & Action Controls */}
+                          <div className="space-y-2 md:w-72">
+                            <label className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">
+                              Contact Number {isMissingMobile && <span className="text-rose-500">(Required)</span>}
+                            </label>
+                            <input
+                              type="text"
+                              value={currentMobile}
+                              onChange={(e) => {
+                                setEditedStaffMobiles(prev => ({
+                                  ...prev,
+                                  [staff.staff_id]: e.target.value
+                                }));
+                              }}
+                              placeholder="e.g. +65 8123 4567"
+                              className={`w-full bg-zinc-950 border text-xs text-zinc-200 rounded-xl px-3 py-2 font-mono focus:outline-none ${
+                                isMissingMobile 
+                                  ? 'border-rose-500/50 focus:border-rose-500' 
+                                  : 'border-zinc-900 hover:border-zinc-850 focus:border-purple-500'
+                              }`}
+                            />
+                            {isMissingMobile && (
+                              <p className="text-[10px] text-rose-400 font-mono">‚ö†Ô∏è No mobile number saved. Please type before sending.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Preview / Direct Actions for this crew member */}
+                        <div className="flex justify-end gap-2 pt-2 border-t border-zinc-900/50">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const message = getPersonalizedMessage(staff, deliverables);
+                              setPreviewStaffMessage({
+                                staffName: staff.name,
+                                message: message
+                              });
+                            }}
+                            className="px-3.5 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-300 hover:text-white text-[11px] font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                          >
+                            üëÅÔ∏è Preview Message
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isMissingMobile}
+                            onClick={() => handleSendToWhatsApp(staff, deliverables)}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-[11px] font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                          >
+                            üí¨ Send via WhatsApp
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer action to close everything */}
+            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-end">
+              <button
+                type="button"
+                onClick={() => setWhatsappShareModalOpen(false)}
+                className="px-4 py-2 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Close Coordination Panel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* WHATSAPP MESSAGE PREVIEW SUB-POPUP */}
+      {previewStaffMessage && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+            {/* Header */}
+            <div className="p-4 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
+              <div>
+                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-emerald-400 block mb-0.5">
+                  Message Preview
+                </span>
+                <h3 className="text-xs font-black text-white uppercase tracking-wider font-mono">
+                  For {previewStaffMessage.staffName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewStaffMessage(null)}
+                className="p-1 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer font-bold text-xs"
+              >
+                ‚úï Close
+              </button>
+            </div>
+
+            {/* Message Body Box */}
+            <div className="p-5 bg-zinc-950/80 overflow-y-auto flex-1 text-left font-sans">
+              <pre className="text-[11px] text-zinc-300 font-mono whitespace-pre-wrap leading-relaxed bg-zinc-900/60 p-4 rounded-xl border border-zinc-900 select-all overflow-x-auto max-h-[50vh]">
+                {previewStaffMessage.message}
+              </pre>
+              <p className="text-[10px] text-zinc-500 font-mono mt-3 text-center">
+                üí° Tip: You can double-click inside the text box to select/copy the message text manually.
+              </p>
+            </div>
+
+            {/* Footer with Send Action */}
+            <div className="p-4 border-t border-zinc-900 bg-[#0c0d10] flex justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setPreviewStaffMessage(null)}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-850 text-zinc-400 hover:text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+              >
+                Back to List
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const staffAss = whatsappShareData.staffAssignments.find((sa: any) => sa.staff.name === previewStaffMessage.staffName);
+                  if (staffAss) {
+                    handleSendToWhatsApp(staffAss.staff, staffAss.deliverables);
+                  }
+                  setPreviewStaffMessage(null);
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 text-white text-xs font-mono font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                üí¨ Send to WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALS GATEWAY FOR POST-PRODUCTION ROSTER */}
+
+      {/* 1. ONBOARD / EDIT STAFF MEMBER MODAL */}
+      <AnimatePresence>
+        {isStaffModalOpen && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div 
+              id="production_staff_modal"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
+                <div>
+                  <h3 className="text-sm font-black uppercase text-white font-mono tracking-wider">
+                    {editingStaffMember ? 'Update Professional Credentials' : 'Onboard New Production Staff'}
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                    Configure official post-production specialties, indices, and contact details.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsStaffModalOpen(false)}
+                  className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitStaff} className="p-6 space-y-4 font-mono text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Name */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Full Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={staffFormName}
+                      onChange={(e) => setStaffFormName(e.target.value)}
+                      placeholder="e.g. John Doe"
+                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Employee ID */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Employee ID</label>
+                    <input
+                      type="text"
+                      required
+                      value={staffFormEmployeeId}
+                      onChange={(e) => setStaffFormEmployeeId(e.target.value)}
+                      placeholder="e.g. EMP-2034"
+                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Mobile */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-zinc-500 uppercase font-black block">Mobile Number</label>
+                      {editingStaffMember && (
+                        <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                          üîí Locked (Permanent)
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      disabled={Boolean(editingStaffMember)}
+                      readOnly={Boolean(editingStaffMember)}
+                      value={staffFormMobile}
+                      onChange={(e) => setStaffFormMobile(e.target.value)}
+                      placeholder="e.g. +91 98765 43210"
+                      className={`w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none ${
+                        editingStaffMember ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                      }`}
+                    />
+                  </div>
+
+                  {/* WhatsApp */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 uppercase font-black block">WhatsApp Number</label>
+                    <input
+                      type="text"
+                      value={staffFormWhatsapp}
+                      onChange={(e) => setStaffFormWhatsapp(e.target.value)}
+                      placeholder="Leave blank to copy mobile"
+                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Email */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[10px] text-zinc-500 uppercase font-black block">Email Address</label>
+                      {editingStaffMember && (
+                        <span className="text-[10px] text-amber-500 font-mono flex items-center gap-1 font-bold">
+                          üîí Locked (Permanent)
+                        </span>
+                      )}
+                    </div>
+                    <input
+                      type="email"
+                      disabled={Boolean(editingStaffMember)}
+                      readOnly={Boolean(editingStaffMember)}
+                      value={staffFormEmail}
+                      onChange={(e) => setStaffFormEmail(e.target.value)}
+                      placeholder="e.g. editor@photocrew.pro"
+                      className={`w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none ${
+                        editingStaffMember ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
+                      }`}
+                    />
+                  </div>
+
+                  {/* Address */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Base Address & City</label>
+                    <input
+                      type="text"
+                      value={staffFormAddress}
+                      onChange={(e) => setStaffFormAddress(e.target.value)}
+                      placeholder="e.g. Suite 4B, MG Road, Bangalore"
+                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Joining Date */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Joining Date</label>
+                    <input
+                      type="date"
+                      value={staffFormJoiningDate}
+                      onChange={(e) => setStaffFormJoiningDate(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Production Role */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Production Role Specialty</label>
+                    <select
+                      value={staffFormRole}
+                      onChange={(e) => setStaffFormRole(e.target.value)}
+                      className="w-full bg-zinc-900 border border-zinc-850 text-xs text-zinc-200 rounded-xl px-3 py-2.5 cursor-pointer focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    >
+                      <option value="">Select Specialty</option>
+                      {allRoles.map(role => (
+                        <option key={role} value={role}>{role}</option>
+                      ))}
+                      <option value="Other / Custom Role Specialty">Other / Custom Role Specialty</option>
+                    </select>
+                  </div>
+
+                  {/* Custom Role Specialty Input */}
+                  {staffFormRole === 'Other / Custom Role Specialty' && (
+                    <div className="space-y-1 sm:col-span-2">
+                      <label className="text-[10px] text-amber-500 uppercase font-black block">Custom Role Specialty</label>
+                      <input
+                        type="text"
+                        required
+                        value={customRoleSpecialty}
+                        onChange={(e) => setCustomRoleSpecialty(e.target.value)}
+                        placeholder="e.g. Cinematic Reels Editor"
+                        className="w-full bg-zinc-900 border border-amber-950 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none placeholder-zinc-650"
+                      />
+                    </div>
+                  )}
+
+                  {/* Status */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] text-zinc-500 uppercase font-black block">Employment Status</label>
+                    <select
+                      value={staffFormStatus}
+                      onChange={(e) => setStaffFormStatus(e.target.value as any)}
+                      className="w-full bg-zinc-900 border border-zinc-850 text-xs text-zinc-200 rounded-xl px-3 py-2.5 cursor-pointer focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                    >
+                      <option value="Active">Active / On Roster</option>
+                      <option value="Inactive">Inactive / Suspended</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-zinc-900 bg-zinc-900/30 -mx-6 -mb-6 flex gap-2.5 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsStaffModalOpen(false)}
+                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded-xl cursor-pointer duration-150"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-zinc-950 font-black uppercase rounded-xl cursor-pointer hover:scale-[1.01] duration-150 shadow-md shadow-amber-500/5"
+                  >
+                    {editingStaffMember ? 'Update Staff Member' : 'Onboard Staff'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 2. CUSTOM ROLE FORM MODAL */}
+      <AnimatePresence>
+        {isCustomRoleModalOpen && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-md overflow-hidden shadow-2xl"
+            >
+              <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
+                <div>
+                  <h3 className="text-sm font-black uppercase text-white font-mono tracking-wider">
+                    Create Custom Production Role
+                  </h3>
+                  <p className="text-[11px] text-zinc-500 font-mono mt-0.5">
+                    Newly created roles will instantly propagate across indices.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomRoleModalOpen(false)}
+                  className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitCustomRole} className="p-6 space-y-4 font-mono text-xs">
+                <div className="space-y-1">
+                  <label className="text-[10px] text-zinc-500 uppercase font-black block">Role Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={customRoleName}
+                    onChange={(e) => setCustomRoleName(e.target.value)}
+                    placeholder="e.g. Drone Video Specialist"
+                    className="w-full bg-zinc-900 border border-zinc-850 px-3.5 py-2.5 text-white text-xs rounded-xl focus:ring-1 focus:ring-amber-500 focus:outline-none"
+                  />
+                  <span className="text-[9px] text-zinc-600 block mt-1">
+                    Examples: Premium Wedding Editor, Luxury Album Designer, Short Video Specialist.
+                  </span>
+                </div>
+
+                <div className="p-4 border-t border-zinc-900 bg-zinc-900/30 -mx-6 -mb-6 flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomRoleModalOpen(false)}
+                    className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded-xl cursor-pointer duration-150"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-purple-650 hover:bg-purple-600 text-white font-extrabold uppercase rounded-xl cursor-pointer duration-150 shadow-md shadow-purple-500/5"
+                  >
+                    Create Role
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 3. METRIC DETAILS DRILL-DOWN MODAL */}
+      <AnimatePresence>
+        {selectedMetricDetail && (
+          <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d10]">
+                <div>
+                  <h3 className="text-sm font-black uppercase text-white font-mono tracking-wider">
+                    {selectedMetricDetail.type} Detail Log
+                  </h3>
+                  <p className="text-[11px] text-zinc-550 font-mono mt-0.5">
+                    Individual post-production assignment roster for <span className="text-amber-500">{selectedMetricDetail.memberName}</span>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMetricDetail(null)}
+                  className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer transition-colors duration-100"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-6 max-h-[460px] overflow-y-auto w-full">
+                {selectedMetricDetail.list.length === 0 ? (
+                  <div className="text-center text-zinc-550 font-mono py-12">
+                    No active project assignment records found under this metric.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full text-left border-collapse text-xs text-zinc-300 font-mono min-w-max">
+                      <thead>
+                        <tr className="border-b border-zinc-900 text-zinc-500 uppercase pb-2 text-[9px] tracking-widest bg-zinc-950/40">
+                          <th className="py-3 px-3 font-bold">Project ID</th>
+                          <th className="py-3 px-3 font-bold">Client / Event</th>
+                          <th className="py-3 px-3 font-bold">Editing Stage</th>
+                          <th className="py-3 px-3 font-bold">Priority</th>
+                          <th className="py-3 px-3 font-bold text-right">Target Deadline</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900">
+                        {selectedMetricDetail.list.map((proj) => {
+                          let clientName = 'Unknown Client';
+                          const leadMatch = leadsData?.find(l => l.lead_id === proj.tracking_id || `PRD-${l.lead_id}` === proj.production_id);
+                          if (leadMatch) {
+                            clientName = `${leadMatch.client_name} - ${leadMatch.event_type || 'Wedding'}`;
+                          } else {
+                            const orderMatch = (orders || []).find(o => o.order_id === proj.tracking_id || o.lead_id === proj.tracking_id);
+                            if (orderMatch) {
+                              clientName = `${orderMatch.client_name} - Project`;
+                            } else {
+                              clientName = proj.tracking_id || 'Post-Production Job';
+                            }
+                          }
+
+                          return (
+                            <tr key={proj.production_id || proj.tracking_id} className="hover:bg-zinc-900/10">
+                              <td className="py-3 px-3 font-bold text-amber-500 text-[11px]">
+                                {proj.production_id || proj.tracking_id || 'N/A'}
+                              </td>
+                              <td className="py-3 px-3 font-sans text-xs text-zinc-250 break-words max-w-[200px]">
+                                {clientName}
+                              </td>
+                              <td className="py-3 px-3 text-[11px]">
+                                <StatusText status={proj.editing_status || 'Raw Footage Received'} />
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] ${
+                                  proj.project_priority === 'Critical' || proj.project_priority === 'High'
+                                    ? 'bg-rose-500/10 text-rose-450 border border-rose-500/20'
+                                    : 'bg-zinc-905 border border-zinc-900 text-zinc-450'
+                                }`}>
+                                  {proj.project_priority || 'Medium'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-3 text-right text-zinc-400 font-black">
+                                {proj.expected_delivery_date || proj.target_delivery_date || 'TBD'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              <div className="p-4 border-t border-zinc-900 flex justify-end bg-[#0c0d10]">
+                <button
+                  type="button"
+                  onClick={() => setSelectedMetricDetail(null)}
+                  className="px-4 py-2 bg-zinc-900 hover:bg-zinc-850 text-zinc-455 hover:text-white rounded-xl duration-150 cursor-pointer text-xs font-mono uppercase"
+                >
+                  Close Log
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 4. PROFESSIONAL PROFILE OVERLAY CARD MODAL */}
+      <AnimatePresence>
+        {viewingStaffMember && (() => {
+          const stats = getStaffRosterStats(viewingStaffMember.name);
+          return (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-zinc-950 border border-zinc-900 rounded-3xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative"
+              >
+                <div className="relative overflow-hidden bg-[#0c0d11] p-6 border-b border-zinc-900 flex justify-between items-start">
+                  <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+                  
+                  <div className="flex items-center gap-4 relative z-10 font-sans">
+                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-zinc-950 flex items-center justify-center text-3xl font-black font-mono shadow-xl relative overflow-hidden">
+                      {viewingStaffMember.name.charAt(0)}
+                      <div className="absolute inset-0 bg-white/10 scale-120 rotate-12" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-black text-white uppercase tracking-wider font-mono">
+                          {viewingStaffMember.name}
+                        </h2>
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-mono leading-none font-bold uppercase ${
+                          viewingStaffMember.status === 'Active' 
+                            ? 'bg-emerald-500/10 text-emerald-400' 
+                            : 'bg-zinc-800 text-zinc-500'
+                        }`}>
+                          {viewingStaffMember.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-500 font-mono mt-0.5 uppercase tracking-wide">
+                        {viewingStaffMember.production_role_speciality || viewingStaffMember.role || 'Post-Production Specialist'}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setViewingStaffMember(null)}
+                    className="p-1.5 hover:bg-zinc-900 text-zinc-500 hover:text-white rounded-lg cursor-pointer relative z-10"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Info Grid */}
+                <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Left panel: Info cards */}
+                  <div className="space-y-4 font-mono text-xs">
+                    <h4 className="text-[10px] text-zinc-500 uppercase tracking-widest font-black border-b border-zinc-900 pb-1">
+                      General Contact Details
+                    </h4>
+                    <div className="space-y-3">
+                      <div className="bg-zinc-900/40 border border-zinc-900/60 p-3 rounded-xl space-y-1.5">
+                        <span className="text-[9px] text-zinc-550 uppercase font-bold block">Mobile Number</span>
+                        <span className="text-zinc-200 tracking-wide">{viewingStaffMember.mobile}</span>
+                      </div>
+                      <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl space-y-1.5">
+                        <span className="text-[9px] text-zinc-550 uppercase font-bold block">WhatsApp Number</span>
+                        <span className="text-zinc-200 tracking-wide">{viewingStaffMember.whatsapp_number || viewingStaffMember.mobile}</span>
+                      </div>
+                      <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl space-y-1.5">
+                        <span className="text-[9px] text-zinc-550 uppercase font-bold block">Email Address</span>
+                        <span className="text-zinc-200 break-words block">{viewingStaffMember.email}</span>
+                      </div>
+                      <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl space-y-1.5">
+                        <span className="text-[9px] text-zinc-550 uppercase font-bold block">Joining Date</span>
+                        <span className="text-zinc-200 tracking-wide">{viewingStaffMember.joining_date}</span>
+                      </div>
+                      {viewingStaffMember.address && (
+                        <div className="bg-zinc-950 border border-zinc-900 p-3 rounded-xl space-y-1.5">
+                          <span className="text-[9px] text-zinc-550 uppercase font-bold block">Base Location / Address</span>
+                          <span className="text-zinc-200 block text-[11px] break-words">{viewingStaffMember.address}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right/Center panel: Analytics Dashboard */}
+                  <div className="md:col-span-2 space-y-4 font-mono">
+                    <h4 className="text-[10px] text-zinc-500 uppercase tracking-widest font-black border-b border-zinc-900 pb-1">
+                      Editor Performance & Job Metrics
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center">
+                        <span className="text-zinc-550 text-[9px] uppercase tracking-wider font-bold">Total Assigned</span>
+                        <div className="text-2xl font-black text-white mt-1">{stats.assigned.length}</div>
+                      </div>
+                      <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center">
+                        <span className="text-zinc-550 text-[9px] uppercase tracking-wider font-bold text-emerald-450 font-black font-mono">Completed</span>
+                        <div className="text-2xl font-black text-emerald-400 mt-1">{stats.completedCount}</div>
+                      </div>
+                      <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center">
+                        <span className="text-zinc-550 text-[9px] uppercase tracking-wider font-bold text-amber-500">Pending</span>
+                        <div className="text-2xl font-black text-amber-500 mt-1">{stats.pendingCount}</div>
+                      </div>
+                      <div className="bg-[#0b0c10] border border-zinc-900 p-3.5 rounded-xl text-center font-bold">
+                        <span className="text-zinc-550 text-[9px] uppercase tracking-wider">Approval Rate</span>
+                        <div className="text-2xl font-black text-purple-400 mt-1">
+                          {stats.assigned.length > 0 ? Math.round((stats.approvedCount / stats.assigned.length) * 100) : 100}%
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Project List */}
+                    <div className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4 space-y-2">
+                      <span className="text-[10px] text-zinc-550 uppercase tracking-widest font-black block mb-2">
+                        Staff Assignment Log
+                      </span>
+                      <div className="overflow-y-auto max-h-[220px] space-y-2 pr-1 select-none">
+                        {stats.assigned.length === 0 ? (
+                          <div className="text-center py-8 text-zinc-650 text-xs font-mono">
+                            No historic or pending jobs assigned to this staff member yet.
+                          </div>
+                        ) : (
+                          stats.assigned.map(proj => {
+                            let clientTitle = 'Post-Production Job';
+                            const leadM = leadsData?.find(l => l.lead_id === proj.tracking_id || `PRD-${l.lead_id}` === proj.production_id);
+                            if (leadM) clientTitle = `${leadM.client_name} (${leadM.event_type || 'Wedding'})`;
+
+                            return (
+                              <div key={proj.production_id || proj.tracking_id} className="bg-zinc-900/60 border border-zinc-850 p-2.5 rounded-xl flex items-center justify-between text-xs">
+                                <div>
+                                  <div className="font-extrabold text-zinc-200">{clientTitle}</div>
+                                  <div className="text-[9px] text-zinc-550 mt-0.5">
+                                    ID: {proj.production_id || proj.tracking_id} | Deadline: {proj.expected_delivery_date || proj.target_delivery_date || 'TBD'}
+                                  </div>
+                                </div>
+                                <StatusText status={proj.editing_status} />
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 border-t border-zinc-900 flex justify-end bg-[#0c0d10]">
+                  <button
+                    type="button"
+                    onClick={() => setViewingStaffMember(null)}
+                    className="px-5 py-2.5 bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-white rounded-xl duration-150 cursor-pointer text-xs uppercase"
+                  >
+                    Close Profile Card
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* ASSIGNED TASKS POPUP */}
+      <AnimatePresence>
+        {selectedStaffForTasks && (() => {
+          const staffTasks = [...(editorAssignments || [])].filter(a => 
+            a.staff_name.toLowerCase() === selectedStaffForTasks.toLowerCase() && 
+            isAssignmentActive(a, production || [])
+          );
+
+          return (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
+              >
+                {/* Header */}
+                <div className="p-4 sm:p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <span>üìã</span> Assigned Tasks
+                    </h3>
+                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                      STAFF: <span className="text-amber-400 font-bold">{selectedStaffForTasks}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStaffForTasks(null)}
+                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                  >
+                    ‚úï Close
+                  </button>
+                </div>
+
+                {/* Body Table */}
+                <div className="p-0 overflow-y-auto flex-1">
+                  {staffTasks.length === 0 ? (
+                    <div className="p-8 text-center text-zinc-500 font-mono text-xs">
+                      No assigned tasks found.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto w-full max-w-full">
+<table className="w-full text-left border-collapse min-w-max">
+                      <thead className="bg-zinc-900/40 sticky top-0 border-b border-zinc-900">
+                        <tr className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                          <th className="px-4 py-3 font-bold">Order ID</th>
+                          <th className="px-4 py-3 font-bold">Customer Name</th>
+                          <th className="px-4 py-3 font-bold">Event Name</th>
+                          <th className="px-4 py-3 font-bold">Assigned Task</th>
+                          <th className="px-4 py-3 font-bold">Target Delivery Date</th>
+                          <th className="px-4 py-3 font-bold">Raw Footage Received</th>
+                          <th className="px-4 py-3 font-bold">Current Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
+                        {staffTasks.map(task => {
+                          const correlatedProj = (production || []).find(p => p.production_id === task.production_id);
+                          const { order, lead } = resolveOrderAndLead(correlatedProj);
+                          const trackingId = correlatedProj?.tracking_id;
+                          const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' ? order?.order_id : (trackingId || 'N/A');
+                          const customerName = lead?.customer_name || order?.customer_name || correlatedProj?.customer_name || 'Client';
+                          const eventName = order?.event_type || order?.custom_event_name || 'Project';
+                          const rawFootageLink = getRawFootageDriveLink(correlatedProj);
+
+                          return (
+                            <tr key={task.assignment_id} className="hover:bg-zinc-900/30 transition-colors">
+                              <td className="px-4 py-3 font-mono font-bold text-violet-400">{orderId}</td>
+                              <td className="px-4 py-3 font-semibold text-white">{customerName}</td>
+                              <td className="px-4 py-3 font-medium text-purple-300">{eventName}</td>
+                              <td className="px-4 py-3 font-medium text-amber-100">{task.speciality || 'Editor'}</td>
+                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">{task.target_finish_date || correlatedProj?.target_delivery_date || '‚Äî'}</td>
+                              <td className="px-4 py-3">
+                                {rawFootageLink && (rawFootageLink.startsWith('http://') || rawFootageLink.startsWith('https://')) ? (
+                                  <a
+                                    href={rawFootageLink.startsWith('http') ? rawFootageLink : `https://${rawFootageLink}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    referrerPolicy="no-referrer"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-md text-[11px] font-bold transition-all cursor-pointer"
+                                    title={rawFootageLink}
+                                  >
+                                    <FileVideo className="w-3.5 h-3.5 shrink-0" />
+                                    <span>View Raw Footage</span>
+                                    <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
+                                  </a>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-zinc-500 text-[11px] font-mono">
+                                    <Clock className="w-3 h-3 text-zinc-600" />
+                                    <span>Pending</span>
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
+                                  task.status === 'Completed'
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
+                                    : task.status === 'Revision'
+                                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
+                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
+                                }`}>
+                                  {task.status}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+</div>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* RE-SEND REVIEW MODAL */}
+      <AnimatePresence>
+        {customerReviewResendProd && (() => {
+          const { order, lead } = resolveOrderAndLead(customerReviewResendProd);
+          const customerName = order?.customer_name || lead?.customer_name || 'Customer';
+          const trackingId = customerReviewResendProd.tracking_id || 'N/A';
+          return (
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <span>üì§</span> Send Customer Review Links
+                    </h3>
+                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                      PROJECT ID: <span className="text-violet-400 font-bold">{customerReviewResendProd.production_id}</span> ‚Ä¢ TRACKING ID: <span className="text-amber-400 font-bold">{trackingId}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setCustomerReviewResendProd(null)}
+                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                  >
+                    ‚úï Close
+                  </button>
+                </div>
+
+                {/* Body Form */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    try {
+                      setIsSaving(true);
+                      await updateProduction(customerReviewResendProd.production_id, {
+                        editing_status: 'Customer Review'
+                      });
+                      if (order?.order_id) {
+                        await updateOrderStage(order?.order_id, 'Customer Review');
+                      }
+                      
+                      // Trigger WhatsApp Web with encoded text
+                      const formattedPhone = customerReviewPhone.replace(/\D/g, '');
+                      const encodedMsg = encodeURIComponent(customerReviewMessage);
+                      const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
+                      window.open(whatsappUrl, '_blank');
+                      
+                      setCustomerReviewResendProd(null);
+                    } catch (err: any) {
+                      alert("Error updating status: " + (err.message || err));
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  className="p-6 space-y-4 overflow-y-auto flex-1 text-left"
+                >
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                      Customer Name
+                    </label>
+                    <div className="text-sm font-semibold text-zinc-200 bg-zinc-900/40 px-3 py-2 rounded-xl border border-zinc-900">
+                      {customerName}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                        WhatsApp Number / Mobile
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={customerReviewPhone}
+                        onChange={(e) => setCustomerReviewPhone(e.target.value)}
+                        className="w-full bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                        Set Stage Automatically to
+                      </label>
+                      <div className="text-xs font-semibold text-emerald-400 bg-emerald-950/10 border border-emerald-900/30 px-3 py-2 rounded-xl">
+                        üí¨ Customer Review
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                      Draft Message Content
+                    </label>
+                    <p className="text-[10px] text-zinc-500 font-mono mb-1">
+                      Customize review link messages including all assigned deliverables below:
+                    </p>
+                    <textarea
+                      required
+                      rows={10}
+                      value={customerReviewMessage}
+                      onChange={(e) => setCustomerReviewMessage(e.target.value)}
+                      className="w-full bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono whitespace-pre-wrap leading-relaxed"
+                    />
+                  </div>
+
+                  {/* Buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerReviewResendProd(null)}
+                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>üí¨</span> {isSaving ? 'Saving...' : 'Send via WhatsApp'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* CLIENT ACCEPTANCE POPUP */}
+      <AnimatePresence>
+        {clientAcceptanceProd && (() => {
+          const { order, lead } = resolveOrderAndLead(clientAcceptanceProd);
+          const customerName = order?.customer_name || lead?.customer_name || 'Customer';
+          const trackingId = clientAcceptanceProd.tracking_id || 'N/A';
+          const eventGroups = getClientAcceptanceDeliverables(clientAcceptanceProd);
+          const allChecklistKeys = eventGroups.flatMap(g => g.items.map(i => i.key));
+
+          // Convert a file to Base64
+          const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            setCaUploadingProof(true);
+            setCaUploadName(file.name);
+            setCaConsentProofChecked(true);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              setCaCommunicationProof(reader.result as string);
+              setCaUploadingProof(false);
+            };
+            reader.onerror = () => {
+              alert("Failed to read file");
+              setCaUploadingProof(false);
+            };
+            reader.readAsDataURL(file);
+          };
+
+          return (
+            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh]"
+              >
+                {/* Header */}
+                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                  <div>
+                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <span>‚úì</span> Client Acceptance Verification Deck
+                    </h3>
+                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
+                      PROJECT ID: <span className="text-violet-400 font-bold">{clientAcceptanceProd.production_id}</span> ‚Ä¢ TRACKING ID: <span className="text-amber-400 font-bold">{trackingId}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setClientAcceptanceProd(null);
+                      setCaUploadConfirmations({});
+                    }}
+                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                  >
+                    ‚úï Close
+                  </button>
+                </div>
+
+                {/* Body Form */}
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+
+                    if (!caConsentProofChecked) {
+                      alert("Please check and confirm 'Client Communication & Consent Proof'.");
+                      return;
+                    }
+
+                    if (!caCommunicationProof || !caCommunicationProof.trim()) {
+                      alert("Client Communication & Consent Proof is required. Please upload or select a proof file.");
+                      return;
+                    }
+
+                    if (!caUploadName || !caUploadName.trim()) {
+                      alert("Upload Name is required. Please provide a valid file name.");
+                      return;
+                    }
+
+                    try {
+                      setIsSaving(true);
+                      
+                      let uploadedProofUrl = caCommunicationProof;
+                      if (caCommunicationProof && caCommunicationProof.trim()) {
+                        try {
+                          uploadedProofUrl = await uploadProofToStorage(caCommunicationProof, 'client_acceptance');
+                        } catch (uErr: any) {
+                          alert(`Proof upload failed: ${uErr.message}`);
+                          setIsSaving(false);
+                          return;
+                        }
+                      }
+
+                      const updates: any = {
+                        editing_status: 'Client Acceptance',
+                        client_communication_proof: uploadedProofUrl,
+                        customer_communication_proof: uploadedProofUrl,
+                        proof_url: uploadedProofUrl,
+                        upload_name: caUploadName.trim(),
+                        proof_name: caUploadName.trim(),
+                        client_communication_proof_name: caUploadName.trim(),
+                        checklist_client_communication_proof: caConsentProofChecked,
+                        checklist_customer_acceptance: caVerifyCustomerAcceptance,
+                        checklist_content_usage: caContentUsageConfirmation,
+                        checklist_footage_deleted_7_days: caFootageDeleted7Days,
+                        checklist_payment_from_sales: caVerifyPaymentSales,
+                        checklist_edited_files_uploaded: caValidateEditedFiles,
+                        server_upload_validated: caValidateEditedFiles,
+                        validated_server_uploads: caValidatedServerUploads
+                      };
+                      
+                      await updateProduction(clientAcceptanceProd.production_id, updates);
+                      
+                      const targetId = order?.order_id || trackingId || clientAcceptanceProd.production_id;
+                      if (targetId) {
+                        await updateOrderStage(targetId, 'Client Acceptance' as any);
+                      }
+
+                      // Persist unified Client Acceptance Verification records per event
+                      if (saveClientAcceptanceVerification) {
+                        if (eventGroups.length > 0) {
+                          for (const group of eventGroups) {
+                            const conf = caUploadConfirmations[group.eventId];
+                            const matchedFolder = (conf?.folderName || group.items.find(i => i.folderName)?.folderName || clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '').trim();
+                            const matchedLink = (group.items.find(i => i.uploadLink)?.uploadLink || clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '').trim();
+                            
+                            await saveClientAcceptanceVerification({
+                              order_id: targetId,
+                              event_id: group.eventId || 'default',
+                              folder_name: matchedFolder,
+                              upload_link_path: matchedLink,
+                              client_communication_consent_proof: uploadedProofUrl,
+                              proof_file_name: caUploadName.trim(),
+                              consent_proof_verified: true
+                            });
+                          }
+                        } else {
+                          await saveClientAcceptanceVerification({
+                            order_id: targetId,
+                            event_id: 'default',
+                            folder_name: (clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '').trim(),
+                            upload_link_path: (clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '').trim(),
+                            client_communication_consent_proof: uploadedProofUrl,
+                            proof_file_name: caUploadName.trim(),
+                            consent_proof_verified: true
+                          });
+                        }
+                      }
+
+                      // Update assignments with manual upload confirmations and server upload validation
+                      for (const group of eventGroups) {
+                        const conf = caUploadConfirmations[group.eventId];
+                        const isGroupValidated = Boolean(caValidatedServerUploads[group.eventId] || caValidateEditedFiles);
+
+                        for (const item of group.items) {
+                          if (item.assignmentId) {
+                            const isItemValidated = Boolean(caValidatedServerUploads[item.key] || caValidatedServerUploads[item.assignmentId] || isGroupValidated);
+                            const assignmentUpdate: any = {};
+
+                            if (conf?.confirmed) {
+                              assignmentUpdate.server_upload_confirmed = true;
+                              assignmentUpdate.server_upload_event_date = conf.eventDate;
+                              assignmentUpdate.server_upload_folder_name = conf.folderName;
+                              assignmentUpdate.server_upload_confirmed_at = new Date().toISOString();
+                              assignmentUpdate.server_upload_confirmed_by = currentUserName || 'Production Staff';
+                              assignmentUpdate.edited_folder_uploaded_to_server = true;
+                            }
+
+                            if (isItemValidated) {
+                              assignmentUpdate.server_upload_validated = true;
+                              assignmentUpdate.server_upload_validated_at = new Date().toISOString();
+                              assignmentUpdate.server_upload_validated_by = currentUserName || 'Production Staff';
+                            }
+
+                            if (Object.keys(assignmentUpdate).length > 0) {
+                              await updateEditorAssignmentStatus(item.assignmentId, item.status as any, assignmentUpdate);
+                            }
+                          }
+                        }
+                      }
+
+                      if (refreshData) {
+                        await refreshData();
+                      }
+                      setClientAcceptanceProd(null);
+                      setCaUploadConfirmations({});
+                    } catch (err: any) {
+                      alert("Error finalizing Client Acceptance: " + (err.message || err));
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  className="p-6 space-y-5 overflow-y-auto flex-1 text-left"
+                >
+                  {/* Customer Block */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-2xl">
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
+                      <div className="text-xs font-semibold text-zinc-200">{customerName}</div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Production Status</span>
+                      <span className="inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/15">
+                        {clientAcceptanceProd.editing_status || 'In Progress'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Production Verification Checklist */}
+                  <div className="space-y-3">
+                    <div className="border-b border-zinc-900 pb-1.5 flex items-center justify-between">
+                      <h4 className="text-[10px] text-indigo-400 uppercase font-black tracking-widest font-mono flex items-center gap-1.5">
+                        <span>‚òë</span> Production Verification Checklist
+                      </h4>
+                      <span className="text-[10px] font-mono text-zinc-400 font-bold">
+                        Verification Steps
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {/* MANDATORY: Client Communication & Consent Proof */}
+                      <div className="p-4 bg-zinc-900/60 border border-pink-500/30 rounded-xl space-y-3 shadow-inner">
+                        <label className="flex items-start gap-3 cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            checked={caConsentProofChecked}
+                            onChange={(e) => setCaConsentProofChecked(e.target.checked)}
+                            className="w-4 h-4 mt-0.5 accent-pink-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                          />
+                          <div className="space-y-0.5 flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-zinc-100 group-hover:text-pink-300 transition-colors flex items-center gap-1.5">
+                                <span>üí¨</span> Client Communication & Consent Proof <span className="text-rose-400 font-black text-sm">*</span>
+                              </span>
+                              <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
+                                caConsentProofChecked && caCommunicationProof ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                              }`}>
+                                {caConsentProofChecked && caCommunicationProof ? 'Confirmed' : 'Mandatory'}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-zinc-400 leading-normal block">
+                              Confirm client communication and consent proof has been acquired and uploaded.
+                            </span>
+                          </div>
+                        </label>
+
+                        {/* Upload Name Field */}
+                        <div className="space-y-1.5 pt-1">
+                          <label className="block text-[10px] font-mono font-bold text-zinc-300 uppercase">
+                            Upload Name <span className="text-rose-400">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g. Client_Consent_Proof_24Aug2026.jpg"
+                            value={caUploadName}
+                            onChange={(e) => setCaUploadName(e.target.value)}
+                            className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-pink-500 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none transition-colors"
+                          />
+                        </div>
+
+                        {/* Upload / Select Proof Button */}
+                        <div className="space-y-2">
+                          <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 hover:border-pink-500/50 bg-zinc-950/80 hover:bg-zinc-900/60 rounded-xl py-3 px-4 cursor-pointer transition-all">
+                            <span className="text-xs text-zinc-300 font-bold mb-0.5 flex items-center gap-1.5">
+                              <Upload className="w-4 h-4 text-pink-400" />
+                              {caUploadingProof ? 'Processing proof...' : caCommunicationProof ? 'Change / Select Different Proof' : 'Upload / Select Proof'}
+                            </span>
+                            <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP, PDF formats supported</span>
+                            <input
+                              type="file"
+                              accept="image/*,application/pdf"
+                              onChange={handleFileChange}
+                              disabled={caUploadingProof}
+                              className="hidden"
+                            />
+                          </label>
+
+                          {/* Attached proof preview */}
+                          {caCommunicationProof && (
+                            <div className="p-3 bg-zinc-950 border border-pink-500/20 rounded-xl space-y-2 animate-in fade-in duration-200">
+                              <div className="flex items-center justify-between text-xs text-pink-400 font-mono font-bold">
+                                <span className="flex items-center gap-1.5">
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Proof Attached: {caUploadName || 'File'}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setCaCommunicationProof('');
+                                    setCaUploadName('');
+                                    setCaConsentProofChecked(false);
+                                  }}
+                                  className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
+                                >
+                                  Remove Proof
+                                </button>
+                              </div>
+
+                              {caCommunicationProof.startsWith('data:') || caCommunicationProof.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ? (
+                                <div className="relative rounded-lg overflow-hidden border border-zinc-850 max-h-40 bg-zinc-900 flex items-center justify-center">
+                                  <img
+                                    src={resolveStorageUrl(caCommunicationProof) || caCommunicationProof}
+                                    alt="Client Communication Proof"
+                                    referrerPolicy="no-referrer"
+                                    className="max-h-40 max-w-full object-contain rounded-lg"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2 p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-300">
+                                  <span className="text-pink-400">üìÑ</span>
+                                  <span className="truncate flex-1">{caUploadName || 'Uploaded Proof Document'}</span>
+                                  <a
+                                    href={resolveStorageUrl(caCommunicationProof) || caCommunicationProof}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-pink-400 hover:underline text-[11px] font-bold"
+                                  >
+                                    View Proof ‚Üó
+                                  </a>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 1. Verify Customer Acceptance */}
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={caVerifyCustomerAcceptance}
+                          onChange={(e) => setCaVerifyCustomerAcceptance(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-zinc-200 block">
+                            1. Verify Customer Acceptance
+                          </span>
+                          <span className="text-[11px] text-zinc-400 leading-normal block">
+                            Confirm that the customer has reviewed and approved the delivered output.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* 2. Content Usage Confirmation */}
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={caContentUsageConfirmation}
+                          onChange={(e) => setCaContentUsageConfirmation(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-zinc-200 block">
+                            2. Content Usage Confirmation
+                          </span>
+                          <span className="text-[11px] text-zinc-400 leading-normal block">
+                            Confirm client permission for social media, marketing, or portfolio showcase.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* 3. Footage Deleted in 7 Days */}
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={caFootageDeleted7Days}
+                          onChange={(e) => setCaFootageDeleted7Days(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-zinc-200 block">
+                            3. Footage Deleted in 7 Days
+                          </span>
+                          <span className="text-[11px] text-zinc-400 leading-normal block">
+                            Acknowledge standard 7-day raw footage retention window before local clean-up.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* 4. Verify Payment from Sales */}
+                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={caVerifyPaymentSales}
+                          onChange={(e) => setCaVerifyPaymentSales(e.target.checked)}
+                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                        />
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-zinc-200 block">
+                            4. Verify Payment from Sales
+                          </span>
+                          <span className="text-[11px] text-zinc-400 leading-normal block">
+                            Cross-check billing records and verify complete payment collection with Sales.
+                          </span>
+                        </div>
+                      </label>
+
+                      {/* 5. Validate Edited Files Uploaded */}
+                      <div className="p-3.5 bg-zinc-900/50 border border-zinc-850 rounded-xl space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <label className="flex items-start gap-3 cursor-pointer group">
+                            <input
+                              type="checkbox"
+                              checked={caValidateEditedFiles}
+                              onChange={(e) => {
+                                const newVal = e.target.checked;
+                                setCaValidateEditedFiles(newVal);
+                                const nextMap = { ...caValidatedServerUploads };
+                                eventGroups.forEach(g => {
+                                  nextMap[g.eventId] = newVal;
+                                  g.items.forEach(i => {
+                                    nextMap[i.key] = newVal;
+                                    if (i.assignmentId) nextMap[i.assignmentId] = newVal;
+                                  });
+                                });
+                                setCaValidatedServerUploads(nextMap);
+                              }}
+                              className="w-4 h-4 mt-0.5 accent-emerald-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
+                            />
+                            <div className="space-y-0.5">
+                              <span className="text-xs font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors block">
+                                5. Validate Edited Files Uploaded
+                              </span>
+                              <span className="text-[11px] text-zinc-400 leading-normal block">
+                                Validate and verify that the Editor has uploaded all edited files/folders to the server for each event.
+                              </span>
+                            </div>
+                          </label>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold shrink-0 ${
+                            caValidateEditedFiles ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'
+                          }`}>
+                            {caValidateEditedFiles ? 'Validated' : 'Pending Validation'}
+                          </span>
+                        </div>
+
+                        {/* Upload Details per Event */}
+                        {eventGroups.length > 0 ? (
+                          <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
+                            {eventGroups.map((group) => {
+                              const groupKey = group.eventId;
+                              const groupUploadItems = group.items;
+                              const hasUploadedItem = groupUploadItems.some(i => i.isUploaded);
+                              const matchedDate = groupUploadItems.find(i => i.eventDate)?.eventDate || clientAcceptanceProd.event_date || 'N/A';
+                              const matchedFolder = groupUploadItems.find(i => i.folderName)?.folderName || clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '';
+                              const matchedLink = groupUploadItems.find(i => i.uploadLink)?.uploadLink || clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '';
+
+                              return (
+                                <div key={`event_val_${groupKey}`} className="p-3 bg-zinc-950/60 border border-zinc-850/80 rounded-lg space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-purple-300 font-mono flex items-center gap-1.5">
+                                      <span>üìÖ</span> {group.eventName}
+                                    </span>
+                                  </div>
+
+                                  {/* Upload Info Box */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono bg-zinc-900/40 p-2.5 rounded-md border border-zinc-850">
+                                    <div>
+                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Event Date:</span>
+                                      <span className="text-zinc-300 font-semibold">{matchedDate}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Folder Name:</span>
+                                      <span className={matchedFolder ? 'text-emerald-300 font-semibold truncate block' : 'text-zinc-500 italic block'}>
+                                        {matchedFolder || 'Not provided yet'}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Server Upload Status:</span>
+                                      <span className={hasUploadedItem ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                                        {hasUploadedItem ? '‚úì Uploaded by Editor' : '‚è≥ Pending Editor Upload'}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Upload Link / Path:</span>
+                                      {matchedLink ? (
+                                        <a
+                                          href={matchedLink.startsWith('http') ? matchedLink : `https://${matchedLink}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-indigo-400 hover:text-indigo-300 underline font-bold truncate block"
+                                        >
+                                          üîó {matchedLink}
+                                        </a>
+                                      ) : (
+                                        <span className="text-zinc-500 italic">No direct link stored</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-[11px] font-mono text-zinc-400 bg-zinc-950 p-2.5 rounded-lg border border-zinc-850">
+                            Single Event / Production Server Path: <span className="text-emerald-400 font-semibold">{clientAcceptanceProd.server_path || clientAcceptanceProd.server_upload_folder_name || 'Ready for Validation'}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Edited Folder Upload Confirmations */}
+                  {caCommunicationProof && eventGroups.length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="text-[10px] text-emerald-400 uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5">
+                        üì§ Edited Folder Upload Confirmation
+                      </h4>
+                      <div className="space-y-3">
+                        {eventGroups.map((group) => {
+                          const conf = caUploadConfirmations[group.eventId] || { confirmed: false, eventDate: '', folderName: '' };
+                          return (
+                            <div key={`manual_conf_${group.eventId}`} className="p-3 bg-zinc-900/30 border border-zinc-850 rounded-xl space-y-3">
+                              <label className="flex items-start gap-3 cursor-pointer group">
+                                <input
+                                  type="checkbox"
+                                  checked={conf.confirmed}
+                                  onChange={(e) => {
+                                    setCaUploadConfirmations(prev => ({
+                                      ...prev,
+                                      [group.eventId]: {
+                                        ...conf,
+                                        confirmed: e.target.checked
+                                      }
+                                    }));
+                                  }}
+                                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900 transition-colors cursor-pointer"
+                                />
+                                <div>
+                                  <span className="text-xs font-semibold text-zinc-200 group-hover:text-emerald-300 transition-colors block">
+                                    Edited Folder Uploaded to Server
+                                  </span>
+                                  <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
+                                    Confirm upload for: <span className="font-bold text-zinc-400">{group.eventName}</span>
+                                  </span>
+                                </div>
+                              </label>
+
+                              {conf.confirmed && (
+                                <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                                  <div className="space-y-1">
+                                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                                      Event Date <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                      type="date"
+                                      required={conf.confirmed}
+                                      value={conf.eventDate}
+                                      onChange={(e) => setCaUploadConfirmations(prev => ({
+                                        ...prev,
+                                        [group.eventId]: { ...conf, eventDate: e.target.value }
+                                      }))}
+                                      className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                                      Folder Name <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      required={conf.confirmed}
+                                      placeholder="e.g. 2024-05-12_Wedding_Videos"
+                                      value={conf.folderName}
+                                      onChange={(e) => setCaUploadConfirmations(prev => ({
+                                        ...prev,
+                                        [group.eventId]: { ...conf, folderName: e.target.value }
+                                      }))}
+                                      className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClientAcceptanceProd(null);
+                        setCaUploadConfirmations({});
+                      }}
+                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSaving || caUploadingProof}
+                      className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>‚úì</span> {isSaving ? 'Submitting...' : 'Approve Client Acceptance'}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+    </div>
+  );
+};
+const isProjectLocked = (status?: string): boolean => {
+  if (!status) return false;
+  const s = status.toLowerCase();
+  return ['project completed', 'completed', 'delivered', 'project delivered', 'project cancelled', 'cancelled', 'canceled', 'closed', 'project closed', 'order closed'].includes(s);
+};
+
+export const isAssignmentActive = (a: any, productionList: any[] = []): boolean => {
+  if (!a) return false;
+  const s = (a.status || '').toLowerCase();
+  if (['completed', 'editing completed', 'project closed', 'order closed', 'closed', 'cancelled', 'canceled'].includes(s)) return false;
+  
+  if (productionList.length > 0 && a.production_id) {
+    const prod = productionList.find(p => p.production_id === a.production_id);
+    if (prod && isProjectLocked(prod.editing_status)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+
+

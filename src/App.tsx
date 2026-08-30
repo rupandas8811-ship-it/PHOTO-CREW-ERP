@@ -911,7 +911,7 @@ const MainAppContent: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-xs font-black uppercase tracking-wider text-zinc-300 font-mono">
-                    DATE RANGE
+                    Global Temporal Range
                   </h3>
                   <p className="text-[10px] text-zinc-500 font-sans">
                     Refined analytical bound parameters: <span className="text-amber-400 font-bold font-mono">{globalDateRange.start}</span> to <span className="text-amber-400 font-bold font-mono">{globalDateRange.end}</span>
