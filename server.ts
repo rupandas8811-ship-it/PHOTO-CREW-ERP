@@ -773,7 +773,8 @@ async function startServer() {
         final_edited_footage_link,
         proof_file_name,
         proof_storage_path,
-        consent_proof_verified
+        consent_proof_verified,
+        edited_folder_uploaded_to_server
       } = payload;
 
       if (!order_id) {
@@ -806,6 +807,7 @@ async function startServer() {
           proof_file_name: proof_file_name !== undefined ? proof_file_name : existingRecords[index].proof_file_name,
           proof_storage_path: proof_storage_path !== undefined ? proof_storage_path : existingRecords[index].proof_storage_path,
           consent_proof_verified: consent_proof_verified !== undefined ? Boolean(consent_proof_verified) : existingRecords[index].consent_proof_verified,
+          edited_folder_uploaded_to_server: edited_folder_uploaded_to_server !== undefined ? Boolean(edited_folder_uploaded_to_server) : existingRecords[index].edited_folder_uploaded_to_server,
           updated_at: now
         };
         existingRecords[index] = savedRecord;
@@ -821,7 +823,8 @@ async function startServer() {
           final_edited_footage_link: resolvedLink,
           proof_file_name: proof_file_name || '',
           proof_storage_path: proof_storage_path || '',
-          consent_proof_verified: consent_proof_verified !== undefined ? Boolean(consent_proof_verified) : true,
+          consent_proof_verified: consent_proof_verified !== undefined ? Boolean(consent_proof_verified) : false,
+          edited_folder_uploaded_to_server: edited_folder_uploaded_to_server !== undefined ? Boolean(edited_folder_uploaded_to_server) : false,
           created_at: now,
           updated_at: now
         };

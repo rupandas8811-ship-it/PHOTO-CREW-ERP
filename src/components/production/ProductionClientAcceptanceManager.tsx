@@ -250,19 +250,33 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           savedLink = matchingAssignment?.edited_drive_link || (matchingAssignment as any)?.Edited_Drive_Link || (matchingAssignment as any)?.delivery_link || targetProd?.edited_drive_link || (targetProd as any)?.final_consolidated_drive_link || '';
         }
 
-        const isConfirmedSaved = Boolean(
-          savedFolderName ||
-          savedLink ||
+        // 2A. CHECKLIST ITEM 1: CLIENT COMMUNICATION & CONSENT PROOF (INDEPENDENT)
+        const proofLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
+        const proofCheckbox = proofLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || proofLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+        const isProofSaved = Boolean(
           savedVerif?.consent_proof_verified ||
+          savedVerif?.client_communication_consent_proof ||
+          targetProd?.client_communication_proof ||
+          targetProd?.checklist_client_communication_proof
+        );
+        if (isProofSaved && proofCheckbox && !proofCheckbox.checked) {
+          proofCheckbox.click();
+        }
+
+        // 2B. CHECKLIST ITEM 2: EDITED FOLDER UPLOADED TO SERVER (INDEPENDENT)
+        // Must NOT depend on consent_proof_verified!
+        const isFolderUploadConfirmed = Boolean(
+          (savedFolderName && savedLink) ||
+          (savedVerif as any)?.edited_folder_uploaded_to_server ||
+          matchingAssignment?.server_upload_confirmed ||
+          (matchingAssignment as any)?.edited_folder_uploaded_to_server ||
           targetProd?.server_upload_confirmed ||
-          (targetProd as any)?.edited_folder_uploaded_to_server ||
-          matchingAssignment?.server_upload_confirmed
+          (targetProd as any)?.edited_folder_uploaded_to_server
         );
 
-        // Check the "Edited Folder Uploaded to Server" checkbox if there's saved data
+        // Check the "Edited Folder Uploaded to Server" checkbox if there's saved data for folder upload
         const checkbox = eventCard.querySelector<HTMLInputElement>('input[type="checkbox"]');
-
-        if (isConfirmedSaved && checkbox && !checkbox.checked) {
+        if (isFolderUploadConfirmed && checkbox && !checkbox.checked) {
           checkbox.click();
         }
 
@@ -404,6 +418,10 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             }
 
             // Extract proof URL and name from DOM to save to DB
+            const proofLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
+            const proofCheckbox = proofLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || proofLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const isConsentProofChecked = proofCheckbox ? proofCheckbox.checked : true;
+
             const proofImg = caModal.querySelector<HTMLImageElement>('img[alt*="Proof"], img[alt*="Communication"]');
             const proofLink = caModal.querySelector<HTMLAnchorElement>('a[href*="storage"], a[href*="firebasestorage"], a[href*="proof"]');
             const caCommunicationProofVal = proofImg?.src || proofLink?.href || '';
@@ -425,6 +443,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               const fInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
               const folderVal = fInput ? (fInput.value || '').trim() : '';
 
+              const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+              const isFolderUploadChecked = checkbox ? checkbox.checked : true;
+
               lastFolderVal = folderVal;
               lastLinkVal = linkVal;
 
@@ -438,8 +459,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                     final_edited_footage_link: linkVal,
                     client_communication_consent_proof: caCommunicationProofVal,
                     proof_file_name: caUploadNameVal,
-                    consent_proof_verified: true
-                  });
+                    consent_proof_verified: isConsentProofChecked,
+                    edited_folder_uploaded_to_server: isFolderUploadChecked
+                  } as any);
                 }
               }
 
@@ -455,7 +477,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                   Edited_Drive_Link: linkVal,
                   final_edited_footage_link: linkVal,
                   server_upload_folder_name: folderVal,
-                  server_upload_confirmed: true,
+                  server_upload_confirmed: isFolderUploadChecked,
+                  edited_folder_uploaded_to_server: isFolderUploadChecked,
                   server_upload_confirmed_at: new Date().toISOString(),
                   server_upload_confirmed_by: 'Production Team'
                 };
