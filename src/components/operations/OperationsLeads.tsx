@@ -1816,7 +1816,10 @@ export const OperationsLeads: React.FC = () => {
     e.preventDefault();
     if (!assigningOrderId || isSaving) return;
     
-    // Validate required fields
+    setIsSaving(true);
+
+    try {
+      // Validate required fields
     const hasAnyAllocations = Object.values(eventAllocations).some((alloc: any) => alloc.staff && alloc.staff.length > 0);
     if (activeAssignments.length === 0 && !hasAnyAllocations) {
       alert("Please assign at least one staff member.");
@@ -1945,9 +1948,7 @@ export const OperationsLeads: React.FC = () => {
        }
     }
 
-    try {
-
-      // Collect ALL assigned staff across all events into activeAssignments so they are recorded correctly per event
+     // Collect ALL assigned staff across all events into activeAssignments so they are recorded correctly per event
       const allAssignedStaff: { 
         assignment_id?: string;
         staff_role: string; 
@@ -1987,13 +1988,6 @@ export const OperationsLeads: React.FC = () => {
       });
 
       // Gather all selected equipment across all events
-      const allAssignedEquipment = Array.from(
-        new Set(
-          Object.values(eventAllocations).flatMap((alloc: any) => 
-            alloc.staff?.flatMap((st: any) => st.equipment || []) || []
-          )
-        )
-      ) as string[];
       const consolidatedEquipKit = allAssignedEquipment.join(', ');
       
       // Update lead_events table with assigned staff AND event-specific equipment via updateLead API proxy
@@ -3964,10 +3958,10 @@ export const OperationsLeads: React.FC = () => {
                   {isSaving ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                      <span>Saving Assignments...</span>
+                      <span>SAVING ALL ASSIGNMENTS...</span>
                     </>
                   ) : (
-                    'Save All Assignments'
+                    'SAVE ALL ASSIGNMENTS'
                   )}
                 </button>
               </div>
