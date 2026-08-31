@@ -570,6 +570,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             const saveTargets = Array.from(candidateOrderIds).filter(Boolean);
 
             // 1. SAVE CHECKLIST DATA FIRST TO SUPABASE
+            let verifSaveSuccess = false;
             for (const inp of linkInputs) {
               const evId = inp.getAttribute('data-event-id') || 'default';
               const linkVal = (inp.value || '').trim();
@@ -583,7 +584,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
               for (const targetId of saveTargets) {
                 if (saveClientAcceptanceVerification) {
-                  await saveClientAcceptanceVerification({
+                  const saved = await saveClientAcceptanceVerification({
                     order_id: targetId,
                     event_id: evId,
                     folder_name: folderVal,
@@ -594,6 +595,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                     consent_proof_verified: true,
                     edited_folder_uploaded_to_server: true
                   } as any);
+                  if (saved) verifSaveSuccess = true;
                 }
               }
 
@@ -604,10 +606,12 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               );
               for (const a of matchingAssignments) {
                 const assignmentUpdates = {
+                  status: 'Client Acceptance',
                   edited_drive_link: linkVal,
                   Edited_Drive_Link: linkVal,
                   final_edited_footage_link: linkVal,
                   server_upload_folder_name: folderVal,
+                  folder_name: folderVal,
                   server_upload_confirmed: true,
                   edited_folder_uploaded_to_server: true,
                   server_upload_confirmed_at: new Date().toISOString(),
@@ -619,9 +623,16 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
             // 2. UPDATE PRODUCTION RECORD STATUS TO 'Client Acceptance' IN SUPABASE
             const prodUpdates = {
+              editing_status: 'Client Acceptance',
+              production_status: 'Client Acceptance',
+              current_status: 'Client Acceptance',
+              status: 'Client Acceptance',
               final_consolidated_drive_link: lastLinkVal,
               edited_drive_link: lastLinkVal,
+              final_edited_footage_link: lastLinkVal,
+              upload_link_path: lastLinkVal,
               server_upload_folder_name: lastFolderVal,
+              folder_name: lastFolderVal,
               server_upload_confirmed: true,
               edited_folder_uploaded_to_server: true,
               checklist_client_communication_proof: true,
@@ -680,10 +691,12 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
               await pushUpdate('orders', 'order_id', id, {
                 current_stage: 'Client Acceptance',
-                order_status: 'Confirmed'
+                order_status: 'Confirmed',
+                status: 'Client Acceptance'
               });
 
               await pushUpdate('leads', 'lead_id', id, {
+                status: 'Client Acceptance'
               });
             }
 

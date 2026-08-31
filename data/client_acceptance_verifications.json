@@ -11,7 +11,8 @@
     "consent_proof_verified": true,
     "created_at": "2026-08-30T19:49:32.24+00:00",
     "updated_at": "2026-08-31T05:54:29.21914+00:00",
-    "final_edited_footage_link": "https://supabase.com/dashboard/project/aqifyxsimhqayfjwzzwj/sql/new"
+    "final_edited_footage_link": "https://supabase.com/dashboard/project/aqifyxsimhqayfjwzzwj/sql/new",
+    "edited_folder_uploaded_to_server": false
   },
   {
     "id": "TEST_ORD_999_default",
@@ -25,6 +26,22 @@
     "proof_storage_path": "",
     "consent_proof_verified": true,
     "created_at": "2026-08-31T07:47:08.161+00:00",
-    "updated_at": "2026-08-31T07:47:08.161+00:00"
+    "updated_at": "2026-08-31T07:47:08.161+00:00",
+    "edited_folder_uploaded_to_server": false
+  },
+  {
+    "id": "TEST_CA_PERFECT_001_EV-01",
+    "order_id": "TEST_CA_PERFECT_001",
+    "event_id": "EV-01",
+    "client_communication_consent_proof": "https://example.com/proof.jpg",
+    "folder_name": "Test_Perfect_Folder",
+    "upload_link_path": "https://drive.google.com/test-link",
+    "final_edited_footage_link": "https://drive.google.com/test-link",
+    "proof_file_name": "proof.jpg",
+    "proof_storage_path": "",
+    "consent_proof_verified": true,
+    "edited_folder_uploaded_to_server": true,
+    "created_at": "2026-08-31T09:42:26.327+00:00",
+    "updated_at": "2026-08-31T09:42:26.327+00:00"
   }
 ]

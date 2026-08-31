@@ -1385,11 +1385,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'checklist_content_usage', 'checklist_footage_deleted_7_days',
         'checklist_payment_from_sales', 'checklist_edited_files_uploaded',
         'server_upload_validated', 'server_upload_folder_name', 'server_upload_event_date',
-        'server_upload_confirmed', 'edited_drive_link', 'delivery_link'
+        'server_upload_confirmed', 'edited_drive_link', 'delivery_link', 'edited_folder_uploaded_to_server',
+        'folder_name', 'final_edited_footage_link', 'upload_link_path'
       ],
       client_acceptance_verifications: [
         'id', 'order_id', 'event_id', 'client_communication_consent_proof',
-        'folder_name', 'upload_link_path', 'proof_file_name', 'proof_storage_path',
+        'folder_name', 'upload_link_path', 'final_edited_footage_link', 'edited_folder_uploaded_to_server', 'proof_file_name', 'proof_storage_path',
         'consent_proof_verified', 'created_at', 'updated_at'
       ],
       payments: [
