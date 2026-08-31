@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
@@ -373,6 +373,8 @@ export const OperationsLeads: React.FC = () => {
   // Inline edit state for assignment
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const whatsappModalRef = useRef<HTMLDivElement>(null);
+  const whatsappScrollRef = useRef<HTMLDivElement>(null);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
   const [noteModalLeadId, setNoteModalLeadId] = useState("");
   const [noteModalOrderId, setNoteModalOrderId] = useState("");
@@ -649,6 +651,16 @@ export const OperationsLeads: React.FC = () => {
       });
       setEditedMessages(initialMsgs);
       setSelectedStaffForShare(initialSelected);
+
+      // Automatically scroll to the Personalized WhatsApp Share modal and reset inner scroll container
+      setTimeout(() => {
+        if (whatsappModalRef.current) {
+          whatsappModalRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (whatsappScrollRef.current) {
+          whatsappScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, 50);
     } else {
       setEditedMessages({});
       setSelectedStaffForShare({});
@@ -3958,10 +3970,10 @@ export const OperationsLeads: React.FC = () => {
                   {isSaving ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                      <span>SAVING ALL ASSIGNMENTS...</span>
+                      <span>SAVING ASSIGNMENTS...</span>
                     </>
                   ) : (
-                    'SAVE ALL ASSIGNMENTS'
+                    'SAVE ASSIGNMENTS'
                   )}
                 </button>
               </div>
@@ -4704,8 +4716,8 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Multi-Staff WhatsApp Share picker */}
       {whatsappShareModalData && (
-        <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+        <div id="personalized-whatsapp-share-modal-overlay" className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div ref={whatsappModalRef} id="personalized-whatsapp-share-modal-card" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
             <button 
               onClick={() => setWhatsappShareModalData(null)}
               className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
@@ -4726,7 +4738,7 @@ export const OperationsLeads: React.FC = () => {
               </div>
             </div>
 
-            <div className="overflow-y-auto space-y-5 flex-1 pr-1 text-left">
+            <div ref={whatsappScrollRef} className="overflow-y-auto space-y-5 flex-1 pr-1 text-left">
               {whatsappShareModalData.staffNames.filter(name => {
                 const st = staff?.find(s => s.name === name);
                 return st?.department === 'Operations';
