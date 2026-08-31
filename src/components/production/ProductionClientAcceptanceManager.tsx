@@ -602,10 +602,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                 saveTargets.some(tId => tId.toLowerCase() === String(a.order_id || '').toLowerCase() || tId.toLowerCase() === String(a.production_id || '').toLowerCase()) &&
                 (a.event_id === evId || !a.event_id || evId === 'default' || (linkInputs.length === 1))
               );
-
               for (const a of matchingAssignments) {
                 const assignmentUpdates = {
-                  status: 'Client Acceptance' as any,
                   edited_drive_link: linkVal,
                   Edited_Drive_Link: linkVal,
                   final_edited_footage_link: linkVal,
@@ -613,21 +611,14 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                   server_upload_confirmed: true,
                   edited_folder_uploaded_to_server: true,
                   server_upload_confirmed_at: new Date().toISOString(),
-                  server_upload_confirmed_by: 'Production Team'
+                  server_upload_confirmed_by: "Production Team"
                 };
-
-                if (updateEditorAssignmentStatus) {
-                  await updateEditorAssignmentStatus(a.assignment_id, 'Client Acceptance' as any, assignmentUpdates);
-                }
-                await pushUpdate('editor_assignments', 'assignment_id', a.assignment_id, assignmentUpdates);
+                await pushUpdate("editor_assignments", "assignment_id", a.assignment_id, assignmentUpdates);
               }
             }
 
             // 2. UPDATE PRODUCTION RECORD STATUS TO 'Client Acceptance' IN SUPABASE
             const prodUpdates = {
-              editing_status: 'Client Acceptance' as any,
-              production_status: 'Client Acceptance' as any,
-              current_status: 'Client Acceptance' as any,
               final_consolidated_drive_link: lastLinkVal,
               edited_drive_link: lastLinkVal,
               server_upload_folder_name: lastFolderVal,
@@ -693,8 +684,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               });
 
               await pushUpdate('leads', 'lead_id', id, {
-                status: 'Client Acceptance',
-                current_status: 'Client Acceptance'
               });
             }
 

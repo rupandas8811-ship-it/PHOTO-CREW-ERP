@@ -5072,32 +5072,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         }
       }
     }
-
-    // Sync editor_assignments status if Client Acceptance
-    if (nextStage === 'Client Acceptance' || updates.editing_status === 'Client Acceptance') {
-      const pId = targetProd?.production_id || productionId;
-      const trkId = targetProd?.tracking_id || inferredTrackingId;
-      const oId = tgtOrder?.order_id;
-
-      const matchingAssignments = (editorAssignments || []).filter(a => 
-        a.production_id === pId || 
-        a.production_id === trkId || 
-        (oId && a.order_id === oId)
-      );
-
-      for (const assign of matchingAssignments) {
-        await pushUpdate('editor_assignments', 'assignment_id', assign.assignment_id, { status: 'Client Acceptance' });
-      }
-
-      if (matchingAssignments.length > 0) {
-        setEditorAssignments(prev => prev.map(a => 
-          (a.production_id === pId || a.production_id === trkId || (oId && a.order_id === oId))
-            ? { ...a, status: 'Client Acceptance' }
-            : a
-        ));
-      }
-    }
-
     // Record status history & proof attachment
     if (updates.editing_status && nextStage && (previousStage !== nextStage || updates.client_communication_proof)) {
       const roleParts = (currentUserName && currentUserName.includes('|')) 

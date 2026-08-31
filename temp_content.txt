@@ -1,0 +1,26 @@
+              // Update isolated editor_assignments with 'Client Acceptance' status to prevent rank recalculation revert
+              const matchingAssignments = (editorAssignments || []).filter(a =>
+                saveTargets.some(tId => tId.toLowerCase() === String(a.order_id || '').toLowerCase() || tId.toLowerCase() === String(a.production_id || '').toLowerCase()) &&
+                (a.event_id === evId || !a.event_id || evId === 'default' || (linkInputs.length === 1))
+              );
+
+              for (const a of matchingAssignments) {
+                const assignmentUpdates = {
+                  status: 'Client Acceptance' as any,
+                  edited_drive_link: linkVal,
+                  Edited_Drive_Link: linkVal,
+                  final_edited_footage_link: linkVal,
+                  server_upload_folder_name: folderVal,
+                  server_upload_confirmed: true,
+                  edited_folder_uploaded_to_server: true,
+                  server_upload_confirmed_at: new Date().toISOString(),
+                  server_upload_confirmed_by: 'Production Team'
+                };
+
+                if (updateEditorAssignmentStatus) {
+                  await updateEditorAssignmentStatus(a.assignment_id, 'Client Acceptance' as any, assignmentUpdates);
+                }
+                await pushUpdate('editor_assignments', 'assignment_id', a.assignment_id, assignmentUpdates);
+              }
+            }
+
