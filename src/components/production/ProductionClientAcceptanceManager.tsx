@@ -739,6 +739,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
             // 4. VERIFY DATABASE PERSISTENCE IN SUPABASE (PRODUCTION TABLE)
             let isVerifiedInDb = false;
+            let verificationErrorMsg = '';
+
             for (const checkId of saveTargets) {
               for (const col of ['production_id', 'tracking_id', 'order_id', 'lead_id']) {
                 try {
@@ -754,20 +756,34 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                   const verifyData = await verifyRes.json();
                   if (verifyData?.success && Array.isArray(verifyData.data) && verifyData.data.length > 0) {
                     const dbRow = verifyData.data[0];
-                    const dbStatus = dbRow.editing_status || dbRow.production_status || dbRow.current_status;
-                    if (dbStatus === 'Client Acceptance') {
+                    const dbCurrStatus = dbRow.current_status || dbRow.production_status || dbRow.editing_status;
+                    const dbProdStatus = dbRow.production_status || dbRow.current_status || dbRow.editing_status;
+
+                    if (dbCurrStatus !== 'Client Acceptance' && dbProdStatus !== 'Client Acceptance') {
+                      verificationErrorMsg = `CLIENT ACCEPTANCE STATUS UPDATE FAILED: current_status was '${dbRow.current_status || 'null'}' and production_status was '${dbRow.production_status || 'null'}' instead of 'Client Acceptance'.`;
+                    } else if (lastFolderVal && dbRow.folder_name !== lastFolderVal && dbRow.server_upload_folder_name !== lastFolderVal) {
+                      verificationErrorMsg = `CLIENT ACCEPTANCE SAVE FAILED: folder_name in database ('${dbRow.folder_name || 'null'}') did not match submitted '${lastFolderVal}'.`;
+                    } else if (lastLinkVal && dbRow.final_edited_footage_link !== lastLinkVal && dbRow.edited_drive_link !== lastLinkVal && dbRow.upload_link_path !== lastLinkVal) {
+                      verificationErrorMsg = `CLIENT ACCEPTANCE SAVE FAILED: final_edited_footage_link in database did not match submitted link.`;
+                    } else {
                       isVerifiedInDb = true;
                       break;
                     }
                   }
-                } catch (_) {}
+                } catch (vErr: any) {
+                  console.warn(`[Verification SELECT attempt failed for ${col}=${checkId}]:`, vErr);
+                }
               }
               if (isVerifiedInDb) break;
             }
 
             if (!isVerifiedInDb) {
-              console.log("[Client Acceptance] Immediate select pending cache propagation; pushUpdate completed successfully.");
-              isVerifiedInDb = true;
+              if (verificationErrorMsg) {
+                throw new Error(verificationErrorMsg);
+              } else {
+                console.log("[Client Acceptance] Immediate select pending cache propagation; pushUpdate completed successfully.");
+                isVerifiedInDb = true;
+              }
             }
 
             // 5. RE-FETCH FRESH DATA FROM SUPABASE

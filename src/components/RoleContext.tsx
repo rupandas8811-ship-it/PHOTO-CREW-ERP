@@ -6596,12 +6596,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
           
           const prodObj = (production || []).find(p => p.production_id === prodId);
-          const baseStatus = prodObj?.editing_status || 'Raw Footage Received';
+          const baseStatus = prodObj?.editing_status || (prodObj as any)?.production_status || (prodObj as any)?.current_status || 'Raw Footage Received';
 
           let nextEditingStatus: EditingStatus | undefined = undefined;
           
-          // Do not override terminal statuses
-          if (!['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'].includes(baseStatus)) {
+          const terminalStatuses = ['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'];
+          const isTerminal = terminalStatuses.includes(baseStatus) || 
+                             terminalStatuses.includes(prodObj?.editing_status || '') ||
+                             terminalStatuses.includes((prodObj as any)?.production_status || '') ||
+                             terminalStatuses.includes((prodObj as any)?.current_status || '');
+
+          // Do not override terminal or Client Acceptance statuses
+          if (!isTerminal) {
             if (totalTasks > 0) {
               const getTaskStageRank = (st: string, driveLink?: string) => {
                 const s = st || '';
