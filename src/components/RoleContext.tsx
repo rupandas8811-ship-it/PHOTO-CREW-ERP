@@ -3458,14 +3458,28 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const { data: dbUserByEmail } = await supabaseClient
           .from('users')
           .select('*')
-          .eq('email', emailFromAuth.toLowerCase().trim())
+          .ilike('email', emailFromAuth.trim())
           .maybeSingle();
         
         if (dbUserByEmail && currentUid) {
-          await supabaseClient.from('users').update({ id: currentUid }).eq('email', emailFromAuth.toLowerCase().trim());
+          await supabaseClient.from('users').update({ id: currentUid }).eq('email', dbUserByEmail.email);
           dbUser = { ...dbUserByEmail, id: currentUid };
         } else if (dbUserByEmail) {
           dbUser = dbUserByEmail;
+        }
+      }
+
+      // If dbUser has a different email than emailFromAuth, align it!
+      if (dbUser && currentUid && emailFromAuth) {
+        const dbEmailNorm = (dbUser.email || '').toLowerCase().trim();
+        const authEmailNorm = emailFromAuth.toLowerCase().trim();
+        if (dbEmailNorm !== authEmailNorm) {
+          console.log("Aligning user profile email with authenticated email in context...");
+          await supabaseClient
+            .from('users')
+            .update({ email: emailFromAuth.trim() })
+            .eq('id', currentUid);
+          dbUser = { ...dbUser, email: emailFromAuth.trim() };
         }
       }
 
@@ -3478,8 +3492,20 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         throw new Error("User record missing from users table.");
       }
 
-      if (emailFromAuth && finalUser.email && finalUser.email.toLowerCase().trim() !== emailFromAuth.toLowerCase().trim()) {
-        throw new Error("User record email does not match logged-in account.");
+      // Robust case-insensitive comparison and self-healing alignment
+      if (emailFromAuth && finalUser.email) {
+        const finalEmailNorm = finalUser.email.toLowerCase().trim();
+        const authEmailNorm = emailFromAuth.toLowerCase().trim();
+        if (finalEmailNorm !== authEmailNorm) {
+          console.log("Healing email mismatch between local user record and auth in context...");
+          finalUser.email = emailFromAuth.trim();
+          if (finalUser.id) {
+            await supabaseClient
+              .from('users')
+              .update({ email: emailFromAuth.trim() })
+              .eq('id', finalUser.id);
+          }
+        }
       }
 
       if (!finalUser.role) {

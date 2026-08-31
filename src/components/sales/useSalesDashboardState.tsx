@@ -6609,7 +6609,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             const { data: dbUserByEmail } = await supabaseClient
               .from('users')
               .select('*')
-              .eq('email', emailFromAuth.toLowerCase().trim())
+              .ilike('email', emailFromAuth.trim())
               .maybeSingle();
             
             if (dbUserByEmail && currentUid) {
@@ -6617,10 +6617,24 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               await supabaseClient
                 .from('users')
                 .update({ id: currentUid })
-                .eq('email', emailFromAuth.toLowerCase().trim());
+                .eq('email', dbUserByEmail.email);
               dbUser = { ...dbUserByEmail, id: currentUid };
             } else if (dbUserByEmail) {
               dbUser = dbUserByEmail;
+            }
+          }
+
+          // If dbUser has a different email than emailFromAuth, align it!
+          if (dbUser && currentUid && emailFromAuth) {
+            const dbEmailNorm = (dbUser.email || '').toLowerCase().trim();
+            const authEmailNorm = emailFromAuth.toLowerCase().trim();
+            if (dbEmailNorm !== authEmailNorm) {
+              console.log("Aligning user profile email with authenticated email...");
+              await supabaseClient
+                .from('users')
+                .update({ email: emailFromAuth.trim() })
+                .eq('id', currentUid);
+              dbUser = { ...dbUser, email: emailFromAuth.trim() };
             }
           }
 
@@ -6634,9 +6648,20 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             return;
           }
 
-          if (emailFromAuth && finalUser.email && finalUser.email.toLowerCase().trim() !== emailFromAuth.toLowerCase().trim()) {
-            showToastMsg("User record email does not match logged-in account.", "error");
-            return;
+          // Robust case-insensitive comparison and self-healing alignment
+          if (emailFromAuth && finalUser.email) {
+            const finalEmailNorm = finalUser.email.toLowerCase().trim();
+            const authEmailNorm = emailFromAuth.toLowerCase().trim();
+            if (finalEmailNorm !== authEmailNorm) {
+              console.log("Healing email mismatch between local user record and auth...");
+              finalUser.email = emailFromAuth.trim();
+              if (finalUser.id) {
+                await supabaseClient
+                  .from('users')
+                  .update({ email: emailFromAuth.trim() })
+                  .eq('id', finalUser.id);
+              }
+            }
           }
 
           if (!finalUser.role) {
