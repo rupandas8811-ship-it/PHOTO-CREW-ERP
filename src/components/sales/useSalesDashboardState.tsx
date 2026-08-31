@@ -5749,11 +5749,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     if (isCrm) {
       if (editingEventId) {
-        setCrmEvents(prev => prev.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev));
+        setCrmEvents(prev => prev.map(ev => ev.id === editingEventId ? { ...(eventData as any), id: editingEventId } : ev));
         showToastMsg("Event updated in list.", "success");
       } else {
         const newEv: LeadEvent = {
-          ...eventData,
+          ...(eventData as any),
           id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
         };
         setCrmEvents(prev => [...prev, newEv]);
@@ -5761,11 +5761,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       }
     } else {
       if (editingEventId) {
-        setCreateEvents(prev => prev.map(ev => ev.id === editingEventId ? { ...eventData, id: editingEventId } : ev));
+        setCreateEvents(prev => prev.map(ev => ev.id === editingEventId ? { ...(eventData as any), id: editingEventId } : ev));
         showToastMsg("Event updated in list.", "success");
       } else {
         const newEv: LeadEvent = {
-          ...eventData,
+          ...(eventData as any),
           id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
         };
         setCreateEvents(prev => [...prev, newEv]);

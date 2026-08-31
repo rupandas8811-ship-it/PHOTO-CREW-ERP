@@ -172,7 +172,7 @@ export function getAllStaffStatusesForOrder(
     leadObj.events.forEach((ev: any, evIdx: number) => {
       if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
         const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
-        names.forEach(name => {
+        names.forEach((name: string) => {
           const nameLower = name.toLowerCase();
           let st = 'Pending';
 

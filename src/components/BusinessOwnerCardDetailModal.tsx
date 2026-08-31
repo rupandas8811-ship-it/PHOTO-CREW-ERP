@@ -204,10 +204,10 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Desktop Table View */}
-              <div className="hidden md:block border border-zinc-900 rounded-xl overflow-hidden">
+              {/* Table View */}
+              <div className="border border-zinc-900 rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse min-w-max">
                     <thead>
                       <tr className="bg-zinc-950/80 border-b border-zinc-900 text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
                         {columns.map(col => (
@@ -233,30 +233,6 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
                     </tbody>
                   </table>
                 </div>
-              </div>
-
-              {/* Mobile Card-Stack View */}
-              <div className="md:hidden space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-                {filteredData.map((item, idx) => (
-                  <div 
-                    key={item.id || item.order_id || item.lead_id || idx} 
-                    className="bg-zinc-900/30 border border-zinc-850/80 p-4 rounded-xl space-y-2.5 shadow-inner"
-                  >
-                    {columns.map(col => (
-                      <div 
-                        key={col.key} 
-                        className="flex flex-col gap-1 border-b border-zinc-900/40 pb-2 last:border-0 last:pb-0"
-                      >
-                        <span className="text-[9px] font-mono font-bold text-zinc-500 uppercase tracking-wider">
-                          {col.label}
-                        </span>
-                        <div className="text-xs text-zinc-250 font-sans break-words">
-                          {col.render ? col.render(item) : String(item[col.key] || 'N/A')}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
               </div>
             </div>
           )}

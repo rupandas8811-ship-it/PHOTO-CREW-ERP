@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-export default async function handler(req, res) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: 'Method Not Allowed' });
   }
@@ -40,7 +40,7 @@ export default async function handler(req, res) {
       .getPublicUrl(fileName);
 
     res.status(200).json({ success: true, publicUrl: publicData.publicUrl });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[Vercel API] Upload exception:', err);
     res.status(500).json({ success: false, error: err.message || String(err) });
   }

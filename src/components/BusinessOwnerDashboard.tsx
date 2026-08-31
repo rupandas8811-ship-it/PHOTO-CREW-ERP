@@ -1135,7 +1135,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       setTimeout(() => setApprovalFeedback(null), 5000);
     } catch (err: any) {
       console.error("[handleApproveAndCloseOrder] Error approving order:", err);
-      alert("Failed to close order: " + (err?.message || "Database update failed"));
+      throw err;
     }
   };
 
@@ -2858,7 +2858,7 @@ interface ReviewAndCloseModalProps {
   payments: Payment[];
   currentRole?: string;
   onClose: () => void;
-  onApprove: () => void;
+  onApprove: () => Promise<void> | void;
   onReject?: () => void;
 }
 
@@ -2873,12 +2873,21 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   onReject
 }) => {
   const { editorAssignments, quotations } = useRole();
-  const [previewProof, setPreviewProof] = useState<{
-    imageUrl: string;
-    label: string;
-    staffName: string;
-    deliverableName: string;
-  } | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  const handleApproveSubmit = async () => {
+    if (isApproving) return;
+    setIsApproving(true);
+    setApproveError(null);
+    try {
+      await onApprove();
+      // Auto-close is handled by parent resetting the modal order state
+    } catch (err: any) {
+      setApproveError(err.message || "Database update failed");
+      setIsApproving(false);
+    }
+  };
 
   useEffect(() => {
     document.body.style.overflow = 'hidden';
@@ -3009,131 +3018,6 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
       assignments: orderAssignments
     }];
   }, [order, lead, prod, editorAssignments]);
-
-  // Extract Client Communication & Consent Proof uploaded by Production Staff
-  const proofList = useMemo(() => {
-    const items: Array<{
-      id: string;
-      label: string;
-      staffName: string;
-      deliverableName: string;
-      eventName: string;
-      imageUrl: string;
-      displayUrl: string;
-    }> = [];
-
-    const isValidImg = (val: any): string | null => {
-      return resolveStorageUrl(val);
-    };
-
-    const formatImgUrl = (url: string) => {
-      if (!url) return '';
-      const trimmed = url.trim();
-      if (trimmed.includes('drive.google.com/file/d/')) {
-        const fileIdMatch = trimmed.match(/\/d\/([a-zA-Z0-9_-]+)/);
-        if (fileIdMatch && fileIdMatch[1]) {
-          return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
-        }
-      }
-      if (trimmed.includes('drive.google.com/open?id=')) {
-        const fileIdMatch = trimmed.match(/id=([a-zA-Z0-9_-]+)/);
-        if (fileIdMatch && fileIdMatch[1]) {
-          return `https://lh3.googleusercontent.com/d/${fileIdMatch[1]}`;
-        }
-      }
-      return trimmed;
-    };
-
-    // 1. Check editor_assignments
-    const orderAssignments = (editorAssignments || []).filter((a: any) =>
-      a.production_id === prod?.production_id ||
-      a.order_id === order.order_id ||
-      a.order_id === order.lead_id ||
-      a.order_id === prod?.tracking_id
-    );
-
-    orderAssignments.forEach((a: any, idx: number) => {
-      const candidates = [
-        a.customer_communication_proof,
-        a.client_communication_proof,
-        a.confirmation_proof,
-        a.proof_url,
-        a.proof_image,
-        a.uploaded_proof
-      ];
-
-      for (const cand of candidates) {
-        const valid = isValidImg(cand);
-        if (valid && !items.some(i => i.imageUrl === valid)) {
-          items.push({
-            id: a.assignment_id || `assign_proof_${idx}`,
-            label: `Client Communication & Consent Proof`,
-            staffName: a.staff_name || prod?.editor_assigned || 'Production Staff',
-            deliverableName: a.speciality || 'Deliverable Proof',
-            eventName: a.event_id || 'Event',
-            imageUrl: valid,
-            displayUrl: formatImgUrl(valid)
-          });
-          break;
-        }
-      }
-    });
-
-    // 2. Check production record
-    if (prod) {
-      const prodCandidates = [
-        { key: 'client_communication_proof', name: 'Client Communication & Consent Proof' },
-        { key: 'customer_communication_proof', name: 'Customer Communication Proof' },
-        { key: 'customer_acceptance_proof', name: 'Customer Acceptance Proof' },
-        { key: 'confirmation_proof', name: 'Confirmation Proof' },
-        { key: 'proof_url', name: 'Uploaded Proof Image' },
-        { key: 'communication_proof', name: 'Communication Consent Proof' },
-        { key: 'proof_image', name: 'Proof Image' }
-      ];
-
-      for (const pCand of prodCandidates) {
-        const rawVal = (prod as any)[pCand.key];
-        const valid = isValidImg(rawVal);
-        if (valid && !items.some(i => i.imageUrl === valid)) {
-          items.push({
-            id: `prod_proof_${pCand.key}`,
-            label: pCand.name,
-            staffName: prod.editor_assigned || 'Production Staff',
-            deliverableName: 'Client Consent',
-            eventName: 'Order Consent',
-            imageUrl: valid,
-            displayUrl: formatImgUrl(valid)
-          });
-        }
-      }
-    }
-
-    // 3. Check order record
-    if (order) {
-      const orderCandidates = [
-        { key: 'client_communication_proof', name: 'Client Communication & Consent Proof' },
-        { key: 'customer_communication_proof', name: 'Customer Communication Proof' },
-        { key: 'proof_url', name: 'Uploaded Proof Image' }
-      ];
-      for (const oCand of orderCandidates) {
-        const rawVal = (order as any)[oCand.key];
-        const valid = isValidImg(rawVal);
-        if (valid && !items.some(i => i.imageUrl === valid)) {
-          items.push({
-            id: `order_proof_${oCand.key}`,
-            label: oCand.name,
-            staffName: 'Production Staff',
-            deliverableName: 'Client Consent',
-            eventName: 'Order Consent',
-            imageUrl: valid,
-            displayUrl: formatImgUrl(valid)
-          });
-        }
-      }
-    }
-
-    return items;
-  }, [order, prod, editorAssignments]);
 
   if (typeof document === 'undefined') return null;
 
@@ -3277,59 +3161,6 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
               ))}
             </div>
           </div>
-
-          {/* Section 5: Client Communication & Consent Proof */}
-          <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-3">
-            <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Client Communication & Consent Proof</span>
-            </h3>
-
-            {proofList.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {proofList.map((proof) => (
-                  <div key={proof.id} className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-bold text-zinc-200 block truncate">{proof.label}</span>
-                      <span className="text-[10px] font-mono text-zinc-400 block truncate">
-                        Uploaded by: {proof.staffName}
-                      </span>
-                    </div>
-                    {proof.imageUrl.startsWith('data:') || proof.imageUrl.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) || proof.imageUrl.includes('drive.google.com') ? (
-                      <button
-                        type="button"
-                        onClick={() => setPreviewProof({
-                          imageUrl: proof.imageUrl,
-                          label: proof.label,
-                          staffName: proof.staffName,
-                          deliverableName: proof.deliverableName
-                        })}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>VIEW IMAGE</span>
-                      </button>
-                    ) : (
-                      <a
-                        href={proof.imageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-400 text-xs font-mono font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        <span>OPEN PROOF</span>
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-3 bg-zinc-950 border border-zinc-800/80 rounded-lg text-center">
-                <span className="text-xs font-mono text-zinc-500 italic">No Proof Uploaded</span>
-              </div>
-            )}
-          </div>
-
         </div>
 
         {/* Modal Action Bar */}
@@ -3342,10 +3173,17 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             )}
           </p>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto relative">
+            {approveError && (
+              <div className="absolute bottom-[calc(100%+24px)] right-0 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-mono font-bold text-center flex items-center justify-center gap-2 z-10 w-full sm:w-max max-w-sm whitespace-normal shadow-xl">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>ORDER CLOSE FAILED: {approveError}</span>
+              </div>
+            )}
             <button
               onClick={onClose}
-              className="px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer text-center"
+              disabled={isApproving}
+              className="px-4 py-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer text-center disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
@@ -3353,7 +3191,8 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             {isBusinessOwner && onReject && (
               <button
                 onClick={onReject}
-                className="px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold text-xs hover:bg-rose-500/20 transition-all cursor-pointer flex justify-center items-center gap-1.5"
+                disabled={isApproving}
+                className="px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold text-xs hover:bg-rose-500/20 transition-all cursor-pointer flex justify-center items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Reject Back to Production</span>
               </button>
@@ -3361,92 +3200,27 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
 
             {isBusinessOwner && (
               <button
-                onClick={onApprove}
-                className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all cursor-pointer shadow-lg flex justify-center items-center gap-2"
+                onClick={handleApproveSubmit}
+                disabled={isApproving}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 text-black font-black text-xs hover:bg-amber-400 transition-all cursor-pointer shadow-lg flex justify-center items-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
               >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Approve & Close Order</span>
+                {isApproving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Approving & Closing...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Approve & Close Order</span>
+                  </>
+                )}
               </button>
             )}
           </div>
         </div>
 
       </div>
-
-      {/* Proof Image Preview Modal */}
-      {previewProof && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[60] flex items-center justify-center p-4">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-150">
-            <div className="p-4 border-b border-zinc-850 flex items-center justify-between bg-zinc-900/50">
-              <div>
-                <span className="text-[10px] font-mono font-bold uppercase text-emerald-400 tracking-wider">
-                  Client Communication & Consent Proof
-                </span>
-                <h4 className="text-sm font-bold text-white mt-0.5">
-                  {previewProof.label} ({previewProof.staffName})
-                </h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPreviewProof(null)}
-                className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-6 flex-1 overflow-y-auto flex items-center justify-center bg-black">
-              {(() => {
-                const formattedUrl = previewProof.imageUrl.includes('drive.google.com/file/d/')
-                  ? previewProof.imageUrl.replace(/\/file\/d\/([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
-                  : previewProof.imageUrl.includes('drive.google.com/open?id=')
-                  ? previewProof.imageUrl.replace(/.*id=([a-zA-Z0-9_-]+).*/, '/uc?export=view&id=$1')
-                  : previewProof.imageUrl;
-
-                return (
-                  <img
-                    src={formattedUrl}
-                    alt="Client Communication & Consent Proof"
-                    className="max-h-[60vh] w-auto object-contain rounded-lg border border-zinc-800 shadow-xl"
-                    onError={(e) => {
-                      const target = e.currentTarget;
-                      target.style.display = 'none';
-                      const parent = target.parentElement;
-                      if (parent && !parent.querySelector('.img-error-fallback')) {
-                        const errDiv = document.createElement('div');
-                        errDiv.className = 'img-error-fallback p-6 text-center text-zinc-400 font-mono text-xs';
-                        errDiv.innerHTML = `<p class="mb-2 text-rose-400 font-bold">Image preview unavailable inline</p><p class="text-zinc-500 text-[11px]">Click "Open Full Image" below to view the proof image.</p>`;
-                        parent.appendChild(errDiv);
-                      }
-                    }}
-                  />
-                );
-              })()}
-            </div>
-
-            <div className="p-4 border-t border-zinc-850 flex items-center justify-between bg-zinc-900/50">
-              <a
-                href={previewProof.imageUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                referrerPolicy="no-referrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-mono font-bold transition-colors cursor-pointer"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open Full Image</span>
-              </a>
-
-              <button
-                type="button"
-                onClick={() => setPreviewProof(null)}
-                className="px-4 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-mono font-bold cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>,
     document.body
   );

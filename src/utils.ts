@@ -1782,7 +1782,7 @@ export function getEventTeamMemberStaffMapping(params: {
       const cleanMobiles = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
       const mobilesList = cleanMobiles.split(',').map((m: string) => m.trim()).filter(Boolean);
 
-      names.forEach((name, nIdx) => {
+      names.forEach((name: string, nIdx: number) => {
         const already = assignedStaffPool.some(p => p.staff_name.toLowerCase() === name.toLowerCase());
         if (!already && name.toLowerCase() !== 'unassigned' && name.toLowerCase() !== 'none') {
           const stObj = staffList.find(s => s.name?.toLowerCase() === name.toLowerCase());
