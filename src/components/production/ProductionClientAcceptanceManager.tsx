@@ -173,14 +173,17 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         typedLinksRef.current = {};
       }
 
-      // Hide event date inputs if present
-      const dateInputs = Array.from(caModal.querySelectorAll<HTMLInputElement>('input[type="date"], input[id*="date"]'));
-      dateInputs.forEach(dateInput => {
-        dateInput.required = false;
-        dateInput.removeAttribute('required');
-        const formGroup = dateInput.closest('div.space-y-1, div:has(> label)') as HTMLElement | null;
+      // Hide event date inputs if present (target only actual date inputs inside event date labels)
+      const dateLabels = Array.from(caModal.querySelectorAll<HTMLElement>('label')).filter(l => (l.textContent || '').toLowerCase().includes('event date'));
+      dateLabels.forEach(dateLabel => {
+        const formGroup = dateLabel.closest('div.space-y-1, div:has(> label)') as HTMLElement | null;
         if (formGroup) {
           formGroup.style.setProperty('display', 'none', 'important');
+          const dateInput = formGroup.querySelector('input');
+          if (dateInput) {
+            dateInput.required = false;
+            dateInput.removeAttribute('required');
+          }
         }
       });
 
@@ -231,63 +234,65 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           checkbox.click();
         }
 
-        const folderInput = eventCard.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-        if (folderInput && savedFolderName && !folderInput.value) {
-          setTextInputValue(folderInput, savedFolderName);
-        }
-
-        // Hide Event Date if inside this event card
+        // Hide Event Date container specifically inside this card
         const cardDateLabel = Array.from(eventCard.querySelectorAll<HTMLElement>('label')).find(l => (l.textContent || '').toLowerCase().includes('event date'));
         if (cardDateLabel) {
-          const cardDateWrapper = cardDateLabel.closest('div.space-y-1') as HTMLElement | null;
-          if (cardDateWrapper) {
-            cardDateWrapper.style.setProperty('display', 'none', 'important');
-            const cardDateInput = cardDateWrapper.querySelector('input');
-            if (cardDateInput) {
-              cardDateInput.required = false;
-              cardDateInput.removeAttribute('required');
+          const dateGroup = cardDateLabel.closest('div.space-y-1') as HTMLElement | null;
+          if (dateGroup) {
+            dateGroup.style.setProperty('display', 'none', 'important');
+            const dInput = dateGroup.querySelector('input');
+            if (dInput) {
+              dInput.required = false;
+              dInput.removeAttribute('required');
             }
           }
         }
 
-        // Final edited footage link input
+        const folderInput = eventCard.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
+        if (folderInput && savedFolderName && !folderInput.value && document.activeElement !== folderInput) {
+          setTextInputValue(folderInput, savedFolderName);
+        }
+
+        // Inject / Ensure FINAL EDITED FOOTAGE LINK * field
         const gridContainer = eventCard.querySelector('div.grid') as HTMLElement | null || eventCard;
         if (gridContainer) {
-          const currentLinkValue = typedLinksRef.current[cardKey] ?? savedLink;
+          let linkWrapper = gridContainer.querySelector<HTMLElement>('.ca-final-footage-link-group');
+          const currentLinkValue = typedLinksRef.current[cardKey] ?? savedLink ?? '';
 
-          let linkWrapper = gridContainer.querySelector('.ca-final-footage-link-group') as HTMLElement | null;
           if (!linkWrapper) {
             linkWrapper = document.createElement('div');
             linkWrapper.className = 'space-y-1 ca-final-footage-link-group';
             linkWrapper.innerHTML = `
               <label class="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                Final Edited Footage Link <span class="text-rose-500">*</span>
+                FINAL EDITED FOOTAGE LINK <span class="text-rose-500">*</span>
               </label>
               <input
-                type="url"
+                type="text"
                 placeholder="Paste final edited footage URL (e.g. Google Drive link)"
-                value="${(currentLinkValue || '').replace(/"/g, '&quot;')}"
+                value="${currentLinkValue.replace(/"/g, '&quot;')}"
                 class="ca-final-footage-link-input w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
               />
             `;
             gridContainer.appendChild(linkWrapper);
+          }
 
-            const newLinkInput = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
-            if (newLinkInput) {
-              newLinkInput.addEventListener('input', (e) => {
-                typedLinksRef.current[cardKey] = (e.target as HTMLInputElement).value;
-              });
-              newLinkInput.addEventListener('change', (e) => {
-                typedLinksRef.current[cardKey] = (e.target as HTMLInputElement).value;
-              });
-            }
-          } else {
-            const inputEl = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
-            if (inputEl) {
-              if (document.activeElement !== inputEl && currentLinkValue && inputEl.value !== currentLinkValue) {
-                inputEl.value = currentLinkValue;
+          const linkInput = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
+          if (linkInput) {
+            if (document.activeElement !== linkInput) {
+              if (currentLinkValue && linkInput.value !== currentLinkValue) {
+                linkInput.value = currentLinkValue;
               }
-              typedLinksRef.current[cardKey] = inputEl.value;
+            }
+            typedLinksRef.current[cardKey] = linkInput.value;
+
+            if (!linkInput.dataset.bound) {
+              linkInput.dataset.bound = 'true';
+              const handleInput = (e: Event) => {
+                const val = (e.target as HTMLInputElement).value;
+                typedLinksRef.current[cardKey] = val;
+              };
+              linkInput.addEventListener('input', handleInput);
+              linkInput.addEventListener('change', handleInput);
             }
           }
         }
