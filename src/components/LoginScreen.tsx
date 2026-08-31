@@ -119,7 +119,7 @@ export const LoginScreen: React.FC = () => {
       setReadTest('ok');
 
       // 2. Insert check - Write a temporary activity log
-      const tempId = `LOG-TEST-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
+      const tempId = `LOG-TEST-${Math.floor(1000 + Math.random() * 9000)}`;
       const { error: insertErr } = await supabase.from('activity_logs').insert({
         log_id: tempId,
         user_name: 'Diagnostic Rig',

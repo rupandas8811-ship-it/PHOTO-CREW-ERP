@@ -69,7 +69,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormEmail('');
     
     // Generate logical Employee ID
-    const randomId = `EMP-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
+    const randomId = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
     setFormEmployeeId(randomId);
     setFormCity('');
     setFormDepartment('Post-Production');
