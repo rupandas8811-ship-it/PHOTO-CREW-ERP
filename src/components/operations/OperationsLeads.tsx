@@ -3984,8 +3984,8 @@ export const OperationsLeads: React.FC = () => {
 
 
       {/* Equipment Status Modal */}
-      {selectedEquipmentStatus && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000000] flex items-center justify-center p-4">
+      {selectedEquipmentStatus && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000000] flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
             <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
               <div>
@@ -4106,11 +4106,11 @@ export const OperationsLeads: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Event Images Modal */}
-      {selectedEventImages && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000000] flex items-center justify-center p-4">
+      {selectedEventImages && createPortal(
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2000000] flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl relative p-5">
             <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
               <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
@@ -4191,7 +4191,7 @@ export const OperationsLeads: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
       {/* Verify Raw Footage Modal */}
       {receivingFootageOrderId && (() => {
@@ -5403,7 +5403,7 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Image Preview Modal */}
       {imagePreviewModal && createPortal(
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-lg z-[9999999] flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-lg z-[2147483647] flex flex-col items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <div>
