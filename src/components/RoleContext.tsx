@@ -1918,7 +1918,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                 const authorString = currentUserName ? `${currentUserName}|${currentRole || 'System'}` : 'System';
                 
                 const historyPayload = {
-                  history_id: `HST-${Math.floor(1000 + Math.random() * 9000)}`,
+                  history_id: `HST-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`,
                   lead_id: leadId,
                   order_id: orderId,
                   old_status: oldStatus,
@@ -3269,7 +3269,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       // Log login
       const newLog: ActivityLog = {
-        log_id: `LOG-${Math.floor(100 + Math.random() * 900)}`,
+        log_id: `LOG-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`,
         user_name: foundUser.name,
         role: foundUser.role,
         action: 'User Logged In Successfully',
@@ -3300,7 +3300,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   const logout = () => {
     if (currentUser) {
       const newLog: ActivityLog = {
-        log_id: `LOG-${Math.floor(100 + Math.random() * 900)}`,
+        log_id: `LOG-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`,
         user_name: currentUser.name,
         role: currentUser.role,
         action: 'User Logged Out',
@@ -3345,7 +3345,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     detailedAction += ` | Date: ${dateStr} | Time: ${timeStr}`;
 
     const newLog: ActivityLog = {
-      log_id: `LOG-${Math.floor(100 + Math.random() * 900)}`,
+      log_id: `LOG-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`,
       user_name: currentUserName,
       role: currentRole,
       action: detailedAction,
@@ -3613,7 +3613,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     if (packages && packages.length > 0) {
       const formattedPackages: LeadPackage[] = packages.map((pkg, index) => ({
         ...pkg,
-        lead_package_id: `LP-${leadId}-${index}-${Math.floor(100 + Math.random() * 900)}`,
+        lead_package_id: `LP-${leadId}-${index}-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`,
         lead_id: leadId,
         created_at: new Date().toISOString()
       }));
@@ -4062,7 +4062,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     if (!paymentExistsInDb) {
-      const paymentId = existingPaymentId || `PAY-${Math.floor(3012 + Math.random() * 800)}`;
+      const paymentId = existingPaymentId || `PAY-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
       const newPayment: Payment = {
         payment_id: paymentId,
         order_id: masterOrderId,
@@ -4140,7 +4140,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     if (!opExistsInDb) {
       const newOp: Operation = {
-        operation_id: existingOpId || `OP-${Math.floor(5012 + Math.random() * 800)}`,
+        operation_id: existingOpId || `OP-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`,
         order_id: masterOrderId,
         photographer_assigned: 'Unassigned',
         videographer_assigned: 'Unassigned',
@@ -4248,7 +4248,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     if (!targetOrder) throw new Error("Order not found");
 
     const existingOp = operations.find(o => o.order_id === orderId);
-    const opId = existingOp?.operation_id || `OP-${Math.floor(5012 + Math.random() * 800)}`;
+    const opId = existingOp?.operation_id || `OP-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const { current_stage, event_date, event_time, event_status, ...restOpData } = opData;
     
     // Default or specified status / stage
@@ -4549,7 +4549,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const nameKey = (a.staff_name || '').toLowerCase();
         const existingInfo = existingStatusMap.get(key) || existingStatusMap.get(nameKey);
 
-        const assignId = a.assignment_id || existingInfo?.assignment_id || `ASST-${Math.floor(100000 + Math.random() * 900000)}`;
+        const assignId = a.assignment_id || existingInfo?.assignment_id || `ASST-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
         const assignDate = timestamp.split('T')[0];
 
         const newAssign: StaffAssignment = {
@@ -4691,8 +4691,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   // 5. Mark Event Completed (Action button in Operations)
   const markEventCompleted = async (orderId: string, serverPath: string) => {
-    const trackingId = `TRK-${Math.floor(2012 + Math.random() * 800)}`;
-    const pId = `PRD-${Math.floor(4012 + Math.random() * 800)}`;
+    const trackingId = `TRK-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
+    const pId = `PRD-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
 
     const newRawFootage: RawFootage = {
       tracking_id: trackingId,
@@ -4971,7 +4971,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           setProduction(prev => prev.map(p => p.production_id === targetProd.production_id ? { ...p, ...updates } : p));
         }
       } else {
-        const newPId = productionId.startsWith('PRD-') ? `PRD-${Math.floor(100000 + Math.random() * 899999)}` : productionId;
+        const newPId = productionId.startsWith('PRD-') ? `PRD-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}` : productionId;
         const newProd: Production = {
           production_id: newPId,
           tracking_id: inferredTrackingId,
@@ -5259,7 +5259,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         balanceDue = totalAmount - advanceAmount; // no additional received
       }
 
-      const payId = existingPayment?.payment_id || `PAY-${Math.floor(3000 + Math.random() * 1000)}`;
+      const payId = existingPayment?.payment_id || `PAY-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
       const updatedPayment: Payment = {
         payment_id: payId,
         order_id: orderId,
@@ -5351,7 +5351,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     });
 
     let existingRf = rawFootage.find(f => f.order_id === orderId);
-    let trackingId = existingRf?.tracking_id || `TRK-${Math.floor(2012 + Math.random() * 850)}`;
+    let trackingId = existingRf?.tracking_id || `TRK-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
 
     const todayYyyyMmDd = timestamp.split('T')[0];
 
@@ -5385,7 +5385,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Ensure production entry exists or update it
     let existingProd = augmentedProduction.find(p => p.tracking_id === trackingId || p.tracking_id === orderId);
-    let pId = existingProd?.production_id || `PRD-${Math.floor(4012 + Math.random() * 850)}`;
+    let pId = existingProd?.production_id || `PRD-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     
     const targetLead = leads.find(l => l.lead_id === targetOrder?.lead_id);
 
@@ -5775,7 +5775,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   // User Management Admin features
   const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string, employee_id?: string) => {
-    const newId = crypto.randomUUID ? crypto.randomUUID() : `U-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newId = crypto.randomUUID ? crypto.randomUUID() : `U-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const safeEmail = (email && email.trim() !== '') ? email.trim().toLowerCase() : `${mobile ? mobile.replace(/[^a-zA-Z0-9]/g, '') : 'user'}_${newId.substring(0,6)}@photocrew.com`;
     const safeUsername = safeEmail.split('@')[0];
     
@@ -5931,7 +5931,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addStaff = async (member: Omit<Staff, "staff_id">) => {
-    const staffId = `STF-${Math.floor(1000 + Math.random() * 9000)}`;
+    const staffId = `STF-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const timestamp = new Date().toISOString();
     const newStaff: Staff = {
       ...member,
@@ -6000,7 +6000,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addProductionStaff = async (member: Omit<Staff, "staff_id">) => {
-    const staffId = `STF-${Math.floor(10000 + Math.random() * 90000)}`;
+    const staffId = `STF-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const timestamp = new Date().toISOString();
     const newStaff: Staff = {
       ...member,
@@ -6078,7 +6078,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addEquipment = async (equip: Omit<Equipment, 'equipment_id'>) => {
-    const equipmentId = `EQ-${Math.floor(1000 + Math.random() * 9000)}`;
+    const equipmentId = `EQ-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const now = new Date().toISOString();
     const newEquip: Equipment = {
       ...equip,
@@ -6186,7 +6186,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addPackage = async (pkg: Omit<Package, 'package_id'>) => {
-    const package_id = `PKG-${(pkg.category || 'W').substring(0, 1).toUpperCase()}${Math.floor(100 + Math.random() * 900)}`;
+    const package_id = `PKG-${(pkg.category || 'W').substring(0, 1).toUpperCase()}${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const newPkg: Package = {
       ...pkg,
       package_id,
@@ -6399,7 +6399,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addNotification = async (payload: Omit<Notification, 'notification_id' | 'created_at' | 'read_status'> & { notification_id?: string; read_status?: boolean }) => {
-    const notification_id = payload.notification_id || `NTF-${6001 + Math.floor(Math.random() * 10000)}`;
+    const notification_id = payload.notification_id || `NTF-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const newNotif: Notification = {
       ...payload,
       notification_id,
@@ -6537,7 +6537,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addSpeciality = async (name: string) => {
-    const id = `SPC-${Math.floor(100 + Math.random() * 900)}`;
+    const id = `SPC-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const newSpec: ProductionSpeciality = {
       speciality_id: id,
       name,
@@ -6568,7 +6568,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const assignEditorToProject = async (assignment: Omit<EditorAssignment, 'assignment_id' | 'status' | 'assigned_date'>) => {
-    const id = `EDR-${Math.floor(1000 + Math.random() * 9000)}`;
+    const id = `EDR-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const newAssign: EditorAssignment = {
       ...assignment,
       assignment_id: id,
@@ -7072,7 +7072,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addEquipmentHandover = async (handover: Omit<EquipmentHandover, 'handover_id'>) => {
-    const handoverId = `HND-${Math.floor(1000 + Math.random() * 9000)}`;
+    const handoverId = `HND-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
     const newHandover: EquipmentHandover = {
       ...handover,
       handover_id: handoverId,
@@ -7087,7 +7087,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   const addEquipmentHandovers = async (handovers: Omit<EquipmentHandover, 'handover_id'>[]) => {
     const newHandovers: EquipmentHandover[] = handovers.map((h, index) => ({
       ...h,
-      handover_id: `HND-${Math.floor(1000 + Math.random() * 9000)}-${index}`,
+      handover_id: `HND-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}-${index}`,
       created_at: new Date().toISOString()
     }));
     setEquipmentHandovers(prev => [...newHandovers, ...prev]);
@@ -7938,7 +7938,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           console.log(`[Reminders] Generating ${pendingReminders.length} automatic reminder notifications in bulk...`);
           
           const mappedReminders = pendingReminders.map(rem => {
-            const notification_id = rem.notification_id || `NTF-${6001 + Math.floor(Math.random() * 10000)}`;
+            const notification_id = rem.notification_id || `NTF-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
             return {
               ...rem,
               notification_id,

@@ -44,7 +44,7 @@ export const UserManagementModule: React.FC = () => {
       }
 
       // 2. Insert, Update, Delete test
-      const tempId = `LOG-MGMT-${Math.floor(1000 + Math.random() * 9000)}`;
+      const tempId = `LOG-MGMT-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
       const { error: insertErr } = await supabaseClient.from('activity_logs').insert({
         log_id: tempId,
         user_name: currentUser?.name || 'Admin Health',

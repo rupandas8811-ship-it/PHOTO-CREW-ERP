@@ -86,7 +86,7 @@ export const DatabaseHealthModule: React.FC = () => {
       }
 
       // 4. CRUD Test (Insert, Update, Delete) on [activity_logs]
-      const auditId = `LOG-TEST-${Math.floor(1000 + Math.random() * 9000)}`;
+      const auditId = `LOG-TEST-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`;
       addLog(`✍️ 4a. Attempting test INSERT into [activity_logs] (ID: ${auditId})...`);
       
       const { error: insErr } = await supabaseClient.from('activity_logs').insert({

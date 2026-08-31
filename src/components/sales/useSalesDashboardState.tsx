@@ -2477,7 +2477,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       
       const d = new Date();
       const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-      const randomFour = String(Math.floor(1 + Math.random() * 9999)).padStart(4, '0');
+      const randomFour = String(Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)).padStart(4, '0');
       const generatedQuotNum = existingQuotation ? existingQuotation.quotation_number : `QT-${dateStr}-${randomFour}`;
       const quotNum = activeQuoteNum || generatedQuotNum;
       
@@ -4589,7 +4589,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           } else {
             finalEventsList.push({
               ...eventData,
-              id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+              id: `EV-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`
             });
           }
 
@@ -5525,7 +5525,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       let finalEventsList = [...(createdLeadId ? createEvents : crmEvents)];
       if (finalEventsList.length === 0 && (eventForm.event_type || eventForm.event_name || eventForm.event_date || eventForm.event_location)) {
         finalEventsList.push({
-          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`,
+          id: `EV-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`,
           event_type: eventForm.event_type || '',
           event_name: eventForm.event_name || '',
           event_shoot_type: eventForm.event_shoot_type || '',
@@ -5754,7 +5754,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       } else {
         const newEv: LeadEvent = {
           ...(eventData as any),
-          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+          id: `EV-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`
         };
         setCrmEvents(prev => [...prev, newEv]);
         showToastMsg("Event added to list.", "success");
@@ -5766,7 +5766,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       } else {
         const newEv: LeadEvent = {
           ...(eventData as any),
-          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+          id: `EV-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`
         };
         setCreateEvents(prev => [...prev, newEv]);
         showToastMsg("Event added to list.", "success");
@@ -6900,7 +6900,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         } else {
           finalEventsList.push({
             ...eventData,
-            id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+            id: `EV-${Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000)}`
           });
         }
         

@@ -1011,7 +1011,7 @@ export const StaffModule: React.FC = () => {
         );
         return {
           name: eqStr,
-          assetId: match?.equipment_id || match?.serial_number || ('EQ-ASSET-' + Math.floor(1000 + Math.random() * 9000))
+          assetId: match?.equipment_id || match?.serial_number || ('EQ-ASSET-' + Date.now().toString(36).toUpperCase() + Math.floor(Math.random() * 10000))
         };
       });
     };
