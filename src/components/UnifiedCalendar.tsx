@@ -654,12 +654,49 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
       if (ev.sourceType === 'memo') return false;
 
       // Event Status (Class) filter
-      if (statusFilter !== 'All') {
-        if (ev.eventClass !== statusFilter) return false;
+      if (statusFilter !== 'All' && statusFilter !== 'All Statuses' && statusFilter !== 'All Stages') {
+        const stageNorm = (ev.currentStage || '').trim().toLowerCase();
+        const classNorm = (ev.eventClass || '').trim().toLowerCase();
+        const filterNorm = statusFilter.trim().toLowerCase();
+
+        const directMatch = stageNorm === filterNorm || classNorm === filterNorm;
+
+        if (!directMatch) {
+          // Specific status alias matching
+          if (filterNorm === 'order confirmed') {
+            if (!['order confirmed', 'confirm order', 'new order received', 'booking confirmed'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'assigned crew') {
+            if (!['assigned crew', 'staff assigned', 'operations assigned'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'event started') {
+            if (!['event started', 'event start'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'event ended') {
+            if (!['event ended', 'event end', 'event completed', 'event complete'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'footage handover') {
+            if (!['footage handover', 'equipment handover'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'verified footage') {
+            if (!['verified footage', 'raw footage received', 'footage handover verified'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'event cancelled') {
+            if (stageNorm !== 'event cancelled') return false;
+          } else if (filterNorm === 'assigned editor') {
+            if (!['assigned editor', 'editor assigned'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'editing started') {
+            if (!['editing started', 'editing in progress', 'editing'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'customer review') {
+            if (!['customer review', 'client review', 'client review sent', 'ready for review', 'internal qc review', 'revision required', 'revision in progress'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'editing completed') {
+            if (!['editing completed', 'editing complete'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'client acceptance') {
+            if (!['client acceptance', 'final approval', 'approved'].includes(stageNorm)) return false;
+          } else if (filterNorm === 'order closed') {
+            if (!['order closed', 'closed', 'completed', 'project closed', 'project completed', 'delivered', 'project delivered'].includes(stageNorm)) return false;
+          } else {
+            return false;
+          }
+        }
       }
 
       // Event Type filter
-      if (eventTypeFilter !== 'All') {
+      if (eventTypeFilter !== 'All' && eventTypeFilter !== 'All Event Types') {
         if (ev.eventType !== eventTypeFilter) return false;
       }
 
@@ -1052,14 +1089,36 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
               >
-                <option value="All">All Stages</option>
-                {ACTIVE_STAGE_GROUPS.map((group, idx) => (
-                  <optgroup key={idx} label={group.label} className={`bg-zinc-950 ${group.colorClass} font-bold`}>
-                    {group.options.map(opt => (
-                      <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
-                    ))}
-                  </optgroup>
-                ))}
+                <option value="All">All Statuses</option>
+                {role === 'operations' || role === 'worker' ? (
+                  <>
+                    <option value="Order Confirmed">Order Confirmed</option>
+                    <option value="Assigned Crew">Assigned Crew</option>
+                    <option value="Event Started">Event Started</option>
+                    <option value="Event Ended">Event Ended</option>
+                    <option value="Footage Handover">Footage Handover</option>
+                    <option value="Verified Footage">Verified Footage</option>
+                    <option value="Event Cancelled">Event Cancelled</option>
+                  </>
+                ) : role === 'production' ? (
+                  <>
+                    <option value="Verified Footage">Verified Footage</option>
+                    <option value="Assigned Editor">Assigned Editor</option>
+                    <option value="Editing Started">Editing Started</option>
+                    <option value="Customer Review">Customer Review</option>
+                    <option value="Editing Completed">Editing Completed</option>
+                    <option value="Client Acceptance">Client Acceptance</option>
+                    <option value="Order Closed">Order Closed</option>
+                  </>
+                ) : (
+                  ACTIVE_STAGE_GROUPS.map((group, idx) => (
+                    <optgroup key={idx} label={group.label} className={`bg-zinc-950 ${group.colorClass} font-bold`}>
+                      {group.options.map(opt => (
+                        <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
+                      ))}
+                    </optgroup>
+                  ))
+                )}
               </select>
             </div>
 

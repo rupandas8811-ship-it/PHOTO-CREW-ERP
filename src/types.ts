@@ -21,25 +21,26 @@ export const ACTIVE_STAGE_GROUPS = [
     label: "Operations Statuses",
     colorClass: "text-amber-400",
     options: [
-      { value: "Event Scheduled", label: "Event Scheduled" },
+      { value: "Order Confirmed", label: "Order Confirmed" },
+      { value: "Assigned Crew", label: "Assigned Crew" },
       { value: "Event Started", label: "Event Started" },
-      { value: "Event Completed", label: "Event Completed" },
-      { value: "Event Cancelled", label: "Event Cancelled" },
-      { value: "Raw Footage Received", label: "Raw Footage Received" }
+      { value: "Event Ended", label: "Event Ended" },
+      { value: "Footage Handover", label: "Footage Handover" },
+      { value: "Verified Footage", label: "Verified Footage" },
+      { value: "Event Cancelled", label: "Event Cancelled" }
     ]
   },
   {
     label: "Production Statuses",
     colorClass: "text-indigo-400",
     options: [
-      { value: "New Project Received", label: "New Project Received" },
-      { value: "Editor Assigned", label: "Editor Assigned" },
+      { value: "Verified Footage", label: "Verified Footage" },
+      { value: "Assigned Editor", label: "Assigned Editor" },
       { value: "Editing Started", label: "Editing Started" },
-      { value: "Client Review", label: "Client Review" },
-      { value: "Editing Complete", label: "Editing Complete" },
-      { value: "Customer Review", label: "Client Review" },
-      { value: "Project Completed", label: "Project Completed" },
-      { value: "Project Cancelled", label: "Project Cancelled" }
+      { value: "Customer Review", label: "Customer Review" },
+      { value: "Editing Completed", label: "Editing Completed" },
+      { value: "Client Acceptance", label: "Client Acceptance" },
+      { value: "Order Closed", label: "Order Closed" }
     ]
   }
 ];

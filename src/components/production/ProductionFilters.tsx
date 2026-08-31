@@ -27,7 +27,7 @@ export const ProductionFilters: React.FC<ProductionFiltersProps> = ({
   editorOptions = [],
   className = ''
 }) => {
-  const safeStatusOptions = Array.isArray(statusOptions) ? statusOptions : [];
+  const safeStatusOptions = Array.from(new Set(Array.isArray(statusOptions) ? statusOptions : []));
   const safeEditorOptions = Array.isArray(editorOptions) ? editorOptions : [];
 
   return (
