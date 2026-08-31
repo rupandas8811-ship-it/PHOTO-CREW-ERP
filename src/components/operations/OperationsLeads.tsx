@@ -4868,9 +4868,9 @@ export const OperationsLeads: React.FC = () => {
 
         const eventNames = Object.keys(groupedByEvent);
 
-        return (
+        return createPortal(
           <div 
-            className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden overscroll-none animate-in fade-in duration-150"
+            className="fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex flex-col w-full h-full h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden overscroll-none animate-in fade-in duration-150"
             onClick={(e) => {
               if (e.target === e.currentTarget) setViewingStaffOrderId(null);
             }}
@@ -5242,7 +5242,7 @@ export const OperationsLeads: React.FC = () => {
               </div>
             </div>
           </div>
-        );
+        , document.body);
       })()}
 
       {/* Busy Staff Roster Popup */}
