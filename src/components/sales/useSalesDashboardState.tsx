@@ -6709,7 +6709,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           }
         } catch (err: any) {
           setIsSaving(false);
-          showToastMsg(`Failed to check for duplicate customer: ${err.message || String(err)}`, "error");
+          setSaveErrorPopup({
+            title: "Error",
+            message: "Unable to check existing customer. Please try again."
+          });
           return;
         } finally {
           setIsSaving(false);
