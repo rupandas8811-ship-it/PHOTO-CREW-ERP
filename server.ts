@@ -761,6 +761,7 @@ async function startServer() {
         client_communication_consent_proof,
         folder_name,
         upload_link_path,
+        final_edited_footage_link,
         proof_file_name,
         proof_storage_path,
         consent_proof_verified
@@ -773,6 +774,7 @@ async function startServer() {
       const cleanOrderId = String(order_id).trim();
       const cleanEventId = String(event_id || 'default').trim();
       const now = new Date().toISOString();
+      const resolvedLink = (final_edited_footage_link !== undefined ? final_edited_footage_link : upload_link_path) || '';
 
       const existingRecords = readCaVerificationsFromFile();
       const index = existingRecords.findIndex(
@@ -790,7 +792,8 @@ async function startServer() {
           event_id: cleanEventId,
           client_communication_consent_proof: client_communication_consent_proof !== undefined ? client_communication_consent_proof : existingRecords[index].client_communication_consent_proof,
           folder_name: folder_name !== undefined ? folder_name : existingRecords[index].folder_name,
-          upload_link_path: upload_link_path !== undefined ? upload_link_path : existingRecords[index].upload_link_path,
+          upload_link_path: resolvedLink || existingRecords[index].upload_link_path || '',
+          final_edited_footage_link: resolvedLink || existingRecords[index].final_edited_footage_link || existingRecords[index].upload_link_path || '',
           proof_file_name: proof_file_name !== undefined ? proof_file_name : existingRecords[index].proof_file_name,
           proof_storage_path: proof_storage_path !== undefined ? proof_storage_path : existingRecords[index].proof_storage_path,
           consent_proof_verified: consent_proof_verified !== undefined ? Boolean(consent_proof_verified) : existingRecords[index].consent_proof_verified,
@@ -805,7 +808,8 @@ async function startServer() {
           event_id: cleanEventId,
           client_communication_consent_proof: client_communication_consent_proof || '',
           folder_name: folder_name || '',
-          upload_link_path: upload_link_path || '',
+          upload_link_path: resolvedLink,
+          final_edited_footage_link: resolvedLink,
           proof_file_name: proof_file_name || '',
           proof_storage_path: proof_storage_path || '',
           consent_proof_verified: consent_proof_verified !== undefined ? Boolean(consent_proof_verified) : true,

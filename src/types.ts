@@ -577,6 +577,7 @@ export interface ClientAcceptanceVerification {
   client_communication_consent_proof?: string;
   folder_name?: string;
   upload_link_path?: string;
+  final_edited_footage_link?: string;
   proof_file_name?: string;
   proof_storage_path?: string;
   consent_proof_verified?: boolean;
