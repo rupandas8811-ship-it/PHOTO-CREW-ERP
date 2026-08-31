@@ -3073,8 +3073,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       } as any;
     }
     const selectedPkgId = selectedPkg?.package_id || 'Custom Package';
-    const inclusionsList = editableInclusions[selectedPkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'] || (Object.values(editableInclusions).find(v => Array.isArray(v) && v.length > 0) || []);
-    const deliverablesList = editableDeliverables[selectedPkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'] || (Object.values(editableDeliverables).find(v => Array.isArray(v) && v.length > 0) || []);
+    const inclusionsList = editableInclusions[selectedPkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'] || [];
+    const deliverablesList = editableDeliverables[selectedPkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'] || [];
     const currentEvents = isEdit ? crmEvents : createEvents;
 
     return (
@@ -3205,22 +3205,43 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 const evId = event.id || event.event_id || `EV-${eventIdx + 1}`;
                 const eventKey = `${selectedPkgId}_${evId}`;
                 const altKey = `Custom Package_${evId}`;
+                const nameKey = `${selectedPkgId}_${event.event_name || event.event_type || ''}`;
 
-                const eventInclusions = editableInclusions[eventKey] !== undefined
-                  ? editableInclusions[eventKey]
-                  : (editableInclusions[evId] !== undefined
-                      ? editableInclusions[evId]
-                      : (editableInclusions[altKey] !== undefined
-                          ? editableInclusions[altKey]
-                          : (inclusionsList.length > 0 ? [...inclusionsList] : [])));
+                let eventInclusions: string[] = [];
+                if (editableInclusions[eventKey] !== undefined) {
+                  eventInclusions = editableInclusions[eventKey];
+                } else if (editableInclusions[evId] !== undefined) {
+                  eventInclusions = editableInclusions[evId];
+                } else if (editableInclusions[altKey] !== undefined) {
+                  eventInclusions = editableInclusions[altKey];
+                } else if (event.event_name && editableInclusions[nameKey] !== undefined) {
+                  eventInclusions = editableInclusions[nameKey];
+                } else if (event.team_members && Array.isArray(event.team_members) && event.team_members.length > 0) {
+                  eventInclusions = event.team_members.map((m: any) => typeof m === 'string' ? m : (m?.name ? `${m.qty > 1 ? m.qty + 'x ' : ''}${m.name}` : '')).filter(Boolean);
+                } else if (event.members && Array.isArray(event.members) && event.members.length > 0) {
+                  eventInclusions = event.members.map((m: any) => typeof m === 'string' ? m : (m?.name ? `${m.qty > 1 ? m.qty + 'x ' : ''}${m.name}` : '')).filter(Boolean);
+                } else if (currentEvents.length === 1 && inclusionsList.length > 0) {
+                  eventInclusions = [...inclusionsList];
+                } else {
+                  eventInclusions = [];
+                }
 
-                const eventDeliverables = editableDeliverables[eventKey] !== undefined
-                  ? editableDeliverables[eventKey]
-                  : (editableDeliverables[evId] !== undefined
-                      ? editableDeliverables[evId]
-                      : (editableDeliverables[altKey] !== undefined
-                          ? editableDeliverables[altKey]
-                          : (deliverablesList.length > 0 ? [...deliverablesList] : [])));
+                let eventDeliverables: string[] = [];
+                if (editableDeliverables[eventKey] !== undefined) {
+                  eventDeliverables = editableDeliverables[eventKey];
+                } else if (editableDeliverables[evId] !== undefined) {
+                  eventDeliverables = editableDeliverables[evId];
+                } else if (editableDeliverables[altKey] !== undefined) {
+                  eventDeliverables = editableDeliverables[altKey];
+                } else if (event.event_name && editableDeliverables[nameKey] !== undefined) {
+                  eventDeliverables = editableDeliverables[nameKey];
+                } else if (event.deliverables && Array.isArray(event.deliverables) && event.deliverables.length > 0) {
+                  eventDeliverables = event.deliverables.map((d: any) => typeof d === 'string' ? d : (d?.name ? `${d.qty > 1 ? d.qty + 'x ' : ''}${d.name}` : '')).filter(Boolean);
+                } else if (currentEvents.length === 1 && deliverablesList.length > 0) {
+                  eventDeliverables = [...deliverablesList];
+                } else {
+                  eventDeliverables = [];
+                }
 
                 const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
                 const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
@@ -3277,7 +3298,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                               currentList.push("");
                               const updated = {
                                 ...editableInclusions,
-                                [eventKey]: currentList
+                                [eventKey]: currentList,
+                                [evId]: currentList,
+                                [`Custom Package_${evId}`]: currentList,
+                                [`custom_package_${evId}`]: currentList
                               };
                               setEditableInclusions(updated);
                               saveStep3DataRealtime(updated, editableDeliverables);
@@ -3301,7 +3325,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList[idx] = newVal;
                                 const updated = {
                                   ...editableInclusions,
-                                  [eventKey]: currentList
+                                  [eventKey]: currentList,
+                                  [evId]: currentList,
+                                  [`Custom Package_${evId}`]: currentList,
+                                  [`custom_package_${evId}`]: currentList
                                 };
                                 setEditableInclusions(updated);
                                 saveStep3DataRealtime(updated, editableDeliverables);
@@ -3311,7 +3338,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList.splice(idx, 1);
                                 const updated = {
                                   ...editableInclusions,
-                                  [eventKey]: currentList
+                                  [eventKey]: currentList,
+                                  [evId]: currentList,
+                                  [`Custom Package_${evId}`]: currentList,
+                                  [`custom_package_${evId}`]: currentList
                                 };
                                 setEditableInclusions(updated);
                                 saveStep3DataRealtime(updated, editableDeliverables);
@@ -3326,7 +3356,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList.push("");
                                 const updated = {
                                   ...editableInclusions,
-                                  [eventKey]: currentList
+                                  [eventKey]: currentList,
+                                  [evId]: currentList,
+                                  [`Custom Package_${evId}`]: currentList,
+                                  [`custom_package_${evId}`]: currentList
                                 };
                                 setEditableInclusions(updated);
                                 saveStep3DataRealtime(updated, editableDeliverables);
@@ -3355,7 +3388,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                               currentList.push("");
                               const updated = {
                                 ...editableDeliverables,
-                                [eventKey]: currentList
+                                [eventKey]: currentList,
+                                [evId]: currentList,
+                                [`Custom Package_${evId}`]: currentList,
+                                [`custom_package_${evId}`]: currentList
                               };
                               setEditableDeliverables(updated);
                               saveStep3DataRealtime(editableInclusions, updated);
@@ -3379,7 +3415,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList[idx] = newVal;
                                 const updated = {
                                   ...editableDeliverables,
-                                  [eventKey]: currentList
+                                  [eventKey]: currentList,
+                                  [evId]: currentList,
+                                  [`Custom Package_${evId}`]: currentList,
+                                  [`custom_package_${evId}`]: currentList
                                 };
                                 setEditableDeliverables(updated);
                                 saveStep3DataRealtime(editableInclusions, updated);
@@ -3389,7 +3428,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList.splice(idx, 1);
                                 const updated = {
                                   ...editableDeliverables,
-                                  [eventKey]: currentList
+                                  [eventKey]: currentList,
+                                  [evId]: currentList,
+                                  [`Custom Package_${evId}`]: currentList,
+                                  [`custom_package_${evId}`]: currentList
                                 };
                                 setEditableDeliverables(updated);
                                 saveStep3DataRealtime(editableInclusions, updated);
@@ -3404,7 +3446,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                                 currentList.push("");
                                 const updated = {
                                   ...editableDeliverables,
-                                  [eventKey]: currentList
+                                  [eventKey]: currentList,
+                                  [evId]: currentList,
+                                  [`Custom Package_${evId}`]: currentList,
+                                  [`custom_package_${evId}`]: currentList
                                 };
                                 setEditableDeliverables(updated);
                                 saveStep3DataRealtime(editableInclusions, updated);
