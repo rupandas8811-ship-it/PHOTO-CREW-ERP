@@ -39,6 +39,17 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   booking,
   isStaffView
 }) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   const { 
     currentRole,
     orders, 
@@ -412,11 +423,11 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   const isStaff = isStaffView || currentRole === 'Staff' || currentRole === 'Operation Staff';
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-4xl shadow-2xl flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0 overflow-hidden animate-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/70 sticky top-0 z-10">
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800 bg-zinc-900/70 shrink-0 z-10">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-lg shrink-0">
               📋
@@ -446,7 +457,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
         </div>
 
         {/* Modal Scroll Content */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 text-zinc-300">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6 text-zinc-300">
           
           {/* Section 1: Customer Details */}
           <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-3">
@@ -953,7 +964,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-zinc-800 bg-zinc-900/70 flex justify-end">
+        <div className="p-4 border-t border-zinc-800 bg-zinc-900/70 flex justify-end shrink-0">
           <button
             onClick={onClose}
             className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-xs font-bold transition-all cursor-pointer font-mono"

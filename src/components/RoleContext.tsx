@@ -203,6 +203,7 @@ interface RoleContextType {
   resetAllData: () => Promise<void>;
   refreshData: () => void;
   pushInsert: (table: string, record: any) => Promise<{ success: boolean; error?: string; localFallback?: boolean }>;
+  pushUpsert: (table: string, record: any) => Promise<{ success: boolean; error?: string }>;
   pushUpdate: (table: string, matchColumn: string, matchValue: any, updates: any) => Promise<{ success: boolean; error?: string; localFallback?: boolean }>;
   pushDelete: (table: string, matchColumn: string, matchValue: any) => Promise<{ success: boolean; error?: string }>;
   statusHistory: any[];
@@ -1378,15 +1379,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'target_delivery_date', 'actual_delivery_date', 'assigned_staff', 'project_notes',
         'internal_comments', 'raw_footage_status', 'production_status', 'approval_status',
         'editing_progress', 'order_id', 'lead_id', 'customer_name',
-        'event_id', 'assigned_team', 'final_consolidated_drive_link', 'current_status',
-        'client_communication_proof', 'customer_communication_proof', 'proof_url',
-        'upload_name', 'proof_name', 'client_communication_proof_name',
-        'checklist_client_communication_proof', 'checklist_customer_acceptance',
-        'checklist_content_usage', 'checklist_footage_deleted_7_days',
+        'event_id', 'assigned_team', 'final_consolidated_drive_link', 'current_status', 'created_at',
+        'client_communication_proof', 'customer_communication_proof', 'confirmation_proof',
+        'proof_url', 'proof_image', 'uploaded_proof',
+        'server_upload_confirmed', 'server_upload_event_date', 'server_upload_folder_name', 'server_path',
+        'edited_drive_link', 'server_upload_confirmed_at', 'server_upload_confirmed_by',
+        'checklist_customer_acceptance', 'checklist_content_usage', 'checklist_footage_deleted_7_days',
         'checklist_payment_from_sales', 'checklist_edited_files_uploaded',
-        'server_upload_validated', 'server_upload_folder_name', 'server_upload_event_date',
-        'server_upload_confirmed', 'edited_drive_link', 'delivery_link', 'edited_folder_uploaded_to_server',
-        'folder_name', 'final_edited_footage_link', 'upload_link_path'
+        'server_upload_validated', 'validated_server_uploads', 'customer_review_image',
+        'delivery_link', 'client_communication_proof_name', 'proof_name', 'upload_name',
+        'checklist_client_communication_proof', 'edited_folder_uploaded_to_server', 'status',
+        'folder_name', 'final_edited_footage_link', 'upload_link_path', 'client_approval_date',
+        'client_communication_consent_proof', 'proof_file_name', 'updated_at'
       ],
       client_acceptance_verifications: [
         'id', 'order_id', 'event_id', 'client_communication_consent_proof',
@@ -8033,6 +8037,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         resetAllData,
         refreshData,
         pushInsert,
+        pushUpsert,
         pushUpdate,
         statusHistory,
         getLeadCurrentStatus,

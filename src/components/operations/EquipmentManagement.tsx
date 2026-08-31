@@ -127,6 +127,17 @@ export const EquipmentManagement: React.FC = () => {
     status: 'Active' as string
   });
 
+  useEffect(() => {
+    if (showGearForm || selectedEq || busyEquipment) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showGearForm, selectedEq, busyEquipment]);
+
   // Handle selecting an item for editing
   const handleSelectEdit = (eq: Equipment, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -778,17 +789,17 @@ export const EquipmentManagement: React.FC = () => {
       <div className="grid grid-cols-1 gap-6 items-start">
         {/* Gear Form Modal */}
         {showGearForm && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
-            <div id="equipment_registry_form" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl w-full max-w-lg relative my-auto max-h-full overflow-y-auto">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
+            <div id="equipment_registry_form" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xl w-full max-w-lg relative flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0 overflow-hidden">
               <button onClick={() => { setEditingId(null); setShowGearForm(false); }} className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 rounded-full bg-zinc-800/50 hover:bg-zinc-800 transition-colors z-10 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
-              <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5 pr-8">
+              <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5 pr-8 shrink-0">
                 <PlusCircle className="w-4 h-4 text-amber-500" />
                 <span>{editingId ? 'Edit Register Details' : 'Register New Studio Gear'}</span>
               </h3>
 
-              <form onSubmit={handleSubmit} className="space-y-4 text-xs mt-4">
+              <form onSubmit={handleSubmit} className="space-y-4 text-xs mt-4 flex-1 min-h-0 overflow-y-auto pr-1">
             <fieldset disabled={!canEdit} className="space-y-4">
               <div>
                 <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
@@ -1103,11 +1114,11 @@ export const EquipmentManagement: React.FC = () => {
         const meta = parseEquipmentNotes(selectedEq.notes);
         const assigned_quantity = selectedEq.quantity - (selectedEq.available_quantity ?? selectedEq.quantity);
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0 animate-in zoom-in-95 duration-200">
               
               {/* Header block */}
-              <div className="p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between">
+              <div className="p-4 sm:p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between shrink-0">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] font-mono bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded uppercase font-extrabold tracking-widest">
@@ -1115,18 +1126,18 @@ export const EquipmentManagement: React.FC = () => {
                     </span>
                     <span className="text-zinc-500 font-mono text-xs">/ {selectedEq.equipment_type}</span>
                   </div>
-                  <h4 className="text-lg font-bold text-white mt-1.5">{selectedEq.equipment_name}</h4>
+                  <h4 className="text-base sm:text-lg font-bold text-white mt-1.5">{selectedEq.equipment_name}</h4>
                 </div>
                 <button 
                   onClick={() => setSelectedEq(null)} 
-                  className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer"
+                  className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Body content (Bento-style layout) */}
-              <div className="p-6 max-h-[70vh] overflow-y-auto space-y-6 text-xs text-zinc-300">
+              <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6 text-xs text-zinc-300">
                 
                 {/* Visual statistics grid */}
                 <div className="grid grid-cols-3 gap-3 text-center">
@@ -1277,11 +1288,11 @@ export const EquipmentManagement: React.FC = () => {
 
       {/* Equipment Active Task Count & Assignment Popup */}
       {busyEquipment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0 animate-in zoom-in-95 duration-200">
             
             {/* Header block */}
-            <div className="p-6 border-b border-zinc-850 bg-zinc-950/80 flex items-center justify-between">
+            <div className="p-4 sm:p-6 border-b border-zinc-855 bg-zinc-950/80 flex items-center justify-between shrink-0">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono bg-amber-500/10 text-amber-500 border border-amber-500/20 px-2 py-0.5 rounded uppercase font-extrabold tracking-widest">
@@ -1296,7 +1307,7 @@ export const EquipmentManagement: React.FC = () => {
                     {busyEquipment.tasks.length > 0 ? `${busyEquipment.tasks.length} ACTIVE TASK${busyEquipment.tasks.length > 1 ? 'S' : ''}` : '0 ACTIVE TASKS'}
                   </span>
                 </div>
-                <h4 className="text-lg font-bold text-white mt-1.5">{busyEquipment.equipment.equipment_name}</h4>
+                <h4 className="text-base sm:text-lg font-bold text-white mt-1.5">{busyEquipment.equipment.equipment_name}</h4>
                 <p className="text-xs text-zinc-400 mt-0.5 font-mono">
                   Brand: <span className="text-zinc-300 font-medium">{busyEquipment.equipment.brand || '—'}</span>
                   {busyEquipment.equipment.model && <span> | Model: <span className="text-zinc-300 font-medium">{busyEquipment.equipment.model}</span></span>}
@@ -1305,14 +1316,14 @@ export const EquipmentManagement: React.FC = () => {
               </div>
               <button 
                 onClick={() => setBusyEquipment(null)} 
-                className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer"
+                className="p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-400 hover:text-white transition-all cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Body content */}
-            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-4">
               {busyEquipment.tasks.length > 0 ? (
                 <div className="overflow-x-auto border border-zinc-850 rounded-2xl bg-zinc-950/40">
                   <table className="w-full text-left border-collapse min-w-max">
@@ -1366,7 +1377,7 @@ export const EquipmentManagement: React.FC = () => {
             </div>
 
             {/* Footer block */}
-            <div className="p-4 border-t border-zinc-850 bg-zinc-950/60 flex items-center justify-between">
+            <div className="p-4 border-t border-zinc-850 bg-zinc-950/60 flex items-center justify-between shrink-0">
               <span className="text-[11px] font-mono text-zinc-500">
                 {busyEquipment.tasks.length} active assignment{busyEquipment.tasks.length === 1 ? '' : 's'} resolved
               </span>

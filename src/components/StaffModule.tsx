@@ -603,11 +603,11 @@ const StaffEquipmentDetailsCell = ({ b, proofStatus }: { b: any, proofStatus: an
 
       {isOpen && createPortal(
         <div 
-          className={`staff-equipment-details-popup-${b.orderId || b.key} fixed z-[110] w-[320px] max-w-[95vw] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/80 overflow-hidden transform origin-${coords.openUpward ? 'bottom' : 'top'} animate-in fade-in zoom-in-95 duration-200 flex flex-col`}
+          className={`staff-equipment-details-popup-${b.orderId || b.key} fixed z-[110] w-[320px] max-w-[calc(100vw-1.5rem)] bg-zinc-900 border border-zinc-700/80 rounded-xl shadow-2xl shadow-black/80 overflow-hidden transform origin-${coords.openUpward ? 'bottom' : 'top'} animate-in fade-in zoom-in-95 duration-200 flex flex-col`}
           style={{ 
             left: coords.left, 
-            ...(coords.openUpward ? { bottom: window.innerHeight - coords.top } : { top: coords.top }),
-            maxHeight: '300px'
+            ...(coords.openUpward ? { bottom: Math.max(12, window.innerHeight - coords.top) } : { top: Math.max(12, coords.top) }),
+            maxHeight: `${Math.min(300, window.innerHeight - 30)}px`
           }}
         >
           <div className="px-4 py-3 bg-zinc-800/50 border-b border-zinc-700/60 flex items-center justify-between shrink-0">
@@ -831,6 +831,19 @@ export const StaffModule: React.FC = () => {
     booking: any;
     stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete';
   } | null>(null);
+  const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
+
+  // Lock background body scroll when any modal is active
+  useEffect(() => {
+    if (selectedBookingDetails || photoModalData || calendarModalDate) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [selectedBookingDetails, photoModalData, calendarModalDate]);
 
   // Photos attached in modal & raw footage link
   const [modalPhotos, setModalPhotos] = useState<Record<string, string>>({});
@@ -2070,7 +2083,6 @@ export const StaffModule: React.FC = () => {
   // Calendar View & Navigation state
   const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
   const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
   const [calendarModalEvents, setCalendarModalEvents] = useState<any[]>([]);
 
   const handlePrevMonth = () => {

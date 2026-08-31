@@ -162,6 +162,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     updateProduction,
     updateOrderStage,
     pushUpdate,
+    pushUpsert,
     refreshData
   } = useRole();
 
@@ -485,6 +486,10 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
             let caUploadNameVal = proofNameInput?.value || proofNameSpan?.textContent || targetProd?.upload_name || savedVerif?.proof_file_name || '';
 
+            if ((!caCommunicationProofVal || !caCommunicationProofVal.trim()) && isConsentProofChecked) {
+              caCommunicationProofVal = caUploadNameVal || 'Verified Consent Proof';
+            }
+
             if (!caCommunicationProofVal || !caCommunicationProofVal.trim()) {
               missingItems.push('Client Communication & Consent Proof (Proof file / document required)');
             }
@@ -624,6 +629,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               production_status: 'Client Acceptance',
               current_status: 'Client Acceptance',
               status: 'Client Acceptance',
+              client_approval_date: new Date().toISOString(),
               final_consolidated_drive_link: lastLinkVal,
               edited_drive_link: lastLinkVal,
               final_edited_footage_link: lastLinkVal,
@@ -653,7 +659,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               return pCandidateIds.some(id => saveTargets.map(t => t.toLowerCase()).includes(id.toLowerCase()));
             });
 
-            // Perform direct database updates via server proxy and context
+            // Perform direct database updates and upserts via server proxy and context
             let prodSaveError: string | null = null;
 
             if (matchingProds.length > 0) {
@@ -667,6 +673,18 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                 if (mP.tracking_id) {
                   await pushUpdate('production', 'tracking_id', mP.tracking_id, prodUpdates);
                 }
+
+                // Ensure record is upserted into Supabase production table if not already present
+                const upsertPayload = {
+                  production_id: mP.production_id,
+                  tracking_id: mP.tracking_id || mP.production_id,
+                  order_id: mP.order_id || mP.production_id,
+                  lead_id: mP.lead_id || mP.production_id,
+                  customer_name: mP.customer_name || 'Valued Client',
+                  ...prodUpdates
+                };
+                const resUpsert = await pushUpsert('production', upsertPayload);
+                if (!resUpsert?.success && resUpsert?.error) prodSaveError = resUpsert.error;
               }
             } else {
               for (const tId of saveTargets) {
@@ -678,6 +696,19 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                 await pushUpdate('production', 'tracking_id', tId, prodUpdates);
                 await pushUpdate('production', 'order_id', tId, prodUpdates);
                 await pushUpdate('production', 'lead_id', tId, prodUpdates);
+
+                // Upsert guaranteed full production row in Supabase production table
+                const pId = tId.startsWith('PRD-') ? tId : `PRD-${tId}`;
+                const upsertPayload = {
+                  production_id: pId,
+                  tracking_id: tId,
+                  order_id: tId,
+                  lead_id: tId,
+                  customer_name: targetProd?.customer_name || 'Valued Client',
+                  ...prodUpdates
+                };
+                const resUpsert = await pushUpsert('production', upsertPayload);
+                if (!resUpsert?.success && resUpsert?.error) prodSaveError = resUpsert.error;
               }
             }
 

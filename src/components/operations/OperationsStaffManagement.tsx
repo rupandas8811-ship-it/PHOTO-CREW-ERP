@@ -82,6 +82,17 @@ export const OperationsStaffManagement: React.FC = () => {
   });
 
   const [selectedStaffBookings, setSelectedStaffBookings] = useState<{ staffName: string; bookings: any[] } | null>(null);
+
+  useEffect(() => {
+    if (showStaffModal || selectedStaffBookings) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showStaffModal, selectedStaffBookings]);
   const [searchQuery, setSearchQuery] = useState('');
   const [operatingId, setOperatingId] = useState<string | null>(null);
 
@@ -546,10 +557,10 @@ export const OperationsStaffManagement: React.FC = () => {
       {/* Roster form - Modal */}
       {showStaffModal && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm"
           onClick={(e) => { if (e.target === e.currentTarget) handleCancel(); }}
         >
-          <div className="w-full max-w-md flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl relative max-h-[90vh] overflow-hidden">
+          <div className="w-full max-w-md flex flex-col bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl relative max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0 overflow-hidden">
             <div className="flex items-center justify-between p-5 border-b border-zinc-800 shrink-0 bg-zinc-900 z-10">
               <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5">
                 <PlusCircle className="w-4 h-4 text-amber-500" />
@@ -975,16 +986,16 @@ export const OperationsStaffManagement: React.FC = () => {
       {typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {selectedStaffBookings && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[99999] flex items-center justify-center p-2 sm:p-4">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-7xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-7xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0"
             >
               {/* Modal Header */}
-              <div className="p-6 border-b border-zinc-850 flex items-center justify-between bg-zinc-950/40">
+              <div className="p-4 sm:p-6 border-b border-zinc-850 flex items-center justify-between bg-zinc-950/40 shrink-0">
                 <div className="space-y-1">
                   <h3 className="text-sm font-mono font-bold uppercase text-amber-500 flex items-center gap-2">
                     <span className="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
@@ -1142,7 +1153,7 @@ export const OperationsStaffManagement: React.FC = () => {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-6 border-t border-zinc-850 flex justify-end bg-zinc-950/40">
+              <div className="p-4 sm:p-6 border-t border-zinc-850 flex justify-end bg-zinc-950/40 shrink-0">
                 <button
                   type="button"
                   onClick={() => setSelectedStaffBookings(null)}
