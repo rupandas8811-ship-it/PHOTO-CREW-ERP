@@ -4894,50 +4894,34 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         updates.current_status = updates.editing_status;
       }
 
-      // Check if targetProd exists in DB production state
-      const existingInProdState = production.find(p => 
-        p.production_id === productionId || 
-        (targetProd && p.production_id === targetProd.production_id) ||
-        (p.tracking_id && (p.tracking_id === inferredTrackingId || p.tracking_id === targetProd?.tracking_id))
-      );
-
-      if (existingInProdState) {
-        const rProd = await pushUpdate('production', 'production_id', existingInProdState.production_id, updates);
+      if (targetProd) {
+        const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
         if (!rProd?.success) {
           console.warn("[updateProduction] DB operation failed for production table update:", rProd?.error);
           throw new Error(rProd?.error || "DB operation failed for production table update");
         } else {
-          setProduction(prev => prev.map(p => p.production_id === existingInProdState.production_id ? { ...p, ...updates } : p));
+          setProduction(prev => prev.map(p => p.production_id === targetProd.production_id ? { ...p, ...updates } : p));
         }
       } else {
-        const newPId = (targetProd?.production_id || productionId).startsWith('PRD-') ? (targetProd?.production_id || productionId) : `PRD-${targetProd?.production_id || productionId}`;
+        const newPId = productionId.startsWith('PRD-') ? `PRD-${Math.floor(100000 + Math.random() * 899999)}` : productionId;
         const newProd: Production = {
           production_id: newPId,
-          tracking_id: targetProd?.tracking_id || inferredTrackingId,
-          editor_assigned: updates.editor_assigned || targetProd?.editor_assigned || 'Unassigned',
-          editing_status: (updates.editing_status || previousStage || 'Client Acceptance') as any,
-          production_status: (updates.editing_status || updates.production_status || 'Client Acceptance') as any,
-          current_status: (updates.editing_status || updates.current_status || 'Client Acceptance') as any,
+          tracking_id: inferredTrackingId,
+          editor_assigned: updates.editor_assigned || 'Unassigned',
+          editing_status: (updates.editing_status || previousStage || 'Raw Footage Received') as any,
           remarks: updates.remarks || '',
           project_priority: updates.project_priority || 'Medium',
           raw_footage_location: updates.raw_footage_location || '',
           target_delivery_date: updates.target_delivery_date || '',
           expected_delivery_date: updates.expected_delivery_date || '',
-          ...(targetProd || {}),
           ...updates
         };
-        const rProd = await pushUpsert('production', newProd);
+        const rProd = await pushInsert('production', newProd);
         if (!rProd?.success) {
-          console.warn("[updateProduction] DB operation failed for production table upsert:", rProd?.error);
-          throw new Error(rProd?.error || "DB operation failed for production table upsert");
+          console.warn("[updateProduction] DB operation failed for production table insert:", rProd?.error);
+          throw new Error(rProd?.error || "DB operation failed for production table insert");
         } else {
-          setProduction(prev => {
-            const exists = prev.some(p => p.production_id === newProd.production_id);
-            if (exists) {
-              return prev.map(p => p.production_id === newProd.production_id ? { ...p, ...newProd, ...updates } : p);
-            }
-            return [newProd, ...prev];
-          });
+          setProduction(prev => [newProd, ...prev]);
         }
       }
     } catch (prodErr: any) {
@@ -5456,33 +5440,25 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       );
     }
 
-    let orderUpdateSucceeded = false;
-    const orderExists = augmentedOrders.some(o => o.order_id === resolvedOrderId) || orders.some(o => o.order_id === resolvedOrderId);
-    if (orderExists || !orderId.startsWith('LD')) {
-      const rOrd = await pushUpdate('orders', 'order_id', resolvedOrderId, { 
-        current_stage: targetStageToSave,
-        updated_by: currentUserName,
-        updated_at: timestamp
-      });
-      if (rOrd?.success) {
-        orderUpdateSucceeded = true;
-        setOrders(prev => prev.map(o => o.order_id === resolvedOrderId ? { ...o, current_stage: targetStageToSave } : o));
-      } else if (!targetOrder?.lead_id && !orderId.startsWith('LD')) {
-        throw new Error("Failed to update order stage: " + rOrd?.error);
-      }
+    const rOrd = await pushUpdate('orders', 'order_id', resolvedOrderId, { 
+      current_stage: targetStageToSave,
+      updated_by: currentUserName,
+      updated_at: timestamp
+    });
+    if (!rOrd?.success) {
+      throw new Error("Failed to update order stage: " + rOrd?.error);
+    } else {
+      setOrders(prev => prev.map(o => o.order_id === resolvedOrderId ? { ...o, current_stage: targetStageToSave } : o));
     }
 
-    const leadIdToUpdate = targetOrder?.lead_id || (orderId.startsWith('LD') ? orderId : undefined);
-    if (leadIdToUpdate) {
-      const rLead = await pushUpdate('leads', 'lead_id', leadIdToUpdate, { 
+    if (targetOrder) {
+      const rLead = await pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
         status: targetStageToSave,
         current_status: targetStageToSave,
         updated_by: currentUserName,
         updated_at: timestamp
       });
-      if (rLead?.success) {
-        setLeads(prev => prev.map(l => l.lead_id === leadIdToUpdate ? { ...l, status: targetStageToSave, current_status: targetStageToSave } : l));
-      } else if (!orderUpdateSucceeded) {
+      if (!rLead?.success) {
         throw new Error("Failed to update lead status: " + rLead?.error);
       }
     }

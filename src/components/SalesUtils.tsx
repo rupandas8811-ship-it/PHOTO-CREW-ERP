@@ -246,20 +246,28 @@ export function buildStep3EventPayloads(
     const evId = event?.id || event?.event_id || `event_${idx + 1}`;
     const evName = event?.event_name || event?.event_type || 'Unnamed Event';
 
-    const keysToTry = [
-      `${effectivePkgId}_${evId}`,
-      `Custom Package_${evId}`,
-      `custom_package_${evId}`,
-      `${evId}`
-    ];
-    if (event?.event_name) {
-      keysToTry.push(`${effectivePkgId}_${event.event_name}`);
-      keysToTry.push(`Custom Package_${event.event_name}`);
-    }
-
-    if (!isMultiEvent) {
-      keysToTry.push(effectivePkgId, 'Custom Package', 'custom_package');
-    }
+    const keysToTry = isMultiEvent
+      ? [
+          `${effectivePkgId}_${evId}`,
+          `Custom Package_${evId}`,
+          `custom_package_${evId}`,
+          `${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evName}`,
+          `custom_package_${evName}`
+        ]
+      : [
+          `${effectivePkgId}_${evId}`,
+          `Custom Package_${evId}`,
+          `custom_package_${evId}`,
+          `${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evName}`,
+          `custom_package_${evName}`,
+          effectivePkgId,
+          'Custom Package',
+          'custom_package'
+        ];
 
     let list: any[] = [];
     let found = false;
@@ -271,25 +279,10 @@ export function buildStep3EventPayloads(
       }
     }
 
-    if (!found && event) {
-      if (Array.isArray(event.team_members) && event.team_members.length > 0) {
-        list = event.team_members;
-      } else if (Array.isArray(event.members) && event.members.length > 0) {
-        list = event.members;
-      } else if (Array.isArray(event.teamMembers) && event.teamMembers.length > 0) {
-        list = event.teamMembers;
-      }
-    }
-
-    const structured = formatListToStructuredObjects(list);
-
     return {
-      id: evId,
       event_id: evId,
       event_name: evName,
-      team_members: structured,
-      teamMembers: structured,
-      members: structured
+      team_members: formatListToStructuredObjects(list)
     };
   });
 
@@ -297,20 +290,28 @@ export function buildStep3EventPayloads(
     const evId = event?.id || event?.event_id || `event_${idx + 1}`;
     const evName = event?.event_name || event?.event_type || 'Unnamed Event';
 
-    const keysToTry = [
-      `${effectivePkgId}_${evId}`,
-      `Custom Package_${evId}`,
-      `custom_package_${evId}`,
-      `${evId}`
-    ];
-    if (event?.event_name) {
-      keysToTry.push(`${effectivePkgId}_${event.event_name}`);
-      keysToTry.push(`Custom Package_${event.event_name}`);
-    }
-
-    if (!isMultiEvent) {
-      keysToTry.push(effectivePkgId, 'Custom Package', 'custom_package');
-    }
+    const keysToTry = isMultiEvent
+      ? [
+          `${effectivePkgId}_${evId}`,
+          `Custom Package_${evId}`,
+          `custom_package_${evId}`,
+          `${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evName}`,
+          `custom_package_${evName}`
+        ]
+      : [
+          `${effectivePkgId}_${evId}`,
+          `Custom Package_${evId}`,
+          `custom_package_${evId}`,
+          `${evId}`,
+          `${effectivePkgId}_${evName}`,
+          `Custom Package_${evName}`,
+          `custom_package_${evName}`,
+          effectivePkgId,
+          'Custom Package',
+          'custom_package'
+        ];
 
     let list: any[] = [];
     let found = false;
@@ -322,21 +323,10 @@ export function buildStep3EventPayloads(
       }
     }
 
-    if (!found && event) {
-      if (Array.isArray(event.deliverables) && event.deliverables.length > 0) {
-        list = event.deliverables;
-      } else if (Array.isArray(event.deliverables_list) && event.deliverables_list.length > 0) {
-        list = event.deliverables_list;
-      }
-    }
-
-    const structured = formatListToStructuredObjects(list);
-
     return {
-      id: evId,
       event_id: evId,
       event_name: evName,
-      deliverables: structured
+      deliverables: formatListToStructuredObjects(list)
     };
   });
 
@@ -363,8 +353,8 @@ export function buildStep3EventPayloads(
     deliverablesJson,
     flatTeamMembers,
     flatDeliverables,
-    teamMembersText: isMultiEvent ? JSON.stringify(teamMembersJson) : (teamMembersJson.length === 1 ? JSON.stringify(teamMembersJson[0].team_members) : JSON.stringify(flatTeamMembers)),
-    deliverablesText: isMultiEvent ? JSON.stringify(deliverablesJson) : (deliverablesJson.length === 1 ? JSON.stringify(deliverablesJson[0].deliverables) : JSON.stringify(flatDeliverables))
+    teamMembersText: teamMembersJson.length > 1 ? JSON.stringify(teamMembersJson) : JSON.stringify(flatTeamMembers),
+    deliverablesText: deliverablesJson.length > 1 ? JSON.stringify(deliverablesJson) : JSON.stringify(flatDeliverables)
   };
 }
 
@@ -385,7 +375,7 @@ export function parseTeamMembersJsonToRecord(
         const { qty, text } = parseQtyAndText(s);
         return text ? combineQtyAndText(qty, text) : '';
       }).filter(Boolean);
-      if (list.length > 0 && (!eventsList || eventsList.length <= 1)) {
+      if (list.length > 0) {
         result[pkgId] = list;
         result['Custom Package'] = list;
         result['custom_package'] = list;
@@ -401,11 +391,11 @@ export function parseTeamMembersJsonToRecord(
         const { qty, text } = parseQtyAndText(item);
         if (text) generalList.push(combineQtyAndText(qty, text));
       } else if (item && typeof item === 'object') {
-        const isEventStructure = (item.event_name || item.event_type || item.event_id || item.id) && (Array.isArray(item.team_members) || Array.isArray(item.members) || Array.isArray(item.teamMembers));
+        const isEventStructure = (item.event_name || item.event_type || item.event_id) && (Array.isArray(item.team_members) || Array.isArray(item.members));
         if (isEventStructure) {
           const evName = item.event_name || item.event_type;
-          const evId = item.event_id || item.id;
-          const membersList = Array.isArray(item.team_members) ? item.team_members : (Array.isArray(item.members) ? item.members : (Array.isArray(item.teamMembers) ? item.teamMembers : []));
+          const evId = item.event_id;
+          const membersList = Array.isArray(item.team_members) ? item.team_members : (Array.isArray(item.members) ? item.members : []);
           const members = membersList.map((m: any) => {
             const { qty, text } = parseQtyAndText(m);
             return text ? combineQtyAndText(qty, text) : '';
@@ -414,16 +404,12 @@ export function parseTeamMembersJsonToRecord(
           if (evName === 'General' || (!evName && !evId)) {
             generalList = [...generalList, ...members];
           } else {
-            let matchedEv = null;
-            if (evId) {
-              matchedEv = (eventsList || []).find(e => e && (String(e.id) === String(evId) || String(e.event_id) === String(evId)));
-            }
-            if (!matchedEv && evName) {
-              matchedEv = (eventsList || []).find(e => e && (e.event_name === evName || e.event_type === evName));
-            }
-            if (!matchedEv && eventsList && eventsList[idx]) {
-              matchedEv = eventsList[idx];
-            }
+            const matchedEv = (eventsList || []).find((e, eIdx) =>
+              (evId && (e.id && String(e.id) === String(evId) || e.event_id && String(e.event_id) === String(evId))) ||
+              (eIdx === idx) ||
+              (e.event_name && e.event_name === evName) ||
+              (e.event_type && e.event_type === evName)
+            );
             const targetId = matchedEv?.id || matchedEv?.event_id || evId || `event_${idx + 1}`;
 
             if (targetId) {
@@ -431,12 +417,6 @@ export function parseTeamMembersJsonToRecord(
               result[`Custom Package_${targetId}`] = members;
               result[`custom_package_${targetId}`] = members;
               result[targetId] = members;
-            }
-            if (evId && evId !== targetId) {
-              result[`${pkgId}_${evId}`] = members;
-              result[`Custom Package_${evId}`] = members;
-              result[`custom_package_${evId}`] = members;
-              result[evId] = members;
             }
           }
         } else {
@@ -451,7 +431,7 @@ export function parseTeamMembersJsonToRecord(
       }
     });
 
-    if (generalList.length > 0 && (!eventsList || eventsList.length <= 1)) {
+    if (generalList.length > 0) {
       result[pkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
@@ -487,7 +467,7 @@ export function parseDeliverablesJsonToRecord(
         const { qty, text } = parseQtyAndText(s);
         return text ? combineQtyAndText(qty, text) : '';
       }).filter(Boolean);
-      if (list.length > 0 && (!eventsList || eventsList.length <= 1)) {
+      if (list.length > 0) {
         result[pkgId] = list;
         result['Custom Package'] = list;
         result['custom_package'] = list;
@@ -503,10 +483,10 @@ export function parseDeliverablesJsonToRecord(
         const { qty, text } = parseQtyAndText(item);
         if (text) generalList.push(combineQtyAndText(qty, text));
       } else if (item && typeof item === 'object') {
-        const isEventStructure = (item.event_name || item.event_type || item.event_id || item.id) && (Array.isArray(item.deliverables) || Array.isArray(item.deliverables_list));
+        const isEventStructure = (item.event_name || item.event_type || item.event_id) && (Array.isArray(item.deliverables) || Array.isArray(item.deliverables_list));
         if (isEventStructure) {
           const evName = item.event_name || item.event_type;
-          const evId = item.event_id || item.id;
+          const evId = item.event_id;
           let deliverables: string[] = [];
           if (Array.isArray(item.deliverables)) {
             deliverables = item.deliverables.map((d: any) => {
@@ -523,16 +503,12 @@ export function parseDeliverablesJsonToRecord(
           if (evName === 'General' || (!evName && !evId) || evName === 'Unnamed Event') {
             generalList = [...generalList, ...deliverables];
           } else {
-            let matchedEv = null;
-            if (evId) {
-              matchedEv = (eventsList || []).find(e => e && (String(e.id) === String(evId) || String(e.event_id) === String(evId)));
-            }
-            if (!matchedEv && evName) {
-              matchedEv = (eventsList || []).find(e => e && (e.event_name === evName || e.event_type === evName));
-            }
-            if (!matchedEv && eventsList && eventsList[idx]) {
-              matchedEv = eventsList[idx];
-            }
+            const matchedEv = (eventsList || []).find((e, eIdx) =>
+              (evId && (e.id && String(e.id) === String(evId) || e.event_id && String(e.event_id) === String(evId))) ||
+              (eIdx === idx) ||
+              (e.event_name && e.event_name === evName) ||
+              (e.event_type && e.event_type === evName)
+            );
             const targetId = matchedEv?.id || matchedEv?.event_id || evId || `event_${idx + 1}`;
 
             if (targetId) {
@@ -540,12 +516,6 @@ export function parseDeliverablesJsonToRecord(
               result[`Custom Package_${targetId}`] = deliverables;
               result[`custom_package_${targetId}`] = deliverables;
               result[targetId] = deliverables;
-            }
-            if (evId && evId !== targetId) {
-              result[`${pkgId}_${evId}`] = deliverables;
-              result[`Custom Package_${evId}`] = deliverables;
-              result[`custom_package_${evId}`] = deliverables;
-              result[evId] = deliverables;
             }
           }
         } else {
@@ -560,7 +530,7 @@ export function parseDeliverablesJsonToRecord(
       }
     });
 
-    if (generalList.length > 0 && (!eventsList || eventsList.length <= 1)) {
+    if (generalList.length > 0) {
       result[pkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
@@ -962,46 +932,25 @@ export const generateQuotationPDF = (
   }[] = [];
 
   if (lead.events && lead.events.length > 0) {
-    const isMultiEv = lead.events.length > 1;
     // 1. First, create the array of events
     const unsortedEvents: any[] = [];
     lead.events.forEach((event: any) => {
-      const evId = event.id || event.event_id;
-      const eventKey = `${pkgId}_${evId}`;
-      const altKey = `Custom Package_${evId}`;
+      const eventKey = `${pkgId}_${event.id}`;
       const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
       
-      let eventInclusions: string[] = [];
-      if (editableInclusions?.[eventKey] !== undefined) {
-        eventInclusions = editableInclusions[eventKey];
-      } else if (evId && editableInclusions?.[evId] !== undefined) {
-        eventInclusions = editableInclusions[evId];
-      } else if (editableInclusions?.[altKey] !== undefined) {
-        eventInclusions = editableInclusions[altKey];
-      } else if (event.event_name && editableInclusions?.[nameKey] !== undefined) {
-        eventInclusions = editableInclusions[nameKey];
-      } else if (event.team_members && Array.isArray(event.team_members) && event.team_members.length > 0) {
-        eventInclusions = event.team_members.map((m: any) => typeof m === 'string' ? m : (m?.name ? `${m.qty > 1 ? m.qty + 'x ' : ''}${m.name}` : '')).filter(Boolean);
-      } else if (!isMultiEv && inclusionsList.length > 0) {
-        eventInclusions = inclusionsList;
-      }
+      const eventInclusions = editableInclusions?.[eventKey] !== undefined
+        ? editableInclusions[eventKey]
+        : (editableInclusions?.[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
 
       const eventName = event.event_name || event.event_type || 'Unnamed Event';
 
-      let eventDeliverables: string[] = [];
-      if (editableDeliverables?.[eventKey] !== undefined) {
-        eventDeliverables = editableDeliverables[eventKey];
-      } else if (evId && editableDeliverables?.[evId] !== undefined) {
-        eventDeliverables = editableDeliverables[evId];
-      } else if (editableDeliverables?.[altKey] !== undefined) {
-        eventDeliverables = editableDeliverables[altKey];
-      } else if (event.event_name && editableDeliverables?.[nameKey] !== undefined) {
-        eventDeliverables = editableDeliverables[nameKey];
-      } else if (event.deliverables && Array.isArray(event.deliverables) && event.deliverables.length > 0) {
-        eventDeliverables = event.deliverables.map((d: any) => typeof d === 'string' ? d : (d?.name ? `${d.qty > 1 ? d.qty + 'x ' : ''}${d.name}` : '')).filter(Boolean);
-      } else if (!isMultiEv && deliverablesList.length > 0) {
-        eventDeliverables = deliverablesList;
-      }
+      const eventDeliverables = editableDeliverables?.[eventKey] !== undefined
+        ? editableDeliverables[eventKey]
+        : (editableDeliverables?.[nameKey] !== undefined ? editableDeliverables[nameKey] : null);
+
+      const items = eventDeliverables !== null
+        ? eventDeliverables.filter(Boolean)
+        : deliverablesList;
 
       unsortedEvents.push({
         eventName,
@@ -1012,7 +961,7 @@ export const generateQuotationPDF = (
         eventLocation: event.event_location || "N/A",
         guestPax: event.guest_pax !== undefined && event.guest_pax !== null && event.guest_pax !== '' ? String(event.guest_pax) : (lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A')),
         members: (eventInclusions || []).filter(Boolean),
-        deliverables: (eventDeliverables || []).filter(Boolean)
+        deliverables: items
       });
     });
 
