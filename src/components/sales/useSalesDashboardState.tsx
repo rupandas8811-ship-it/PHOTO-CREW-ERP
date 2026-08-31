@@ -1405,6 +1405,22 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     );
     const cleanFinalAmt = Math.max(0, (cleanPkgCost || 0) + cleanAdditional - cleanDiscount);
 
+    const updatedEventsWithData = activeEventsList.map((ev, idx) => {
+      const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
+      const evTmObj = teamMembersJson.find(t => String(t.event_id) === evId);
+      const evDelObj = deliverablesJson.find(d => String(d.event_id) === evId);
+      const evTm = evTmObj?.team_members || [];
+      const evDel = evDelObj?.deliverables || [];
+      return {
+        ...ev,
+        team_members: evTm,
+        deliverables: evDel,
+        inclusions: evTm,
+        Team_Members: JSON.stringify(evTm),
+        Add_Deliverable: JSON.stringify(evDel)
+      };
+    });
+
     const updatePayload: any = {
       Team_Members: safeTeamMembersText,
       Add_Deliverable: safeDeliverablesText,
@@ -1414,6 +1430,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       Final_Quotation_Amount: cleanFinalAmt,
       Final_Package_Amount: cleanFinalAmt,
       final_package_amount: cleanFinalAmt,
+      ...(updatedEventsWithData.length > 0 ? { events: updatedEventsWithData } : {}),
       _explicit_step3_save: true
     };
 
@@ -1440,6 +1457,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               Additional_Services_Cost: cleanAdditional,
               Final_Quotation_Amount: cleanFinalAmt,
               Final_Package_Amount: cleanFinalAmt,
+              ...(updatedEventsWithData.length > 0 ? { events: updatedEventsWithData } : {}),
               ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? { package_price: cleanPkgCost, budget: cleanPkgCost } : {})
             })
             .eq('lead_id', leadId)
@@ -1472,6 +1490,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               Final_Quotation_Amount: cleanFinalAmt,
               Final_Package_Amount: cleanFinalAmt,
               final_package_amount: cleanFinalAmt,
+              events: updatedEventsWithData.length > 0 ? updatedEventsWithData : prev.events,
               ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
                 package_price: cleanPkgCost,
                 budget: cleanPkgCost
@@ -3832,11 +3851,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     const matchedPkgId = fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || 'Custom Package';
     const matchedPkg = (packages || []).find(p => p.package_id === matchedPkgId);
+    const effectiveEvents = eventsForCheck && eventsForCheck.length > 0 ? eventsForCheck : (fullLead.events || crmEvents || []);
 
     // 1. Load Deliverables
     const rawDelData = fullLead.Add_Deliverable || primaryLP?.deliverables_descriptionn || primaryLP?.editable_deliverables || fullLead.deliverables_description || latestQuote?.deliverables_description || matchedPkg?.deliverables;
-    if (rawDelData) {
-      const newDeliverables = parseDeliverablesJsonToRecord(rawDelData, matchedPkgId, fullLead.events || crmEvents);
+    if (rawDelData || (effectiveEvents && effectiveEvents.length > 0)) {
+      const newDeliverables = parseDeliverablesJsonToRecord(rawDelData, matchedPkgId, effectiveEvents);
       setEditableDeliverables(newDeliverables);
     } else {
       setEditableDeliverables({});
@@ -3845,8 +3865,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     // 2. Load Team Members
     const rawTeamData = fullLead.Team_Members || fullLead.Team_member || (fullLead as any)?.team_members || primaryLP?.Team_Members_Included || primaryLP?.editable_inclusions || matchedPkg?.team_members;
     console.log('TEAM MEMBERS LOADED in openCRMModal', { leadId: fullLead.lead_id, Team_Members: rawTeamData });
-    if (rawTeamData) {
-      const newInclusions = parseTeamMembersJsonToRecord(rawTeamData, matchedPkgId, fullLead.events || crmEvents);
+    if (rawTeamData || (effectiveEvents && effectiveEvents.length > 0)) {
+      const newInclusions = parseTeamMembersJsonToRecord(rawTeamData, matchedPkgId, effectiveEvents);
       setEditableInclusions(newInclusions);
     } else {
       setEditableInclusions({});
@@ -3991,13 +4011,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       if (!newDeliverables[customPkgVal]) newDeliverables[customPkgVal] = [];
 
       if (activeEvents && activeEvents.length > 0) {
-        activeEvents.forEach((ev) => {
-          const k1 = `${customPkgVal}_${ev.id}`;
-          const k2 = `${customPkgVal}_${ev.event_name || ev.event_type || 'Unnamed Event'}`;
+        activeEvents.forEach((ev, idx) => {
+          const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
+          const k1 = `${customPkgVal}_${evId}`;
           if (!newInclusions[k1]) newInclusions[k1] = [];
-          if (!newInclusions[k2]) newInclusions[k2] = [];
+          if (!newInclusions[evId]) newInclusions[evId] = [];
           if (!newDeliverables[k1]) newDeliverables[k1] = [];
-          if (!newDeliverables[k2]) newDeliverables[k2] = [];
+          if (!newDeliverables[evId]) newDeliverables[evId] = [];
         });
       }
 
@@ -4042,16 +4062,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       newDeliverables[targetPkgId] = [...defaultDel];
 
       if (activeEvents && activeEvents.length > 0) {
-        activeEvents.forEach((ev) => {
-          newInclusions[`${pkgIdStr}_${ev.id}`] = [...defaultInc];
-          newInclusions[`${pkgIdStr}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
-          newInclusions[`${targetPkgId}_${ev.id}`] = [...defaultInc];
-          newInclusions[`${targetPkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultInc];
+        activeEvents.forEach((ev, idx) => {
+          const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
+          newInclusions[`${pkgIdStr}_${evId}`] = [...defaultInc];
+          newInclusions[`${targetPkgId}_${evId}`] = [...defaultInc];
+          newInclusions[evId] = [...defaultInc];
           
-          newDeliverables[`${pkgIdStr}_${ev.id}`] = [...defaultDel];
-          newDeliverables[`${pkgIdStr}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultDel];
-          newDeliverables[`${targetPkgId}_${ev.id}`] = [...defaultDel];
-          newDeliverables[`${targetPkgId}_${ev.event_name || ev.event_type || 'Unnamed Event'}`] = [...defaultDel];
+          newDeliverables[`${pkgIdStr}_${evId}`] = [...defaultDel];
+          newDeliverables[`${targetPkgId}_${evId}`] = [...defaultDel];
+          newDeliverables[evId] = [...defaultDel];
         });
       }
 

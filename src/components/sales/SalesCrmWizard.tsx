@@ -834,8 +834,10 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
 
                               {/* Event-Wise Configuration or Single Configuration */}
                               <div>
-                                {crmEvents && crmEvents.length > 0 ? (
-                                  crmEvents.map((event, eventIdx) => {
+                                {((crmEvents && crmEvents.length > 0) || (createEvents && createEvents.length > 0)) ? (
+                                  ((crmEvents && crmEvents.length > 0) ? crmEvents : createEvents).map((event, eventIdx) => {
+                                    const activeEventsList = (crmEvents && crmEvents.length > 0) ? crmEvents : createEvents;
+                                    const isMulti = activeEventsList.length > 1;
                                     const evId = event.id || event.event_id || `EV-${eventIdx + 1}`;
                                     const eventKey = `${selectedPkgId}_${evId}`;
                                     const altKey = `Custom Package_${evId}`;
@@ -846,7 +848,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                           ? editableInclusions[evId]
                                           : (editableInclusions[altKey] !== undefined
                                               ? editableInclusions[altKey]
-                                              : (inclusionsList.length > 0 ? [...inclusionsList] : [])));
+                                              : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))));
 
                                     const eventDeliverables = editableDeliverables[eventKey] !== undefined
                                       ? editableDeliverables[eventKey]
@@ -854,7 +856,31 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                           ? editableDeliverables[evId]
                                           : (editableDeliverables[altKey] !== undefined
                                               ? editableDeliverables[altKey]
-                                              : (deliverablesList.length > 0 ? [...deliverablesList] : [])));
+                                              : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))));
+
+                                    const updateInclusionsForEvent = (newList: string[]) => {
+                                      const updated = {
+                                        ...editableInclusions,
+                                        [eventKey]: newList,
+                                        [`Custom Package_${evId}`]: newList,
+                                        [`custom_package_${evId}`]: newList,
+                                        [evId]: newList
+                                      };
+                                      setEditableInclusions(updated);
+                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                    };
+
+                                    const updateDeliverablesForEvent = (newList: string[]) => {
+                                      const updated = {
+                                        ...editableDeliverables,
+                                        [eventKey]: newList,
+                                        [`Custom Package_${evId}`]: newList,
+                                        [`custom_package_${evId}`]: newList,
+                                        [evId]: newList
+                                      };
+                                      setEditableDeliverables(updated);
+                                      saveStep3DataRealtime(editableInclusions, updated);
+                                    };
 
                                     const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
                                     const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
@@ -909,12 +935,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                  onClick={() => {
                                                    const currentList = [...eventInclusions];
                                                    currentList.push("");
-                                                   const updated = {
-                                                     ...editableInclusions,
-                                                     [eventKey]: currentList
-                                                   };
-                                                   setEditableInclusions(updated);
-                                                   saveStep3DataRealtime(updated, editableDeliverables);
+                                                   updateInclusionsForEvent(currentList);
                                                  }}
                                                  className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                                                >
@@ -925,7 +946,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                               <div className="space-y-1.5">
                                                 {eventInclusions.map((item, idx) => (
                                                   <CompactQtyItemRow
-                                                    key={idx}
+                                                    key={`inc_ev_${evId}_${idx}`}
                                                     value={item}
                                                     options={activeMasterRoles}
                                                     placeholder="Type or select Role / Team Member..."
@@ -933,22 +954,12 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                     onChange={(newVal) => {
                                                       const currentList = [...eventInclusions];
                                                       currentList[idx] = newVal;
-                                                      const updated = {
-                                                        ...editableInclusions,
-                                                        [eventKey]: currentList
-                                                      };
-                                                      setEditableInclusions(updated);
-                                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                                      updateInclusionsForEvent(currentList);
                                                     }}
                                                     onDelete={() => {
                                                       const currentList = [...eventInclusions];
                                                       currentList.splice(idx, 1);
-                                                      const updated = {
-                                                        ...editableInclusions,
-                                                        [eventKey]: currentList
-                                                      };
-                                                      setEditableInclusions(updated);
-                                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                                      updateInclusionsForEvent(currentList);
                                                     }}
                                                   />
                                                 ))}
@@ -958,12 +969,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                     onClick={() => {
                                                       const currentList = [...eventInclusions];
                                                       currentList.push("");
-                                                      const updated = {
-                                                        ...editableInclusions,
-                                                        [eventKey]: currentList
-                                                      };
-                                                      setEditableInclusions(updated);
-                                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                                      updateInclusionsForEvent(currentList);
                                                     }}
                                                     className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                                                   >
@@ -986,12 +992,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                  onClick={() => {
                                                    const currentList = [...eventDeliverables];
                                                    currentList.push("");
-                                                   const updated = {
-                                                     ...editableDeliverables,
-                                                     [eventKey]: currentList
-                                                   };
-                                                   setEditableDeliverables(updated);
-                                                   saveStep3DataRealtime(editableInclusions, updated);
+                                                   updateDeliverablesForEvent(currentList);
                                                  }}
                                                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                                                >
@@ -1010,22 +1011,12 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                     onChange={(newVal) => {
                                                       const currentList = [...eventDeliverables];
                                                       currentList[idx] = newVal;
-                                                      const updated = {
-                                                        ...editableDeliverables,
-                                                        [eventKey]: currentList
-                                                      };
-                                                      setEditableDeliverables(updated);
-                                                      saveStep3DataRealtime(editableInclusions, updated);
+                                                      updateDeliverablesForEvent(currentList);
                                                     }}
                                                     onDelete={() => {
                                                       const currentList = [...eventDeliverables];
                                                       currentList.splice(idx, 1);
-                                                      const updated = {
-                                                        ...editableDeliverables,
-                                                        [eventKey]: currentList
-                                                      };
-                                                      setEditableDeliverables(updated);
-                                                      saveStep3DataRealtime(editableInclusions, updated);
+                                                      updateDeliverablesForEvent(currentList);
                                                     }}
                                                   />
                                                 ))}
@@ -1035,12 +1026,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                     onClick={() => {
                                                       const currentList = [...eventDeliverables];
                                                       currentList.push("");
-                                                      const updated = {
-                                                        ...editableDeliverables,
-                                                        [eventKey]: currentList
-                                                      };
-                                                      setEditableDeliverables(updated);
-                                                      saveStep3DataRealtime(editableInclusions, updated);
+                                                      updateDeliverablesForEvent(currentList);
                                                     }}
                                                     className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                                                   >
@@ -1050,9 +1036,9 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                               </div>
                                            )}
                                          </div>
-                                        </div>
-                                      );
-                                    })
+                                      </div>
+                                    );
+                                  })
                                 ) : (
                                   <div className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
                                      {/* Single Team Members Included */}
