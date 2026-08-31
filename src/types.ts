@@ -575,6 +575,8 @@ export interface ClientAcceptanceVerification {
   id?: string;
   order_id: string;
   event_id: string;
+  task_id?: string;
+  assignment_id?: string;
   client_communication_consent_proof?: string;
   folder_name?: string;
   upload_link_path?: string;

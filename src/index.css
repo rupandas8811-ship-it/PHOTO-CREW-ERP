@@ -627,7 +627,7 @@ div.fixed.inset-0:has(#production-action-dropdown) {
   overflow: hidden !important;
   box-sizing: border-box !important;
   overscroll-behavior: contain !important;
-  touch-action: none !important;
+  touch-action: auto !important;
   transform: none !important;
 }
 
@@ -711,7 +711,7 @@ div.fixed.inset-0:has(#production-action-dropdown) {
   box-sizing: border-box !important;
   -webkit-overflow-scrolling: touch !important;
   overscroll-behavior: contain !important;
-  touch-action: pan-y !important;
+  touch-action: auto !important;
   display: flex !important;
   flex-direction: column !important;
 }
@@ -826,6 +826,37 @@ div.fixed.inset-0:has(span:is([class*="text-emerald-400"])),
 div.fixed.inset-0:has(h4 span.text-purple-300),
 .proof-preview-modal-layer {
   z-index: 1000005 !important;
+}
+
+/* ==========================================================================
+   Assigned Team Mobile Scroll & Viewport Constraint Fixes
+   ========================================================================== */
+.prod-assigned-team-overlay {
+  z-index: 100000 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  overflow: hidden !important;
+}
+
+.prod-assigned-team-body {
+  display: block !important; /* override flex column to ensure proper browser scrolling of tables */
+  overflow-y: auto !important;
+  overflow-x: auto !important; /* enable both directions scrolling on touch devices */
+  -webkit-overflow-scrolling: touch !important;
+  max-height: calc(100vh - var(--prod-nav-header-height, 64px)) !important;
+  max-height: calc(100dvh - var(--prod-nav-header-height, 64px)) !important;
+  flex: 1 1 auto !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 640px) {
+  .prod-assigned-team-body {
+    padding: 1rem !important;
+    max-height: calc(100vh - 68px) !important;
+    max-height: calc(100dvh - 68px) !important;
+  }
 }
 
 

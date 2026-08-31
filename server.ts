@@ -786,11 +786,18 @@ async function startServer() {
       const now = new Date().toISOString();
       const resolvedLink = (final_edited_footage_link !== undefined ? final_edited_footage_link : upload_link_path) || '';
 
+      const cleanTaskId = String(payload.task_id || payload.assignment_id || '').trim();
       const existingRecords = readCaVerificationsFromFile();
       const index = existingRecords.findIndex(
-        (r: any) =>
-          String(r.order_id || '').trim().toLowerCase() === cleanOrderId.toLowerCase() &&
-          String(r.event_id || 'default').trim().toLowerCase() === cleanEventId.toLowerCase()
+        (r: any) => {
+          const rTaskId = String(r.task_id || r.assignment_id || '').trim().toLowerCase();
+          if (cleanTaskId && rTaskId) {
+            return rTaskId === cleanTaskId.toLowerCase() &&
+                   String(r.order_id || '').trim().toLowerCase() === cleanOrderId.toLowerCase();
+          }
+          return String(r.order_id || '').trim().toLowerCase() === cleanOrderId.toLowerCase() &&
+                 String(r.event_id || 'default').trim().toLowerCase() === cleanEventId.toLowerCase();
+        }
       );
 
       let savedRecord: any;
@@ -800,6 +807,8 @@ async function startServer() {
           ...existingRecords[index],
           order_id: cleanOrderId,
           event_id: cleanEventId,
+          task_id: cleanTaskId || existingRecords[index].task_id || '',
+          assignment_id: cleanTaskId || existingRecords[index].assignment_id || '',
           client_communication_consent_proof: client_communication_consent_proof !== undefined ? client_communication_consent_proof : existingRecords[index].client_communication_consent_proof,
           folder_name: folder_name !== undefined ? folder_name : existingRecords[index].folder_name,
           upload_link_path: resolvedLink || existingRecords[index].upload_link_path || '',
@@ -814,9 +823,11 @@ async function startServer() {
       } else {
         // Insert new record
         savedRecord = {
-          id: `${cleanOrderId}_${cleanEventId}`,
+          id: cleanTaskId ? `${cleanOrderId}_${cleanTaskId}` : `${cleanOrderId}_${cleanEventId}`,
           order_id: cleanOrderId,
           event_id: cleanEventId,
+          task_id: cleanTaskId,
+          assignment_id: cleanTaskId,
           client_communication_consent_proof: client_communication_consent_proof || '',
           folder_name: folder_name || '',
           upload_link_path: resolvedLink,

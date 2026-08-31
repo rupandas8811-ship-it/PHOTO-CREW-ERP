@@ -663,16 +663,15 @@ export const ProductionStaffModule: React.FC = () => {
     const cleanOrdId = String(orderId).trim().toLowerCase();
 
     (grp.deliverables || []).forEach((item: any) => {
-      const evtKey = (item.eventId || item.eventName || 'default').trim();
+      const evtKey = item.assignmentId;
       if (!eventConfigs[evtKey]) {
-        const cleanEvtId = String(evtKey).trim().toLowerCase();
+        const cleanEvtId = String(item.eventId || item.eventName || 'default').trim().toLowerCase();
         const savedVerif = (clientAcceptanceVerifications || []).find(v => {
           const vOrd = String(v.order_id || '').trim().toLowerCase();
-          const vEvt = String(v.event_id || 'default').trim().toLowerCase();
-          if (cleanOrdId && vOrd === cleanOrdId) {
-            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase())) {
-              return true;
-            }
+          const vTask = String((v as any).task_id || (v as any).assignment_id || '').trim().toLowerCase();
+          const delivTaskId = String(item.assignmentId || '').trim().toLowerCase();
+          if (cleanOrdId && vOrd === cleanOrdId && vTask && delivTaskId && vTask === delivTaskId) {
+            return true;
           }
           return false;
         });
@@ -704,7 +703,7 @@ export const ProductionStaffModule: React.FC = () => {
         eventConfigs[evtKey] = {
           eventKey: evtKey,
           eventId: item.eventId || '',
-          eventName: item.eventName || grp.eventName || 'Event',
+          eventName: `${item.eventName || grp.eventName || 'Event'} - ${item.deliverableName || item.speciality || 'Task'}`,
           eventDate: existingEventDate,
           folderName: existingFolderName,
           confirmed: existingConfirmed,
@@ -714,11 +713,11 @@ export const ProductionStaffModule: React.FC = () => {
       }
     });
 
-    const currentEvtKey = (delivItem.eventId || delivItem.eventName || 'default').trim();
+    const currentEvtKey = delivItem.assignmentId;
     const currentCfg = eventConfigs[currentEvtKey] || {
       eventKey: currentEvtKey,
       eventId: delivItem.eventId || '',
-      eventName: delivItem.eventName || grp.eventName || 'Event',
+      eventName: `${delivItem.eventName || grp.eventName || 'Event'} - ${delivItem.deliverableName || delivItem.speciality || 'Task'}`,
       eventDate: formatDateToDDMMYY(delivItem.eventDate || grp.eventDate || '') || (delivItem.eventDate || grp.eventDate || ''),
       folderName: (delivItem.serverUploadFolderName || delivItem.assignmentObj?.server_upload_folder_name || '').trim(),
       confirmed: Boolean(delivItem.serverUploadConfirmed || delivItem.assignmentObj?.server_upload_confirmed),
@@ -805,16 +804,15 @@ export const ProductionStaffModule: React.FC = () => {
     const cleanOrdId = String(orderId).trim().toLowerCase();
 
     (grp.deliverables || []).forEach((item: any) => {
-      const evtKey = (item.eventId || item.eventName || 'default').trim();
+      const evtKey = item.assignmentId;
       if (!eventConfigs[evtKey]) {
-        const cleanEvtId = String(evtKey).trim().toLowerCase();
+        const cleanEvtId = String(item.eventId || item.eventName || 'default').trim().toLowerCase();
         const savedVerif = (clientAcceptanceVerifications || []).find(v => {
           const vOrd = String(v.order_id || '').trim().toLowerCase();
-          const vEvt = String(v.event_id || 'default').trim().toLowerCase();
-          if (cleanOrdId && vOrd === cleanOrdId) {
-            if (vEvt === 'default' || vEvt === cleanEvtId || (item.eventId && vEvt === String(item.eventId).trim().toLowerCase())) {
-              return true;
-            }
+          const vTask = String((v as any).task_id || (v as any).assignment_id || '').trim().toLowerCase();
+          const delivTaskId = String(item.assignmentId || '').trim().toLowerCase();
+          if (cleanOrdId && vOrd === cleanOrdId && vTask && delivTaskId && vTask === delivTaskId) {
+            return true;
           }
           return false;
         });
@@ -842,7 +840,7 @@ export const ProductionStaffModule: React.FC = () => {
         eventConfigs[evtKey] = {
           eventKey: evtKey,
           eventId: item.eventId || '',
-          eventName: item.eventName || grp.eventName || 'Event',
+          eventName: `${item.eventName || grp.eventName || 'Event'} - ${item.deliverableName || item.speciality || 'Task'}`,
           eventDate: existingEventDate,
           folderName: existingFolderName,
           confirmed: existingConfirmed
@@ -850,11 +848,11 @@ export const ProductionStaffModule: React.FC = () => {
       }
     });
 
-    const currentEvtKey = (delivItem.eventId || delivItem.eventName || 'default').trim();
+    const currentEvtKey = delivItem.assignmentId;
     const currentCfg = eventConfigs[currentEvtKey] || {
       eventKey: currentEvtKey,
       eventId: delivItem.eventId || '',
-      eventName: delivItem.eventName || grp.eventName || 'Event',
+      eventName: `${delivItem.eventName || grp.eventName || 'Event'} - ${delivItem.deliverableName || delivItem.speciality || 'Task'}`,
       eventDate: delivItem.eventDate || grp.eventDate || '',
       folderName: '',
       confirmed: false
@@ -1291,7 +1289,7 @@ export const ProductionStaffModule: React.FC = () => {
       return;
     }
 
-    const uniqueEventKeys: string[] = Array.from(new Set(deliverablesToUpdate.map((d: any) => ((d.eventId || d.eventName || 'default') as string).trim())));
+    const uniqueEventKeys: string[] = deliverablesToUpdate.map((d: any) => d.assignmentId);
     for (const evtKey of uniqueEventKeys) {
       const cfg = customerReviewForm.event_configs[evtKey] || {
         confirmed: customerReviewForm.server_upload_confirmed,
@@ -1315,7 +1313,7 @@ export const ProductionStaffModule: React.FC = () => {
       }
 
       for (const deliv of deliverablesToUpdate) {
-        const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+        const evtKey = deliv.assignmentId;
         const cfg = customerReviewForm.event_configs[evtKey] || {
           confirmed: true,
           eventDate: customerReviewForm.server_upload_event_date,
@@ -1410,7 +1408,7 @@ export const ProductionStaffModule: React.FC = () => {
       const deliverablesToUpdate = b.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
 
       for (const deliv of deliverablesToUpdate) {
-        const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+        const evtKey = deliv.assignmentId;
         const cfg = customerReviewForm.event_configs[evtKey] || {
           confirmed: customerReviewForm.server_upload_confirmed,
           eventDate: customerReviewForm.server_upload_event_date,
@@ -1451,7 +1449,7 @@ export const ProductionStaffModule: React.FC = () => {
       const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
       for (const prodId of uniqueProdIds as string[]) {
         const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
-        const evtKey = (matchingDeliv?.eventId || matchingDeliv?.eventName || 'default').trim();
+        const evtKey = matchingDeliv?.assignmentId || 'default';
         const cfg = customerReviewForm.event_configs[evtKey] || {
           confirmed: customerReviewForm.server_upload_confirmed,
           eventDate: customerReviewForm.server_upload_event_date,
@@ -1484,7 +1482,7 @@ export const ProductionStaffModule: React.FC = () => {
       if (saveClientAcceptanceVerification) {
         for (const deliv of deliverablesToUpdate) {
           const orderId = deliv.orderId || b.orderId || b.leadId || '';
-          const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+          const evtKey = deliv.assignmentId;
           const cfg = customerReviewForm.event_configs[evtKey] || {
             confirmed: customerReviewForm.server_upload_confirmed,
             eventDate: customerReviewForm.server_upload_event_date,
@@ -1496,7 +1494,9 @@ export const ProductionStaffModule: React.FC = () => {
           if (orderId) {
             await saveClientAcceptanceVerification({
               order_id: orderId,
-              event_id: deliv.eventId || evtKey || 'default',
+              event_id: deliv.eventId || 'default',
+              assignment_id: deliv.assignmentId,
+              task_id: deliv.assignmentId,
               folder_name: fName,
               upload_link_path: lPath,
               client_communication_consent_proof: imgUrl || '',
@@ -1583,7 +1583,7 @@ Thank you.`;
     }
 
     // Validate that every selected event has confirmed checklist with Event Date and Folder Name
-    const uniqueEventKeys = Array.from(new Set(deliverablesToUpdate.map((d: any) => (d.eventId || d.eventName || 'default').trim())));
+    const uniqueEventKeys = deliverablesToUpdate.map((d: any) => d.assignmentId);
     for (const evtKey of uniqueEventKeys as string[]) {
       const cfg = editingCompletedForm.event_configs[evtKey] || {
         confirmed: editingCompletedForm.server_upload_confirmed,
@@ -1616,7 +1616,7 @@ Thank you.`;
         mainProofUrl = uploadedProofUrl;
         console.log(`[ProductionStaffModule] Proof Storage URL generated for ${deliv.assignmentId}:`, uploadedProofUrl);
 
-        const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+        const evtKey = deliv.assignmentId;
         const cfg = editingCompletedForm.event_configs[evtKey] || {
           confirmed: true,
           eventDate: editingCompletedForm.server_upload_event_date,
@@ -1656,7 +1656,7 @@ Thank you.`;
       const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
       for (const prodId of uniqueProdIds as string[]) {
         const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
-        const evtKey = (matchingDeliv?.eventId || matchingDeliv?.eventName || 'default').trim();
+        const evtKey = matchingDeliv?.assignmentId || 'default';
         const cfg = editingCompletedForm.event_configs[evtKey] || {
           eventDate: editingCompletedForm.server_upload_event_date,
           folderName: editingCompletedForm.server_upload_folder_name
@@ -1683,7 +1683,7 @@ Thank you.`;
       if (saveClientAcceptanceVerification) {
         for (const deliv of deliverablesToUpdate) {
           const orderId = deliv.orderId || b.orderId || b.leadId || '';
-          const evtKey = (deliv.eventId || deliv.eventName || 'default').trim();
+          const evtKey = deliv.assignmentId;
           const cfg = editingCompletedForm.event_configs[evtKey] || {
             confirmed: true,
             eventDate: editingCompletedForm.server_upload_event_date,
@@ -1695,7 +1695,7 @@ Thank you.`;
           if (orderId) {
             await saveClientAcceptanceVerification({
               order_id: orderId,
-              event_id: deliv.eventId || evtKey || 'default',
+              event_id: deliv.eventId || 'default',
               assignment_id: deliv.assignmentId,
               task_id: deliv.assignmentId,
               folder_name: fName,
@@ -2881,7 +2881,7 @@ Thank you.`;
       {/* ========================================================= */}
       {customerReviewModal && (() => {
         const selectedDeliverables = customerReviewModal.group.deliverables.filter((d: any) => customerReviewForm.selectedIds.includes(d.assignmentId));
-        const uniqueEventKeys = Array.from(new Set(selectedDeliverables.map((d: any) => (d.eventId || d.eventName || 'default').trim())));
+        const uniqueEventKeys = selectedDeliverables.map((d: any) => d.assignmentId);
 
         return (
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -2944,7 +2944,7 @@ Thank you.`;
                         <p className="text-xs text-zinc-500 italic">Select at least one deliverable below to configure server checklist.</p>
                       ) : (
                           uniqueEventKeys.map((evtKey: string) => {
-                            const sampleDeliv = selectedDeliverables.find((d: any) => (d.eventId || d.eventName || 'default').trim() === evtKey);
+                            const sampleDeliv = selectedDeliverables.find((d: any) => d.assignmentId === evtKey);
                             const rawDate = sampleDeliv?.eventDate || customerReviewModal.group?.eventDate || '';
                             const defaultEvtDate = formatDateToDDMMYY(rawDate) || rawDate;
 
@@ -3245,7 +3245,7 @@ Thank you.`;
       {/* ========================================================= */}
       {editingCompletedModal && (() => {
         const selectedDeliverables = editingCompletedModal.group.deliverables.filter((d: any) => editingCompletedForm.selectedIds.includes(d.assignmentId));
-        const uniqueEventKeys = Array.from(new Set(selectedDeliverables.map((d: any) => (d.eventId || d.eventName || 'default').trim())));
+        const uniqueEventKeys = selectedDeliverables.map((d: any) => d.assignmentId);
 
         const isChecklistValid = uniqueEventKeys.length > 0 && uniqueEventKeys.every((evtKey: string) => {
           const cfg = editingCompletedForm.event_configs[evtKey] || {
@@ -3361,7 +3361,7 @@ Thank you.`;
                             confirmed: editingCompletedForm.server_upload_confirmed
                           };
 
-                          const matchingDeliv = selectedDeliverables.find((d: any) => (d.eventId || d.eventName || 'default').trim() === evtKey);
+                          const matchingDeliv = selectedDeliverables.find((d: any) => d.assignmentId === evtKey);
                           const eventDisplayName = evtCfg.eventName || matchingDeliv?.eventName || 'Event';
                           const defaultEvtDate = evtCfg.eventDate || matchingDeliv?.eventDate || editingCompletedModal.group?.eventDate || '';
 

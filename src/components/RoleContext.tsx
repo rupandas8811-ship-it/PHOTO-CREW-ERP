@@ -6749,9 +6749,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       setClientAcceptanceVerifications(prev => {
         const oId = String(saved.order_id || '').trim().toLowerCase();
         const eId = String(saved.event_id || 'default').trim().toLowerCase();
+        const sTaskId = String(saved.task_id || saved.assignment_id || '').trim().toLowerCase();
         const existingIdx = prev.findIndex(
-          r => String(r.order_id || '').trim().toLowerCase() === oId &&
-               String(r.event_id || 'default').trim().toLowerCase() === eId
+          r => {
+            const rTaskId = String(r.task_id || r.assignment_id || '').trim().toLowerCase();
+            if (sTaskId && rTaskId) {
+              return rTaskId === sTaskId && String(r.order_id || '').trim().toLowerCase() === oId;
+            }
+            return String(r.order_id || '').trim().toLowerCase() === oId &&
+                 String(r.event_id || 'default').trim().toLowerCase() === eId;
+          }
         );
         if (existingIdx >= 0) {
           const next = [...prev];
@@ -6767,9 +6774,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       setClientAcceptanceVerifications(prev => {
         const oId = String(preparedVerification.order_id || '').trim().toLowerCase();
         const eId = String(preparedVerification.event_id || 'default').trim().toLowerCase();
+        const sTaskId = String(preparedVerification.task_id || preparedVerification.assignment_id || '').trim().toLowerCase();
         const existingIdx = prev.findIndex(
-          r => String(r.order_id || '').trim().toLowerCase() === oId &&
-               String(r.event_id || 'default').trim().toLowerCase() === eId
+          r => {
+            const rTaskId = String(r.task_id || r.assignment_id || '').trim().toLowerCase();
+            if (sTaskId && rTaskId) {
+              return rTaskId === sTaskId && String(r.order_id || '').trim().toLowerCase() === oId;
+            }
+            return String(r.order_id || '').trim().toLowerCase() === oId &&
+                 String(r.event_id || 'default').trim().toLowerCase() === eId;
+          }
         );
         if (existingIdx >= 0) {
           const next = [...prev];

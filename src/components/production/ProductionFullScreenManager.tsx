@@ -153,6 +153,11 @@ export const ProductionFullScreenManager: React.FC = () => {
           if (isClientAcceptanceModal && !overlay.classList.contains('prod-client-acceptance-overlay')) {
             overlay.classList.add('prod-client-acceptance-overlay');
           }
+          const isAssignedTeamModal = overlayText.includes('production lead • assigned team') || 
+                                      (overlayText.includes('assigned team') && (overlayText.includes('prd-') || overlayText.includes('ord-')));
+          if (isAssignedTeamModal && !overlay.classList.contains('prod-assigned-team-overlay')) {
+            overlay.classList.add('prod-assigned-team-overlay');
+          }
 
           // 2. Mark inner card as full screen container
           const modalCard = overlay.querySelector<HTMLElement>('#production_workflow_modal') ||
@@ -198,6 +203,9 @@ export const ProductionFullScreenManager: React.FC = () => {
               }
               if (isClientAcceptanceModal && !body.classList.contains('prod-client-acceptance-body')) {
                 body.classList.add('prod-client-acceptance-body');
+              }
+              if (isAssignedTeamModal && !body.classList.contains('prod-assigned-team-body')) {
+                body.classList.add('prod-assigned-team-body');
               }
             }
 
@@ -307,13 +315,27 @@ export const ProductionFullScreenManager: React.FC = () => {
     // Prevent touch dragging on backdrop when locked
     const handleTouchMove = (e: TouchEvent) => {
       if (!isLockedRef.current) return;
-      const activeModal = document.querySelector('.prod-fullscreen-overlay');
-      if (!activeModal) return;
+      
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
 
-      const bodyElem = activeModal.querySelector('.prod-fullscreen-body');
-      if (bodyElem && bodyElem.contains(e.target as Node)) {
+      // Allow touch gestures inside scrollable or interactive containers (including bodies, tables, and full modals)
+      if (
+        target.closest(
+          '.prod-fullscreen-body, .prod-client-acceptance-body, .proof-preview-modal-layer, [class*="overflow-y-auto"], [class*="overflow-x-auto"], table, tbody, tr, td, th, .prod-fullscreen-card, .prod-client-acceptance-card'
+        )
+      ) {
         return;
       }
+
+      const activeModal = document.querySelector('.prod-fullscreen-overlay, .prod-client-acceptance-overlay');
+      if (activeModal && (target === activeModal || activeModal.contains(target))) {
+        const card = activeModal.querySelector('.prod-fullscreen-card, .prod-client-acceptance-card');
+        if (card && card.contains(target)) {
+          return;
+        }
+      }
+
       e.preventDefault();
     };
 

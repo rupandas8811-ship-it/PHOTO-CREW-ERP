@@ -2313,10 +2313,10 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           type="button"
           onClick={() => {
             const fullOrder = orders.find(o => o.order_id === item.orderId || o.lead_id === item.leadId) || item;
-            setSelectedPaymentHistoryOrder(fullOrder);
+            setSelectedHistoryOrder(fullOrder);
           }}
           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-          title="View Payment Details & History"
+          title="View Project History & Timeline"
         >
           <History className="w-3.5 h-3.5" />
           <span>History</span>
@@ -2796,10 +2796,10 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                         type="button"
                         onClick={() => {
                           const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
-                          setSelectedPaymentHistoryOrder(fullOrder);
+                          setSelectedHistoryOrder(fullOrder);
                         }}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-                        title="View Payment Details & History"
+                        title="View Project History & Timeline"
                       >
                         <History className="w-3.5 h-3.5" />
                         <span>History</span>

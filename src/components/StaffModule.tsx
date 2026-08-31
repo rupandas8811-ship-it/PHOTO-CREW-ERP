@@ -828,6 +828,7 @@ export const StaffModule: React.FC = () => {
   // Modal states & refs
   const selectedBookingDetailsRef = useRef<HTMLDivElement>(null);
   const photoModalScrollRef = useRef<HTMLDivElement>(null);
+  const photoModalRef = useRef<HTMLDivElement>(null);
   const calendarModalScrollRef = useRef<HTMLDivElement>(null);
 
   const [selectedBookingDetails, setSelectedBookingDetails] = useState<any | null>(null);
@@ -859,6 +860,33 @@ export const StaffModule: React.FC = () => {
       document.body.style.overflow = '';
     };
   }, [selectedBookingDetails, photoModalData, calendarModalDate]);
+
+  // Auto-scroll popup into view for the three target workflows when opened
+  useEffect(() => {
+    if (photoModalData) {
+      const { stage } = photoModalData;
+      if (stage === 'Event Start' || stage === 'Equipment Handover' || stage === 'Event Complete') {
+        // Temporarily allow page scrolling so scrollIntoView can shift the viewport
+        document.body.style.overflow = '';
+        const timer = setTimeout(() => {
+          if (photoModalRef.current) {
+            photoModalRef.current.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center'
+            });
+            // Re-lock body overflow after smooth scroll finishes
+            const lockTimer = setTimeout(() => {
+              if (photoModalData) {
+                document.body.style.overflow = 'hidden';
+              }
+            }, 850);
+            return () => clearTimeout(lockTimer);
+          }
+        }, 80);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [photoModalData]);
 
   // Photos attached in modal & raw footage link
   const [modalPhotos, setModalPhotos] = useState<Record<string, string>>({});
@@ -2578,7 +2606,7 @@ export const StaffModule: React.FC = () => {
       {/* EQUIPMENT PHOTO PROOF VERIFICATION MODAL (EVENT START / EVENT COMPLETE) */}
       {photoModalData && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+          <div ref={photoModalRef} className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
               <div>
                 <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
