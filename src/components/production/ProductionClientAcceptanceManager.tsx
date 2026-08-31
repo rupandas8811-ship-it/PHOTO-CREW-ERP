@@ -458,7 +458,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
             const dbRow = verifyData.data[0];
 
-            if (dbRow.current_status !== 'Client Acceptance' && dbRow.production_status !== 'Client Acceptance' && dbRow.editing_status !== 'Client Acceptance') {
+            if (String(dbRow.current_status || '').trim().toLowerCase() !== 'client acceptance' && String(dbRow.production_status || '').trim().toLowerCase() !== 'client acceptance' && String(dbRow.editing_status || '').trim().toLowerCase() !== 'client acceptance') {
               throw new Error(`CLIENT ACCEPTANCE STATUS UPDATE FAILED: The Production status was not saved as Client Acceptance. Current DB values: current_status='${dbRow.current_status || ''}', production_status='${dbRow.production_status || ''}', editing_status='${dbRow.editing_status || ''}'.`);
             }
 

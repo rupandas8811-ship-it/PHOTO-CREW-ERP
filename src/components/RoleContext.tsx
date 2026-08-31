@@ -1185,10 +1185,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Priority Status Determination Rule:
       // Order Closed > Client Acceptance > Other production workflow statuses / fallback
       const isClosedStatus = (s?: string) => 
-        ['Order Closed', 'Closed', 'Project Closed', 'Completed', 'Project Completed'].includes(String(s || '').trim());
+        ['order closed', 'closed', 'project closed', 'completed', 'project completed'].includes(String(s || '').trim().toLowerCase());
 
       const isClientAcceptanceStatus = (s?: string) => 
-        String(s || '').trim() === 'Client Acceptance';
+        String(s || '').trim().toLowerCase() === 'client acceptance';
 
       const hasClosed = isClosedStatus(p.current_status) || 
                         isClosedStatus(p.production_status) || 
@@ -4924,6 +4924,29 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           } else {
             console.warn("[updateProduction] Failed to auto-insert raw_footage placeholder:", rRF?.error);
           }
+        }
+      }
+    }
+
+    // Prevent downgrading from Client Acceptance
+    if (targetProd) {
+      const currentIsClientAcceptance = 
+        String(targetProd.current_status || '').trim().toLowerCase() === 'client acceptance' || 
+        String(targetProd.production_status || '').trim().toLowerCase() === 'client acceptance';
+
+      if (currentIsClientAcceptance) {
+        // If they are not actively trying to close the order, strip any lower status
+        if (updates.editing_status && updates.editing_status !== 'Client Acceptance' && updates.editing_status !== 'Order Closed') {
+          delete updates.editing_status;
+        }
+        if (updates.production_status && updates.production_status !== 'Client Acceptance' && updates.production_status !== 'Order Closed') {
+          delete updates.production_status;
+        }
+        if (updates.current_status && updates.current_status !== 'Client Acceptance' && updates.current_status !== 'Order Closed') {
+          delete updates.current_status;
+        }
+        if ((updates as any).status && (updates as any).status !== 'Client Acceptance' && (updates as any).status !== 'Order Closed') {
+          delete (updates as any).status;
         }
       }
     }
