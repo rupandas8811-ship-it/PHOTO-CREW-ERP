@@ -192,7 +192,11 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
     setSalesStaffMobile,
     saveStep3DataRealtime,
     handleSavePackageOnly,
-    renderQuotationAndStep4Section
+    renderQuotationAndStep4Section,
+    showDuplicateWarning,
+    duplicateCustomerInfo,
+    handleDuplicateContinue,
+    handleDuplicateCancel
   } = props;
 
   const leadSourcesList = props.LEAD_SOURCES || LEAD_SOURCES || [];
@@ -1634,6 +1638,71 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Customer Already Registered Duplicate Warning */}
+      {showDuplicateWarning && duplicateCustomerInfo && (
+        <div id="duplicate_customer_warning_popup" className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-[70] flex items-center justify-center p-4 text-left">
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="w-10 h-10 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                  ⚠ Customer Already Registered
+                </h3>
+                <p className="text-[11px] text-zinc-400 mt-0.5">
+                  A registered customer was found with this phone number.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950/50 rounded-xl p-4 border border-slate-800/50 space-y-2.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-zinc-400 font-medium">Customer Name:</span>
+                <span className="text-white font-semibold">{duplicateCustomerInfo.customer_name}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-zinc-400 font-medium">Created Date:</span>
+                <span className="text-white font-mono">{formatDateDDMMYY(duplicateCustomerInfo.created_date)}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-zinc-400 font-medium">Current Status:</span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-zinc-300 border border-slate-700">
+                  {duplicateCustomerInfo.status}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-zinc-400 font-medium">Event Date:</span>
+                <span className="text-white font-mono">{formatDateDDMMYY(duplicateCustomerInfo.event_date)}</span>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Would you like to continue creating a new quotation/lead using this registered customer number, or cancel and return to the list?
+            </p>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                id="btn_duplicate_cancel"
+                onClick={handleDuplicateCancel}
+                className="flex-1 bg-slate-800 hover:bg-slate-750 text-zinc-300 font-medium py-2 px-4 rounded-xl text-xs transition-all cursor-pointer border border-slate-700/50 text-center"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                id="btn_duplicate_continue"
+                onClick={handleDuplicateContinue}
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold py-2 px-4 rounded-xl text-xs transition-all cursor-pointer text-center"
+              >
+                Continue
+              </button>
+            </div>
           </div>
         </div>
       )}

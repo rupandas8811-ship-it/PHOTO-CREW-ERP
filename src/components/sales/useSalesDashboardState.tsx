@@ -942,6 +942,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const [wizardStep, setWizardStep] = useState(1);
   const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
 
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [duplicateCustomerInfo, setDuplicateCustomerInfo] = useState<{
+    customer_name: string;
+    created_date: string;
+    status: string;
+    event_date: string;
+  } | null>(null);
+  const bypassDuplicateCheckRef = useRef(false);
+
   // Package customizations
   const [pkgPrices, setPkgPrices] = useState<Record<string, number>>({});
   const [pkgDeliverables, setPkgDeliverables] = useState<Record<string, string>>({});
@@ -960,6 +969,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const [advanceReceived, setAdvanceReceived] = useState<number | ''>('');
 
   const resetForm = () => {
+    bypassDuplicateCheckRef.current = false;
     setCreateForm({
       customer_name: '',
       mobile: '',
@@ -6672,6 +6682,40 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         }
       }
 
+      if (!createdLeadId && !bypassDuplicateCheckRef.current) {
+        try {
+          setIsSaving(true);
+          const { data: existingLeads, error: lookupError } = await supabaseClient
+            .from('leads')
+            .select('customer_name, created_date, status, event_date')
+            .eq('mobile', mobileVal);
+
+          if (lookupError) {
+            throw lookupError;
+          }
+
+          if (existingLeads && existingLeads.length > 0) {
+            // Find the first matching customer
+            const duplicate = existingLeads[0];
+            setDuplicateCustomerInfo({
+              customer_name: duplicate.customer_name || 'N/A',
+              created_date: duplicate.created_date || 'N/A',
+              status: duplicate.status || 'N/A',
+              event_date: duplicate.event_date || 'N/A'
+            });
+            setShowDuplicateWarning(true);
+            setIsSaving(false);
+            return;
+          }
+        } catch (err: any) {
+          setIsSaving(false);
+          showToastMsg(`Failed to check for duplicate customer: ${err.message || String(err)}`, "error");
+          return;
+        } finally {
+          setIsSaving(false);
+        }
+      }
+
       try {
         setIsSaving(true);
         const finalSource = createForm.lead_source === 'Other' ? 'Other' : createForm.lead_source;
@@ -7131,6 +7175,21 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDuplicateContinue = async () => {
+    setShowDuplicateWarning(false);
+    bypassDuplicateCheckRef.current = true;
+    await handleWizardNext();
+    bypassDuplicateCheckRef.current = false;
+  };
+
+  const handleDuplicateCancel = () => {
+    setShowDuplicateWarning(false);
+    setDuplicateCustomerInfo(null);
+    bypassDuplicateCheckRef.current = false;
+    resetForm();
+    setActiveTab('list');
   };
 
   // Handle follow up submit
@@ -7651,6 +7710,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     createEvents,
     createForm,
     createdLeadId,
+    showDuplicateWarning,
+    setShowDuplicateWarning,
+    duplicateCustomerInfo,
+    setDuplicateCustomerInfo,
+    handleDuplicateContinue,
+    handleDuplicateCancel,
     crmEvents,
     crmHighestStep,
     crmToast,
