@@ -335,6 +335,15 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           proofCheckbox.click();
         }
 
+        // Remove required asterisk on Upload Name label if present
+        const caLabels = Array.from(caModal.querySelectorAll<HTMLElement>('label'));
+        caLabels.forEach(lbl => {
+          if ((lbl.textContent || '').toLowerCase().includes('upload name')) {
+            const asterisk = lbl.querySelector('span.text-rose-500, span.text-red-500');
+            if (asterisk) asterisk.remove();
+          }
+        });
+
         // Autofill Upload Name if previously saved
         const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
         if (proofNameInput && !proofNameInput.value && (savedVerif?.proof_file_name || targetProd?.upload_name)) {
@@ -479,10 +488,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
             if (!caCommunicationProofVal || !caCommunicationProofVal.trim()) {
               missingItems.push('Client Communication & Consent Proof (Proof file / document required)');
-            }
-
-            if (!caUploadNameVal || !caUploadNameVal.trim()) {
-              missingItems.push('Upload Name');
             }
 
             // Check "Edited Folder Uploaded to Server" for each event/task card
