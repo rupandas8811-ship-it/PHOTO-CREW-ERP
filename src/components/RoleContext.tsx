@@ -1182,7 +1182,33 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatedP.raw_footage_location = resolvedLink;
       }
 
-      if (!p.editing_status || p.editing_status === 'Pending') {
+      // Priority Status Determination Rule:
+      // Order Closed > Client Acceptance > Other production workflow statuses / fallback
+      const isClosedStatus = (s?: string) => 
+        ['Order Closed', 'Closed', 'Project Closed', 'Completed', 'Project Completed'].includes(String(s || '').trim());
+
+      const isClientAcceptanceStatus = (s?: string) => 
+        String(s || '').trim() === 'Client Acceptance';
+
+      const hasClosed = isClosedStatus(p.current_status) || 
+                        isClosedStatus(p.production_status) || 
+                        isClosedStatus(p.editing_status) || 
+                        isClosedStatus((p as any).status);
+
+      const hasClientAcceptance = isClientAcceptanceStatus(p.current_status) || 
+                                  isClientAcceptanceStatus(p.production_status) || 
+                                  isClientAcceptanceStatus(p.editing_status) || 
+                                  isClientAcceptanceStatus((p as any).status);
+
+      if (hasClosed) {
+        updatedP.editing_status = 'Order Closed' as any;
+        updatedP.current_status = 'Order Closed';
+        updatedP.production_status = 'Order Closed';
+      } else if (hasClientAcceptance) {
+        updatedP.editing_status = 'Client Acceptance' as any;
+        updatedP.current_status = 'Client Acceptance';
+        updatedP.production_status = 'Client Acceptance';
+      } else if (!p.editing_status || p.editing_status === 'Pending') {
         if (leadStatus) {
           updatedP.editing_status = leadStatus as any;
         } else if (ord) {

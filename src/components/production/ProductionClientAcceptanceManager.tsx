@@ -63,10 +63,10 @@ const showFrontLevelError = (containerEl: HTMLElement, title: string, items: str
         Dismiss ✕
       </button>
     </div>
-    <div class="text-xs font-sans text-rose-200/90 leading-relaxed">
+    <div class="text-xs font-sans text-rose-200/90 leading-relaxed mt-2">
       ${uniqueItems.length > 0 ? `
-        <p class="font-semibold text-rose-100 mb-1">Details / Missing:</p>
-        <ul class="list-disc list-inside space-y-1 font-mono text-[11px] text-rose-200 pl-1">
+        <p class="font-semibold text-rose-100 mb-1">Missing:</p>
+        <ul class="space-y-1 font-mono text-[12px] text-rose-200 pl-1">
           ${uniqueItems.map(item => `<li>• ${item}</li>`).join('')}
         </ul>
       ` : ''}
@@ -285,12 +285,13 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             }
 
             if (!caCommunicationProofVal) {
-              missingItems.push('Client Communication & Consent Proof File');
+              missingItems.push('Client Communication & Consent Proof');
             }
 
             // 2. Validate Edited Folder Upload & Folder Name
             let folderVal = '';
             let isFolderCheckedOverall = false;
+            let isAnyFolderEmpty = false;
 
             const cardEntries = Object.keys(confirmationsRef.current).length > 0
               ? Object.keys(confirmationsRef.current)
@@ -298,20 +299,24 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
             cardEntries.forEach(cardKey => {
               const isChecked = Boolean(confirmationsRef.current[cardKey]);
+              const cardFolder = (foldersRef.current[cardKey] || '').trim();
+              
               if (isChecked) {
                 isFolderCheckedOverall = true;
-                const cardFolder = (foldersRef.current[cardKey] || '').trim();
-
-                if (!cardFolder && !missingItems.includes('Folder Name is required.')) {
-                  missingItems.push('Folder Name is required.');
-                }
-
                 if (!folderVal && cardFolder) folderVal = cardFolder;
+              }
+
+              if (!cardFolder) {
+                isAnyFolderEmpty = true;
               }
             });
 
             if (!isFolderCheckedOverall) {
               missingItems.push('Edited Folder Uploaded to Server');
+            }
+            
+            if (isAnyFolderEmpty && !missingItems.includes('Folder Name')) {
+              missingItems.push('Folder Name');
             }
 
             // STOP IF MISSING ANY REQUIRED ITEM
@@ -405,14 +410,13 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               }
             }
 
-            // 3. UPDATE RELATED EDITOR ASSIGNMENTS STATUS TO 'Client Acceptance'
+            // 3. UPDATE RELATED EDITOR ASSIGNMENTS METADATA (DO NOT CHANGE ASSIGNMENT STATUS TO PRESERVE HISTORY)
             const matchingAssignments = (editorAssignments || []).filter(a =>
               a.production_id === targetProdId || (orderId && a.order_id === orderId)
             );
             for (const a of matchingAssignments) {
               try {
                 await pushUpdate('editor_assignments', 'assignment_id', a.assignment_id, {
-                  status: 'Client Acceptance',
                   server_upload_folder_name: folderVal,
                   folder_name: folderVal,
                   server_upload_confirmed: true,
@@ -449,13 +453,13 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             });
             const verifyData = await verifyRes.json();
             if (!verifyData?.success || !Array.isArray(verifyData.data) || verifyData.data.length === 0) {
-              throw new Error(`CLIENT ACCEPTANCE STATUS VERIFICATION FAILED: Database record (${targetProdId}) could not be retrieved.`);
+              throw new Error(`CLIENT ACCEPTANCE STATUS UPDATE FAILED: Database record (${targetProdId}) could not be retrieved.`);
             }
 
             const dbRow = verifyData.data[0];
 
-            if (dbRow.current_status !== 'Client Acceptance' && dbRow.production_status !== 'Client Acceptance') {
-              throw new Error(`CLIENT ACCEPTANCE STATUS VERIFICATION FAILED: The Production status was not saved correctly. Current status in database is '${dbRow.current_status || dbRow.production_status || 'unknown'}' instead of 'Client Acceptance'.`);
+            if (dbRow.current_status !== 'Client Acceptance' && dbRow.production_status !== 'Client Acceptance' && dbRow.editing_status !== 'Client Acceptance') {
+              throw new Error(`CLIENT ACCEPTANCE STATUS UPDATE FAILED: The Production status was not saved as Client Acceptance. Current DB values: current_status='${dbRow.current_status || ''}', production_status='${dbRow.production_status || ''}', editing_status='${dbRow.editing_status || ''}'.`);
             }
 
             // 6. REFRESH GLOBAL DATA
@@ -464,21 +468,30 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             }
 
             // 7. SUCCESS — CLOSE POPUP CLEANLY
-            const cancelButton = Array.from(caModal.querySelectorAll<HTMLButtonElement>('button')).find(btn => {
-              const t = (btn.textContent || '').toLowerCase();
-              return t.includes('close') || t.includes('cancel') || t.includes('✕');
-            });
-            if (cancelButton) {
-              cancelButton.click();
+            if (submitBtn) {
+              submitBtn.innerHTML = '✓ CLIENT ACCEPTANCE APPROVED';
+              submitBtn.classList.remove('bg-amber-600', 'hover:bg-amber-500');
+              submitBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500', 'text-white');
             }
+
+            setTimeout(() => {
+              const cancelButton = Array.from(caModal.querySelectorAll<HTMLButtonElement>('button')).find(btn => {
+                const t = (btn.textContent || '').toLowerCase();
+                return t.includes('close') || t.includes('cancel') || t.includes('✕');
+              });
+              if (cancelButton) {
+                cancelButton.click();
+              }
+            }, 750);
 
           } catch (saveErr: any) {
             console.error('[ProductionClientAcceptanceManager] Failed to finalize Client Acceptance:', saveErr);
             const errText = saveErr?.message || String(saveErr);
-            if (errText.includes('VERIFICATION FAILED')) {
-              showFrontLevelError(form, 'CLIENT ACCEPTANCE STATUS VERIFICATION FAILED', [
-                'The Production status was not saved correctly.',
-                errText
+            
+            if (errText.includes('STATUS UPDATE FAILED')) {
+              showFrontLevelError(form, 'CLIENT ACCEPTANCE STATUS UPDATE FAILED', [
+                'The Production status was not saved as Client Acceptance.',
+                errText.replace('CLIENT ACCEPTANCE STATUS UPDATE FAILED: ', '')
               ]);
             } else {
               showFrontLevelError(form, 'CLIENT ACCEPTANCE SAVE FAILED', [

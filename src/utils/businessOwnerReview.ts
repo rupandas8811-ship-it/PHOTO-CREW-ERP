@@ -23,6 +23,8 @@ export function performBusinessOwnerReview(
   // 1. Customer Acceptance
   const customerAcceptanceVerified = !!(
     prod?.editing_status === 'Client Acceptance' ||
+    prod?.production_status === 'Client Acceptance' ||
+    (prod as any)?.current_status === 'Client Acceptance' ||
     prod?.editing_status === 'Project Completed' ||
     prod?.editing_status === 'Completed' ||
     prod?.editing_status === 'Editing Complete' ||
