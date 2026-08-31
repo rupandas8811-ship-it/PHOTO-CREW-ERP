@@ -169,10 +169,10 @@ export const SalesStaffManagementModule: React.FC = () => {
       </div>
 
       <div className="bg-[#09090b] border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl relative">
-        <div className="overflow-x-auto min-h-[400px]">
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto min-h-[400px] custom-scrollbar">
+          <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
-              <tr className="bg-zinc-900/50 border-b border-zinc-800 text-[10px] uppercase font-mono tracking-wider text-zinc-400">
+              <tr className="bg-zinc-900/50 border-b border-zinc-800 text-[10px] uppercase font-mono tracking-wider text-zinc-400 whitespace-nowrap">
                 <th className="p-4 font-bold">Staff Name</th>
                 <th className="p-4 font-bold">Contact</th>
                 <th className="p-4 font-bold">Employee ID</th>
@@ -192,11 +192,11 @@ export const SalesStaffManagementModule: React.FC = () => {
               ) : (
                 salesStaffList.map((usr) => (
                   <tr key={usr.id} className="hover:bg-zinc-900/30 transition-colors">
-                    <td className="p-4">
+                    <td className="p-4 whitespace-nowrap">
                       <div className="font-bold text-slate-200">{usr.name}</div>
                       {usr.username && <div className="text-xs text-slate-500">@{usr.username}</div>}
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 whitespace-nowrap">
                       <div className="flex items-center gap-1.5 text-xs text-slate-300">
                         <Phone className="w-3 h-3 text-slate-400" />
                         {usr.mobile}
@@ -208,23 +208,23 @@ export const SalesStaffManagementModule: React.FC = () => {
                         </div>
                       )}
                     </td>
-                    <td className="p-4 text-sm font-mono text-slate-300">
+                    <td className="p-4 text-sm font-mono text-slate-300 whitespace-nowrap">
                       {usr.employee_id || '-'}
                     </td>
-                    <td className="p-4">
+                    <td className="p-4 whitespace-nowrap">
                       <span className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider ${usr.active ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-zinc-800 text-zinc-400 border border-zinc-700'}`}>
                         {usr.active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="p-4 text-xs font-mono">
+                    <td className="p-4 text-xs font-mono whitespace-nowrap">
                       <span className="text-slate-300">{getAssignedLeadsCount(usr.id, usr.name)} Total</span>
                       <span className="text-slate-500 mx-2">|</span>
                       <span className="text-indigo-400">{getActiveAssignedLeadsCount(usr.id, usr.name)} Active</span>
                     </td>
-                    <td className="p-4 text-xs text-slate-400 font-mono">
+                    <td className="p-4 text-xs text-slate-400 font-mono whitespace-nowrap">
                       {new Date(usr.created_at).toLocaleDateString()}
                     </td>
-                    <td className="p-4 text-right">
+                    <td className="p-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEditForm(usr)}
