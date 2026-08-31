@@ -39,9 +39,14 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   booking,
   isStaffView
 }) => {
+  const modalScrollRef = React.useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTop = 0;
+      }
     } else {
       document.body.style.overflow = '';
     }
@@ -457,7 +462,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
         </div>
 
         {/* Modal Scroll Content */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6 text-zinc-300">
+        <div ref={modalScrollRef} className="p-4 sm:p-6 overflow-y-auto flex-1 min-h-0 space-y-6 text-zinc-300">
           
           {/* Section 1: Customer Details */}
           <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-3">

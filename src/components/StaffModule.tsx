@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
-import { MapPin, Calendar, Clock, Briefcase, Camera, User, Phone, MessageSquare, Eye, CheckCircle, AlertCircle, Upload, X, Play, ShieldCheck, ChevronRight, ChevronLeft, Video } from 'lucide-react';
+import { MapPin, Calendar, Clock, Briefcase, Camera, User, Phone, MessageSquare, Eye, CheckCircle, AlertCircle, Upload, X, Play, ShieldCheck, ChevronRight, ChevronLeft, Video, Loader2 } from 'lucide-react';
 import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../types';
 import { supabaseClient } from '../supabaseClient';
 import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } from '../utils/orderStageCalculator';
@@ -825,17 +825,32 @@ export const StaffModule: React.FC = () => {
 
   }, [leadEquipmentHistory, staffAssignments, staffName]);
 
-  // Modal states
+  // Modal states & refs
+  const selectedBookingDetailsRef = useRef<HTMLDivElement>(null);
+  const photoModalScrollRef = useRef<HTMLDivElement>(null);
+  const calendarModalScrollRef = useRef<HTMLDivElement>(null);
+
   const [selectedBookingDetails, setSelectedBookingDetails] = useState<any | null>(null);
   const [photoModalData, setPhotoModalData] = useState<{
     booking: any;
     stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete';
   } | null>(null);
   const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<{ title: string; message: string; details?: string[] } | null>(null);
 
-  // Lock background body scroll when any modal is active
+  // Lock background body scroll and auto-scroll modals to top when active
   useEffect(() => {
-    if (selectedBookingDetails || photoModalData || calendarModalDate) {
+    if (photoModalData) {
+      document.body.style.overflow = 'hidden';
+      if (photoModalScrollRef.current) {
+        photoModalScrollRef.current.scrollTop = 0;
+      }
+    } else if (calendarModalDate) {
+      document.body.style.overflow = 'hidden';
+      if (calendarModalScrollRef.current) {
+        calendarModalScrollRef.current.scrollTop = 0;
+      }
+    } else if (selectedBookingDetails) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -1073,7 +1088,7 @@ export const StaffModule: React.FC = () => {
             const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, staffIdx, orderId, lead.lead_id, op);
 
             // Role
-            const staffObj = staff?.find(s => s.name.toLowerCase() === staffName.toLowerCase());
+            const staffObj = staff?.find(s => (s.name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
             let assignedRole = staffObj ? staffObj.role : 'Crew Member';
             if (sa?.staff_role) {
               assignedRole = sa.staff_role;
@@ -1135,7 +1150,7 @@ export const StaffModule: React.FC = () => {
         );
         const hasStaffAssignment = staffAssignments?.some(sa => 
           sa.order_id === orderId && 
-          sa.staff_name.toLowerCase() === staffName.toLowerCase() &&
+          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase() &&
           sa.assignment_status !== 'Cancelled'
         );
 
@@ -1147,7 +1162,7 @@ export const StaffModule: React.FC = () => {
             else if (op.drone_operator_assigned?.toLowerCase() === staffName.toLowerCase()) assignedRole = 'Drone Operator';
             else if (op.assistant_assigned?.toLowerCase() === staffName.toLowerCase()) assignedRole = 'Assistant';
           }
-          const sa = staffAssignments?.find(s => s.order_id === orderId && s.staff_name.toLowerCase() === staffName.toLowerCase());
+          const sa = staffAssignments?.find(s => s.order_id === orderId && (s.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
           if (sa?.staff_role) {
             assignedRole = sa.staff_role;
           }
@@ -1289,6 +1304,7 @@ export const StaffModule: React.FC = () => {
 
   // Open Equipment Photo Verification Modal
   const openPhotoModal = (booking: any, stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete') => {
+    setSubmitError(null);
     const existingPhotos: Record<string, string> = {};
 
     const relevantHistory = (leadEquipmentHistory || []).filter(h => {
@@ -1423,7 +1439,6 @@ export const StaffModule: React.FC = () => {
 
       if (!hasAssetColl) {
         e.target.value = '';
-        alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
         showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
         return;
       }
@@ -1451,8 +1466,9 @@ export const StaffModule: React.FC = () => {
 
   // Submit Equipment Photos & Update Task Status
   const handleConfirmStatusUpdate = async () => {
-    if (!photoModalData) return;
+    if (!photoModalData || isSubmitting) return;
     const { booking, stage } = photoModalData;
+    setSubmitError(null);
 
     // --- EVENT START WORKFLOW ---
     if (stage === 'Event Start') {
@@ -1464,24 +1480,25 @@ export const StaffModule: React.FC = () => {
         : true;
       const hasEventStart = !!modalPhotos['Event Start Photo Proof'] || !!modalPhotos['Event Start Image'];
 
-      if (hasEquipment) {
-        if (!hasAssetColl && hasEventStart) {
-          alert("Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-          showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-          return;
-        }
+      // Strict Image Upload Validation before submitting
+      const missingList: string[] = [];
+      if (hasEquipment && !hasAssetColl) {
+        missingList.push('1. Equipment Received / Asset Picture');
+      }
+      if (!hasEventStart) {
+        missingList.push('2. Event Start Image');
+      }
 
-        if (!hasAssetColl && !hasEventStart) {
-          alert("Please upload at least the Equipment Received / Asset Picture.");
-          showToast("⚠️ Please upload at least the Equipment Received / Asset Picture.");
-          return;
-        }
-      } else {
-        if (!hasEventStart) {
-          alert("Please upload the Event Start Image.");
-          showToast("⚠️ Please upload the Event Start Image.");
-          return;
-        }
+      // If user uploaded only Asset Collection photo and wants to save draft
+      if (hasEquipment && hasAssetColl && !hasEventStart) {
+        // Allow saving draft asset image
+      } else if (missingList.length > 0) {
+        setSubmitError({
+          title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
+          message: 'The following required image(s) are missing:',
+          details: missingList
+        });
+        return;
       }
 
       try {
@@ -1498,6 +1515,10 @@ export const StaffModule: React.FC = () => {
 
             const fileName = `proofs/${booking.orderId || booking.leadId}_AssetCollection_Draft_${Date.now()}.jpg`;
             const finalUrl = await safeUploadImage(rawUrl, fileName);
+
+            if (!finalUrl) {
+              throw new Error("Failed to upload Equipment Received / Asset Picture.");
+            }
 
             const eqName = itemKey;
             const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
@@ -1560,13 +1581,12 @@ export const StaffModule: React.FC = () => {
 
           setPhotoModalData(null);
           setModalPhotos({});
-          alert("✓ Equipment Received / Asset Image saved successfully!\n\nEvent Start action remains available. Click Event Start again to upload the Event Start Image.");
           showToast("✅ Equipment Received / Asset Image saved!");
           return;
         }
 
-        // 2. BOTH IMAGES PRESENT: Asset / Equipment Image AND Event Start Image
-        if (hasAssetColl && hasEventStart) {
+        // 2. BOTH IMAGES PRESENT or EVENT START IMAGE
+        if ((hasEquipment && hasAssetColl && hasEventStart) || (!hasEquipment && hasEventStart)) {
           const allProofsToSave: EquipmentProofItem[] = [];
 
           // A. Save / verify Asset Images
@@ -1576,6 +1596,10 @@ export const StaffModule: React.FC = () => {
 
             const fileName = `proofs/${booking.orderId || booking.leadId}_AssetCollection_${Date.now()}.jpg`;
             const finalUrl = await safeUploadImage(rawUrl, fileName);
+
+            if (!finalUrl) {
+              throw new Error("Failed to upload Equipment Received / Asset Picture.");
+            }
 
             const eqName = itemKey;
             const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
@@ -1615,8 +1639,16 @@ export const StaffModule: React.FC = () => {
 
           // B. Save Event Start Image
           const rawStartUrl = modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image'];
+          if (!rawStartUrl) {
+            throw new Error("Event Start Image is missing.");
+          }
+
           const startFileName = `proofs/${booking.orderId || booking.leadId}_EventStart_${Date.now()}.jpg`;
           const finalStartUrl = await safeUploadImage(rawStartUrl, startFileName);
+
+          if (!finalStartUrl) {
+            throw new Error("Failed to upload Event Start Image.");
+          }
 
           allProofsToSave.push({
             equipmentName: 'Event Start Photo Proof',
@@ -1677,10 +1709,10 @@ export const StaffModule: React.FC = () => {
           // Update database tables: staff_assignments, operations, orders, leads
           if (booking.orderId) {
             const matchingSA = staffAssignments?.find(sa => {
-              if (sa.order_id !== booking.orderId) return false;
-              if (sa.staff_name.toLowerCase() !== staffName.toLowerCase()) return false;
+              if (!sa || sa.order_id !== booking.orderId) return false;
+              if (!sa.staff_name || sa.staff_name.trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
               if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
-              if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== booking.eventName.trim().toLowerCase()) return false;
+              if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== (booking.eventName || '').trim().toLowerCase()) return false;
               return true;
             });
 
@@ -1740,13 +1772,15 @@ export const StaffModule: React.FC = () => {
 
           setPhotoModalData(null);
           setModalPhotos({});
-          alert("✅ Both images saved! Event Started confirmed successfully.");
           showToast("✅ Event Started confirmed and saved successfully!");
         }
       } catch (error: any) {
         console.error('Error updating Event Start status:', error);
-        alert(`❌ Failed to submit Event Start: ${error.message || 'Unknown error'}`);
-        showToast(`❌ ${error.message || 'Failed to update status.'}`);
+        setSubmitError({
+          title: 'EVENT SUBMISSION FAILED',
+          message: error?.message || 'An error occurred while uploading images or updating status. Please try again.'
+        });
+        showToast(`❌ ${error?.message || 'Failed to update status.'}`);
       } finally {
         setIsSubmitting(false);
       }
@@ -1774,20 +1808,27 @@ export const StaffModule: React.FC = () => {
     }
 
     // Validate mandatory photo proofs
+    const missingOther: string[] = [];
     for (const item of reqItems) {
       if (!item.optional) {
         const hasPhoto = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
         if (!hasPhoto) {
-          showToast(`⚠️ Please capture/upload a photo for ${item.name}`);
-          return;
+          missingOther.push(item.name);
         }
       }
     }
 
     // Validate mandatory Raw Footage Link for Footage Handover
     if (stage === 'Equipment Handover' && (!modalRawFootageLink || !modalRawFootageLink.trim())) {
-      showToast('⚠️ Please enter the Raw Footage Drive Link (Required)');
-      alert('Please provide the Raw Footage Drive Link.');
+      missingOther.push('Raw Footage Drive Link');
+    }
+
+    if (missingOther.length > 0) {
+      setSubmitError({
+        title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
+        message: 'The following required item(s) are missing:',
+        details: missingOther
+      });
       return;
     }
 
@@ -2006,7 +2047,7 @@ export const StaffModule: React.FC = () => {
 
         const matchingSA = staffAssignments?.find(sa => {
           if (sa.order_id !== booking.orderId) return false;
-          if (sa.staff_name.toLowerCase() !== staffName.toLowerCase()) return false;
+          if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
           if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
           if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== booking.eventName.trim().toLowerCase()) return false;
           return true;
@@ -2069,13 +2110,11 @@ export const StaffModule: React.FC = () => {
       setModalPhotos({});
       setModalRawFootageLink('');
       const stageLabel = stage === 'Event Complete' ? 'Event End' : stage;
-      alert(`✅ ${stageLabel} confirmed and saved successfully!`);
       showToast(`✅ ${stageLabel} submitted & saved successfully!`);
 
     } catch (error: any) {
       console.error('Error updating status:', error);
-      alert(`❌ Failed to submit ${stage}: ${error.message || 'Unknown error'}`);
-      showToast(`❌ ${error.message || 'Failed to update status.'}`);
+      showToast(`❌ Failed to submit ${stage}: ${error.message || 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -2556,7 +2595,24 @@ export const StaffModule: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-5">
+            <div ref={photoModalScrollRef} className="p-6 overflow-y-auto space-y-5">
+              {submitError && (
+                <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 text-xs text-rose-300 flex items-start gap-3 animate-in fade-in">
+                  <AlertCircle className="w-5 h-5 shrink-0 text-rose-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-extrabold text-rose-400 uppercase tracking-wider">{submitError.title}</div>
+                    <div className="text-zinc-200 font-medium">{submitError.message}</div>
+                    {submitError.details && submitError.details.length > 0 && (
+                      <ul className="list-disc list-inside mt-1 space-y-0.5 text-rose-200 font-medium">
+                        {submitError.details.map((item, idx) => (
+                          <li key={idx} className="font-semibold">{item}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-300 flex items-start gap-3">
                 <AlertCircle className="w-5 h-5 shrink-0 text-amber-400 mt-0.5" />
                 <div>
