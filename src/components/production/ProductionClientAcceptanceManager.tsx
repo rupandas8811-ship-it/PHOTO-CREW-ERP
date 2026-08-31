@@ -7,21 +7,20 @@ import { useRole } from '../RoleContext';
  * PRODUCTION DASHBOARD — CLIENT ACCEPTANCE VERIFICATION DECK MANAGER
  * 
  * SCOPE & SPECIFICATIONS:
- * 1. REMOVE EVENT DATE:
- *    - Removes "Event Date *" field and date input from "Edited Folder Uploaded to Server" section.
- *    - Does NOT modify event date stored in Supabase or used elsewhere.
- * 2. KEEP FOLDER NAME:
- *    - Keeps existing "Folder Name *" field and ensures persistence across sessions.
- * 3. ADD FINAL EDITED FOOTAGE LINK:
- *    - Adds "Final Edited Footage Link *" field inside "Edited Folder Uploaded to Server" section.
- *    - Allows user to paste final edited footage URL/link uploaded by the editor.
- * 4. TASK/EVENT DATA ISOLATION:
- *    - Final Edited Footage Link belongs strictly to its specific event/task.
- *    - Multi-event orders have isolated links per event (Event 1 -> Link 1, Event 2 -> Link 2).
- * 5. SUPABASE PERSISTENCE:
- *    - Correctly persists and loads from Supabase (client_acceptance_verifications, editor_assignments, production).
- *    - Solves order_id / tracking_id / production_id mapping gaps so checkbox, folder name, and footage link survive reload/reopen.
- * 6. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file rule).
+ * 1. REQUIRED CHECKLIST VALIDATION:
+ *    - Validates "Client Communication & Consent Proof" (checkbox, file/url, upload name).
+ *    - Validates "Edited Folder Uploaded to Server" (checkbox, Folder Name, Final Edited Footage Link).
+ *    - Shows front-level error messages if any item is missing and stops submission.
+ * 2. SAVE CHECKLIST DATA FIRST:
+ *    - Persists verification records to Supabase (client_acceptance_verifications, editor_assignments, production).
+ * 3. UPDATE PRODUCTION STATUS & ORDER STAGE:
+ *    - Updates Production record to 'Client Acceptance'.
+ *    - Updates related Order stage to 'Client Acceptance'.
+ *    - Updates editor_assignments status to 'Client Acceptance' to prevent rank recalculation reverts.
+ * 4. VERIFY DATABASE PERSISTENCE & REFRESH DATA:
+ *    - Verifies Supabase returns 'Client Acceptance' status before closing modal.
+ *    - Triggers refreshData() so status persists on re-open, page reload, and in Business Owner workflow.
+ * 5. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file rule).
  */
 
 // Helper to set input value programmatically and dispatch both input & change events for React state compatibility
@@ -111,6 +110,9 @@ const showFrontLevelError = (containerEl: HTMLElement, title: string, items: str
     }
   }
 
+  // Deduplicate item messages
+  const uniqueItems = Array.from(new Set(items));
+
   errorBox.innerHTML = `
     <div class="flex items-center justify-between border-b border-rose-800/80 pb-2">
       <div class="flex items-center gap-2 font-mono font-bold text-xs sm:text-sm text-rose-200 uppercase tracking-wider">
@@ -121,10 +123,10 @@ const showFrontLevelError = (containerEl: HTMLElement, title: string, items: str
       </button>
     </div>
     <div class="text-xs font-sans text-rose-200/90 leading-relaxed">
-      ${items.length > 0 ? `
-        <p class="font-semibold text-rose-100 mb-1">Please complete the following required items before approving:</p>
+      ${uniqueItems.length > 0 ? `
+        <p class="font-semibold text-rose-100 mb-1">Missing:</p>
         <ul class="list-disc list-inside space-y-1 font-mono text-[11px] text-rose-200 pl-1">
-          ${items.map(item => `<li><span class="text-rose-400 font-bold">✗</span> ${item}</li>`).join('')}
+          ${uniqueItems.map(item => `<li>• ${item}</li>`).join('')}
         </ul>
       ` : ''}
     </div>
@@ -333,8 +335,13 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           proofCheckbox.click();
         }
 
+        // Autofill Upload Name if previously saved
+        const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
+        if (proofNameInput && !proofNameInput.value && (savedVerif?.proof_file_name || targetProd?.upload_name)) {
+          setTextInputValue(proofNameInput, savedVerif?.proof_file_name || targetProd?.upload_name || '');
+        }
+
         // 2B. CHECKLIST ITEM 2: EDITED FOLDER UPLOADED TO SERVER (INDEPENDENT)
-        // Must NOT depend on consent_proof_verified!
         const isFolderUploadConfirmed = Boolean(
           (savedFolderName && savedLink) ||
           (savedVerif as any)?.edited_folder_uploaded_to_server ||
@@ -367,13 +374,11 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         // 3 & 4. ADD FINAL EDITED FOOTAGE LINK: Injected inside event card with strict event data isolation
         const gridContainer = eventCard.querySelector('div.grid') as HTMLElement | null;
         if (gridContainer) {
-          // Adjust grid to 2 columns on desktop so Folder Name and Final Edited Footage Link sit side by side
           gridContainer.classList.remove('ca-folder-single-col');
           gridContainer.style.setProperty('grid-template-columns', 'repeat(auto-fit, minmax(240px, 1fr))', 'important');
 
           let linkWrapper = gridContainer.querySelector(`.ca-final-footage-link-group[data-event-id="${eventId}"]`) as HTMLElement | null;
           if (!linkWrapper) {
-            // Check if there's an older group to replace
             const oldGroup = gridContainer.querySelector('.ca-final-footage-link-group');
             if (oldGroup && oldGroup.getAttribute('data-event-id') !== eventId) {
               oldGroup.remove();
@@ -383,7 +388,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             linkWrapper.className = 'space-y-1 ca-final-footage-link-group';
             linkWrapper.setAttribute('data-event-id', eventId);
 
-            // Fetch initial saved link into isolated ref/state
             if (savedLink) {
               setEventLinks(prev => ({ ...prev, [eventId]: savedLink }));
             }
@@ -403,7 +407,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
             gridContainer.appendChild(linkWrapper);
 
-            // Attach input event listener for realtime typing / pasting
             const inputEl = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
             if (inputEl) {
               inputEl.addEventListener('input', (e) => {
@@ -412,7 +415,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               });
             }
           } else {
-            // Keep input in sync with state or savedLink if value changed
             const inputEl = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
             if (inputEl && document.activeElement !== inputEl) {
               const currentVal = eventLinksRef.current[eventId] || savedLink || '';
@@ -429,9 +431,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       if (form && !form.dataset.caEnhanced) {
         form.dataset.caEnhanced = 'true';
 
-        // Listen in the CAPTURING phase to run BEFORE React's delegated listener at document root
         form.addEventListener('submit', async (e) => {
-          // Stop React's default form submit from firing
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
@@ -439,12 +439,11 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           const currentOrderId = activeOrderIdRef.current || orderId;
           const currentProdId = activeProdIdRef.current || prodId;
 
-          // Find the submit button to show feedback
           const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
           const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
           if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span>⏳</span> Submitting...';
+            submitBtn.innerHTML = '<span class="animate-spin inline-block mr-1">⟳</span> SAVING CLIENT ACCEPTANCE...';
           }
 
           try {
@@ -459,23 +458,31 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             const isConsentProofChecked = proofCheckbox ? proofCheckbox.checked : false;
 
             if (!isConsentProofChecked) {
-              missingItems.push('Client Communication & Consent Proof (Checkbox required)');
+              missingItems.push('Client Communication & Consent Proof');
             }
 
             const proofImg = caModal.querySelector<HTMLImageElement>('img[alt*="Proof"], img[alt*="Communication"]');
-            const proofLink = caModal.querySelector<HTMLAnchorElement>('a[href*="storage"], a[href*="firebasestorage"], a[href*="proof"]');
-            const caCommunicationProofVal = proofImg?.src || proofLink?.href || '';
+            const proofLink = caModal.querySelector<HTMLAnchorElement>('a[href*="storage"], a[href*="firebasestorage"], a[href*="proof"], a[href*="http"]');
+            
+            // Match saved verification
+            const orderVerifs = (clientAcceptanceVerifications || []).filter(v => {
+              const vOrd = String(v.order_id || '').trim().toLowerCase();
+              return candidateIds.includes(vOrd);
+            });
+            const savedVerif = orderVerifs[0];
 
-            if (!caCommunicationProofVal || !caCommunicationProofVal.trim()) {
-              missingItems.push('Client Communication & Consent Proof (File or document proof required)');
-            }
+            let caCommunicationProofVal = proofImg?.src || proofLink?.href || targetProd?.client_communication_proof || savedVerif?.client_communication_consent_proof || '';
 
             const proofNameSpan = caModal.querySelector<HTMLElement>('span.truncate');
             const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
-            const caUploadNameVal = proofNameInput?.value || proofNameSpan?.textContent || 'Uploaded Proof Document';
+            let caUploadNameVal = proofNameInput?.value || proofNameSpan?.textContent || targetProd?.upload_name || savedVerif?.proof_file_name || '';
 
-            if (!caUploadNameVal || !caUploadNameVal.trim() || (!caCommunicationProofVal && caUploadNameVal === 'Uploaded Proof Document')) {
-              missingItems.push('Upload Name (Proof file name required)');
+            if (!caCommunicationProofVal || !caCommunicationProofVal.trim()) {
+              missingItems.push('Client Communication & Consent Proof (Proof file / document required)');
+            }
+
+            if (!caUploadNameVal || !caUploadNameVal.trim()) {
+              missingItems.push('Upload Name');
             }
 
             // Check "Edited Folder Uploaded to Server" for each event/task card
@@ -491,19 +498,14 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                 const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
                 const isFolderUploadChecked = checkbox ? checkbox.checked : false;
 
-                const fiberDetails = card ? getEventGroupFromFiber(card as HTMLElement) : null;
-                const eventCardText = card?.textContent || '';
-                const eventNameMatch = eventCardText.match(/confirm upload for:\s*([^\n\r]+)/i) || eventCardText.match(/event:\s*([^\n\r]+)/i);
-                const eventLabelName = fiberDetails?.eventName || (eventNameMatch ? eventNameMatch[1].trim() : (linkInputs.length === 1 ? 'Edited Folder' : `Event ${i + 1}`));
-
                 if (!isFolderUploadChecked) {
-                  missingItems.push(`Edited Folder Uploaded to Server (${eventLabelName})`);
+                  missingItems.push(`Edited Folder Uploaded to Server`);
                 }
                 if (!folderVal) {
-                  missingItems.push(`Folder Name (${eventLabelName})`);
+                  missingItems.push(`Folder Name`);
                 }
                 if (!linkVal) {
-                  missingItems.push(`Final Edited Footage Link (${eventLabelName})`);
+                  missingItems.push(`Final Edited Footage Link`);
                 }
               });
             } else {
@@ -517,7 +519,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                 missingItems.push('Folder Name');
                 missingItems.push('Final Edited Footage Link');
               } else {
-                uploadCheckboxes.forEach((uploadLabel, i) => {
+                uploadCheckboxes.forEach((uploadLabel) => {
                   const card = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3');
                   const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
                   const folderInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
@@ -525,9 +527,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                   const isChecked = checkbox ? checkbox.checked : false;
                   const folderVal = folderInput ? (folderInput.value || '').trim() : '';
 
-                  if (!isChecked) missingItems.push(`Edited Folder Uploaded to Server (Event ${i + 1})`);
-                  if (!folderVal) missingItems.push(`Folder Name (Event ${i + 1})`);
-                  missingItems.push(`Final Edited Footage Link (Event ${i + 1})`);
+                  if (!isChecked) missingItems.push(`Edited Folder Uploaded to Server`);
+                  if (!folderVal) missingItems.push(`Folder Name`);
+                  missingItems.push(`Final Edited Footage Link`);
                 });
               }
             }
@@ -562,7 +564,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
             const saveTargets = Array.from(candidateOrderIds).filter(Boolean);
 
-            // 1. Save all isolated verification records per event to Supabase
+            // 1. SAVE CHECKLIST DATA FIRST TO SUPABASE
             for (const inp of linkInputs) {
               const evId = inp.getAttribute('data-event-id') || 'default';
               const linkVal = (inp.value || '').trim();
@@ -590,7 +592,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                 }
               }
 
-              // Update isolated editor_assignments
+              // Update isolated editor_assignments with 'Client Acceptance' status to prevent rank recalculation revert
               const matchingAssignments = (editorAssignments || []).filter(a =>
                 saveTargets.some(tId => tId.toLowerCase() === String(a.order_id || '').toLowerCase() || tId.toLowerCase() === String(a.production_id || '').toLowerCase()) &&
                 (a.event_id === evId || !a.event_id || evId === 'default' || (linkInputs.length === 1))
@@ -598,6 +600,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
               for (const a of matchingAssignments) {
                 const assignmentUpdates = {
+                  status: 'Client Acceptance' as any,
                   edited_drive_link: linkVal,
                   Edited_Drive_Link: linkVal,
                   final_edited_footage_link: linkVal,
@@ -609,13 +612,13 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                 };
 
                 if (updateEditorAssignmentStatus) {
-                  await updateEditorAssignmentStatus(a.assignment_id, a.status as any, assignmentUpdates);
+                  await updateEditorAssignmentStatus(a.assignment_id, 'Client Acceptance' as any, assignmentUpdates);
                 }
                 await pushUpdate('editor_assignments', 'assignment_id', a.assignment_id, assignmentUpdates);
               }
             }
 
-            // 2. Update production record status to 'Client Acceptance' in Supabase
+            // 2. UPDATE PRODUCTION RECORD STATUS TO 'Client Acceptance' IN SUPABASE
             const prodUpdates = {
               editing_status: 'Client Acceptance' as any,
               production_status: 'Client Acceptance' as any,
@@ -640,7 +643,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               client_communication_proof_name: caUploadNameVal,
             };
 
-            // 2. Update production record status to 'Client Acceptance' in Supabase across all matching candidate IDs
             const matchingProds = (production || []).filter(p => {
               const pCandidateIds = getAllCandidateOrderIds(p);
               return pCandidateIds.some(id => saveTargets.map(t => t.toLowerCase()).includes(id.toLowerCase()));
@@ -670,7 +672,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               }
             }
 
-            // 3. Update orders and leads tables stage to 'Client Acceptance' in Supabase
+            // 3. UPDATE RELATED ORDERS AND LEADS STAGE TO 'Client Acceptance' IN SUPABASE
             for (const id of saveTargets) {
               if (updateOrderStage) {
                 try {
@@ -691,7 +693,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               });
             }
 
-            // 4. VERIFY DATABASE RESPONSE
+            // 4. VERIFY BOTH DATABASE UPDATES (PRODUCTION & ORDERS)
             let isVerifiedInDb = false;
             for (const checkId of saveTargets) {
               for (const col of ['production_id', 'tracking_id', 'order_id', 'lead_id']) {
@@ -718,15 +720,19 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               if (isVerifiedInDb) break;
             }
 
-            // 5. Force a clean refresh of data in the dashboard context
+            if (!isVerifiedInDb) {
+              throw new Error("Database verification check failed: Production status in Supabase was not updated to 'Client Acceptance'.");
+            }
+
+            // 5. RE-FETCH FRESH DATA FROM SUPABASE
             if (refreshData) {
               await refreshData();
             }
 
-            // 6. Success! Programmatically click the native cancel button to close the modal safely
+            // 6. SUCCESS! Programmatically click close button to close popup
             const cancelButton = Array.from(caModal.querySelectorAll<HTMLButtonElement>('button')).find(btn => {
               const t = (btn.textContent || '').toLowerCase();
-              return t.includes('cancel');
+              return t.includes('close') || t.includes('cancel') || t.includes('✕');
             });
             if (cancelButton) {
               cancelButton.click();
