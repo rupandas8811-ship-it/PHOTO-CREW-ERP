@@ -9,6 +9,7 @@ import { ProductionFullScreenManager } from './production/ProductionFullScreenMa
 import { ProductionNoteManager } from './production/ProductionNoteManager';
 import { ProductionEventManager } from './production/ProductionEventManager';
 import { ProductionAssignedTeamManager } from './production/ProductionAssignedTeamManager';
+import { ProductionClientAcceptanceManager } from './production/ProductionClientAcceptanceManager';
 
 /**
  * ProductionDashboardUpdates.tsx
@@ -37,6 +38,7 @@ export const ProductionExtensionContainer: React.FC<ProductionExtensionContainer
       <ProductionNoteManager />
       <ProductionEventManager />
       <ProductionAssignedTeamManager />
+      <ProductionClientAcceptanceManager />
       {children}
     </div>
   );
@@ -53,7 +55,8 @@ export {
   ProductionFullScreenManager,
   ProductionNoteManager,
   ProductionEventManager,
-  ProductionAssignedTeamManager
+  ProductionAssignedTeamManager,
+  ProductionClientAcceptanceManager
 };
 
 export type {

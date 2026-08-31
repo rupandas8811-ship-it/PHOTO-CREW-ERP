@@ -252,11 +252,6 @@ export const ProductionFullScreenManager: React.FC = () => {
                   dateInput.removeAttribute('required');
                   if (formGroup) {
                     formGroup.style.setProperty('display', 'none', 'important');
-                    const parentGrid = formGroup.parentElement as HTMLElement | null;
-                    if (parentGrid && parentGrid.classList.contains('grid')) {
-                      parentGrid.classList.add('ca-folder-single-col');
-                      parentGrid.style.setProperty('grid-template-columns', '1fr', 'important');
-                    }
                   }
                 }
               });
