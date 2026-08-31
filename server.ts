@@ -344,6 +344,15 @@ async function startServer() {
 
     for (const key of Object.keys(clone)) {
       const val = clone[key];
+      if (key.toLowerCase() === 'whatsapp_number') {
+        if (val === '' || val === null || val === undefined || val === 'NaN' || val === 'null' || val === 'undefined') {
+          clone[key] = null;
+        } else {
+          const digits = String(val).replace(/\D/g, '');
+          clone[key] = digits ? Number(digits) : null;
+        }
+        continue;
+      }
       const isPhone = key.includes('mobile') || key.includes('whatsapp') || key.includes('phone');
       if (isNumericDbKey(key)) {
         if (val === '' || val === null || val === undefined || val === 'NaN' || val === 'null' || val === 'undefined') {

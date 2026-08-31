@@ -11,7 +11,7 @@ import { useRole } from '../RoleContext';
  *    - Removes "Event Date *" field and date input from "Edited Folder Uploaded to Server" section.
  *    - Does NOT modify event date stored in Supabase or used elsewhere.
  * 2. KEEP FOLDER NAME:
- *    - Keeps existing "Folder Name *" field exactly as it currently works.
+ *    - Keeps existing "Folder Name *" field and ensures persistence across sessions.
  * 3. ADD FINAL EDITED FOOTAGE LINK:
  *    - Adds "Final Edited Footage Link *" field inside "Edited Folder Uploaded to Server" section.
  *    - Allows user to paste final edited footage URL/link uploaded by the editor.
@@ -20,10 +20,11 @@ import { useRole } from '../RoleContext';
  *    - Multi-event orders have isolated links per event (Event 1 -> Link 1, Event 2 -> Link 2).
  * 5. SUPABASE PERSISTENCE:
  *    - Correctly persists and loads from Supabase (client_acceptance_verifications, editor_assignments, production).
+ *    - Solves order_id / tracking_id / production_id mapping gaps so checkbox, folder name, and footage link survive reload/reopen.
  * 6. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file rule).
  */
 
-// Programmatically set text input value and trigger React onChange/onInput
+// Helper to set input value programmatically and dispatch both input & change events for React state compatibility
 const setTextInputValue = (inputEl: HTMLInputElement, value: string) => {
   if (inputEl.value === value) return;
   const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
@@ -36,6 +37,7 @@ const setTextInputValue = (inputEl: HTMLInputElement, value: string) => {
     valueSetter?.call(inputEl, value);
   }
   inputEl.dispatchEvent(new Event("input", { bubbles: true }));
+  inputEl.dispatchEvent(new Event("change", { bubbles: true }));
 };
 
 // Helper to extract eventGroup details directly from React Fiber for 100% accuracy
@@ -48,7 +50,6 @@ const getEventGroupFromFiber = (el: HTMLElement): { eventId: string; eventName: 
     if (fiber.key && String(fiber.key).startsWith('manual_conf_')) {
       const eventId = String(fiber.key).replace('manual_conf_', '');
       
-      // Try to find the group name from React Fiber props
       let eventName = eventId;
       let curr = fiber;
       while (curr) {
@@ -64,6 +65,20 @@ const getEventGroupFromFiber = (el: HTMLElement): { eventId: string; eventName: 
     fiber = fiber.return;
   }
   return null;
+};
+
+// Extract all valid identifiers for a production item to prevent lookup mismatches
+const getAllCandidateOrderIds = (targetProd: any, fallbackId?: string): string[] => {
+  const set = new Set<string>();
+  if (fallbackId) set.add(String(fallbackId).trim().toLowerCase());
+  if (targetProd) {
+    if (targetProd.production_id) set.add(String(targetProd.production_id).trim().toLowerCase());
+    if (targetProd.tracking_id) set.add(String(targetProd.tracking_id).trim().toLowerCase());
+    if (targetProd.order_id) set.add(String(targetProd.order_id).trim().toLowerCase());
+    if (targetProd.lead_id) set.add(String(targetProd.lead_id).trim().toLowerCase());
+    if (targetProd.id) set.add(String(targetProd.id).trim().toLowerCase());
+  }
+  return Array.from(set).filter(Boolean);
 };
 
 export const ProductionClientAcceptanceManager: React.FC = () => {
@@ -119,7 +134,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       // Extract Order / Production ID from header or badges
       const headerTitle = caModal.querySelector('h3');
       const headerText = headerTitle?.textContent || caModal.textContent || '';
-      const prodIdMatch = headerText.match(/(PRD-[A-Za-z0-9_-]+|ORD-[A-Za-z0-9_-]+)/i);
+      const prodIdMatch = headerText.match(/(PRD-[A-Za-z0-9_-]+|ORD-[A-Za-z0-9_-]+|TRK-[A-Za-z0-9_-]+)/i);
       const matchedHeaderId = prodIdMatch ? prodIdMatch[1].trim() : '';
 
       // Match target production record
@@ -127,7 +142,11 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         p.production_id === matchedHeaderId ||
         (p as any).order_id === matchedHeaderId ||
         p.tracking_id === matchedHeaderId ||
-        (matchedHeaderId && (p.production_id?.toLowerCase() === matchedHeaderId.toLowerCase() || p.tracking_id?.toLowerCase() === matchedHeaderId.toLowerCase()))
+        (matchedHeaderId && (
+          p.production_id?.toLowerCase() === matchedHeaderId.toLowerCase() ||
+          p.tracking_id?.toLowerCase() === matchedHeaderId.toLowerCase() ||
+          String((p as any).order_id || '').toLowerCase() === matchedHeaderId.toLowerCase()
+        ))
       ) || (production || []).find(p => {
         const custName = (p as any).customer_name || '';
         return custName && headerText.includes(custName);
@@ -138,6 +157,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
       if (orderId) activeOrderIdRef.current = orderId;
       if (prodId) activeProdIdRef.current = prodId;
+
+      const candidateIds = getAllCandidateOrderIds(targetProd, matchedHeaderId);
 
       // Find all event cards under "Edited Folder Upload Confirmation" / "Edited Folder Uploaded to Server"
       const allLabels = Array.from(caModal.querySelectorAll<HTMLElement>('label'));
@@ -161,8 +182,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           eventName = eventNameMatch ? eventNameMatch[1].trim() : `Event ${idx + 1}`;
 
           // Find matching event ID from lead or order events
-          const matchedLead = (leads || []).find(l => l.id === orderId || (l as any).order_id === orderId || (l as any).lead_id === orderId || (l as any).lead_id === targetProd?.lead_id);
-          const matchedOrder = (orders || []).find(o => o.order_id === orderId || (o as any).id === orderId || (o as any).lead_id === orderId);
+          const matchedLead = (leads || []).find(l => candidateIds.includes(String(l.id || '').toLowerCase()) || candidateIds.includes(String((l as any).order_id || '').toLowerCase()) || candidateIds.includes(String((l as any).lead_id || '').toLowerCase()) || (targetProd?.lead_id && String(l.id || '').toLowerCase() === String(targetProd.lead_id).toLowerCase()));
+          const matchedOrder = (orders || []).find(o => candidateIds.includes(String(o.order_id || '').toLowerCase()) || candidateIds.includes(String((o as any).id || '').toLowerCase()) || candidateIds.includes(String((o as any).lead_id || '').toLowerCase()));
           const eventsList = (matchedLead?.events && Array.isArray(matchedLead.events)) ? matchedLead.events : (matchedOrder?.events && Array.isArray(matchedOrder.events) ? matchedOrder.events : []);
 
           const matchedEv = eventsList.find((ev: any, eIdx: number) =>
@@ -200,36 +221,48 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           }
         });
 
-        // 2. FETCH PREVIOUS SAVED VALUES FOR AUTOFILL
-        const cleanOrd = String(orderId || '').trim().toLowerCase();
+        // 2. FETCH PREVIOUS SAVED VALUES FOR AUTOFILL WITH COMPREHENSIVE IDENTIFIER MATCHING
         const cleanEvt = String(eventId || 'default').trim().toLowerCase();
 
-        const savedVerif = (clientAcceptanceVerifications || []).find(v =>
-          String(v.order_id || '').trim().toLowerCase() === cleanOrd &&
-          (String(v.event_id || 'default').trim().toLowerCase() === cleanEvt ||
-           String(v.event_id || '').trim().toLowerCase() === eventName.toLowerCase())
-        );
+        // Match saved verification across candidate order IDs and event identifiers
+        const orderVerifs = (clientAcceptanceVerifications || []).filter(v => {
+          const vOrd = String(v.order_id || '').trim().toLowerCase();
+          return candidateIds.includes(vOrd);
+        });
+
+        const savedVerif = orderVerifs.find(v => {
+          const vEvt = String(v.event_id || 'default').trim().toLowerCase();
+          return vEvt === cleanEvt || vEvt === eventName.toLowerCase() || vEvt === 'default' || cleanEvt === 'default';
+        }) || orderVerifs[0]; // Fallback to first verif for single-event orders
 
         let savedFolderName = savedVerif?.folder_name || '';
         let savedLink = savedVerif?.final_edited_footage_link || savedVerif?.upload_link_path || '';
 
         const matchingAssignment = (editorAssignments || []).find(a =>
-          (a.order_id === orderId || a.production_id === prodId || a.production_id === orderId) &&
-          (a.event_id === eventId || a.event_id === eventName)
+          (candidateIds.includes(String(a.order_id || '').toLowerCase()) || candidateIds.includes(String(a.production_id || '').toLowerCase())) &&
+          (a.event_id === eventId || a.event_id === eventName || !a.event_id || cleanEvt === 'default')
         );
 
         if (!savedFolderName) {
-          savedFolderName = matchingAssignment?.server_upload_folder_name || targetProd?.server_upload_folder_name || '';
+          savedFolderName = matchingAssignment?.server_upload_folder_name || targetProd?.server_upload_folder_name || (targetProd as any)?.server_path || '';
         }
         if (!savedLink) {
-          savedLink = matchingAssignment?.edited_drive_link || (matchingAssignment as any)?.Edited_Drive_Link || (matchingAssignment as any)?.delivery_link || '';
+          savedLink = matchingAssignment?.edited_drive_link || (matchingAssignment as any)?.Edited_Drive_Link || (matchingAssignment as any)?.delivery_link || targetProd?.edited_drive_link || (targetProd as any)?.final_consolidated_drive_link || '';
         }
+
+        const isConfirmedSaved = Boolean(
+          savedFolderName ||
+          savedLink ||
+          savedVerif?.consent_proof_verified ||
+          targetProd?.server_upload_confirmed ||
+          (targetProd as any)?.edited_folder_uploaded_to_server ||
+          matchingAssignment?.server_upload_confirmed
+        );
 
         // Check the "Edited Folder Uploaded to Server" checkbox if there's saved data
         const checkbox = eventCard.querySelector<HTMLInputElement>('input[type="checkbox"]');
-        const isAutofilled = eventCard.getAttribute('data-ca-autofilled') === 'true';
 
-        if (!isAutofilled && (savedFolderName || savedLink) && checkbox && !checkbox.checked) {
+        if (isConfirmedSaved && checkbox && !checkbox.checked) {
           checkbox.click();
         }
 
@@ -242,7 +275,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           }
 
           // Fill previous folder name and dispatch input event to sync with React parent state
-          if (!isAutofilled && savedFolderName && folderInput.value !== savedFolderName) {
+          if (savedFolderName && folderInput.value !== savedFolderName) {
             setTextInputValue(folderInput, savedFolderName);
           }
         }
@@ -295,26 +328,14 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               });
             }
           } else {
-            // Keep input in sync with state if value changed
+            // Keep input in sync with state or savedLink if value changed
             const inputEl = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
             if (inputEl && document.activeElement !== inputEl) {
               const currentVal = eventLinksRef.current[eventId] || savedLink || '';
-              if (inputEl.value !== currentVal) {
+              if (inputEl.value !== currentVal && currentVal) {
                 inputEl.value = currentVal;
               }
             }
-          }
-        }
-
-        // Mark as fully autofilled once inputs are successfully synchronized
-        if (!isAutofilled) {
-          const hasFolderToFill = !!savedFolderName;
-          const hasFolderInDOM = !!folderInput;
-          const hasLinkInDOM = !!eventCard.querySelector('input.ca-final-footage-link-input');
-
-          const isFullyAutofilled = (!hasFolderToFill || (hasFolderInDOM && folderInput.value === savedFolderName)) && hasLinkInDOM;
-          if (isFullyAutofilled) {
-            eventCard.setAttribute('data-ca-autofilled', 'true');
           }
         }
       });
@@ -353,6 +374,16 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               const folderVal = fInput ? (fInput.value || '').trim() : '';
               const linkVal = (inp.value || '').trim();
 
+              const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+              if (checkbox && !checkbox.checked) {
+                alert(`Please check 'Edited Folder Uploaded to Server' confirmation.`);
+                if (submitBtn) {
+                  submitBtn.disabled = false;
+                  submitBtn.innerHTML = originalBtnText;
+                }
+                return;
+              }
+
               if (!folderVal) {
                 alert(`Folder Name is required for all uploaded folders.`);
                 if (submitBtn) {
@@ -383,7 +414,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             let lastFolderVal = '';
             let lastLinkVal = '';
 
-            // 1. Process all isolated saves per event/task
+            const saveTargets = Array.from(new Set([currentOrderId, currentProdId, targetProd?.tracking_id, targetProd?.order_id, matchedHeaderId].filter(Boolean) as string[]));
+
+            // 1. Process all isolated saves per event/task across all order identifiers for guaranteed fetch matching
             for (const inp of linkInputs) {
               const evId = inp.getAttribute('data-event-id') || 'default';
               const linkVal = (inp.value || '').trim();
@@ -395,11 +428,10 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               lastFolderVal = folderVal;
               lastLinkVal = linkVal;
 
-              if (currentOrderId) {
-                // Save isolated record to Client Acceptance Verification table (Supabase & file sync)
+              for (const targetId of saveTargets) {
                 if (saveClientAcceptanceVerification) {
                   await saveClientAcceptanceVerification({
-                    order_id: currentOrderId,
+                    order_id: targetId,
                     event_id: evId,
                     folder_name: folderVal,
                     upload_link_path: linkVal,
@@ -409,33 +441,33 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                     consent_proof_verified: true
                   });
                 }
+              }
 
-                // Update isolated editor_assignments for this specific task
-                const matchingAssignments = (editorAssignments || []).filter(a =>
-                  (a.order_id === currentOrderId || a.production_id === currentProdId || a.production_id === currentOrderId) &&
-                  (a.event_id === evId || !a.event_id || evId === 'default' || (linkInputs.length === 1))
-                );
+              // Update isolated editor_assignments for this specific task
+              const matchingAssignments = (editorAssignments || []).filter(a =>
+                (candidateIds.includes(String(a.order_id || '').toLowerCase()) || candidateIds.includes(String(a.production_id || '').toLowerCase())) &&
+                (a.event_id === evId || !a.event_id || evId === 'default' || (linkInputs.length === 1))
+              );
 
-                for (const a of matchingAssignments) {
-                  const assignmentUpdates = {
-                    edited_drive_link: linkVal,
-                    Edited_Drive_Link: linkVal,
-                    final_edited_footage_link: linkVal,
-                    server_upload_folder_name: folderVal,
-                    server_upload_confirmed: true,
-                    server_upload_confirmed_at: new Date().toISOString(),
-                    server_upload_confirmed_by: 'Production Team'
-                  };
+              for (const a of matchingAssignments) {
+                const assignmentUpdates = {
+                  edited_drive_link: linkVal,
+                  Edited_Drive_Link: linkVal,
+                  final_edited_footage_link: linkVal,
+                  server_upload_folder_name: folderVal,
+                  server_upload_confirmed: true,
+                  server_upload_confirmed_at: new Date().toISOString(),
+                  server_upload_confirmed_by: 'Production Team'
+                };
 
-                  if (updateEditorAssignmentStatus) {
-                    await updateEditorAssignmentStatus(a.assignment_id, a.status as any, assignmentUpdates);
-                  }
-                  await pushUpdate('editor_assignments', 'assignment_id', a.assignment_id, assignmentUpdates);
+                if (updateEditorAssignmentStatus) {
+                  await updateEditorAssignmentStatus(a.assignment_id, a.status as any, assignmentUpdates);
                 }
+                await pushUpdate('editor_assignments', 'assignment_id', a.assignment_id, assignmentUpdates);
               }
             }
 
-            // 2. Update production record status to 'Client Acceptance' and write consolidated links
+            // 2. Update production record status to 'Client Acceptance' and write consolidated links to Supabase
             if (currentProdId && updateProduction) {
               const prodUpdates = {
                 editing_status: 'Client Acceptance' as any,
@@ -444,6 +476,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                 final_consolidated_drive_link: lastLinkVal,
                 edited_drive_link: lastLinkVal,
                 server_upload_folder_name: lastFolderVal,
+                server_upload_confirmed: true,
+                edited_folder_uploaded_to_server: true,
                 checklist_client_communication_proof: true,
                 checklist_customer_acceptance: true,
                 checklist_content_usage: true,
@@ -461,6 +495,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
               await updateProduction(currentProdId, prodUpdates);
               await pushUpdate('production', 'production_id', currentProdId, prodUpdates);
+              if (targetProd?.tracking_id) {
+                await pushUpdate('production', 'tracking_id', targetProd.tracking_id, prodUpdates);
+              }
             }
 
             // 3. Update order stage to 'Client Acceptance' in Supabase orders & leads tables

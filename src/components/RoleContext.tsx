@@ -1533,6 +1533,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Comprehensive numeric sanitization to ensure empty strings are NEVER sent to NUMERIC/DECIMAL/INT columns
     for (const key of Object.keys(clone)) {
+      if (key.toLowerCase() === 'whatsapp_number') {
+        const val = clone[key];
+        if (val === '' || val === null || val === undefined || val === 'NaN' || val === 'null' || val === 'undefined') {
+          clone[key] = null;
+        } else {
+          const digits = String(val).replace(/\D/g, '');
+          clone[key] = digits ? Number(digits) : null;
+        }
+        continue;
+      }
       if (isNumericColumnKey(key)) {
         const val = clone[key];
         const isPhone = key.includes('mobile') || key.includes('whatsapp') || key.includes('phone');
