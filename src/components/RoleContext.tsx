@@ -4905,8 +4905,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Set production state in Supabase
     try {
       if (updates.editing_status) {
-        updates.production_status = updates.editing_status;
-        updates.current_status = updates.editing_status;
+        if (!updates.production_status && targetProd?.production_status !== 'Client Acceptance') {
+          updates.production_status = updates.editing_status;
+        }
+        if (!updates.current_status && targetProd?.current_status !== 'Client Acceptance') {
+          updates.current_status = updates.editing_status;
+        }
       }
 
       if (targetProd) {
@@ -6601,7 +6605,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           let nextEditingStatus: EditingStatus | undefined = undefined;
           
           const terminalStatuses = ['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'];
-          const isTerminal = terminalStatuses.includes(baseStatus) || 
+          const isTerminal = (prodObj as any)?.current_status === 'Client Acceptance' ||
+                             (prodObj as any)?.production_status === 'Client Acceptance' ||
+                             prodObj?.editing_status === 'Client Acceptance' ||
+                             terminalStatuses.includes(baseStatus) || 
                              terminalStatuses.includes(prodObj?.editing_status || '') ||
                              terminalStatuses.includes((prodObj as any)?.production_status || '') ||
                              terminalStatuses.includes((prodObj as any)?.current_status || '');

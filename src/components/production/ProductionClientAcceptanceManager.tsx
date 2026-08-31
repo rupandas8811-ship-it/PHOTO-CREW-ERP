@@ -7,21 +7,27 @@ import { useRole } from '../RoleContext';
  * PRODUCTION DASHBOARD — CLIENT ACCEPTANCE VERIFICATION DECK MANAGER
  * 
  * SCOPE & SPECIFICATIONS:
- * 1. REQUIRED CHECKLIST VALIDATION:
- *    - Validates "Client Communication & Consent Proof" (checkbox, file/url, upload name).
- *    - Validates "Edited Folder Uploaded to Server" (checkbox, Folder Name, Final Edited Footage Link).
- *    - Shows front-level error messages if any item is missing and stops submission.
- * 2. SAVE CHECKLIST DATA FIRST:
- *    - Persists verification records to Supabase (production, editor_assignments, client_acceptance_verifications, orders, leads).
- * 3. UPDATE PRODUCTION STATUS & ORDER STAGE:
- *    - Updates Production record to 'Client Acceptance' across editing_status, production_status, current_status.
- *    - Updates related Order stage to 'Client Acceptance'.
- *    - Updates editor_assignments status to 'Client Acceptance' to prevent rank recalculation reverts.
- * 4. VERIFY DATABASE PERSISTENCE & REFRESH DATA:
- *    - Re-fetches and verifies Supabase returns 'Client Acceptance' status before closing modal.
- *    - Displays front-level error banner if database write fails.
- *    - Triggers refreshData() so status persists on re-open, page reload, and in Business Owner workflow.
- * 5. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file rule).
+ * 1. USE THE ACTUAL public.production RECORD:
+ *    - Identifies exact current production_id (no search by customer name or array index).
+ *    - Updates ONLY the exact Production record currently open.
+ * 2. SAVE ALL CLIENT ACCEPTANCE VALUES:
+ *    - Saves: checklist_client_communication_proof, client_communication_proof,
+ *      checklist_edited_files_uploaded, folder_name, final_edited_footage_link,
+ *      checklist_customer_acceptance, checklist_content_usage, checklist_footage_deleted_7_days,
+ *      checklist_payment_from_sales, client_approval_date.
+ * 3. SAVE PRODUCTION STATUS:
+ *    - Sets current_status = 'Client Acceptance' AND production_status = 'Client Acceptance'.
+ *    - Final status stored in database, treating current_status/production_status as authoritative.
+ * 4. PREVENT "EDITING COMPLETED" OVERWRITE:
+ *    - Ensures Client Acceptance priority over lower workflow stages.
+ * 5. SAVE FIRST, STATUS SECOND:
+ *    - Sequence: Click Approve -> Show Loading -> Validate -> Save -> Check DB -> Update Status -> Verify -> Refresh -> Success -> Close.
+ * 6. LOADING STATE:
+ *    - Button changes to "⟳ SAVING CLIENT ACCEPTANCE..." and is disabled until done.
+ * 7. ERROR BANNERS & VERIFICATION:
+ *    - Shows front-level error banner if validation or database save/verification fails.
+ *    - Modal remains open on error.
+ * 8. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file constraint).
  */
 
 // Helper to set input value programmatically and dispatch both input & change events for React state compatibility
@@ -56,47 +62,6 @@ const getClientAcceptanceProdFromFiber = (caModal: HTMLElement): any => {
   return null;
 };
 
-// Helper to extract eventGroup details directly from React Fiber for 100% accuracy
-const getEventGroupFromFiber = (el: HTMLElement): { eventId: string; eventName: string } | null => {
-  const key = Object.keys(el).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
-  if (!key) return null;
-
-  let fiber = (el as any)[key];
-  while (fiber) {
-    if (fiber.key && String(fiber.key).startsWith('manual_conf_')) {
-      const eventId = String(fiber.key).replace('manual_conf_', '');
-      
-      let eventName = eventId;
-      let curr = fiber;
-      while (curr) {
-        const p = curr.memoizedProps || curr.pendingProps;
-        if (p?.group?.eventName) {
-          eventName = p.group.eventName;
-          break;
-        }
-        curr = curr.return;
-      }
-      return { eventId, eventName };
-    }
-    fiber = fiber.return;
-  }
-  return null;
-};
-
-// Extract all valid identifiers for a production item to prevent lookup mismatches
-const getAllCandidateOrderIds = (targetProd: any, fallbackId?: string): string[] => {
-  const set = new Set<string>();
-  if (fallbackId) set.add(String(fallbackId).trim().toLowerCase());
-  if (targetProd) {
-    if (targetProd.production_id) set.add(String(targetProd.production_id).trim().toLowerCase());
-    if (targetProd.tracking_id) set.add(String(targetProd.tracking_id).trim().toLowerCase());
-    if (targetProd.order_id) set.add(String(targetProd.order_id).trim().toLowerCase());
-    if (targetProd.lead_id) set.add(String(targetProd.lead_id).trim().toLowerCase());
-    if (targetProd.id) set.add(String(targetProd.id).trim().toLowerCase());
-  }
-  return Array.from(set).filter(Boolean);
-};
-
 // Front-level error banner helpers
 const showFrontLevelError = (containerEl: HTMLElement, title: string, items: string[]) => {
   let errorBox = containerEl.querySelector<HTMLElement>('.ca-front-error-banner');
@@ -111,7 +76,6 @@ const showFrontLevelError = (containerEl: HTMLElement, title: string, items: str
     }
   }
 
-  // Deduplicate item messages
   const uniqueItems = Array.from(new Set(items));
 
   errorBox.innerHTML = `
@@ -156,23 +120,15 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     orders,
     leads,
     editorAssignments,
-    clientAcceptanceVerifications,
     saveClientAcceptanceVerification,
     updateEditorAssignmentStatus,
     updateProduction,
     updateOrderStage,
     pushUpdate,
-    pushUpsert,
     refreshData
   } = useRole();
 
-  // State to hold event-isolated links: Record<eventId, linkUrl>
-  const [eventLinks, setEventLinks] = useState<Record<string, string>>({});
-  const eventLinksRef = useRef<Record<string, string>>({});
-  eventLinksRef.current = eventLinks;
-
-  const activeOrderIdRef = useRef<string>('');
-  const activeProdIdRef = useRef<string>('');
+  const activeExactProdIdRef = useRef<string>('');
   const lastModalRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -188,254 +144,120 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       });
 
       if (!caModal) {
-        activeOrderIdRef.current = '';
-        activeProdIdRef.current = '';
+        activeExactProdIdRef.current = '';
         lastModalRef.current = null;
         return;
       }
 
-      // Check if this is a newly opened modal session
-      if (lastModalRef.current !== caModal) {
-        lastModalRef.current = caModal;
-        setEventLinks({});
-        eventLinksRef.current = {};
-      }
-
-      // Extract Order / Production ID from Fiber FIRST
+      // Identify exact production record from fiber or header element
       const fiberProd = getClientAcceptanceProdFromFiber(caModal);
-
-      // Extract Order / Production ID from header or badges or fiber
       const headerTitle = caModal.querySelector('h3');
       const headerText = headerTitle?.textContent || caModal.textContent || '';
-      const prodIdMatches = Array.from(headerText.matchAll(/(PRD-[A-Za-z0-9_-]+|ORD-[A-Za-z0-9_-]+|TRK-[A-Za-z0-9_-]+|OR[0-9]{2,6}|LD[0-9]{2,6})/gi)).map(m => m[1]);
-      const matchedHeaderId = prodIdMatches[0] || fiberProd?.production_id || fiberProd?.order_id || fiberProd?.tracking_id || '';
+      
+      const prodIdMatches = Array.from(headerText.matchAll(/PRD-[A-Za-z0-9_-]+/gi)).map(m => m[0]);
+      const matchedHeaderProdId = prodIdMatches[0] || fiberProd?.production_id || '';
 
-      // Match target production record
-      const targetProd = fiberProd || (production || []).find(p =>
-        p.production_id === matchedHeaderId ||
-        (p as any).order_id === matchedHeaderId ||
-        p.tracking_id === matchedHeaderId ||
-        (matchedHeaderId && (
-          p.production_id?.toLowerCase() === matchedHeaderId.toLowerCase() ||
-          p.tracking_id?.toLowerCase() === matchedHeaderId.toLowerCase() ||
-          String((p as any).order_id || '').toLowerCase() === matchedHeaderId.toLowerCase() ||
-          String((p as any).lead_id || '').toLowerCase() === matchedHeaderId.toLowerCase()
-        ))
-      ) || (production || []).find(p => {
-        const custName = (p as any).customer_name || '';
-        return custName && headerText.includes(custName);
+      const exactTargetProd = fiberProd || (production || []).find(p =>
+        p.production_id === matchedHeaderProdId ||
+        (matchedHeaderProdId && p.production_id?.toLowerCase() === matchedHeaderProdId.toLowerCase())
+      ) || (production || []).find(p => p.production_id && headerText.includes(p.production_id));
+
+      const exactProdId = exactTargetProd?.production_id || matchedHeaderProdId;
+      if (!exactProdId) return;
+
+      if (lastModalRef.current !== caModal || activeExactProdIdRef.current !== exactProdId) {
+        lastModalRef.current = caModal;
+        activeExactProdIdRef.current = exactProdId;
+      }
+
+      // Hide event date inputs if present
+      const dateInputs = Array.from(caModal.querySelectorAll<HTMLInputElement>('input[type="date"], input[id*="date"]'));
+      dateInputs.forEach(dateInput => {
+        dateInput.required = false;
+        dateInput.removeAttribute('required');
+        const formGroup = dateInput.closest('div.space-y-1, div:has(> label)') as HTMLElement | null;
+        if (formGroup) {
+          formGroup.style.setProperty('display', 'none', 'important');
+        }
       });
 
-      const orderId = (targetProd as any)?.order_id || targetProd?.tracking_id || targetProd?.production_id || matchedHeaderId;
-      const prodId = targetProd?.production_id || matchedHeaderId;
+      // Fetch saved values from exactTargetProd
+      const savedFolderName = exactTargetProd?.folder_name || exactTargetProd?.server_upload_folder_name || (exactTargetProd as any)?.server_path || '';
+      const savedLink = exactTargetProd?.final_edited_footage_link || exactTargetProd?.edited_drive_link || (exactTargetProd as any)?.final_consolidated_drive_link || '';
+      const savedUploadName = exactTargetProd?.upload_name || exactTargetProd?.proof_name || exactTargetProd?.client_communication_proof_name || '';
 
-      if (orderId) activeOrderIdRef.current = orderId;
-      if (prodId) activeProdIdRef.current = prodId;
-
-      const candidateIds = getAllCandidateOrderIds(targetProd, matchedHeaderId);
-
-      // Find all event cards under "Edited Folder Upload Confirmation" / "Edited Folder Uploaded to Server"
+      // AUTOFILL 1: CLIENT COMMUNICATION & CONSENT PROOF
       const allLabels = Array.from(caModal.querySelectorAll<HTMLElement>('label'));
+      const proofLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
+      const proofCheckbox = proofLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || proofLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      
+      if (exactTargetProd?.checklist_client_communication_proof && proofCheckbox && !proofCheckbox.checked) {
+        proofCheckbox.click();
+      }
+
+      const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
+      if (proofNameInput && !proofNameInput.value && savedUploadName) {
+        setTextInputValue(proofNameInput, savedUploadName);
+      }
+
+      // AUTOFILL 2: EDITED FOLDER UPLOADED TO SERVER CHECKBOX & INPUTS
       const uploadCheckboxes = allLabels.filter(l => {
         const t = (l.textContent || '').toLowerCase();
         return t.includes('edited folder uploaded to server') || t.includes('edited folder uploaded in server');
       });
 
-      uploadCheckboxes.forEach((uploadLabel, idx) => {
-        const eventCard = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3') as HTMLElement | null;
-        if (!eventCard) return;
-
-        // Determine event identity with high-precision React Fiber traversal, fallback to regex mapping
-        const fiberDetails = getEventGroupFromFiber(eventCard);
-        let eventName = fiberDetails?.eventName || '';
-        let eventId = fiberDetails?.eventId || '';
-
-        if (!eventId) {
-          const eventCardText = eventCard.textContent || '';
-          const eventNameMatch = eventCardText.match(/confirm upload for:\s*([^\n\r]+)/i) || eventCardText.match(/event:\s*([^\n\r]+)/i);
-          eventName = eventNameMatch ? eventNameMatch[1].trim() : `Event ${idx + 1}`;
-
-          // Find matching event ID from lead or order events
-          const matchedLead = (leads || []).find(l => candidateIds.includes(String(l.id || '').toLowerCase()) || candidateIds.includes(String((l as any).order_id || '').toLowerCase()) || candidateIds.includes(String((l as any).lead_id || '').toLowerCase()) || (targetProd?.lead_id && String(l.id || '').toLowerCase() === String(targetProd.lead_id).toLowerCase()));
-          const matchedOrder = (orders || []).find(o => candidateIds.includes(String(o.order_id || '').toLowerCase()) || candidateIds.includes(String((o as any).id || '').toLowerCase()) || candidateIds.includes(String((o as any).lead_id || '').toLowerCase()));
-          const eventsList = (matchedLead?.events && Array.isArray(matchedLead.events)) ? matchedLead.events : (matchedOrder?.events && Array.isArray(matchedOrder.events) ? matchedOrder.events : []);
-
-          const matchedEv = eventsList.find((ev: any, eIdx: number) =>
-            ev.id === eventName ||
-            ev.event_id === eventName ||
-            ev.event_name === eventName ||
-            ev.event_type === eventName ||
-            `Event ${eIdx + 1}` === eventName ||
-            eIdx === idx
-          );
-
-          eventId = String(matchedEv?.id || matchedEv?.event_id || (eventsList[idx] as any)?.id || (eventsList[idx] as any)?.event_id || `EV-${idx + 1}`);
-        }
-
-        // 1. REMOVE EVENT DATE: Hide "Event Date *" section and remove required constraint
-        const dateInputs = Array.from(eventCard.querySelectorAll<HTMLInputElement>('input[type="date"], input[id*="date"]'));
-        dateInputs.forEach(dateInput => {
-          dateInput.required = false;
-          dateInput.removeAttribute('required');
-          const formGroup = dateInput.closest('div.space-y-1, div:has(> label)') as HTMLElement | null;
-          if (formGroup) {
-            formGroup.style.setProperty('display', 'none', 'important');
-          }
-        });
-
-        // Also check if any label with "Event Date" exists and hide its parent
-        const formLabels = Array.from(eventCard.querySelectorAll<HTMLElement>('label'));
-        formLabels.forEach(lbl => {
-          const lText = (lbl.textContent || '').toLowerCase();
-          if (lText.includes('event date') && !lText.includes('edited folder')) {
-            const group = lbl.closest('div.space-y-1, div') as HTMLElement | null;
-            if (group && group !== eventCard) {
-              group.style.setProperty('display', 'none', 'important');
-            }
-          }
-        });
-
-        // 2. FETCH PREVIOUS SAVED VALUES FOR AUTOFILL WITH COMPREHENSIVE IDENTIFIER MATCHING
-        const cleanEvt = String(eventId || 'default').trim().toLowerCase();
-
-        // Match saved verification across candidate order IDs and event identifiers
-        const orderVerifs = (clientAcceptanceVerifications || []).filter(v => {
-          const vOrd = String(v.order_id || '').trim().toLowerCase();
-          return candidateIds.includes(vOrd);
-        });
-
-        const savedVerif = orderVerifs.find(v => {
-          const vEvt = String(v.event_id || 'default').trim().toLowerCase();
-          return vEvt === cleanEvt || vEvt === eventName.toLowerCase() || vEvt === 'default' || cleanEvt === 'default';
-        }) || orderVerifs[0]; // Fallback to first verif for single-event orders
-
-        const matchingAssignment = (editorAssignments || []).find(a =>
-          (candidateIds.includes(String(a.order_id || '').toLowerCase()) || candidateIds.includes(String(a.production_id || '').toLowerCase())) &&
-          (a.event_id === eventId || a.event_id === eventName || !a.event_id || cleanEvt === 'default')
-        );
-
-        let savedFolderName = targetProd?.folder_name || targetProd?.server_upload_folder_name || (targetProd as any)?.server_path || savedVerif?.folder_name || matchingAssignment?.server_upload_folder_name || '';
-        let savedLink = targetProd?.final_edited_footage_link || targetProd?.edited_drive_link || savedVerif?.final_edited_footage_link || savedVerif?.upload_link_path || matchingAssignment?.edited_drive_link || (targetProd as any)?.final_consolidated_drive_link || '';
-
-        // 2A. CHECKLIST ITEM 1: CLIENT COMMUNICATION & CONSENT PROOF (INDEPENDENT)
-        const proofLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
-        const proofCheckbox = proofLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || proofLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-        const isProofSaved = Boolean(
-          savedVerif?.consent_proof_verified ||
-          savedVerif?.client_communication_consent_proof ||
-          targetProd?.client_communication_proof ||
-          targetProd?.checklist_client_communication_proof
-        );
-        if (isProofSaved && proofCheckbox && !proofCheckbox.checked) {
-          proofCheckbox.click();
-        }
-
-        // Remove required asterisk on Upload Name label if present
-        const caLabels = Array.from(caModal.querySelectorAll<HTMLElement>('label'));
-        caLabels.forEach(lbl => {
-          if ((lbl.textContent || '').toLowerCase().includes('upload name')) {
-            const asterisk = lbl.querySelector('span.text-rose-500, span.text-red-500');
-            if (asterisk) asterisk.remove();
-          }
-        });
-
-        // Autofill Upload Name if previously saved
-        const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
-        if (proofNameInput && !proofNameInput.value && (savedVerif?.proof_file_name || targetProd?.upload_name || targetProd?.proof_name)) {
-          setTextInputValue(proofNameInput, savedVerif?.proof_file_name || targetProd?.upload_name || targetProd?.proof_name || '');
-        }
-
-        // 2B. CHECKLIST ITEM 2: EDITED FOLDER UPLOADED TO SERVER (INDEPENDENT)
-        const isFolderUploadConfirmed = Boolean(
+      uploadCheckboxes.forEach((uploadLabel) => {
+        const eventCard = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3') as HTMLElement | null || caModal;
+        
+        const isFolderUploadSaved = Boolean(
           savedFolderName ||
           savedLink ||
-          (savedVerif as any)?.edited_folder_uploaded_to_server ||
-          matchingAssignment?.server_upload_confirmed ||
-          (matchingAssignment as any)?.edited_folder_uploaded_to_server ||
-          targetProd?.server_upload_confirmed ||
-          (targetProd as any)?.edited_folder_uploaded_to_server ||
-          targetProd?.checklist_edited_files_uploaded ||
-          targetProd?.server_upload_validated ||
-          targetProd?.editing_status === 'Client Acceptance' ||
-          (targetProd as any)?.production_status === 'Client Acceptance'
+          exactTargetProd?.checklist_edited_files_uploaded ||
+          exactTargetProd?.server_upload_confirmed ||
+          exactTargetProd?.server_upload_validated ||
+          exactTargetProd?.editing_status === 'Client Acceptance' ||
+          (exactTargetProd as any)?.production_status === 'Client Acceptance'
         );
 
-        // Check the "Edited Folder Uploaded to Server" checkbox if there's saved data for folder upload
         const checkbox = eventCard.querySelector<HTMLInputElement>('input[type="checkbox"]');
-        if (isFolderUploadConfirmed && checkbox && !checkbox.checked) {
+        if (isFolderUploadSaved && checkbox && !checkbox.checked) {
           checkbox.click();
         }
 
-        // KEEP FOLDER NAME: Ensure folder name grid layout looks clean
-        const folderInput = eventCard.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]') as HTMLInputElement | null;
-        if (folderInput) {
-          const folderGroup = folderInput.closest('div.space-y-1, div:has(> label)') as HTMLElement | null;
-          if (folderGroup) {
-            folderGroup.style.removeProperty('display');
-          }
-
-          // Fill previous folder name and dispatch input event to sync with React parent state
-          if (savedFolderName && folderInput.value !== savedFolderName) {
-            setTextInputValue(folderInput, savedFolderName);
-          }
+        const folderInput = eventCard.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
+        if (folderInput && savedFolderName && folderInput.value !== savedFolderName) {
+          setTextInputValue(folderInput, savedFolderName);
         }
 
-        // 3 & 4. ADD FINAL EDITED FOOTAGE LINK: Injected inside event card with strict event data isolation
-        const gridContainer = eventCard.querySelector('div.grid') as HTMLElement | null;
+        // Final edited footage link input
+        const gridContainer = eventCard.querySelector('div.grid') as HTMLElement | null || eventCard;
         if (gridContainer) {
-          gridContainer.classList.remove('ca-folder-single-col');
-          gridContainer.style.setProperty('grid-template-columns', 'repeat(auto-fit, minmax(240px, 1fr))', 'important');
-
-          let linkWrapper = gridContainer.querySelector(`.ca-final-footage-link-group[data-event-id="${eventId}"]`) as HTMLElement | null;
+          let linkWrapper = gridContainer.querySelector('.ca-final-footage-link-group') as HTMLElement | null;
           if (!linkWrapper) {
-            const oldGroup = gridContainer.querySelector('.ca-final-footage-link-group');
-            if (oldGroup && oldGroup.getAttribute('data-event-id') !== eventId) {
-              oldGroup.remove();
-            }
-
             linkWrapper = document.createElement('div');
             linkWrapper.className = 'space-y-1 ca-final-footage-link-group';
-            linkWrapper.setAttribute('data-event-id', eventId);
-
-            if (savedLink) {
-              setEventLinks(prev => ({ ...prev, [eventId]: savedLink }));
-            }
-
             linkWrapper.innerHTML = `
               <label class="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
                 Final Edited Footage Link <span class="text-rose-500">*</span>
               </label>
               <input
                 type="url"
-                data-event-id="${eventId}"
                 placeholder="Paste final edited footage URL (e.g. Google Drive link)"
                 value="${savedLink.replace(/"/g, '&quot;')}"
                 class="ca-final-footage-link-input w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
               />
             `;
-
             gridContainer.appendChild(linkWrapper);
-
-            const inputEl = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
-            if (inputEl) {
-              inputEl.addEventListener('input', (e) => {
-                const val = (e.target as HTMLInputElement).value;
-                setEventLinks(prev => ({ ...prev, [eventId]: val }));
-              });
-            }
           } else {
             const inputEl = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
-            if (inputEl && document.activeElement !== inputEl) {
-              const currentVal = eventLinksRef.current[eventId] || savedLink || '';
-              if (inputEl.value !== currentVal && currentVal) {
-                inputEl.value = currentVal;
-              }
+            if (inputEl && document.activeElement !== inputEl && savedLink && inputEl.value !== savedLink) {
+              inputEl.value = savedLink;
             }
           }
         }
       });
 
-      // 5. Intercept "Approve Client Acceptance" form submission to ensure Supabase persistence & strict validation
+      // INTERCEPT FORM SUBMISSION
       const form = caModal.querySelector('form');
       if (form && !form.dataset.caEnhanced) {
         form.dataset.caEnhanced = 'true';
@@ -445,105 +267,69 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           e.stopPropagation();
           e.stopImmediatePropagation();
 
-          const currentOrderId = activeOrderIdRef.current || orderId;
-          const currentProdId = activeProdIdRef.current || prodId;
+          const targetProdId = activeExactProdIdRef.current || exactProdId;
 
           const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
           const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
           if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="animate-spin inline-block mr-1">⟳</span> SAVING CLIENT ACCEPTANCE TO DATABASE...';
+            submitBtn.innerHTML = '<span class="animate-spin inline-block mr-1.5">⟳</span> SAVING CLIENT ACCEPTANCE...';
           }
 
           try {
             clearFrontLevelError(form);
 
-            // COLLECT ALL MISSING REQUIRED CHECKLIST ITEMS & FIELDS
             const missingItems: string[] = [];
 
-            // Check Client Communication & Consent Proof
-            const proofLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
-            const proofCheckbox = proofLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || proofLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-            const isConsentProofChecked = proofCheckbox ? proofCheckbox.checked : false;
+            // 1. Validate Client Communication & Consent Proof
+            const pLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
+            const pCheckbox = pLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || pLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const isConsentChecked = pCheckbox ? pCheckbox.checked : false;
 
-            if (!isConsentProofChecked) {
-              missingItems.push('Client Communication & Consent Proof (Checkbox required)');
+            if (!isConsentChecked) {
+              missingItems.push('Client Communication & Consent Proof');
             }
 
             const proofImg = caModal.querySelector<HTMLImageElement>('img[alt*="Proof"], img[alt*="Communication"]');
             const proofLink = caModal.querySelector<HTMLAnchorElement>('a[href*="storage"], a[href*="firebasestorage"], a[href*="proof"], a[href*="http"]');
-            
-            // Match saved verification
-            const orderVerifs = (clientAcceptanceVerifications || []).filter(v => {
-              const vOrd = String(v.order_id || '').trim().toLowerCase();
-              return candidateIds.includes(vOrd);
-            });
-            const savedVerif = orderVerifs[0];
-
-            let caCommunicationProofVal = proofImg?.src || proofLink?.href || targetProd?.client_communication_proof || savedVerif?.client_communication_consent_proof || '';
-
             const proofNameSpan = caModal.querySelector<HTMLElement>('span.truncate');
             const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
-            let caUploadNameVal = proofNameInput?.value || proofNameSpan?.textContent || targetProd?.upload_name || savedVerif?.proof_file_name || '';
 
-            if ((!caCommunicationProofVal || !caCommunicationProofVal.trim()) && isConsentProofChecked) {
-              caCommunicationProofVal = caUploadNameVal || 'Verified Consent Proof';
+            let caCommunicationProofVal = (proofImg?.src || proofLink?.href || exactTargetProd?.client_communication_proof || '').trim();
+            let caUploadNameVal = (proofNameInput?.value || proofNameSpan?.textContent || exactTargetProd?.upload_name || 'Verified Consent Proof').trim();
+
+            if (!caCommunicationProofVal && isConsentChecked) {
+              caCommunicationProofVal = caUploadNameVal;
             }
 
-            if (!caCommunicationProofVal || !caCommunicationProofVal.trim()) {
-              missingItems.push('Client Communication & Consent Proof (Proof file / document required)');
+            if (!caCommunicationProofVal) {
+              missingItems.push('Client Communication & Consent Proof File');
             }
 
-            // Check "Edited Folder Uploaded to Server" for each event/task card
-            const linkInputs = Array.from(caModal.querySelectorAll<HTMLInputElement>('input.ca-final-footage-link-input'));
+            // 2. Validate Edited Folder Uploaded to Server
+            const folderInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
+            const linkInput = caModal.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
+            const folderCheckboxes = allLabels.filter(l => {
+              const t = (l.textContent || '').toLowerCase();
+              return t.includes('edited folder uploaded to server') || t.includes('edited folder uploaded in server');
+            });
+            const folderCb = folderCheckboxes[0]?.querySelector<HTMLInputElement>('input[type="checkbox"]') || folderCheckboxes[0]?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const isFolderChecked = folderCb ? folderCb.checked : false;
 
-            if (linkInputs.length > 0) {
-              linkInputs.forEach((inp, i) => {
-                const card = inp.closest('div.p-3, div.rounded-xl, div.space-y-3');
-                const fInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-                const folderVal = fInput ? (fInput.value || '').trim() : '';
-                const linkVal = (inp.value || '').trim();
+            const folderVal = folderInput ? (folderInput.value || '').trim() : '';
+            const linkVal = linkInput ? (linkInput.value || '').trim() : '';
 
-                const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-                const isFolderUploadChecked = checkbox ? checkbox.checked : false;
-
-                if (!isFolderUploadChecked) {
-                  missingItems.push(`Edited Folder Uploaded to Server (Checkbox must be checked)`);
-                }
-                if (!folderVal) {
-                  missingItems.push(`Folder Name (Folder Name is required)`);
-                }
-                if (!linkVal) {
-                  missingItems.push(`Final Edited Footage Link (Footage URL is required)`);
-                }
-              });
-            } else {
-              const uploadCheckboxes = allLabels.filter(l => {
-                const t = (l.textContent || '').toLowerCase();
-                return t.includes('edited folder uploaded to server') || t.includes('edited folder uploaded in server');
-              });
-
-              if (uploadCheckboxes.length === 0) {
-                missingItems.push('Edited Folder Uploaded to Server');
-                missingItems.push('Folder Name');
-                missingItems.push('Final Edited Footage Link');
-              } else {
-                uploadCheckboxes.forEach((uploadLabel) => {
-                  const card = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3');
-                  const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-                  const folderInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-                  
-                  const isChecked = checkbox ? checkbox.checked : false;
-                  const folderVal = folderInput ? (folderInput.value || '').trim() : '';
-
-                  if (!isChecked) missingItems.push(`Edited Folder Uploaded to Server`);
-                  if (!folderVal) missingItems.push(`Folder Name`);
-                  missingItems.push(`Final Edited Footage Link`);
-                });
-              }
+            if (!isFolderChecked) {
+              missingItems.push('Edited Folder Uploaded to Server');
+            }
+            if (!folderVal) {
+              missingItems.push('Folder Name');
+            }
+            if (!linkVal) {
+              missingItems.push('Final Edited Footage Link');
             }
 
-            // STOP APPROVAL PROCESS IF ANY REQUIRED ITEM IS MISSING
+            // STOP IF MISSING ANY REQUIRED ITEM
             if (missingItems.length > 0) {
               showFrontLevelError(form, 'CLIENT ACCEPTANCE CANNOT BE APPROVED', missingItems);
               if (submitBtn) {
@@ -553,245 +339,171 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               return;
             }
 
-            let lastFolderVal = '';
-            let lastLinkVal = '';
+            // Read state of additional checkboxes to preserve actual values
+            const custAccLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('customer acceptance'));
+            const custAccCb = custAccLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const caVerifyCustomerAcceptance = custAccCb ? custAccCb.checked : Boolean(exactTargetProd?.checklist_customer_acceptance);
 
-            const candidateOrderIds = new Set<string>();
-            if (currentOrderId) candidateOrderIds.add(currentOrderId);
-            if (currentProdId) candidateOrderIds.add(currentProdId);
-            if (targetProd?.order_id) candidateOrderIds.add(targetProd.order_id);
-            if (targetProd?.tracking_id) candidateOrderIds.add(targetProd.tracking_id);
-            if (targetProd?.lead_id) candidateOrderIds.add(targetProd.lead_id);
-            if (matchedHeaderId) candidateOrderIds.add(matchedHeaderId);
+            const contentUsageLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('content usage'));
+            const contentUsageCb = contentUsageLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const caContentUsageConfirmation = contentUsageCb ? contentUsageCb.checked : Boolean(exactTargetProd?.checklist_content_usage);
 
-            (orders || []).forEach(o => {
-              if (Array.from(candidateOrderIds).some(id => id.toLowerCase() === String(o.order_id || '').toLowerCase() || id.toLowerCase() === String(o.lead_id || '').toLowerCase())) {
-                if (o.order_id) candidateOrderIds.add(o.order_id);
-                if (o.lead_id) candidateOrderIds.add(o.lead_id);
-              }
-            });
+            const footageDelLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('deleted after 7 days') || (l.textContent || '').toLowerCase().includes('footage deleted'));
+            const footageDelCb = footageDelLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const caFootageDeleted7Days = footageDelCb ? footageDelCb.checked : Boolean(exactTargetProd?.checklist_footage_deleted_7_days);
 
-            const saveTargets = Array.from(candidateOrderIds).filter(Boolean);
+            const paymentSalesLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('payment from sales'));
+            const paymentSalesCb = paymentSalesLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const caVerifyPaymentSales = paymentSalesCb ? paymentSalesCb.checked : Boolean(exactTargetProd?.checklist_payment_from_sales);
 
-            // 1. SAVE CHECKLIST DATA FIRST TO SUPABASE
-            for (const inp of linkInputs) {
-              const evId = inp.getAttribute('data-event-id') || 'default';
-              const linkVal = (inp.value || '').trim();
+            const clientApprovalDate = new Date().toISOString();
 
-              const card = inp.closest('div.p-3, div.rounded-xl, div.space-y-3');
-              const fInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-              const folderVal = fInput ? (fInput.value || '').trim() : '';
-
-              lastFolderVal = folderVal;
-              lastLinkVal = linkVal;
-
-              for (const targetId of saveTargets) {
-                if (saveClientAcceptanceVerification) {
-                  await saveClientAcceptanceVerification({
-                    order_id: targetId,
-                    event_id: evId,
-                    folder_name: folderVal,
-                    upload_link_path: linkVal,
-                    final_edited_footage_link: linkVal,
-                    client_communication_consent_proof: caCommunicationProofVal,
-                    proof_file_name: caUploadNameVal,
-                    consent_proof_verified: true,
-                    edited_folder_uploaded_to_server: true
-                  } as any);
-                }
-              }
-
-              // Update isolated editor_assignments with 'Client Acceptance' status to prevent rank recalculation revert
-              const matchingAssignments = (editorAssignments || []).filter(a =>
-                saveTargets.some(tId => tId.toLowerCase() === String(a.order_id || '').toLowerCase() || tId.toLowerCase() === String(a.production_id || '').toLowerCase()) &&
-                (a.event_id === evId || !a.event_id || evId === 'default' || (linkInputs.length === 1))
-              );
-              for (const a of matchingAssignments) {
-                const assignmentUpdates = {
-                  status: 'Client Acceptance',
-                  edited_drive_link: linkVal,
-                  Edited_Drive_Link: linkVal,
-                  final_edited_footage_link: linkVal,
-                  server_upload_folder_name: folderVal,
-                  folder_name: folderVal,
-                  server_upload_confirmed: true,
-                  edited_folder_uploaded_to_server: true,
-                  server_upload_confirmed_at: new Date().toISOString(),
-                  server_upload_confirmed_by: "Production Team"
-                };
-                await pushUpdate("editor_assignments", "assignment_id", a.assignment_id, assignmentUpdates);
-              }
-            }
-
-            // 2. UPDATE PRODUCTION RECORD STATUS TO 'Client Acceptance' IN SUPABASE public.production
-            const prodUpdates = {
-              editing_status: 'Client Acceptance',
-              production_status: 'Client Acceptance',
-              current_status: 'Client Acceptance',
-              status: 'Client Acceptance',
-              client_approval_date: new Date().toISOString(),
-              final_consolidated_drive_link: lastLinkVal,
-              edited_drive_link: lastLinkVal,
-              final_edited_footage_link: lastLinkVal,
-              upload_link_path: lastLinkVal,
-              server_upload_folder_name: lastFolderVal,
-              folder_name: lastFolderVal,
-              server_upload_confirmed: true,
-              edited_folder_uploaded_to_server: true,
+            // PREPARE DATABASE PAYLOAD FOR public.production RECORD ONLY
+            const prodPayload = {
               checklist_client_communication_proof: true,
-              checklist_customer_acceptance: true,
-              checklist_content_usage: true,
-              checklist_footage_deleted_7_days: true,
-              checklist_payment_from_sales: true,
-              checklist_edited_files_uploaded: true,
-              server_upload_validated: true,
               client_communication_proof: caCommunicationProofVal,
               customer_communication_proof: caCommunicationProofVal,
               proof_url: caCommunicationProofVal,
               upload_name: caUploadNameVal,
               proof_name: caUploadNameVal,
               client_communication_proof_name: caUploadNameVal,
-              remarks: `Client Acceptance Approved on ${new Date().toLocaleString()}. Folder: ${lastFolderVal}, Footage Link: ${lastLinkVal}`
+
+              checklist_edited_files_uploaded: true,
+              server_upload_confirmed: true,
+              server_upload_validated: true,
+              folder_name: folderVal,
+              server_upload_folder_name: folderVal,
+              final_edited_footage_link: linkVal,
+              edited_drive_link: linkVal,
+              final_consolidated_drive_link: linkVal,
+              upload_link_path: linkVal,
+
+              checklist_customer_acceptance: caVerifyCustomerAcceptance,
+              checklist_content_usage: caContentUsageConfirmation,
+              checklist_footage_deleted_7_days: caFootageDeleted7Days,
+              checklist_payment_from_sales: caVerifyPaymentSales,
+
+              client_approval_date: clientApprovalDate,
+
+              // Authoritative Status Updates
+              current_status: 'Client Acceptance',
+              production_status: 'Client Acceptance',
+              editing_status: 'Client Acceptance',
+              status: 'Client Acceptance',
+              remarks: `Client Acceptance Approved on ${new Date().toLocaleString()}. Folder: ${folderVal}, Link: ${linkVal}`
             };
 
-            const matchingProds = (production || []).filter(p => {
-              const pCandidateIds = getAllCandidateOrderIds(p);
-              return pCandidateIds.some(id => saveTargets.map(t => t.toLowerCase()).includes(id.toLowerCase()));
-            });
+            // 1. SAVE TO public.production FOR EXACT production_id ONLY
+            const resProd = await pushUpdate('production', 'production_id', targetProdId, prodPayload);
+            if (!resProd?.success && resProd?.error) {
+              throw new Error(`Supabase error saving production record (${targetProdId}): ${resProd.error}`);
+            }
 
-            // Perform direct database updates and upserts via server proxy and context
-            let prodSaveError: string | null = null;
-
-            if (matchingProds.length > 0) {
-              for (const mP of matchingProds) {
-                if (mP.production_id && updateProduction) {
-                  try { await updateProduction(mP.production_id, prodUpdates); } catch (pErr: any) { console.warn("[updateProduction warning]:", pErr); }
-                }
-                const res1 = await pushUpdate('production', 'production_id', mP.production_id, prodUpdates);
-                if (!res1?.success && res1?.error) prodSaveError = res1.error;
-
-                if (mP.tracking_id) {
-                  await pushUpdate('production', 'tracking_id', mP.tracking_id, prodUpdates);
-                }
-
-                // Ensure record is upserted into Supabase production table if not already present
-                const upsertPayload = {
-                  production_id: mP.production_id,
-                  tracking_id: mP.tracking_id || mP.production_id,
-                  order_id: mP.order_id || mP.production_id,
-                  lead_id: mP.lead_id || mP.production_id,
-                  customer_name: mP.customer_name || 'Valued Client',
-                  ...prodUpdates
-                };
-                const resUpsert = await pushUpsert('production', upsertPayload);
-                if (!resUpsert?.success && resUpsert?.error) prodSaveError = resUpsert.error;
-              }
-            } else {
-              for (const tId of saveTargets) {
-                if (updateProduction) {
-                  try { await updateProduction(tId, prodUpdates); } catch (_) {}
-                }
-                const res = await pushUpdate('production', 'production_id', tId, prodUpdates);
-                if (!res?.success && res?.error) prodSaveError = res.error;
-                await pushUpdate('production', 'tracking_id', tId, prodUpdates);
-                await pushUpdate('production', 'order_id', tId, prodUpdates);
-                await pushUpdate('production', 'lead_id', tId, prodUpdates);
-
-                // Upsert guaranteed full production row in Supabase production table
-                const pId = tId.startsWith('PRD-') ? tId : `PRD-${tId}`;
-                const upsertPayload = {
-                  production_id: pId,
-                  tracking_id: tId,
-                  order_id: tId,
-                  lead_id: tId,
-                  customer_name: targetProd?.customer_name || 'Valued Client',
-                  ...prodUpdates
-                };
-                const resUpsert = await pushUpsert('production', upsertPayload);
-                if (!resUpsert?.success && resUpsert?.error) prodSaveError = resUpsert.error;
+            if (updateProduction) {
+              try {
+                await updateProduction(targetProdId, prodPayload);
+              } catch (uErr: any) {
+                console.warn('[updateProduction state update warning]:', uErr);
               }
             }
 
-            if (prodSaveError) {
-              throw new Error(`Database production save failed: ${prodSaveError}`);
+            // 2. PERSIST VERIFICATION RECORD IF HOOK AVAILABLE
+            const orderId = exactTargetProd?.order_id || exactTargetProd?.tracking_id || targetProdId;
+            if (saveClientAcceptanceVerification) {
+              try {
+                await saveClientAcceptanceVerification({
+                  order_id: orderId,
+                  event_id: 'default',
+                  folder_name: folderVal,
+                  upload_link_path: linkVal,
+                  final_edited_footage_link: linkVal,
+                  client_communication_consent_proof: caCommunicationProofVal,
+                  proof_file_name: caUploadNameVal,
+                  consent_proof_verified: true,
+                  edited_folder_uploaded_to_server: true
+                } as any);
+              } catch (vErr) {
+                console.warn('[saveClientAcceptanceVerification warning]:', vErr);
+              }
             }
 
-            // 3. UPDATE RELATED ORDERS AND LEADS STAGE TO 'Client Acceptance' IN SUPABASE
-            for (const id of saveTargets) {
+            // 3. UPDATE RELATED EDITOR ASSIGNMENTS STATUS TO 'Client Acceptance'
+            const matchingAssignments = (editorAssignments || []).filter(a =>
+              a.production_id === targetProdId || (orderId && a.order_id === orderId)
+            );
+            for (const a of matchingAssignments) {
+              try {
+                await pushUpdate('editor_assignments', 'assignment_id', a.assignment_id, {
+                  status: 'Client Acceptance',
+                  edited_drive_link: linkVal,
+                  final_edited_footage_link: linkVal,
+                  server_upload_folder_name: folderVal,
+                  folder_name: folderVal,
+                  server_upload_confirmed: true,
+                  edited_folder_uploaded_to_server: true
+                });
+              } catch (_) {}
+            }
+
+            // 4. UPDATE RELATED ORDER/LEAD STAGE TO 'Client Acceptance'
+            if (orderId) {
               if (updateOrderStage) {
                 try {
-                  await updateOrderStage(id, 'Client Acceptance' as any);
-                } catch (stageErr) {
-                  console.warn(`[updateOrderStage warning for ${id}]:`, stageErr);
-                }
+                  await updateOrderStage(orderId, 'Client Acceptance' as any);
+                } catch (_) {}
               }
-
-              await pushUpdate('orders', 'order_id', id, {
+              await pushUpdate('orders', 'order_id', orderId, {
                 current_stage: 'Client Acceptance',
-                order_status: 'Confirmed',
                 status: 'Client Acceptance'
               });
-
-              await pushUpdate('leads', 'lead_id', id, {
+              await pushUpdate('leads', 'lead_id', orderId, {
                 status: 'Client Acceptance'
               });
             }
 
-            // 4. VERIFY DATABASE PERSISTENCE IN SUPABASE (PRODUCTION TABLE)
-            let isVerifiedInDb = false;
-            let verificationErrorMsg = '';
-
-            for (const checkId of saveTargets) {
-              for (const col of ['production_id', 'tracking_id', 'order_id', 'lead_id']) {
-                try {
-                  const verifyRes = await fetch('/api/db/select', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      table: 'production',
-                      matchColumn: col,
-                      matchValue: checkId
-                    })
-                  });
-                  const verifyData = await verifyRes.json();
-                  if (verifyData?.success && Array.isArray(verifyData.data) && verifyData.data.length > 0) {
-                    const dbRow = verifyData.data[0];
-                    const dbCurrStatus = dbRow.current_status || dbRow.production_status || dbRow.editing_status;
-                    const dbProdStatus = dbRow.production_status || dbRow.current_status || dbRow.editing_status;
-
-                    if (dbCurrStatus !== 'Client Acceptance' && dbProdStatus !== 'Client Acceptance') {
-                      verificationErrorMsg = `CLIENT ACCEPTANCE STATUS UPDATE FAILED: current_status was '${dbRow.current_status || 'null'}' and production_status was '${dbRow.production_status || 'null'}' instead of 'Client Acceptance'.`;
-                    } else if (lastFolderVal && dbRow.folder_name !== lastFolderVal && dbRow.server_upload_folder_name !== lastFolderVal) {
-                      verificationErrorMsg = `CLIENT ACCEPTANCE SAVE FAILED: folder_name in database ('${dbRow.folder_name || 'null'}') did not match submitted '${lastFolderVal}'.`;
-                    } else if (lastLinkVal && dbRow.final_edited_footage_link !== lastLinkVal && dbRow.edited_drive_link !== lastLinkVal && dbRow.upload_link_path !== lastLinkVal) {
-                      verificationErrorMsg = `CLIENT ACCEPTANCE SAVE FAILED: final_edited_footage_link in database did not match submitted link.`;
-                    } else {
-                      isVerifiedInDb = true;
-                      break;
-                    }
-                  }
-                } catch (vErr: any) {
-                  console.warn(`[Verification SELECT attempt failed for ${col}=${checkId}]:`, vErr);
-                }
-              }
-              if (isVerifiedInDb) break;
+            // 5. RE-FETCH AND VERIFY DATABASE VALUES FROM public.production
+            const verifyRes = await fetch('/api/db/select', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                table: 'production',
+                matchColumn: 'production_id',
+                matchValue: targetProdId
+              })
+            });
+            const verifyData = await verifyRes.json();
+            if (!verifyData?.success || !Array.isArray(verifyData.data) || verifyData.data.length === 0) {
+              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: Database record (${targetProdId}) could not be retrieved.`);
             }
 
-            if (!isVerifiedInDb) {
-              if (verificationErrorMsg) {
-                throw new Error(verificationErrorMsg);
-              } else {
-                console.log("[Client Acceptance] Immediate select pending cache propagation; pushUpdate completed successfully.");
-                isVerifiedInDb = true;
-              }
+            const dbRow = verifyData.data[0];
+
+            if (dbRow.current_status !== 'Client Acceptance' && dbRow.production_status !== 'Client Acceptance') {
+              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: current_status in database was '${dbRow.current_status || 'null'}' and production_status was '${dbRow.production_status || 'null'}' instead of 'Client Acceptance'.`);
             }
 
-            // 5. RE-FETCH FRESH DATA FROM SUPABASE
+            if (!dbRow.checklist_client_communication_proof && !dbRow.client_communication_proof) {
+              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: Client communication proof was not saved in database.`);
+            }
+
+            if (!dbRow.checklist_edited_files_uploaded) {
+              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: checklist_edited_files_uploaded was not saved as true.`);
+            }
+
+            if (folderVal && dbRow.folder_name !== folderVal && dbRow.server_upload_folder_name !== folderVal) {
+              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: folder_name in database ('${dbRow.folder_name || 'null'}') did not match submitted '${folderVal}'.`);
+            }
+
+            if (linkVal && dbRow.final_edited_footage_link !== linkVal && dbRow.edited_drive_link !== linkVal) {
+              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: final_edited_footage_link in database did not match submitted link.`);
+            }
+
+            // 6. REFRESH GLOBAL DATA
             if (refreshData) {
               await refreshData();
             }
 
-            // 6. SUCCESS! Close popup cleanly
+            // 7. SUCCESS — CLOSE POPUP CLEANLY
             const cancelButton = Array.from(caModal.querySelectorAll<HTMLButtonElement>('button')).find(btn => {
               const t = (btn.textContent || '').toLowerCase();
               return t.includes('close') || t.includes('cancel') || t.includes('✕');
@@ -802,9 +514,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
           } catch (saveErr: any) {
             console.error('[ProductionClientAcceptanceManager] Failed to finalize Client Acceptance:', saveErr);
-            showFrontLevelError(form, 'CLIENT ACCEPTANCE FAILED TO SAVE TO DATABASE', [
+            showFrontLevelError(form, 'CLIENT ACCEPTANCE SAVE FAILED', [
               `Error: ${saveErr?.message || String(saveErr)}`,
-              `Please ensure the server connection is active and retry.`
+              `Please ensure the database connection is active and retry.`
             ]);
           } finally {
             if (submitBtn) {
@@ -816,7 +528,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       }
     };
 
-    // Run sync on mount and periodically when modals render
     const interval = setInterval(handleSyncClientAcceptanceModal, 150);
     handleSyncClientAcceptanceModal();
 
@@ -826,7 +537,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     orders,
     leads,
     editorAssignments,
-    clientAcceptanceVerifications,
     saveClientAcceptanceVerification,
     updateEditorAssignmentStatus,
     updateProduction,
@@ -837,4 +547,3 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
   return null;
 };
-
