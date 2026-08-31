@@ -131,6 +131,9 @@ export const ProductionFullScreenManager: React.FC = () => {
       overlays.forEach((overlay) => {
         if (checkIsTargetOverlay(overlay)) {
           hasActiveTargetModal = true;
+          const overlayText = (overlay.textContent || '').toLowerCase();
+          const isClientAcceptanceModal = overlayText.includes('client acceptance verification deck') ||
+                                          (overlayText.includes('client acceptance') && (overlayText.includes('project id') || overlayText.includes('tracking id') || overlayText.includes('approve client acceptance')));
 
           // Add ancestor class to all parent elements up to document.body
           // to neutralize transform/filter/will-change containing blocks
@@ -147,14 +150,22 @@ export const ProductionFullScreenManager: React.FC = () => {
           if (!overlay.classList.contains('prod-fullscreen-overlay')) {
             overlay.classList.add('prod-fullscreen-overlay');
           }
+          if (isClientAcceptanceModal && !overlay.classList.contains('prod-client-acceptance-overlay')) {
+            overlay.classList.add('prod-client-acceptance-overlay');
+          }
 
           // 2. Mark inner card as full screen container
           const modalCard = overlay.querySelector<HTMLElement>('#production_workflow_modal') ||
             overlay.querySelector<HTMLElement>('div.bg-zinc-950') ||
             (overlay.firstElementChild as HTMLElement);
 
-          if (modalCard && !modalCard.classList.contains('prod-fullscreen-card')) {
-            modalCard.classList.add('prod-fullscreen-card');
+          if (modalCard) {
+            if (!modalCard.classList.contains('prod-fullscreen-card')) {
+              modalCard.classList.add('prod-fullscreen-card');
+            }
+            if (isClientAcceptanceModal && !modalCard.classList.contains('prod-client-acceptance-card')) {
+              modalCard.classList.add('prod-client-acceptance-card');
+            }
           }
 
           // 3. Mark header element
@@ -163,8 +174,13 @@ export const ProductionFullScreenManager: React.FC = () => {
               modalCard.querySelector<HTMLElement>('div.border-b') ||
               (modalCard.firstElementChild as HTMLElement);
 
-            if (header && !header.classList.contains('prod-fullscreen-header')) {
-              header.classList.add('prod-fullscreen-header');
+            if (header) {
+              if (!header.classList.contains('prod-fullscreen-header')) {
+                header.classList.add('prod-fullscreen-header');
+              }
+              if (isClientAcceptanceModal && !header.classList.contains('prod-client-acceptance-header')) {
+                header.classList.add('prod-client-acceptance-header');
+              }
             }
 
             // 4. Mark body element
@@ -176,8 +192,13 @@ export const ProductionFullScreenManager: React.FC = () => {
               modalCard.querySelector<HTMLElement>('div.p-4') ||
               modalCard.querySelector<HTMLElement>('div.p-3\\.5');
 
-            if (body && !body.classList.contains('prod-fullscreen-body')) {
-              body.classList.add('prod-fullscreen-body');
+            if (body) {
+              if (!body.classList.contains('prod-fullscreen-body')) {
+                body.classList.add('prod-fullscreen-body');
+              }
+              if (isClientAcceptanceModal && !body.classList.contains('prod-client-acceptance-body')) {
+                body.classList.add('prod-client-acceptance-body');
+              }
             }
 
             // 5. Mark footer / action button containers if present
@@ -185,8 +206,13 @@ export const ProductionFullScreenManager: React.FC = () => {
               const actionContainers = body.querySelectorAll<HTMLElement>('div.flex.gap-3, div.flex.items-center.gap-3, div.pt-2, div.pt-4');
               actionContainers.forEach((container) => {
                 const buttons = container.querySelectorAll('button');
-                if (buttons.length > 0 && !container.classList.contains('prod-fullscreen-footer')) {
-                  container.classList.add('prod-fullscreen-footer');
+                if (buttons.length > 0) {
+                  if (!container.classList.contains('prod-fullscreen-footer')) {
+                    container.classList.add('prod-fullscreen-footer');
+                  }
+                  if (isClientAcceptanceModal && !container.classList.contains('prod-client-acceptance-footer')) {
+                    container.classList.add('prod-client-acceptance-footer');
+                  }
                 }
               });
 
@@ -195,6 +221,43 @@ export const ProductionFullScreenManager: React.FC = () => {
                 const parent = table.parentElement;
                 if (parent && !parent.classList.contains('prod-fullscreen-table-wrapper')) {
                   parent.classList.add('prod-fullscreen-table-wrapper');
+                }
+              });
+            }
+
+            // 6. Client Acceptance Verification Deck specific UI adjustments
+            if (isClientAcceptanceModal) {
+              // 6a. UI REMOVAL: Remove "Upload Link / Path:" display section
+              const allSpans = overlay.querySelectorAll<HTMLElement>('span, label');
+              allSpans.forEach((span) => {
+                const sText = (span.textContent || '').trim().toLowerCase();
+                if (sText === 'upload link / path:' || sText === 'upload link / path') {
+                  const parentDiv = span.closest('div');
+                  if (parentDiv && !parentDiv.classList.contains('ca-upload-link-hidden')) {
+                    parentDiv.classList.add('ca-upload-link-hidden');
+                    parentDiv.style.setProperty('display', 'none', 'important');
+                  }
+                }
+              });
+
+              // 6b. UI REMOVAL: Remove "Event Date *" input & label from "Edited Folder Upload Confirmation"
+              const dateInputs = overlay.querySelectorAll<HTMLInputElement>('input[type="date"]');
+              dateInputs.forEach((dateInput) => {
+                const formGroup = dateInput.closest('div.space-y-1') as HTMLElement | null;
+                const label = formGroup?.querySelector('label');
+                const labelText = (label?.textContent || '').toLowerCase();
+                if (labelText.includes('event date')) {
+                  // Ensure input is not blocking form submission
+                  dateInput.required = false;
+                  dateInput.removeAttribute('required');
+                  if (formGroup) {
+                    formGroup.style.setProperty('display', 'none', 'important');
+                    const parentGrid = formGroup.parentElement as HTMLElement | null;
+                    if (parentGrid && parentGrid.classList.contains('grid')) {
+                      parentGrid.classList.add('ca-folder-single-col');
+                      parentGrid.style.setProperty('grid-template-columns', '1fr', 'important');
+                    }
+                  }
                 }
               });
             }
