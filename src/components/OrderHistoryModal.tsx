@@ -78,6 +78,18 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
     uploadDate?: string;
   } | null>(null);
 
+  // Lock body scroll when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   const toggleSection = (section: string) => {
     setExpandedSections(prev => ({ ...prev, [section]: !(prev[section] ?? true) }));
   };
@@ -649,7 +661,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
 
   // 6. Roadmap Macro Milestones Steps Calculation
   const roadmapSteps = useMemo(() => {
-    const stages = [
+    let stages = [
       { id: 'quotation_created', label: 'Create Quotation' },
       { id: 'quotation_sent', label: 'Quotation Sent' },
       { id: 'order_confirmed', label: 'Order Confirmed' },
@@ -660,6 +672,21 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
       { id: 'proof_uploaded', label: 'Proof Uploads' },
       { id: 'order_close', label: 'Order Close' }
     ];
+
+    // Filter out unwanted milestone types as requested by the user
+    const unwantedMilestones = [
+      'Create Quotation',
+      'Quotation Sent',
+      'Order Confirmed',
+      'Operations',
+      'Production',
+      'Staff Assignment',
+      'Task Progress',
+      'Proof Uploads',
+      'Order Close'
+    ];
+
+    stages = stages.filter(st => !unwantedMilestones.includes(st.label));
 
     const isClosed = ['Closed', 'Order Closed', 'Completed', 'Project Completed'].includes(matchedOrder?.order_status || matchedOrder?.current_stage || matchedLead?.current_stage || '');
     const isProdActive = matchedProd !== null || matchedEditorAssignments.length > 0;
@@ -733,7 +760,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
 
   return createPortal(
     <div 
-      className="fixed inset-0 bg-black/90 backdrop-blur-md z-[250] flex items-center justify-center p-2 sm:p-5 animate-in fade-in duration-200"
+      className="fixed inset-0 bg-black/90 backdrop-blur-md z-[999999] flex items-center justify-center p-2 sm:p-5 animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -798,41 +825,43 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         </div>
 
         {/* ROADMAP MACRO MILESTONE STEPPER BAR */}
-        <div className="px-4 py-3 bg-zinc-950 border-b border-zinc-850 overflow-x-auto shrink-0 custom-scrollbar">
-          <div className="flex items-center justify-between min-w-[850px] gap-2">
-            {roadmapSteps.map((step, idx) => {
-              return (
-                <React.Fragment key={step.id}>
-                  <div className="flex flex-col items-center text-center space-y-1 group">
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center font-mono text-xs font-bold transition-all shadow-md ${
-                      step.isDone 
-                        ? 'bg-emerald-500 text-black shadow-emerald-500/20' 
-                        : step.isCurrent 
-                        ? 'bg-amber-500 text-black animate-pulse' 
-                        : 'bg-zinc-900 text-zinc-600 border border-zinc-800'
-                    }`}>
-                      {step.isDone ? <Check className="w-4 h-4 stroke-[3]" /> : idx + 1}
+        {roadmapSteps.length > 0 && (
+          <div className="px-4 py-3 bg-zinc-950 border-b border-zinc-850 overflow-x-auto shrink-0 custom-scrollbar">
+            <div className="flex items-center justify-between min-w-[850px] gap-2">
+              {roadmapSteps.map((step, idx) => {
+                return (
+                  <React.Fragment key={step.id}>
+                    <div className="flex flex-col items-center text-center space-y-1 group">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center font-mono text-xs font-bold transition-all shadow-md ${
+                        step.isDone 
+                          ? 'bg-emerald-500 text-black shadow-emerald-500/20' 
+                          : step.isCurrent 
+                          ? 'bg-amber-500 text-black animate-pulse' 
+                          : 'bg-zinc-900 text-zinc-600 border border-zinc-800'
+                      }`}>
+                        {step.isDone ? <Check className="w-4 h-4 stroke-[3]" /> : idx + 1}
+                      </div>
+                      <span className={`text-[11px] font-bold font-sans whitespace-nowrap ${
+                        step.isDone ? 'text-zinc-200' : step.isCurrent ? 'text-amber-400' : 'text-zinc-600'
+                      }`}>
+                        {step.label}
+                      </span>
+                      <span className="text-[9px] font-mono text-zinc-500 whitespace-nowrap">
+                        {step.stepDate}
+                      </span>
                     </div>
-                    <span className={`text-[11px] font-bold font-sans whitespace-nowrap ${
-                      step.isDone ? 'text-zinc-200' : step.isCurrent ? 'text-amber-400' : 'text-zinc-600'
-                    }`}>
-                      {step.label}
-                    </span>
-                    <span className="text-[9px] font-mono text-zinc-500 whitespace-nowrap">
-                      {step.stepDate}
-                    </span>
-                  </div>
 
-                  {idx < roadmapSteps.length - 1 && (
-                    <div className={`flex-1 h-0.5 min-w-[20px] transition-colors ${
-                      step.isDone ? 'bg-emerald-500/60' : 'bg-zinc-850'
-                    }`}></div>
-                  )}
-                </React.Fragment>
-              );
-            })}
+                    {idx < roadmapSteps.length - 1 && (
+                      <div className={`flex-1 h-0.5 min-w-[20px] transition-colors ${
+                        step.isDone ? 'bg-emerald-500/60' : 'bg-zinc-850'
+                      }`}></div>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* SUBTAB NAVIGATION & SEARCH BAR */}
         <div className="p-3 sm:p-4 bg-zinc-900/60 border-b border-zinc-800 flex flex-col lg:flex-row items-center justify-between gap-3 shrink-0">
@@ -1482,7 +1511,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
       {/* FULL RESPONSIVE IMAGE LIGHTBOX PREVIEW MODAL */}
       {previewImage && (
         <div 
-          className="fixed inset-0 bg-black/95 backdrop-blur-md z-[300] flex items-center justify-center p-3 sm:p-6"
+          className="fixed inset-0 bg-black/95 backdrop-blur-md z-[9999999] flex items-center justify-center p-3 sm:p-6"
           onClick={() => setPreviewImage(null)}
         >
           <div 
