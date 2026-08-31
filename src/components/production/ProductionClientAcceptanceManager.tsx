@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRole } from '../RoleContext';
 
 /**
@@ -7,44 +8,21 @@ import { useRole } from '../RoleContext';
  * PRODUCTION DASHBOARD — CLIENT ACCEPTANCE VERIFICATION DECK MANAGER
  * 
  * SCOPE & SPECIFICATIONS:
- * 1. USE THE ACTUAL public.production RECORD:
- *    - Identifies exact current production_id (no search by customer name or array index).
+ * 1. REAL REACT STATE & CONTROLLED INPUTS:
+ *    - Renders Final Edited Footage Link and Folder Name using standard React state and createPortal.
+ *    - Zero manual document.createElement / innerHTML string injection for input fields.
+ * 2. USE THE ACTUAL public.production RECORD:
+ *    - Identifies exact current production_id.
  *    - Updates ONLY the exact Production record currently open.
- * 2. SAVE ALL CLIENT ACCEPTANCE VALUES:
- *    - Saves: checklist_client_communication_proof, client_communication_proof,
- *      checklist_edited_files_uploaded, folder_name, final_edited_footage_link,
- *      checklist_customer_acceptance, checklist_content_usage, checklist_footage_deleted_7_days,
- *      checklist_payment_from_sales, client_approval_date.
- * 3. SAVE PRODUCTION STATUS:
- *    - Sets current_status = 'Client Acceptance' AND production_status = 'Client Acceptance'.
- *    - Final status stored in database, treating current_status/production_status as authoritative.
- * 4. PREVENT "EDITING COMPLETED" OVERWRITE:
- *    - Ensures Client Acceptance priority over lower workflow stages.
- * 5. SAVE FIRST, STATUS SECOND:
- *    - Sequence: Click Approve -> Show Loading -> Validate -> Save -> Check DB -> Update Status -> Verify -> Refresh -> Success -> Close.
- * 6. LOADING STATE:
- *    - Button changes to "⟳ SAVING CLIENT ACCEPTANCE..." and is disabled until done.
- * 7. ERROR BANNERS & VERIFICATION:
- *    - Shows front-level error banner if validation or database save/verification fails.
- *    - Modal remains open on error.
- * 8. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file constraint).
+ * 3. SAVE ALL CLIENT ACCEPTANCE VALUES TO public.production:
+ *    - Saves: final_edited_footage_link, folder_name, checklist_edited_files_uploaded, etc.
+ * 4. INDEPENDENT PER EVENT:
+ *    - Maintains finalEditedFootageLinks[cardKey] state for multi-event tasks independently.
+ * 5. REQUIRED VALIDATION:
+ *    - Validates Folder Name & Final Edited Footage Link when "Edited Folder Uploaded to Server" is checked.
+ *    - Shows front-level error banner if missing and prevents modal submission.
+ * 6. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file constraint).
  */
-
-// Helper to set input value programmatically and dispatch both input & change events for React state compatibility
-const setTextInputValue = (inputEl: HTMLInputElement, value: string) => {
-  if (inputEl.value === value) return;
-  const valueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
-  const prototype = Object.getPrototypeOf(inputEl);
-  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-
-  if (valueSetter && valueSetter !== prototypeValueSetter) {
-    prototypeValueSetter?.call(inputEl, value);
-  } else {
-    valueSetter?.call(inputEl, value);
-  }
-  inputEl.dispatchEvent(new Event("input", { bubbles: true }));
-  inputEl.dispatchEvent(new Event("change", { bubbles: true }));
-};
 
 // Helper to extract clientAcceptanceProd directly from React Fiber
 const getClientAcceptanceProdFromFiber = (caModal: HTMLElement): any => {
@@ -128,9 +106,23 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     refreshData
   } = useRole();
 
+  // Controlled React states for Client Acceptance Verification Deck
+  const [finalEditedFootageLinks, setFinalEditedFootageLinks] = useState<Record<string, string>>({});
+  const [folderNames, setFolderNames] = useState<Record<string, string>>({});
+  const [uploadConfirmations, setUploadConfirmations] = useState<Record<string, boolean>>({});
+  const [portalTargetMap, setPortalTargetMap] = useState<Record<string, HTMLElement>>({});
+
+  // Synchronized refs to prevent stale closure in submit listener
+  const linksRef = useRef<Record<string, string>>({});
+  const foldersRef = useRef<Record<string, string>>({});
+  const confirmationsRef = useRef<Record<string, boolean>>({});
+
+  useEffect(() => { linksRef.current = finalEditedFootageLinks; }, [finalEditedFootageLinks]);
+  useEffect(() => { foldersRef.current = folderNames; }, [folderNames]);
+  useEffect(() => { confirmationsRef.current = uploadConfirmations; }, [uploadConfirmations]);
+
   const activeExactProdIdRef = useRef<string>('');
   const lastModalRef = useRef<HTMLElement | null>(null);
-  const typedLinksRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     const handleSyncClientAcceptanceModal = () => {
@@ -145,9 +137,11 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       });
 
       if (!caModal) {
-        activeExactProdIdRef.current = '';
-        lastModalRef.current = null;
-        typedLinksRef.current = {};
+        if (activeExactProdIdRef.current) {
+          activeExactProdIdRef.current = '';
+          lastModalRef.current = null;
+          setPortalTargetMap({});
+        }
         return;
       }
 
@@ -167,13 +161,31 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       const exactProdId = exactTargetProd?.production_id || matchedHeaderProdId;
       if (!exactProdId) return;
 
+      // Reset or load initial values on opening new record deck
       if (lastModalRef.current !== caModal || activeExactProdIdRef.current !== exactProdId) {
         lastModalRef.current = caModal;
         activeExactProdIdRef.current = exactProdId;
-        typedLinksRef.current = {};
+
+        const savedFolderName = exactTargetProd?.folder_name || exactTargetProd?.server_upload_folder_name || (exactTargetProd as any)?.server_path || '';
+        const savedLink = exactTargetProd?.final_edited_footage_link || exactTargetProd?.edited_drive_link || (exactTargetProd as any)?.final_consolidated_drive_link || '';
+        const isFolderUploadSaved = Boolean(
+          savedFolderName ||
+          savedLink ||
+          exactTargetProd?.checklist_edited_files_uploaded ||
+          exactTargetProd?.server_upload_confirmed ||
+          exactTargetProd?.server_upload_validated ||
+          exactTargetProd?.editing_status === 'Client Acceptance' ||
+          (exactTargetProd as any)?.production_status === 'Client Acceptance'
+        );
+
+        // Pre-populate state for exact production
+        const initialKey = exactProdId;
+        setFinalEditedFootageLinks({ [initialKey]: savedLink });
+        setFolderNames({ [initialKey]: savedFolderName });
+        setUploadConfirmations({ [initialKey]: isFolderUploadSaved });
       }
 
-      // Hide event date inputs if present (target only actual date inputs inside event date labels)
+      // Hide default Event Date inputs in DOM
       const dateLabels = Array.from(caModal.querySelectorAll<HTMLElement>('label')).filter(l => (l.textContent || '').toLowerCase().includes('event date'));
       dateLabels.forEach(dateLabel => {
         const formGroup = dateLabel.closest('div.space-y-1, div:has(> label)') as HTMLElement | null;
@@ -187,116 +199,58 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         }
       });
 
-      // Fetch saved values from exactTargetProd
-      const savedFolderName = exactTargetProd?.folder_name || exactTargetProd?.server_upload_folder_name || (exactTargetProd as any)?.server_path || '';
-      const savedLink = exactTargetProd?.final_edited_footage_link || exactTargetProd?.edited_drive_link || (exactTargetProd as any)?.final_consolidated_drive_link || '';
-      const savedUploadName = exactTargetProd?.upload_name || exactTargetProd?.proof_name || exactTargetProd?.client_communication_proof_name || '';
-
-      // AUTOFILL 1: CLIENT COMMUNICATION & CONSENT PROOF
+      // Find event cards or confirmation blocks in modal
       const allLabels = Array.from(caModal.querySelectorAll<HTMLElement>('label'));
-      const proofLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
-      const proofCheckbox = proofLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || proofLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-      
-      if (exactTargetProd?.checklist_client_communication_proof && proofCheckbox && !proofCheckbox.checked) {
-        proofCheckbox.click();
-      }
-
-      const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
-      if (proofNameInput && !proofNameInput.value && savedUploadName) {
-        setTextInputValue(proofNameInput, savedUploadName);
-      }
-
-      // AUTOFILL 2: EDITED FOLDER UPLOADED TO SERVER CHECKBOX & INPUTS
       const uploadCheckboxes = allLabels.filter(l => {
         const t = (l.textContent || '').toLowerCase();
         return t.includes('edited folder uploaded to server') || t.includes('edited folder uploaded in server');
       });
 
+      const newPortalTargets: Record<string, HTMLElement> = {};
+
       uploadCheckboxes.forEach((uploadLabel, idx) => {
         const eventCard = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3') as HTMLElement | null || caModal;
-        
-        // Extract card isolation key
         const cardTitleEl = eventCard.querySelector('span.font-bold, span.font-semibold');
-        const cardKey = cardTitleEl?.textContent?.trim() || `card_${idx}`;
+        const cardKey = cardTitleEl?.textContent?.trim() || exactProdId || `card_${idx}`;
 
+        // Ensure portal mount container exists inside the event card
+        let mountNode = eventCard.querySelector<HTMLElement>('.ca-portal-mount-container');
+        if (!mountNode) {
+          // Hide original card children to replace with Portal component
+          Array.from(eventCard.children).forEach((child: Element) => {
+            (child as HTMLElement).style.setProperty('display', 'none', 'important');
+          });
+
+          mountNode = document.createElement('div');
+          mountNode.className = 'ca-portal-mount-container w-full';
+          eventCard.appendChild(mountNode);
+        }
+
+        newPortalTargets[cardKey] = mountNode;
+
+        // Initialize state for card if not yet set
+        const savedFolderName = exactTargetProd?.folder_name || exactTargetProd?.server_upload_folder_name || (exactTargetProd as any)?.server_path || '';
+        const savedLink = exactTargetProd?.final_edited_footage_link || exactTargetProd?.edited_drive_link || (exactTargetProd as any)?.final_consolidated_drive_link || '';
         const isFolderUploadSaved = Boolean(
           savedFolderName ||
           savedLink ||
           exactTargetProd?.checklist_edited_files_uploaded ||
           exactTargetProd?.server_upload_confirmed ||
-          exactTargetProd?.server_upload_validated ||
-          exactTargetProd?.editing_status === 'Client Acceptance' ||
-          (exactTargetProd as any)?.production_status === 'Client Acceptance'
+          exactTargetProd?.server_upload_validated
         );
 
-        const checkbox = eventCard.querySelector<HTMLInputElement>('input[type="checkbox"]');
-        if (isFolderUploadSaved && checkbox && !checkbox.checked) {
-          checkbox.click();
+        if (foldersRef.current[cardKey] === undefined) {
+          setFolderNames(prev => ({ ...prev, [cardKey]: savedFolderName }));
         }
-
-        // Hide Event Date container specifically inside this card
-        const cardDateLabel = Array.from(eventCard.querySelectorAll<HTMLElement>('label')).find(l => (l.textContent || '').toLowerCase().includes('event date'));
-        if (cardDateLabel) {
-          const dateGroup = cardDateLabel.closest('div.space-y-1') as HTMLElement | null;
-          if (dateGroup) {
-            dateGroup.style.setProperty('display', 'none', 'important');
-            const dInput = dateGroup.querySelector('input');
-            if (dInput) {
-              dInput.required = false;
-              dInput.removeAttribute('required');
-            }
-          }
+        if (linksRef.current[cardKey] === undefined) {
+          setFinalEditedFootageLinks(prev => ({ ...prev, [cardKey]: savedLink }));
         }
-
-        const folderInput = eventCard.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-        if (folderInput && savedFolderName && !folderInput.value && document.activeElement !== folderInput) {
-          setTextInputValue(folderInput, savedFolderName);
-        }
-
-        // Inject / Ensure FINAL EDITED FOOTAGE LINK * field
-        const gridContainer = eventCard.querySelector('div.grid') as HTMLElement | null || eventCard;
-        if (gridContainer) {
-          let linkWrapper = gridContainer.querySelector<HTMLElement>('.ca-final-footage-link-group');
-          const currentLinkValue = typedLinksRef.current[cardKey] ?? savedLink ?? '';
-
-          if (!linkWrapper) {
-            linkWrapper = document.createElement('div');
-            linkWrapper.className = 'space-y-1 ca-final-footage-link-group';
-            linkWrapper.innerHTML = `
-              <label class="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                FINAL EDITED FOOTAGE LINK <span class="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="Paste final edited footage URL (e.g. Google Drive link)"
-                value="${currentLinkValue.replace(/"/g, '&quot;')}"
-                class="ca-final-footage-link-input w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
-              />
-            `;
-            gridContainer.appendChild(linkWrapper);
-          }
-
-          const linkInput = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
-          if (linkInput) {
-            if (document.activeElement !== linkInput) {
-              if (currentLinkValue && linkInput.value !== currentLinkValue) {
-                linkInput.value = currentLinkValue;
-              }
-            }
-            typedLinksRef.current[cardKey] = linkInput.value;
-
-            if (!linkInput.dataset.bound) {
-              linkInput.dataset.bound = 'true';
-              const handleInput = (e: Event) => {
-                const val = (e.target as HTMLInputElement).value;
-                typedLinksRef.current[cardKey] = val;
-              };
-              linkInput.addEventListener('input', handleInput);
-              linkInput.addEventListener('change', handleInput);
-            }
-          }
+        if (confirmationsRef.current[cardKey] === undefined) {
+          setUploadConfirmations(prev => ({ ...prev, [cardKey]: isFolderUploadSaved }));
         }
       });
+
+      setPortalTargetMap(newPortalTargets);
 
       // INTERCEPT FORM SUBMISSION
       const form = caModal.querySelector('form');
@@ -309,9 +263,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           e.stopImmediatePropagation();
 
           const targetProdId = activeExactProdIdRef.current || exactProdId;
-
           const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
           const originalBtnText = submitBtn ? submitBtn.innerHTML : '';
+
           if (submitBtn) {
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<span class="animate-spin inline-block mr-1.5">⟳</span> SAVING CLIENT ACCEPTANCE...';
@@ -323,9 +277,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             const missingItems: string[] = [];
 
             // 1. Validate Client Communication & Consent Proof
-            const pLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
-            const pCheckbox = pLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || pLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-            const isConsentChecked = pCheckbox ? pCheckbox.checked : false;
+            const proofLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
+            const proofCheckbox = proofLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || proofLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+            const isConsentChecked = proofCheckbox ? proofCheckbox.checked : false;
 
             if (!isConsentChecked) {
               missingItems.push('Client Communication & Consent Proof');
@@ -347,56 +301,36 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               missingItems.push('Client Communication & Consent Proof File');
             }
 
-            // 2. Validate Edited Folder Uploaded to Server
-            const folderCheckboxes = allLabels.filter(l => {
-              const t = (l.textContent || '').toLowerCase();
-              return t.includes('edited folder uploaded to server') || t.includes('edited folder uploaded in server');
-            });
-
+            // 2. Validate Edited Folder Upload & Final Footage Link
             let folderVal = '';
             let linkVal = '';
             let isFolderCheckedOverall = false;
 
-            folderCheckboxes.forEach((uploadLabel, idx) => {
-              const eventCard = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3') as HTMLElement | null || caModal;
-              const cardTitleEl = eventCard.querySelector('span.font-bold, span.font-semibold');
-              const cardKey = cardTitleEl?.textContent?.trim() || `card_${idx}`;
+            const cardEntries = Object.keys(confirmationsRef.current).length > 0
+              ? Object.keys(confirmationsRef.current)
+              : [exactProdId];
 
-              const folderCb = uploadLabel.querySelector<HTMLInputElement>('input[type="checkbox"]') || uploadLabel.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-              const isFolderChecked = folderCb ? folderCb.checked : false;
-
-              if (isFolderChecked) {
+            cardEntries.forEach(cardKey => {
+              const isChecked = Boolean(confirmationsRef.current[cardKey]);
+              if (isChecked) {
                 isFolderCheckedOverall = true;
-                const folderInput = eventCard.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]') || caModal.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-                const linkInput = eventCard.querySelector<HTMLInputElement>('input.ca-final-footage-link-input') || caModal.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
+                const cardFolder = (foldersRef.current[cardKey] || '').trim();
+                const cardLink = (linksRef.current[cardKey] || '').trim();
 
-                const cardFolderVal = folderInput ? (folderInput.value || '').trim() : '';
-                const cardLinkVal = linkInput ? (linkInput.value || '').trim() : (typedLinksRef.current[cardKey] || '').trim();
-
-                if (!cardFolderVal && !missingItems.includes('Folder Name')) {
+                if (!cardFolder && !missingItems.includes('Folder Name')) {
                   missingItems.push('Folder Name');
                 }
-                if (!cardLinkVal && !missingItems.includes('Final Edited Footage Link')) {
+                if (!cardLink && !missingItems.includes('Final Edited Footage Link')) {
                   missingItems.push('Final Edited Footage Link');
                 }
 
-                if (!folderVal && cardFolderVal) folderVal = cardFolderVal;
-                if (!linkVal && cardLinkVal) linkVal = cardLinkVal;
+                if (!folderVal && cardFolder) folderVal = cardFolder;
+                if (!linkVal && cardLink) linkVal = cardLink;
               }
             });
 
-            if (!isFolderCheckedOverall && folderCheckboxes.length > 0) {
+            if (!isFolderCheckedOverall) {
               missingItems.push('Edited Folder Uploaded to Server');
-            }
-
-            if (!folderVal) {
-              const fallbackFolderInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-              folderVal = (fallbackFolderInput?.value || savedFolderName || '').trim();
-            }
-
-            if (!linkVal) {
-              const fallbackLinkInput = caModal.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
-              linkVal = (fallbackLinkInput?.value || Object.values(typedLinksRef.current)[0] || savedLink || '').trim();
             }
 
             // STOP IF MISSING ANY REQUIRED ITEM
@@ -409,7 +343,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               return;
             }
 
-            // Read state of additional checkboxes to preserve actual values
+            // Additional Checkboxes
             const custAccLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('customer acceptance'));
             const custAccCb = custAccLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]');
             const caVerifyCustomerAcceptance = custAccCb ? custAccCb.checked : Boolean(exactTargetProd?.checklist_customer_acceptance);
@@ -428,7 +362,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
             const clientApprovalDate = new Date().toISOString();
 
-            // PREPARE DATABASE PAYLOAD FOR public.production RECORD ONLY
+            // PREPARE DATABASE PAYLOAD FOR public.production RECORD
             const prodPayload = {
               checklist_client_communication_proof: true,
               client_communication_proof: caCommunicationProofVal,
@@ -455,7 +389,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
               client_approval_date: clientApprovalDate,
 
-              // Authoritative Status Updates
               current_status: 'Client Acceptance',
               production_status: 'Client Acceptance',
               editing_status: 'Client Acceptance',
@@ -615,5 +548,79 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     refreshData
   ]);
 
-  return null;
+  // Render Portal for each active event card
+  return (
+    <>
+      {Object.entries(portalTargetMap).map(([cardKey, mountNode]) => {
+        if (!mountNode || !(mountNode instanceof HTMLElement) || !document.body.contains(mountNode as Node)) return null;
+
+        const isConfirmed = Boolean(uploadConfirmations[cardKey]);
+        const folderVal = folderNames[cardKey] || '';
+        const linkVal = finalEditedFootageLinks[cardKey] || '';
+
+        return createPortal(
+          <div key={`portal_content_${cardKey}`} className="space-y-3">
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={isConfirmed}
+                onChange={(e) => {
+                  const nextVal = e.target.checked;
+                  setUploadConfirmations(prev => ({ ...prev, [cardKey]: nextVal }));
+                }}
+                className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900 transition-colors cursor-pointer"
+              />
+              <div>
+                <span className="text-xs font-semibold text-zinc-200 group-hover:text-emerald-300 transition-colors block">
+                  Edited Folder Uploaded to Server
+                </span>
+                <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
+                  Confirm upload for: <span className="font-bold text-zinc-400">{cardKey.startsWith('card_') || cardKey.startsWith('PRD-') ? 'Event' : cardKey}</span>
+                </span>
+              </div>
+            </label>
+
+            {isConfirmed && (
+              <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                    FOLDER NAME <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required={isConfirmed}
+                    placeholder="e.g. 2024-05-12_Wedding_Videos"
+                    value={folderVal}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFolderNames(prev => ({ ...prev, [cardKey]: val }));
+                    }}
+                    className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                    FINAL EDITED FOOTAGE LINK <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    required={isConfirmed}
+                    placeholder="Paste final edited footage URL (e.g. Google Drive link)"
+                    value={linkVal}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFinalEditedFootageLinks(prev => ({ ...prev, [cardKey]: val }));
+                    }}
+                    className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
+                  />
+                </div>
+              </div>
+            )}
+          </div>,
+          mountNode
+        );
+      })}
+    </>
+  );
 };
