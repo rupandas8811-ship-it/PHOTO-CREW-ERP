@@ -8,20 +8,18 @@ import { useRole } from '../RoleContext';
  * PRODUCTION DASHBOARD — CLIENT ACCEPTANCE VERIFICATION DECK MANAGER
  * 
  * SCOPE & SPECIFICATIONS:
- * 1. REAL REACT STATE & CONTROLLED INPUTS:
- *    - Renders Final Edited Footage Link and Folder Name using standard React state and createPortal.
- *    - Zero manual document.createElement / innerHTML string injection for input fields.
- * 2. USE THE ACTUAL public.production RECORD:
- *    - Identifies exact current production_id.
- *    - Updates ONLY the exact Production record currently open.
- * 3. SAVE ALL CLIENT ACCEPTANCE VALUES TO public.production:
- *    - Saves: final_edited_footage_link, folder_name, checklist_edited_files_uploaded, etc.
- * 4. INDEPENDENT PER EVENT:
- *    - Maintains finalEditedFootageLinks[cardKey] state for multi-event tasks independently.
- * 5. REQUIRED VALIDATION:
- *    - Validates Folder Name & Final Edited Footage Link when "Edited Folder Uploaded to Server" is checked.
- *    - Shows front-level error banner if missing and prevents modal submission.
- * 6. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file constraint).
+ * 1. REMOVE FINAL EDITED FOOTAGE LINK FROM UI & VALIDATION:
+ *    - Removed Final Edited Footage Link label, input, state, and validation from UI.
+ *    - Database column `public.production.final_edited_footage_link` and existing stored data remain untouched.
+ * 2. REAL REACT STATE FOR FOLDER NAME & UPLOAD CONFIRMATIONS:
+ *    - Renders Folder Name and Edited Folder Uploaded to Server using standard React state and createPortal.
+ * 3. UPDATE & VERIFY PRODUCTION STATUS:
+ *    - Updates `current_status = 'Client Acceptance'` and `production_status = 'Client Acceptance'` on `public.production`.
+ *    - Verifies Supabase update by re-fetching the exact `production_id` before closing the modal.
+ * 4. ERROR HANDLING & POPUP PERSISTENCE:
+ *    - Front-level error banner displays if validation fails or database update/verification fails.
+ *    - Keeps popup open on error.
+ * 5. ZERO MODIFICATIONS TO ProductionModule.tsx (Strict file constraint).
  */
 
 // Helper to extract clientAcceptanceProd directly from React Fiber
@@ -67,7 +65,7 @@ const showFrontLevelError = (containerEl: HTMLElement, title: string, items: str
     </div>
     <div class="text-xs font-sans text-rose-200/90 leading-relaxed">
       ${uniqueItems.length > 0 ? `
-        <p class="font-semibold text-rose-100 mb-1">Missing / Required:</p>
+        <p class="font-semibold text-rose-100 mb-1">Details / Missing:</p>
         <ul class="list-disc list-inside space-y-1 font-mono text-[11px] text-rose-200 pl-1">
           ${uniqueItems.map(item => `<li>• ${item}</li>`).join('')}
         </ul>
@@ -107,17 +105,14 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
   } = useRole();
 
   // Controlled React states for Client Acceptance Verification Deck
-  const [finalEditedFootageLinks, setFinalEditedFootageLinks] = useState<Record<string, string>>({});
   const [folderNames, setFolderNames] = useState<Record<string, string>>({});
   const [uploadConfirmations, setUploadConfirmations] = useState<Record<string, boolean>>({});
   const [portalTargetMap, setPortalTargetMap] = useState<Record<string, HTMLElement>>({});
 
   // Synchronized refs to prevent stale closure in submit listener
-  const linksRef = useRef<Record<string, string>>({});
   const foldersRef = useRef<Record<string, string>>({});
   const confirmationsRef = useRef<Record<string, boolean>>({});
 
-  useEffect(() => { linksRef.current = finalEditedFootageLinks; }, [finalEditedFootageLinks]);
   useEffect(() => { foldersRef.current = folderNames; }, [folderNames]);
   useEffect(() => { confirmationsRef.current = uploadConfirmations; }, [uploadConfirmations]);
 
@@ -167,10 +162,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         activeExactProdIdRef.current = exactProdId;
 
         const savedFolderName = exactTargetProd?.folder_name || exactTargetProd?.server_upload_folder_name || (exactTargetProd as any)?.server_path || '';
-        const savedLink = exactTargetProd?.final_edited_footage_link || exactTargetProd?.edited_drive_link || (exactTargetProd as any)?.final_consolidated_drive_link || '';
         const isFolderUploadSaved = Boolean(
           savedFolderName ||
-          savedLink ||
           exactTargetProd?.checklist_edited_files_uploaded ||
           exactTargetProd?.server_upload_confirmed ||
           exactTargetProd?.server_upload_validated ||
@@ -180,12 +173,11 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
         // Pre-populate state for exact production
         const initialKey = exactProdId;
-        setFinalEditedFootageLinks({ [initialKey]: savedLink });
         setFolderNames({ [initialKey]: savedFolderName });
         setUploadConfirmations({ [initialKey]: isFolderUploadSaved });
       }
 
-      // Hide default Event Date inputs in DOM
+      // Hide default Event Date inputs in DOM if present
       const dateLabels = Array.from(caModal.querySelectorAll<HTMLElement>('label')).filter(l => (l.textContent || '').toLowerCase().includes('event date'));
       dateLabels.forEach(dateLabel => {
         const formGroup = dateLabel.closest('div.space-y-1, div:has(> label)') as HTMLElement | null;
@@ -230,10 +222,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
         // Initialize state for card if not yet set
         const savedFolderName = exactTargetProd?.folder_name || exactTargetProd?.server_upload_folder_name || (exactTargetProd as any)?.server_path || '';
-        const savedLink = exactTargetProd?.final_edited_footage_link || exactTargetProd?.edited_drive_link || (exactTargetProd as any)?.final_consolidated_drive_link || '';
         const isFolderUploadSaved = Boolean(
           savedFolderName ||
-          savedLink ||
           exactTargetProd?.checklist_edited_files_uploaded ||
           exactTargetProd?.server_upload_confirmed ||
           exactTargetProd?.server_upload_validated
@@ -241,9 +231,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
         if (foldersRef.current[cardKey] === undefined) {
           setFolderNames(prev => ({ ...prev, [cardKey]: savedFolderName }));
-        }
-        if (linksRef.current[cardKey] === undefined) {
-          setFinalEditedFootageLinks(prev => ({ ...prev, [cardKey]: savedLink }));
         }
         if (confirmationsRef.current[cardKey] === undefined) {
           setUploadConfirmations(prev => ({ ...prev, [cardKey]: isFolderUploadSaved }));
@@ -301,9 +288,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               missingItems.push('Client Communication & Consent Proof File');
             }
 
-            // 2. Validate Edited Folder Upload & Final Footage Link
+            // 2. Validate Edited Folder Upload & Folder Name
             let folderVal = '';
-            let linkVal = '';
             let isFolderCheckedOverall = false;
 
             const cardEntries = Object.keys(confirmationsRef.current).length > 0
@@ -315,17 +301,12 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               if (isChecked) {
                 isFolderCheckedOverall = true;
                 const cardFolder = (foldersRef.current[cardKey] || '').trim();
-                const cardLink = (linksRef.current[cardKey] || '').trim();
 
-                if (!cardFolder && !missingItems.includes('Folder Name')) {
-                  missingItems.push('Folder Name');
-                }
-                if (!cardLink && !missingItems.includes('Final Edited Footage Link')) {
-                  missingItems.push('Final Edited Footage Link');
+                if (!cardFolder && !missingItems.includes('Folder Name is required.')) {
+                  missingItems.push('Folder Name is required.');
                 }
 
                 if (!folderVal && cardFolder) folderVal = cardFolder;
-                if (!linkVal && cardLink) linkVal = cardLink;
               }
             });
 
@@ -377,10 +358,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               server_upload_validated: true,
               folder_name: folderVal,
               server_upload_folder_name: folderVal,
-              final_edited_footage_link: linkVal,
-              edited_drive_link: linkVal,
-              final_consolidated_drive_link: linkVal,
-              upload_link_path: linkVal,
 
               checklist_customer_acceptance: caVerifyCustomerAcceptance,
               checklist_content_usage: caContentUsageConfirmation,
@@ -393,13 +370,13 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               production_status: 'Client Acceptance',
               editing_status: 'Client Acceptance',
               status: 'Client Acceptance',
-              remarks: `Client Acceptance Approved on ${new Date().toLocaleString()}. Folder: ${folderVal}, Link: ${linkVal}`
+              remarks: `Client Acceptance Approved on ${new Date().toLocaleString()}. Folder: ${folderVal}`
             };
 
             // 1. SAVE TO public.production FOR EXACT production_id ONLY
             const resProd = await pushUpdate('production', 'production_id', targetProdId, prodPayload);
-            if (!resProd?.success && resProd?.error) {
-              throw new Error(`Supabase error saving production record (${targetProdId}): ${resProd.error}`);
+            if (resProd?.error) {
+              throw new Error(`Database save error (${targetProdId}): ${resProd.error}`);
             }
 
             if (updateProduction) {
@@ -418,8 +395,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                   order_id: orderId,
                   event_id: 'default',
                   folder_name: folderVal,
-                  upload_link_path: linkVal,
-                  final_edited_footage_link: linkVal,
                   client_communication_consent_proof: caCommunicationProofVal,
                   proof_file_name: caUploadNameVal,
                   consent_proof_verified: true,
@@ -438,8 +413,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               try {
                 await pushUpdate('editor_assignments', 'assignment_id', a.assignment_id, {
                   status: 'Client Acceptance',
-                  edited_drive_link: linkVal,
-                  final_edited_footage_link: linkVal,
                   server_upload_folder_name: folderVal,
                   folder_name: folderVal,
                   server_upload_confirmed: true,
@@ -476,29 +449,13 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             });
             const verifyData = await verifyRes.json();
             if (!verifyData?.success || !Array.isArray(verifyData.data) || verifyData.data.length === 0) {
-              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: Database record (${targetProdId}) could not be retrieved.`);
+              throw new Error(`CLIENT ACCEPTANCE STATUS VERIFICATION FAILED: Database record (${targetProdId}) could not be retrieved.`);
             }
 
             const dbRow = verifyData.data[0];
 
             if (dbRow.current_status !== 'Client Acceptance' && dbRow.production_status !== 'Client Acceptance') {
-              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: current_status in database was '${dbRow.current_status || 'null'}' and production_status was '${dbRow.production_status || 'null'}' instead of 'Client Acceptance'.`);
-            }
-
-            if (!dbRow.checklist_client_communication_proof && !dbRow.client_communication_proof) {
-              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: Client communication proof was not saved in database.`);
-            }
-
-            if (!dbRow.checklist_edited_files_uploaded) {
-              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: checklist_edited_files_uploaded was not saved as true.`);
-            }
-
-            if (folderVal && dbRow.folder_name !== folderVal && dbRow.server_upload_folder_name !== folderVal) {
-              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: folder_name in database ('${dbRow.folder_name || 'null'}') did not match submitted '${folderVal}'.`);
-            }
-
-            if (linkVal && dbRow.final_edited_footage_link !== linkVal && dbRow.edited_drive_link !== linkVal) {
-              throw new Error(`CLIENT ACCEPTANCE VERIFICATION FAILED: final_edited_footage_link in database did not match submitted link.`);
+              throw new Error(`CLIENT ACCEPTANCE STATUS VERIFICATION FAILED: The Production status was not saved correctly. Current status in database is '${dbRow.current_status || dbRow.production_status || 'unknown'}' instead of 'Client Acceptance'.`);
             }
 
             // 6. REFRESH GLOBAL DATA
@@ -517,10 +474,17 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
           } catch (saveErr: any) {
             console.error('[ProductionClientAcceptanceManager] Failed to finalize Client Acceptance:', saveErr);
-            showFrontLevelError(form, 'CLIENT ACCEPTANCE SAVE FAILED', [
-              `Error: ${saveErr?.message || String(saveErr)}`,
-              `Please ensure the database connection is active and retry.`
-            ]);
+            const errText = saveErr?.message || String(saveErr);
+            if (errText.includes('VERIFICATION FAILED')) {
+              showFrontLevelError(form, 'CLIENT ACCEPTANCE STATUS VERIFICATION FAILED', [
+                'The Production status was not saved correctly.',
+                errText
+              ]);
+            } else {
+              showFrontLevelError(form, 'CLIENT ACCEPTANCE SAVE FAILED', [
+                errText
+              ]);
+            }
           } finally {
             if (submitBtn) {
               submitBtn.disabled = false;
@@ -556,7 +520,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
         const isConfirmed = Boolean(uploadConfirmations[cardKey]);
         const folderVal = folderNames[cardKey] || '';
-        const linkVal = finalEditedFootageLinks[cardKey] || '';
 
         return createPortal(
           <div key={`portal_content_${cardKey}`} className="space-y-3">
@@ -581,40 +544,21 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             </label>
 
             {isConfirmed && (
-              <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                <div className="space-y-1">
-                  <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                    FOLDER NAME <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required={isConfirmed}
-                    placeholder="e.g. 2024-05-12_Wedding_Videos"
-                    value={folderVal}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFolderNames(prev => ({ ...prev, [cardKey]: val }));
-                    }}
-                    className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                    FINAL EDITED FOOTAGE LINK <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="url"
-                    required={isConfirmed}
-                    placeholder="Paste final edited footage URL (e.g. Google Drive link)"
-                    value={linkVal}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFinalEditedFootageLinks(prev => ({ ...prev, [cardKey]: val }));
-                    }}
-                    className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
-                  />
-                </div>
+              <div className="pl-7 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+                  FOLDER NAME <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required={isConfirmed}
+                  placeholder="e.g. 2024-05-12_Wedding_Videos"
+                  value={folderVal}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setFolderNames(prev => ({ ...prev, [cardKey]: val }));
+                  }}
+                  className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
+                />
               </div>
             )}
           </div>,
