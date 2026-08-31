@@ -568,7 +568,7 @@ export function parseDeliverablesJsonToRecord(
             }).filter(Boolean);
           }
 
-          if (evName === 'General' || (!evName && !evId) || evName === 'Unnamed Event') {
+          if (evName === 'General' || (!evName && !evId) || (!evId && evName === 'Unnamed Event')) {
             generalList = [...generalList, ...deliverables];
           } else {
             const matchedEv = (eventsList || []).find((e, eIdx) =>
