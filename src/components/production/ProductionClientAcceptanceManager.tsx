@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useRole } from '../RoleContext';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { supabaseClient } from '../../supabaseClient';
 
 export const ProductionClientAcceptanceManager: React.FC = () => {
   const { production, pushUpdate, refreshData } = useRole();
@@ -179,22 +180,16 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       });
       
       // 2. Verify Database
-      const verifyRes = await fetch('/api/db/select', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          table: 'production',
-          matchColumn: 'production_id',
-          matchValue: activeProd.production_id
-        })
-      });
-      
-      const verifyData = await verifyRes.json();
-      if (!verifyData?.success || !Array.isArray(verifyData.data) || verifyData.data.length === 0) {
-        throw new Error(`Database record (${activeProd.production_id}) could not be retrieved.`);
+      const { data: dbData, error: dbError } = await supabaseClient
+        .from('production')
+        .select('*')
+        .eq('production_id', activeProd.production_id);
+
+      if (dbError || !dbData || dbData.length === 0) {
+        throw new Error(`Database record (${activeProd.production_id}) could not be retrieved. ${dbError?.message || ''}`);
       }
       
-      const dbRow = verifyData.data[0];
+      const dbRow = dbData[0];
       if (String(dbRow.current_status || '').trim().toLowerCase() !== 'client acceptance' && 
           String(dbRow.production_status || '').trim().toLowerCase() !== 'client acceptance') {
         throw new Error(`The Production status was not saved as Client Acceptance.`);
