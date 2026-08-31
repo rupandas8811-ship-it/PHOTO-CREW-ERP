@@ -130,6 +130,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
   const activeExactProdIdRef = useRef<string>('');
   const lastModalRef = useRef<HTMLElement | null>(null);
+  const typedLinksRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
     const handleSyncClientAcceptanceModal = () => {
@@ -146,6 +147,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       if (!caModal) {
         activeExactProdIdRef.current = '';
         lastModalRef.current = null;
+        typedLinksRef.current = {};
         return;
       }
 
@@ -168,6 +170,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       if (lastModalRef.current !== caModal || activeExactProdIdRef.current !== exactProdId) {
         lastModalRef.current = caModal;
         activeExactProdIdRef.current = exactProdId;
+        typedLinksRef.current = {};
       }
 
       // Hide event date inputs if present
@@ -206,9 +209,13 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         return t.includes('edited folder uploaded to server') || t.includes('edited folder uploaded in server');
       });
 
-      uploadCheckboxes.forEach((uploadLabel) => {
+      uploadCheckboxes.forEach((uploadLabel, idx) => {
         const eventCard = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3') as HTMLElement | null || caModal;
         
+        // Extract card isolation key
+        const cardTitleEl = eventCard.querySelector('span.font-bold, span.font-semibold');
+        const cardKey = cardTitleEl?.textContent?.trim() || `card_${idx}`;
+
         const isFolderUploadSaved = Boolean(
           savedFolderName ||
           savedLink ||
@@ -225,13 +232,29 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         }
 
         const folderInput = eventCard.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-        if (folderInput && savedFolderName && folderInput.value !== savedFolderName) {
+        if (folderInput && savedFolderName && !folderInput.value) {
           setTextInputValue(folderInput, savedFolderName);
+        }
+
+        // Hide Event Date if inside this event card
+        const cardDateLabel = Array.from(eventCard.querySelectorAll<HTMLElement>('label')).find(l => (l.textContent || '').toLowerCase().includes('event date'));
+        if (cardDateLabel) {
+          const cardDateWrapper = cardDateLabel.closest('div.space-y-1') as HTMLElement | null;
+          if (cardDateWrapper) {
+            cardDateWrapper.style.setProperty('display', 'none', 'important');
+            const cardDateInput = cardDateWrapper.querySelector('input');
+            if (cardDateInput) {
+              cardDateInput.required = false;
+              cardDateInput.removeAttribute('required');
+            }
+          }
         }
 
         // Final edited footage link input
         const gridContainer = eventCard.querySelector('div.grid') as HTMLElement | null || eventCard;
         if (gridContainer) {
+          const currentLinkValue = typedLinksRef.current[cardKey] ?? savedLink;
+
           let linkWrapper = gridContainer.querySelector('.ca-final-footage-link-group') as HTMLElement | null;
           if (!linkWrapper) {
             linkWrapper = document.createElement('div');
@@ -243,15 +266,28 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               <input
                 type="url"
                 placeholder="Paste final edited footage URL (e.g. Google Drive link)"
-                value="${savedLink.replace(/"/g, '&quot;')}"
+                value="${(currentLinkValue || '').replace(/"/g, '&quot;')}"
                 class="ca-final-footage-link-input w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono transition-all outline-none"
               />
             `;
             gridContainer.appendChild(linkWrapper);
+
+            const newLinkInput = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
+            if (newLinkInput) {
+              newLinkInput.addEventListener('input', (e) => {
+                typedLinksRef.current[cardKey] = (e.target as HTMLInputElement).value;
+              });
+              newLinkInput.addEventListener('change', (e) => {
+                typedLinksRef.current[cardKey] = (e.target as HTMLInputElement).value;
+              });
+            }
           } else {
             const inputEl = linkWrapper.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
-            if (inputEl && document.activeElement !== inputEl && savedLink && inputEl.value !== savedLink) {
-              inputEl.value = savedLink;
+            if (inputEl) {
+              if (document.activeElement !== inputEl && currentLinkValue && inputEl.value !== currentLinkValue) {
+                inputEl.value = currentLinkValue;
+              }
+              typedLinksRef.current[cardKey] = inputEl.value;
             }
           }
         }
@@ -307,26 +343,55 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             }
 
             // 2. Validate Edited Folder Uploaded to Server
-            const folderInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-            const linkInput = caModal.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
             const folderCheckboxes = allLabels.filter(l => {
               const t = (l.textContent || '').toLowerCase();
               return t.includes('edited folder uploaded to server') || t.includes('edited folder uploaded in server');
             });
-            const folderCb = folderCheckboxes[0]?.querySelector<HTMLInputElement>('input[type="checkbox"]') || folderCheckboxes[0]?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-            const isFolderChecked = folderCb ? folderCb.checked : false;
 
-            const folderVal = folderInput ? (folderInput.value || '').trim() : '';
-            const linkVal = linkInput ? (linkInput.value || '').trim() : '';
+            let folderVal = '';
+            let linkVal = '';
+            let isFolderCheckedOverall = false;
 
-            if (!isFolderChecked) {
+            folderCheckboxes.forEach((uploadLabel, idx) => {
+              const eventCard = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3') as HTMLElement | null || caModal;
+              const cardTitleEl = eventCard.querySelector('span.font-bold, span.font-semibold');
+              const cardKey = cardTitleEl?.textContent?.trim() || `card_${idx}`;
+
+              const folderCb = uploadLabel.querySelector<HTMLInputElement>('input[type="checkbox"]') || uploadLabel.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+              const isFolderChecked = folderCb ? folderCb.checked : false;
+
+              if (isFolderChecked) {
+                isFolderCheckedOverall = true;
+                const folderInput = eventCard.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]') || caModal.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
+                const linkInput = eventCard.querySelector<HTMLInputElement>('input.ca-final-footage-link-input') || caModal.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
+
+                const cardFolderVal = folderInput ? (folderInput.value || '').trim() : '';
+                const cardLinkVal = linkInput ? (linkInput.value || '').trim() : (typedLinksRef.current[cardKey] || '').trim();
+
+                if (!cardFolderVal && !missingItems.includes('Folder Name')) {
+                  missingItems.push('Folder Name');
+                }
+                if (!cardLinkVal && !missingItems.includes('Final Edited Footage Link')) {
+                  missingItems.push('Final Edited Footage Link');
+                }
+
+                if (!folderVal && cardFolderVal) folderVal = cardFolderVal;
+                if (!linkVal && cardLinkVal) linkVal = cardLinkVal;
+              }
+            });
+
+            if (!isFolderCheckedOverall && folderCheckboxes.length > 0) {
               missingItems.push('Edited Folder Uploaded to Server');
             }
+
             if (!folderVal) {
-              missingItems.push('Folder Name');
+              const fallbackFolderInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
+              folderVal = (fallbackFolderInput?.value || savedFolderName || '').trim();
             }
+
             if (!linkVal) {
-              missingItems.push('Final Edited Footage Link');
+              const fallbackLinkInput = caModal.querySelector<HTMLInputElement>('input.ca-final-footage-link-input');
+              linkVal = (fallbackLinkInput?.value || Object.values(typedLinksRef.current)[0] || savedLink || '').trim();
             }
 
             // STOP IF MISSING ANY REQUIRED ITEM
