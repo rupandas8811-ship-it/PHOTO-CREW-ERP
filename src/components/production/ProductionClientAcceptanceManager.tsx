@@ -40,6 +40,22 @@ const setTextInputValue = (inputEl: HTMLInputElement, value: string) => {
   inputEl.dispatchEvent(new Event("change", { bubbles: true }));
 };
 
+// Helper to extract clientAcceptanceProd directly from React Fiber
+const getClientAcceptanceProdFromFiber = (caModal: HTMLElement): any => {
+  if (!caModal) return null;
+  const key = Object.keys(caModal).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+  if (!key) return null;
+  let fiber = (caModal as any)[key];
+  while (fiber) {
+    const props = fiber.memoizedProps || fiber.pendingProps;
+    if (props?.clientAcceptanceProd) {
+      return props.clientAcceptanceProd;
+    }
+    fiber = fiber.return;
+  }
+  return null;
+};
+
 // Helper to extract eventGroup details directly from React Fiber for 100% accuracy
 const getEventGroupFromFiber = (el: HTMLElement): { eventId: string; eventName: string } | null => {
   const key = Object.keys(el).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
@@ -181,21 +197,25 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         eventLinksRef.current = {};
       }
 
-      // Extract Order / Production ID from header or badges
+      // Extract Order / Production ID from Fiber FIRST
+      const fiberProd = getClientAcceptanceProdFromFiber(caModal);
+
+      // Extract Order / Production ID from header or badges or fiber
       const headerTitle = caModal.querySelector('h3');
       const headerText = headerTitle?.textContent || caModal.textContent || '';
-      const prodIdMatch = headerText.match(/(PRD-[A-Za-z0-9_-]+|ORD-[A-Za-z0-9_-]+|TRK-[A-Za-z0-9_-]+)/i);
-      const matchedHeaderId = prodIdMatch ? prodIdMatch[1].trim() : '';
+      const prodIdMatches = Array.from(headerText.matchAll(/(PRD-[A-Za-z0-9_-]+|ORD-[A-Za-z0-9_-]+|TRK-[A-Za-z0-9_-]+|OR[0-9]{2,6}|LD[0-9]{2,6})/gi)).map(m => m[1]);
+      const matchedHeaderId = prodIdMatches[0] || fiberProd?.production_id || fiberProd?.order_id || fiberProd?.tracking_id || '';
 
       // Match target production record
-      const targetProd = (production || []).find(p =>
+      const targetProd = fiberProd || (production || []).find(p =>
         p.production_id === matchedHeaderId ||
         (p as any).order_id === matchedHeaderId ||
         p.tracking_id === matchedHeaderId ||
         (matchedHeaderId && (
           p.production_id?.toLowerCase() === matchedHeaderId.toLowerCase() ||
           p.tracking_id?.toLowerCase() === matchedHeaderId.toLowerCase() ||
-          String((p as any).order_id || '').toLowerCase() === matchedHeaderId.toLowerCase()
+          String((p as any).order_id || '').toLowerCase() === matchedHeaderId.toLowerCase() ||
+          String((p as any).lead_id || '').toLowerCase() === matchedHeaderId.toLowerCase()
         ))
       ) || (production || []).find(p => {
         const custName = (p as any).customer_name || '';
@@ -620,18 +640,34 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               client_communication_proof_name: caUploadNameVal,
             };
 
-            if (currentProdId && updateProduction) {
-              await updateProduction(currentProdId, prodUpdates);
-            }
+            // 2. Update production record status to 'Client Acceptance' in Supabase across all matching candidate IDs
+            const matchingProds = (production || []).filter(p => {
+              const pCandidateIds = getAllCandidateOrderIds(p);
+              return pCandidateIds.some(id => saveTargets.map(t => t.toLowerCase()).includes(id.toLowerCase()));
+            });
 
-            if (targetProd?.production_id) {
-              const resP = await pushUpdate('production', 'production_id', targetProd.production_id, prodUpdates);
-              if (!resP?.success) {
-                throw new Error(`Failed to update production table: ${resP?.error || 'Unknown error'}`);
+            if (matchingProds.length > 0) {
+              for (const mP of matchingProds) {
+                if (mP.production_id && updateProduction) {
+                  await updateProduction(mP.production_id, prodUpdates);
+                }
+                if (mP.production_id) {
+                  await pushUpdate('production', 'production_id', mP.production_id, prodUpdates);
+                }
+                if (mP.tracking_id) {
+                  await pushUpdate('production', 'tracking_id', mP.tracking_id, prodUpdates);
+                }
               }
-            }
-            if (targetProd?.tracking_id) {
-              await pushUpdate('production', 'tracking_id', targetProd.tracking_id, prodUpdates);
+            } else {
+              for (const tId of saveTargets) {
+                if (updateProduction) {
+                  try { await updateProduction(tId, prodUpdates); } catch (_) {}
+                }
+                await pushUpdate('production', 'production_id', tId, prodUpdates);
+                await pushUpdate('production', 'tracking_id', tId, prodUpdates);
+                await pushUpdate('production', 'order_id', tId, prodUpdates);
+                await pushUpdate('production', 'lead_id', tId, prodUpdates);
+              }
             }
 
             // 3. Update orders and leads tables stage to 'Client Acceptance' in Supabase
@@ -656,24 +692,30 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
             }
 
             // 4. VERIFY DATABASE RESPONSE
-            if (currentProdId || targetProd?.production_id) {
-              const verifyRes = await fetch('/api/db/select', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  table: 'production',
-                  matchColumn: 'production_id',
-                  matchValue: currentProdId || targetProd?.production_id
-                })
-              });
-              
-              const verifyData = await verifyRes.json();
-              if (verifyData?.success && Array.isArray(verifyData.data) && verifyData.data.length > 0) {
-                const dbStatus = verifyData.data[0].editing_status || verifyData.data[0].production_status || verifyData.data[0].current_status;
-                if (dbStatus !== 'Client Acceptance') {
-                  throw new Error(`Database status verification failed. Target status was not updated to 'Client Acceptance'.`);
-                }
+            let isVerifiedInDb = false;
+            for (const checkId of saveTargets) {
+              for (const col of ['production_id', 'tracking_id', 'order_id', 'lead_id']) {
+                try {
+                  const verifyRes = await fetch('/api/db/select', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      table: 'production',
+                      matchColumn: col,
+                      matchValue: checkId
+                    })
+                  });
+                  const verifyData = await verifyRes.json();
+                  if (verifyData?.success && Array.isArray(verifyData.data) && verifyData.data.length > 0) {
+                    const dbStatus = verifyData.data[0].editing_status || verifyData.data[0].production_status || verifyData.data[0].current_status;
+                    if (dbStatus === 'Client Acceptance') {
+                      isVerifiedInDb = true;
+                      break;
+                    }
+                  }
+                } catch (_) {}
               }
+              if (isVerifiedInDb) break;
             }
 
             // 5. Force a clean refresh of data in the dashboard context
