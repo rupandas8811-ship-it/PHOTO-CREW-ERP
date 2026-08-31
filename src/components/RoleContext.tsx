@@ -4247,8 +4247,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
     if (!targetOrder) throw new Error("Order not found");
 
-    const existingOp = operations.find(o => o.order_id === orderId);
-    const opId = existingOp?.operation_id || `OP-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 10000)}`;
+    let opExistsInDb = false;
+    let existingOpId = operations.find(o => o.order_id === orderId)?.operation_id;
+
+    if (supabaseClient) {
+      const { data: dbOp } = await supabaseClient.from('operations').select('operation_id').eq('order_id', orderId).maybeSingle();
+      if (dbOp) {
+        existingOpId = dbOp.operation_id;
+        opExistsInDb = true;
+      }
+    }
+
+    const opId = existingOpId || `OP-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 10000)}`;
     const { current_stage, event_date, event_time, event_status, ...restOpData } = opData;
     
     // Default or specified status / stage
@@ -4336,8 +4346,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    if (existingOp) {
-      const resOp = await pushUpdate('operations', 'operation_id', existingOp.operation_id, {
+    if (opExistsInDb || existingOpId) {
+      const resOp = await pushUpdate('operations', 'operation_id', existingOpId as string, {
         ...restOpData,
         event_status: dbEventStatus,
         updated_by: currentUserName,
