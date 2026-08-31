@@ -65,6 +65,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
   } = useRole();
 
   const [activeTab, setActiveTab] = useState<'roadmap' | 'operations' | 'production' | 'proofs' | 'footage' | 'payments'>('roadmap');
+  const [showMoreTabs, setShowMoreTabs] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('asc'); // Default chronological (oldest to newest)
@@ -761,32 +762,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
               )}
             </div>
 
-            <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
-              <span>{matchedOrder?.customer_name || matchedLead?.customer_name || 'Customer Project History'}</span>
-              <span className="text-xs font-normal px-2.5 py-0.5 rounded-full bg-zinc-800 text-zinc-300 font-mono">
-                {matchedLead?.custom_event_name || matchedLead?.event_type || matchedOrder?.event_type || 'Photography Event'}
-              </span>
-            </h2>
 
-            <div className="flex items-center gap-4 text-xs text-zinc-400 mt-2 flex-wrap font-mono">
-              <span className="flex items-center gap-1 text-zinc-300">
-                <Calendar className="w-3.5 h-3.5 text-blue-400" />
-                <span>Event Date: {matchedOrder?.event_date ? formatDateDDMMYY(matchedOrder.event_date) : (matchedLead?.event_date ? formatDateDDMMYY(matchedLead.event_date) : 'N/A')}</span>
-              </span>
-              {matchedLead?.mobile && (
-                <span className="flex items-center gap-1 text-zinc-300">
-                  <Phone className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{matchedLead.mobile}</span>
-                </span>
-              )}
-              <span className="flex items-center gap-1">
-                <Tag className="w-3.5 h-3.5 text-purple-400" />
-                <span>Current Stage:</span>
-                <strong className="px-2 py-0.5 rounded bg-zinc-800 text-amber-300 border border-zinc-700">
-                  {matchedOrder?.order_status || matchedOrder?.current_stage || matchedLead?.current_stage || 'Active'}
-                </strong>
-              </span>
-            </div>
           </div>
 
           {/* Financial Summary Pill & Close Button */}
@@ -862,72 +838,91 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         <div className="p-3 sm:p-4 bg-zinc-900/60 border-b border-zinc-800 flex flex-col lg:flex-row items-center justify-between gap-3 shrink-0">
           
           {/* Subtabs */}
-          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-full lg:w-auto overflow-x-auto custom-scrollbar">
+          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800 w-full lg:w-auto overflow-visible relative z-20">
             <button
               type="button"
-              onClick={() => setActiveTab('roadmap')}
+              onClick={() => { setActiveTab('roadmap'); setShowMoreTabs(false); }}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === 'roadmap' ? 'bg-amber-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white'
               }`}
             >
               <History className="w-3.5 h-3.5" />
-              <span>Full Roadmap ({timelineItems.length})</span>
+              <span>Full Roadmap</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('operations')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'operations' ? 'bg-amber-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5" />
-              <span>Operations ({matchedStaffAssignments.length || matchedOps.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('production')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'production' ? 'bg-amber-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Production Tasks ({matchedEditorAssignments.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('proofs')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'proofs' ? 'bg-emerald-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              <ImageIcon className="w-3.5 h-3.5" />
-              <span>Proof Gallery ({allProofGallery.length})</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('footage')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'footage' ? 'bg-amber-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              <HardDrive className="w-3.5 h-3.5" />
-              <span>Footage Repository</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('payments')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'payments' ? 'bg-amber-500 text-black shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              <DollarSign className="w-3.5 h-3.5" />
-              <span>Payments ({matchedPayments.length})</span>
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowMoreTabs(!showMoreTabs)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                  activeTab !== 'roadmap' ? 'bg-zinc-800 text-white shadow-sm border border-zinc-700' : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                }`}
+              >
+                <span>More</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMoreTabs ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {showMoreTabs && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-[90]" 
+                    onClick={() => setShowMoreTabs(false)}
+                  />
+                  <div className="absolute top-full left-0 sm:left-auto sm:right-0 mt-2 w-56 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-[100] py-1.5 overflow-hidden flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('operations'); setShowMoreTabs(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                        activeTab === 'operations' ? 'bg-amber-500/10 text-amber-400 border-l-2 border-amber-500' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50 border-l-2 border-transparent'
+                      }`}
+                    >
+                      <Film className="w-3.5 h-3.5" />
+                      <span>Operations</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('production'); setShowMoreTabs(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                        activeTab === 'production' ? 'bg-amber-500/10 text-amber-400 border-l-2 border-amber-500' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50 border-l-2 border-transparent'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Production Tasks</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('proofs'); setShowMoreTabs(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                        activeTab === 'proofs' ? 'bg-emerald-500/10 text-emerald-400 border-l-2 border-emerald-500' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50 border-l-2 border-transparent'
+                      }`}
+                    >
+                      <ImageIcon className="w-3.5 h-3.5" />
+                      <span>Proof Gallery</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('footage'); setShowMoreTabs(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                        activeTab === 'footage' ? 'bg-amber-500/10 text-amber-400 border-l-2 border-amber-500' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50 border-l-2 border-transparent'
+                      }`}
+                    >
+                      <HardDrive className="w-3.5 h-3.5" />
+                      <span>Footage Repository</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('payments'); setShowMoreTabs(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                        activeTab === 'payments' ? 'bg-amber-500/10 text-amber-400 border-l-2 border-amber-500' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50 border-l-2 border-transparent'
+                      }`}
+                    >
+                      <DollarSign className="w-3.5 h-3.5" />
+                      <span>Payments</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Search & Sort Controls */}

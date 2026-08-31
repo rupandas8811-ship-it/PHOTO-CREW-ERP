@@ -6,6 +6,11 @@ import { supabaseClient } from '../../supabaseClient';
 
 export const ProductionClientAcceptanceManager: React.FC = () => {
   const { production, pushUpdate, refreshData } = useRole();
+  const productionRef = React.useRef(production);
+  useEffect(() => {
+    productionRef.current = production;
+  }, [production]);
+
   const [activeProdId, setActiveProdId] = useState<string | null>(null);
   
   const activeProd = activeProdId 
@@ -28,8 +33,12 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
   // Reset state when a new prod is opened
   useEffect(() => {
     if (activeProd) {
+      const statusNorm = (activeProd.current_status || activeProd.production_status || activeProd.editing_status || '').trim().toLowerCase();
+      const completedStatuses = ['client acceptance', 'business owner review', 'project completed', 'completed', 'order closed', 'closed', 'final approval', 'approved', 'ready for delivery', 'delivered'];
+      const isCompleted = completedStatuses.includes(statusNorm);
+
       setChecklist({
-        checklist_customer_acceptance: !!activeProd.checklist_customer_acceptance,
+        checklist_customer_acceptance: isCompleted ? !!activeProd.checklist_customer_acceptance : false,
         checklist_content_usage: !!activeProd.checklist_content_usage,
         checklist_footage_deleted_7_days: !!activeProd.checklist_footage_deleted_7_days,
         checklist_payment_from_sales: !!activeProd.checklist_payment_from_sales,
@@ -138,7 +147,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
   }, []);
 
   const checklistItems = [
-    { key: 'checklist_customer_acceptance', label: 'Verify Customer Acceptance' },
+    { key: 'checklist_customer_acceptance', label: 'Client Approval' },
     { key: 'checklist_content_usage', label: 'Content Usage Confirmation' },
     { key: 'checklist_footage_deleted_7_days', label: 'Footage Deleted in 7 Days' },
     { key: 'checklist_payment_from_sales', label: 'Verify Payment from Sales' },
