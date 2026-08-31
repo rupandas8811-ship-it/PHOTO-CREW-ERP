@@ -3985,7 +3985,7 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Equipment Status Modal */}
       {selectedEquipmentStatus && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000000] flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative p-5">
             <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
               <div>
@@ -4110,7 +4110,7 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Event Images Modal */}
       {selectedEventImages && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1000000] flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl relative p-5">
             <div className="flex items-center justify-between mb-4 border-b border-zinc-800 pb-3">
               <h3 className="text-sm font-bold text-indigo-400 font-mono uppercase">
@@ -5164,7 +5164,8 @@ export const OperationsLeads: React.FC = () => {
                                     {/* 5. Equipment Status */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       {hasEqAssigned ? (
-                                        <span 
+                                        <button 
+                                          type="button"
                                           onClick={() => setSelectedEquipmentStatus({ 
                                             staffName: member.staff_name, 
                                             assignedEquipment: effectiveAssignedEq.length > 0 ? effectiveAssignedEq : (member.assigned_equipment || []),
@@ -5178,7 +5179,7 @@ export const OperationsLeads: React.FC = () => {
                                           title="Click to view equipment verification images"
                                         >
                                           {equipmentStatusText}
-                                        </span>
+                                        </button>
                                       ) : (
                                         <span className="text-zinc-500 font-semibold text-xs font-mono">
                                           No Equipment Assigned
@@ -5188,12 +5189,13 @@ export const OperationsLeads: React.FC = () => {
 
                                     {/* 6. Event Images */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                                      <span 
+                                      <button 
+                                        type="button"
                                         onClick={() => setSelectedEventImages({ staffName: member.staff_name, assetCollection, evStart, evEnd })}
                                         className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
                                       >
                                         {eventImageStatusText}
-                                      </span>
+                                      </button>
                                     </td>
 
                                     {/* 7. Raw Footage */}
@@ -5401,7 +5403,7 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Image Preview Modal */}
       {imagePreviewModal && createPortal(
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-lg z-[9999999] flex flex-col items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <div>
