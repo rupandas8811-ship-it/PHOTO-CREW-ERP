@@ -81,6 +81,56 @@ const getAllCandidateOrderIds = (targetProd: any, fallbackId?: string): string[]
   return Array.from(set).filter(Boolean);
 };
 
+// Front-level error banner helpers
+const showFrontLevelError = (containerEl: HTMLElement, title: string, items: string[]) => {
+  let errorBox = containerEl.querySelector<HTMLElement>('.ca-front-error-banner');
+  if (!errorBox) {
+    errorBox = document.createElement('div');
+    errorBox.className = 'ca-front-error-banner p-4 mb-4 bg-rose-950/95 border-2 border-rose-500 rounded-xl text-rose-100 space-y-2.5 shadow-2xl animate-in fade-in slide-in-from-top-2 z-50 transition-all';
+    
+    if (containerEl.firstChild) {
+      containerEl.insertBefore(errorBox, containerEl.firstChild);
+    } else {
+      containerEl.appendChild(errorBox);
+    }
+  }
+
+  errorBox.innerHTML = `
+    <div class="flex items-center justify-between border-b border-rose-800/80 pb-2">
+      <div class="flex items-center gap-2 font-mono font-bold text-xs sm:text-sm text-rose-200 uppercase tracking-wider">
+        <span class="text-rose-400 text-base">⚠</span> ${title}
+      </div>
+      <button type="button" class="ca-dismiss-error-btn px-2.5 py-1 rounded text-[10px] font-mono font-bold bg-rose-900/80 hover:bg-rose-800 text-rose-200 border border-rose-700/80 transition-colors cursor-pointer">
+        Dismiss ✕
+      </button>
+    </div>
+    <div class="text-xs font-sans text-rose-200/90 leading-relaxed">
+      ${items.length > 0 ? `
+        <p class="font-semibold text-rose-100 mb-1">Please complete the following required items before approving:</p>
+        <ul class="list-disc list-inside space-y-1 font-mono text-[11px] text-rose-200 pl-1">
+          ${items.map(item => `<li><span class="text-rose-400 font-bold">✗</span> ${item}</li>`).join('')}
+        </ul>
+      ` : ''}
+    </div>
+  `;
+
+  const dismissBtn = errorBox.querySelector<HTMLButtonElement>('.ca-dismiss-error-btn');
+  if (dismissBtn) {
+    dismissBtn.onclick = () => {
+      errorBox?.remove();
+    };
+  }
+
+  errorBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+
+const clearFrontLevelError = (containerEl: HTMLElement) => {
+  const errorBox = containerEl.querySelector<HTMLElement>('.ca-front-error-banner');
+  if (errorBox) {
+    errorBox.remove();
+  }
+};
+
 export const ProductionClientAcceptanceManager: React.FC = () => {
   const {
     production,
@@ -378,63 +428,121 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           }
 
           try {
-            // Collect all link inputs currently in the modal
-            const linkInputs = Array.from(caModal.querySelectorAll<HTMLInputElement>('input.ca-final-footage-link-input'));
-            
-            // STRICT VALIDATION
-            for (const inp of linkInputs) {
-              const card = inp.closest('div.p-3, div.rounded-xl, div.space-y-3');
-              const fInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
-              const folderVal = fInput ? (fInput.value || '').trim() : '';
-              const linkVal = (inp.value || '').trim();
+            clearFrontLevelError(form);
 
-              const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-              if (checkbox && !checkbox.checked) {
-                alert(`Please check 'Edited Folder Uploaded to Server' confirmation.`);
-                if (submitBtn) {
-                  submitBtn.disabled = false;
-                  submitBtn.innerHTML = originalBtnText;
-                }
-                return;
-              }
+            // COLLECT ALL MISSING REQUIRED CHECKLIST ITEMS & FIELDS
+            const missingItems: string[] = [];
 
-              if (!folderVal) {
-                alert(`Folder Name is required for all uploaded folders.`);
-                if (submitBtn) {
-                  submitBtn.disabled = false;
-                  submitBtn.innerHTML = originalBtnText;
-                }
-                return;
-              }
-
-              if (!linkVal) {
-                alert(`Final Edited Footage Link is required for all uploaded folders.`);
-                if (submitBtn) {
-                  submitBtn.disabled = false;
-                  submitBtn.innerHTML = originalBtnText;
-                }
-                return;
-              }
-            }
-
-            // Extract proof URL and name from DOM to save to DB
+            // Check Client Communication & Consent Proof
             const proofLabel = allLabels.find(l => (l.textContent || '').toLowerCase().includes('client communication & consent proof'));
             const proofCheckbox = proofLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || proofLabel?.closest('label')?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-            const isConsentProofChecked = proofCheckbox ? proofCheckbox.checked : true;
+            const isConsentProofChecked = proofCheckbox ? proofCheckbox.checked : false;
+
+            if (!isConsentProofChecked) {
+              missingItems.push('Client Communication & Consent Proof (Checkbox required)');
+            }
 
             const proofImg = caModal.querySelector<HTMLImageElement>('img[alt*="Proof"], img[alt*="Communication"]');
             const proofLink = caModal.querySelector<HTMLAnchorElement>('a[href*="storage"], a[href*="firebasestorage"], a[href*="proof"]');
             const caCommunicationProofVal = proofImg?.src || proofLink?.href || '';
-            
+
+            if (!caCommunicationProofVal || !caCommunicationProofVal.trim()) {
+              missingItems.push('Client Communication & Consent Proof (File or document proof required)');
+            }
+
             const proofNameSpan = caModal.querySelector<HTMLElement>('span.truncate');
-            const caUploadNameVal = proofNameSpan?.textContent || 'Uploaded Proof Document';
+            const proofNameInput = caModal.querySelector<HTMLInputElement>('input[placeholder*="Upload Name"], input[name*="uploadName"]');
+            const caUploadNameVal = proofNameInput?.value || proofNameSpan?.textContent || 'Uploaded Proof Document';
+
+            if (!caUploadNameVal || !caUploadNameVal.trim() || (!caCommunicationProofVal && caUploadNameVal === 'Uploaded Proof Document')) {
+              missingItems.push('Upload Name (Proof file name required)');
+            }
+
+            // Check "Edited Folder Uploaded to Server" for each event/task card
+            const linkInputs = Array.from(caModal.querySelectorAll<HTMLInputElement>('input.ca-final-footage-link-input'));
+
+            if (linkInputs.length > 0) {
+              linkInputs.forEach((inp, i) => {
+                const card = inp.closest('div.p-3, div.rounded-xl, div.space-y-3');
+                const fInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
+                const folderVal = fInput ? (fInput.value || '').trim() : '';
+                const linkVal = (inp.value || '').trim();
+
+                const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+                const isFolderUploadChecked = checkbox ? checkbox.checked : false;
+
+                const fiberDetails = card ? getEventGroupFromFiber(card as HTMLElement) : null;
+                const eventCardText = card?.textContent || '';
+                const eventNameMatch = eventCardText.match(/confirm upload for:\s*([^\n\r]+)/i) || eventCardText.match(/event:\s*([^\n\r]+)/i);
+                const eventLabelName = fiberDetails?.eventName || (eventNameMatch ? eventNameMatch[1].trim() : (linkInputs.length === 1 ? 'Edited Folder' : `Event ${i + 1}`));
+
+                if (!isFolderUploadChecked) {
+                  missingItems.push(`Edited Folder Uploaded to Server (${eventLabelName})`);
+                }
+                if (!folderVal) {
+                  missingItems.push(`Folder Name (${eventLabelName})`);
+                }
+                if (!linkVal) {
+                  missingItems.push(`Final Edited Footage Link (${eventLabelName})`);
+                }
+              });
+            } else {
+              const uploadCheckboxes = allLabels.filter(l => {
+                const t = (l.textContent || '').toLowerCase();
+                return t.includes('edited folder uploaded to server') || t.includes('edited folder uploaded in server');
+              });
+
+              if (uploadCheckboxes.length === 0) {
+                missingItems.push('Edited Folder Uploaded to Server');
+                missingItems.push('Folder Name');
+                missingItems.push('Final Edited Footage Link');
+              } else {
+                uploadCheckboxes.forEach((uploadLabel, i) => {
+                  const card = uploadLabel.closest('div.p-3, div.rounded-xl, div.space-y-3');
+                  const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+                  const folderInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
+                  
+                  const isChecked = checkbox ? checkbox.checked : false;
+                  const folderVal = folderInput ? (folderInput.value || '').trim() : '';
+
+                  if (!isChecked) missingItems.push(`Edited Folder Uploaded to Server (Event ${i + 1})`);
+                  if (!folderVal) missingItems.push(`Folder Name (Event ${i + 1})`);
+                  missingItems.push(`Final Edited Footage Link (Event ${i + 1})`);
+                });
+              }
+            }
+
+            // STOP APPROVAL PROCESS IF ANY REQUIRED ITEM IS MISSING
+            if (missingItems.length > 0) {
+              showFrontLevelError(form, 'CLIENT ACCEPTANCE CANNOT BE APPROVED', missingItems);
+              if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalBtnText;
+              }
+              return;
+            }
 
             let lastFolderVal = '';
             let lastLinkVal = '';
 
-            const saveTargets = Array.from(new Set([currentOrderId, currentProdId, targetProd?.tracking_id, targetProd?.order_id, matchedHeaderId].filter(Boolean) as string[]));
+            const candidateOrderIds = new Set<string>();
+            if (currentOrderId) candidateOrderIds.add(currentOrderId);
+            if (currentProdId) candidateOrderIds.add(currentProdId);
+            if (targetProd?.order_id) candidateOrderIds.add(targetProd.order_id);
+            if (targetProd?.tracking_id) candidateOrderIds.add(targetProd.tracking_id);
+            if (targetProd?.lead_id) candidateOrderIds.add(targetProd.lead_id);
+            if (matchedHeaderId) candidateOrderIds.add(matchedHeaderId);
 
-            // 1. Process all isolated saves per event/task across all order identifiers for guaranteed fetch matching
+            (orders || []).forEach(o => {
+              if (Array.from(candidateOrderIds).some(id => id.toLowerCase() === String(o.order_id || '').toLowerCase() || id.toLowerCase() === String(o.lead_id || '').toLowerCase())) {
+                if (o.order_id) candidateOrderIds.add(o.order_id);
+                if (o.lead_id) candidateOrderIds.add(o.lead_id);
+              }
+            });
+
+            const saveTargets = Array.from(candidateOrderIds).filter(Boolean);
+
+            // 1. Save all isolated verification records per event to Supabase
             for (const inp of linkInputs) {
               const evId = inp.getAttribute('data-event-id') || 'default';
               const linkVal = (inp.value || '').trim();
@@ -442,9 +550,6 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               const card = inp.closest('div.p-3, div.rounded-xl, div.space-y-3');
               const fInput = card?.querySelector<HTMLInputElement>('input[placeholder*="Wedding_Videos"], input[placeholder*="folder name"], input[id*="folder"]');
               const folderVal = fInput ? (fInput.value || '').trim() : '';
-
-              const checkbox = card?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-              const isFolderUploadChecked = checkbox ? checkbox.checked : true;
 
               lastFolderVal = folderVal;
               lastLinkVal = linkVal;
@@ -459,15 +564,15 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                     final_edited_footage_link: linkVal,
                     client_communication_consent_proof: caCommunicationProofVal,
                     proof_file_name: caUploadNameVal,
-                    consent_proof_verified: isConsentProofChecked,
-                    edited_folder_uploaded_to_server: isFolderUploadChecked
+                    consent_proof_verified: true,
+                    edited_folder_uploaded_to_server: true
                   } as any);
                 }
               }
 
-              // Update isolated editor_assignments for this specific task
+              // Update isolated editor_assignments
               const matchingAssignments = (editorAssignments || []).filter(a =>
-                (candidateIds.includes(String(a.order_id || '').toLowerCase()) || candidateIds.includes(String(a.production_id || '').toLowerCase())) &&
+                saveTargets.some(tId => tId.toLowerCase() === String(a.order_id || '').toLowerCase() || tId.toLowerCase() === String(a.production_id || '').toLowerCase()) &&
                 (a.event_id === evId || !a.event_id || evId === 'default' || (linkInputs.length === 1))
               );
 
@@ -477,8 +582,8 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
                   Edited_Drive_Link: linkVal,
                   final_edited_footage_link: linkVal,
                   server_upload_folder_name: folderVal,
-                  server_upload_confirmed: isFolderUploadChecked,
-                  edited_folder_uploaded_to_server: isFolderUploadChecked,
+                  server_upload_confirmed: true,
+                  edited_folder_uploaded_to_server: true,
                   server_upload_confirmed_at: new Date().toISOString(),
                   server_upload_confirmed_by: 'Production Team'
                 };
@@ -490,50 +595,93 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
               }
             }
 
-            // 2. Update production record status to 'Client Acceptance' and write consolidated links to Supabase
-            if (currentProdId && updateProduction) {
-              const prodUpdates = {
-                editing_status: 'Client Acceptance' as any,
-                production_status: 'Client Acceptance' as any,
-                current_status: 'Client Acceptance' as any,
-                final_consolidated_drive_link: lastLinkVal,
-                edited_drive_link: lastLinkVal,
-                server_upload_folder_name: lastFolderVal,
-                server_upload_confirmed: true,
-                edited_folder_uploaded_to_server: true,
-                checklist_client_communication_proof: true,
-                checklist_customer_acceptance: true,
-                checklist_content_usage: true,
-                checklist_footage_deleted_7_days: true,
-                checklist_payment_from_sales: true,
-                checklist_edited_files_uploaded: true,
-                server_upload_validated: true,
-                client_communication_proof: caCommunicationProofVal,
-                customer_communication_proof: caCommunicationProofVal,
-                proof_url: caCommunicationProofVal,
-                upload_name: caUploadNameVal,
-                proof_name: caUploadNameVal,
-                client_communication_proof_name: caUploadNameVal,
-              };
+            // 2. Update production record status to 'Client Acceptance' in Supabase
+            const prodUpdates = {
+              editing_status: 'Client Acceptance' as any,
+              production_status: 'Client Acceptance' as any,
+              current_status: 'Client Acceptance' as any,
+              final_consolidated_drive_link: lastLinkVal,
+              edited_drive_link: lastLinkVal,
+              server_upload_folder_name: lastFolderVal,
+              server_upload_confirmed: true,
+              edited_folder_uploaded_to_server: true,
+              checklist_client_communication_proof: true,
+              checklist_customer_acceptance: true,
+              checklist_content_usage: true,
+              checklist_footage_deleted_7_days: true,
+              checklist_payment_from_sales: true,
+              checklist_edited_files_uploaded: true,
+              server_upload_validated: true,
+              client_communication_proof: caCommunicationProofVal,
+              customer_communication_proof: caCommunicationProofVal,
+              proof_url: caCommunicationProofVal,
+              upload_name: caUploadNameVal,
+              proof_name: caUploadNameVal,
+              client_communication_proof_name: caUploadNameVal,
+            };
 
+            if (currentProdId && updateProduction) {
               await updateProduction(currentProdId, prodUpdates);
-              await pushUpdate('production', 'production_id', currentProdId, prodUpdates);
-              if (targetProd?.tracking_id) {
-                await pushUpdate('production', 'tracking_id', targetProd.tracking_id, prodUpdates);
+            }
+
+            if (targetProd?.production_id) {
+              const resP = await pushUpdate('production', 'production_id', targetProd.production_id, prodUpdates);
+              if (!resP?.success) {
+                throw new Error(`Failed to update production table: ${resP?.error || 'Unknown error'}`);
+              }
+            }
+            if (targetProd?.tracking_id) {
+              await pushUpdate('production', 'tracking_id', targetProd.tracking_id, prodUpdates);
+            }
+
+            // 3. Update orders and leads tables stage to 'Client Acceptance' in Supabase
+            for (const id of saveTargets) {
+              if (updateOrderStage) {
+                try {
+                  await updateOrderStage(id, 'Client Acceptance' as any);
+                } catch (stageErr) {
+                  console.warn(`[updateOrderStage warning for ${id}]:`, stageErr);
+                }
+              }
+
+              await pushUpdate('orders', 'order_id', id, {
+                current_stage: 'Client Acceptance',
+                order_status: 'Confirmed'
+              });
+
+              await pushUpdate('leads', 'lead_id', id, {
+                status: 'Client Acceptance',
+                current_status: 'Client Acceptance'
+              });
+            }
+
+            // 4. VERIFY DATABASE RESPONSE
+            if (currentProdId || targetProd?.production_id) {
+              const verifyRes = await fetch('/api/db/select', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  table: 'production',
+                  matchColumn: 'production_id',
+                  matchValue: currentProdId || targetProd?.production_id
+                })
+              });
+              
+              const verifyData = await verifyRes.json();
+              if (verifyData?.success && Array.isArray(verifyData.data) && verifyData.data.length > 0) {
+                const dbStatus = verifyData.data[0].editing_status || verifyData.data[0].production_status || verifyData.data[0].current_status;
+                if (dbStatus !== 'Client Acceptance') {
+                  throw new Error(`Database status verification failed. Target status was not updated to 'Client Acceptance'.`);
+                }
               }
             }
 
-            // 3. Update order stage to 'Client Acceptance' in Supabase orders & leads tables
-            if (currentOrderId && updateOrderStage) {
-              await updateOrderStage(currentOrderId, 'Client Acceptance' as any);
-            }
-
-            // 4. Force a clean refresh of data in the dashboard context
+            // 5. Force a clean refresh of data in the dashboard context
             if (refreshData) {
               await refreshData();
             }
 
-            // 5. Success! Programmatically click the native cancel button to close the modal safely
+            // 6. Success! Programmatically click the native cancel button to close the modal safely
             const cancelButton = Array.from(caModal.querySelectorAll<HTMLButtonElement>('button')).find(btn => {
               const t = (btn.textContent || '').toLowerCase();
               return t.includes('cancel');
@@ -544,7 +692,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
           } catch (saveErr: any) {
             console.error('[ProductionClientAcceptanceManager] Failed to finalize Client Acceptance:', saveErr);
-            alert(`Approval failed! Please check your connection and try again.\nError: ${saveErr?.message || String(saveErr)}`);
+            showFrontLevelError(form, 'CLIENT ACCEPTANCE FAILED', [`Unable to update status in database: ${saveErr?.message || String(saveErr)}`]);
           } finally {
             if (submitBtn) {
               submitBtn.disabled = false;
