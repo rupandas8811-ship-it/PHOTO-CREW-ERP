@@ -1605,11 +1605,15 @@ export const StaffModule: React.FC = () => {
           setStaffStatuses(nextStatuses);
           localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
 
-          await refreshData();
-
           setPhotoModalData(null);
           setModalPhotos({});
           showToast("✅ Equipment Received / Asset Image saved!");
+
+          try {
+            await refreshData();
+          } catch (refreshErr) {
+            console.error('Error refreshing data after Equipment Received:', refreshErr);
+          }
           return;
         }
 
@@ -1796,11 +1800,15 @@ export const StaffModule: React.FC = () => {
             }
           }
 
-          await refreshData();
-
           setPhotoModalData(null);
           setModalPhotos({});
           showToast("✅ Event Started confirmed and saved successfully!");
+
+          try {
+            await refreshData();
+          } catch (refreshErr) {
+            console.error('Error refreshing data after Event Start:', refreshErr);
+          }
         }
       } catch (error: any) {
         console.error('Error updating Event Start status:', error);
@@ -2132,13 +2140,17 @@ export const StaffModule: React.FC = () => {
         }
       }
 
-      await refreshData();
-
       setPhotoModalData(null);
       setModalPhotos({});
       setModalRawFootageLink('');
       const stageLabel = stage === 'Event Complete' ? 'Event End' : stage;
       showToast(`✅ ${stageLabel} submitted & saved successfully!`);
+
+      try {
+        await refreshData();
+      } catch (refreshErr) {
+        console.error('Error refreshing data after status update:', refreshErr);
+      }
 
     } catch (error: any) {
       console.error('Error updating status:', error);
