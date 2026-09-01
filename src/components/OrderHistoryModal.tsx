@@ -760,7 +760,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
 
   return createPortal(
     <div 
-      className="fixed inset-0 bg-black/90 backdrop-blur-md z-[999999] flex items-center justify-center p-2 sm:p-5 animate-in fade-in duration-200"
+      className="fixed inset-0 bg-black/90 backdrop-blur-md z-[2000000] flex items-center justify-center p-2 sm:p-5 animate-in fade-in duration-200"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
