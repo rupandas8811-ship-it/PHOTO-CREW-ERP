@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
@@ -1433,38 +1433,6 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       {currentSection === 'calendar' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           
-          <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
-            <div>
-              <h2 className="text-sm font-black uppercase tracking-wider text-purple-400 font-mono flex items-center gap-2">
-                <CalendarIcon className="w-4 h-4" />
-                <span>EVENT CALENDAR</span>
-              </h2>
-              <p className="text-xs text-zinc-400 mt-0.5">
-                Single unified calendar displaying Event Dates, Delivery Dates, Client Acceptance, and Orders Waiting for Approval.
-              </p>
-            </div>
-
-            {/* Calendar Legend */}
-            <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                <span className="text-zinc-300">Event Dates</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
-                <span className="text-zinc-300">Delivery Dates</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                <span className="text-zinc-300">Client Acceptance</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                <span className="text-zinc-300">Waiting Approval</span>
-              </div>
-            </div>
-          </div>
-
           {/* Calendar Component Wrapper */}
           <BusinessOwnerCalendarView 
             orders={orders}
@@ -1818,7 +1786,65 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   production,
   onSelectEvent
 }) => {
+  const { globalDateRange } = useRole();
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+
+  // Helper to normalize any date input format to standard YYYY-MM-DD
+  const normalizeToYYYYMMDD = useCallback((dateVal: any): string | null => {
+    if (!dateVal) return null;
+    if (dateVal instanceof Date) {
+      const y = dateVal.getFullYear();
+      const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+      const d = String(dateVal.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    
+    let str = String(dateVal).trim();
+    if (!str) return null;
+
+    if (str.includes('T')) {
+      str = str.split('T')[0];
+    }
+    str = str.split(/\s+/)[0];
+
+    if (str.includes('-')) {
+      const parts = str.split('-');
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+        } else if (parts[2].length === 4) {
+          return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+      }
+    }
+    try {
+      const dObj = new Date(str);
+      if (!isNaN(dObj.getTime())) {
+        const y = dObj.getFullYear();
+        const m = String(dObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+    } catch (e) {}
+    return null;
+  }, []);
+
+  // Synchronize calendar's visible month with the start of the global temporal range filter
+  useEffect(() => {
+    if (globalDateRange?.start) {
+      const normalizedStart = normalizeToYYYYMMDD(globalDateRange.start);
+      if (normalizedStart) {
+        const parts = normalizedStart.split('-');
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1; // 0-indexed month
+        if (!isNaN(y) && !isNaN(m)) {
+          if (currentDate.getFullYear() !== y || currentDate.getMonth() !== m) {
+            setCurrentDate(new Date(y, m, 1));
+          }
+        }
+      }
+    }
+  }, [globalDateRange?.start, normalizeToYYYYMMDD]);
 
   // Filter state (Hidden by default)
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -1928,7 +1954,18 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
 
       if (order.event_date && shouldShowEvent) {
         const dateStr = order.event_date.split('T')[0];
-        if (dateStr) {
+        
+        let isDateInRange = true;
+        if (globalDateRange?.start && globalDateRange?.end) {
+          const startStr = normalizeToYYYYMMDD(globalDateRange.start);
+          const endStr = normalizeToYYYYMMDD(globalDateRange.end);
+          const normalizedEvDate = normalizeToYYYYMMDD(order.event_date);
+          if (startStr && endStr && normalizedEvDate) {
+            isDateInRange = normalizedEvDate >= startStr && normalizedEvDate <= endStr;
+          }
+        }
+
+        if (dateStr && isDateInRange) {
           if (!map[dateStr]) map[dateStr] = [];
           map[dateStr].push({
             id: `event-${order.order_id}`,
@@ -1950,7 +1987,18 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
       // Target delivery date event
       if ((prod?.expected_delivery_date || prod?.target_delivery_date) && activeFilters.deliveryDates) {
         const delDate = (prod.expected_delivery_date || prod.target_delivery_date || '').split('T')[0];
-        if (delDate) {
+        
+        let isDateInRange = true;
+        if (globalDateRange?.start && globalDateRange?.end) {
+          const startStr = normalizeToYYYYMMDD(globalDateRange.start);
+          const endStr = normalizeToYYYYMMDD(globalDateRange.end);
+          const normalizedDelDate = normalizeToYYYYMMDD(prod.expected_delivery_date || prod.target_delivery_date);
+          if (startStr && endStr && normalizedDelDate) {
+            isDateInRange = normalizedDelDate >= startStr && normalizedDelDate <= endStr;
+          }
+        }
+
+        if (delDate && isDateInRange) {
           if (!map[delDate]) map[delDate] = [];
           map[delDate].push({
             id: `delivery-${order.order_id}`,
@@ -1971,7 +2019,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
     });
 
     return map;
-  }, [orders, production, activeFilters]);
+  }, [orders, production, activeFilters, globalDateRange, normalizeToYYYYMMDD]);
 
   return (
     <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
