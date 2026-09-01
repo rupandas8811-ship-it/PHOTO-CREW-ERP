@@ -2836,7 +2836,10 @@ export const StaffModule: React.FC = () => {
                 }`}
               >
                 {isSubmitting ? (
-                  <span>Saving...</span>
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
                 ) : photoModalData.stage === 'Event Start' ? (
                   <>
                     <CheckCircle className="w-4 h-4" />

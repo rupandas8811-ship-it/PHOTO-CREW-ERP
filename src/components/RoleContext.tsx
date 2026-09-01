@@ -3400,8 +3400,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     logActivity('Reset Database to Pre-seeded State', 'System', 'ALL');
   };
 
-  const refreshData = () => {
-    fetchFromDb();
+  const refreshData = async () => {
+    await fetchFromDb();
     logActivity('Refreshed Workspace Data', 'System', 'ALL');
   };
 
