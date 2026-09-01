@@ -670,7 +670,7 @@ export const StaffModule: React.FC = () => {
   const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead, pushInsert, pushUpdate } = useRole();
 
   // Resolve staff member
-  const staffMember = staff.find(s => 
+  const staffMember = (staff || []).find(s => 
     (s.mobile && s.mobile === currentUser?.mobile) || 
     (s.email && s.email.toLowerCase() === currentUser?.email?.toLowerCase())
   );
@@ -1083,7 +1083,7 @@ export const StaffModule: React.FC = () => {
 
     (leads || []).forEach((lead) => {
       const order = (orders || []).find(o => o.lead_id === lead.lead_id);
-      const op = operations.find(o => o.order_id === (order?.order_id || lead.lead_id));
+      const op = (operations || []).find(o => o.order_id === (order?.order_id || lead.lead_id));
 
       const orderId = order?.order_id || `OR-${lead.lead_id.replace(/^LD-?/, '')}`;
 
