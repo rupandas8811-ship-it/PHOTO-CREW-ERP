@@ -61,7 +61,8 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
     logs = [],
     rawFootage = [],
     clientAcceptanceVerifications = [],
-    equipmentHandovers = []
+    equipmentHandovers = [],
+    leadEquipmentHistory = []
   } = useRole();
 
   const [activeTab, setActiveTab] = useState<'roadmap' | 'operations' | 'production' | 'proofs' | 'footage' | 'payments'>('roadmap');
@@ -187,6 +188,295 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
       (primaryOrderId && q.order_id === primaryOrderId)
     );
   }, [quotations, primaryLeadId, primaryOrderId]);
+
+  const operationsImageHistory = useMemo(() => {
+    // 1. Group staff assignments by Event ID/Name
+    const eventsMap: Record<string, {
+      event_id: string;
+      event_name: string;
+      staff: {
+        assignment_id: string;
+        staff_id: string;
+        staff_name: string;
+        staff_role: string;
+        task_status: string;
+        assignment_status: string;
+        assignment_date: string;
+        equipment: string[];
+        mobile: string;
+        raw_footage_link: string;
+        eventStartImages: any[];
+        equipmentReceivedImages: { equipmentName: string; images: any[] }[];
+        equipmentHandoverImages: { equipmentName: string; images: any[] }[];
+        eventEndImages: any[];
+      }[];
+    }> = {};
+
+    matchedStaffAssignments.forEach(sa => {
+      const eId = sa.event_id || 'general';
+      const eName = sa.event_name || 'General Event';
+      const key = `${eId}_${eName}`;
+
+      if (!eventsMap[key]) {
+        eventsMap[key] = {
+          event_id: eId,
+          event_name: eName,
+          staff: []
+        };
+      }
+
+      // Find all leadEquipmentHistory records matching this staff and event
+      const normStaffName = (sa.staff_name || '').trim().toLowerCase();
+      const saStaffId = sa.staff_id || '';
+      const saEventId = sa.event_id;
+      const saEventName = (sa.event_name || '').trim().toLowerCase();
+
+      const matchedHistory = (leadEquipmentHistory || []).filter(h => {
+        // Must belong to the current order/lead
+        const isOrderMatch = (primaryOrderId && h.order_id === primaryOrderId) || 
+                             (primaryLeadId && h.lead_id === primaryLeadId);
+        if (!isOrderMatch) return false;
+
+        // Staff match
+        const recordStaff = (h.returned_by || '').trim().toLowerCase();
+        let parsedRemarks: any = {};
+        if (h.remarks) {
+          try {
+            if (typeof h.remarks === 'string' && h.remarks.startsWith('{')) {
+              parsedRemarks = JSON.parse(h.remarks);
+            } else if (typeof h.remarks === 'object') {
+              parsedRemarks = h.remarks;
+            }
+          } catch (e) {}
+        }
+        const parsedStaffName = (parsedRemarks.staff_name || parsedRemarks.uploaded_by || '').trim().toLowerCase();
+        const parsedStaffId = parsedRemarks.staff_id || '';
+
+        const isStaffMatch = (normStaffName && recordStaff === normStaffName) || 
+                             (normStaffName && parsedStaffName === normStaffName) ||
+                             (saStaffId && parsedStaffId && saStaffId === parsedStaffId);
+        if (!isStaffMatch) return false;
+
+        // Event match
+        let isEventMatch = true;
+        const hEventId = parsedRemarks.event_id;
+        const hEventName = (parsedRemarks.event_name || '').trim().toLowerCase();
+        if (saEventId && hEventId && saEventId !== 'gen' && saEventId !== 'ev' && hEventId !== 'gen' && hEventId !== 'ev') {
+          if (saEventId !== hEventId) {
+            isEventMatch = false;
+            if (saEventName && hEventName && saEventName === hEventName) {
+              isEventMatch = true;
+            }
+          }
+        }
+
+        return isEventMatch;
+      });
+
+      // Prepare categories
+      const saEquipment = Array.isArray(sa.equipment) ? sa.equipment : (sa.equipment ? [sa.equipment] : []);
+
+      const equipmentReceivedImages: { equipmentName: string; images: any[] }[] = saEquipment.map(eq => ({
+        equipmentName: eq,
+        images: []
+      }));
+
+      const equipmentHandoverImages: { equipmentName: string; images: any[] }[] = saEquipment.map(eq => ({
+        equipmentName: eq,
+        images: []
+      }));
+
+      const eventStartImages: any[] = [];
+      const eventEndImages: any[] = [];
+
+      matchedHistory.forEach(h => {
+        let photoUrl = h.photo_url || '';
+        let metaDate = '-';
+        let metaTime = '-';
+
+        let parsedRemarks: any = {};
+        if (h.remarks) {
+          try {
+            if (typeof h.remarks === 'string' && h.remarks.startsWith('{')) {
+              parsedRemarks = JSON.parse(h.remarks);
+            } else if (typeof h.remarks === 'object') {
+              parsedRemarks = h.remarks;
+            }
+            photoUrl = parsedRemarks.photo_url || parsedRemarks.url || photoUrl;
+          } catch (e) {}
+        }
+
+        if (!photoUrl) return;
+
+        photoUrl = resolveStorageUrl(photoUrl);
+
+        const timestamp = h.returned_at || h.created_at || parsedRemarks.uploaded_at;
+        if (timestamp) {
+          const dt = new Date(timestamp);
+          if (!isNaN(dt.getTime())) {
+            const day = String(dt.getDate()).padStart(2, '0');
+            const month = String(dt.getMonth() + 1).padStart(2, '0');
+            const year = dt.getFullYear();
+            metaDate = `${day}-${month}-${year}`;
+            metaTime = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+          }
+        }
+
+        const eqName = h.equipment_name || '';
+        const eqStatus = (h.equipment_status || parsedRemarks.proof_type || '').toLowerCase().trim();
+        const eqNameLower = eqName.toLowerCase();
+
+        // 1. EVENT START
+        if (eqNameLower === 'event start photo proof' || eqNameLower === 'event start' || eqNameLower === 'event start image' || eqStatus === 'event started' || eqStatus === 'event start') {
+          eventStartImages.push({
+            id: h.id || `es-${Date.now()}-${Math.random()}`,
+            url: photoUrl,
+            label: `Event Start Proof - ${sa.staff_name}`,
+            uploadDate: metaDate,
+            uploadTime: metaTime
+          });
+        }
+        // 2. EVENT END
+        else if (eqNameLower === 'event completion photo proof' || eqNameLower === 'event completion' || eqStatus.includes('event complete') || eqStatus.includes('event ended') || eqStatus.includes('event end')) {
+          eventEndImages.push({
+            id: h.id || `ee-${Date.now()}-${Math.random()}`,
+            url: photoUrl,
+            label: `Event End Proof - ${sa.staff_name}`,
+            uploadDate: metaDate,
+            uploadTime: metaTime
+          });
+        }
+        // 3. EQUIPMENT RECEIVED
+        else if (eqNameLower === 'asset collection photo proof' || eqNameLower === 'asset collection' || eqNameLower === 'equipment received / asset picture' || eqStatus === 'equipment received' || eqStatus === 'asset collected (draft)') {
+          const label = eqNameLower.includes('proof') ? 'Asset Collection Proof' : eqName;
+          const matchedEq = equipmentReceivedImages.find(item => eqNameLower.includes(item.equipmentName.toLowerCase()) || item.equipmentName.toLowerCase().includes(eqNameLower));
+          if (matchedEq) {
+            matchedEq.images.push({
+              id: h.id || `er-${Date.now()}-${Math.random()}`,
+              url: photoUrl,
+              label: `${label} - ${sa.staff_name}`,
+              equipmentName: matchedEq.equipmentName,
+              uploadDate: metaDate,
+              uploadTime: metaTime
+            });
+          } else {
+            if (equipmentReceivedImages.length > 0) {
+              equipmentReceivedImages[0].images.push({
+                id: h.id || `er-${Date.now()}-${Math.random()}`,
+                url: photoUrl,
+                label: `${label} - ${sa.staff_name}`,
+                equipmentName: equipmentReceivedImages[0].equipmentName,
+                uploadDate: metaDate,
+                uploadTime: metaTime
+              });
+            } else {
+              equipmentReceivedImages.push({
+                equipmentName: eqName || 'Assigned Equipment',
+                images: [{
+                  id: h.id || `er-${Date.now()}-${Math.random()}`,
+                  url: photoUrl,
+                  label: `${label} - ${sa.staff_name}`,
+                  equipmentName: eqName || 'Assigned Equipment',
+                  uploadDate: metaDate,
+                  uploadTime: metaTime
+                }]
+              });
+            }
+          }
+        }
+        // 4. EQUIPMENT HANDOVER
+        else if (eqNameLower === 'equipment handover photo proof' || eqNameLower === 'equipment handover' || eqNameLower === 'asset return photo proof' || eqStatus.includes('handover') || eqStatus.includes('returned')) {
+          const label = eqNameLower.includes('proof') ? 'Asset Return Proof' : eqName;
+          const matchedEq = equipmentHandoverImages.find(item => eqNameLower.includes(item.equipmentName.toLowerCase()) || item.equipmentName.toLowerCase().includes(eqNameLower));
+          if (matchedEq) {
+            matchedEq.images.push({
+              id: h.id || `eh-${Date.now()}-${Math.random()}`,
+              url: photoUrl,
+              label: `${label} - ${sa.staff_name}`,
+              equipmentName: matchedEq.equipmentName,
+              uploadDate: metaDate,
+              uploadTime: metaTime
+            });
+          } else {
+            if (equipmentHandoverImages.length > 0) {
+              equipmentHandoverImages[0].images.push({
+                id: h.id || `eh-${Date.now()}-${Math.random()}`,
+                url: photoUrl,
+                label: `${label} - ${sa.staff_name}`,
+                equipmentName: equipmentHandoverImages[0].equipmentName,
+                uploadDate: metaDate,
+                uploadTime: metaTime
+              });
+            } else {
+              equipmentHandoverImages.push({
+                equipmentName: eqName || 'Assigned Equipment',
+                images: [{
+                  id: h.id || `eh-${Date.now()}-${Math.random()}`,
+                  url: photoUrl,
+                  label: `${label} - ${sa.staff_name}`,
+                  equipmentName: eqName || 'Assigned Equipment',
+                  uploadDate: metaDate,
+                  uploadTime: metaTime
+                }]
+              });
+            }
+          }
+        }
+        // 5. OTHER/FALLBACK
+        else {
+          const isReceivedStatus = eqStatus.includes('received') || eqStatus.includes('collect');
+          const isHandoverStatus = eqStatus.includes('handover') || eqStatus.includes('return');
+          
+          if (isReceivedStatus) {
+            const matchedEq = equipmentReceivedImages.find(item => eqNameLower.includes(item.equipmentName.toLowerCase()) || item.equipmentName.toLowerCase().includes(eqNameLower));
+            const targetEq = matchedEq || equipmentReceivedImages[0];
+            if (targetEq) {
+              targetEq.images.push({
+                id: h.id || `er-${Date.now()}-${Math.random()}`,
+                url: photoUrl,
+                label: `${eqName || 'Equipment Received'} - ${sa.staff_name}`,
+                equipmentName: targetEq.equipmentName,
+                uploadDate: metaDate,
+                uploadTime: metaTime
+              });
+            }
+          } else if (isHandoverStatus) {
+            const matchedEq = equipmentHandoverImages.find(item => eqNameLower.includes(item.equipmentName.toLowerCase()) || item.equipmentName.toLowerCase().includes(eqNameLower));
+            const targetEq = matchedEq || equipmentHandoverImages[0];
+            if (targetEq) {
+              targetEq.images.push({
+                id: h.id || `eh-${Date.now()}-${Math.random()}`,
+                url: photoUrl,
+                label: `${eqName || 'Equipment Returned'} - ${sa.staff_name}`,
+                equipmentName: targetEq.equipmentName,
+                uploadDate: metaDate,
+                uploadTime: metaTime
+              });
+            }
+          }
+        }
+      });
+
+      eventsMap[key].staff.push({
+        assignment_id: sa.assignment_id,
+        staff_id: sa.staff_id,
+        staff_name: sa.staff_name,
+        staff_role: sa.staff_role,
+        task_status: sa.task_status,
+        assignment_status: sa.assignment_status,
+        assignment_date: sa.assignment_date,
+        equipment: saEquipment,
+        mobile: sa.mobile || '',
+        raw_footage_link: sa.raw_footage_link || '',
+        eventStartImages,
+        equipmentReceivedImages,
+        equipmentHandoverImages,
+        eventEndImages
+      });
+    });
+
+    return Object.values(eventsMap);
+  }, [matchedStaffAssignments, leadEquipmentHistory, primaryOrderId, primaryLeadId]);
 
   // Helper date parser
   const parseDateTime = (dateVal?: any) => {
@@ -1105,84 +1395,327 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white uppercase font-mono tracking-wider flex items-center gap-2">
                   <Film className="w-4 h-4 text-amber-400" />
-                  <span>Operations Field Crew Tasks ({matchedStaffAssignments.length})</span>
+                  <span>Operations Field Crew Image Audit ({matchedStaffAssignments.length})</span>
                 </h3>
               </div>
 
-              {matchedStaffAssignments.length === 0 ? (
+              {operationsImageHistory.length === 0 ? (
                 <div className="py-12 text-center bg-zinc-900/40 border border-zinc-800 rounded-2xl">
-                  <p className="text-zinc-500 text-xs font-mono">No specific individual operations task assignments recorded for this project.</p>
+                  <p className="text-zinc-500 text-xs font-mono">No operations event tasks or uploaded images recorded for this project.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {matchedStaffAssignments.map((sa, idx) => {
-                    const taskProofs = (allProofGallery || []).filter(p => p.taskName.includes(sa.staff_role || '') || p.staffName === sa.staff_name);
-
-                    return (
-                      <div key={sa.assignment_id || idx} className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
-                        <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                <div className="space-y-6">
+                  {operationsImageHistory.map((evt, eIdx) => (
+                    <div key={evt.event_id || eIdx} className="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 space-y-4 shadow-xl">
+                      {/* Event Header */}
+                      <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                            <Calendar className="w-5 h-5" />
+                          </div>
                           <div>
-                            <span className="text-[10px] font-mono text-amber-400 uppercase font-bold block">
-                              Task: {sa.staff_role || 'Operations Task'}
-                            </span>
-                            <h4 className="text-sm font-bold text-white">{sa.staff_name}</h4>
+                            <span className="text-[10px] font-mono text-amber-500 uppercase font-bold tracking-wider block">EVENT UNIT</span>
+                            <h4 className="text-base font-bold text-white uppercase font-mono tracking-wide">
+                              {evt.event_name}
+                            </h4>
                           </div>
-                          <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-zinc-950 border border-zinc-800 text-zinc-300">
-                            {sa.task_status || sa.assignment_status || 'Assigned'}
-                          </span>
                         </div>
-
-                        <div className="space-y-1.5 text-xs font-mono text-zinc-400">
-                          <div>Assignment Date: <span className="text-zinc-200">{sa.assignment_date ? formatDateDDMMYY(sa.assignment_date) : 'N/A'}</span></div>
-                          <div>Mobile: <span className="text-zinc-200">{sa.mobile || 'N/A'}</span></div>
-                          <div>Equipment: <span className="text-zinc-200">{Array.isArray(sa.equipment) ? sa.equipment.join(', ') : (sa.equipment || 'Standard Kit')}</span></div>
-                          {sa.raw_footage_link && (
-                            <div className="pt-1">
-                              <a 
-                                href={sa.raw_footage_link.startsWith('http') ? sa.raw_footage_link : `https://${sa.raw_footage_link}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                referrerPolicy="no-referrer"
-                                className="inline-flex items-center gap-1 text-blue-400 hover:underline font-bold"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                <span>Raw Footage Drive Link</span>
-                              </a>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Task Specific Proofs */}
-                        {taskProofs.length > 0 && (
-                          <div className="pt-2 border-t border-zinc-850 space-y-1.5">
-                            <span className="text-[10px] font-mono font-bold uppercase text-emerald-400 block">
-                              Task Proof Images ({taskProofs.length})
-                            </span>
-                            <div className="flex gap-2 flex-wrap">
-                              {taskProofs.map(tp => (
-                                <button
-                                  key={tp.id}
-                                  type="button"
-                                  onClick={() => setPreviewImage({
-                                    url: tp.url,
-                                    title: tp.label,
-                                    taskName: sa.staff_role,
-                                    staffName: sa.staff_name,
-                                    department: 'Operations',
-                                    uploadDate: tp.uploadDate
-                                  })}
-                                  className="px-2 py-1 rounded bg-zinc-950 border border-emerald-500/30 text-emerald-400 text-xs font-mono hover:bg-emerald-500/10 flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Eye className="w-3 h-3" />
-                                  <span>View Proof</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        <span className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-zinc-900 border border-zinc-800 text-zinc-400">
+                          {evt.staff.length} Assigned Crew Member{evt.staff.length !== 1 ? 's' : ''}
+                        </span>
                       </div>
-                    );
-                  })}
+
+                      {/* Staff List for this Event */}
+                      <div className="space-y-4">
+                        {evt.staff.map((st, sIdx) => (
+                          <div key={st.assignment_id || sIdx} className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 space-y-4">
+                            {/* Staff Profile Row */}
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-850 pb-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center font-bold text-zinc-300 font-mono text-sm uppercase">
+                                  {st.staff_name ? st.staff_name.slice(0, 2) : 'OP'}
+                                </div>
+                                <div>
+                                  <h5 className="text-sm font-bold text-white flex items-center gap-1.5">
+                                    <span>{st.staff_name}</span>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-zinc-950 border border-zinc-800 text-amber-400 uppercase">
+                                      {st.staff_role}
+                                    </span>
+                                  </h5>
+                                  <p className="text-[10px] text-zinc-400 font-mono">
+                                    Date: {st.assignment_date ? formatDateDDMMYY(st.assignment_date) : 'N/A'} • Mobile: {st.mobile || 'N/A'}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-950 border border-zinc-800 text-zinc-300 uppercase">
+                                  {st.task_status || st.assignment_status || 'Assigned'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Operations Image Sections */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                              {/* 1. EVENT START */}
+                              <div className="bg-zinc-950/50 border border-zinc-800/60 rounded-xl p-3 space-y-2.5">
+                                <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                                  <span className="text-[10px] font-mono font-extrabold uppercase text-amber-400 tracking-wider flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    <span>1. Event Start Proof</span>
+                                  </span>
+                                  <span className="text-[9px] font-mono font-bold text-zinc-500">
+                                    {st.eventStartImages.length} Image{st.eventStartImages.length !== 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                                {st.eventStartImages.length === 0 ? (
+                                  <div className="py-4 text-center border border-dashed border-zinc-850 rounded-lg">
+                                    <p className="text-zinc-500 text-[10px] font-mono">Pending Event Start Image</p>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {st.eventStartImages.map(img => (
+                                      <div key={img.id} className="relative group overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
+                                        <img 
+                                          src={img.url} 
+                                          alt={img.label} 
+                                          referrerPolicy="no-referrer"
+                                          className="w-full h-24 object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                                        />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewImage({
+                                              url: img.url,
+                                              title: img.label,
+                                              taskName: st.staff_role,
+                                              staffName: st.staff_name,
+                                              department: 'Operations',
+                                              uploadDate: img.uploadDate
+                                            })}
+                                            className="px-2.5 py-1 rounded bg-amber-500 text-zinc-950 text-xs font-bold font-mono hover:scale-105 transition-transform flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <Eye className="w-3.5 h-3.5 stroke-[2.5]" />
+                                            <span>View Image</span>
+                                          </button>
+                                        </div>
+                                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-1.5 text-[9px] font-mono text-zinc-400 flex justify-between">
+                                          <span>{img.uploadDate}</span>
+                                          <span>{img.uploadTime}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 4. EVENT END */}
+                              <div className="bg-zinc-950/50 border border-zinc-800/60 rounded-xl p-3 space-y-2.5">
+                                <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                                  <span className="text-[10px] font-mono font-extrabold uppercase text-emerald-400 tracking-wider flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                    <span>4. Event End Proof</span>
+                                  </span>
+                                  <span className="text-[9px] font-mono font-bold text-zinc-500">
+                                    {st.eventEndImages.length} Image{st.eventEndImages.length !== 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                                {st.eventEndImages.length === 0 ? (
+                                  <div className="py-4 text-center border border-dashed border-zinc-850 rounded-lg">
+                                    <p className="text-zinc-500 text-[10px] font-mono">Pending Event End Image</p>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 gap-2">
+                                    {st.eventEndImages.map(img => (
+                                      <div key={img.id} className="relative group overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
+                                        <img 
+                                          src={img.url} 
+                                          alt={img.label} 
+                                          referrerPolicy="no-referrer"
+                                          className="w-full h-24 object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                                        />
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => setPreviewImage({
+                                              url: img.url,
+                                              title: img.label,
+                                              taskName: st.staff_role,
+                                              staffName: st.staff_name,
+                                              department: 'Operations',
+                                              uploadDate: img.uploadDate
+                                            })}
+                                            className="px-2.5 py-1 rounded bg-emerald-500 text-zinc-950 text-xs font-bold font-mono hover:scale-105 transition-transform flex items-center gap-1 cursor-pointer"
+                                          >
+                                            <Eye className="w-3.5 h-3.5 stroke-[2.5]" />
+                                            <span>View Image</span>
+                                          </button>
+                                        </div>
+                                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-1.5 text-[9px] font-mono text-zinc-400 flex justify-between">
+                                          <span>{img.uploadDate}</span>
+                                          <span>{img.uploadTime}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 2. EQUIPMENT RECEIVED */}
+                              <div className="bg-zinc-950/50 border border-zinc-800/60 rounded-xl p-3 space-y-2.5 sm:col-span-2">
+                                <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                                  <span className="text-[10px] font-mono font-extrabold uppercase text-blue-400 tracking-wider flex items-center gap-1">
+                                    <Package className="w-3.5 h-3.5" />
+                                    <span>2. Equipment Received Proofs</span>
+                                  </span>
+                                </div>
+                                {st.equipmentReceivedImages.length === 0 ? (
+                                  <div className="py-4 text-center border border-dashed border-zinc-850 rounded-lg">
+                                    <p className="text-zinc-500 text-[10px] font-mono">No Equipment Allocated</p>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {st.equipmentReceivedImages.map((eq, eqIdx) => (
+                                      <div key={eqIdx} className="bg-zinc-900/60 border border-zinc-850/80 rounded-lg p-2.5 space-y-2">
+                                        <div className="flex justify-between items-center text-[10px] font-mono">
+                                          <span className="text-zinc-300 font-bold truncate max-w-[180px]">{eq.equipmentName}</span>
+                                          <span className="px-1 rounded bg-blue-500/10 text-blue-400 font-extrabold font-sans text-[8px] tracking-wide uppercase">
+                                            {eq.images.length > 0 ? 'Collected' : 'Pending'}
+                                          </span>
+                                        </div>
+                                        {eq.images.length === 0 ? (
+                                          <div className="py-3 text-center border border-dashed border-zinc-850 rounded bg-zinc-950/20">
+                                            <p className="text-zinc-600 text-[9px] font-mono">Pending Equipment Collection Image</p>
+                                          </div>
+                                        ) : (
+                                          <div className="grid grid-cols-1 gap-1.5">
+                                            {eq.images.map(img => (
+                                              <div key={img.id} className="relative group overflow-hidden rounded border border-zinc-800 bg-zinc-950 h-16">
+                                                <img 
+                                                  src={img.url} 
+                                                  alt={img.label} 
+                                                  referrerPolicy="no-referrer"
+                                                  className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                                                />
+                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setPreviewImage({
+                                                      url: img.url,
+                                                      title: img.label,
+                                                      taskName: `${st.staff_role} - Received: ${eq.equipmentName}`,
+                                                      staffName: st.staff_name,
+                                                      department: 'Operations',
+                                                      uploadDate: img.uploadDate
+                                                    })}
+                                                    className="px-2 py-0.5 rounded bg-blue-500 text-zinc-950 text-[9px] font-bold font-mono hover:scale-105 transition-transform flex items-center gap-0.5 cursor-pointer"
+                                                  >
+                                                    <Eye className="w-3 h-3 stroke-[2.5]" />
+                                                    <span>View</span>
+                                                  </button>
+                                                </div>
+                                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-1 text-[8px] font-mono text-zinc-400 flex justify-between">
+                                                  <span>{img.uploadDate}</span>
+                                                  <span>{img.uploadTime}</span>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 3. EQUIPMENT HANDOVER */}
+                              <div className="bg-zinc-950/50 border border-zinc-800/60 rounded-xl p-3 space-y-2.5 sm:col-span-2">
+                                <div className="flex items-center justify-between border-b border-zinc-900 pb-1.5">
+                                  <span className="text-[10px] font-mono font-extrabold uppercase text-purple-400 tracking-wider flex items-center gap-1">
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                    <span>3. Equipment Handover Proofs</span>
+                                  </span>
+                                </div>
+                                {st.equipmentHandoverImages.length === 0 ? (
+                                  <div className="py-4 text-center border border-dashed border-zinc-850 rounded-lg">
+                                    <p className="text-zinc-550 text-[10px] font-mono">No Equipment Allocated</p>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {st.equipmentHandoverImages.map((eq, eqIdx) => (
+                                      <div key={eqIdx} className="bg-zinc-900/60 border border-zinc-850/80 rounded-lg p-2.5 space-y-2">
+                                        <div className="flex justify-between items-center text-[10px] font-mono">
+                                          <span className="text-zinc-300 font-bold truncate max-w-[180px]">{eq.equipmentName}</span>
+                                          <span className="px-1 rounded bg-purple-500/10 text-purple-400 font-extrabold font-sans text-[8px] tracking-wide uppercase">
+                                            {eq.images.length > 0 ? 'Returned' : 'Pending'}
+                                          </span>
+                                        </div>
+                                        {eq.images.length === 0 ? (
+                                          <div className="py-3 text-center border border-dashed border-zinc-850 rounded bg-zinc-950/20">
+                                            <p className="text-zinc-650 text-[9px] font-mono">Pending Equipment Handover Image</p>
+                                          </div>
+                                        ) : (
+                                          <div className="grid grid-cols-1 gap-1.5">
+                                            {eq.images.map(img => (
+                                              <div key={img.id} className="relative group overflow-hidden rounded border border-zinc-800 bg-zinc-950 h-16">
+                                                <img 
+                                                  src={img.url} 
+                                                  alt={img.label} 
+                                                  referrerPolicy="no-referrer"
+                                                  className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
+                                                />
+                                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setPreviewImage({
+                                                      url: img.url,
+                                                      title: img.label,
+                                                      taskName: `${st.staff_role} - Returned: ${eq.equipmentName}`,
+                                                      staffName: st.staff_name,
+                                                      department: 'Operations',
+                                                      uploadDate: img.uploadDate
+                                                    })}
+                                                    className="px-2 py-0.5 rounded bg-purple-500 text-zinc-950 text-[9px] font-bold font-mono hover:scale-105 transition-transform flex items-center gap-0.5 cursor-pointer"
+                                                  >
+                                                    <Eye className="w-3 h-3 stroke-[2.5]" />
+                                                    <span>View</span>
+                                                  </button>
+                                                </div>
+                                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 to-transparent p-1 text-[8px] font-mono text-zinc-400 flex justify-between">
+                                                  <span>{img.uploadDate}</span>
+                                                  <span>{img.uploadTime}</span>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Raw Footage Link display */}
+                            {st.raw_footage_link && (
+                              <div className="pt-2 border-t border-zinc-850/80 flex items-center justify-between">
+                                <span className="text-[10px] text-zinc-400 font-mono font-bold uppercase">Field Output:</span>
+                                <a 
+                                  href={st.raw_footage_link.startsWith('http') ? st.raw_footage_link : `https://${st.raw_footage_link}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  referrerPolicy="no-referrer"
+                                  className="inline-flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 font-bold font-mono border border-blue-500/20 bg-blue-500/5 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  <span>Open Raw Footage Link</span>
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

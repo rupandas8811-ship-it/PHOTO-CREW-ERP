@@ -280,6 +280,8 @@ interface RoleContextType {
 
   clientAcceptanceVerifications: ClientAcceptanceVerification[];
   saveClientAcceptanceVerification: (verification: ClientAcceptanceVerification) => Promise<ClientAcceptanceVerification>;
+  isProductionDashboardActive?: boolean;
+  setIsProductionDashboardActive?: (val: boolean) => void;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -945,6 +947,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [equipmentHandovers, setEquipmentHandovers] = useState<EquipmentHandover[]>([]);
 
   const [clientAcceptanceVerifications, setClientAcceptanceVerifications] = useState<ClientAcceptanceVerification[]>([]);
+  const [isProductionDashboardActive, setIsProductionDashboardActive] = useState(false);
 
 
 
@@ -8056,24 +8059,62 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     });
   }, [isDataLoading, augmentedProduction, notifications, augmentedOrders, leads]);
 
+  const isTerminalStatusValue = (s?: string) => {
+    const val = String(s || '').trim().toLowerCase();
+    return val === 'client acceptance' || val === 'order closed';
+  };
+
+  const isTerminalRecord = (item: any, trackingId: string) => {
+    if (!item) return false;
+    if (isTerminalStatusValue(item.status) || 
+        isTerminalStatusValue(item.current_status) || 
+        isTerminalStatusValue(item.current_stage) || 
+        isTerminalStatusValue(item.editing_status) || 
+        isTerminalStatusValue(item.production_status)) {
+      return true;
+    }
+    const p = augmentedProduction.find(
+      prod => prod.tracking_id === trackingId || 
+              prod.production_id === trackingId || 
+              prod.order_id === trackingId || 
+              prod.lead_id === trackingId
+    );
+    if (p) {
+      if (isTerminalStatusValue(p.editing_status) || 
+          isTerminalStatusValue(p.production_status) || 
+          isTerminalStatusValue(p.current_status)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const visibleLeads = useMemo(() => {
+    let baseLeads = leads;
     if (currentRole === 'Sales Team' && currentUser) {
-      return leads.filter(l => 
+      baseLeads = leads.filter(l => 
         l.sales_person === currentUserName || 
         l.created_by === currentUserName || 
         l.sales_staff_id === currentUser.id
       );
     }
-    return leads;
-  }, [leads, currentRole, currentUser, currentUserName]);
+    if (isProductionDashboardActive) {
+      baseLeads = baseLeads.filter(l => !isTerminalRecord(l, l.lead_id));
+    }
+    return baseLeads;
+  }, [leads, currentRole, currentUser, currentUserName, isProductionDashboardActive, augmentedProduction]);
 
   const visibleOrders = useMemo(() => {
+    let baseOrders = augmentedOrders;
     if (currentRole === 'Sales Team' && currentUser) {
       const allowedLeadIds = new Set(visibleLeads.map(l => l.lead_id));
-      return augmentedOrders.filter(o => allowedLeadIds.has(o.lead_id));
+      baseOrders = augmentedOrders.filter(o => allowedLeadIds.has(o.lead_id));
     }
-    return augmentedOrders;
-  }, [augmentedOrders, currentRole, visibleLeads, currentUser]);
+    if (isProductionDashboardActive) {
+      baseOrders = baseOrders.filter(o => !isTerminalRecord(o, o.order_id) && !isTerminalRecord(o, o.lead_id));
+    }
+    return baseOrders;
+  }, [augmentedOrders, currentRole, visibleLeads, currentUser, isProductionDashboardActive, augmentedProduction]);
 
   const visiblePayments = useMemo(() => {
     if (currentRole === 'Sales Team' && currentUser) {
@@ -8098,8 +8139,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         leads: visibleLeads,
         orders: visibleOrders,
         operations: augmentedOperations,
-        rawFootage,
-        production: augmentedProduction,
+        rawFootage: isProductionDashboardActive
+          ? rawFootage.filter(rf => !isTerminalRecord(rf, rf.order_id || rf.tracking_id))
+          : rawFootage,
+        production: isProductionDashboardActive
+          ? augmentedProduction.filter(p => !isTerminalRecord(p, p.tracking_id || p.production_id || p.lead_id || p.order_id))
+          : augmentedProduction,
         payments: visiblePayments,
         logs,
         staff,
@@ -8198,6 +8243,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         deleteRawFootage,
         clientAcceptanceVerifications,
         saveClientAcceptanceVerification,
+        isProductionDashboardActive,
+        setIsProductionDashboardActive,
       }}
     >
       {children}

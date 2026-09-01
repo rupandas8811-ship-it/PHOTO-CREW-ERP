@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useRole } from './RoleContext';
 import { ProductionFilters, ProductionFiltersProps } from './production/ProductionFilters';
 import { ProductionAssignment, ProductionAssignmentProps } from './production/ProductionAssignment';
 import { ProductionProofUpload, ProductionProofUploadProps } from './production/ProductionProofUpload';
@@ -32,6 +33,19 @@ export const ProductionExtensionContainer: React.FC<ProductionExtensionContainer
   children,
   className = ''
 }) => {
+  const { setIsProductionDashboardActive } = useRole();
+
+  useEffect(() => {
+    if (setIsProductionDashboardActive) {
+      setIsProductionDashboardActive(true);
+    }
+    return () => {
+      if (setIsProductionDashboardActive) {
+        setIsProductionDashboardActive(false);
+      }
+    };
+  }, [setIsProductionDashboardActive]);
+
   return (
     <div className={`production-dashboard-extension ${className}`}>
       <ProductionFullScreenManager />
