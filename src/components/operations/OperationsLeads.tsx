@@ -2069,11 +2069,9 @@ export const OperationsLeads: React.FC = () => {
       }
 
       await saveStaffAssignments(assigningOrderId, finalAssignments, targetStage);
-      
-      // Update data so that UI reflects new crew directly from lead_staff_assignment_history
-      refreshData();
 
-      // Update equipment status in real-time
+      // Update equipment status concurrently in real-time
+      const equipPromises: Promise<any>[] = [];
       if (equipment && updateEquipment) {
         const op = getOpDetails(assigningOrderId);
         const previousKitsFromOp = op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
@@ -2092,13 +2090,13 @@ export const OperationsLeads: React.FC = () => {
           if (found) {
             const stillUsedElsewhere = isEquipmentBusy(kitStr, assigningOrderId);
             if (!stillUsedElsewhere) {
-              await updateEquipment(found.equipment_id, { status: 'Available' });
+              equipPromises.push(updateEquipment(found.equipment_id, { status: 'Available' }));
             }
             
             // Record Return in lead_equipment_history
             if (addLeadEquipmentHistory) {
               const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
-              await addLeadEquipmentHistory({
+              equipPromises.push(addLeadEquipmentHistory({
                 lead_id: matchedOrder?.lead_id || 'UNKNOWN',
                 order_id: assigningOrderId,
                 equipment_name: found.equipment_name,
@@ -2106,7 +2104,7 @@ export const OperationsLeads: React.FC = () => {
                 returned_by: currentUserName || 'Operations Team',
                 returned_at: new Date().toISOString(),
                 remarks: `Released from order ${assigningOrderId} by ${currentUserName || 'Operations Team'}`
-              });
+              }));
             }
           }
         }
@@ -2114,7 +2112,7 @@ export const OperationsLeads: React.FC = () => {
         for (const kitStr of allAssignedEquipment) {
           const found = equipment.find(eq => eq.equipment_name.toLowerCase() === kitStr.toLowerCase());
           if (found) {
-            await updateEquipment(found.equipment_id, { status: 'Assigned' });
+            equipPromises.push(updateEquipment(found.equipment_id, { status: 'Assigned' }));
             
             // Record Assignment History if not already recorded as active for this order
             if (addLeadEquipmentHistory) {
@@ -2126,13 +2124,13 @@ export const OperationsLeads: React.FC = () => {
                 h.equipment_status !== 'Returned'
               );
               if (!alreadyActiveHistory) {
-                await addLeadEquipmentHistory({
+                equipPromises.push(addLeadEquipmentHistory({
                   lead_id: matchedOrder?.lead_id || 'UNKNOWN',
                   order_id: assigningOrderId,
                   equipment_name: found.equipment_name,
                   equipment_status: 'Assigned',
                   remarks: `Assigned to order ${assigningOrderId} by ${currentUserName || 'Operations Team'}`
-                });
+                }));
               }
             }
           }
@@ -2150,24 +2148,29 @@ export const OperationsLeads: React.FC = () => {
         targetStage
       });
 
-      // Assign operations includes event_status and raw footage link if updated
-      await assignOperations(assigningOrderId, {
-        photographer_assigned: photographer || assignForm.photographer_assigned || '',
-        videographer_assigned: videographer || assignForm.videographer_assigned || '',
-        drone_operator_assigned: droneOp || assignForm.drone_operator_assigned || '',
-        assistant_assigned: assistant || assignForm.assistant_assigned || '',
-        equipment_kit: consolidatedEquipKit,
-        reporting_time: convertTimeToDbFormat(assignForm.reporting_time),
-        remarks: assignForm.remarks,
-        event_status: targetStage,
-        current_stage: targetStage,
-        event_date: assignForm.event_date,
-        event_time: convertTimeToDbFormat(assignForm.event_time),
-        assigned_staff: finalAssignments.map(a => a.staff_name).join(', '),
-        assigned_roles: finalAssignments.map(a => a.staff_role).join(', ')
-      } as any);
+      // Assign operations and execute equipment promises in parallel
+      await Promise.all([
+        ...equipPromises,
+        assignOperations(assigningOrderId, {
+          photographer_assigned: photographer || assignForm.photographer_assigned || '',
+          videographer_assigned: videographer || assignForm.videographer_assigned || '',
+          drone_operator_assigned: droneOp || assignForm.drone_operator_assigned || '',
+          assistant_assigned: assistant || assignForm.assistant_assigned || '',
+          equipment_kit: consolidatedEquipKit,
+          reporting_time: convertTimeToDbFormat(assignForm.reporting_time),
+          remarks: assignForm.remarks,
+          event_status: targetStage,
+          current_stage: targetStage,
+          event_date: assignForm.event_date,
+          event_time: convertTimeToDbFormat(assignForm.event_time),
+          assigned_staff: finalAssignments.map(a => a.staff_name).join(', '),
+          assigned_roles: finalAssignments.map(a => a.staff_role).join(', ')
+        } as any)
+      ]);
 
-      refreshData();
+      if (typeof refreshData === 'function') {
+        refreshData();
+      }
 
       if (matchedOrder) {
         setWhatsappShareModalData({

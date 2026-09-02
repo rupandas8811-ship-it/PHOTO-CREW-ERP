@@ -314,8 +314,11 @@ async function startServer() {
     );
   }
 
-  function sanitizeRecordForDbServer(record: any, table?: string) {
+  function sanitizeRecordForDbServer(record: any, table?: string): any {
     if (!record || typeof record !== 'object') return record;
+    if (Array.isArray(record)) {
+      return record.map(r => sanitizeRecordForDbServer(r, table));
+    }
     const clone = { ...record };
 
     if (table === 'editor_assignments') {

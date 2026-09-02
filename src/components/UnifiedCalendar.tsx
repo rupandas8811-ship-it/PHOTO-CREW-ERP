@@ -471,15 +471,43 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
         'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
       ];
 
-      leads.forEach(ld => {
+      // Build a unified collection of all leads and orders
+      const combinedItemsMap = new Map<string, { ld: any; ord?: any }>();
+      (leads || []).forEach(ld => {
+        if (!ld) return;
+        const key = ld.lead_id || (ld as any).order_id;
+        if (key) combinedItemsMap.set(key, { ld });
+      });
+
+      (orders || []).forEach(ord => {
+        if (!ord) return;
+        const key = ord.lead_id || ord.order_id;
+        if (key && combinedItemsMap.has(key)) {
+          combinedItemsMap.get(key)!.ord = ord;
+        } else if (ord.order_id && combinedItemsMap.has(ord.order_id)) {
+          combinedItemsMap.get(ord.order_id)!.ord = ord;
+        } else {
+          combinedItemsMap.set(ord.order_id || ord.lead_id, { ld: ord, ord });
+        }
+      });
+
+      combinedItemsMap.forEach(({ ld, ord: matchedOrd }) => {
         if (!ld) return;
 
-        const ord = orders?.find(o => o.lead_id === ld.lead_id);
-        const orderId = ord?.order_id || ld.lead_id;
-        const prodRecord = production?.find(p => p.tracking_id === ld.lead_id || p.order_id === ld.lead_id || p.tracking_id === orderId || (p as any).order_id === orderId);
-        const opsRecord = operations?.find(o => o.order_id === orderId || o.order_id === ld.lead_id);
+        const ord = matchedOrd || (orders ? orders.find(o => o.lead_id === ld.lead_id || o.order_id === ld.lead_id || (ld.order_id && o.order_id === ld.order_id)) : undefined);
+        const orderId = ord?.order_id || ld.order_id || ld.lead_id;
+        const leadId = ld.lead_id || ord?.lead_id || orderId;
 
-        const statusClean = (ord?.current_stage || prodRecord?.editing_status || ld.status || ld.current_status || '').trim();
+        const prodRecord = production?.find(p => 
+          p.tracking_id === leadId || 
+          p.order_id === leadId || 
+          p.tracking_id === orderId || 
+          (p as any).order_id === orderId || 
+          (p.production_id && (p.production_id === ld.production_id || p.production_id === (ld as any).prod_id))
+        );
+        const opsRecord = operations?.find(o => o.order_id === orderId || o.order_id === leadId);
+
+        const statusClean = (ord?.current_stage || prodRecord?.editing_status || prodRecord?.production_status || ld.status || ld.current_status || 'Event').trim();
 
         let isVisible = false;
 
@@ -492,7 +520,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
         } else if (role === 'production') {
           isVisible = productionStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
         } else if (role === 'owner') {
-          isVisible = ownerStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
+          // Business Owner views all events regardless of status
+          isVisible = true;
         } else {
           isVisible = true;
         }
@@ -501,9 +530,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
 
         // Find staff assignments
         const assigns = staffAssignments ? staffAssignments.filter(x => 
-          x.order_id === ld.lead_id || 
+          x.order_id === leadId || 
           x.order_id === orderId || 
-          (x as any).lead_id === ld.lead_id
+          (x as any).lead_id === leadId
         ) : [];
 
         // Operations Staff restriction: show ONLY events assigned to this staff member
@@ -534,79 +563,192 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
         }
 
         // Fetch events from ld.events or fall back to lead-level event if no events are saved
-        const eventsList = (ld.events && ld.events.length > 0) ? ld.events : [
+        const eventsList = (ld.events && Array.isArray(ld.events) && ld.events.length > 0) ? ld.events : [
           {
-            id: `fallback-${ld.lead_id}`,
-            event_date: ld.event_date,
-            event_start_time: ld.event_time,
-            event_name: ld.custom_event_name || ld.event_type || 'Event Shoot',
-            event_type: ld.event_type,
-            event_location: ld.event_location || 'Studio'
+            id: `fallback-${leadId}`,
+            event_date: ld.event_date || ord?.event_date || '',
+            event_start_time: ld.event_time || ord?.event_time || '10:00 AM',
+            event_name: ld.custom_event_name || ord?.custom_event_name || ld.event_type || ord?.event_type || 'Event Shoot',
+            event_type: ld.event_type || ord?.event_type || 'Shoot',
+            event_location: ld.event_location || ord?.event_location || 'Studio'
           }
         ];
 
-        const targetDeliveryDate = prodRecord?.expected_delivery_date || prodRecord?.target_delivery_date || ld.delivery_target_date || '';
+        const baseTargetDeliveryDate = normalizeToYYYYMMDD(
+          prodRecord?.target_delivery_date || 
+          prodRecord?.expected_delivery_date || 
+          prodRecord?.delivery_date || 
+          ord?.delivery_target_date || 
+          (ord as any)?.target_delivery_date || 
+          (ord as any)?.expected_delivery_date || 
+          ld.delivery_target_date || 
+          (ld as any)?.target_delivery_date || 
+          (ld as any)?.expected_delivery_date || 
+          opsRecord?.target_delivery_date || 
+          ''
+        );
+
         const uniqueStaff = new Set(assigns.map(a => a.staff_name));
         const assignedTeamCount = uniqueStaff.size;
 
         eventsList.forEach((ev, index) => {
           if (!ev) return;
 
-          let dateToUse = '';
-          if (role === 'production') {
-            // Production calendar MUST show target delivery date ONLY
-            dateToUse = ev.target_delivery_date || targetDeliveryDate;
-          } else {
-            // Sales/Ops/Ops Staff/Owner calendars show actual event date
-            dateToUse = ev.event_date || ld.event_date || '';
-          }
+          const evTargetDeliveryDate = normalizeToYYYYMMDD(
+            ev.target_delivery_date || 
+            ev.targeted_date || 
+            ev.delivery_target_date || 
+            ev.target_date || 
+            baseTargetDeliveryDate
+          );
 
-          // If dateToUse is missing/empty, do not render on calendar
-          if (!dateToUse) return;
-          
-          if (dateToUse.includes('T')) {
-            dateToUse = dateToUse.split('T')[0];
-          }
+          const evSavedEventDate = normalizeToYYYYMMDD(
+            ev.event_date || 
+            ev.event_start_date || 
+            ld.event_date || 
+            ord?.event_date || 
+            ''
+          );
 
-          const evStartTime = ev.event_start_time || ev.event_time || ld.event_time || '10:00 AM';
-          const evName = ev.event_name || ld.custom_event_name || ev.event_type || ld.event_type || 'Event Shoot';
-          const evType = ev.event_type || ld.event_type || 'Shoot';
-          const evLoc = ev.event_location || ld.event_location || 'Studio';
+          const evStartTime = ev.event_start_time || ev.event_time || ld.event_time || ord?.event_time || '10:00 AM';
+          const evName = ev.event_name || ld.custom_event_name || ord?.custom_event_name || ev.event_type || ld.event_type || ord?.event_type || 'Event Shoot';
+          const evType = ev.event_type || ld.event_type || ord?.event_type || 'Shoot';
+          const evLoc = ev.event_location || ld.event_location || ord?.event_location || 'Studio';
 
-          events.push({
-            id: `lead-event-${ld.lead_id}-${index}-${ev.id || 'idx'}`,
-            sourceType: 'order',
-            eventClass: role === 'production' ? 'Target Delivery' : 'Event Scheduled',
-            date: dateToUse,
-            customerName: ld.customer_name,
-            mobile: ld.mobile,
-            eventName: evName, eventType: evType,
-            eventTime: evStartTime,
-            eventLocation: evLoc,
-            currentStage: statusClean || ld.status,
-            notes: 'On Track',
-            packageName: ld.Select_Package_Option || 'Custom Package',
-            totalAmount: ld.package_price || ld.budget || 0,
-            orderId: orderId,
-            targetDeliveryDate: targetDeliveryDate,
-            raw: {
-              ...ld,
-              ...ev,
-              lead_id: ld.lead_id,
-              order_id: orderId,
-              event_name: evName,
-              event_type: evType,
-              event_date: ev.event_date || ld.event_date || '',
-              event_start_time: evStartTime,
-              event_end_time: ev.event_end_time || '',
-              reporting_date: ev.reporting_date || '',
-              reporting_time: ev.reporting_time || '',
-              assignedTeamCount,
-              assigns,
-              targetDeliveryDate: targetDeliveryDate,
-              sales_person: ld.sales_person || ld.created_by || 'Sales Team'
+          if (role === 'owner') {
+            // Business Owner Calendar:
+            // 1. Display on exact saved Event Date
+            if (evSavedEventDate) {
+              events.push({
+                id: `lead-event-${leadId}-${index}-${ev.id || 'idx'}`,
+                sourceType: 'order',
+                eventClass: 'Event Scheduled',
+                date: evSavedEventDate,
+                customerName: ld.customer_name || ord?.customer_name || 'Customer',
+                mobile: ld.mobile || ord?.mobile || '',
+                eventName: evName, 
+                eventType: evType,
+                eventTime: evStartTime,
+                eventLocation: evLoc,
+                currentStage: statusClean || ld.status,
+                notes: 'On Track',
+                packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
+                totalAmount: ld.package_price || ld.budget || ord?.quotation_amount || 0,
+                orderId: orderId,
+                targetDeliveryDate: evTargetDeliveryDate,
+                raw: {
+                  ...ld,
+                  ...ev,
+                  lead_id: leadId,
+                  order_id: orderId,
+                  event_name: evName,
+                  event_type: evType,
+                  event_date: evSavedEventDate,
+                  event_start_time: evStartTime,
+                  event_end_time: ev.event_end_time || '',
+                  reporting_date: ev.reporting_date || '',
+                  reporting_time: ev.reporting_time || '',
+                  assignedTeamCount,
+                  assigns,
+                  targetDeliveryDate: evTargetDeliveryDate,
+                  delivery_target_date: evTargetDeliveryDate,
+                  expected_delivery_date: evTargetDeliveryDate,
+                  sales_person: ld.sales_person || ld.created_by || ord?.sales_person || 'Sales Team'
+                }
+              });
             }
-          });
+
+            // 2. If Targeted Date exists and differs from event date, also display on exact Targeted Date
+            if (evTargetDeliveryDate && evTargetDeliveryDate !== evSavedEventDate) {
+              events.push({
+                id: `lead-target-delivery-${leadId}-${index}-${ev.id || 'idx'}`,
+                sourceType: 'order',
+                eventClass: 'Target Delivery',
+                date: evTargetDeliveryDate,
+                customerName: ld.customer_name || ord?.customer_name || 'Customer',
+                mobile: ld.mobile || ord?.mobile || '',
+                eventName: `Target Delivery - ${evName}`, 
+                eventType: evType,
+                eventTime: evStartTime,
+                eventLocation: evLoc,
+                currentStage: statusClean || ld.status,
+                notes: 'Target Delivery',
+                packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
+                totalAmount: ld.package_price || ld.budget || ord?.quotation_amount || 0,
+                orderId: orderId,
+                targetDeliveryDate: evTargetDeliveryDate,
+                raw: {
+                  ...ld,
+                  ...ev,
+                  lead_id: leadId,
+                  order_id: orderId,
+                  event_name: evName,
+                  event_type: evType,
+                  event_date: evSavedEventDate || evTargetDeliveryDate,
+                  event_start_time: evStartTime,
+                  event_end_time: ev.event_end_time || '',
+                  reporting_date: ev.reporting_date || '',
+                  reporting_time: ev.reporting_time || '',
+                  assignedTeamCount,
+                  assigns,
+                  targetDeliveryDate: evTargetDeliveryDate,
+                  delivery_target_date: evTargetDeliveryDate,
+                  expected_delivery_date: evTargetDeliveryDate,
+                  sales_person: ld.sales_person || ld.created_by || ord?.sales_person || 'Sales Team'
+                }
+              });
+            }
+          } else {
+            let dateToUse = '';
+            if (role === 'production') {
+              // Production calendar shows target delivery date only
+              dateToUse = evTargetDeliveryDate || evSavedEventDate;
+            } else {
+              // Sales/Ops/Ops Staff calendars show actual event date
+              dateToUse = evSavedEventDate || evTargetDeliveryDate;
+            }
+
+            // If dateToUse is missing/empty, do not render on calendar
+            if (!dateToUse) return;
+
+            events.push({
+              id: `lead-event-${leadId}-${index}-${ev.id || 'idx'}`,
+              sourceType: 'order',
+              eventClass: role === 'production' ? 'Target Delivery' : 'Event Scheduled',
+              date: dateToUse,
+              customerName: ld.customer_name || ord?.customer_name || 'Customer',
+              mobile: ld.mobile || ord?.mobile || '',
+              eventName: evName, 
+              eventType: evType,
+              eventTime: evStartTime,
+              eventLocation: evLoc,
+              currentStage: statusClean || ld.status,
+              notes: 'On Track',
+              packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
+              totalAmount: ld.package_price || ld.budget || ord?.quotation_amount || 0,
+              orderId: orderId,
+              targetDeliveryDate: evTargetDeliveryDate,
+              raw: {
+                ...ld,
+                ...ev,
+                lead_id: leadId,
+                order_id: orderId,
+                event_name: evName,
+                event_type: evType,
+                event_date: evSavedEventDate || dateToUse,
+                event_start_time: evStartTime,
+                event_end_time: ev.event_end_time || '',
+                reporting_date: ev.reporting_date || '',
+                reporting_time: ev.reporting_time || '',
+                assignedTeamCount,
+                assigns,
+                targetDeliveryDate: evTargetDeliveryDate,
+                delivery_target_date: evTargetDeliveryDate,
+                expected_delivery_date: evTargetDeliveryDate,
+                sales_person: ld.sales_person || ld.created_by || ord?.sales_person || 'Sales Team'
+              }
+            });
+          }
         });
       });
 

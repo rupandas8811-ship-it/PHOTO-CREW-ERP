@@ -46,6 +46,7 @@ import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { OwnerStaffPerformanceReport } from './OwnerModule';
 import { BusinessOwnerCardDetailModal } from './BusinessOwnerCardDetailModal';
 import { PaymentHistoryModal } from './PaymentHistoryModal';
+import { AddNoteModal } from './AddNoteModal';
 import { OrderHistoryModal } from './OrderHistoryModal';
 import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
@@ -1792,10 +1793,11 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   const { globalDateRange } = useRole();
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
-  // Helper to normalize any date input format to standard YYYY-MM-DD
+  // Helper to normalize any date input format to standard YYYY-MM-DD without timezone shifts
   const normalizeToYYYYMMDD = useCallback((dateVal: any): string | null => {
     if (!dateVal) return null;
     if (dateVal instanceof Date) {
+      if (isNaN(dateVal.getTime())) return null;
       const y = dateVal.getFullYear();
       const m = String(dateVal.getMonth() + 1).padStart(2, '0');
       const d = String(dateVal.getDate()).padStart(2, '0');
@@ -1803,19 +1805,24 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
     }
     
     let str = String(dateVal).trim();
-    if (!str) return null;
+    if (!str || str === 'undefined' || str === 'null' || str === '—' || str === 'N/A' || str === 'TBD') return null;
 
     if (str.includes('T')) {
       str = str.split('T')[0];
     }
     str = str.split(/\s+/)[0];
 
+    // Standardize separators (/ and . to -)
+    str = str.replace(/[\/\.]/g, '-');
+
     if (str.includes('-')) {
       const parts = str.split('-');
       if (parts.length === 3) {
         if (parts[0].length === 4) {
+          // YYYY-MM-DD
           return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
         } else if (parts[2].length === 4) {
+          // DD-MM-YYYY
           return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
         }
       }
@@ -1902,16 +1909,53 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   const eventsByDate = useMemo(() => {
     const map: Record<string, any[]> = {};
 
-    orders.forEach(order => {
-      const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
-      const lead = leads?.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
-      
+    // Build unified collection of orders and leads
+    const combinedMap = new Map<string, { order?: Order; lead?: any }>();
+    (leads || []).forEach(l => {
+      if (!l) return;
+      const key = l.lead_id || (l as any).order_id;
+      if (key) combinedMap.set(key, { lead: l });
+    });
+    (orders || []).forEach(o => {
+      if (!o) return;
+      const key = o.lead_id || o.order_id;
+      if (key && combinedMap.has(key)) {
+        combinedMap.get(key)!.order = o;
+      } else if (o.order_id && combinedMap.has(o.order_id)) {
+        combinedMap.get(o.order_id)!.order = o;
+      } else {
+        combinedMap.set(o.order_id || o.lead_id, { order: o });
+      }
+    });
+
+    combinedMap.forEach(({ order, lead: matchedLead }) => {
+      const lead = matchedLead || (leads ? leads.find(l => (order && (l.lead_id === order.lead_id || l.lead_id === order.order_id || (l.order_id && l.order_id === order.order_id)))) : undefined);
+      const orderId = order?.order_id || lead?.order_id || lead?.lead_id;
+      const leadId = lead?.lead_id || order?.lead_id || orderId;
+
+      const prod = production?.find(p => 
+        p.tracking_id === leadId || 
+        p.order_id === leadId || 
+        p.tracking_id === orderId || 
+        (p as any).order_id === orderId ||
+        (p.production_id && (p.production_id === lead?.production_id || p.production_id === (lead as any)?.prod_id))
+      );
+
       const rawLeadEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
       const deserialized = (!rawLeadEvents || rawLeadEvents.length === 0) && (lead?.notes_special_customizations || order?.notes_special_customizations)
         ? deserializeLeadEvents(lead?.notes_special_customizations || order?.notes_special_customizations).events
         : [];
       const combinedEvents = rawLeadEvents.length > 0 ? rawLeadEvents : (deserialized.length > 0 ? deserialized : []);
-      const eventsToMap = combinedEvents.length > 0 ? combinedEvents : [{ event_date: order.event_date, event_name: order.custom_event_name || order.event_type, event_type: order.event_type }];
+      const eventsToMap = combinedEvents.length > 0 ? combinedEvents : [{
+        id: `event-${orderId}`,
+        event_date: order?.event_date || lead?.event_date || '',
+        event_name: order?.custom_event_name || order?.event_type || lead?.custom_event_name || lead?.event_type || 'Event Shoot',
+        event_type: order?.event_type || lead?.event_type || 'Shoot',
+        event_location: order?.event_location || lead?.event_location || 'Studio',
+        target_delivery_date: (order as any)?.target_delivery_date || lead?.delivery_target_date || ''
+      }];
+
+      const currentStage = (order?.current_stage || prod?.editing_status || prod?.production_status || lead?.status || lead?.current_status || 'Event Scheduled').trim();
 
       const isWaitingApproval = [
         'Client Acceptance',
@@ -1919,102 +1963,111 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         'Customer Review',
         'Editing Complete',
         'Final Approval'
-      ].includes(order.current_stage) || (prod && [
+      ].some(st => st.toLowerCase() === currentStage.toLowerCase());
+
+      const isClientAcceptance = [
         'Client Acceptance',
-        'Business Owner Review',
-        'Customer Review',
-        'Editing Complete',
-        'Final Approval'
-      ].includes(prod.editing_status));
-      const isClientAcceptance = order.current_stage === 'Client Acceptance' || prod?.editing_status === 'Client Acceptance';
+        'Final Approval',
+        'Approved'
+      ].some(st => st.toLowerCase() === currentStage.toLowerCase());
 
-      let typeCategory = 'event_date';
-      let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-      if (isWaitingApproval) {
-        typeCategory = 'waiting_approval';
-        badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
-      } else if (isClientAcceptance) {
-        typeCategory = 'client_acceptance';
-        badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-      }
-
-      // Check if this type of event should be shown based on activeFilters
-      const shouldShowEvent =
-        (typeCategory === 'event_date' && activeFilters.eventDates) ||
-        (typeCategory === 'client_acceptance' && activeFilters.clientAcceptance) ||
-        (typeCategory === 'waiting_approval' && activeFilters.waitingApproval);
+      const baseTargetedDate = normalizeToYYYYMMDD(
+        prod?.target_delivery_date ||
+        prod?.expected_delivery_date ||
+        prod?.delivery_date ||
+        order?.delivery_target_date ||
+        (order as any)?.target_delivery_date ||
+        (order as any)?.expected_delivery_date ||
+        lead?.delivery_target_date ||
+        (lead as any)?.target_delivery_date ||
+        (lead as any)?.expected_delivery_date ||
+        ''
+      );
 
       eventsToMap.forEach((ev: any, idx: number) => {
-        const evDate = ev.event_date || order.event_date;
-        if (evDate && shouldShowEvent) {
-          const dateStr = evDate.split('T')[0];
-          
-          let isDateInRange = true;
-          if (globalDateRange?.start && globalDateRange?.end) {
-            const startStr = normalizeToYYYYMMDD(globalDateRange.start);
-            const endStr = normalizeToYYYYMMDD(globalDateRange.end);
-            const normalizedEvDate = normalizeToYYYYMMDD(evDate);
-            if (startStr && endStr && normalizedEvDate) {
-              isDateInRange = normalizedEvDate >= startStr && normalizedEvDate <= endStr;
-            }
+        const evTargetedDate = normalizeToYYYYMMDD(
+          ev.target_delivery_date ||
+          ev.targeted_date ||
+          ev.delivery_target_date ||
+          ev.target_date ||
+          baseTargetedDate
+        );
+
+        const evSavedEventDate = normalizeToYYYYMMDD(
+          ev.event_date ||
+          ev.event_start_date ||
+          order?.event_date ||
+          lead?.event_date ||
+          ''
+        );
+
+        const customerName = order?.customer_name || lead?.customer_name || 'Customer';
+        const eventName = ev.event_name || ev.event_type || order?.custom_event_name || order?.event_type || lead?.custom_event_name || lead?.event_type || 'Event';
+        const location = ev.event_location || order?.event_location || lead?.event_location || 'Studio';
+
+        // 1. Placement on exact saved Event Date
+        if (evSavedEventDate) {
+          let evTypeCategory = 'event_date';
+          let evBadgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+          if (isWaitingApproval) {
+            evTypeCategory = 'waiting_approval';
+            evBadgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
+          } else if (isClientAcceptance) {
+            evTypeCategory = 'client_acceptance';
+            evBadgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
           }
 
-          if (dateStr && isDateInRange) {
-            if (!map[dateStr]) map[dateStr] = [];
-            map[dateStr].push({
-              id: `event-${order.order_id}-${idx}`,
-              type: typeCategory,
-              badgeColor,
-              title: `${order.customer_name} - ${ev.event_name || ev.event_type || 'Event'}`,
-              customerName: order.customer_name,
-              orderId: order.order_id,
-              eventName: ev.event_name || ev.event_type || order.custom_event_name || order.event_type || 'Photography Event',
-              currentStatus: prod?.editing_status || order.current_stage || 'Event Scheduled',
-              eventDate: evDate,
-              location: order.event_location || 'Studio',
-              rawOrder: order,
-              rawProd: prod
+          const shouldShowEventDate =
+            (evTypeCategory === 'event_date' && activeFilters.eventDates) ||
+            (evTypeCategory === 'client_acceptance' && activeFilters.clientAcceptance) ||
+            (evTypeCategory === 'waiting_approval' && activeFilters.waitingApproval);
+
+          if (shouldShowEventDate) {
+            if (!map[evSavedEventDate]) map[evSavedEventDate] = [];
+            map[evSavedEventDate].push({
+              id: `event-${orderId}-${ev.id || idx}`,
+              type: evTypeCategory,
+              badgeColor: evBadgeColor,
+              title: `${customerName} - ${eventName}`,
+              customerName,
+              orderId,
+              eventName,
+              currentStatus: currentStage,
+              eventDate: evSavedEventDate,
+              targetDeliveryDate: evTargetedDate || '',
+              location,
+              rawOrder: order || lead,
+              rawProd: prod,
+              rawLead: lead
             });
           }
         }
-      });
 
-      // Target delivery date event
-      if ((prod?.expected_delivery_date || prod?.target_delivery_date) && activeFilters.deliveryDates) {
-        const delDate = (prod.expected_delivery_date || prod.target_delivery_date || '').split('T')[0];
-        
-        let isDateInRange = true;
-        if (globalDateRange?.start && globalDateRange?.end) {
-          const startStr = normalizeToYYYYMMDD(globalDateRange.start);
-          const endStr = normalizeToYYYYMMDD(globalDateRange.end);
-          const normalizedDelDate = normalizeToYYYYMMDD(prod.expected_delivery_date || prod.target_delivery_date);
-          if (startStr && endStr && normalizedDelDate) {
-            isDateInRange = normalizedDelDate >= startStr && normalizedDelDate <= endStr;
-          }
-        }
-
-        if (delDate && isDateInRange) {
-          if (!map[delDate]) map[delDate] = [];
-          map[delDate].push({
-            id: `delivery-${order.order_id}`,
+        // 2. Placement on exact Targeted Date (Delivery Date)
+        if (evTargetedDate && activeFilters.deliveryDates) {
+          if (!map[evTargetedDate]) map[evTargetedDate] = [];
+          map[evTargetedDate].push({
+            id: `target-delivery-${orderId}-${ev.id || idx}`,
             type: 'delivery_date',
             badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
-            title: `Delivery: ${order.customer_name}`,
-            customerName: order.customer_name,
-            orderId: order.order_id,
-            eventName: `Target Delivery - ${order.custom_event_name || order.event_type}`,
-            currentStatus: prod.editing_status || 'Editing In Progress',
-            eventDate: delDate,
-            location: order.event_location || 'Studio',
-            rawOrder: order,
-            rawProd: prod
+            title: `Target Delivery: ${customerName} - ${eventName}`,
+            customerName,
+            orderId,
+            eventName: `Target Delivery: ${eventName}`,
+            currentStatus: currentStage,
+            eventDate: evSavedEventDate || evTargetedDate,
+            targetDeliveryDate: evTargetedDate,
+            location,
+            rawOrder: order || lead,
+            rawProd: prod,
+            rawLead: lead
           });
         }
-      }
+      });
     });
 
     return map;
-  }, [orders, production, activeFilters, globalDateRange, normalizeToYYYYMMDD]);
+  }, [orders, leads, production, activeFilters, normalizeToYYYYMMDD]);
 
   return (
     <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 sm:p-5 shadow-2xl space-y-4">
@@ -2256,6 +2309,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [selectedPaymentHistoryOrder, setSelectedPaymentHistoryOrder] = useState<any | null>(null);
   const [selectedHistoryOrder, setSelectedHistoryOrder] = useState<any | null>(null);
+  const [noteModalOrder, setNoteModalOrder] = useState<any | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [paymentTab, setPaymentTab] = useState<'all' | 'pending' | 'history'>('all');
 
@@ -2835,18 +2889,32 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
-                          setSelectedPaymentHistoryOrder(fullOrder);
-                        }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-                        title="View Payment History"
-                      >
-                        <History className="w-3.5 h-3.5" />
-                        <span>Payment History</span>
-                      </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
+                            setSelectedPaymentHistoryOrder(fullOrder);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+                          title="View Payment History"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          <span>Payment History</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
+                            setNoteModalOrder(fullOrder);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+                          title="Add Note"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Add Note</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -2886,6 +2954,17 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         onClose={() => setSelectedHistoryOrder(null)}
         order={selectedHistoryOrder}
       />
+
+      {/* ADD NOTE MODAL */}
+      {noteModalOrder && (
+        <AddNoteModal
+          isOpen={noteModalOrder !== null}
+          onClose={() => setNoteModalOrder(null)}
+          leadId={noteModalOrder.lead_id || noteModalOrder.order_id}
+          orderId={noteModalOrder.order_id}
+          customerName={noteModalOrder.customer_name || 'Customer'}
+        />
+      )}
 
     </div>
   );
@@ -3472,7 +3551,7 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
                   const evTime = ev.rawOrder?.event_time || '10:00 AM';
                   const custName = ev.customerName || ev.rawOrder?.customer_name || '—';
                   const status = ev.currentStatus || ev.rawOrder?.current_stage || 'Active';
-                  const targetDel = ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || '—';
+                  const targetDel = ev.targetDeliveryDate || ev.rawOrder?.target_delivery_date || ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || ev.rawLead?.delivery_target_date || '—';
 
                   return (
                     <tr 

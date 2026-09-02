@@ -4303,20 +4303,25 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const previousStage = targetOrder ? targetOrder.current_stage : 'Order Confirmed';
     const timestamp = new Date().toISOString();
 
-    const resOrd = await pushUpdate('orders', 'order_id', orderId, { 
+    const roleParts = (currentUserName && currentUserName.includes('|')) 
+      ? currentUserName.split('|') 
+      : [currentUserName || 'System', currentRole || 'System'];
+    const changedBy = roleParts[0];
+    const changedByRole = roleParts[1] || currentRole || 'System';
+
+    // Optimistic UI updates for immediate responsiveness
+    setOrders(prev => prev.map(o => o.order_id === orderId ? {
+      ...o,
       current_stage: targetStageNum,
-      event_date: event_date || (targetOrder ? targetOrder.event_date : undefined),
-      event_time: event_time || (targetOrder ? targetOrder.event_time : undefined),
+      event_date: event_date || o.event_date,
+      event_time: event_time || o.event_time,
       updated_by: currentUserName,
       updated_at: timestamp
-    });
-
-    if (!resOrd?.success) {
-      throw new Error(resOrd?.error || "Failed to update order status.");
-    }
+    } : o));
 
     if (targetOrder) {
-      const resLead = await pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
+      setLeads(prev => prev.map(l => l.lead_id === targetOrder.lead_id ? {
+        ...l,
         status: targetStageNum,
         current_status: targetStageNum,
         event_date: event_date || targetOrder.event_date,
@@ -4327,32 +4332,73 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         reporting_time: opData.reporting_time,
         updated_by: currentUserName,
         updated_at: timestamp
-      });
-      if (!resLead?.success) {
-        throw new Error(resLead?.error || "Failed to update lead status.");
-      }
+      } : l));
     }
 
     if (opExistsInDb || existingOpId) {
-      const resOp = await pushUpdate('operations', 'operation_id', existingOpId as string, {
+      setOperations(prev => prev.map(o => o.operation_id === existingOpId ? {
+        ...o,
         ...restOpData,
         event_status: dbEventStatus,
-        updated_by: currentUserName,
-      });
-      if (!resOp?.success) throw new Error(resOp?.error || "Failed to update operations.");
+        updated_by: currentUserName
+      } : o));
     } else {
-      const resOp = await pushInsert('operations', newOp);
-      if (!resOp?.success) throw new Error(resOp?.error || "Failed to insert operations.");
+      setOperations(prev => [newOp, ...prev]);
+    }
+
+    const opPromises: Promise<any>[] = [];
+
+    opPromises.push(
+      pushUpdate('orders', 'order_id', orderId, { 
+        current_stage: targetStageNum,
+        event_date: event_date || (targetOrder ? targetOrder.event_date : undefined),
+        event_time: event_time || (targetOrder ? targetOrder.event_time : undefined),
+        updated_by: currentUserName,
+        updated_at: timestamp
+      }).then(resOrd => {
+        if (!resOrd?.success) throw new Error(resOrd?.error || "Failed to update order status.");
+      })
+    );
+
+    if (targetOrder) {
+      opPromises.push(
+        pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
+          status: targetStageNum,
+          current_status: targetStageNum,
+          event_date: event_date || targetOrder.event_date,
+          event_time: event_time || targetOrder.event_time,
+          assigned_staff: (opData as any).assigned_staff,
+          assigned_roles: (opData as any).assigned_roles,
+          assigned_equipment: opData.equipment_kit,
+          reporting_time: opData.reporting_time,
+          updated_by: currentUserName,
+          updated_at: timestamp
+        }).then(resLead => {
+          if (!resLead?.success) throw new Error(resLead?.error || "Failed to update lead status.");
+        })
+      );
+    }
+
+    if (opExistsInDb || existingOpId) {
+      opPromises.push(
+        pushUpdate('operations', 'operation_id', existingOpId as string, {
+          ...restOpData,
+          event_status: dbEventStatus,
+          updated_by: currentUserName,
+        }).then(resOp => {
+          if (!resOp?.success) throw new Error(resOp?.error || "Failed to update operations.");
+        })
+      );
+    } else {
+      opPromises.push(
+        pushInsert('operations', newOp).then(resOp => {
+          if (!resOp?.success) throw new Error(resOp?.error || "Failed to insert operations.");
+        })
+      );
     }
 
     // Insert into lead_status_history if stage changed
     if (previousStage !== targetStageNum && targetOrder?.lead_id) {
-      const roleParts = (currentUserName && currentUserName.includes('|')) 
-        ? currentUserName.split('|') 
-        : [currentUserName || 'System', currentRole || 'System'];
-      const changedBy = roleParts[0];
-      const changedByRole = roleParts[1] || currentRole || 'System';
-
       const newHist = {
         lead_id: targetOrder.lead_id,
         order_id: orderId,
@@ -4364,16 +4410,19 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         created_at: timestamp
       };
 
-      await pushInsert('lead_status_history', newHist).catch(err => console.warn("Failed to insert lead status history:", err?.message || err));
       setStatusHistory(prev => [...prev, newHist]);
+      opPromises.push(
+        pushInsert('lead_status_history', newHist).catch(err => console.warn("Failed to insert lead status history:", err?.message || err))
+      );
     }
 
-    //  // Disabled to prevent full reload
+    await Promise.all(opPromises);
 
     const customerName = targetOrder ? targetOrder.customer_name : 'Customer';
     const eventName = targetOrder ? (targetOrder.event_type || targetOrder.package_name || 'Event') : 'Wedding';
     const formattedDate = event_date || (targetOrder ? targetOrder.event_date : '');
 
+    // Non-blocking notification
     addNotification({
       user_id: 'All',
       project_id: orderId,
@@ -4382,7 +4431,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       title: '📅 Event Scheduled',
       message: `${eventName} Event has been scheduled. Customer: ${customerName}. Event: ${eventName}. Date: ${formattedDate}.`,
       recipient_role: 'Sales Team'
-    });
+    }).catch(err => console.warn("Notification dispatch notice:", err));
 
     addNotification({
       user_id: 'All',
@@ -4439,9 +4488,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     if (supabaseClient) {
-      // Explicitly verify the parent records exist in the database BEFORE insert
-      const { data: dbLead, error: leadErr } = await supabaseClient.from('leads').select('lead_id').eq('lead_id', leadId).single();
-      if (leadErr || !dbLead) {
+      // Parallelize DB parent record existence checks
+      const [leadRes, orderRes, opRes] = await Promise.all([
+        supabaseClient.from('leads').select('lead_id').eq('lead_id', leadId).maybeSingle(),
+        supabaseClient.from('orders').select('order_id, lead_id').eq('order_id', orderId).maybeSingle(),
+        supabaseClient.from('operations').select('operation_id').eq('order_id', orderId).maybeSingle()
+      ]);
+
+      const initPromises: Promise<any>[] = [];
+
+      if (!leadRes?.data) {
         if (targetLead) {
           const preparedLead = {
             ...targetLead,
@@ -4452,17 +4508,15 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             budget: targetLead.budget !== undefined && targetLead.budget !== null ? targetLead.budget : 0,
             sales_person: targetLead.sales_person || 'Sales Team'
           };
-          const res = await pushInsert('leads', preparedLead);
-          if (!res.success) {
-            throw new Error(`Failed to initialize Lead record in database:\n\n${res.error}`);
-          }
+          initPromises.push(pushInsert('leads', preparedLead).then(res => {
+            if (!res.success) throw new Error(`Failed to initialize Lead record in database:\n\n${res.error}`);
+          }));
         } else {
           throw new Error(`Database Error: Missing Lead Record in DB (${leadId}).`);
         }
       }
 
-      const { data: dbOrder, error: orderErr } = await supabaseClient.from('orders').select('order_id, lead_id').eq('order_id', orderId).single();
-      if (orderErr || !dbOrder) {
+      if (!orderRes?.data) {
         if (targetOrder) {
           const preparedOrder = {
             ...targetOrder,
@@ -4472,27 +4526,28 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             balance_amount: targetOrder.balance_amount !== undefined && targetOrder.balance_amount !== null ? targetOrder.balance_amount : 0,
             sales_person: targetOrder.sales_person || 'Sales Team'
           };
-          const res = await pushInsert('orders', preparedOrder);
-          if (!res.success) {
-            throw new Error(`Failed to initialize Order record in database:\n\n${res.error}`);
-          }
+          initPromises.push(pushInsert('orders', preparedOrder).then(res => {
+            if (!res.success) throw new Error(`Failed to initialize Order record in database:\n\n${res.error}`);
+          }));
         } else {
           throw new Error(`Database Error: Missing Order Record in DB (${orderId}).`);
         }
-      } else if (dbOrder.lead_id !== leadId) {
+      } else if (orderRes.data.lead_id !== leadId) {
         throw new Error(`Validation Error: Order ${orderId} does not belong to Lead ${leadId}.`);
       }
 
-      const { data: dbOp, error: opErr } = await supabaseClient.from('operations').select('operation_id').eq('order_id', orderId).maybeSingle();
-      if (opErr || !dbOp) {
+      if (!opRes?.data) {
         if (targetOp) {
-          const res = await pushInsert('operations', targetOp);
-          if (!res.success) {
-            throw new Error(`Failed to initialize Operations record in database:\n\n${res.error}`);
-          }
+          initPromises.push(pushInsert('operations', targetOp).then(res => {
+            if (!res.success) throw new Error(`Failed to initialize Operations record in database:\n\n${res.error}`);
+          }));
         } else {
           throw new Error(`Database Error: Missing Operations Record in DB for Order (${orderId}).`);
         }
+      }
+
+      if (initPromises.length > 0) {
+        await Promise.all(initPromises);
       }
     }
 
@@ -4527,6 +4582,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
 
       const insertedAssignments: StaffAssignment[] = [];
+      const historyInserts: any[] = [];
+      const assignInserts: StaffAssignment[] = [];
 
       for (const a of assignments) {
         // STEP 2: SAVE ASSIGNMENT HISTORY
@@ -4538,8 +4595,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           assigned_by: changedBy,
           assigned_at: timestamp
         };
-        const resHist = await pushInsert('lead_staff_assignment_history', newHist);
-        if (!resHist.success) throw new Error(`Error saving assignment history:\n\n${resHist.error}`);
+        historyInserts.push(newHist);
 
         // STEP 3: INSERT CURRENT ASSIGNMENT
         const key = `${(a.staff_name || '').toLowerCase()}_${a.event_id || 'gen'}_${(a.staff_role || '').toLowerCase()}`;
@@ -4567,21 +4623,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         };
 
         insertedAssignments.push(newAssign);
-
-        const resAssign = await pushInsert('staff_assignments', newAssign);
-        if (!resAssign.success) {
-          if (resAssign.error?.includes('idx_unique_staff_per_order') || resAssign.error?.includes('duplicate key') || resAssign.error?.includes('23505')) {
-            console.warn("Ignored staff_assignments constraint duplicate key for multi-event staff assignment:", resAssign.error);
-          } else {
-            console.warn("Could not insert staff assignment record, proceeding with event assignment:", resAssign.error);
-          }
-        }
+        assignInserts.push(newAssign);
       }
 
+      // Optimistically update React state immediately!
       setStaffAssignments(prev => [
         ...prev.filter(sa => sa.order_id !== orderId),
         ...insertedAssignments
       ]);
+
+      // Execute all history and assignment inserts concurrently
+      await Promise.all([
+        ...historyInserts.map(h => pushInsert('lead_staff_assignment_history', h).then(res => {
+          if (!res.success) throw new Error(`Error saving assignment history:\n\n${res.error}`);
+        })),
+        ...assignInserts.map(na => pushInsert('staff_assignments', na).then(resAssign => {
+          if (!resAssign.success) {
+            if (resAssign.error?.includes('idx_unique_staff_per_order') || resAssign.error?.includes('duplicate key') || resAssign.error?.includes('23505')) {
+              console.warn("Ignored staff_assignments constraint duplicate key for multi-event staff assignment:", resAssign.error);
+            } else {
+              console.warn("Could not insert staff assignment record, proceeding with event assignment:", resAssign.error);
+            }
+          }
+        }))
+      ]);
+
+      const updateOps: Promise<any>[] = [];
 
       // STEP 4: UPDATE OPERATIONS TABLE
       let opUpdates: any = {};
@@ -4594,8 +4661,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       
       if (Object.keys(opUpdates).length > 0) {
         opUpdates.updated_by = changedBy;
-        const resOp = await pushUpdate('operations', 'order_id', orderId, opUpdates);
-        if (!resOp.success) throw new Error(`Error updating operations record:\n\n${resOp.error}`);
+        updateOps.push(pushUpdate('operations', 'order_id', orderId, opUpdates).then(resOp => {
+          if (!resOp.success) throw new Error(`Error updating operations record:\n\n${resOp.error}`);
+        }));
       }
 
       if (assignments.length > 0 && targetStage && targetStage !== 'Order Confirmed') { // STEP 5: UPDATE LEAD STATUS (Only if targetStage is not 'Order Confirmed')
@@ -4621,28 +4689,34 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
             created_at: timestamp
           };
-          await pushInsert('lead_status_history', statusHist);
+          updateOps.push(pushInsert('lead_status_history', statusHist));
 
-          const resLead = await pushUpdate('leads', 'lead_id', leadId, { 
+          updateOps.push(pushUpdate('leads', 'lead_id', leadId, { 
             current_status: finalStage, 
             status: finalStage,
             updated_by: changedBy
-          });
-          if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
+          }).then(resLead => {
+            if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
+          }));
 
-          const resOrder = await pushUpdate('orders', 'order_id', orderId, { 
+          updateOps.push(pushUpdate('orders', 'order_id', orderId, { 
             current_stage: finalStage, 
             updated_by: changedBy
-          });
-          if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);
+          }).then(resOrder => {
+            if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);
+          }));
         }
+      }
+
+      if (updateOps.length > 0) {
+        await Promise.all(updateOps);
       }
 
     } // STEP 6: REFRESH DASHBOARD
     
 
-    // Create notifications for assigned staff
-    assignments.forEach((a) => {
+    // Create notifications for assigned staff asynchronously in background
+    Promise.all(assignments.flatMap((a) => {
       const ord = augmentedOrders.find((o) => o.order_id === orderId);
       const op = augmentedOperations.find((o) => o.order_id === orderId);
       const customerName = ord?.customer_name || 'Valued Client';
@@ -4650,39 +4724,41 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       const eventDate = ord?.event_date || 'N/A';
       const reportingTime = op?.reporting_time || '08:00';
 
-      // 1. New Event Assigned
-      addNotification({
-        user_id: a.staff_id,
-        project_id: orderId,
-        task_id: 'Shoot',
-        notification_type: 'New Event Assigned',
-        title: 'New Event Assigned',
-        message: `You have been assigned as ${a.staff_role} for ${customerName}'s ${eventType} (Order: ${orderId}) on ${eventDate}.`,
-        recipient_role: 'Operations Team'
-      });
+      return [
+        // 1. New Event Assigned
+        addNotification({
+          user_id: a.staff_id,
+          project_id: orderId,
+          task_id: 'Shoot',
+          notification_type: 'New Event Assigned',
+          title: 'New Event Assigned',
+          message: `You have been assigned as ${a.staff_role} for ${customerName}'s ${eventType} (Order: ${orderId}) on ${eventDate}.`,
+          recipient_role: 'Operations Team'
+        }),
 
-      // 2. Event Tomorrow Reminder
-      addNotification({
-        user_id: a.staff_id,
-        project_id: orderId,
-        task_id: 'Shoot',
-        notification_type: 'Event Tomorrow Reminder',
-        title: 'Event Tomorrow Reminder',
-        message: `Reminder: Tomorrow is the ${eventType} shoot for ${customerName} (Order: ${orderId}). Please report at ${reportingTime}.`,
-        recipient_role: 'Operations Team'
-      });
+        // 2. Event Tomorrow Reminder
+        addNotification({
+          user_id: a.staff_id,
+          project_id: orderId,
+          task_id: 'Shoot',
+          notification_type: 'Event Tomorrow Reminder',
+          title: 'Event Tomorrow Reminder',
+          message: `Reminder: Tomorrow is the ${eventType} shoot for ${customerName} (Order: ${orderId}). Please report at ${reportingTime}.`,
+          recipient_role: 'Operations Team'
+        }),
 
-      // 3. Event Today Reminder
-      addNotification({
-        user_id: a.staff_id,
-        project_id: orderId,
-        task_id: 'Shoot',
-        notification_type: 'Event Today Reminder',
-        title: 'Event Today Reminder',
-        message: `Reminder: Today is the ${eventType} shoot for ${customerName} (Order: ${orderId}). Report on time at ${reportingTime} and update status through ERP.`,
-        recipient_role: 'Operations Team'
-      });
-    });
+        // 3. Event Today Reminder
+        addNotification({
+          user_id: a.staff_id,
+          project_id: orderId,
+          task_id: 'Shoot',
+          notification_type: 'Event Today Reminder',
+          title: 'Event Today Reminder',
+          message: `Reminder: Today is the ${eventType} shoot for ${customerName} (Order: ${orderId}). Report on time at ${reportingTime} and update status through ERP.`,
+          recipient_role: 'Operations Team'
+        })
+      ];
+    })).catch(err => console.warn("Staff notification background dispatch:", err));
   };
 
 
@@ -5074,6 +5150,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     const leadIdToUpdate = tgtLead?.lead_id || tgtOrder?.lead_id || (actualTrackingId.startsWith('PRD-') ? actualTrackingId.replace('PRD-', '') : actualTrackingId);
 
+    const relatedPromises: Promise<any>[] = [];
+
     if (nextStage && leadIdToUpdate) {
       const leadUpdates: any = {
         updated_by: currentUserName,
@@ -5098,13 +5176,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         leadUpdates.production_role = (updates as any).assigned_role;
       }
       
-      console.log("Updating lead:", leadIdToUpdate, leadUpdates);
-      const rLead = await pushUpdate('leads', 'lead_id', leadIdToUpdate, leadUpdates);
-      if (rLead?.success) {
-        setLeads(prev => prev.map(l => l.lead_id === leadIdToUpdate ? { ...l, ...leadUpdates } : l));
-      } else {
-        console.warn("Lead update warning:", rLead?.error);
-      }
+      setLeads(prev => prev.map(l => l.lead_id === leadIdToUpdate ? { ...l, ...leadUpdates } : l));
+      relatedPromises.push(
+        pushUpdate('leads', 'lead_id', leadIdToUpdate, leadUpdates).catch(err => console.warn("Lead update warning:", err))
+      );
     }
 
     if (nextStage && tgtOrder) {
@@ -5119,12 +5194,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           updated_by: currentUserName,
           updated_at: timestamp
         };
-        const rOrd = await pushUpdate('orders', 'order_id', tgtOrder.order_id, ordUpdates);
-        if (rOrd?.success) {
-          setOrders(prev => prev.map(o => o.order_id === tgtOrder!.order_id ? { ...o, ...ordUpdates } : o));
-        } else {
-          console.warn("Order stage update warning:", rOrd?.error);
-        }
+        setOrders(prev => prev.map(o => o.order_id === tgtOrder!.order_id ? { ...o, ...ordUpdates } : o));
+        relatedPromises.push(
+          pushUpdate('orders', 'order_id', tgtOrder.order_id, ordUpdates).catch(err => console.warn("Order stage update warning:", err))
+        );
       }
     }
     // Record status history & proof attachment
@@ -5148,14 +5221,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         created_at: timestamp
       };
 
-      try {
-        const resHist = await pushInsert('lead_status_history', newHist);
-        if (resHist?.success) {
-          setStatusHistory(prev => [...prev, newHist as any]);
-        }
-      } catch (shErr) {
-        console.warn("Failed to insert lead_status_history in updateProduction:", shErr);
-      }
+      setStatusHistory(prev => [...prev, newHist as any]);
+      relatedPromises.push(
+        pushInsert('lead_status_history', newHist).catch(shErr => console.warn("Failed to insert lead_status_history in updateProduction:", shErr))
+      );
+    }
+
+    if (relatedPromises.length > 0) {
+      await Promise.all(relatedPromises);
     }
 
     //  // Disabled to prevent full reload
@@ -6548,22 +6621,27 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       created_at: new Date().toISOString()
     };
     setEditorAssignments(prev => [newAssign, ...prev]);
-    await pushInsert('editor_assignments', newAssign);
     logActivity(`Assigned Editor: ${assignment.staff_name} as ${assignment.speciality}`, 'Production', id);
     
     const prodProj = augmentedProduction.find(p => p.production_id === assignment.production_id);
+    let prodPromise: Promise<any> = Promise.resolve();
     if (prodProj) {
       const currentAssigned = prodProj.assigned_staff ? prodProj.assigned_staff.split(', ') : [];
       if (!currentAssigned.includes(assignment.staff_name)) {
         currentAssigned.push(assignment.staff_name);
         const updatedStaff = currentAssigned.join(', ');
-        updateProduction(assignment.production_id, {
+        prodPromise = updateProduction(assignment.production_id, {
           assigned_staff: updatedStaff,
           editor_assigned: assignment.staff_name, // keep the latest assigned as the main editor_assigned
           production_status: 'Editor Assigned'
         });
       }
     }
+
+    await Promise.all([
+      pushInsert('editor_assignments', newAssign),
+      prodPromise
+    ]);
   };
 
   const updateEditorAssignment = async (assignmentId: string, updates: Partial<Omit<EditorAssignment, 'assignment_id'>>) => {
