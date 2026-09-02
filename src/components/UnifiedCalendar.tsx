@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { formatINR, formatTime12Hour, formatDateDDMMYY } from '../utils';
 import { EVENT_TYPES, ACTIVE_STAGE_GROUPS } from '../types';
+import { AssignedStaffDropdown } from './AssignedStaffDropdown';
 
 interface UnifiedCalendarProps {
   role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
@@ -2051,6 +2052,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         <th className="p-3.5 pl-5">Order ID</th>
                         <th className="p-3.5">Customer Name</th>
                         <th className="p-3.5">Event Name</th>
+                        <th className="p-3.5">Assigned Staff</th>
                         <th className="p-3.5">Current Status</th>
                         {role === 'operations' ? (
                           <th className="p-3.5">Assigned Team</th>
@@ -2148,6 +2150,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
                             {lead.custom_event_name || lead.event_type || (lead.events && lead.events[0]?.event_name) || "Shoot Event"}
+                          </td>
+                          <td className="p-3.5 font-sans">
+                            <AssignedStaffDropdown orderId={orderIdDisplay} leadId={lead.lead_id} />
                           </td>
                           <td className="p-3.5">
                             <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-amber-300 border border-zinc-700">
@@ -2290,6 +2295,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           <th className="p-3.5 pl-4">Order ID</th>
                           <th className="p-3.5">Event Name</th>
                           <th className="p-3.5">Customer</th>
+                          <th className="p-3.5">Assigned Staff</th>
                           <th className="p-3.5">Event Date</th>
                           <th className="p-3.5">Event Time</th>
                           <th className="p-3.5">Location</th>
@@ -2327,8 +2333,11 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                               <td className="p-3.5 text-zinc-200 font-medium">
                                 <div>{custName}</div>
                                 {ev.mobile && (
-                                  <div className="text-[10px] font-mono text-zinc-500">{ev.mobile}</div>
+                                   <div className="text-[10px] font-mono text-zinc-500">{ev.mobile}</div>
                                 )}
+                              </td>
+                              <td className="p-3.5 font-sans">
+                                <AssignedStaffDropdown orderId={ev.orderId || ev.raw?.order_id || ev.raw?.tracking_id || ev.raw?.lead_id} leadId={ev.raw?.lead_id || ev.raw?.order_id || ev.orderId} />
                               </td>
                               <td className="p-3.5 font-mono text-zinc-300 whitespace-nowrap">
                                 {evDate}

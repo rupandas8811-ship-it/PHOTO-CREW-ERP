@@ -9,6 +9,7 @@ import { SalesCrmWizard } from './sales/SalesCrmWizard';
 import { SalesModals } from './sales/SalesModals';
 import { SalesCalendar } from './SalesCalendar';
 import { CustomPackageMaster } from './CustomPackageMaster';
+import { useRole } from './RoleContext';
 import { Plus, AlertTriangle, RefreshCw, FileText, Calendar, Users, Layers, Sparkles } from 'lucide-react';
 
 interface ErrorBoundaryProps {
@@ -74,6 +75,8 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
   setActiveSubTab: externalSetActiveTab 
 }) => {
   const state = useSalesDashboardState(externalActiveTab, externalSetActiveTab);
+  const { currentUser, currentUserName } = useRole();
+  const salesPersonName = currentUser?.name || currentUserName || 'Sales Team';
 
   return (
     <SalesErrorBoundary>
@@ -122,13 +125,16 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
         {state.activeTab !== 'create' && state.activeTab !== 'custom_package_master' && !state.selectedLead && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-black text-white flex items-center gap-2">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
-                <span>Sales & Lead Desk</span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-1">
-                Capture enquiries, build bespoke quotations, coordinate shoot specifications, and track conversion workflows.
-              </p>
+                <h2 className="text-xl font-black text-white">Sales & Lead Desk</h2>
+                {salesPersonName && (
+                  <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm">
+                    <span className="text-xs">👤</span>
+                    <span>{salesPersonName}</span>
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap">
@@ -137,7 +143,11 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
                 <button
                   id="btn_lead_tab_calendar"
                   type="button"
-                  onClick={() => { state.setActiveTab('calendar'); state.setSelectedLead(null); if (state.setSelectedCustomerProfileId) state.setSelectedCustomerProfileId(null); }}
+                  onClick={() => { 
+                    state.setActiveTab(state.activeTab === 'calendar' ? 'list' : 'calendar'); 
+                    state.setSelectedLead(null); 
+                    if (state.setSelectedCustomerProfileId) state.setSelectedCustomerProfileId(null); 
+                  }}
                   className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                     state.activeTab === 'calendar'
                       ? 'bg-zinc-800 border-zinc-700 text-white shadow-sm font-black'
@@ -145,20 +155,9 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
                   }`}
                 >
                   <Calendar className="w-3.5 h-3.5 text-blue-400" />
-                  <span>Sales Calendar</span>
+                  <span>{state.activeTab === 'calendar' ? '📋 Leads Directory' : 'Sales Calendar'}</span>
                 </button>
               </div>
-
-              {state.canEdit && (
-                <button
-                  id="btn_create_new_lead"
-                  onClick={() => state.setActiveTab('create')}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4 stroke-[3]" />
-                  <span>Create Quotation</span>
-                </button>
-              )}
             </div>
           </div>
         )}

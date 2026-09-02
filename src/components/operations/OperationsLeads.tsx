@@ -2002,40 +2002,33 @@ export const OperationsLeads: React.FC = () => {
       // Gather all selected equipment across all events
       const consolidatedEquipKit = allAssignedEquipment.join(', ');
       
-      // Update lead_events table with assigned staff AND event-specific equipment via updateLead API proxy
+      // Update lead events with assigned staff AND event-specific equipment
       const baseMatchedOrder = orders.find(o => o.order_id === assigningOrderId);
+      let updatedEvents: any[] | undefined = undefined;
       if (baseMatchedOrder?.lead_id && parentLeadInstance) {
-          const updatedEvents = (parentLeadInstance.events || []).map((ev: any) => {
-             const evId = ev.id || '';
-             const alloc = eventAllocations[evId];
-             if (alloc && alloc.staff) {
-                const validStaff = alloc.staff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
-                const staffNames = validStaff.map((s: any) => s.staff_name).join(', ');
-                const staffMobiles = validStaff.map((s: any) => s.mobile || '').join(', ');
+        updatedEvents = (parentLeadInstance.events || []).map((ev: any) => {
+          const evId = ev.id || '';
+          const alloc = eventAllocations[evId];
+          if (alloc && alloc.staff) {
+            const validStaff = alloc.staff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
+            const staffNames = validStaff.map((s: any) => s.staff_name).join(', ');
+            const staffMobiles = validStaff.map((s: any) => s.mobile || '').join(', ');
 
-                const staffEquipments = validStaff.map((s: any) => s.equipment || []);
-                const finalStaffMobiles = staffMobiles + ' || EQUIPMENT: JSON:' + JSON.stringify(staffEquipments);
+            const staffEquipments = validStaff.map((s: any) => s.equipment || []);
+            const finalStaffMobiles = staffMobiles + ' || EQUIPMENT: JSON:' + JSON.stringify(staffEquipments);
 
-                return {
-                   ...ev,
-                   assigned_staff_names: staffNames,
-                   assigned_staff_mobiles: finalStaffMobiles
-                };
-             }
-             return ev;
-          });
-
-         await updateLead(baseMatchedOrder.lead_id, { events: updatedEvents });
+            return {
+              ...ev,
+              assigned_staff_names: staffNames,
+              assigned_staff_mobiles: finalStaffMobiles
+            };
+          }
+          return ev;
+        });
       }
 
       // Save the multi-staff role assignments to Supabase & Context state!
-      // Map some main ones to assignForm variables for legacy column compatibility
       const finalAssignments = allAssignedStaff.length > 0 ? allAssignedStaff : activeAssignments;
-      const photographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('photographer'))?.staff_name || '';
-      const videographer = finalAssignments.find(a => a.staff_role.toLowerCase().includes('videographer'))?.staff_name || '';
-      const droneOp = finalAssignments.find(a => a.staff_role.toLowerCase().includes('drone') || a.staff_role.toLowerCase().includes('aerial'))?.staff_name || '';
-      const assistant = finalAssignments.find(a => a.staff_role.toLowerCase().includes('assistant'))?.staff_name || '';
-      
       const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
       const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === parentLeadInstance?.lead_id) || [];
 
@@ -2068,11 +2061,11 @@ export const OperationsLeads: React.FC = () => {
         targetStage = 'Order Confirmed';
       }
 
-      await saveStaffAssignments(assigningOrderId, finalAssignments, targetStage);
+      // Collect equipment updates & equipment history inserts
+      const equipmentUpdates: { equipmentId: string; status: string }[] = [];
+      const equipmentHistoryInserts: any[] = [];
 
-      // Update equipment status concurrently in real-time
-      const equipPromises: Promise<any>[] = [];
-      if (equipment && updateEquipment) {
+      if (equipment) {
         const op = getOpDetails(assigningOrderId);
         const previousKitsFromOp = op?.equipment_kit ? op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
         const previousKitsFromAssignments = (staffAssignments || [])
@@ -2090,83 +2083,67 @@ export const OperationsLeads: React.FC = () => {
           if (found) {
             const stillUsedElsewhere = isEquipmentBusy(kitStr, assigningOrderId);
             if (!stillUsedElsewhere) {
-              equipPromises.push(updateEquipment(found.equipment_id, { status: 'Available' }));
+              equipmentUpdates.push({ equipmentId: found.equipment_id, status: 'Available' });
             }
             
             // Record Return in lead_equipment_history
-            if (addLeadEquipmentHistory) {
-              const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
-              equipPromises.push(addLeadEquipmentHistory({
-                lead_id: matchedOrder?.lead_id || 'UNKNOWN',
-                order_id: assigningOrderId,
-                equipment_name: found.equipment_name,
-                equipment_status: 'Returned',
-                returned_by: currentUserName || 'Operations Team',
-                returned_at: new Date().toISOString(),
-                remarks: `Released from order ${assigningOrderId} by ${currentUserName || 'Operations Team'}`
-              }));
-            }
+            const matchedOrd = orders.find(o => o.order_id === assigningOrderId);
+            equipmentHistoryInserts.push({
+              lead_id: matchedOrd?.lead_id || 'UNKNOWN',
+              order_id: assigningOrderId,
+              equipment_name: found.equipment_name,
+              equipment_status: 'Returned',
+              returned_by: currentUserName || 'Operations Team',
+              returned_at: new Date().toISOString(),
+              remarks: `Released from order ${assigningOrderId} by ${currentUserName || 'Operations Team'}`
+            });
           }
         }
 
         for (const kitStr of allAssignedEquipment) {
           const found = equipment.find(eq => eq.equipment_name.toLowerCase() === kitStr.toLowerCase());
           if (found) {
-            equipPromises.push(updateEquipment(found.equipment_id, { status: 'Assigned' }));
+            equipmentUpdates.push({ equipmentId: found.equipment_id, status: 'Assigned' });
             
             // Record Assignment History if not already recorded as active for this order
-            if (addLeadEquipmentHistory) {
-              const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
-              const alreadyActiveHistory = (leadEquipmentHistory || []).some(h => 
-                h.order_id === assigningOrderId && 
-                h.equipment_name.toLowerCase() === kitStr.toLowerCase() && 
-                !h.returned_at && 
-                h.equipment_status !== 'Returned'
-              );
-              if (!alreadyActiveHistory) {
-                equipPromises.push(addLeadEquipmentHistory({
-                  lead_id: matchedOrder?.lead_id || 'UNKNOWN',
-                  order_id: assigningOrderId,
-                  equipment_name: found.equipment_name,
-                  equipment_status: 'Assigned',
-                  remarks: `Assigned to order ${assigningOrderId} by ${currentUserName || 'Operations Team'}`
-                }));
-              }
+            const matchedOrd = orders.find(o => o.order_id === assigningOrderId);
+            const alreadyActiveHistory = (leadEquipmentHistory || []).some(h => 
+              h.order_id === assigningOrderId && 
+              h.equipment_name.toLowerCase() === kitStr.toLowerCase() && 
+              !h.returned_at && 
+              h.equipment_status !== 'Returned'
+            );
+            if (!alreadyActiveHistory) {
+              equipmentHistoryInserts.push({
+                lead_id: matchedOrd?.lead_id || 'UNKNOWN',
+                order_id: assigningOrderId,
+                equipment_name: found.equipment_name,
+                equipment_status: 'Assigned',
+                remarks: `Assigned to order ${assigningOrderId} by ${currentUserName || 'Operations Team'}`
+              });
             }
           }
         }
       }
 
       console.log("Saving assignment for order:", assigningOrderId, {
-        photographer,
-        videographer,
-        droneOp,
-        assistant,
         equipment: consolidatedEquipKit,
         reporting_time: convertTimeToDbFormat(assignForm.reporting_time),
         assignmentStats,
         targetStage
       });
 
-      // Assign operations and execute equipment promises in parallel
-      await Promise.all([
-        ...equipPromises,
-        assignOperations(assigningOrderId, {
-          photographer_assigned: photographer || assignForm.photographer_assigned || '',
-          videographer_assigned: videographer || assignForm.videographer_assigned || '',
-          drone_operator_assigned: droneOp || assignForm.drone_operator_assigned || '',
-          assistant_assigned: assistant || assignForm.assistant_assigned || '',
-          equipment_kit: consolidatedEquipKit,
-          reporting_time: convertTimeToDbFormat(assignForm.reporting_time),
-          remarks: assignForm.remarks,
-          event_status: targetStage,
-          current_stage: targetStage,
-          event_date: assignForm.event_date,
-          event_time: convertTimeToDbFormat(assignForm.event_time),
-          assigned_staff: finalAssignments.map(a => a.staff_name).join(', '),
-          assigned_roles: finalAssignments.map(a => a.staff_role).join(', ')
-        } as any)
-      ]);
+      // Save assignments, lead updates, operations updates, equipment and history in one parallel operation
+      await saveStaffAssignments(assigningOrderId, finalAssignments, targetStage, {
+        updatedEvents,
+        equipmentKit: consolidatedEquipKit,
+        reportingTime: convertTimeToDbFormat(assignForm.reporting_time),
+        eventDate: assignForm.event_date,
+        eventTime: convertTimeToDbFormat(assignForm.event_time),
+        remarks: assignForm.remarks,
+        equipmentUpdates,
+        equipmentHistoryInserts
+      });
 
       if (typeof refreshData === 'function') {
         refreshData();
@@ -4719,29 +4696,30 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Multi-Staff WhatsApp Share picker */}
       {whatsappShareModalData && (
-        <div id="personalized-whatsapp-share-modal-overlay" className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div ref={whatsappModalRef} id="personalized-whatsapp-share-modal-card" className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full w-full max-w-2xl shadow-2xl p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+        <div id="personalized-whatsapp-share-modal-overlay" className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+          <div ref={whatsappModalRef} id="personalized-whatsapp-share-modal-card" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl p-4 sm:p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
             <button 
               onClick={() => setWhatsappShareModalData(null)}
-              className="absolute top-4 right-4 text-zinc-500 hover:text-white font-bold cursor-pointer transition-colors p-1"
+              className="absolute top-3.5 right-3.5 sm:top-4 sm:right-4 w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white font-bold cursor-pointer transition-colors rounded-lg hover:bg-zinc-800"
               type="button"
+              aria-label="Close modal"
             >
               ✕
             </button>
             
-            <div className="flex items-center gap-2.5 mb-4 border-b border-zinc-800 pb-3">
-              <span className="text-xl">📱</span>
-              <div className="text-left">
-                <h3 className="text-base font-bold text-white">
+            <div className="flex items-center gap-2.5 mb-3 sm:mb-4 border-b border-zinc-800 pb-3 pr-8 sm:pr-0">
+              <span className="text-xl shrink-0">📱</span>
+              <div className="text-left min-w-0">
+                <h3 className="text-sm sm:text-base font-bold text-white truncate">
                   Personalized WhatsApp Share
                 </h3>
-                <p className="text-[11px] text-zinc-400">
+                <p className="text-[10px] sm:text-[11px] text-zinc-400 truncate">
                   Review and share work assignments for Order <span className="font-mono text-indigo-400 font-bold">{whatsappShareModalData.orderId}</span>
                 </p>
               </div>
             </div>
 
-            <div ref={whatsappScrollRef} className="overflow-y-auto space-y-5 flex-1 pr-1 text-left">
+            <div ref={whatsappScrollRef} className="overflow-y-auto space-y-4 sm:space-y-5 flex-1 pr-1 text-left">
               {whatsappShareModalData.staffNames.filter(name => {
                 const st = staff?.find(s => s.name === name);
                 return st?.department === 'Operations';
@@ -4761,14 +4739,14 @@ export const OperationsLeads: React.FC = () => {
                   return (
                     <div 
                       key={idx} 
-                      className={`border rounded-2xl p-4 transition-all duration-200 ${
+                      className={`border rounded-xl sm:rounded-2xl p-3.5 sm:p-4 transition-all duration-200 ${
                         isSelected 
                           ? 'bg-zinc-950/65 border-zinc-800/80 shadow-md' 
                           : 'bg-zinc-900/30 border-zinc-850/40 opacity-60'
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="flex items-start gap-2.5">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
+                        <div className="flex items-start gap-2.5 min-w-0">
                           <button
                             type="button"
                             onClick={() => {
@@ -4777,13 +4755,13 @@ export const OperationsLeads: React.FC = () => {
                                 [name]: !prev[name]
                               }));
                             }}
-                            className="text-lg text-indigo-400 hover:text-indigo-300 transition-all active:scale-90 cursor-pointer pt-0.5"
+                            className="text-lg text-indigo-400 hover:text-indigo-300 transition-all active:scale-90 cursor-pointer pt-0.5 shrink-0"
                           >
                             {isSelected ? '☑️' : '⬛'}
                           </button>
                           
-                          <div>
-                            <div className="flex items-center gap-1.5">
+                          <div className="min-w-0">
+                            <div className="flex items-center flex-wrap gap-1.5">
                               <span className="text-xs font-black text-white">{name}</span>
                               {stObj?.role && (
                                 <span className="text-[9.5px] font-mono text-zinc-400 bg-zinc-850 px-1.5 py-0.5 rounded border border-zinc-800">
@@ -4809,7 +4787,7 @@ export const OperationsLeads: React.FC = () => {
                                 : `https://wa.me/?text=${encodeURIComponent(msgText)}`;
                               window.open(shareUrl, '_blank');
                             }}
-                            className="px-3.5 py-1.5 bg-[#25D366] hover:bg-[#20ba5a] active:scale-95 text-black font-extrabold text-[11px] rounded-xl flex items-center gap-1.5 shadow-md shadow-[#25D366]/10 hover:shadow-[#25D366]/25 transition-all cursor-pointer"
+                            className="w-full sm:w-auto px-4 py-2 sm:py-1.5 bg-[#25D366] hover:bg-[#20ba5a] active:scale-95 text-black font-extrabold text-xs sm:text-[11px] rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-[#25D366]/10 hover:shadow-[#25D366]/25 transition-all cursor-pointer shrink-0"
                           >
                             <span className="text-xs">📲</span> Share on WhatsApp
                           </button>
@@ -4840,11 +4818,11 @@ export const OperationsLeads: React.FC = () => {
               )}
             </div>
 
-            <div className="pt-4 border-t border-zinc-800 mt-4 flex justify-end gap-3">
+            <div className="pt-3 sm:pt-4 border-t border-zinc-800 mt-3 sm:mt-4 flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setWhatsappShareModalData(null)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-300 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer text-center"
               >
                 Close
               </button>

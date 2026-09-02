@@ -236,7 +236,17 @@ interface RoleContextType {
       task_status?: string;
       assignment_status?: string;
     }[],
-    targetStage?: CurrentStage
+    targetStage?: CurrentStage,
+    metaPayload?: {
+      updatedEvents?: any[];
+      equipmentKit?: string;
+      reportingTime?: string;
+      eventDate?: string;
+      eventTime?: string;
+      remarks?: string;
+      equipmentUpdates?: { equipmentId: string; status: string }[];
+      equipmentHistoryInserts?: any[];
+    }
   ) => Promise<void>;
 
   specialities: ProductionSpeciality[];
@@ -1673,27 +1683,53 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   const pushInsert = async (table: string, record: any): Promise<{ success: boolean; error?: string; localFallback?: boolean }> => {
     if (!supabaseClient) return { success: true };
     try {
-      if (table === 'leads') {
-        if (!('total_pax' in record)) {
-          record.total_pax = 0;
+      let sanitized: any;
+      if (Array.isArray(record)) {
+        if (record.length === 0) return { success: true };
+        sanitized = record.map((recItem) => {
+          const itemCopy = { ...recItem };
+          if (table === 'leads') {
+            if (!('total_pax' in itemCopy)) itemCopy.total_pax = 0;
+            if (!('reference_source' in itemCopy)) itemCopy.reference_source = '';
+            const anyStatus = itemCopy.status || itemCopy.current_status || 'New Lead';
+            itemCopy.status = anyStatus;
+            itemCopy.current_status = anyStatus;
+            if (currentUserName) {
+              itemCopy.created_by = `${currentUserName}|${currentRole || 'System'}`;
+            }
+          }
+          const san = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, itemCopy), table);
+          if (table === 'operations_staff' && san.staff_id) {
+            san.staff_id = mapToDbStaffId(san.staff_id);
+          }
+          if (table === 'equipment' && san.equipment_id) {
+            san.equipment_id = mapToDbEquipmentId(san.equipment_id);
+          }
+          return san;
+        });
+      } else {
+        if (table === 'leads') {
+          if (!('total_pax' in record)) {
+            record.total_pax = 0;
+          }
+          if (!('reference_source' in record)) {
+            record.reference_source = '';
+          }
         }
-        if (!('reference_source' in record)) {
-          record.reference_source = '';
+        sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, record), table);
+        if (table === 'operations_staff' && sanitized.staff_id) {
+          sanitized.staff_id = mapToDbStaffId(sanitized.staff_id);
         }
-      }
-      const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, record), table);
-      if (table === 'operations_staff' && sanitized.staff_id) {
-        sanitized.staff_id = mapToDbStaffId(sanitized.staff_id);
-      }
-      if (table === 'equipment' && sanitized.equipment_id) {
-        sanitized.equipment_id = mapToDbEquipmentId(sanitized.equipment_id);
-      }
-      if (table === 'leads') {
-        const anyStatus = sanitized.status || sanitized.current_status || record.status || record.current_status || 'New Lead';
-        sanitized.status = anyStatus;
-        sanitized.current_status = anyStatus;
-        if (currentUserName) {
-          sanitized.created_by = `${currentUserName}|${currentRole || 'System'}`;
+        if (table === 'equipment' && sanitized.equipment_id) {
+          sanitized.equipment_id = mapToDbEquipmentId(sanitized.equipment_id);
+        }
+        if (table === 'leads') {
+          const anyStatus = sanitized.status || sanitized.current_status || record.status || record.current_status || 'New Lead';
+          sanitized.status = anyStatus;
+          sanitized.current_status = anyStatus;
+          if (currentUserName) {
+            sanitized.created_by = `${currentUserName}|${currentRole || 'System'}`;
+          }
         }
       }
       // Try sending to server-side proxy first to bypass client RLS issues
@@ -1718,9 +1754,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                 const localRecords = JSON.parse(existingLocalStr);
                 if (Array.isArray(localRecords)) {
                   const idCol = table === 'leads' ? 'lead_id' : (table === 'orders' ? 'order_id' : null);
-                  if (idCol && record[idCol]) {
-                    const filtered = localRecords.filter((r: any) => r && r[idCol] !== record[idCol]);
-                    localStorage.setItem(localKey, JSON.stringify(filtered));
+                  if (idCol) {
+                    const recIds = Array.isArray(record) ? record.map(r => r[idCol]).filter(Boolean) : [record[idCol]].filter(Boolean);
+                    if (recIds.length > 0) {
+                      const filtered = localRecords.filter((r: any) => r && !recIds.includes(r[idCol]));
+                      localStorage.setItem(localKey, JSON.stringify(filtered));
+                    }
                   }
                 }
               } catch (e) {
@@ -1761,9 +1800,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               const localRecords = JSON.parse(existingLocalStr);
               if (Array.isArray(localRecords)) {
                 const idCol = table === 'leads' ? 'lead_id' : (table === 'orders' ? 'order_id' : null);
-                if (idCol && record[idCol]) {
-                  const filtered = localRecords.filter((r: any) => r && r[idCol] !== record[idCol]);
-                  localStorage.setItem(localKey, JSON.stringify(filtered));
+                if (idCol) {
+                  const recIds = Array.isArray(record) ? record.map(r => r[idCol]).filter(Boolean) : [record[idCol]].filter(Boolean);
+                  if (recIds.length > 0) {
+                    const filtered = localRecords.filter((r: any) => r && !recIds.includes(r[idCol]));
+                    localStorage.setItem(localKey, JSON.stringify(filtered));
+                  }
                 }
               }
             } catch (e) {
@@ -4461,7 +4503,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       task_status?: string;
       assignment_status?: string;
     }[],
-    targetStage?: CurrentStage
+    targetStage?: CurrentStage,
+    metaPayload?: {
+      updatedEvents?: any[];
+      equipmentKit?: string;
+      reportingTime?: string;
+      eventDate?: string;
+      eventTime?: string;
+      remarks?: string;
+      equipmentUpdates?: { equipmentId: string; status: string }[];
+      equipmentHistoryInserts?: any[];
+    }
   ) => {
     if (!orderId) {
       throw new Error("Missing Required Field: order_id is null or empty.");
@@ -4483,73 +4535,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     const targetOp = augmentedOperations.find(o => o.order_id === orderId);
-    if (!targetOp) {
-      throw new Error(`Missing Operations Record: Operation for Order ${orderId} not found locally.`);
-    }
-
-    if (supabaseClient) {
-      // Parallelize DB parent record existence checks
-      const [leadRes, orderRes, opRes] = await Promise.all([
-        supabaseClient.from('leads').select('lead_id').eq('lead_id', leadId).maybeSingle(),
-        supabaseClient.from('orders').select('order_id, lead_id').eq('order_id', orderId).maybeSingle(),
-        supabaseClient.from('operations').select('operation_id').eq('order_id', orderId).maybeSingle()
-      ]);
-
-      const initPromises: Promise<any>[] = [];
-
-      if (!leadRes?.data) {
-        if (targetLead) {
-          const preparedLead = {
-            ...targetLead,
-            lead_source: targetLead.lead_source || 'Direct',
-            email: targetLead.email || '—',
-            event_time: targetLead.event_time || '12:00',
-            event_location: targetLead.event_location || '—',
-            budget: targetLead.budget !== undefined && targetLead.budget !== null ? targetLead.budget : 0,
-            sales_person: targetLead.sales_person || 'Sales Team'
-          };
-          initPromises.push(pushInsert('leads', preparedLead).then(res => {
-            if (!res.success) throw new Error(`Failed to initialize Lead record in database:\n\n${res.error}`);
-          }));
-        } else {
-          throw new Error(`Database Error: Missing Lead Record in DB (${leadId}).`);
-        }
-      }
-
-      if (!orderRes?.data) {
-        if (targetOrder) {
-          const preparedOrder = {
-            ...targetOrder,
-            event_time: targetOrder.event_time || '12:00',
-            event_location: targetOrder.event_location || '—',
-            package_name: targetOrder.package_name || 'Custom Shoot Package',
-            balance_amount: targetOrder.balance_amount !== undefined && targetOrder.balance_amount !== null ? targetOrder.balance_amount : 0,
-            sales_person: targetOrder.sales_person || 'Sales Team'
-          };
-          initPromises.push(pushInsert('orders', preparedOrder).then(res => {
-            if (!res.success) throw new Error(`Failed to initialize Order record in database:\n\n${res.error}`);
-          }));
-        } else {
-          throw new Error(`Database Error: Missing Order Record in DB (${orderId}).`);
-        }
-      } else if (orderRes.data.lead_id !== leadId) {
-        throw new Error(`Validation Error: Order ${orderId} does not belong to Lead ${leadId}.`);
-      }
-
-      if (!opRes?.data) {
-        if (targetOp) {
-          initPromises.push(pushInsert('operations', targetOp).then(res => {
-            if (!res.success) throw new Error(`Failed to initialize Operations record in database:\n\n${res.error}`);
-          }));
-        } else {
-          throw new Error(`Database Error: Missing Operations Record in DB for Order (${orderId}).`);
-        }
-      }
-
-      if (initPromises.length > 0) {
-        await Promise.all(initPromises);
-      }
-    }
 
     const timestamp = new Date().toISOString();
     const roleParts = (currentUserName && currentUserName.includes('|')) 
@@ -4558,162 +4543,208 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const changedBy = roleParts[0];
     const changedByRole = roleParts[1] || currentRole || 'System';
 
-    if (assignments.length > 0) {
-      // Keep map of existing assignments to preserve task_status and assignment_status if already present
-      const existingStatusMap = new Map<string, { task_status?: string; assignment_status?: string; assignment_id?: string }>();
-      (staffAssignments || []).filter(sa => sa.order_id === orderId).forEach(sa => {
-        const key = `${(sa.staff_name || '').toLowerCase()}_${sa.event_id || 'gen'}_${(sa.staff_role || '').toLowerCase()}`;
-        const nameKey = (sa.staff_name || '').toLowerCase();
-        existingStatusMap.set(key, { task_status: sa.task_status, assignment_status: sa.assignment_status, assignment_id: sa.assignment_id });
-        if (!existingStatusMap.has(nameKey)) {
-          existingStatusMap.set(nameKey, { task_status: sa.task_status, assignment_status: sa.assignment_status, assignment_id: sa.assignment_id });
-        }
-      });
-
-      if (supabaseClient) {
-        // Delete all old assignments for this order to allow multiple staff per role without overwriting
-        const { error: deleteErr } = await supabaseClient
+    // 1. Delete old assignments for this order in Supabase if client available
+    if (supabaseClient) {
+      try {
+        await supabaseClient
           .from('staff_assignments')
           .delete()
           .eq('order_id', orderId);
-        if (deleteErr) {
-          console.error("Warning: Could not delete old staff assignments:", deleteErr);
-        }
+      } catch (deleteErr) {
+        console.warn("Could not delete old staff assignments:", deleteErr);
       }
+    }
 
-      const insertedAssignments: StaffAssignment[] = [];
-      const historyInserts: any[] = [];
-      const assignInserts: StaffAssignment[] = [];
+    // 2. Prepare assignments and history
+    const insertedAssignments: StaffAssignment[] = [];
+    const historyInserts: any[] = [];
+    const assignInserts: StaffAssignment[] = [];
 
-      for (const a of assignments) {
-        // STEP 2: SAVE ASSIGNMENT HISTORY
-        const newHist = {
-          lead_id: leadId,
-          order_id: orderId,
-          assigned_role: a.staff_role,
-          assigned_staff: a.staff_name,
-          assigned_by: changedBy,
-          assigned_at: timestamp
-        };
-        historyInserts.push(newHist);
-
-        // STEP 3: INSERT CURRENT ASSIGNMENT
-        const key = `${(a.staff_name || '').toLowerCase()}_${a.event_id || 'gen'}_${(a.staff_role || '').toLowerCase()}`;
-        const nameKey = (a.staff_name || '').toLowerCase();
-        const existingInfo = existingStatusMap.get(key) || existingStatusMap.get(nameKey);
-
-        const assignId = a.assignment_id || existingInfo?.assignment_id || `ASST-${Math.floor(100000 + Math.random() * 900000)}`;
-        const assignDate = timestamp.split('T')[0];
-
-        const newAssign: StaffAssignment = {
-          assignment_id: assignId,
-          order_id: orderId,
-          staff_role: a.staff_role,
-          staff_id: a.staff_id,
-          staff_name: a.staff_name,
-          assignment_date: assignDate,
-          assignment_status: a.assignment_status || existingInfo?.assignment_status || 'Assigned',
-          task_status: a.task_status || existingInfo?.task_status || 'Pending',
-          event_id: a.event_id || '',
-          event_name: a.event_name || '',
-          equipment: a.equipment || [],
-          mobile: a.mobile || '',
-          staff_type: a.staff_type || 'In-House',
-          updated_by: changedBy
-        };
-
-        insertedAssignments.push(newAssign);
-        assignInserts.push(newAssign);
+    const existingStatusMap = new Map<string, { task_status?: string; assignment_status?: string; assignment_id?: string }>();
+    (staffAssignments || []).filter(sa => sa.order_id === orderId).forEach(sa => {
+      const key = `${(sa.staff_name || '').toLowerCase()}_${sa.event_id || 'gen'}_${(sa.staff_role || '').toLowerCase()}`;
+      const nameKey = (sa.staff_name || '').toLowerCase();
+      existingStatusMap.set(key, { task_status: sa.task_status, assignment_status: sa.assignment_status, assignment_id: sa.assignment_id });
+      if (!existingStatusMap.has(nameKey)) {
+        existingStatusMap.set(nameKey, { task_status: sa.task_status, assignment_status: sa.assignment_status, assignment_id: sa.assignment_id });
       }
+    });
 
-      // Optimistically update React state immediately!
-      setStaffAssignments(prev => [
-        ...prev.filter(sa => sa.order_id !== orderId),
-        ...insertedAssignments
-      ]);
+    for (const a of assignments) {
+      const newHist = {
+        lead_id: leadId,
+        order_id: orderId,
+        assigned_role: a.staff_role,
+        assigned_staff: a.staff_name,
+        assigned_by: changedBy,
+        assigned_at: timestamp
+      };
+      historyInserts.push(newHist);
 
-      // Execute all history and assignment inserts concurrently
-      await Promise.all([
-        ...historyInserts.map(h => pushInsert('lead_staff_assignment_history', h).then(res => {
-          if (!res.success) throw new Error(`Error saving assignment history:\n\n${res.error}`);
-        })),
-        ...assignInserts.map(na => pushInsert('staff_assignments', na).then(resAssign => {
-          if (!resAssign.success) {
-            if (resAssign.error?.includes('idx_unique_staff_per_order') || resAssign.error?.includes('duplicate key') || resAssign.error?.includes('23505')) {
-              console.warn("Ignored staff_assignments constraint duplicate key for multi-event staff assignment:", resAssign.error);
-            } else {
-              console.warn("Could not insert staff assignment record, proceeding with event assignment:", resAssign.error);
-            }
-          }
-        }))
-      ]);
+      const key = `${(a.staff_name || '').toLowerCase()}_${a.event_id || 'gen'}_${(a.staff_role || '').toLowerCase()}`;
+      const nameKey = (a.staff_name || '').toLowerCase();
+      const existingInfo = existingStatusMap.get(key) || existingStatusMap.get(nameKey);
 
-      const updateOps: Promise<any>[] = [];
+      const assignId = a.assignment_id || existingInfo?.assignment_id || `ASST-${Math.floor(100000 + Math.random() * 900000)}`;
+      const assignDate = timestamp.split('T')[0];
 
-      // STEP 4: UPDATE OPERATIONS TABLE
-      let opUpdates: any = {};
-      for (const a of assignments) {
-        if (a.staff_role === 'Photographer') opUpdates.photographer_assigned = a.staff_name;
-        else if (a.staff_role === 'Videographer') opUpdates.videographer_assigned = a.staff_name;
-        else if (a.staff_role === 'Drone Operator') opUpdates.drone_operator_assigned = a.staff_name;
-        else if (a.staff_role === 'Assistant') opUpdates.assistant_assigned = a.staff_name;
+      const newAssign: StaffAssignment = {
+        assignment_id: assignId,
+        order_id: orderId,
+        staff_role: a.staff_role,
+        staff_id: a.staff_id,
+        staff_name: a.staff_name,
+        assignment_date: assignDate,
+        assignment_status: a.assignment_status || existingInfo?.assignment_status || 'Assigned',
+        task_status: a.task_status || existingInfo?.task_status || 'Pending',
+        event_id: a.event_id || '',
+        event_name: a.event_name || '',
+        equipment: a.equipment || [],
+        mobile: a.mobile || '',
+        staff_type: a.staff_type || 'In-House',
+        updated_by: changedBy
+      };
+
+      insertedAssignments.push(newAssign);
+      assignInserts.push(newAssign);
+    }
+
+    // Optimistically update React state immediately
+    setStaffAssignments(prev => [
+      ...prev.filter(sa => sa.order_id !== orderId),
+      ...insertedAssignments
+    ]);
+
+    // Prepare operations update payload
+    let opUpdates: any = {};
+    for (const a of assignments) {
+      if (a.staff_role.toLowerCase().includes('photographer')) opUpdates.photographer_assigned = a.staff_name;
+      else if (a.staff_role.toLowerCase().includes('videographer')) opUpdates.videographer_assigned = a.staff_name;
+      else if (a.staff_role.toLowerCase().includes('drone') || a.staff_role.toLowerCase().includes('aerial')) opUpdates.drone_operator_assigned = a.staff_name;
+      else if (a.staff_role.toLowerCase().includes('assistant')) opUpdates.assistant_assigned = a.staff_name;
+    }
+
+    if (metaPayload?.equipmentKit !== undefined) opUpdates.equipment_kit = metaPayload.equipmentKit;
+    if (metaPayload?.reportingTime) opUpdates.reporting_time = metaPayload.reportingTime;
+    if (metaPayload?.remarks !== undefined) opUpdates.remarks = metaPayload.remarks;
+    if (metaPayload?.eventDate) opUpdates.event_date = metaPayload.eventDate;
+    if (metaPayload?.eventTime) opUpdates.event_time = metaPayload.eventTime;
+    if (targetStage) {
+      opUpdates.event_status = targetStage;
+      opUpdates.current_stage = targetStage;
+    }
+    opUpdates.assigned_staff = assignments.map(a => a.staff_name).join(', ');
+    opUpdates.assigned_roles = assignments.map(a => a.staff_role).join(', ');
+    opUpdates.updated_by = changedBy;
+
+    // Build stage updates for leads & orders
+    const finalStage = targetStage || 'Assigned Crew';
+    const preventDowngradeStages = [
+      'Event Started', 'Event Completed', 'Raw Footage Received',
+      'Editor Assigned', 'Editing Started', 'Editing In Progress',
+      'Internal QC Review', 'Client Review Sent', 'Internal Review',
+      'Client Review', 'Revision Required', 'Revision In Progress',
+      'Revision', 'Final Approval', 'Ready for Delivery',
+      'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
+    ];
+    const currentLeadStage = targetLead.current_status || targetLead.status || 'Order Confirmed';
+    const shouldUpdateStage = targetStage && targetStage !== 'Order Confirmed' && !preventDowngradeStages.includes(currentLeadStage);
+
+    // Prepare leads update payload
+    const leadUpdates: any = {
+      updated_by: changedBy,
+      assigned_staff: assignments.map(a => a.staff_name).join(', '),
+      assigned_roles: assignments.map(a => a.staff_role).join(', ')
+    };
+    if (metaPayload?.updatedEvents) leadUpdates.events = metaPayload.updatedEvents;
+    if (metaPayload?.equipmentKit !== undefined) leadUpdates.assigned_equipment = metaPayload.equipmentKit;
+    if (metaPayload?.reportingTime) leadUpdates.reporting_time = metaPayload.reportingTime;
+    if (shouldUpdateStage) {
+      leadUpdates.current_status = finalStage;
+      leadUpdates.status = finalStage;
+    }
+
+    // Prepare orders update payload
+    const orderUpdates: any = {
+      updated_by: changedBy
+    };
+    if (metaPayload?.eventDate) orderUpdates.event_date = metaPayload.eventDate;
+    if (metaPayload?.eventTime) orderUpdates.event_time = metaPayload.eventTime;
+    if (shouldUpdateStage) {
+      orderUpdates.current_stage = finalStage;
+    }
+
+    // Optimistic local state updates
+    setOperations(prev => prev.map(op => op.order_id === orderId ? { ...op, ...opUpdates } : op));
+    setOrders(prev => prev.map(o => o.order_id === orderId ? { ...o, ...orderUpdates } : o));
+    setLeads(prev => prev.map(l => l.lead_id === leadId ? { ...l, ...leadUpdates } : l));
+
+    // Consolidate DB operations into parallel execution
+    const dbOperations: Promise<any>[] = [];
+
+    if (historyInserts.length > 0) {
+      dbOperations.push(pushInsert('lead_staff_assignment_history', historyInserts));
+    }
+    if (assignInserts.length > 0) {
+      dbOperations.push(pushInsert('staff_assignments', assignInserts));
+    }
+    dbOperations.push(pushUpdate('operations', 'order_id', orderId, opUpdates));
+    dbOperations.push(pushUpdate('leads', 'lead_id', leadId, leadUpdates));
+    dbOperations.push(pushUpdate('orders', 'order_id', orderId, orderUpdates));
+
+    if (shouldUpdateStage) {
+      const statusHist = {
+        lead_id: leadId,
+        order_id: orderId,
+        old_status: currentLeadStage,
+        new_status: finalStage,
+        changed_by: changedBy,
+        changed_by_role: changedByRole,
+        remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
+        created_at: timestamp
+      };
+      dbOperations.push(pushInsert('lead_status_history', statusHist));
+    }
+
+    if (metaPayload?.equipmentUpdates && metaPayload.equipmentUpdates.length > 0) {
+      for (const eqUp of metaPayload.equipmentUpdates) {
+        dbOperations.push(pushUpdate('equipment', 'equipment_id', eqUp.equipmentId, { status: eqUp.status }));
       }
+      setEquipment(prev => prev.map(eq => {
+        const match = metaPayload.equipmentUpdates?.find(u => u.equipmentId === eq.equipment_id);
+        return match ? { ...eq, status: match.status as any } : eq;
+      }));
+    }
+
+    if (metaPayload?.equipmentHistoryInserts && metaPayload.equipmentHistoryInserts.length > 0) {
+      dbOperations.push(pushInsert('lead_equipment_history', metaPayload.equipmentHistoryInserts));
+      setLeadEquipmentHistory(prev => [...(prev || []), ...metaPayload.equipmentHistoryInserts!]);
+    }
+
+    // Await all DB operations together
+    const results = await Promise.all(dbOperations);
+    for (const res of results) {
+      if (res && res.success === false && !res.localFallback) {
+        throw new Error(res.error || "Failed to persist assignment data to database.");
+      }
+    }
+
+    // Step 6: Verify the saved assignment data before completing
+    if (supabaseClient && assignments.length > 0) {
+      const { data: verified, error: verifyErr } = await supabaseClient
+        .from('staff_assignments')
+        .select('assignment_id, staff_name')
+        .eq('order_id', orderId);
       
-      if (Object.keys(opUpdates).length > 0) {
-        opUpdates.updated_by = changedBy;
-        updateOps.push(pushUpdate('operations', 'order_id', orderId, opUpdates).then(resOp => {
-          if (!resOp.success) throw new Error(`Error updating operations record:\n\n${resOp.error}`);
-        }));
+      if (verifyErr) {
+        console.warn("Verification select note:", verifyErr.message);
+      } else if (!verified || verified.length === 0) {
+        throw new Error("Verification check failed: Saved staff assignments were not confirmed in the database.");
       }
+    }
 
-      if (assignments.length > 0 && targetStage && targetStage !== 'Order Confirmed') { // STEP 5: UPDATE LEAD STATUS (Only if targetStage is not 'Order Confirmed')
-        const currentStage = targetLead.current_status || targetLead.status || 'Order Confirmed';
-        const preventDowngradeStages = [
-          'Event Started', 'Event Completed', 'Raw Footage Received',
-          'Editor Assigned', 'Editing Started', 'Editing In Progress',
-          'Internal QC Review', 'Client Review Sent', 'Internal Review',
-          'Client Review', 'Revision Required', 'Revision In Progress',
-          'Revision', 'Final Approval', 'Ready for Delivery',
-          'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
-        ];
-
-        if (!preventDowngradeStages.includes(currentStage)) {
-          const finalStage = targetStage || 'Assigned Crew';
-          const statusHist = {
-            lead_id: leadId,
-            order_id: orderId,
-            old_status: currentStage,
-            new_status: finalStage,
-            changed_by: changedBy,
-            changed_by_role: changedByRole,
-            remarks: `Assigned: ${assignments.map(a => `${a.staff_role} (${a.staff_name})`).join(', ')}`,
-            created_at: timestamp
-          };
-          updateOps.push(pushInsert('lead_status_history', statusHist));
-
-          updateOps.push(pushUpdate('leads', 'lead_id', leadId, { 
-            current_status: finalStage, 
-            status: finalStage,
-            updated_by: changedBy
-          }).then(resLead => {
-            if (!resLead.success) throw new Error(`Error updating lead status:\n\n${resLead.error}`);
-          }));
-
-          updateOps.push(pushUpdate('orders', 'order_id', orderId, { 
-            current_stage: finalStage, 
-            updated_by: changedBy
-          }).then(resOrder => {
-            if (!resOrder.success) throw new Error(`Error updating order stage:\n\n${resOrder.error}`);
-          }));
-        }
-      }
-
-      if (updateOps.length > 0) {
-        await Promise.all(updateOps);
-      }
-
-    } // STEP 6: REFRESH DASHBOARD
-    
+    // Activity log & async background notifications
+    logActivity(`Assigned Crew for Order: ${orderId} (Status: ${targetStage || 'Assigned Crew'})`, 'Operations', targetOp?.operation_id || orderId, currentLeadStage, targetStage);
 
     // Create notifications for assigned staff asynchronously in background
     Promise.all(assignments.flatMap((a) => {
@@ -4722,7 +4753,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       const customerName = ord?.customer_name || 'Valued Client';
       const eventType = ord?.event_type || 'Event';
       const eventDate = ord?.event_date || 'N/A';
-      const reportingTime = op?.reporting_time || '08:00';
+      const reportingTime = opUpdates.reporting_time || op?.reporting_time || '08:00';
 
       return [
         // 1. New Event Assigned

@@ -1618,13 +1618,13 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
             </div>
 
             {/* Footer Buttons: Sticky */}
-            <div className="py-1 px-4 sm:px-5 border-t border-slate-850 flex items-center justify-between bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
+            <div className="py-2.5 sm:py-1 px-3.5 sm:px-5 border-t border-slate-850 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 bg-slate-950/90 sm:bg-slate-950/40 sticky bottom-0 z-10 shrink-0 backdrop-blur-sm">
+              <div className="order-2 sm:order-1 flex items-center gap-2 w-full sm:w-auto">
                 {crmWizardStep > 1 ? (
                   <button
                     type="button"
                     onClick={() => setCrmWizardStep(crmWizardStep - 1)}
-                    className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
+                    className="w-full sm:w-auto h-9 sm:h-7 px-3.5 py-1.5 sm:py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border-0 flex items-center justify-center shrink-0"
                   >
                     Back
                   </button>
@@ -1632,7 +1632,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                   <button
                     type="button"
                     onClick={() => setSelectedLead(null)}
-                    className="px-3.5 py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border border-slate-705 border-0"
+                    className="w-full sm:w-auto h-9 sm:h-7 px-3.5 py-1.5 sm:py-1 bg-slate-800 hover:bg-slate-750 text-slate-300 hover:text-white text-xs font-mono font-bold uppercase rounded transition-all cursor-pointer border-0 flex items-center justify-center shrink-0"
                   >
                     Back
                   </button>
@@ -1642,7 +1642,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                     type="button"
                     onClick={() => setShowCancelConfirmPopup(true)}
                     disabled={isCrmLocked}
-                    className={`px-3.5 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-lg ${
+                    className={`w-full sm:w-auto h-9 sm:h-7 px-3.5 py-1.5 sm:py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-lg flex items-center justify-center ${
                       isCrmLocked ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' : 'bg-rose-600 hover:bg-rose-500 text-white cursor-pointer shadow-rose-600/15'
                     } border border-transparent`}
                   >
@@ -1651,7 +1651,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="order-1 sm:order-2 grid grid-cols-1 min-[420px]:grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
                 {crmWizardStep === 3 && !isLeadConfirmed && !['Order Confirmed', 'Event Scheduled', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') && (
                   <button
                     type="button"
@@ -1678,7 +1678,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                       setShowConfirmModal(true);
                     }}
                     disabled={isSaving || isCrmLocked || (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')}
-                    className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                    className={`w-full sm:w-auto h-9 sm:h-7 px-4 py-1.5 sm:py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center justify-center gap-1.5 border-0 ${
                       isCrmLocked
                         ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
                       (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
@@ -1695,7 +1695,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                   id="btn_crm_save_step"
                   onClick={() => handleSaveStep(crmWizardStep)}
                   disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
-                  className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                  className={`w-full sm:w-auto h-9 sm:h-7 px-4 py-1.5 sm:py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center justify-center gap-1.5 border-0 ${
                     isCrmLocked
                       ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
                     crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')

@@ -230,6 +230,26 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                     </div>
                     
                     <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                      {/* Create Quotation Button (ONLY in Leads Directory) */}
+                      {canEdit && (
+                        <button
+                          id="btn_create_new_lead"
+                          type="button"
+                          onClick={() => {
+                            if (typeof setActiveTab === 'function') {
+                              setActiveTab('create');
+                            }
+                            if (typeof setSelectedLead === 'function') {
+                              setSelectedLead(null);
+                            }
+                          }}
+                          className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
+                        >
+                          <Plus className="w-4 h-4 stroke-[3]" />
+                          <span>Create Quotation</span>
+                        </button>
+                      )}
+
                       {/* Sort Order Filter Button */}
                       <ListSortFilter value={sortOrder} onChange={setSortOrder} />
 
