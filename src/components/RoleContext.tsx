@@ -1474,7 +1474,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'server_upload_confirmed', 'server_upload_event_date', 'server_upload_folder_name',
         'server_upload_confirmed_at', 'server_upload_confirmed_by',
         'edited_folder_uploaded_to_server', 'server_upload_validated',
-        'server_upload_validated_at', 'server_upload_validated_by'
+        'server_upload_validated_at', 'server_upload_validated_by',
+        'server_file_link', 'upload_link', 'folder_name', 'upload_link_path'
       ],
       operations_staff: [
         'staff_id', 'name', 'mobile', 'whatsapp_number', 'email', 'role', 'department', 'status', 'joining_date', 
@@ -2527,10 +2528,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               uploaded_proof: item.uploaded_proof || cached?.uploaded_proof || null,
               server_upload_confirmed: item.server_upload_confirmed ?? cached?.server_upload_confirmed ?? false,
               server_upload_event_date: item.server_upload_event_date || cached?.server_upload_event_date || '',
-              server_upload_folder_name: item.server_upload_folder_name || cached?.server_upload_folder_name || '',
+              server_upload_folder_name: item.server_upload_folder_name || item.folder_name || cached?.server_upload_folder_name || cached?.folder_name || '',
+              folder_name: item.folder_name || item.server_upload_folder_name || cached?.folder_name || cached?.server_upload_folder_name || '',
               server_upload_confirmed_at: item.server_upload_confirmed_at || cached?.server_upload_confirmed_at || '',
               server_upload_confirmed_by: item.server_upload_confirmed_by || cached?.server_upload_confirmed_by || '',
-              edited_folder_uploaded_to_server: item.edited_folder_uploaded_to_server ?? cached?.edited_folder_uploaded_to_server ?? false
+              edited_folder_uploaded_to_server: item.edited_folder_uploaded_to_server ?? cached?.edited_folder_uploaded_to_server ?? false,
+              server_file_link: item.server_file_link || item.upload_link || item.upload_link_path || cached?.server_file_link || cached?.upload_link || '',
+              upload_link: item.upload_link || item.server_file_link || cached?.upload_link || '',
+              upload_link_path: item.upload_link_path || item.server_file_link || cached?.upload_link_path || ''
             };
           }));
         }
@@ -3084,22 +3089,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         return { success: false, error: 'Database client is not initialized.' };
       }
 
-      // Step 1: Look up user profile safely by Email, Mobile, or Username
+      // Step 1: Look up user profile safely by Email, Mobile, or Username directly from public.users
       const rawDigits = cleanInput.replace(/\D/g, '');
       const last10 = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
+      const cleanPassword = password.trim();
+
+      let candidateUsers: any[] = [];
 
       try {
-        const { data: allUsers } = await supabaseClient.from('users').select('*');
-        if (allUsers) {
-          dbUser = allUsers.find(u => {
+        const { data: allUsers, error: usersError } = await supabaseClient.from('users').select('*');
+        if (allUsers && allUsers.length > 0) {
+          candidateUsers = allUsers.filter(u => {
             const uEmail = (u.email || '').trim().toLowerCase();
             const uUser = (u.username || '').trim().toLowerCase();
             const uPhone = (u.mobile || '').replace(/\D/g, '');
+            const uPhoneLast10 = uPhone.length >= 10 ? uPhone.slice(-10) : uPhone;
             
+            // Email matching
             if (cleanInput.includes('@') && uEmail === cleanInput.toLowerCase()) return true;
-            if (uUser === cleanInput.toLowerCase()) return true;
-            if (uEmail === cleanInput.toLowerCase()) return true;
-            if (rawDigits.length >= 7 && uPhone.endsWith(last10)) return true;
+            if (uEmail && uEmail === cleanInput.toLowerCase()) return true;
+            // Username matching
+            if (uUser && uUser === cleanInput.toLowerCase()) return true;
+            // Mobile matching: exact digits or last 10 digits
+            if (rawDigits.length >= 7) {
+              if (uPhone === rawDigits) return true;
+              if (last10.length >= 7 && (uPhoneLast10 === last10 || uPhone.endsWith(last10))) return true;
+            }
             return false;
           });
         }
@@ -3107,23 +3122,27 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         console.warn('[LOGIN] Error querying users table:', err?.message || err);
       }
 
-      // Check in-memory users list
-      if (!dbUser && users.length > 0) {
-        dbUser = users.find(u => {
+      // Check in-memory users list fallback if no candidates from DB query
+      if (candidateUsers.length === 0 && users.length > 0) {
+        candidateUsers = users.filter(u => {
           const uEmail = (u.email || '').trim().toLowerCase();
           const uUser = (u.username || '').trim().toLowerCase();
           const uPhone = (u.mobile || '').replace(/\D/g, '');
+          const uPhoneLast10 = uPhone.length >= 10 ? uPhone.slice(-10) : uPhone;
           
           if (cleanInput.includes('@') && uEmail === cleanInput.toLowerCase()) return true;
-          if (uUser === cleanInput.toLowerCase()) return true;
-          if (uEmail === cleanInput.toLowerCase()) return true;
-          if (rawDigits.length >= 7 && uPhone.endsWith(last10)) return true;
+          if (uEmail && uEmail === cleanInput.toLowerCase()) return true;
+          if (uUser && uUser === cleanInput.toLowerCase()) return true;
+          if (rawDigits.length >= 7) {
+            if (uPhone === rawDigits) return true;
+            if (last10.length >= 7 && (uPhoneLast10 === last10 || uPhone.endsWith(last10))) return true;
+          }
           return false;
         });
       }
 
-      // Fallback: Check in-memory staff lists (operations_staff, production_staff)
-      if (!dbUser) {
+      // Fallback: Check in-memory staff lists (operations_staff, production_staff) if user record not yet created
+      if (candidateUsers.length === 0) {
         let matchingStaff = staff.find(s => {
           const sEmail = (s.email || '').trim().toLowerCase();
           const sMobile = (s.mobile || '').replace(/\D/g, '');
@@ -3137,7 +3156,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           return false;
         });
         
-        let fallbackRole = 'Operation Staff';
+        let fallbackRole: UserRole = 'Operation Staff';
 
         if (!matchingStaff) {
           matchingStaff = productionStaff.find(s => {
@@ -3159,7 +3178,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
         if (matchingStaff) {
           const staffEmail = matchingStaff.email || `${matchingStaff.mobile ? matchingStaff.mobile.replace(/\D/g, '') : matchingStaff.name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`;
-          dbUser = {
+          const newStaffUser = {
             id: matchingStaff.staff_id || `STAFF-${Date.now()}`,
             name: matchingStaff.name,
             email: staffEmail,
@@ -3167,73 +3186,72 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             mobile: matchingStaff.mobile || '',
             role: fallbackRole,
             active: matchingStaff.status !== 'Inactive',
-            password: password
+            password: cleanPassword
           };
 
           // Save to users table so future direct queries find them
           try {
             await supabaseClient.from('users').upsert({
-              id: dbUser.id,
-              name: dbUser.name,
-              email: dbUser.email,
-              username: dbUser.username,
-              mobile: dbUser.mobile,
+              id: newStaffUser.id,
+              name: newStaffUser.name,
+              email: newStaffUser.email,
+              username: newStaffUser.username,
+              mobile: newStaffUser.mobile,
               role: fallbackRole,
-              active: dbUser.active,
-              password: password,
+              active: newStaffUser.active,
+              password: cleanPassword,
               created_at: new Date().toISOString()
             }, { onConflict: 'email' });
           } catch (e) {
             console.warn('[LOGIN] Auto-sync fallback to users table warning:', e);
           }
+
+          candidateUsers = [newStaffUser];
         }
       }
 
       let authSuccess = false;
 
-      // Direct check against users.password column
-      if (dbUser && dbUser.password && dbUser.password === password) {
-        authSuccess = true;
+      // 1. Direct password check against candidate users' public.users.password
+      for (const candidate of candidateUsers) {
+        const storedPwd = String(candidate.password ?? '').trim();
+        if (storedPwd !== '' && storedPwd === cleanPassword) {
+          authSuccess = true;
+          dbUser = candidate;
+          break;
+        }
       }
 
-      // If direct password check didn't match or dbUser has no password, try Supabase Auth
-      if (!authSuccess) {
-        let loginEmail = cleanInput;
-        if (dbUser && dbUser.email) {
-          loginEmail = dbUser.email;
-        }
+      // 2. If direct password check didn't match, check Supabase Auth as secondary fallback
+      if (!authSuccess && candidateUsers.length > 0) {
+        for (const candidate of candidateUsers) {
+          const loginEmail = candidate.email || (cleanInput.includes('@') ? cleanInput : null);
+          if (loginEmail) {
+            try {
+              const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({
+                email: loginEmail,
+                password: cleanPassword
+              });
 
-        try {
-          const { data: authData, error: authErr } = await supabaseClient.auth.signInWithPassword({
-            email: loginEmail,
-            password: password
-          });
-
-          if (!authErr && authData?.session) {
-            authSuccess = true;
-            if (!dbUser) {
-              const { data: profile } = await supabaseClient
-                .from('users')
-                .select('*')
-                .eq('email', loginEmail)
-                .maybeSingle();
-              dbUser = profile;
+              if (!authErr && authData?.session) {
+                authSuccess = true;
+                dbUser = candidate;
+                // Sync password to public.users table so future logins use public.users.password directly
+                try {
+                  await supabaseClient
+                    .from('users')
+                    .update({ password: cleanPassword })
+                    .eq('id', candidate.id);
+                  dbUser.password = cleanPassword;
+                } catch (syncErr) {
+                  console.warn("[LOGIN] Failed to update password in users table:", syncErr);
+                }
+                break;
+              }
+            } catch (e: any) {
+              console.warn("Supabase Auth sign in failed:", e?.message || e);
             }
           }
-        } catch (e: any) {
-          console.warn("Supabase Auth sign in failed:", e?.message || e);
-        }
-      }
-
-      if (authSuccess && dbUser && dbUser.password !== password) {
-        try {
-          await supabaseClient
-            .from('users')
-            .update({ password: password })
-            .eq('email', dbUser.email);
-          dbUser.password = password;
-        } catch (syncErr) {
-          console.warn("[LOGIN] Failed to update password in users table:", syncErr);
         }
       }
 
@@ -3244,25 +3262,41 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
 
       // Validate active status
-      if (!dbUser.active) {
+      if (dbUser.active === false || dbUser.active === 'false') {
         const msg = 'Your account has been deactivated. Please contact the administrator.';
         logAttempt('Failed', msg, dbUser.id);
         return { success: false, error: msg };
       }
 
-      // Validate role
+      // Validate role with case-insensitive normalization
       if (!dbUser.role) {
         const msg = 'User role is not configured.';
         logAttempt('Failed', msg, dbUser.id);
         return { success: false, error: msg };
       }
 
-      const validRoles = ['Business Owner', 'Sales Team', 'Operations Team', 'Production Team', 'Operation Staff', 'Production Staff'];
-      if (!validRoles.includes(dbUser.role)) {
+      const normalizeUserRole = (rawRole: string): UserRole => {
+        const r = (rawRole || '').trim().toLowerCase();
+        if (r.includes('owner') || r.includes('business')) return 'Business Owner';
+        if (r.includes('sales')) return 'Sales Team';
+        if (r.includes('prod') && r.includes('staff')) return 'Production Staff';
+        if (r.includes('prod') && r.includes('team')) return 'Production Team';
+        if (r.includes('op') && r.includes('staff')) return 'Operation Staff';
+        if (r.includes('op') && r.includes('team')) return 'Operations Team';
+        if (r.includes('editor') || r.includes('production')) return 'Production Staff';
+        if (r.includes('photo') || r.includes('video') || r.includes('drone') || r.includes('operation')) return 'Operation Staff';
+        return rawRole as UserRole;
+      };
+
+      const normalizedRole = normalizeUserRole(dbUser.role);
+      const validRoles: UserRole[] = ['Business Owner', 'Sales Team', 'Operations Team', 'Production Team', 'Operation Staff', 'Production Staff'];
+      if (!validRoles.includes(normalizedRole)) {
         const msg = 'You do not have permission to access this page.';
         logAttempt('Failed', msg, dbUser.id);
         return { success: false, error: msg };
       }
+
+      dbUser.role = normalizedRole;
 
       // Load credentials & fields
       const foundUser = mapUserFieldsFromDb(dbUser);
@@ -5974,35 +6008,69 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const resetUserPassword = async (id: string, newPassword: string) => {
-    let targetUser = users.find(u => u.id === id);
-    if (!targetUser) return;
+    const cleanPassword = newPassword.trim();
+    const dbUserId = mapToDbUserId(id);
     
-    // 1. Update in users table
-    const dbRes = await pushUpdate('users', 'id', mapToDbUserId(id), { password: newPassword });
-    if (!dbRes.success) {
-      throw new Error(dbRes.error || "Failed to reset password in database");
+    // Find target user in state or database
+    let targetUser = users.find(u => u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId);
+    
+    if (!targetUser && supabaseClient) {
+      try {
+        const { data: fetchedUser } = await supabaseClient
+          .from('users')
+          .select('*')
+          .eq('id', dbUserId)
+          .maybeSingle();
+        if (fetchedUser) {
+          targetUser = mapUserFieldsFromDb(fetchedUser);
+        }
+      } catch (fetchErr) {
+        console.warn("Error fetching user for password reset:", fetchErr);
+      }
+    }
+
+    // 1. Direct update in public.users table for immediate persistence
+    if (supabaseClient) {
+      try {
+        await supabaseClient.from('users').update({ password: cleanPassword }).eq('id', dbUserId);
+        if (targetUser?.email) {
+          await supabaseClient.from('users').update({ password: cleanPassword }).ilike('email', targetUser.email.trim());
+        }
+        if (targetUser?.mobile) {
+          await supabaseClient.from('users').update({ password: cleanPassword }).eq('mobile', targetUser.mobile.trim());
+        }
+      } catch (directSbErr) {
+        console.warn("Direct Supabase update warning in resetUserPassword:", directSbErr);
+      }
     }
     
-    // 2. Also update Supabase Auth via server admin endpoint
+    // 2. Also update in users table via server proxy
+    try {
+      await pushUpdate('users', 'id', dbUserId, { password: cleanPassword });
+    } catch (pushErr) {
+      console.warn("pushUpdate users password warning:", pushErr);
+    }
+    
+    // 3. Also update Supabase Auth via server admin endpoint
     try {
       await fetch('/api/auth/update-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          auth_id: mapToDbUserId(id),
-          email: targetUser.email,
-          mobile: targetUser.mobile,
-          password: newPassword,
-          name: targetUser.name,
-          role: targetUser.role
+          auth_id: dbUserId,
+          email: targetUser?.email,
+          mobile: targetUser?.mobile,
+          password: cleanPassword,
+          name: targetUser?.name,
+          role: targetUser?.role
         })
       });
     } catch (authErr) {
       console.warn("Supabase Auth password update warning:", authErr);
     }
 
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, password: newPassword } : u));
-    logActivity(`Reset Password for User account: ${targetUser.name}`, 'UserManagement', id);
+    setUsers((prev) => prev.map((u) => (u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId) ? { ...u, password: cleanPassword } : u));
+    logActivity(`Reset Password for User account: ${targetUser?.name || id}`, 'UserManagement', id);
   };
 
   const addStaff = async (member: Omit<Staff, "staff_id">) => {

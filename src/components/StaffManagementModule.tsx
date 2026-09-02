@@ -3,14 +3,14 @@ import { useRole } from './RoleContext';
 import { Staff } from '../types';
 import { triggerAutoScrollAndFocus } from '../utils';
 import { 
-  Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, Trash2, ShieldAlert,
+  Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, ShieldAlert,
   Search, Filter, Calendar, FolderOpen, Heart, CheckCircle2, ChevronRight, X, Sparkles, Image,
   Key, Eye, EyeOff, Lock
 } from 'lucide-react';
 
 export const StaffManagementModule: React.FC = () => {
   const { 
-    staff, addStaff, updateStaff, deleteStaff, production, currentRole,
+    staff, addStaff, updateStaff, production, currentRole,
     specialities = [], addSpeciality, updateSpeciality, deactivateSpeciality,
     addUser, resetUserPassword, users
   } = useRole();
@@ -142,11 +142,35 @@ export const StaffManagementModule: React.FC = () => {
       // If a new password was provided during edit, update the user credentials
       if (staffPassword && staffPassword.length >= 6) {
         try {
-          const userRec = users.find(u => u.email?.toLowerCase() === email.toLowerCase() || u.mobile === mobile);
+          const cleanPwd = staffPassword.trim();
+          const targetEmail = (email || '').trim().toLowerCase();
+          const targetMobile10 = (mobile || '').replace(/\D/g, '').slice(-10);
+          
+          let userRec = users.find(u => {
+            const uEmail = (u.email || '').trim().toLowerCase();
+            const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
+            if (targetEmail && uEmail === targetEmail) return true;
+            if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
+            return false;
+          });
+
+          if (!userRec && supabaseClient) {
+            const { data: dbUsers } = await supabaseClient.from('users').select('*');
+            if (dbUsers) {
+              userRec = dbUsers.find(u => {
+                const uEmail = (u.email || '').trim().toLowerCase();
+                const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
+                if (targetEmail && uEmail === targetEmail) return true;
+                if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
+                return false;
+              });
+            }
+          }
+
           if (userRec) {
-            await resetUserPassword(userRec.id, staffPassword);
+            await resetUserPassword(userRec.id, cleanPwd);
           } else {
-            await addUser(name, email, mobile, 'Operation Staff', status === 'Active', staffPassword);
+            await addUser(name, email, mobile, 'Operation Staff', status === 'Active', cleanPwd);
           }
         } catch (pwErr) {
           console.warn("Could not update staff login password:", pwErr);
@@ -198,23 +222,50 @@ export const StaffManagementModule: React.FC = () => {
     setResetSuccessMessage('');
 
     try {
-      // Find matching user record
-      const targetUser = users.find(u => 
-        (u.email && u.email.toLowerCase() === resetModalStaff.email?.toLowerCase()) ||
-        (u.mobile && u.mobile === resetModalStaff.mobile)
-      );
+      const cleanNewPassword = newStaffPassword.trim();
+      const staffEmail = (resetModalStaff.email || '').trim().toLowerCase();
+      const staffMobileDigits = (resetModalStaff.mobile || '').replace(/\D/g, '');
+      const staffMobile10 = staffMobileDigits.length >= 10 ? staffMobileDigits.slice(-10) : staffMobileDigits;
+
+      // Find matching user record from state
+      let targetUser = users.find(u => {
+        const uEmail = (u.email || '').trim().toLowerCase();
+        const uMobileDigits = (u.mobile || '').replace(/\D/g, '');
+        const uMobile10 = uMobileDigits.length >= 10 ? uMobileDigits.slice(-10) : uMobileDigits;
+        if (staffEmail && uEmail && uEmail === staffEmail) return true;
+        if (staffMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === staffMobile10) return true;
+        return false;
+      });
+
+      // If not found in state, look directly in public.users table
+      if (!targetUser && supabaseClient) {
+        const { data: dbUsers } = await supabaseClient.from('users').select('*');
+        if (dbUsers) {
+          const matchedDbUser = dbUsers.find(u => {
+            const uEmail = (u.email || '').trim().toLowerCase();
+            const uMobileDigits = (u.mobile || '').replace(/\D/g, '');
+            const uMobile10 = uMobileDigits.length >= 10 ? uMobileDigits.slice(-10) : uMobileDigits;
+            if (staffEmail && uEmail && uEmail === staffEmail) return true;
+            if (staffMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === staffMobile10) return true;
+            return false;
+          });
+          if (matchedDbUser) {
+            targetUser = matchedDbUser;
+          }
+        }
+      }
 
       if (targetUser) {
-        await resetUserPassword(targetUser.id, newStaffPassword);
+        await resetUserPassword(targetUser.id, cleanNewPassword);
       } else {
         // Create user if missing
         await addUser(
           resetModalStaff.name,
-          resetModalStaff.email,
+          resetModalStaff.email || `${staffMobileDigits || 'staff'}@photocrew.com`,
           resetModalStaff.mobile,
           'Operation Staff',
           resetModalStaff.status === 'Active',
-          newStaffPassword
+          cleanNewPassword
         );
       }
 

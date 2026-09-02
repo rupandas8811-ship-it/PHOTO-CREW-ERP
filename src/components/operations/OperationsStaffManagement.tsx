@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole } from '../RoleContext';
 import { 
-  Users, UserCheck, ShieldAlert, PlusCircle, Edit, Trash2, Mail, Phone, Calendar, Briefcase, Search, X,
+  Users, UserCheck, ShieldAlert, PlusCircle, Edit, Mail, Phone, Calendar, Briefcase, Search, X,
   ChevronDown, Sparkles
 } from 'lucide-react';
 import { Staff } from '../../types';
@@ -11,7 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { supabaseClient } from '../../supabaseClient';
 
 export const OperationsStaffManagement: React.FC = () => {
-  const { currentRole, staff, users = [], addStaff, updateStaff, deleteStaff, operations, leads, orders, staffAssignments } = useRole();
+  const { currentRole, staff, users = [], addStaff, updateStaff, operations, leads, orders, staffAssignments } = useRole();
   const canEdit = currentRole === 'Operations Team' || currentRole === 'Business Owner';
 
   // Modal / Form state
@@ -353,28 +353,6 @@ export const OperationsStaffManagement: React.FC = () => {
       alert(`Operation failed: ${err.message || err}`);
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleDelete = async (id: string, name: string) => {
-    if (confirm(`Are you absolutely sure you want to delete staff member "${name}"? This action cannot be undone.`)) {
-      try {
-        setOperatingId(id);
-        await deleteStaff(id);
-        const toast = document.createElement('div');
-        toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
-        toast.innerHTML = `✅ Staff member "${name}" deleted successfully.`;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-      } catch (err: any) {
-        const toast = document.createElement('div');
-        toast.className = 'fixed bottom-4 right-4 bg-rose-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
-        toast.innerHTML = `❌ Failed to delete staff member: ${err.message || err}`;
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-      } finally {
-        setOperatingId(null);
-      }
     }
   };
 

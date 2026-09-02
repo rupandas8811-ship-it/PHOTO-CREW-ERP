@@ -571,6 +571,8 @@ export interface EditorAssignment {
   server_upload_validated_by?: string;
   server_file_link?: string;
   upload_link?: string;
+  folder_name?: string;
+  upload_link_path?: string;
 }
 
 export interface ClientAcceptanceVerification {

@@ -819,11 +819,26 @@ export const ProductionStaffModule: React.FC = () => {
           return false;
         });
 
+        const existingFolderName = (
+          item.assignmentObj?.server_upload_folder_name ||
+          item.assignmentObj?.folder_name ||
+          item.serverUploadFolderName ||
+          savedVerif?.folder_name ||
+          ''
+        ).trim();
+        const existingServerFileLink = (
+          item.assignmentObj?.server_file_link ||
+          item.assignmentObj?.upload_link ||
+          item.assignmentObj?.upload_link_path ||
+          savedVerif?.upload_link_path ||
+          ''
+        ).trim();
         const existingConfirmed = Boolean(
           savedVerif?.consent_proof_verified ||
           item.serverUploadConfirmed ||
           item.assignmentObj?.server_upload_confirmed ||
-          item.assignmentObj?.edited_folder_uploaded_to_server
+          item.assignmentObj?.edited_folder_uploaded_to_server ||
+          (existingFolderName.length > 0 && existingServerFileLink.length > 0)
         );
         const existingEventDate = (
           item.serverUploadEventDate ||
@@ -832,18 +847,6 @@ export const ProductionStaffModule: React.FC = () => {
           grp.eventDate ||
           ''
         ).trim();
-        const existingFolderName = (
-          savedVerif?.folder_name ||
-          item.serverUploadFolderName ||
-          item.assignmentObj?.server_upload_folder_name ||
-          ''
-        ).trim();
-        const existingServerFileLink = existingConfirmed ? (
-          item.assignmentObj?.server_file_link ||
-          item.assignmentObj?.upload_link ||
-          savedVerif?.upload_link_path ||
-          ''
-        ).trim() : '';
 
         eventConfigs[evtKey] = {
           eventKey: evtKey,
@@ -1341,9 +1344,16 @@ export const ProductionStaffModule: React.FC = () => {
           edited_folder_uploaded_to_server: true,
           server_upload_event_date: serverEventDate,
           server_upload_folder_name: serverFolderName,
+          folder_name: serverFolderName,
           server_upload_confirmed_at: timestamp,
           server_upload_confirmed_by: staffName || 'Production Staff'
         };
+
+        if (cfg.serverFileLink?.trim()) {
+          assignPayload.server_file_link = cfg.serverFileLink.trim();
+          assignPayload.upload_link = cfg.serverFileLink.trim();
+          assignPayload.upload_link_path = cfg.serverFileLink.trim();
+        }
 
         if (imgUrl) {
           assignPayload.customer_review_image = imgUrl;
@@ -1447,8 +1457,14 @@ export const ProductionStaffModule: React.FC = () => {
           assignPayload.edited_folder_uploaded_to_server = true;
           assignPayload.server_upload_event_date = cfg.eventDate.trim();
           assignPayload.server_upload_folder_name = cfg.folderName.trim();
+          assignPayload.folder_name = cfg.folderName.trim();
           assignPayload.server_upload_confirmed_at = timestamp;
           assignPayload.server_upload_confirmed_by = staffName || 'Production Staff';
+          if (cfg.serverFileLink?.trim()) {
+            assignPayload.server_file_link = cfg.serverFileLink.trim();
+            assignPayload.upload_link = cfg.serverFileLink.trim();
+            assignPayload.upload_link_path = cfg.serverFileLink.trim();
+          }
         }
 
         await updateEditorAssignmentStatus(deliv.assignmentId, 'Customer Review' as any, assignPayload);
@@ -1649,11 +1665,13 @@ Thank you.`;
           server_upload_confirmed: true,
           server_upload_event_date: serverEventDate,
           server_upload_folder_name: serverFolderName,
+          folder_name: serverFolderName,
           server_upload_confirmed_at: timestamp,
           server_upload_confirmed_by: staffName || currentUser?.name || 'Production Staff',
           edited_folder_uploaded_to_server: true,
           server_file_link: (cfg.serverFileLink || '').trim(),
-          upload_link: (cfg.serverFileLink || '').trim()
+          upload_link: (cfg.serverFileLink || '').trim(),
+          upload_link_path: (cfg.serverFileLink || '').trim()
         };
 
         await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Completed' as any, assignPayload);
@@ -1706,7 +1724,7 @@ Thank you.`;
             folderName: editingCompletedForm.server_upload_folder_name
           };
           const fName = (cfg.folderName || editingCompletedForm.server_upload_folder_name || '').trim();
-          const lPath = (deliv.editedDriveLink || deliv.assignmentObj?.edited_drive_link || deliv.assignmentObj?.Edited_Drive_Link || '').trim();
+          const lPath = (cfg.serverFileLink || deliv.editedDriveLink || deliv.assignmentObj?.server_file_link || deliv.assignmentObj?.upload_link || deliv.assignmentObj?.edited_drive_link || deliv.assignmentObj?.Edited_Drive_Link || '').trim();
           
           if (orderId) {
             await saveClientAcceptanceVerification({

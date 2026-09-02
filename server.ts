@@ -983,8 +983,8 @@ async function startServer() {
         }
       }
       
-      // Update users table
-      const userUpdates: any = { updated_at: new Date().toISOString() };
+      // Update users table (note: public.users has created_at, no updated_at)
+      const userUpdates: any = {};
       if (name) userUpdates.name = name;
       if (email && !isStaffRole) userUpdates.email = email.trim().toLowerCase();
       if (role) userUpdates.role = role;

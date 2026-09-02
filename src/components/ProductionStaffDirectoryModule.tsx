@@ -3,7 +3,7 @@ import { useRole } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { Staff, Production } from '../types';
 import { 
-  Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, Trash2, ShieldAlert,
+  Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, ShieldAlert,
   Search, Filter, Calendar, FolderOpen, Heart, CheckCircle2, ChevronRight, X, Sparkles, Image,
   Eye, Edit3, MessageSquare, MapPin, BarChart3, Download, RefreshCw, Star, ArrowUpRight, TrendingUp
 } from 'lucide-react';
@@ -17,7 +17,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     users = [],
     addProductionStaff: addStaff, 
     updateProductionStaff: updateStaff, 
-    deleteProductionStaff: deleteStaff, 
     production = [], 
     specialities = [],
     editorAssignments = [],
@@ -166,11 +165,15 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
         // Edit Mode
         let userId = null;
         if (editingStaff) {
-           const existingUser = users.find(u => 
-             (editingStaff.email && u.email?.toLowerCase() === editingStaff.email.toLowerCase()) ||
-             (editingStaff.mobile && u.mobile === editingStaff.mobile) ||
-             (editingStaff.email && u.username?.toLowerCase() === editingStaff.email.toLowerCase())
-           );
+           const targetEmail = (editingStaff.email || '').trim().toLowerCase();
+           const targetMobile10 = (editingStaff.mobile || '').replace(/\D/g, '').slice(-10);
+           const existingUser = users.find(u => {
+             const uEmail = (u.email || '').trim().toLowerCase();
+             const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
+             if (targetEmail && uEmail === targetEmail) return true;
+             if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
+             return false;
+           });
            if (existingUser) userId = existingUser.id;
         }
         
@@ -277,22 +280,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       showToast('error', '❌ Failed to save Production Staff.');
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  // Delete staff member
-  const handleDeleteStaff = async (member: Staff) => {
-    if (window.confirm(`Are you absolutely sure you want to delete ${member.name} from the directory? This action will remove all assignments linked to this staff member.`)) {
-      try {
-        await deleteStaff(member.staff_id);
-        alert('Staff deleted successfully.');
-        if (viewingStaff?.staff_id === member.staff_id) {
-          setViewingStaff(null);
-        }
-      } catch (err: any) {
-        console.warn("Failed deleting staff", err?.message || err);
-        alert('An error occurred during staff deletion.');
-      }
     }
   };
 
