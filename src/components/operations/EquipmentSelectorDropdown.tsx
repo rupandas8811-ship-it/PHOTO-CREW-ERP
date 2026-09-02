@@ -181,8 +181,12 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
     }
   }, [isOpen]);
 
-  // Compute availability for each equipment item
+  // Compute availability for each equipment item ONLY when opened or inspecting modal
   const equipmentWithAvailability = useMemo(() => {
+    if (!isOpen && !conflictModalState?.isOpen) {
+      return [];
+    }
+
     return (equipment || []).map((eq) => {
       const isSelected = selectedEquipmentNames.includes(eq.equipment_name);
 
@@ -200,7 +204,7 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
         eq.status === 'Inactive' ||
         eq.status === 'Retired';
 
-      // Check if busy on another order/event
+      // Check if busy on another order/event using exact Date + Start Time + End Time overlap logic
       const availability = checkEquipmentAvailability(eq.equipment_name, currentOrderId, targetEventDate, targetStartTime, targetEndTime);
       const isBusyElsewhere = !isSelected && availability.isBusy;
 
@@ -234,7 +238,7 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
         statusType = 'busy';
         statusLabel = 'Busy / In Use';
         canAssign = false;
-        reason = `Assigned to another active event on this date.`;
+        reason = `Assigned to another active event with overlapping time.`;
       }
 
       return {
@@ -248,10 +252,19 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
         isSelected
       };
     });
-  }, [equipment, selectedEquipmentNames, otherStaffEquipments, checkEquipmentAvailability, currentOrderId, targetEventDate, targetStartTime, targetEndTime]);
+  }, [isOpen, conflictModalState?.isOpen, equipment, selectedEquipmentNames, otherStaffEquipments, checkEquipmentAvailability, currentOrderId, targetEventDate, targetStartTime, targetEndTime]);
 
   // Counts for filter pills
   const counts = useMemo(() => {
+    if (!isOpen && !conflictModalState?.isOpen) {
+      return {
+        all: equipment?.length || 0,
+        available: 0,
+        busy: 0,
+        selected: selectedEquipmentNames.length
+      };
+    }
+
     let available = 0;
     let busy = 0;
     let selected = 0;
@@ -268,7 +281,7 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
       busy,
       selected
     };
-  }, [equipmentWithAvailability]);
+  }, [equipmentWithAvailability, isOpen, conflictModalState?.isOpen, equipment?.length, selectedEquipmentNames.length]);
 
   // Filtered equipment list based on search and status filter
   const filteredEquipment = useMemo(() => {
@@ -553,38 +566,41 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
                           )}
 
                           {eq.conflicts && eq.conflicts.length > 0 && (
-                            <div className="mt-2 bg-rose-500/10 border border-rose-500/20 rounded p-2 text-rose-300">
-                              <div className="font-bold font-sans text-[11px] mb-1 flex items-center gap-1">
-                                <AlertCircle size={12} /> Equipment Not Available (Time Overlap)
+                            <div className="mt-2 bg-rose-500/10 border border-rose-500/20 rounded-lg p-2.5 text-rose-300">
+                              <div className="font-bold font-sans text-[11px] mb-1.5 flex items-center gap-1.5 text-rose-400">
+                                <AlertCircle size={13} className="shrink-0" />
+                                <span>Equipment Locked / Busy (Time Overlap)</span>
                               </div>
-                              <div className="text-[10px] space-y-1">
+                              <div className="text-[10px] space-y-1.5">
                                 {eq.conflicts.map((c: any, i: number) => (
-                                  <div key={i} className="pl-3 border-l-2 border-rose-500/30">
-                                    <div><strong>Staff:</strong> {c.staffName}</div>
-                                    <div><strong>Event:</strong> {c.eventName} ({c.eventDate})</div>
-                                    <div><strong>Time:</strong> {c.startTime || '?'} - {c.endTime || '?'}</div>
+                                  <div key={i} className="pl-2.5 border-l-2 border-rose-500/40 text-rose-200">
+                                    <div><strong className="text-zinc-300">Staff:</strong> {c.staffName}</div>
+                                    <div><strong className="text-zinc-300">Event:</strong> {c.eventName} ({c.eventDate})</div>
+                                    <div><strong className="text-zinc-300">Time:</strong> <span className="font-mono text-rose-300 font-bold">{c.startTime || '?'} – {c.endTime || '?'}</span></div>
                                   </div>
                                 ))}
-                                <div className="mt-1 pt-1 border-t border-rose-500/20 italic">
-                                  Requested: {targetEventDate} {targetStartTime ? `${targetStartTime} - ${targetEndTime || '?'}` : ''}
+                                <div className="mt-1.5 pt-1.5 border-t border-rose-500/20 text-zinc-400 text-[10px]">
+                                  <span className="font-semibold text-zinc-300">Current Event:</span> {targetEventDate || 'Selected Date'} {targetStartTime ? `(${targetStartTime} – ${targetEndTime || '?'})` : ''}
                                 </div>
                               </div>
                             </div>
                           )}
 
                           {eq.schedule && eq.schedule.length > 0 && eq.conflicts.length === 0 && (
-                            <div className="mt-2 bg-emerald-500/10 border border-emerald-500/20 rounded p-2 text-emerald-300">
-                              <div className="font-bold font-sans text-[11px] mb-1 flex items-center gap-1">
-                                <Check size={12} /> Equipment Available
+                            <div className="mt-2 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 text-emerald-300">
+                              <div className="font-bold font-sans text-[11px] mb-1 flex items-center gap-1.5 text-emerald-400">
+                                <Check size={13} className="shrink-0" />
+                                <span>Equipment Available (Working on another event)</span>
                               </div>
-                              <div className="text-[10px] text-emerald-400/80 mb-1">
-                                Available for requested time: {targetStartTime ? `${targetStartTime} - ${targetEndTime || '?'}` : ''}
+                              <div className="text-[10px] text-emerald-300/90 mb-1.5">
+                                No time conflict with current event: <strong>{targetEventDate}</strong> {targetStartTime ? `(${targetStartTime} – ${targetEndTime || '?'})` : ''}
                               </div>
-                              <div className="mt-1">
-                                <div className="text-[9px] uppercase tracking-wider mb-1 text-zinc-400">Other Schedule for {targetEventDate}:</div>
+                              <div className="mt-1 pt-1.5 border-t border-emerald-500/20">
+                                <div className="text-[9px] uppercase tracking-wider mb-1 text-zinc-400 font-mono font-semibold">Other Event Schedule on {targetEventDate}:</div>
                                 {eq.schedule.map((s: any, i: number) => (
-                                  <div key={i} className="pl-2 border-l-2 border-emerald-500/30 mb-0.5">
-                                    {s.startTime || '?'} - {s.endTime || '?'} | {s.eventName} ({s.staffName})
+                                  <div key={i} className="pl-2.5 border-l-2 border-emerald-500/40 text-[10px] text-emerald-200 mb-1">
+                                    <div><strong className="text-zinc-300">Event:</strong> {s.eventName} • <strong className="text-zinc-300">Staff:</strong> {s.staffName}</div>
+                                    <div><strong className="text-zinc-300">Time:</strong> <span className="font-mono text-emerald-300 font-bold">{s.startTime || '?'} – {s.endTime || '?'}</span></div>
                                   </div>
                                 ))}
                               </div>

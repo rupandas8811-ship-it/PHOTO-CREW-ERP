@@ -520,12 +520,10 @@ export const OperationsLeads: React.FC = () => {
   const [viewingStaffOrderId, setViewingStaffOrderId] = useState<string | null>(null);
   const [openEquipmentDropdownKey, setOpenEquipmentDropdownKey] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (viewingStaffOrderId) {
-      refreshData();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewingStaffOrderId]);
+  // Fast O(1) indexed lookup maps for maximum performance and instant modal/popup response
+  const orderMap = useMemo(() => new Map((orders || []).map(o => [o.order_id, o])), [orders]);
+  const leadMap = useMemo(() => new Map((leads || []).map(l => [l.lead_id, l])), [leads]);
+  const opMap = useMemo(() => new Map((operations || []).map(o => [o.order_id, o])), [operations]);
 
   useEffect(() => {
     if (assigningOrderId) {
@@ -811,6 +809,8 @@ export const OperationsLeads: React.FC = () => {
 
   const isStaffBusyOnDate = (staffName: string, targetDate: string, currentOrderId?: string) => {
     if (!targetDate || !staffName) return false;
+    const targetNormDate = formatDateDDMMYY(targetDate);
+    if (!targetNormDate) return false;
 
     // A staff member is ONLY busy if there is a successfully saved assignment record in staffAssignments
     const activeAssignments = staffAssignments ? staffAssignments.filter(sa => {
@@ -835,22 +835,22 @@ export const OperationsLeads: React.FC = () => {
       // Ignore the current order being edited so they show as available for re-assignment
       if (currentOrderId && sa.order_id === currentOrderId) return false;
 
-      const relatedOrder = orders.find(o => o.order_id === sa.order_id);
+      const relatedOrder = orderMap.get(sa.order_id);
       if (!relatedOrder) return false;
 
       if (isCompletedEvent(relatedOrder)) return false;
 
-      const op = operations?.find(o => o.order_id === relatedOrder.order_id);
+      const op = opMap.get(relatedOrder.order_id);
       const eventStatus = op?.event_status || 'Assigned';
       if (['completed', 'event completed', 'cancelled'].includes(eventStatus.toLowerCase())) return false;
 
-      const relatedLead = leads.find(l => l.lead_id === relatedOrder.lead_id);
+      const relatedLead = leadMap.get(relatedOrder.lead_id);
       if (!relatedLead || relatedLead.status === 'Lost Lead') return false;
 
       // Check dates in relatedLead events
       if (relatedLead.events && relatedLead.events.length > 0) {
         return relatedLead.events.some((ev: any) => {
-          if (ev.event_date !== targetDate) return false;
+          if (formatDateDDMMYY(ev.event_date) !== targetNormDate) return false;
           const assignedNames = ev.assigned_staff_names
             ? ev.assigned_staff_names.split(',').map((s: string) => s.trim().toLowerCase())
             : [];
@@ -858,7 +858,7 @@ export const OperationsLeads: React.FC = () => {
         });
       } else {
         // Check default event date
-        return relatedLead.event_date === targetDate || relatedOrder.event_date === targetDate;
+        return formatDateDDMMYY(relatedLead.event_date) === targetNormDate || formatDateDDMMYY(relatedOrder.event_date) === targetNormDate;
       }
     });
   };
@@ -926,13 +926,13 @@ export const OperationsLeads: React.FC = () => {
       const taskStatus = ((sa as any).task_status || '').toLowerCase();
       if (completedStages.includes(assignStatus) || completedStages.includes(taskStatus)) return;
 
-      const relatedOrder = orders.find(o => o.order_id === sa.order_id);
+      const relatedOrder = orderMap.get(sa.order_id);
       if (!relatedOrder || isCompletedEvent(relatedOrder)) return;
 
-      const op = operations?.find(o => o.order_id === relatedOrder.order_id);
+      const op = opMap.get(relatedOrder.order_id);
       if (op && ['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return;
 
-      const relatedLead = leads.find(l => l.lead_id === relatedOrder.lead_id);
+      const relatedLead = leadMap.get(relatedOrder.lead_id);
       if (!relatedLead || relatedLead.status === 'Lost Lead') return;
 
       if (isReturnedForOrder(sa.order_id, relatedOrder.lead_id)) return;
@@ -992,10 +992,10 @@ export const OperationsLeads: React.FC = () => {
       if (['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return;
       if (['equipment handover completed', 'returned', 'equipment returned'].includes((op.equipment_status || '').toLowerCase())) return;
 
-      const relatedOrder = orders.find(o => o.order_id === op.order_id);
+      const relatedOrder = orderMap.get(op.order_id);
       if (!relatedOrder || isCompletedEvent(relatedOrder)) return;
 
-      const relatedLead = leads.find(l => l.lead_id === relatedOrder.lead_id);
+      const relatedLead = leadMap.get(relatedOrder.lead_id);
       if (!relatedLead || relatedLead.status === 'Lost Lead') return;
 
       if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id)) return;
@@ -1009,9 +1009,6 @@ export const OperationsLeads: React.FC = () => {
       let evEnd = relatedOrder.event_end_time || '';
       let evName = relatedOrder.event_type || 'Event';
       
-      // Assume operation applies to all events or the first one if we can't pinpoint it,
-      // but usually operations are 1-1 with order. If the order has multiple events, it applies to the whole order.
-      // To be safe, we add a general schedule for the order dates.
       if (relatedLead.events && relatedLead.events.length > 0) {
         relatedLead.events.forEach((ev: any) => {
           allSchedules.push({
@@ -1034,27 +1031,38 @@ export const OperationsLeads: React.FC = () => {
     });
 
     if (targetDate) {
-      result.schedule = allSchedules.filter(s => s.eventDate === targetDate);
-      
-      for (const s of result.schedule) {
-         if (targetStartTime && s.startTime) {
-            // We have both requested start time and existing start time. Let's check overlap.
-            // If checkTimeOverlap returns true, it means they overlap
-            if (checkTimeOverlap(targetStartTime, targetEndTime, s.startTime, s.endTime)) {
-              result.isBusy = true;
-              result.conflicts.push(s);
-            }
-         } else {
-            // If either is missing, we must assume conflict on the same date to be safe.
-            result.isBusy = true;
-            result.conflicts.push(s);
-         }
+      const targetNormDate = formatDateDDMMYY(targetDate);
+      // Only consider schedules that occur on the exact SAME DATE
+      const sameDaySchedules = allSchedules.filter(s => {
+        const sNormDate = s.eventDate ? formatDateDDMMYY(s.eventDate) : '';
+        return sNormDate && sNormDate === targetNormDate;
+      });
+
+      const conflictsList: EquipmentConflictDetails[] = [];
+      const nonConflictsList: EquipmentConflictDetails[] = [];
+
+      for (const s of sameDaySchedules) {
+        // Overlap condition:
+        // existingStart < currentEnd AND existingEnd > currentStart
+        const isOverlap = checkTimeOverlap(targetStartTime, targetEndTime, s.startTime, s.endTime);
+        if (isOverlap) {
+          conflictsList.push(s);
+        } else {
+          nonConflictsList.push(s);
+        }
+      }
+
+      result.conflicts = conflictsList;
+      result.schedule = nonConflictsList;
+      // Rule 1: Same Date + Overlapping Time -> LOCKED (Busy)
+      // Rule 2: Same Date + No Overlap -> DO NOT LOCK (Available, show working there)
+      // Rule 3: Different Date -> DO NOT LOCK (Available)
+      result.isBusy = conflictsList.length > 0;
+      if (result.isBusy) {
+        result.statusText = "Busy / In Use";
       }
     } else {
-      // If we don't have a targetDate, we just check if it's currently busy at all (for generic listing)
-      // Usually generic listing doesn't know the date, so we assume available unless we find an assignment for TODAY?
-      // Actually `isEquipmentBusy` was previously returning true if *any* assignment existed.
-      // Let's keep that behavior for general checks (when targetDate is not provided)
+      // If we don't have a targetDate, check if any active schedule exists
       if (allSchedules.length > 0) {
         result.isBusy = true;
         result.statusText = "Assigned to another active event";
@@ -5239,12 +5247,12 @@ export const OperationsLeads: React.FC = () => {
         );
         
         staffSavedAssignments.forEach(sa => {
-          const order = (orders || []).find(o => o.order_id === sa.order_id);
-          const lead = (leads || []).find(l => l.lead_id === (order?.lead_id || sa.order_id));
+          const order = orderMap.get(sa.order_id);
+          const lead = leadMap.get(order?.lead_id || sa.order_id);
           
           if (!order && !lead) return;
           
-          const op = operations?.find(o => o.order_id === sa.order_id);
+          const op = opMap.get(sa.order_id);
           const bookingStage = order?.current_stage || lead?.status || '';
           const eventStatus = op?.event_status || 'Assigned';
           
@@ -5275,9 +5283,16 @@ export const OperationsLeads: React.FC = () => {
           }
         });
         
-        // Deduplicate
-        const uniqueRosterStr = Array.from(new Set(roster.map(r => JSON.stringify(r))));
-        roster.length = 0; uniqueRosterStr.map(s => roster.push(JSON.parse(s)));
+        // Fast Deduplicate
+        const seenKeys = new Set<string>();
+        const uniqueRoster = roster.filter(r => {
+          const key = `${r.orderId}_${r.eventName}_${r.date}_${r.time}`;
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key);
+          return true;
+        });
+        roster.length = 0;
+        uniqueRoster.forEach(r => roster.push(r));
         return createPortal(
           <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">

@@ -73,13 +73,6 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
 
   const [isCustomerDetailsOpen, setIsCustomerDetailsOpen] = useState(true);
 
-  // Auto-refresh when modal is opened to ensure real-time accuracy
-  useEffect(() => {
-    if (isOpen && refreshData) {
-      refreshData();
-    }
-  }, [isOpen, refreshData]);
-
   const rawTarget = orderId || booking?.orderId || booking?.order_id || booking?.leadId || '';
   const targetOrderId = typeof rawTarget === 'string' ? rawTarget.split('_')[0] : rawTarget;
 

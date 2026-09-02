@@ -2027,26 +2027,77 @@ export function generateWhatsAppAssignmentMessage(params: {
 
 export const parseTimeToMinutes = (timeStr: string | null | undefined): number | null => {
   if (!timeStr) return null;
-  const match = timeStr.trim().match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM|am|pm))?$/);
+  let str = timeStr.trim();
+  if (!str || str === '-' || str === '—' || str.toLowerCase() === 'n/a') return null;
+
+  // Handle ISO string e.g. 2026-09-02T14:30:00
+  if (str.includes('T')) {
+    const parts = str.split('T');
+    if (parts[1]) str = parts[1];
+  }
+
+  // Regex to match:
+  // HH:MM or HH:MM:SS or HH.MM
+  // with optional AM/PM
+  const match = str.match(/^(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?(?:\s*(AM|PM|am|pm))?/i);
   if (!match) return null;
+
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
-  const modifier = match[3] ? match[3].toUpperCase() : null;
+  const modifier = match[4] ? match[4].toUpperCase() : null;
 
   if (modifier === 'PM' && hours < 12) hours += 12;
   if (modifier === 'AM' && hours === 12) hours = 0;
-  
+
+  if (hours < 0 || hours > 24 || minutes < 0 || minutes > 59) return null;
+
   return hours * 60 + minutes;
 };
 
-export const checkTimeOverlap = (startA: string | null | undefined, endA: string | null | undefined, startB: string | null | undefined, endB: string | null | undefined): boolean => {
+export const checkTimeOverlap = (
+  startA: string | null | undefined, 
+  endA: string | null | undefined, 
+  startB: string | null | undefined, 
+  endB: string | null | undefined
+): boolean => {
   const sA = parseTimeToMinutes(startA);
-  const eA = parseTimeToMinutes(endA);
   const sB = parseTimeToMinutes(startB);
-  const eB = parseTimeToMinutes(endB);
-  
-  if (sA === null || eA === null || sB === null || eB === null) return true; // If any time is missing, default to overlap if on same day
-  
-  // Overlap condition: start of A is before end of B AND start of B is before end of A.
+
+  // If neither or only one has a parseable start time
+  if (sA === null || sB === null) {
+    // If exact raw string match, consider them same time (overlap)
+    if (startA && startB && startA.trim().toLowerCase() === startB.trim().toLowerCase()) {
+      return true;
+    }
+    // If times cannot be compared at all, return false unless start strings match
+    return false;
+  }
+
+  // If start times are identical on same day, definitely overlap
+  if (sA === sB) {
+    return true;
+  }
+
+  let eA = parseTimeToMinutes(endA);
+  let eB = parseTimeToMinutes(endB);
+
+  // Handle overnight events (e.g. 10 PM to 2 AM)
+  if (eA !== null && eA <= sA) {
+    eA += 24 * 60;
+  }
+  if (eB !== null && eB <= sB) {
+    eB += 24 * 60;
+  }
+
+  // Default duration if end time is missing (e.g. 4 hours = 240 mins)
+  if (eA === null) {
+    eA = sA + 240;
+  }
+  if (eB === null) {
+    eB = sB + 240;
+  }
+
+  // Two events overlap if:
+  // existingStart < currentEnd AND existingEnd > currentStart
   return sA < eB && sB < eA;
 };
