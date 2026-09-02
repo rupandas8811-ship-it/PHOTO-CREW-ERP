@@ -951,19 +951,6 @@ export const OperationsStaffManagement: React.FC = () => {
                                   <span>Activate</span>
                                 </button>
                               )}
-
-                              <button
-                                onClick={() => handleDelete(st.staff_id, st.name)}
-                                disabled={operatingId !== null}
-                                className="p-1.5 bg-rose-500/10 hover:bg-rose-500/25 text-rose-450 border border-rose-500/20 rounded-lg transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center"
-                                title="Delete Staff Member"
-                              >
-                                {operatingId === st.staff_id ? (
-                                  <span className="w-3 h-3 border-2 border-rose-450 border-t-transparent rounded-full animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                )}
-                              </button>
                             </>
                           )}
                         </div>

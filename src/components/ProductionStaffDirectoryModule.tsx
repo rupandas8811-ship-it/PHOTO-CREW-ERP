@@ -781,13 +781,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                         >
                           <Edit3 className="w-3.5 h-3.5" />
                         </button>
-                        <button
-                          onClick={() => handleDeleteStaff(member)}
-                          className="p-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-450 border border-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                          title="Deregister Staff"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
                       </div>
                     </td>
                     

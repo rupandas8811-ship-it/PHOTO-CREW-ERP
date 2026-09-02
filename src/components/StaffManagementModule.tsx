@@ -641,20 +641,6 @@ export const StaffManagementModule: React.FC = () => {
                       >
                         {member.status === 'Active' ? 'Deactivate' : 'Activate'}
                       </button>
-
-                      {currentRole === 'Business Owner' && (
-                        <button
-                          onClick={() => {
-                            if(confirm(`Are you absolutely sure you want to remove ${member.name} from the crew roster? This action is permanent.`)){
-                              deleteStaff(member.staff_id);
-                            }
-                          }}
-                          className="p-2 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20 rounded-lg transition-colors cursor-pointer"
-                          title="Purge Staff From Directory"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
                     </div>
                   </div>
 
