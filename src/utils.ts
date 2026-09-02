@@ -404,6 +404,104 @@ export const formatDate = formatDateDDMMYY;
 export const formatDateDMY = formatDateDDMMYY;
 export const formatDateDDMMYYYY = formatDateDDMMYY;
 
+/**
+ * Universal Chronological Event Timestamp Parser
+ * Accurately parses Event Start Date and Event Start Time into epoch milliseconds for chronological sorting.
+ * Correctly parses:
+ * - Dates: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, YYYY/MM/DD, Date objects, ISO strings
+ * - Times: 12-hour AM/PM ("09:30 AM", "7:00 PM", "9am", "11:15pm"), 24-hour ("14:30", "09:15:00")
+ * - If time is absent, defaults to beginning of the day (00:00:00).
+ * - If date is absent, falls back to MAX_SAFE_INTEGER so it sorts at the end.
+ */
+export function parseEventDateTimeToTimestamp(
+  dateVal?: string | null | Date,
+  timeVal?: string | null | Date
+): number {
+  if (!dateVal && !timeVal) return Number.MAX_SAFE_INTEGER;
+
+  let year: number | null = null;
+  let month = 0; // 0-indexed
+  let day = 1;
+
+  if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+    year = dateVal.getFullYear();
+    month = dateVal.getMonth();
+    day = dateVal.getDate();
+  } else if (typeof dateVal === 'string' && dateVal.trim() !== '') {
+    const trimmedDate = dateVal.trim();
+    // 1. Check DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+    const dmyMatch = trimmedDate.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+    if (dmyMatch) {
+      day = parseInt(dmyMatch[1], 10);
+      month = parseInt(dmyMatch[2], 10) - 1;
+      year = parseInt(dmyMatch[3], 10);
+    } else {
+      // 2. Check YYYY-MM-DD or YYYY/MM/DD
+      const ymdMatch = trimmedDate.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+      if (ymdMatch) {
+        year = parseInt(ymdMatch[1], 10);
+        month = parseInt(ymdMatch[2], 10) - 1;
+        day = parseInt(ymdMatch[3], 10);
+      } else {
+        const fallback = new Date(trimmedDate);
+        if (!isNaN(fallback.getTime())) {
+          year = fallback.getFullYear();
+          month = fallback.getMonth();
+          day = fallback.getDate();
+        }
+      }
+    }
+  }
+
+  // If no date was found but we have time, fallback year to 2000 so time sorting still works
+  if (year === null) {
+    if (timeVal) {
+      year = 2000;
+      month = 0;
+      day = 1;
+    } else {
+      return Number.MAX_SAFE_INTEGER;
+    }
+  }
+
+  let hours = 0;
+  let minutes = 0;
+  let seconds = 0;
+
+  if (timeVal instanceof Date && !isNaN(timeVal.getTime())) {
+    hours = timeVal.getHours();
+    minutes = timeVal.getMinutes();
+    seconds = timeVal.getSeconds();
+  } else if (typeof timeVal === 'string' && timeVal.trim() !== '') {
+    const trimmedTime = timeVal.trim();
+    // 1. Check 12-hour AM/PM: "09:30 AM", "7:00 PM", "9am", "10:30pm"
+    const ampmMatch = trimmedTime.match(/^(\d{1,2})(?::(\d{1,2}))?(?::(\d{1,2}))?\s*(am|pm)$/i);
+    if (ampmMatch) {
+      let h = parseInt(ampmMatch[1], 10);
+      const m = ampmMatch[2] ? parseInt(ampmMatch[2], 10) : 0;
+      const s = ampmMatch[3] ? parseInt(ampmMatch[3], 10) : 0;
+      const ampm = ampmMatch[4].toLowerCase();
+      if (ampm === 'pm' && h < 12) h += 12;
+      if (ampm === 'am' && h === 12) h = 0;
+      hours = h;
+      minutes = m;
+      seconds = s;
+    } else {
+      // 2. Check 24-hour time: "14:30", "09:15:00", "08:00"
+      const time24Match = trimmedTime.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?/);
+      if (time24Match) {
+        hours = parseInt(time24Match[1], 10);
+        minutes = parseInt(time24Match[2], 10);
+        seconds = time24Match[3] ? parseInt(time24Match[3], 10) : 0;
+      }
+    }
+  }
+
+  const constructed = new Date(year, month, day, hours, minutes, seconds);
+  const time = constructed.getTime();
+  return isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
+}
+
 export function cleanPhone(phone: string | undefined): string {
   if (!phone) return '';
   const cleaned = phone.replace(/[^\d]/g, '');

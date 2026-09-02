@@ -200,7 +200,26 @@ export const PendingPaymentsReport: React.FC = () => {
 
       const primaryEvent = leadEvents[0];
       const primaryEventDate = primaryEvent?.event_date || primaryEvent?.event_start_date || lead.event_date || '';
-      const eventType = leadEvents.map((e: any) => e.event_name || e.event_type).filter(Boolean).join(', ') || lead.event_type || 'Event';
+
+      // Extract actual saved event types (strictly event_type, not event_name)
+      const rawEventTypes: string[] = [];
+      if (leadEvents && leadEvents.length > 0) {
+        leadEvents.forEach((e: any) => {
+          if (e.event_type && typeof e.event_type === 'string' && e.event_type.trim()) {
+            rawEventTypes.push(e.event_type.trim());
+          }
+        });
+      }
+      if (lead.event_type && typeof lead.event_type === 'string' && lead.event_type.trim()) {
+        rawEventTypes.push(lead.event_type.trim());
+      }
+      if (order?.event_type && typeof order.event_type === 'string' && order.event_type.trim()) {
+        rawEventTypes.push(order.event_type.trim());
+      }
+
+      // De-duplicate actual event types
+      const recordEventTypes = Array.from(new Set(rawEventTypes));
+      const eventType = recordEventTypes.join(', ') || primaryEvent?.event_type || lead.event_type || order?.event_type || 'Other';
 
       const isOverdue = primaryEventDate && primaryEventDate < TODAY_STR && remainingAmount > 0;
       
@@ -224,6 +243,7 @@ export const PendingPaymentsReport: React.FC = () => {
         customerName: lead.customer_name,
         mobileNumber: lead.mobile,
         eventType,
+        recordEventTypes,
         eventDate: primaryEventDate,
         events: leadEvents,
         paymentCompletionDate,
@@ -325,8 +345,17 @@ export const PendingPaymentsReport: React.FC = () => {
       if (searchTerm && !rec.customerName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
       if (searchOrderId && !rec.orderId.toLowerCase().includes(searchOrderId.toLowerCase())) return false;
 
-      // Event Type Filter
-      if (eventTypeFilter !== 'All' && rec.eventType !== eventTypeFilter) return false;
+      // Event Type Filter (strictly matches actual saved event types)
+      if (eventTypeFilter !== 'All') {
+        const filterVal = eventTypeFilter.trim().toLowerCase();
+        const hasMatchingEventType = (rec.recordEventTypes && rec.recordEventTypes.some((et: string) => et.trim().toLowerCase() === filterVal))
+          || (rec.eventType && rec.eventType.trim().toLowerCase() === filterVal)
+          || (rec.lead?.event_type && String(rec.lead.event_type).trim().toLowerCase() === filterVal)
+          || (rec.order?.event_type && String(rec.order.event_type).trim().toLowerCase() === filterVal)
+          || (rec.events && rec.events.some((e: any) => e.event_type && String(e.event_type).trim().toLowerCase() === filterVal));
+
+        if (!hasMatchingEventType) return false;
+      }
 
       // Payment Status Filter
       if (paymentStatusFilter !== 'All') {
@@ -345,14 +374,10 @@ export const PendingPaymentsReport: React.FC = () => {
     });
   }, [allPendingRecords, startDate, endDate, searchTerm, searchOrderId, eventTypeFilter, paymentStatusFilter, activeCardFilter]);
 
-  // Unique event types for dropdown
+  // Unique event types for dropdown - strictly sourced from Sales Step 2 EVENT_TYPES
   const uniqueEventTypes = useMemo(() => {
-    const types = new Set<string>(EVENT_TYPES);
-    allPendingRecords.forEach(r => {
-      if (r.eventType) types.add(r.eventType);
-    });
-    return Array.from(types);
-  }, [allPendingRecords]);
+    return Array.from(new Set(EVENT_TYPES));
+  }, []);
 
   // Handle analytical card clicks
   const handleCardClick = (cardType: 'All' | 'Pending' | 'Partial' | 'Overdue' | 'Upcoming' | 'Average') => {

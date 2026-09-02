@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { formatDateDDMMYY, formatTime12Hour } from '../../utils';
+import { formatDateDDMMYY, formatTime12Hour, parseEventDateTimeToTimestamp } from '../../utils';
 import { useRole } from '../RoleContext';
 
 interface EventItem {
@@ -218,6 +218,12 @@ export const ProductionEventManager: React.FC = () => {
             targetOrder?.event_location ||
             '',
         }));
+
+        eventsList.sort((a, b) => {
+          const tA = parseEventDateTimeToTimestamp(a.event_date, a.event_start_time);
+          const tB = parseEventDateTimeToTimestamp(b.event_date, b.event_start_time);
+          return tA - tB;
+        });
       } else {
         const singleName =
           targetLead?.event_name ||

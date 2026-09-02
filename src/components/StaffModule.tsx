@@ -876,29 +876,33 @@ export const StaffModule: React.FC = () => {
 
   // Auto-scroll popup into view for the three target workflows when opened
   useEffect(() => {
+    let timer: any = null;
+    let lockTimer: any = null;
     if (photoModalData) {
       const { stage } = photoModalData;
       if (stage === 'Event Start' || stage === 'Equipment Handover' || stage === 'Event Complete') {
         // Temporarily allow page scrolling so scrollIntoView can shift the viewport
         document.body.style.overflow = '';
-        const timer = setTimeout(() => {
+        timer = setTimeout(() => {
           if (photoModalRef.current) {
             photoModalRef.current.scrollIntoView({
               behavior: 'smooth',
               block: 'center'
             });
             // Re-lock body overflow after smooth scroll finishes
-            const lockTimer = setTimeout(() => {
+            lockTimer = setTimeout(() => {
               if (photoModalData) {
                 document.body.style.overflow = 'hidden';
               }
             }, 850);
-            return () => clearTimeout(lockTimer);
           }
         }, 80);
-        return () => clearTimeout(timer);
       }
     }
+    return () => {
+      if (timer) clearTimeout(timer);
+      if (lockTimer) clearTimeout(lockTimer);
+    };
   }, [photoModalData]);
 
   // Photos attached in modal & raw footage link
@@ -1618,11 +1622,17 @@ export const StaffModule: React.FC = () => {
           setStaffStatuses(nextStatuses);
           localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
 
-          await refreshData();
-
+          // Close modal immediately and restore scrolling
           setPhotoModalData(null);
           setModalPhotos({});
+          document.body.style.overflow = '';
           showToast("✅ Equipment Received / Asset Image saved!");
+
+          try {
+            await refreshData();
+          } catch (e) {
+            console.warn('refreshData error ignored:', e);
+          }
           return;
         }
 
@@ -1809,11 +1819,17 @@ export const StaffModule: React.FC = () => {
             }
           }
 
-          await refreshData();
-
+          // Close modal immediately and restore scrolling
           setPhotoModalData(null);
           setModalPhotos({});
+          document.body.style.overflow = '';
           showToast("✅ Event Started confirmed and saved successfully!");
+
+          try {
+            await refreshData();
+          } catch (e) {
+            console.warn('refreshData error ignored:', e);
+          }
         }
       } catch (error: any) {
         console.error('Error updating Event Start status:', error);
@@ -2145,13 +2161,19 @@ export const StaffModule: React.FC = () => {
         }
       }
 
-      await refreshData();
-
+      // Close modal immediately and restore scrolling
       setPhotoModalData(null);
       setModalPhotos({});
       setModalRawFootageLink('');
+      document.body.style.overflow = '';
       const stageLabel = stage === 'Event Complete' ? 'Event End' : stage;
       showToast(`✅ ${stageLabel} submitted & saved successfully!`);
+
+      try {
+        await refreshData();
+      } catch (e) {
+        console.warn('refreshData error ignored:', e);
+      }
 
     } catch (error: any) {
       console.error('Error updating status:', error);
@@ -2618,7 +2640,7 @@ export const StaffModule: React.FC = () => {
       />
 
       {/* EQUIPMENT PHOTO PROOF VERIFICATION MODAL (EVENT START / EVENT COMPLETE) */}
-      {photoModalData && (
+      {photoModalData && createPortal(
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
           <div ref={photoModalRef} className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
@@ -2882,7 +2904,8 @@ export const StaffModule: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Add Note Modal */}

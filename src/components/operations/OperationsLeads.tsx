@@ -30,6 +30,7 @@ import {
   getEventTeamMemberStaffMapping,
   calculateOrderAssignmentStats,
   isRoleMatch,
+  parseEventDateTimeToTimestamp,
   EventTeamMemberConfig
 } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
@@ -2970,13 +2971,28 @@ export const OperationsLeads: React.FC = () => {
                   const teamMembersConfig = extractTeamMembersConfig(parentLeadInstance, targetLeadPkgs);
                   const totalEvents = parentLeadInstance?.events?.length || 1;
 
-                  return parentLeadInstance?.events && parentLeadInstance.events.map((ev, index) => {
-                    const evId = ev.id || `EV-N/A-${index}`;
+                  const rawEvents = parentLeadInstance?.events || [];
+                  const sortedEventsWithMeta = rawEvents.map((ev, originalIndex) => ({ ev, originalIndex }))
+                    .sort((a, b) => {
+                      const tA = parseEventDateTimeToTimestamp(
+                        a.ev.event_date || a.ev.start_date || a.ev.eventDate || a.ev.date,
+                        a.ev.event_start_time || a.ev.event_time || a.ev.start_time || a.ev.eventStartTime || a.ev.time
+                      );
+                      const tB = parseEventDateTimeToTimestamp(
+                        b.ev.event_date || b.ev.start_date || b.ev.eventDate || b.ev.date,
+                        b.ev.event_start_time || b.ev.event_time || b.ev.start_time || b.ev.eventStartTime || b.ev.time
+                      );
+                      if (tA !== tB) return tA - tB;
+                      return a.originalIndex - b.originalIndex;
+                    });
+
+                  return sortedEventsWithMeta.map(({ ev, originalIndex }, displayIndex) => {
+                    const evId = ev.id || `EV-N/A-${originalIndex}`;
                     const allocation = eventAllocations[evId] || { staff: [] };
                     const allocStaff = allocation.staff || [];
                     
                     const evName = ev.event_name || ev.event_type || 'Unnamed Event';
-                    const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
+                    const includedRoles = getEventRolesForEvent(ev, originalIndex, teamMembersConfig, totalEvents);
                     let loadError = null;
                     if (includedRoles.length === 0) {
                       loadError = `No Team Members specified for event "${evName}". You can manually add staff roles below.`;
@@ -3024,7 +3040,7 @@ export const OperationsLeads: React.FC = () => {
                         > 
                            <div className="flex items-center gap-3">
                               <span className="p-1.5 rounded-lg bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-500 select-none uppercase font-bold font-mono">
-                                🎥 EVENT {index + 1}
+                                🎥 EVENT {displayIndex + 1}
                               </span>
                               <h4 className="text-sm font-sans font-bold text-white uppercase tracking-wide">
                                 {eventNameDisplay}
