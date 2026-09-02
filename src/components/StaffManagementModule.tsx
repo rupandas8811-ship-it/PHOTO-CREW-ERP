@@ -778,7 +778,7 @@ export const StaffManagementModule: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowStaffPassword(!showStaffPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer p-1"
                 >
                   {showStaffPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -1150,7 +1150,7 @@ export const StaffManagementModule: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowNewStaffPassword(!showNewStaffPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer p-1"
                     >
                       {showNewStaffPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>

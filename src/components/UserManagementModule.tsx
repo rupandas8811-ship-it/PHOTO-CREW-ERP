@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRole } from './RoleContext';
 import { 
-  Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle, Activity, Server, Database, Check, AlertCircle, Terminal, HelpCircle as HelpIcon
+  Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle, Activity, Server, Database, Check, AlertCircle, Terminal, HelpCircle as HelpIcon, Eye, EyeOff
 } from 'lucide-react';
 import { User, UserRole } from '../types';
 import { supabaseClient, currentDiagnosticReport, updateDiagnosticMetric } from '../supabaseClient';
@@ -134,6 +134,7 @@ export const UserManagementModule: React.FC = () => {
   const [newRole, setNewRole] = useState<UserRole>('Sales Team');
   const [newActive, setNewActive] = useState(true);
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   // Edit User Form State
   const [editName, setEditName] = useState('');
@@ -144,6 +145,7 @@ export const UserManagementModule: React.FC = () => {
 
   // Password reset state
   const [newResetPasswordValue, setNewResetPasswordValue] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
@@ -579,14 +581,23 @@ export const UserManagementModule: React.FC = () => {
 
                 <div>
                   <label className="block font-semibold text-slate-400 mb-1">Initial Password *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter unique login password..."
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-755 rounded-lg py-1.5 px-3 text-slate-101 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      required
+                      placeholder="Enter unique login password..."
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-755 rounded-lg py-1.5 pl-3 pr-10 text-slate-101 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer p-0.5"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-2 border-t border-slate-800/80 pt-3">
@@ -741,14 +752,23 @@ export const UserManagementModule: React.FC = () => {
 
                 <div>
                   <label className="block font-semibold text-slate-400 mb-1">New Login Password Key *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter strong login key..."
-                    value={newResetPasswordValue}
-                    onChange={(e) => setNewResetPasswordValue(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-slate-101 font-mono focus:ring-1 focus:ring-rose-405"
-                  />
+                  <div className="relative">
+                    <input
+                      type={showResetPassword ? "text" : "password"}
+                      required
+                      placeholder="Enter strong login key..."
+                      value={newResetPasswordValue}
+                      onChange={(e) => setNewResetPasswordValue(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 pl-3 pr-10 text-slate-101 font-mono focus:ring-1 focus:ring-rose-405"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPassword(!showResetPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer p-0.5"
+                    >
+                      {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                   <p className="text-[10px] text-slate-500 mt-1">This takes effect instantly. The employee must log back in using this new security key.</p>
                 </div>
 
@@ -906,14 +926,23 @@ export const UserManagementModule: React.FC = () => {
 
                   <div>
                     <label className="block font-semibold text-slate-400 mb-1">Initial Password *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Enter unique login password..."
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 px-3 text-slate-101 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-505 font-mono"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? "text" : "password"}
+                        required
+                        placeholder="Enter unique login password..."
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 pl-3 pr-10 text-slate-101 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-505 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer p-0.5"
+                      >
+                        {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-2 border-t border-slate-800 pb-1 pt-3">
@@ -1036,14 +1065,23 @@ export const UserManagementModule: React.FC = () => {
 
                   <div>
                     <label className="block font-semibold text-slate-400 mb-1">New Login Password Key *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Enter strong login key..."
-                      value={newResetPasswordValue}
-                      onChange={(e) => setNewResetPasswordValue(e.target.value)}
-                      className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 px-3 text-slate-101 font-mono focus:ring-1 focus:ring-rose-405 focus:outline-none"
-                    />
+                    <div className="relative">
+                      <input
+                        type={showResetPassword ? "text" : "password"}
+                        required
+                        placeholder="Enter strong login key..."
+                        value={newResetPasswordValue}
+                        onChange={(e) => setNewResetPasswordValue(e.target.value)}
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 pl-3 pr-10 text-slate-101 font-mono focus:ring-1 focus:ring-rose-405 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowResetPassword(!showResetPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer p-0.5"
+                      >
+                        {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
                     <p className="text-[10px] text-slate-500 mt-1 font-medium">This takes effect instantly. The employee must log back in using this new security key.</p>
                   </div>
 

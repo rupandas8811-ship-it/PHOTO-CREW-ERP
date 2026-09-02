@@ -4,7 +4,7 @@ import {
   Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, 
   PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle, Activity, 
   Server, Database, Check, AlertCircle as AlertCircleIcon, Terminal, 
-  Trash2, Briefcase, Eye, Save, Lock
+  Trash2, Briefcase, Eye, EyeOff, Save, Lock
 } from 'lucide-react';
 import { User, UserRole, Lead } from '../types';
 
@@ -29,6 +29,7 @@ export const SalesStaffManagementModule: React.FC = () => {
   const [newMobile, setNewMobile] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [newEmployeeId, setNewEmployeeId] = useState('');
   const [newActive, setNewActive] = useState(true);
 
@@ -41,6 +42,7 @@ export const SalesStaffManagementModule: React.FC = () => {
 
   // Reset Password State
   const [resetPwd, setResetPwd] = useState('');
+  const [showResetPwd, setShowResetPwd] = useState(false);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -289,7 +291,23 @@ export const SalesStaffManagementModule: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Password *</label>
-                  <input type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors" placeholder="Create a secure password" />
+                  <div className="relative">
+                    <input 
+                      type={showNewPassword ? "text" : "password"} 
+                      required 
+                      value={newPassword} 
+                      onChange={e => setNewPassword(e.target.value)} 
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-4 pr-10 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-indigo-500 transition-colors" 
+                      placeholder="Create a secure password" 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer p-1"
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">Email Address (Optional)</label>
@@ -400,7 +418,23 @@ export const SalesStaffManagementModule: React.FC = () => {
             <form onSubmit={handleResetPasswordSubmit} className="p-5 space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">New Password *</label>
-                <input type="password" required value={resetPwd} onChange={e => setResetPwd(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 transition-colors" placeholder="Enter new password" />
+                <div className="relative">
+                  <input 
+                    type={showResetPwd ? "text" : "password"} 
+                    required 
+                    value={resetPwd} 
+                    onChange={e => setResetPwd(e.target.value)} 
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-4 pr-10 py-2 text-sm text-slate-100 focus:outline-none focus:border-sky-500 transition-colors" 
+                    placeholder="Enter new password" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPwd(!showResetPwd)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer p-1"
+                  >
+                    {showResetPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <div className="pt-2 flex gap-2 justify-end">
                 <button type="button" onClick={() => setShowResetPwdForm(false)} className="px-4 py-2 rounded-lg text-xs font-bold text-slate-300 hover:bg-zinc-800 transition-colors">
