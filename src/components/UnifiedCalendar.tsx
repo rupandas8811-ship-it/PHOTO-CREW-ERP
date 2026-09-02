@@ -1562,22 +1562,22 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
 
                         {/* Event names list inside the existing date box */}
                         {evs.length > 0 && (
-                          <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0 pointer-events-none">
-                            {evs.slice(0, 3).map((ev, eIdx) => {
+                          <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-y-auto overflow-x-hidden mt-0.5 min-h-0 pr-0.5 pointer-events-auto">
+                            {evs.map((ev, eIdx) => {
                               const displayName = ev.eventName || ev.raw?.event_name || ev.eventType || ev.customerName || 'Event';
                               return (
                                 <div
                                   key={ev.id || eIdx}
-                                  className="w-full truncate text-[8px] sm:text-[10px] leading-tight px-1 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800/80 font-medium text-left"
+                                  className="w-full truncate shrink-0 text-[8px] sm:text-[9.5px] leading-tight px-1 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800/80 font-medium text-left hover:text-white hover:border-zinc-700"
                                   title={displayName}
                                 >
                                   {displayName}
                                 </div>
                               );
                             })}
-                            {evs.length > 3 && (
-                              <div className="text-[8px] font-mono text-zinc-400 px-1 font-bold">
-                                +{evs.length - 3} more
+                            {evs.length > 4 && (
+                              <div className="text-[8px] font-mono text-yellow-400 px-1 py-0.2 font-bold shrink-0 text-left">
+                                +{evs.length - 4} more
                               </div>
                             )}
                           </div>

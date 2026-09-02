@@ -2215,7 +2215,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
       <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {/* Empty Leading Days */}
         {Array.from({ length: firstDayIndex }).map((_, i) => (
-          <div key={`empty-${i}`} className="min-h-[70px] sm:min-h-[90px] p-1 bg-zinc-900/20 rounded-xl border border-zinc-900/50 opacity-30" />
+          <div key={`empty-${i}`} className="h-[88px] sm:h-[108px] min-h-[88px] sm:min-h-[108px] max-h-[88px] sm:max-h-[108px] p-1 bg-zinc-900/20 rounded-xl border border-zinc-900/50 opacity-30" />
         ))}
 
         {/* Days of Month */}
@@ -2236,7 +2236,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
                   onSelectEvent({ date: fullDateStr, events: dayEvents });
                 }
               }}
-              className={`min-h-[70px] sm:min-h-[90px] p-1 sm:p-1.5 rounded-xl border flex flex-col justify-start transition-all overflow-hidden ${
+              className={`h-[88px] sm:h-[108px] min-h-[88px] sm:min-h-[108px] max-h-[88px] sm:max-h-[108px] p-1 sm:p-1.5 rounded-xl border flex flex-col justify-start transition-all overflow-hidden relative ${
                 dayEvents.length > 0 ? 'cursor-pointer hover:border-zinc-700' : ''
               } ${
                 isToday
@@ -2255,21 +2255,31 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
                 )}
               </div>
 
-              {/* Event Cards inside the Day Cell */}
+              {/* Event Cards inside the Day Cell - Scrollable with max 4 directly visible before scroll */}
               {dayEvents.length > 0 && (
-                <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0">
+                <div 
+                  className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-y-auto overflow-x-hidden mt-0.5 min-h-0 pr-0.5 text-left"
+                  onClick={(e) => {
+                    // Allow clicking anywhere in the scrollable container to trigger selection modal as well
+                  }}
+                >
                   {dayEvents.map((ev, eIdx) => {
                     const displayName = ev.eventName || ev.title || ev.customerName || 'Event';
                     return (
                       <div
                         key={ev.id || eIdx}
-                        className="w-full truncate text-[8px] sm:text-[10px] leading-tight px-1 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800/80 font-medium text-left"
+                        className="w-full truncate shrink-0 text-[8px] sm:text-[9.5px] leading-tight px-1 py-0.5 rounded bg-zinc-900/95 text-zinc-300 border border-zinc-800/80 font-medium text-left hover:text-white hover:border-zinc-700"
                         title={displayName}
                       >
                         {displayName}
                       </div>
                     );
                   })}
+                  {dayEvents.length > 4 && (
+                    <div className="text-[8px] sm:text-[9px] font-mono text-amber-400/90 px-1 py-0.2 font-bold shrink-0 text-left">
+                      +{dayEvents.length - 4} more
+                    </div>
+                  )}
                 </div>
               )}
             </div>
