@@ -117,38 +117,122 @@ export const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, d
   );
 };
 
-export function sortEventsAscending(events: any[]): any[] {
-  if (!events || !Array.isArray(events)) return [];
-  return [...events].sort((a, b) => {
-    const dateA = new Date(a.event_date || a.event_start_date || 0).getTime();
-    const dateB = new Date(b.event_date || b.event_start_date || 0).getTime();
-    
-    if (dateA !== dateB) return dateA - dateB;
+/**
+ * Safely parse date and time components of an event into a timezone-agnostic millisecond timestamp.
+ * Supports:
+ * - Date: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY, YYYY/MM/DD, DD-MM-YY, and ISO datetime strings.
+ * - Time: 12-hour (e.g., 11:32 AM, 12:33 AM, 12:31 AM, 12:00 PM) and 24-hour formats (e.g., 00:31, 14:30).
+ * Uses Date.UTC to guarantee strictly chronological sorting with zero timezone offset shifts.
+ */
+export function getEventChronologicalTimestamp(event: any): number {
+  if (!event || typeof event !== 'object') return Number.MAX_SAFE_INTEGER;
 
-    const timeA = a.event_start_time || a.reporting_time || a.event_time || '';
-    const timeB = b.event_start_time || b.reporting_time || b.event_time || '';
-    
-    const parseTime = (t: string) => {
-      if (!t) return 0;
-      let hours = 0;
-      let minutes = 0;
-      const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/i);
-      if (match) {
-        hours = parseInt(match[1], 10) || 0;
-        minutes = parseInt(match[2], 10) || 0;
-        const ampm = match[3]?.toUpperCase();
-        if (ampm === 'PM' && hours < 12) hours += 12;
-        if (ampm === 'AM' && hours === 12) hours = 0;
-      } else {
-        const parts = t.split(':').map(Number);
-        hours = parts[0] || 0;
-        minutes = parts[1] || 0;
+  // 1. Extract raw date string from all possible event date fields
+  const rawDate = String(
+    event.event_start_date ||
+    event.event_date ||
+    event.start_date ||
+    event.date ||
+    event.reporting_date ||
+    ''
+  ).trim();
+
+  // 2. Extract raw time string from all possible event time fields
+  let rawTime = String(
+    event.event_start_time ||
+    event.event_time ||
+    event.start_time ||
+    event.time ||
+    event.reporting_time ||
+    ''
+  ).trim();
+
+  let year = 0;
+  let month = 1; // 1-12
+  let day = 1;   // 1-31
+  let hasDate = false;
+
+  if (rawDate) {
+    // Check if ISO timestamp or contains datetime (e.g., "2026-09-03T11:32:00" or "2026-09-03 11:32:00")
+    const isoMatch = rawDate.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
+    if (isoMatch) {
+      hasDate = true;
+      year = parseInt(isoMatch[1], 10);
+      month = parseInt(isoMatch[2], 10);
+      day = parseInt(isoMatch[3], 10);
+      if (!rawTime && isoMatch[4] !== undefined) {
+        rawTime = `${isoMatch[4]}:${isoMatch[5] || '00'}${isoMatch[6] ? `:${isoMatch[6]}` : ''}`;
       }
-      return hours * 60 + minutes;
-    };
+    } else {
+      // Check for DD/MM/YYYY or DD-MM-YYYY (e.g. 03/09/2026, 20-08-2026)
+      const ddmmyyyyMatch = rawDate.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+      if (ddmmyyyyMatch) {
+        hasDate = true;
+        const p1 = parseInt(ddmmyyyyMatch[1], 10);
+        const p2 = parseInt(ddmmyyyyMatch[2], 10);
+        const p3 = parseInt(ddmmyyyyMatch[3], 10);
+        year = p3;
+        if (p1 > 12) {
+          day = p1;
+          month = p2;
+        } else if (p2 > 12) {
+          month = p1;
+          day = p2;
+        } else {
+          // Standard DD/MM/YYYY
+          day = p1;
+          month = p2;
+        }
+      } else {
+        // Check for DD-MM-YY (e.g. 03-09-26)
+        const ddmmyyMatch = rawDate.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$/);
+        if (ddmmyyMatch) {
+          hasDate = true;
+          day = parseInt(ddmmyyMatch[1], 10);
+          month = parseInt(ddmmyyMatch[2], 10);
+          year = 2000 + parseInt(ddmmyyMatch[3], 10);
+        }
+      }
+    }
+  }
 
-    return parseTime(timeA) - parseTime(timeB);
-  });
+  if (!hasDate) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  // 3. Parse Time (12-hour AM/PM or 24-hour)
+  let hours = 0;
+  let minutes = 0;
+  let seconds = 0;
+
+  if (rawTime) {
+    const timeMatch = rawTime.match(/(\d{1,2})[:.](\d{1,2})(?:[:.](\d{1,2}))?\s*(AM|PM)?/i);
+    if (timeMatch) {
+      hours = parseInt(timeMatch[1], 10) || 0;
+      minutes = parseInt(timeMatch[2], 10) || 0;
+      seconds = parseInt(timeMatch[3], 10) || 0;
+      const ampm = timeMatch[4] ? timeMatch[4].toUpperCase() : null;
+
+      if (ampm === 'PM') {
+        if (hours < 12) hours += 12;
+      } else if (ampm === 'AM') {
+        if (hours === 12) hours = 0;
+      }
+    }
+  }
+
+  return Date.UTC(year, month - 1, day, hours, minutes, seconds);
+}
+
+export function sortEventsAscending<T = any>(events: T[]): T[] {
+  if (!events || !Array.isArray(events)) return [];
+  return events
+    .map((event, index) => ({ event, index, ts: getEventChronologicalTimestamp(event) }))
+    .sort((a, b) => {
+      if (a.ts !== b.ts) return a.ts - b.ts;
+      return a.index - b.index;
+    })
+    .map(item => item.event);
 }
 
 export function parseQtyAndText(raw: any): { qty: number; text: string } {
@@ -1038,10 +1122,10 @@ export const generateQuotationPDF = (
   }[] = [];
 
   if (lead.events && lead.events.length > 0) {
-    // 1. First, create the array of events
-    const unsortedEvents: any[] = [];
-    const isMulti = lead.events.length > 1;
-    lead.events.forEach((event: any, eventIdx: number) => {
+    // Sort events in exact same sequence as Step 3 (chronological by date + time)
+    const sortedEvents = sortEventsAscending(lead.events);
+    const isMulti = sortedEvents.length > 1;
+    sortedEvents.forEach((event: any, eventIdx: number) => {
       const evId = event.id || event.event_id || `EV-${eventIdx + 1}`;
       const eventKey = `${pkgId}_${evId}`;
       const altKey = `Custom Package_${evId}`;
@@ -1081,8 +1165,8 @@ export const generateQuotationPDF = (
       eventsToRender.push({
         eventName,
         eventDate: event.event_start_date || event.event_date || "",
-        eventTime: event.event_time || event.event_start_time || "",
-        eventEndDate: event.event_end_date || "",
+        eventTime: event.event_start_time || event.event_time || event.reporting_time || "",
+        eventEndDate: event.event_end_date || (event as any).Event_End_Date || "",
         eventEndTime: event.event_end_time || "",
         eventLocation: event.event_location || "N/A",
         guestPax: event.guest_pax !== undefined && event.guest_pax !== null && event.guest_pax !== '' ? String(event.guest_pax) : (lead.guest_pax !== undefined && lead.guest_pax !== null && lead.guest_pax !== '' ? String(lead.guest_pax) : (lead.total_pax ? String(lead.total_pax) : 'N/A')),

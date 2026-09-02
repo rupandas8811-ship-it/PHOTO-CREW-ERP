@@ -202,7 +202,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
   const leadSourcesList = props.LEAD_SOURCES || LEAD_SOURCES || [];
   const eventTypesList = props.EVENT_TYPES || EVENT_TYPES || [];
   const shootTypesList = props.SHOOT_TYPES || SHOOT_TYPES || [];
-  const sortedCrmEvents = crmWizardStep === 3 ? sortEventsAscending(crmEvents || []) : (crmEvents || []);
+  const sortedCrmEvents = sortEventsAscending(crmEvents || []);
 
   if (activeTab === 'create' && !selectedLead) {
     return (
