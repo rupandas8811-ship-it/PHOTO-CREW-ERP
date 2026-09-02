@@ -4981,7 +4981,7 @@ export const OperationsLeads: React.FC = () => {
                             <tbody className="divide-y divide-zinc-800/60 text-xs">
                               {members.map((member, mIdx) => {
                                 const normStaffName = (member.staff_name || '').trim().toLowerCase();
-                                const normEvName = (evName || '').trim().toLowerCase();
+                                const normEvName = (group.eventName || '').trim().toLowerCase();
                                 const memberEvId = member.event_id;
 
                                 const rowEqKey = `${ord.order_id}-${memberEvId || 'gen'}-${member.staff_name}-${mIdx}`;
