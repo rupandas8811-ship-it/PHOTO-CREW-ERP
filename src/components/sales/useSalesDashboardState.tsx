@@ -1288,8 +1288,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const initEventsReporting = (lead: Lead | null | undefined) => {
     if (!lead) return;
     const initialMap: Record<string, { reporting_date: string, reporting_time: string }> = {};
-    if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
-      lead.events.forEach((ev, idx) => {
+    const eventsList = sortEventsAscending(
+      (crmEvents && Array.isArray(crmEvents) && crmEvents.length > 0 && selectedLead?.lead_id === lead.lead_id)
+        ? crmEvents
+        : (lead.events || [])
+    );
+    if (eventsList && Array.isArray(eventsList) && eventsList.length > 0) {
+      eventsList.forEach((ev, idx) => {
         const key = ev.id || `ev_${idx}`;
         initialMap[key] = {
           reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || lead.Reporting_date || (lead as any).reporting_date || lead.event_date || '',
@@ -7480,9 +7485,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     }
 
     // Validate that each event has a Reporting Date and Reporting Time
-    if (selectedLead.events && selectedLead.events.length > 0) {
-      for (let i = 0; i < selectedLead.events.length; i++) {
-        const ev = selectedLead.events[i];
+    const modalEvents = sortEventsAscending(
+      (crmEvents && Array.isArray(crmEvents) && crmEvents.length > 0 && selectedLead?.lead_id)
+        ? crmEvents
+        : (selectedLead.events || [])
+    );
+
+    if (modalEvents.length > 0) {
+      for (let i = 0; i < modalEvents.length; i++) {
+        const ev = modalEvents[i];
         const key = ev.id || `ev_${i}`;
         const rep = eventsReporting[key];
         const evTitle = ev.event_name || ev.event_type || `Event ${i + 1}`;
@@ -7511,8 +7522,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       setIsSaving(true);
 
       // Save each event's reporting details to lead_events table in Supabase
-      if (selectedLead.events && selectedLead.events.length > 0) {
-        const updatedEvents = selectedLead.events.map((ev, idx) => {
+      if (modalEvents.length > 0) {
+        const updatedEvents = modalEvents.map((ev, idx) => {
           const key = ev.id || `ev_${idx}`;
           const rep = eventsReporting[key] || { reporting_date: '', reporting_time: '' };
           return {
@@ -7536,8 +7547,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         });
       }
 
-      const firstRepTime = (selectedLead.events && selectedLead.events.length > 0)
-        ? eventsReporting[selectedLead.events[0].id || 'ev_0']?.reporting_time
+      const firstRepTime = (modalEvents.length > 0)
+        ? eventsReporting[modalEvents[0].id || 'ev_0']?.reporting_time
         : eventsReporting['default']?.reporting_time;
 
       await confirmOrder(

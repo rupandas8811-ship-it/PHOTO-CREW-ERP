@@ -15,7 +15,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 
 
@@ -27,6 +27,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
   const {
     showConfirmModal,
     selectedLead,
+    crmEvents,
     confirmBookingModalRef,
     confirmForm,
     setConfirmForm,
@@ -47,6 +48,11 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
   } = props;
 
   if (!showConfirmModal || !selectedLead) return null;
+
+  const rawModalEvents = (crmEvents && Array.isArray(crmEvents) && crmEvents.length > 0 && selectedLead?.lead_id)
+    ? crmEvents
+    : (selectedLead?.events && Array.isArray(selectedLead.events) && selectedLead.events.length > 0 ? selectedLead.events : (crmEvents || []));
+  const sortedModalEvents = sortEventsAscending(rawModalEvents);
 
   return (
     <>
@@ -85,8 +91,8 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                 
                 {/* Collapsible Customer Information Card - Expands naturally with NO inner scrollbar */}
                 {(() => {
-                  const combinedType = (selectedLead.events && selectedLead.events.length > 0)
-                    ? selectedLead.events
+                  const combinedType = (sortedModalEvents && sortedModalEvents.length > 0)
+                    ? sortedModalEvents
                         .map(ev => ev.event_name || ev.event_type)
                         .filter(Boolean)
                         .join(', ') || selectedLead.event_type || 'Event'
@@ -161,8 +167,8 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                     <span className="text-[10px] text-slate-400 font-normal">Set reporting time for crew</span>
                   </label>
                   <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 sm:p-3.5 space-y-3">
-                    {selectedLead?.events && selectedLead.events.length > 0 ? (
-                      selectedLead.events.map((ev, i) => {
+                    {sortedModalEvents && sortedModalEvents.length > 0 ? (
+                      sortedModalEvents.map((ev, i) => {
                         const key = ev.id || `ev_${i}`;
                         const repData = eventsReporting[key] || {
                           reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || '',
@@ -178,7 +184,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                           <div key={key} className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2.5">
                             <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
                               <span className="text-xs font-bold text-amber-400 font-sans tracking-wide">
-                                {selectedLead.events.length > 1 ? `EVENT ${i + 1}` : 'EVENT DETAILS'}
+                                {sortedModalEvents.length > 1 ? `EVENT ${i + 1}` : 'EVENT DETAILS'}
                               </span>
                               <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-800 truncate max-w-[150px]">
                                 {ev.event_shoot_type || selectedLead.shoot_type || 'Shoot'}
