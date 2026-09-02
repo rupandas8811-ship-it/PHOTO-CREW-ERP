@@ -1634,14 +1634,14 @@ export function calculateOrderAssignmentStats(params: {
     });
 
     // Resolve assigned staff list for this event
-    let validStaffForEvent: { staff_name: string; staff_role: string; staff_id?: string }[] = [];
+    let validStaffForEvent: { staff_name: string; staff_role: string }[] = [];
 
     if (eventAllocations) {
       const alloc = eventAllocations[evId] || (totalEvents === 1 ? (eventAllocations['default'] || Object.values(eventAllocations)[0]) : null);
       if (alloc?.staff && Array.isArray(alloc.staff)) {
         validStaffForEvent = alloc.staff
           .filter((s: any) => s.staff_name && s.staff_name.trim() !== '' && s.staff_name.toLowerCase() !== 'unassigned' && s.staff_name.toLowerCase() !== 'none' && s.staff_name.toLowerCase() !== 'pending')
-          .map((s: any) => ({ staff_name: s.staff_name.trim(), staff_role: (s.staff_role || '').trim(), staff_id: s.staff_id }));
+          .map((s: any) => ({ staff_name: s.staff_name.trim(), staff_role: (s.staff_role || '').trim() }));
       }
     } else if (staffAssignments) {
       const isMultiEv = totalEvents > 1;
@@ -1653,46 +1653,27 @@ export function calculateOrderAssignmentStats(params: {
           (sa.event_id ? sa.event_id === evId : (!isMultiEv || (sa.event_name && (sa.event_name.toLowerCase() === (ev.event_name || '').toLowerCase() || sa.event_name.toLowerCase() === (ev.event_type || '').toLowerCase())))) &&
           sa.staff_name && sa.staff_name.trim() !== '' && sa.staff_name.toLowerCase() !== 'unassigned' && sa.staff_name.toLowerCase() !== 'none' && sa.staff_name.toLowerCase() !== 'pending'
         )
-        .map((sa: any) => ({ staff_name: sa.staff_name.trim(), staff_role: (sa.staff_role || '').trim(), staff_id: sa.staff_id }));
+        .map((sa: any) => ({ staff_name: sa.staff_name.trim(), staff_role: (sa.staff_role || '').trim() }));
     } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
       const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter((n: string) => n && n.toLowerCase() !== 'unassigned' && n.toLowerCase() !== 'none' && n.toLowerCase() !== 'pending');
       validStaffForEvent = names.map((name: string) => ({ staff_name: name, staff_role: '' }));
     }
 
-    // Deduplicate validStaffForEvent by staff name / staff id to prevent counting duplicate assignments
-    const uniqueStaffMap = new Map<string, { staff_name: string; staff_role: string; staff_id?: string }>();
-    validStaffForEvent.forEach(s => {
-      const key = (s.staff_id && !s.staff_id.startsWith('MOCK-')) ? s.staff_id : s.staff_name.toLowerCase();
-      if (!uniqueStaffMap.has(key)) {
-        uniqueStaffMap.set(key, s);
-      }
-    });
-    const dedupedStaff = Array.from(uniqueStaffMap.values());
-
     if (tasksMap.size > 0) {
-      const assignedStaffSet = new Set<string>();
+      // Required slots exist
       for (const task of Array.from(tasksMap.values())) {
         totalRequired += task.targetQty;
-        const matchingStaff = dedupedStaff.filter(s => {
-          const key = (s.staff_id && !s.staff_id.startsWith('MOCK-')) ? s.staff_id : s.staff_name.toLowerCase();
-          if (assignedStaffSet.has(key)) return false;
-          return !s.staff_role || s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName);
-        });
-
-        const assignedCount = Math.min(matchingStaff.length, task.targetQty);
-        totalAssigned += assignedCount;
-        matchingStaff.slice(0, assignedCount).forEach(s => {
-          const key = (s.staff_id && !s.staff_id.startsWith('MOCK-')) ? s.staff_id : s.staff_name.toLowerCase();
-          assignedStaffSet.add(key);
-        });
-
+        const matchingStaff = validStaffForEvent.filter(s => !s.staff_role || s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
+        const assignedCount = matchingStaff.length;
+        const validCount = Math.min(assignedCount, task.targetQty);
+        totalAssigned += validCount;
         if (assignedCount < task.targetQty) {
           hasPending = true;
         }
       }
     } else {
-      const directCount = dedupedStaff.length;
-      totalRequired += Math.max(1, directCount);
+      // No tasks configured in package for this event
+      const directCount = validStaffForEvent.length;
       totalAssigned += directCount;
       if (directCount === 0) {
         hasPending = true;
