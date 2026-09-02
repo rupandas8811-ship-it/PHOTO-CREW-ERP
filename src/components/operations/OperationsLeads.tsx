@@ -1237,12 +1237,15 @@ export const OperationsLeads: React.FC = () => {
 
       lead.events.forEach((ev: any, evIdx: number) => {
         const evId = ev.id || '';
-        const evOrderAssignments = orderAssignments.filter(sa => 
-          sa.event_id === evId || 
-          (!sa.event_id && totalEvents === 1) ||
-          (sa.event_name && ev.event_name && sa.event_name.toLowerCase() === ev.event_name.toLowerCase()) ||
-          (sa.event_name && ev.event_type && sa.event_name.toLowerCase() === ev.event_type.toLowerCase())
-        );
+        const evOrderAssignments = orderAssignments.filter(sa => {
+          if (sa.event_id && evId) return sa.event_id === evId;
+          if (!sa.event_id && totalEvents === 1) return true;
+          if (sa.event_name) {
+            const evName = (ev.event_name || ev.event_type || '').toLowerCase();
+            return sa.event_name.toLowerCase() === evName;
+          }
+          return false;
+        });
 
         if (evOrderAssignments.length > 0) {
           evOrderAssignments.forEach((sa, saIdx) => {
@@ -1676,11 +1679,16 @@ export const OperationsLeads: React.FC = () => {
         const taskGroups = Array.from(tasksMap.values());
 
         const isMultiEv = totalEvents > 1;
-        const orderStaffAssignments = staffAssignments?.filter(sa => 
-          sa.order_id === order.order_id && 
-          sa.assignment_status !== 'Cancelled' &&
-          (sa.event_id ? sa.event_id === evId : (!isMultiEv || (sa.event_name && (sa.event_name.toLowerCase() === (ev.event_name || '').toLowerCase() || sa.event_name.toLowerCase() === (ev.event_type || '').toLowerCase()))))
-        ) || [];
+        const orderStaffAssignments = staffAssignments?.filter(sa => {
+          if (!sa || sa.order_id !== order.order_id || sa.assignment_status === 'Cancelled') return false;
+          if (sa.event_id && evId) return sa.event_id === evId;
+          if (!sa.event_id && totalEvents === 1) return true;
+          if (sa.event_name) {
+            const evName = (ev.event_name || ev.event_type || '').toLowerCase();
+            return sa.event_name.toLowerCase() === evName;
+          }
+          return false;
+        }) || [];
         const existingNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean) : [];
 
         let assignedEquipment: string[] = [];
@@ -1774,7 +1782,7 @@ export const OperationsLeads: React.FC = () => {
 
         // Ensure every task group has at least targetQty slots in staffList
         taskGroups.forEach(task => {
-          const currentSlots = staffList.filter(s => s.staff_role === task.roleName);
+          const currentSlots = staffList.filter(s => s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
           const missingCount = task.targetQty - currentSlots.length;
           for (let m = 0; m < missingCount; m++) {
             staffList.push({
@@ -4889,17 +4897,21 @@ export const OperationsLeads: React.FC = () => {
         if (!ord) return null;
         const staffDetails = getAssignedStaffDetailsForOrder(ord);
 
-        // Group by event name
-        const groupedByEvent: Record<string, typeof staffDetails> = {};
+        // Group by unique event key
+        const groupedByEvent: Record<string, { eventName: string; eventDate: string; members: typeof staffDetails }> = {};
         staffDetails.forEach(sd => {
-          const evName = sd.event_name || ord.event_type || 'Main Event';
-          if (!groupedByEvent[evName]) {
-            groupedByEvent[evName] = [];
+          const evKey = sd.event_id || sd.event_name || ord.event_type || 'Main Event';
+          if (!groupedByEvent[evKey]) {
+            groupedByEvent[evKey] = {
+              eventName: sd.event_name || ord.event_type || 'Main Event',
+              eventDate: sd.event_date || '',
+              members: []
+            };
           }
-          groupedByEvent[evName].push(sd);
+          groupedByEvent[evKey].members.push(sd);
         });
 
-        const eventNames = Object.keys(groupedByEvent);
+        const eventGroups = Object.values(groupedByEvent);
 
         return createPortal(
           <div 
@@ -4933,22 +4945,22 @@ export const OperationsLeads: React.FC = () => {
 
               <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 text-left scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
                 <div className="w-full max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] mx-auto space-y-6 pb-16">
-                {eventNames.length === 0 ? (
+                {eventGroups.length === 0 ? (
                   <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                     No staff assigned yet.
                   </div>
                 ) : (
-                  eventNames.map((evName, evIdx) => {
-                    const members = groupedByEvent[evName];
+                  eventGroups.map((group, evIdx) => {
+                    const members = group.members;
                     return (
                       <div key={evIdx} className="bg-zinc-950/40 border border-zinc-850/60 rounded-2xl p-4 space-y-3">
                         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                           <h4 className="text-xs font-bold text-indigo-400 font-sans flex items-center gap-1.5">
-                            🎬 {evName}
+                            🎬 {group.eventName}
                           </h4>
-                          {members[0] && (
+                          {group.eventDate && (
                             <span className="text-[10px] font-mono text-zinc-500">
-                              {formatDateDDMMYY(members[0].event_date)}
+                              {formatDateDDMMYY(group.eventDate)}
                             </span>
                           )}
                         </div>

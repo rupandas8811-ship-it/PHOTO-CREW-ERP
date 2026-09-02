@@ -4668,8 +4668,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Track which existing DB assignment_ids have been updated
     const matchedDbAssignmentIds = new Set<string>();
-    // Track staff names already handled in this batch for the DB table to respect idx_unique_staff_per_order
-    const dbHandledStaffNames = new Set<string>();
 
     const assignDate = timestamp.split('T')[0];
 
@@ -4677,6 +4675,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       const aStaffNameTrimmed = (a.staff_name || '').trim();
       const aStaffNameLower = aStaffNameTrimmed.toLowerCase();
       if (!aStaffNameTrimmed) continue;
+
+      const targetEvId = a.event_id || '';
+      const targetEvName = (a.event_name || '').trim().toLowerCase();
 
       // History entry
       historyInserts.push({
@@ -4688,24 +4689,38 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         assigned_at: timestamp
       });
 
+      // Helper to check if an existing assignment belongs to the same event as candidate 'a'
+      const isSameEvent = (ed: StaffAssignment) => {
+        if (targetEvId && ed.event_id) return ed.event_id === targetEvId;
+        if (targetEvName && ed.event_name) return (ed.event_name || '').trim().toLowerCase() === targetEvName;
+        if (!targetEvId && !ed.event_id) return true;
+        return false;
+      };
+
       // Try matching an existing DB assignment by:
       // 1. Exact assignment_id
-      // 2. Exact staff_id (if valid)
-      // 3. Exact staff_name (case-insensitive)
       let matched = existingDbAssignments.find(ed => 
         a.assignment_id && !a.assignment_id.startsWith('slot_') && ed.assignment_id === a.assignment_id
       );
 
-      if (!matched && a.staff_id && !a.staff_id.startsWith('MOCK-')) {
+      // 2. Matching event + staff_id/staff_name + staff_role
+      if (!matched) {
         matched = existingDbAssignments.find(ed => 
-          ed.staff_id === a.staff_id && !matchedDbAssignmentIds.has(ed.assignment_id)
+          !matchedDbAssignmentIds.has(ed.assignment_id) &&
+          isSameEvent(ed) &&
+          ((a.staff_id && ed.staff_id && !a.staff_id.startsWith('MOCK-') && ed.staff_id === a.staff_id) ||
+           ((ed.staff_name || '').trim().toLowerCase() === aStaffNameLower)) &&
+          ((ed.staff_role || '').trim().toLowerCase() === (a.staff_role || '').trim().toLowerCase())
         );
       }
 
+      // 3. Matching event + staff_id/staff_name
       if (!matched) {
         matched = existingDbAssignments.find(ed => 
-          (ed.staff_name || '').trim().toLowerCase() === aStaffNameLower &&
-          !matchedDbAssignmentIds.has(ed.assignment_id)
+          !matchedDbAssignmentIds.has(ed.assignment_id) &&
+          isSameEvent(ed) &&
+          ((a.staff_id && ed.staff_id && !a.staff_id.startsWith('MOCK-') && ed.staff_id === a.staff_id) ||
+           ((ed.staff_name || '').trim().toLowerCase() === aStaffNameLower))
         );
       }
 
@@ -4722,8 +4737,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         assignment_date: (a as any).assignment_date || matched?.assignment_date || assignDate,
         assignment_status: a.assignment_status || matched?.assignment_status || 'Assigned',
         task_status: a.task_status || matched?.task_status || 'Assigned',
-        event_id: a.event_id || '',
-        event_name: a.event_name || '',
+        event_id: a.event_id || matched?.event_id || '',
+        event_name: a.event_name || matched?.event_name || '',
         equipment: a.equipment || [],
         mobile: a.mobile || '',
         staff_type: a.staff_type || 'In-House',
@@ -4734,7 +4749,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       // Now prepare DB operation for staff_assignments table:
       if (matched) {
         matchedDbAssignmentIds.add(matched.assignment_id);
-        dbHandledStaffNames.add(aStaffNameLower);
 
         updatedAssignments.push({
           matchColumn: 'assignment_id',
@@ -4743,6 +4757,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             staff_role: a.staff_role || matched.staff_role,
             staff_id: a.staff_id || matched.staff_id,
             staff_name: a.staff_name || matched.staff_name,
+            event_id: a.event_id || matched.event_id || '',
+            event_name: a.event_name || matched.event_name || '',
             assignment_date: (a as any).assignment_date || matched.assignment_date || assignDate,
             assignment_status: a.assignment_status || matched.assignment_status || 'Assigned',
             task_status: a.task_status || matched.task_status || 'Assigned',
@@ -4750,13 +4766,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             updated_by: changedBy
           }
         });
-      } else if (!dbHandledStaffNames.has(aStaffNameLower)) {
-        // Genuinely new assignment for this staff on this order
-        dbHandledStaffNames.add(aStaffNameLower);
-
+      } else {
+        // Genuinely new assignment slot/task for this event
         newInsertsForDb.push({
           assignment_id: assignId,
           order_id: orderId,
+          event_id: a.event_id || '',
+          event_name: a.event_name || '',
           staff_role: a.staff_role,
           staff_id: a.staff_id,
           staff_name: a.staff_name,
@@ -4929,13 +4945,23 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     if (supabaseClient && assignments.length > 0) {
       const { data: verified, error: verifyErr } = await supabaseClient
         .from('staff_assignments')
-        .select('assignment_id, staff_name')
+        .select('*')
         .eq('order_id', orderId);
       
       if (verifyErr) {
         console.warn("Verification select note:", verifyErr.message);
       } else if (!verified || verified.length === 0) {
         throw new Error("Verification check failed: Saved staff assignments were not confirmed in the database.");
+      } else {
+        // Sync local React state and cache with freshly fetched verified records from DB
+        setStaffAssignments(prev => {
+          const otherOrders = prev.filter(sa => sa.order_id !== orderId);
+          const combined = [...otherOrders, ...verified];
+          try {
+            localStorage.setItem('erp_staff_assignments', JSON.stringify(combined));
+          } catch (e) {}
+          return combined;
+        });
       }
     }
 
