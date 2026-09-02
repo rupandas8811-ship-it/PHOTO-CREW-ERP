@@ -2624,7 +2624,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
         setPackages(Array.from(pkgMap.values()));
         if (dbCalendarMemos) setCalendarMemos(dbCalendarMemos);
-        if (dbStaffAssignments) setStaffAssignments(dbStaffAssignments);
+        if (dbStaffAssignments) {
+          let cachedAssignments: any[] = [];
+          try {
+            const raw = localStorage.getItem('erp_staff_assignments');
+            if (raw) cachedAssignments = JSON.parse(raw);
+          } catch (e) {}
+
+          const enriched = dbStaffAssignments.map((sa: any) => {
+            const cached = cachedAssignments.find((c: any) => 
+              (c.assignment_id && c.assignment_id === sa.assignment_id) ||
+              (c.order_id === sa.order_id && (c.staff_id === sa.staff_id || (c.staff_name && sa.staff_name && c.staff_name.toLowerCase() === sa.staff_name.toLowerCase())))
+            );
+            if (cached) {
+              return {
+                ...sa,
+                event_id: cached.event_id || sa.event_id || '',
+                event_name: cached.event_name || sa.event_name || '',
+                equipment: cached.equipment || sa.equipment || [],
+                mobile: cached.mobile || sa.mobile || '',
+                staff_type: cached.staff_type || sa.staff_type || 'In-House'
+              };
+            }
+            return sa;
+          });
+          setStaffAssignments(enriched);
+        }
         
         if (dbQuotations) {
           setQuotations(dbQuotations.map((q: any) => {
@@ -4577,60 +4602,87 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const changedBy = roleParts[0];
     const changedByRole = roleParts[1] || currentRole || 'System';
 
-    // 1. Delete old assignments for this order in Supabase if client available
+    // 1. Fetch existing assignments for this order directly from DB (never delete existing assignments)
+    let existingDbAssignments: StaffAssignment[] = [];
     if (supabaseClient) {
       try {
-        await supabaseClient
+        const { data: dbData } = await supabaseClient
           .from('staff_assignments')
-          .delete()
+          .select('*')
           .eq('order_id', orderId);
-      } catch (deleteErr) {
-        console.warn("Could not delete old staff assignments:", deleteErr);
+        if (dbData && Array.isArray(dbData)) {
+          existingDbAssignments = dbData;
+        }
+      } catch (fetchErr) {
+        console.warn("Could not fetch existing staff assignments from DB:", fetchErr);
       }
     }
+    if (existingDbAssignments.length === 0 && Array.isArray(staffAssignments)) {
+      existingDbAssignments = staffAssignments.filter(sa => sa.order_id === orderId);
+    }
 
-    // 2. Prepare assignments and history
-    const insertedAssignments: StaffAssignment[] = [];
+    // 2. Prepare assignments and history with exact identifier matching (update existing, insert new)
+    const updatedAssignments: { matchColumn: string; matchValue: string; updates: any }[] = [];
+    const newInsertsForDb: any[] = [];
+    const finalReactAssignments: StaffAssignment[] = [];
     const historyInserts: any[] = [];
-    const assignInserts: StaffAssignment[] = [];
 
-    const existingStatusMap = new Map<string, { task_status?: string; assignment_status?: string; assignment_id?: string }>();
-    (staffAssignments || []).filter(sa => sa.order_id === orderId).forEach(sa => {
-      const key = `${(sa.staff_name || '').toLowerCase()}_${sa.event_id || 'gen'}_${(sa.staff_role || '').toLowerCase()}`;
-      const nameKey = (sa.staff_name || '').toLowerCase();
-      existingStatusMap.set(key, { task_status: sa.task_status, assignment_status: sa.assignment_status, assignment_id: sa.assignment_id });
-      if (!existingStatusMap.has(nameKey)) {
-        existingStatusMap.set(nameKey, { task_status: sa.task_status, assignment_status: sa.assignment_status, assignment_id: sa.assignment_id });
-      }
-    });
+    // Track which existing DB assignment_ids have been updated
+    const matchedDbAssignmentIds = new Set<string>();
+    // Track staff names already handled in this batch for the DB table to respect idx_unique_staff_per_order
+    const dbHandledStaffNames = new Set<string>();
+
+    const assignDate = timestamp.split('T')[0];
 
     for (const a of assignments) {
-      const newHist = {
+      const aStaffNameTrimmed = (a.staff_name || '').trim();
+      const aStaffNameLower = aStaffNameTrimmed.toLowerCase();
+      if (!aStaffNameTrimmed) continue;
+
+      // History entry
+      historyInserts.push({
         lead_id: leadId,
         order_id: orderId,
         assigned_role: a.staff_role,
         assigned_staff: a.staff_name,
         assigned_by: changedBy,
         assigned_at: timestamp
-      };
-      historyInserts.push(newHist);
+      });
 
-      const key = `${(a.staff_name || '').toLowerCase()}_${a.event_id || 'gen'}_${(a.staff_role || '').toLowerCase()}`;
-      const nameKey = (a.staff_name || '').toLowerCase();
-      const existingInfo = existingStatusMap.get(key) || existingStatusMap.get(nameKey);
+      // Try matching an existing DB assignment by:
+      // 1. Exact assignment_id
+      // 2. Exact staff_id (if valid)
+      // 3. Exact staff_name (case-insensitive)
+      let matched = existingDbAssignments.find(ed => 
+        a.assignment_id && !a.assignment_id.startsWith('slot_') && ed.assignment_id === a.assignment_id
+      );
 
-      const assignId = a.assignment_id || existingInfo?.assignment_id || `ASST-${Math.floor(100000 + Math.random() * 900000)}`;
-      const assignDate = timestamp.split('T')[0];
+      if (!matched && a.staff_id && !a.staff_id.startsWith('MOCK-')) {
+        matched = existingDbAssignments.find(ed => 
+          ed.staff_id === a.staff_id && !matchedDbAssignmentIds.has(ed.assignment_id)
+        );
+      }
 
-      const newAssign: StaffAssignment = {
+      if (!matched) {
+        matched = existingDbAssignments.find(ed => 
+          (ed.staff_name || '').trim().toLowerCase() === aStaffNameLower &&
+          !matchedDbAssignmentIds.has(ed.assignment_id)
+        );
+      }
+
+      const assignId = matched?.assignment_id || 
+        (a.assignment_id && !a.assignment_id.startsWith('slot_') ? a.assignment_id : `ASST-${Math.floor(100000 + Math.random() * 900000)}`);
+
+      // Rich React/Local representation with event details
+      const reactAssignRecord: StaffAssignment = {
         assignment_id: assignId,
         order_id: orderId,
         staff_role: a.staff_role,
-        staff_id: a.staff_id,
+        staff_id: a.staff_id || matched?.staff_id || '',
         staff_name: a.staff_name,
-        assignment_date: assignDate,
-        assignment_status: a.assignment_status || existingInfo?.assignment_status || 'Assigned',
-        task_status: a.task_status || existingInfo?.task_status || 'Pending',
+        assignment_date: (a as any).assignment_date || matched?.assignment_date || assignDate,
+        assignment_status: a.assignment_status || matched?.assignment_status || 'Assigned',
+        task_status: a.task_status || matched?.task_status || 'Assigned',
         event_id: a.event_id || '',
         event_name: a.event_name || '',
         equipment: a.equipment || [],
@@ -4638,16 +4690,62 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         staff_type: a.staff_type || 'In-House',
         updated_by: changedBy
       };
+      finalReactAssignments.push(reactAssignRecord);
 
-      insertedAssignments.push(newAssign);
-      assignInserts.push(newAssign);
+      // Now prepare DB operation for staff_assignments table:
+      if (matched) {
+        matchedDbAssignmentIds.add(matched.assignment_id);
+        dbHandledStaffNames.add(aStaffNameLower);
+
+        updatedAssignments.push({
+          matchColumn: 'assignment_id',
+          matchValue: matched.assignment_id,
+          updates: {
+            staff_role: a.staff_role || matched.staff_role,
+            staff_id: a.staff_id || matched.staff_id,
+            staff_name: a.staff_name || matched.staff_name,
+            assignment_date: (a as any).assignment_date || matched.assignment_date || assignDate,
+            assignment_status: a.assignment_status || matched.assignment_status || 'Assigned',
+            task_status: a.task_status || matched.task_status || 'Assigned',
+            updated_at: timestamp,
+            updated_by: changedBy
+          }
+        });
+      } else if (!dbHandledStaffNames.has(aStaffNameLower)) {
+        // Genuinely new assignment for this staff on this order
+        dbHandledStaffNames.add(aStaffNameLower);
+
+        newInsertsForDb.push({
+          assignment_id: assignId,
+          order_id: orderId,
+          staff_role: a.staff_role,
+          staff_id: a.staff_id,
+          staff_name: a.staff_name,
+          assignment_date: assignDate,
+          assignment_status: a.assignment_status || 'Assigned',
+          task_status: a.task_status || 'Assigned',
+          updated_at: timestamp,
+          updated_by: changedBy
+        });
+      }
     }
 
-    // Optimistically update React state immediately
-    setStaffAssignments(prev => [
-      ...prev.filter(sa => sa.order_id !== orderId),
-      ...insertedAssignments
-    ]);
+    // Preserve any existing assignments for this order that were not part of this edit batch
+    for (const ed of existingDbAssignments) {
+      if (!matchedDbAssignmentIds.has(ed.assignment_id) && !finalReactAssignments.some(r => r.assignment_id === ed.assignment_id)) {
+        finalReactAssignments.push(ed);
+      }
+    }
+
+    // Optimistically update React state immediately and sync local cache
+    setStaffAssignments(prev => {
+      const otherOrders = prev.filter(sa => sa.order_id !== orderId);
+      const combined = [...otherOrders, ...finalReactAssignments];
+      try {
+        localStorage.setItem('erp_staff_assignments', JSON.stringify(combined));
+      } catch (e) {}
+      return combined;
+    });
 
     // Prepare operations update payload
     let opUpdates: any = {};
@@ -4716,15 +4814,40 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Consolidate DB operations into parallel execution
     const dbOperations: Promise<any>[] = [];
 
+    // Push updates for matched existing assignments
+    for (const item of updatedAssignments) {
+      dbOperations.push(pushUpdate('staff_assignments', item.matchColumn, item.matchValue, item.updates));
+    }
+
+    // Push inserts for new assignments
+    if (newInsertsForDb.length > 0) {
+      dbOperations.push(pushInsert('staff_assignments', newInsertsForDb));
+    }
+
     if (historyInserts.length > 0) {
       dbOperations.push(pushInsert('lead_staff_assignment_history', historyInserts));
-    }
-    if (assignInserts.length > 0) {
-      dbOperations.push(pushInsert('staff_assignments', assignInserts));
     }
     dbOperations.push(pushUpdate('operations', 'order_id', orderId, opUpdates));
     dbOperations.push(pushUpdate('leads', 'lead_id', leadId, leadUpdates));
     dbOperations.push(pushUpdate('orders', 'order_id', orderId, orderUpdates));
+
+    // Sync lead_events table for event-level isolation
+    if (metaPayload?.updatedEvents && metaPayload.updatedEvents.length > 0 && supabaseClient) {
+      for (const ev of metaPayload.updatedEvents) {
+        if (ev.id && !String(ev.id).startsWith('EV-')) {
+          dbOperations.push(
+            pushUpdate('lead_events', 'id', ev.id, {
+              assigned_staff_names: ev.assigned_staff_names || '',
+              assigned_staff_mobiles: ev.assigned_staff_mobiles || '',
+              reporting_time: ev.reporting_time || null,
+              reporting_date: ev.reporting_date || ev.Reporting_date || null,
+              Reporting_date: ev.reporting_date || ev.Reporting_date || null,
+              updated_at: timestamp
+            })
+          );
+        }
+      }
+    }
 
     if (shouldUpdateStage) {
       const statusHist = {

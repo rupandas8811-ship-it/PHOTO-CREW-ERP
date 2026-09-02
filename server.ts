@@ -417,8 +417,47 @@ async function startServer() {
       }
 
       if (table === 'staff_assignments' && (res.error?.message?.includes('idx_unique_staff_per_order') || res.error?.code === '23505')) {
-        console.warn(`[Server DB] Handled idx_unique_staff_per_order constraint on staff_assignments to allow multi-event staff assignment:`, res.error.message);
-        return { success: true, data: [currentPayload] };
+        console.warn(`[Server DB] Handled idx_unique_staff_per_order constraint on staff_assignments. Updating existing records instead of failing insert.`);
+        const items = Array.isArray(currentPayload) ? currentPayload : [currentPayload];
+        const updatedRows: any[] = [];
+        for (const itm of items) {
+          if (itm && itm.order_id && itm.staff_name) {
+            const trimmedName = itm.staff_name.trim();
+            const { data: matchedRows } = await db
+              .from('staff_assignments')
+              .select('*')
+              .eq('order_id', itm.order_id);
+            
+            const matched = (matchedRows || []).find((r: any) => 
+              (r.staff_name || '').trim().toLowerCase() === trimmedName.toLowerCase() ||
+              (itm.staff_id && r.staff_id === itm.staff_id)
+            );
+            if (matched) {
+              const { data: upd } = await db
+                .from('staff_assignments')
+                .update({
+                  staff_role: itm.staff_role || matched.staff_role,
+                  staff_id: itm.staff_id || matched.staff_id,
+                  staff_name: itm.staff_name || matched.staff_name,
+                  assignment_date: itm.assignment_date || matched.assignment_date,
+                  assignment_status: itm.assignment_status || matched.assignment_status,
+                  task_status: itm.task_status || matched.task_status,
+                  updated_at: new Date().toISOString(),
+                  updated_by: itm.updated_by || matched.updated_by
+                })
+                .eq('assignment_id', matched.assignment_id)
+                .select();
+              if (upd && upd.length > 0) {
+                updatedRows.push(upd[0]);
+              } else {
+                updatedRows.push(matched);
+              }
+            } else {
+              updatedRows.push(itm);
+            }
+          }
+        }
+        return { success: true, data: updatedRows.length > 0 ? updatedRows : (Array.isArray(currentPayload) ? currentPayload : [currentPayload]) };
       }
 
       lastError = res.error;
