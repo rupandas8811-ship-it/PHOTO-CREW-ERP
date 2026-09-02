@@ -2039,12 +2039,14 @@ export const StaffModule: React.FC = () => {
             });
 
             await pushInsert('equipment_handovers', {
+              handover_id: `HND-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
               order_id: booking.orderId || booking.leadId || '',
               equipment_name: eqItem.name,
               return_status: 'Returned',
               return_date: timestamp.split('T')[0],
               returned_by: staffName,
-              notes: `Returned at footage handover by ${staffName}`
+              notes: `Returned at footage handover by ${staffName}`,
+              created_at: timestamp
             });
           } catch (itemErr) {
             console.warn('[StaffModule] Error saving equipment item return record:', itemErr);
@@ -2054,8 +2056,11 @@ export const StaffModule: React.FC = () => {
 
       if (modalRawFootageLink && booking.orderId) {
         try {
+          const rfTrackingId = `TRK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
           await pushInsert('raw_footage', {
+            tracking_id: rfTrackingId,
             order_id: booking.orderId,
+            event_completed_date: booking.eventDate || timestamp.split('T')[0],
             server_path: modalRawFootageLink,
             uploaded_by: staffName,
             uploaded_date: timestamp,

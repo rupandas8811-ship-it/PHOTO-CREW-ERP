@@ -1455,7 +1455,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'history_id', 'lead_id', 'order_id', 'assigned_role', 'assigned_staff', 'assigned_by', 'assigned_at'
       ],
       lead_equipment_history: [
-        'id', 'lead_id', 'order_id', 'equipment_name', 'equipment_status', 'returned_by', 'returned_at', 'remarks'
+        'id', 'lead_id', 'order_id', 'equipment_name', 'equipment_status', 'returned_by', 'returned_at', 'remarks', 'photo_url', 'asset_id', 'event_id', 'event_name', 'proof_type', 'created_at'
+      ],
+      equipment_handovers: [
+        'handover_id', 'order_id', 'equipment_name', 'return_status', 'return_date', 'returned_by', 'notes', 'created_at'
       ],
       notifications: [
         'notification_id', 'title', 'message', 'sender_name', 'sender_role', 'timestamp', 
@@ -1706,6 +1709,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           if (table === 'equipment' && san.equipment_id) {
             san.equipment_id = mapToDbEquipmentId(san.equipment_id);
           }
+          if (table === 'raw_footage') {
+            if (!san.tracking_id) san.tracking_id = `TRK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+            if (!san.event_completed_date) san.event_completed_date = new Date().toISOString().split('T')[0];
+            if (san.raw_received === undefined) san.raw_received = san.status === 'Received' || !!san.server_path;
+            if (!san.status) san.status = san.raw_received ? 'Received' : 'Pending';
+          }
+          if (table === 'equipment_handovers') {
+            if (!san.handover_id) san.handover_id = `HND-${Math.floor(1000 + Math.random() * 9000)}`;
+            if (!san.created_at) san.created_at = new Date().toISOString();
+            if (!san.return_date) san.return_date = new Date().toISOString().split('T')[0];
+          }
           return san;
         });
       } else {
@@ -1723,6 +1737,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         }
         if (table === 'equipment' && sanitized.equipment_id) {
           sanitized.equipment_id = mapToDbEquipmentId(sanitized.equipment_id);
+        }
+        if (table === 'raw_footage') {
+          if (!sanitized.tracking_id) sanitized.tracking_id = `TRK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+          if (!sanitized.event_completed_date) sanitized.event_completed_date = new Date().toISOString().split('T')[0];
+          if (sanitized.raw_received === undefined) sanitized.raw_received = sanitized.status === 'Received' || !!sanitized.server_path;
+          if (!sanitized.status) sanitized.status = sanitized.raw_received ? 'Received' : 'Pending';
+        }
+        if (table === 'equipment_handovers') {
+          if (!sanitized.handover_id) sanitized.handover_id = `HND-${Math.floor(1000 + Math.random() * 9000)}`;
+          if (!sanitized.created_at) sanitized.created_at = new Date().toISOString();
+          if (!sanitized.return_date) sanitized.return_date = new Date().toISOString().split('T')[0];
         }
         if (table === 'leads') {
           const anyStatus = sanitized.status || sanitized.current_status || record.status || record.current_status || 'New Lead';
@@ -2373,7 +2398,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               supabaseClient.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }),
               supabaseClient.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }),
               supabaseClient.from('lead_events').select('*').order('created_at', { ascending: true }),
-              supabaseClient.from('equipment_handovers').select('*').order('created_at', { ascending: false }),
+              Promise.resolve({ data: [], error: null }),
               supabaseClient.from('production_specialties').select('*'),
               supabaseClient.from('editor_assignments').select('*'),
               supabaseClient.from('production_staff').select('*'),
@@ -2500,7 +2525,21 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbProduction) setProduction(dbProduction);
         if (dbPayments) setPayments(dbPayments);
         if (dbLogs) setLogs(dbLogs);
-        if (dbHandovers) setEquipmentHandovers(dbHandovers);
+        if (dbHandovers && dbHandovers.length > 0) {
+          setEquipmentHandovers(dbHandovers);
+        } else if (dbLeadEquipmentHistory && dbLeadEquipmentHistory.length > 0) {
+          const mappedFromHistory = dbLeadEquipmentHistory.map((deh: any) => ({
+            handover_id: deh.id,
+            order_id: deh.order_id || deh.lead_id,
+            equipment_name: deh.equipment_name,
+            return_status: (deh.equipment_status === 'Returned' || deh.equipment_status === 'Equipment Handover Completed') ? 'Returned' : (deh.equipment_status || 'Returned'),
+            return_date: deh.returned_at ? deh.returned_at.split('T')[0] : (deh.created_at ? deh.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+            returned_by: deh.returned_by || 'Staff',
+            notes: deh.remarks || '',
+            created_at: deh.created_at || deh.returned_at
+          }));
+          setEquipmentHandovers(mappedFromHistory);
+        }
         if (dbSpecList) setSpecialities(dbSpecList);
         if (dbAssignList) {
           let cachedAssignments: EditorAssignment[] = [];
@@ -7364,8 +7403,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       created_at: new Date().toISOString()
     };
     setEquipmentHandovers(prev => [newHandover, ...prev]);
+    const leadEqHistItem: LeadEquipmentHistory = {
+      id: `LEH-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+      lead_id: handover.order_id || 'UNKNOWN',
+      order_id: handover.order_id,
+      equipment_name: handover.equipment_name,
+      equipment_status: handover.return_status,
+      returned_by: handover.returned_by || 'Staff',
+      returned_at: handover.return_date ? new Date(handover.return_date).toISOString() : new Date().toISOString(),
+      remarks: handover.notes || `Equipment Handover: ${handover.equipment_name} - ${handover.return_status}`
+    };
+    setLeadEquipmentHistory(prev => [leadEqHistItem, ...prev]);
     await pushInsert('equipment_handovers', newHandover);
-    // fetchFromDb().catch(console.error); // Disabled to prevent full reload
     logActivity(`Registered Equipment Handover status for ${handover.equipment_name}: ${handover.return_status}`, 'Operations', handover.order_id);
   };
 
@@ -7376,11 +7425,21 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       created_at: new Date().toISOString()
     }));
     setEquipmentHandovers(prev => [...newHandovers, ...prev]);
+    const newHistItems: LeadEquipmentHistory[] = handovers.map(h => ({
+      id: `LEH-${Date.now()}-${Math.floor(Math.random()*1000)}`,
+      lead_id: h.order_id || 'UNKNOWN',
+      order_id: h.order_id,
+      equipment_name: h.equipment_name,
+      equipment_status: h.return_status,
+      returned_by: h.returned_by || 'Staff',
+      returned_at: h.return_date ? new Date(h.return_date).toISOString() : new Date().toISOString(),
+      remarks: h.notes || `Equipment Handover: ${h.equipment_name} - ${h.return_status}`
+    }));
+    setLeadEquipmentHistory(prev => [...newHistItems, ...prev]);
     for (const h of newHandovers) {
       await pushInsert('equipment_handovers', h);
       logActivity(`Registered Equipment Handover status for ${h.equipment_name}: ${h.return_status}`, 'Operations', h.order_id);
     }
-    // fetchFromDb().catch(console.error); // Disabled to prevent full reload
   };
 
   const addLeadEquipmentHistory = async (history: Omit<LeadEquipmentHistory, 'id'>) => {
