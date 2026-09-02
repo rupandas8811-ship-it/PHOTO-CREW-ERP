@@ -1437,6 +1437,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           <BusinessOwnerCalendarView 
             orders={orders}
             production={production}
+            leads={leads}
             onSelectEvent={(eventData) => setCalendarEventModal(eventData)}
           />
 
@@ -1778,12 +1779,14 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 interface BusinessOwnerCalendarViewProps {
   orders: Order[];
   production: Production[];
+  leads: any[];
   onSelectEvent: (eventData: any) => void;
 }
 
 const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   orders,
   production,
+  leads,
   onSelectEvent
 }) => {
   const { globalDateRange } = useRole();
@@ -1828,23 +1831,6 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
     } catch (e) {}
     return null;
   }, []);
-
-  // Synchronize calendar's visible month with the start of the global temporal range filter
-  useEffect(() => {
-    if (globalDateRange?.start) {
-      const normalizedStart = normalizeToYYYYMMDD(globalDateRange.start);
-      if (normalizedStart) {
-        const parts = normalizedStart.split('-');
-        const y = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10) - 1; // 0-indexed month
-        if (!isNaN(y) && !isNaN(m)) {
-          if (currentDate.getFullYear() !== y || currentDate.getMonth() !== m) {
-            setCurrentDate(new Date(y, m, 1));
-          }
-        }
-      }
-    }
-  }, [globalDateRange?.start, normalizeToYYYYMMDD]);
 
   // Filter state (Hidden by default)
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -1918,7 +1904,15 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
 
     orders.forEach(order => {
       const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
+      const lead = leads?.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
       
+      const rawLeadEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+      const deserialized = (!rawLeadEvents || rawLeadEvents.length === 0) && (lead?.notes_special_customizations || order?.notes_special_customizations)
+        ? deserializeLeadEvents(lead?.notes_special_customizations || order?.notes_special_customizations).events
+        : [];
+      const combinedEvents = rawLeadEvents.length > 0 ? rawLeadEvents : (deserialized.length > 0 ? deserialized : []);
+      const eventsToMap = combinedEvents.length > 0 ? combinedEvents : [{ event_date: order.event_date, event_name: order.custom_event_name || order.event_type, event_type: order.event_type }];
+
       const isWaitingApproval = [
         'Client Acceptance',
         'Business Owner Review',
@@ -1932,12 +1926,10 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         'Editing Complete',
         'Final Approval'
       ].includes(prod.editing_status));
-
       const isClientAcceptance = order.current_stage === 'Client Acceptance' || prod?.editing_status === 'Client Acceptance';
 
       let typeCategory = 'event_date';
       let badgeColor = 'bg-blue-500/20 text-blue-300 border-blue-500/30';
-
       if (isWaitingApproval) {
         typeCategory = 'waiting_approval';
         badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
@@ -1952,37 +1944,40 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         (typeCategory === 'client_acceptance' && activeFilters.clientAcceptance) ||
         (typeCategory === 'waiting_approval' && activeFilters.waitingApproval);
 
-      if (order.event_date && shouldShowEvent) {
-        const dateStr = order.event_date.split('T')[0];
-        
-        let isDateInRange = true;
-        if (globalDateRange?.start && globalDateRange?.end) {
-          const startStr = normalizeToYYYYMMDD(globalDateRange.start);
-          const endStr = normalizeToYYYYMMDD(globalDateRange.end);
-          const normalizedEvDate = normalizeToYYYYMMDD(order.event_date);
-          if (startStr && endStr && normalizedEvDate) {
-            isDateInRange = normalizedEvDate >= startStr && normalizedEvDate <= endStr;
+      eventsToMap.forEach((ev: any, idx: number) => {
+        const evDate = ev.event_date || order.event_date;
+        if (evDate && shouldShowEvent) {
+          const dateStr = evDate.split('T')[0];
+          
+          let isDateInRange = true;
+          if (globalDateRange?.start && globalDateRange?.end) {
+            const startStr = normalizeToYYYYMMDD(globalDateRange.start);
+            const endStr = normalizeToYYYYMMDD(globalDateRange.end);
+            const normalizedEvDate = normalizeToYYYYMMDD(evDate);
+            if (startStr && endStr && normalizedEvDate) {
+              isDateInRange = normalizedEvDate >= startStr && normalizedEvDate <= endStr;
+            }
+          }
+
+          if (dateStr && isDateInRange) {
+            if (!map[dateStr]) map[dateStr] = [];
+            map[dateStr].push({
+              id: `event-${order.order_id}-${idx}`,
+              type: typeCategory,
+              badgeColor,
+              title: `${order.customer_name} - ${ev.event_name || ev.event_type || 'Event'}`,
+              customerName: order.customer_name,
+              orderId: order.order_id,
+              eventName: ev.event_name || ev.event_type || order.custom_event_name || order.event_type || 'Photography Event',
+              currentStatus: prod?.editing_status || order.current_stage || 'Event Scheduled',
+              eventDate: evDate,
+              location: order.event_location || 'Studio',
+              rawOrder: order,
+              rawProd: prod
+            });
           }
         }
-
-        if (dateStr && isDateInRange) {
-          if (!map[dateStr]) map[dateStr] = [];
-          map[dateStr].push({
-            id: `event-${order.order_id}`,
-            type: typeCategory,
-            badgeColor,
-            title: `${order.customer_name} - ${order.event_type || 'Event'}`,
-            customerName: order.customer_name,
-            orderId: order.order_id,
-            eventName: order.custom_event_name || order.event_type || 'Photography Event',
-            currentStatus: prod?.editing_status || order.current_stage || 'Event Scheduled',
-            eventDate: order.event_date,
-            location: order.event_location || 'Studio',
-            rawOrder: order,
-            rawProd: prod
-          });
-        }
-      }
+      });
 
       // Target delivery date event
       if ((prod?.expected_delivery_date || prod?.target_delivery_date) && activeFilters.deliveryDates) {
@@ -2361,13 +2356,13 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           type="button"
           onClick={() => {
             const fullOrder = orders.find(o => o.order_id === item.orderId || o.lead_id === item.leadId) || item;
-            setSelectedHistoryOrder(fullOrder);
+            setSelectedPaymentHistoryOrder(fullOrder);
           }}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-          title="View Project History & Timeline"
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+          title="View Payment History"
         >
           <History className="w-3.5 h-3.5" />
-          <span>History</span>
+          <span>Payment History</span>
         </button>
       )
     };
@@ -2844,13 +2839,13 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                         type="button"
                         onClick={() => {
                           const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
-                          setSelectedHistoryOrder(fullOrder);
+                          setSelectedPaymentHistoryOrder(fullOrder);
                         }}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-                        title="View Project History & Timeline"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+                        title="View Payment History"
                       >
                         <History className="w-3.5 h-3.5" />
-                        <span>History</span>
+                        <span>Payment History</span>
                       </button>
                     </td>
                   </tr>
@@ -3077,7 +3072,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
       }}
     >
       <div 
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl shadow-2xl relative animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl 2xl:max-w-5xl min-[1920px]:max-w-[1200px] min-[2560px]:max-w-[1600px] min-[3840px]:max-w-[2000px] shadow-2xl relative animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         
@@ -3236,15 +3231,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
               Cancel
             </button>
 
-            {isBusinessOwner && onReject && (
-              <button
-                onClick={onReject}
-                disabled={isApproving}
-                className="px-4 py-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 font-bold text-xs hover:bg-rose-500/20 transition-all cursor-pointer flex justify-center items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span>Reject Back to Production</span>
-              </button>
-            )}
+            {/* Reject button hidden as per user request */}
 
             {isBusinessOwner && (
               <button
@@ -3439,7 +3426,7 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
       }}
     >
       <div 
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl p-5 md:p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] p-5 md:p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-3 border-b border-zinc-850 shrink-0">

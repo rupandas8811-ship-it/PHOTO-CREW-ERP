@@ -2901,7 +2901,7 @@ export const OperationsLeads: React.FC = () => {
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 max-h-full overflow-hidden max-w-full min-w-0">
               <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
-                <div className="w-full max-w-7xl mx-auto space-y-6 pb-20">
+                <div className="w-full max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] mx-auto space-y-6 pb-20">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -4899,7 +4899,7 @@ export const OperationsLeads: React.FC = () => {
               </div>
 
               <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 text-left scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
-                <div className="w-full max-w-7xl mx-auto space-y-6 pb-16">
+                <div className="w-full max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] mx-auto space-y-6 pb-16">
                 {eventNames.length === 0 ? (
                   <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                     No staff assigned yet.
@@ -5404,7 +5404,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Image Preview Modal */}
       {imagePreviewModal && createPortal(
         <div className="fixed inset-0 bg-black/95 backdrop-blur-lg z-[2147483647] flex flex-col items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-4xl 2xl:max-w-6xl min-[1920px]:max-w-[1400px] min-[2560px]:max-w-[1800px] min-[3840px]:max-w-[2400px] max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in duration-200">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800">
               <div>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{imagePreviewModal.stage}</h3>

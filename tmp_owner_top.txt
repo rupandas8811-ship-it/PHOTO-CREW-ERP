@@ -1,0 +1,15 @@
+import React, { useMemo } from 'react';
+import { useRole } from '../../RoleContext';
+import { formatINR } from '../../../utils';
+import { 
+  Landmark, DollarSign, FileText, CheckCircle, Clock, AlertCircle, TrendingUp, BarChart3, 
+  PieChart as PieChartIcon, Calendar, ArrowUpRight, ArrowDownRight, Package, User
+} from 'lucide-react';
+import { 
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  CartesianGrid, Legend, BarChart, Bar, Cell, PieChart, Pie, LineChart, Line
+} from 'recharts';
+import { CameraLensStatsCard } from '../../CameraLensStatsCard';
+
+export const OwnerRevenueDetailed: React.FC = () => {
+  const { leads, orders, payments, quotations, globalDateRange } = useRole();

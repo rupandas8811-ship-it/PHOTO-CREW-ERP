@@ -7,7 +7,7 @@ import { supabaseClient } from '../../supabaseClient';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../../types';
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../../utils';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending } from '../SalesUtils';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
 import { StatusText } from '../ui/StatusText';
 import { EventDropdownCell } from '../EventDropdownCell';
@@ -3102,7 +3102,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       } as any;
     }
     const selectedPkgId = selectedPkg?.package_id || 'Custom Package';
-    const currentEvents = isEdit ? crmEvents : createEvents;
+    const rawEvents = isEdit ? crmEvents : createEvents;
+    const currentEvents = sortEventsAscending(rawEvents);
     const isMulti = currentEvents && currentEvents.length > 1;
     const inclusionsList = (!isMulti && (editableInclusions[selectedPkgId] || editableInclusions['Custom Package'] || editableInclusions['custom_package'])) || [];
     const deliverablesList = (!isMulti && (editableDeliverables[selectedPkgId] || editableDeliverables['Custom Package'] || editableDeliverables['custom_package'])) || [];

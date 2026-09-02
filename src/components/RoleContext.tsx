@@ -3047,69 +3047,19 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       const last10 = rawDigits.length >= 10 ? rawDigits.slice(-10) : rawDigits;
 
       try {
-        if (cleanInput.includes('@')) {
-          // Look up by email or username
-          const { data: byEmail, error: emailErr } = await supabaseClient
-            .from('users')
-            .select('*')
-            .ilike('email', cleanInput)
-            .limit(1);
-
-          if (!emailErr && byEmail && byEmail.length > 0) {
-            dbUser = byEmail[0];
-          } else {
-            const { data: byUsername } = await supabaseClient
-              .from('users')
-              .select('*')
-              .ilike('username', cleanInput)
-              .limit(1);
-            if (byUsername && byUsername.length > 0) {
-              dbUser = byUsername[0];
-            }
-          }
-        } else {
-          // Look up by mobile number first, then by username/email
-          if (rawDigits && rawDigits.length >= 7) {
-            const { data: byMobileExact } = await supabaseClient
-              .from('users')
-              .select('*')
-              .eq('mobile', cleanInput)
-              .limit(1);
-
-            if (byMobileExact && byMobileExact.length > 0) {
-              dbUser = byMobileExact[0];
-            } else if (last10.length >= 7) {
-              const { data: byMobilePattern } = await supabaseClient
-                .from('users')
-                .select('*')
-                .ilike('mobile', `%${last10}%`)
-                .limit(1);
-              if (byMobilePattern && byMobilePattern.length > 0) {
-                dbUser = byMobilePattern[0];
-              }
-            }
-          }
-
-          if (!dbUser) {
-            const { data: byUsername } = await supabaseClient
-              .from('users')
-              .select('*')
-              .ilike('username', cleanInput)
-              .limit(1);
-
-            if (byUsername && byUsername.length > 0) {
-              dbUser = byUsername[0];
-            } else {
-              const { data: byEmail } = await supabaseClient
-                .from('users')
-                .select('*')
-                .ilike('email', cleanInput)
-                .limit(1);
-              if (byEmail && byEmail.length > 0) {
-                dbUser = byEmail[0];
-              }
-            }
-          }
+        const { data: allUsers } = await supabaseClient.from('users').select('*');
+        if (allUsers) {
+          dbUser = allUsers.find(u => {
+            const uEmail = (u.email || '').trim().toLowerCase();
+            const uUser = (u.username || '').trim().toLowerCase();
+            const uPhone = (u.mobile || '').replace(/\D/g, '');
+            
+            if (cleanInput.includes('@') && uEmail === cleanInput.toLowerCase()) return true;
+            if (uUser === cleanInput.toLowerCase()) return true;
+            if (uEmail === cleanInput.toLowerCase()) return true;
+            if (rawDigits.length >= 7 && uPhone.endsWith(last10)) return true;
+            return false;
+          });
         }
       } catch (err: any) {
         console.warn('[LOGIN] Error querying users table:', err?.message || err);
@@ -3117,33 +3067,49 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       // Check in-memory users list
       if (!dbUser && users.length > 0) {
-        dbUser = users.find(u => 
-          (u.email && u.email.toLowerCase() === cleanInput.toLowerCase()) ||
-          (u.username && u.username.toLowerCase() === cleanInput.toLowerCase()) ||
-          (u.mobile && u.mobile === cleanInput) ||
-          (last10.length >= 7 && u.mobile && u.mobile.replace(/\D/g, '').endsWith(last10))
-        );
+        dbUser = users.find(u => {
+          const uEmail = (u.email || '').trim().toLowerCase();
+          const uUser = (u.username || '').trim().toLowerCase();
+          const uPhone = (u.mobile || '').replace(/\D/g, '');
+          
+          if (cleanInput.includes('@') && uEmail === cleanInput.toLowerCase()) return true;
+          if (uUser === cleanInput.toLowerCase()) return true;
+          if (uEmail === cleanInput.toLowerCase()) return true;
+          if (rawDigits.length >= 7 && uPhone.endsWith(last10)) return true;
+          return false;
+        });
       }
 
       // Fallback: Check in-memory staff lists (operations_staff, production_staff)
       if (!dbUser) {
-        let matchingStaff = staff.find(s => 
-          (s.email && s.email.toLowerCase() === cleanInput.toLowerCase()) ||
-          (s.mobile && s.mobile === cleanInput) ||
-          (last10.length >= 7 && s.mobile && s.mobile.replace(/\D/g, '').endsWith(last10)) ||
-          (last10.length >= 7 && s.whatsapp_number && s.whatsapp_number.replace(/\D/g, '').endsWith(last10)) ||
-          (s.name && (s.name.toLowerCase().replace(/\s+/g, '') + '@photocrew.com' === cleanInput.toLowerCase()))
-        );
+        let matchingStaff = staff.find(s => {
+          const sEmail = (s.email || '').trim().toLowerCase();
+          const sMobile = (s.mobile || '').replace(/\D/g, '');
+          const sWa = (s.whatsapp_number || '').replace(/\D/g, '');
+          const sNameEmail = s.name ? (s.name.toLowerCase().replace(/\s+/g, '') + '@photocrew.com') : '';
+          
+          if (sEmail && sEmail === cleanInput.toLowerCase()) return true;
+          if (last10.length >= 7 && sMobile.endsWith(last10)) return true;
+          if (last10.length >= 7 && sWa.endsWith(last10)) return true;
+          if (sNameEmail && sNameEmail === cleanInput.toLowerCase()) return true;
+          return false;
+        });
+        
         let fallbackRole = 'Operation Staff';
 
         if (!matchingStaff) {
-          matchingStaff = productionStaff.find(s => 
-            (s.email && s.email.toLowerCase() === cleanInput.toLowerCase()) ||
-            (s.mobile && s.mobile === cleanInput) ||
-            (last10.length >= 7 && s.mobile && s.mobile.replace(/\D/g, '').endsWith(last10)) ||
-            (last10.length >= 7 && s.whatsapp_number && s.whatsapp_number.replace(/\D/g, '').endsWith(last10)) ||
-            (s.name && (s.name.toLowerCase().replace(/\s+/g, '') + '@photocrew.com' === cleanInput.toLowerCase()))
-          );
+          matchingStaff = productionStaff.find(s => {
+            const sEmail = (s.email || '').trim().toLowerCase();
+            const sMobile = (s.mobile || '').replace(/\D/g, '');
+            const sWa = (s.whatsapp_number || '').replace(/\D/g, '');
+            const sNameEmail = s.name ? (s.name.toLowerCase().replace(/\s+/g, '') + '@photocrew.com') : '';
+            
+            if (sEmail && sEmail === cleanInput.toLowerCase()) return true;
+            if (last10.length >= 7 && sMobile.endsWith(last10)) return true;
+            if (last10.length >= 7 && sWa.endsWith(last10)) return true;
+            if (sNameEmail && sNameEmail === cleanInput.toLowerCase()) return true;
+            return false;
+          });
           if (matchingStaff) {
             fallbackRole = 'Production Staff';
           }
@@ -4135,24 +4101,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Persist advance payment in payment history
     if (advanceReceived > 0) {
-      const historyKey = `payment_history_${masterOrderId}`;
-      const existingHistoryStr = localStorage.getItem(historyKey);
-      let historyList: any[] = [];
-      if (existingHistoryStr) {
-        try { historyList = JSON.parse(existingHistoryStr); } catch (e) {}
-      }
-      if (!historyList.some((h: any) => h.paymentType === 'Advance Payment')) {
-        historyList.unshift({
-          date: new Date().toISOString(),
-          amount: advanceReceived,
-          transactionId: cleanTxnId || '',
-          paymentMode: paymentMode || 'UPI',
-          paymentType: 'Advance Payment',
-          updatedBy: currentUserName || 'System',
-          notes: 'Initial advance payment on order confirmation'
-        });
-        localStorage.setItem(historyKey, JSON.stringify(historyList));
-      }
+      await pushInsert('payment_history', {
+        order_id: masterOrderId,
+        amount: advanceReceived,
+        payment_date: new Date().toISOString(),
+        transaction_id: cleanTxnId || null,
+        payment_mode: paymentMode || 'UPI',
+        payment_type: 'Advance Payment',
+        updated_by: currentUserName || 'System',
+        notes: 'Initial advance payment on order confirmation'
+      });
     }
 
     // Operations
@@ -5741,43 +5699,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       return [...prev, updatedPayment];
     });
 
-    // Record payment in localStorage history
-    const historyKey = `payment_history_${orderId}`;
-    const existingHistoryStr = localStorage.getItem(historyKey);
-    let historyList = [];
-    if (existingHistoryStr) {
-      try {
-        historyList = JSON.parse(existingHistoryStr);
-      } catch (e) {
-        console.error("Failed to parse payment history", e);
-      }
-    } else {
-      // If no history exists, and there is advance received, prepopulate with the advance payment!
-      if (targetPayment.advance_received > 0) {
-        historyList.push({
-          date: targetPayment.payment_date || new Date().toISOString(),
-          amount: targetPayment.advance_received,
-          transactionId: targetPayment.transaction_id || '',
-          paymentMode: 'Bank Transfer',
-          paymentType: (targetPayment as any).Payment_type || targetPayment.payment_type || 'Advance Payment',
-          updatedBy: 'System',
-          notes: 'Initial advance payment'
-        });
-      }
-    }
-
-    // Push the new transaction details
-    historyList.push({
-      date: new Date().toISOString(), // Use current date/time automatically as requested
+    // Record payment in database history table
+    await pushInsert('payment_history', {
+      order_id: orderId,
       amount: actualAmountReceived,
-      transactionId: cleanTxnId || '',
-      paymentMode: paymentMode || 'UPI',
-      paymentType: finalPaymentType || 'Shoot Time Payment',
-      updatedBy: currentUserName || 'System',
+      payment_date: new Date().toISOString(),
+      transaction_id: cleanTxnId || null,
+      payment_mode: paymentMode || 'UPI',
+      payment_type: finalPaymentType || 'Shoot Time Payment',
+      updated_by: currentUserName || 'System',
       notes: paymentNotes || 'Recorded via update payment'
     });
-
-    localStorage.setItem(historyKey, JSON.stringify(historyList));
 
     // If fully paid, move order status to next transition or check if delivered first.
     // If fully paid AND previous stage was delivered, we can transition stage to Closed!

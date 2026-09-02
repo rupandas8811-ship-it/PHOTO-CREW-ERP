@@ -117,6 +117,40 @@ export const LocalEditableInput: React.FC<LocalEditableInputProps> = ({ value, d
   );
 };
 
+export function sortEventsAscending(events: any[]): any[] {
+  if (!events || !Array.isArray(events)) return [];
+  return [...events].sort((a, b) => {
+    const dateA = new Date(a.event_date || a.event_start_date || 0).getTime();
+    const dateB = new Date(b.event_date || b.event_start_date || 0).getTime();
+    
+    if (dateA !== dateB) return dateA - dateB;
+
+    const timeA = a.event_start_time || a.reporting_time || a.event_time || '';
+    const timeB = b.event_start_time || b.reporting_time || b.event_time || '';
+    
+    const parseTime = (t: string) => {
+      if (!t) return 0;
+      let hours = 0;
+      let minutes = 0;
+      const match = t.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+      if (match) {
+        hours = parseInt(match[1], 10) || 0;
+        minutes = parseInt(match[2], 10) || 0;
+        const ampm = match[3]?.toUpperCase();
+        if (ampm === 'PM' && hours < 12) hours += 12;
+        if (ampm === 'AM' && hours === 12) hours = 0;
+      } else {
+        const parts = t.split(':').map(Number);
+        hours = parts[0] || 0;
+        minutes = parts[1] || 0;
+      }
+      return hours * 60 + minutes;
+    };
+
+    return parseTime(timeA) - parseTime(timeB);
+  });
+}
+
 export function parseQtyAndText(raw: any): { qty: number; text: string } {
   if (raw === null || raw === undefined) return { qty: 1, text: "" };
 
@@ -1125,6 +1159,13 @@ export const generateQuotationPDF = (
       simY += cfg.tableSpacing;
     };
 
+    // Customer details card height (26)
+    if (simY + 26 > 250) {
+      simY = 52;
+      simPageCount++;
+    }
+    simY += 26 + cfg.secSpacing;
+
     eventsToRender.forEach((evObj) => {
       // Event Name / Title height (approx 10.5)
       if (simY + 10.5 > 250) {
@@ -1132,13 +1173,6 @@ export const generateQuotationPDF = (
         simPageCount++;
       }
       simY += 10.5;
-
-      // Customer details card height (26)
-      if (simY + 26 > 250) {
-        simY = 52;
-        simPageCount++;
-      }
-      simY += 26 + cfg.secSpacing;
 
       // Team members table (with header)
       if (evObj.members.length > 0) {
@@ -1695,6 +1729,56 @@ export const generateQuotationPDF = (
   };
 
   // Now, iterate through events and draw the specified blocks
+  
+  // CUSTOMER DETAILS CARD
+  if (currentY + 26 > 250) {
+    currentY = createNewPage();
+  }
+
+  doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
+  doc.roundedRect(15, currentY, 180, 26, 1.5, 1.5, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.25);
+  doc.roundedRect(15, currentY, 180, 26, 1.5, 1.5, 'D');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+  doc.text('CUSTOMER DETAILS', 20, currentY + 5);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(71, 85, 105);
+
+  const col1 = [
+    { label: 'Customer Name', val: lead.customer_name || 'N/A' },
+    { label: 'Mobile Number', val: lead.mobile || 'N/A' },
+    { label: 'Email Address', val: lead.email || 'N/A' },
+    { label: 'Quotation Date', val: formatDate(lead.quotation_date || new Date().toISOString().split('T')[0]) }
+  ];
+
+  const col2 = [
+    { label: 'Sales Staff Name', val: lead.sales_staff_name || 'N/A' },
+    { label: 'Sales Staff Mobile', val: lead.sales_staff_mobile || 'N/A' },
+    { label: 'Guest Pax', val: eventsToRender[0]?.guestPax || lead.total_pax || 'N/A' }
+  ];
+
+  col1.forEach((item, i) => {
+    const itemY = currentY + 9.5 + (i * 4.5);
+    doc.text(item.label, 20, itemY);
+    doc.text(':', 45, itemY);
+    doc.text(String(item.val), 47, itemY);
+  });
+
+  col2.forEach((item, i) => {
+    const itemY = currentY + 9.5 + (i * 4.5);
+    doc.text(item.label, 110, itemY);
+    doc.text(':', 135, itemY);
+    doc.text(String(item.val), 137, itemY);
+  });
+
+  currentY += 26 + cfg.secSpacing;
+
   eventsToRender.forEach((evObj, idx) => {
     // 1. EVENT NAME & META DETAILS
     if (currentY + 11 > 250) {
@@ -1727,55 +1811,6 @@ export const generateQuotationPDF = (
     doc.text(`${endStr}`, 70, currentY);
     doc.text(`${locStr}`, 125, currentY);
     currentY += 6;
-
-    // 2. CUSTOMER DETAILS CARD
-    if (currentY + 26 > 250) {
-      currentY = createNewPage();
-    }
-
-    doc.setFillColor(bgLightGrid[0], bgLightGrid[1], bgLightGrid[2]);
-    doc.roundedRect(15, currentY, 180, 26, 1.5, 1.5, 'F');
-    doc.setDrawColor(226, 232, 240);
-    doc.setLineWidth(0.25);
-    doc.roundedRect(15, currentY, 180, 26, 1.5, 1.5, 'D');
-
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-    doc.text('CUSTOMER DETAILS', 20, currentY + 5);
-
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(71, 85, 105);
-
-    const col1 = [
-      { label: 'Customer Name', val: lead.customer_name || 'N/A' },
-      { label: 'Mobile Number', val: lead.mobile || 'N/A' },
-      { label: 'Email Address', val: lead.email || 'N/A' },
-      { label: 'Quotation Date', val: formatDate(lead.quotation_date || new Date().toISOString().split('T')[0]) }
-    ];
-
-    const col2 = [
-      { label: 'Sales Staff Name', val: lead.sales_staff_name || 'N/A' },
-      { label: 'Sales Staff Mobile', val: lead.sales_staff_mobile || 'N/A' },
-      { label: 'Guest Pax', val: evObj.guestPax || 'N/A' }
-    ];
-
-    col1.forEach((item, i) => {
-      const itemY = currentY + 9.5 + (i * 4.5);
-      doc.text(item.label, 20, itemY);
-      doc.text(':', 45, itemY);
-      doc.text(String(item.val), 47, itemY);
-    });
-
-    col2.forEach((item, i) => {
-      const itemY = currentY + 9.5 + (i * 4.5);
-      doc.text(item.label, 110, itemY);
-      doc.text(':', 135, itemY);
-      doc.text(String(item.val), 137, itemY);
-    });
-
-    currentY += 26 + cfg.secSpacing;
 
     // 3. TEAM MEMBERS INCLUDED
     if (evObj.members.length > 0) {

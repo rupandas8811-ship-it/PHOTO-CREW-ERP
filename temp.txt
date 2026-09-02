@@ -1,0 +1,3 @@
+
+                        const displayType = h.paymentType || (paymentObj ? ((paymentObj as any).Payment_type || paymentObj.payment_type) : '') || 'Payment';
+

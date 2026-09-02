@@ -6,6 +6,7 @@ import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../t
 import { supabaseClient } from '../supabaseClient';
 import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } from '../utils/orderStageCalculator';
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
+import { AddNoteModal } from './AddNoteModal';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
 import { formatDateDDMMYY, formatTime12Hour } from '../utils';
 
@@ -22,6 +23,7 @@ const StaffActionDropdown: React.FC<{
   isCompleted: boolean;
   onViewDetails: () => void;
   onOpenPhotoModal: (step: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete') => void;
+  onAddNote: () => void;
 }> = ({
   booking,
   hasEquipmentReceived,
@@ -29,7 +31,8 @@ const StaffActionDropdown: React.FC<{
   hasEquipmentHandover,
   isCompleted,
   onViewDetails,
-  onOpenPhotoModal
+  onOpenPhotoModal,
+  onAddNote
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -133,6 +136,15 @@ const StaffActionDropdown: React.FC<{
     label: 'View Details',
     onClick: () => {
       onViewDetails();
+      setIsOpen(false);
+    }
+  });
+
+  // Add Note option
+  actionOptions.push({
+    label: 'Add Note',
+    onClick: () => {
+      onAddNote();
       setIsOpen(false);
     }
   });
@@ -836,6 +848,7 @@ export const StaffModule: React.FC = () => {
     booking: any;
     stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete';
   } | null>(null);
+  const [noteModalData, setNoteModalData] = useState<{ leadId: string, orderId?: string, customerName: string } | null>(null);
   const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<{ title: string; message: string; details?: string[] } | null>(null);
 
@@ -2582,6 +2595,7 @@ export const StaffModule: React.FC = () => {
                             isCompleted={isCompleted}
                             onViewDetails={() => setSelectedBookingDetails(b)}
                             onOpenPhotoModal={(step) => openPhotoModal(b, step)}
+                            onAddNote={() => setNoteModalData({ leadId: b.leadId, orderId: b.orderId, customerName: b.customerName })}
                           />
                         </td>
                       </tr>
@@ -2869,6 +2883,17 @@ export const StaffModule: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Add Note Modal */}
+      {noteModalData && (
+        <AddNoteModal
+          isOpen={true}
+          onClose={() => setNoteModalData(null)}
+          leadId={noteModalData.leadId}
+          orderId={noteModalData.orderId}
+          customerName={noteModalData.customerName}
+        />
       )}
 
       {/* Inline Selected Date Event Details are rendered directly below calendar grid */}

@@ -828,12 +828,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
                           <p className="text-zinc-200 font-bold mt-1 uppercase text-[11px]">{prod.editing_progress || '0%'}</p>
                         </div>
                       </div>
-                      <div className="border-t border-zinc-900/85 pt-3 font-sans">
-                        <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono block">Editor Log Notes</span>
-                        <p className="text-xs text-zinc-400 mt-1 italic whitespace-pre-line leading-relaxed max-h-[100px] overflow-y-auto">
-                          {prod.remarks || "No active supplementary logs updated by Assigned Editor."}
-                        </p>
-                      </div>
+                      
                     </div>
                   </div>
 

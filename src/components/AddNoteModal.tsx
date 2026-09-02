@@ -24,11 +24,21 @@ interface AddNoteModalProps {
 }
 
 export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, leadId, orderId, customerName }) => {
-  const { currentRole, userEmail } = useRole();
+  const { currentRole, currentUser, staff, productionStaff } = useRole();
   const [note, setNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [history, setHistory] = useState<NoteHistory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Compute author name
+  let resolvedName = currentUser?.name;
+  if (!resolvedName && currentUser?.email) {
+    const s = [...(staff || []), ...(productionStaff || [])].find(x => x.email?.toLowerCase() === currentUser.email?.toLowerCase());
+    if (s?.staff_name) {
+      resolvedName = s.staff_name;
+    }
+  }
+  const authorName = resolvedName || currentUser?.email?.split('@')[0] || currentRole || 'System';
 
   useEffect(() => {
     if (isOpen) {
@@ -92,7 +102,7 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, lea
         order_id: orderId || null,
         old_status: 'NOTE',
         new_status: 'NOTE',
-        changed_by: userEmail?.split('@')[0] || currentRole || 'System',
+        changed_by: authorName,
         changed_by_role: currentRole,
         remarks: note.trim()
       }).select().single();
@@ -199,14 +209,22 @@ export const AddNoteModal: React.FC<AddNoteModalProps> = ({ isOpen, onClose, lea
 
                   return (
                     <div key={h.id} className="bg-zinc-900/50 border border-zinc-800/50 rounded-xl p-3 flex flex-col gap-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <User className="w-3.5 h-3.5 text-amber-500" />
+                        <span className="text-xs font-bold text-zinc-200">
+                          {h.changed_by || 'Unknown'} • {((h as any).changed_by_role) || 'System'}
+                        </span>
+                      </div>
                       <div className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed mb-1">
                         {h.remarks}
                       </div>
-                      <div className="text-xs text-zinc-400">
-                        Date: {displayDate}
-                      </div>
-                      <div className="text-xs text-zinc-400">
-                        Time: {displayTime}
+                      <div className="flex items-center gap-3 mt-1">
+                        <div className="text-[10px] text-zinc-500 font-mono">
+                          {displayDate}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 font-mono">
+                          {displayTime}
+                        </div>
                       </div>
                     </div>
                   );

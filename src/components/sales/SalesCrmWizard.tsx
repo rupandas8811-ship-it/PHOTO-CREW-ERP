@@ -15,7 +15,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, INITIAL_PACKAGES, SalesModuleProps } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, INITIAL_PACKAGES, SalesModuleProps, sortEventsAscending } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 
 export interface SalesCrmWizardProps {
@@ -202,6 +202,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
   const leadSourcesList = props.LEAD_SOURCES || LEAD_SOURCES || [];
   const eventTypesList = props.EVENT_TYPES || EVENT_TYPES || [];
   const shootTypesList = props.SHOOT_TYPES || SHOOT_TYPES || [];
+  const sortedCrmEvents = crmWizardStep === 3 ? sortEventsAscending(crmEvents || []) : (crmEvents || []);
 
   if (activeTab === 'create' && !selectedLead) {
     return (
@@ -1376,7 +1377,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   
                                   <div className="col-span-1 sm:col-span-2 space-y-2 mb-2">
                                     {crmEvents && crmEvents.length > 0 ? (
-                                      crmEvents.map((ev: any, idx: number) => (
+                                      sortedCrmEvents.map((ev: any, idx: number) => (
                                         <div key={ev.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                                           <div className="flex flex-col min-w-max">
                                             <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider mb-0.5">Event {idx + 1}</span>
@@ -1429,7 +1430,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                 {crmEvents && crmEvents.length > 0 && (
                                   <div className="mt-4 space-y-3">
                                     <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Details</h5>
-                                    {crmEvents.map((ev: any) => (
+                                    {sortedCrmEvents.map((ev: any) => (
                                       <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-4 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
                                         <div className="col-span-1 sm:col-span-4">
                                           <span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span>
@@ -1482,7 +1483,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                 <div className="space-y-2 mb-4">
                                   <label className="block text-[10px] text-zinc-400 mb-2 uppercase font-mono font-bold border-b border-zinc-800 pb-1">Confirmed Event Dates</label>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {crmEvents.map(ev => (
+                                    {sortedCrmEvents.map(ev => (
                                       <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
                                         <div className="flex flex-col">
                                           <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-0.5">🎬 {ev.event_name || ev.event_type || 'Event'}</span>
@@ -1542,7 +1543,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                 {crmEvents && crmEvents.length > 0 && (
                                   <div className="col-span-1 sm:col-span-2 mt-4 space-y-3">
                                     <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Reporting Details</h5>
-                                    {crmEvents.map(ev => {
+                                    {sortedCrmEvents.map(ev => {
                                       const repEndDate = ev.event_end_date || ev.Event_End_Date || (crmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : '');
                                       return (
                                         <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">

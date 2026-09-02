@@ -1057,7 +1057,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
     >
       <div 
         id="business_owner_order_history_modal"
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-6xl shadow-2xl relative flex flex-col max-h-[94vh] overflow-hidden"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-6xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] shadow-2xl relative flex flex-col max-h-[94vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         
@@ -1744,6 +1744,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
 
                     const rawFootageUrl = ea.raw_footage_link || ea.rawFootageLink;
                     const editedDriveUrl = ea.Edited_Drive_Link || ea.edited_drive_link;
+                    const serverFileLinkUrl = ea.server_file_link || ea.upload_link;
 
                     return (
                       <div key={ea.assignment_id || idx} className="bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
@@ -1791,6 +1792,18 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                               >
                                 <ExternalLink className="w-3 h-3" />
                                 <span>Edited Drive Review Link</span>
+                              </a>
+                            )}
+                            {serverFileLinkUrl && (
+                              <a 
+                                href={serverFileLinkUrl.startsWith('http') ? serverFileLinkUrl : `https://${serverFileLinkUrl}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="inline-flex items-center gap-1 text-purple-400 hover:underline font-bold"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>Server File Link</span>
                               </a>
                             )}
                           </div>

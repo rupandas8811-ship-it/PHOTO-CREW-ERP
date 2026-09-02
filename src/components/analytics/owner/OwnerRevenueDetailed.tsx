@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useRole } from '../../RoleContext';
+import { supabaseClient } from '../../../supabaseClient';
 import { formatINR } from '../../../utils';
 import { 
   Landmark, DollarSign, FileText, CheckCircle, Clock, AlertCircle, TrendingUp, BarChart3, 
@@ -122,77 +123,49 @@ export const OwnerRevenueDetailed: React.FC = () => {
     return Object.entries(packages).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 8);
   }, [orders]);
 
-  // Unified recent transactions list using precise Date & Time from payment records/history
-  const recentTransactions = useMemo(() => {
-    const list: {
-      date: string;
-      orderId: string;
-      customerName: string;
-      transactionId: string;
-      paymentMode: string;
-      amount: number;
-      receivedBy?: string;
-    }[] = [];
+  const [recentTransactions, setRecentTransactions] = useState<{
+    date: string;
+    orderId: string;
+    customerName: string;
+    transactionId: string;
+    paymentMode: string;
+    amount: number;
+    receivedBy?: string;
+  }[]>([]);
 
-    payments.forEach(p => {
-      const order = orders.find(o => o.order_id === p.order_id);
-      const customerName = order?.customer_name || 'System Transaction';
-      
-      const historyKey = `payment_history_${p.order_id}`;
-      const existingHistoryStr = localStorage.getItem(historyKey);
-      let historyList: any[] = [];
-      if (existingHistoryStr) {
-        try {
-          historyList = JSON.parse(existingHistoryStr);
-        } catch (e) {
-          console.error("Failed to parse local storage payment history", e);
-        }
-      } else {
-        // Fallback prepopulated history if none exists but total paid is greater than zero
-        const adv = p.advance_received || 0;
-        const finalRecv = p.final_payment_received || 0;
-        
-        if (adv > 0) {
-          historyList.push({
-            date: p.payment_date || order?.created_at || new Date().toISOString(),
-            amount: adv,
-            transactionId: p.transaction_id || '',
-            paymentMode: 'Bank Transfer',
-            paymentType: (p as any)?.Payment_type || p?.payment_type || 'Advance Payment',
-            updatedBy: 'System',
-            notes: 'Initial advance payment'
+  useEffect(() => {
+    const fetchRecentTransactions = async () => {
+      try {
+        const { data, error } = await supabaseClient
+          .from('payment_history')
+          .select('*')
+          .order('payment_date', { ascending: false })
+          .limit(20);
+          
+        if (data && !error) {
+          const list = data.map(h => {
+            const order = orders.find(o => o.order_id === h.order_id);
+            const customerName = order?.customer_name || 'System Transaction';
+            
+            return {
+              date: h.payment_date || new Date().toISOString(),
+              orderId: h.order_id || '-',
+              customerName,
+              transactionId: (!h.transaction_id || h.transaction_id.trim() === '' || h.transaction_id === 'null' || h.transaction_id === 'NULL') ? 'N/A' : h.transaction_id,
+              paymentMode: h.payment_mode || 'N/A',
+              amount: h.amount || 0,
+              receivedBy: h.updated_by || 'System'
+            };
           });
+          setRecentTransactions(list);
         }
-        if (finalRecv > 0) {
-          historyList.push({
-            date: p.payment_date || order?.created_at || new Date().toISOString(),
-            amount: finalRecv,
-            transactionId: p.transaction_id || '',
-            paymentMode: 'Bank Transfer',
-            paymentType: (p as any)?.Payment_type || p?.payment_type || 'Final Payment',
-            updatedBy: 'System',
-            notes: 'Recorded final payment'
-          });
-        }
+      } catch (err) {
+        console.error("Failed to fetch recent transactions", err);
       }
-
-      historyList.forEach(h => {
-        list.push({
-          date: h.date || new Date().toISOString(),
-          orderId: p.order_id,
-          customerName,
-          transactionId: (!h.transactionId || h.transactionId.trim() === '' || h.transactionId === 'null' || h.transactionId === 'NULL') ? 'N/A' : h.transactionId,
-          paymentMode: h.paymentMode || 'N/A',
-          amount: h.amount || 0,
-          receivedBy: h.updatedBy || 'System'
-        });
-      });
-    });
-
-    // Sort by Date & Time descending (newest first)
-    list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    return list;
-  }, [payments, orders]);
+    };
+    
+    fetchRecentTransactions();
+  }, [orders]);
 
   const COLORS = ['#10B981', '#6366F1', '#F59E0B', '#EF4444', '#A78BFA', '#F472B6', '#2DD4BF', '#FACC15'];
 

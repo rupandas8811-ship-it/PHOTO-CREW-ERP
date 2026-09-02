@@ -992,7 +992,7 @@ export const OperationsStaffManagement: React.FC = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-7xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0"
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0"
             >
               {/* Modal Header */}
               <div className="p-4 sm:p-6 border-b border-zinc-850 flex items-center justify-between bg-zinc-950/40 shrink-0">

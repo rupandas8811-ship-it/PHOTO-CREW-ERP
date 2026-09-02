@@ -432,16 +432,21 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
         'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
         'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review',
         'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress',
-        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved',
+        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved', 'Approved / Order Close',
         'Delivered', 'Project Delivered', 'Business Owner Review',
-        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed'
+        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
       ];
 
       const operationsStages = [
         'Confirm Order', 'Order Confirmed', 'Booking Confirmed',
         'Event Scheduled', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned',
         'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
-        'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received'
+        'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
+        'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review',
+        'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress',
+        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved', 'Approved / Order Close',
+        'Delivered', 'Project Delivered', 'Business Owner Review',
+        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
       ];
 
       const productionStages = [
@@ -449,7 +454,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
         'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
         'Internal QC Review', 'Customer Review', 'Client Review', 'Client Review Sent',
         'Revision Required', 'Revision In Progress', 'Editing Completed', 'Editing Complete',
-        'Client Acceptance'
+        'Client Acceptance', 'Final Approval', 'Approved', 'Approved / Order Close',
+        'Delivered', 'Project Delivered', 'Business Owner Review',
+        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
       ];
 
       const ownerStages = [
@@ -459,9 +466,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
         'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
         'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review',
         'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress',
-        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved',
+        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved', 'Approved / Order Close',
         'Delivered', 'Project Delivered', 'Business Owner Review',
-        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed'
+        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
       ];
 
       leads.forEach(ld => {
@@ -556,6 +563,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
 
           // If dateToUse is missing/empty, do not render on calendar
           if (!dateToUse) return;
+          
+          if (dateToUse.includes('T')) {
+            dateToUse = dateToUse.split('T')[0];
+          }
 
           const evStartTime = ev.event_start_time || ev.event_time || ld.event_time || '10:00 AM';
           const evName = ev.event_name || ld.custom_event_name || ev.event_type || ld.event_type || 'Event Shoot';
@@ -1868,7 +1879,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
         <div 
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
         >
-          <div className="bg-zinc-900 border border-zinc-805 w-full w-full max-w-6xl p-6 rounded-2xl shadow-2xl relative space-y-6 my-8">
+          <div className="bg-zinc-900 border border-zinc-805 w-full w-full max-w-6xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] p-6 rounded-2xl shadow-2xl relative space-y-6 my-8">
             <button
               onClick={() => { setPopupDate(null); setPopupLeadId(null); }}
               className="absolute right-4 top-4 p-1.5 hover:bg-zinc-850 rounded-lg text-zinc-400 hover:text-white transition"
@@ -2046,7 +2057,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
       {/* TEAM POPUP */}
       {teamPopupEvent && createPortal(
         <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/90 backdrop-blur-md animate-in zoom-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 w-full w-full max-w-5xl p-6 rounded-2xl shadow-2xl relative">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] p-6 rounded-2xl shadow-2xl relative">
             <button
               onClick={() => setTeamPopupEvent(null)}
               className="absolute right-4 top-4 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
@@ -2085,7 +2096,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
           onClick={(e) => { e.stopPropagation(); setShowSelectedDateModal(false); }}
         >
           <div 
-            className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
+            className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -2141,7 +2152,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           <th className="p-3.5">Event Time</th>
                           <th className="p-3.5">Location</th>
                           <th className="p-3.5">Status</th>
-                          <th className={`p-3.5 ${role === 'production' ? 'pr-4' : ''}`}>Target Delivery Date</th>
+                          {role !== 'operations' && role !== 'worker' && (
+                            <th className={`p-3.5 ${role === 'production' ? 'pr-4' : ''}`}>Target Delivery Date</th>
+                          )}
                           {role !== 'production' && (
                             <th className="p-3.5 pr-4 text-right">Action</th>
                           )}
@@ -2189,9 +2202,11 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                   {status}
                                 </span>
                               </td>
-                              <td className={`p-3.5 font-mono font-bold text-pink-400 whitespace-nowrap ${role === 'production' ? 'pr-4' : ''}`}>
-                                {targetDelDate}
-                              </td>
+                              {role !== 'operations' && role !== 'worker' && (
+                                <td className={`p-3.5 font-mono font-bold text-pink-400 whitespace-nowrap ${role === 'production' ? 'pr-4' : ''}`}>
+                                  {targetDelDate}
+                                </td>
+                              )}
                               {role !== 'production' && (
                                 <td className="p-3.5 pr-4 text-right whitespace-nowrap">
                                   <button

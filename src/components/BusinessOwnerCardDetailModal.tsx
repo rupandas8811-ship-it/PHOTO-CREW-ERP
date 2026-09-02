@@ -124,7 +124,7 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
       }}
     >
       <div 
-        className={`bg-zinc-950 border ${activeColors.border} rounded-2xl w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-zinc-100 animate-in fade-in zoom-in-95 duration-200`}
+        className={`bg-zinc-950 border ${activeColors.border} rounded-2xl w-full max-w-5xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] max-h-[90vh] flex flex-col shadow-2xl overflow-hidden text-zinc-100 animate-in fade-in zoom-in-95 duration-200`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

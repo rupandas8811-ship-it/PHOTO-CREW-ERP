@@ -39,7 +39,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
 
   return (
     <header className="bg-black/90 border-b border-zinc-900 backdrop-blur-md py-4 px-4 sm:px-6 sticky top-0 z-50 shadow-2xl font-sans">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+      <div className="max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] w-full mx-auto flex items-center justify-between gap-4">
         
         {/* Left Side: Toggle (☰ Menu), Logo & Current Role Name */}
         <div className="flex items-center gap-3 sm:gap-4">

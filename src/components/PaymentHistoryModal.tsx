@@ -1,8 +1,9 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FileText, X } from 'lucide-react';
 import { formatINR, formatDateDDMMYY, formatTime12Hour, triggerAutoScrollAndFocus } from '../utils';
 import { Order, Payment, Lead } from '../types';
+import { supabaseClient } from '../supabaseClient';
 
 export interface PaymentHistoryModalProps {
   isOpen: boolean;
@@ -21,16 +22,45 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   orders = [],
   leads = []
 }) => {
+  const [historyList, setHistoryList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const orderId = order?.orderId || order?.order_id || '';
+  const leadId = order?.leadId || order?.lead_id || '';
+  const primaryOrderId = orderId || orders.find(o => leadId && o.lead_id === leadId)?.order_id || '';
+
   useEffect(() => {
     if (isOpen) {
       triggerAutoScrollAndFocus('#payment_details_history_modal', 100);
+      
+      const fetchHistory = async () => {
+        if (!primaryOrderId || !supabaseClient) return;
+        setIsLoading(true);
+        try {
+          const { data, error } = await supabaseClient
+            .from('payment_history')
+            .select('*')
+            .eq('order_id', primaryOrderId)
+            .order('payment_date', { ascending: true });
+          
+          if (!error && data) {
+            setHistoryList(data);
+          }
+        } catch (err) {
+          console.error("Error fetching payment history:", err);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      
+      fetchHistory();
+    } else {
+      setHistoryList([]);
     }
-  }, [isOpen]);
+  }, [isOpen, primaryOrderId]);
 
   if (!isOpen || !order) return null;
 
-  const orderId = order.orderId || order.order_id || '';
-  const leadId = order.leadId || order.lead_id || '';
   const customerName = order.customerName || order.customer_name || 'Customer';
 
   // Find related objects
@@ -40,15 +70,14 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
   // Payment amounts
   const finalQuotation = Number(orderObj?.quotation_amount) || Number(order.totalRevenue) || Number(order.finalPackageAmount) || Number(leadObj?.final_amount) || Number(leadObj?.Final_Quotation_Amount) || Number(leadObj?.budget) || 0;
-
   const totalPaid = paymentObj
     ? ((Number(paymentObj.advance_received) || 0) + (Number(paymentObj.final_payment_received) || 0) + (Number(paymentObj.additional_received) || 0))
     : (Number(order.paymentReceived) || Number(order.totalPaidAmount) || Number(orderObj?.advance_received) || 0);
 
   const remaining = Math.max(0, finalQuotation - totalPaid);
-
   let statusText = 'Pending Payment';
   let statusColor = 'text-rose-400 bg-rose-500/10 border-rose-500/20';
+
   if (remaining <= 0 && finalQuotation > 0) {
     statusText = 'Fully Paid';
     statusColor = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
@@ -71,69 +100,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     }];
   }
 
-  // History entries
-  let historyList: any[] = [];
-  const primaryOrderId = orderId || orderObj?.order_id || '';
-  const primaryLeadId = leadId || orderObj?.lead_id || leadObj?.lead_id || '';
-
-  const storageKey = primaryOrderId ? `payment_history_${primaryOrderId}` : primaryLeadId ? `payment_history_${primaryLeadId}` : '';
-  let storedHistory = storageKey ? localStorage.getItem(storageKey) : null;
-
-  if (storedHistory) {
-    try {
-      const parsed = JSON.parse(storedHistory);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        historyList = parsed;
-      }
-    } catch (e) {
-      console.error('Failed to parse local storage payment history', e);
-    }
-  }
-
-  // Fallback history if no local storage records
-  if (historyList.length === 0) {
-    const adv = Number(paymentObj?.advance_received) || Number(orderObj?.advance_received) || Number(order.advanceReceived) || 0;
-    const finalRecv = Number(paymentObj?.final_payment_received) || 0;
-    const addRecv = Number(paymentObj?.additional_received) || 0;
-
-    if (adv > 0) {
-      historyList.push({
-        date: paymentObj?.payment_date || orderObj?.created_at || new Date().toISOString(),
-        amount: adv,
-        transactionId: paymentObj?.transaction_id || '-',
-        paymentMode: 'Bank Transfer',
-        paymentType: (paymentObj as any)?.Payment_type || paymentObj?.payment_type || 'Advance Payment',
-        updatedBy: 'System',
-        notes: 'Initial advance payment'
-      });
-    }
-    if (finalRecv > 0) {
-      historyList.push({
-        date: paymentObj?.payment_date || new Date().toISOString(),
-        amount: finalRecv,
-        transactionId: paymentObj?.transaction_id || '-',
-        paymentMode: 'Bank Transfer',
-        paymentType: (paymentObj as any)?.Payment_type || paymentObj?.payment_type || 'Final Payment',
-        updatedBy: 'System',
-        notes: 'Recorded final payment'
-      });
-    }
-    if (addRecv > 0) {
-      historyList.push({
-        date: paymentObj?.payment_date || new Date().toISOString(),
-        amount: addRecv,
-        transactionId: paymentObj?.transaction_id || '-',
-        paymentMode: 'Bank Transfer',
-        paymentType: (paymentObj as any)?.Payment_type || paymentObj?.payment_type || 'Additional Payment',
-        updatedBy: 'System',
-        notes: 'Recorded additional payment'
-      });
-    }
-  }
-
   return createPortal(
     <div id="payment_details_history_modal" className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl sm:max-w-3xl lg:max-w-4xl flex flex-col max-h-[90vh] overflow-hidden">
+      <div className="bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-2xl sm:max-w-3xl lg:max-w-4xl 2xl:max-w-6xl min-[1920px]:max-w-[1400px] min-[2560px]:max-w-[1800px] min-[3840px]:max-w-[2400px] flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800/80 bg-zinc-900/60 rounded-t-2xl shrink-0">
@@ -232,17 +201,23 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                 <table className="w-full text-left text-xs border-collapse min-w-max">
                   <thead>
                     <tr className="bg-zinc-900 border-b border-zinc-800 text-zinc-400 font-mono text-[9px] uppercase tracking-wider">
-                      <th className="p-3 pl-4">Date & Time</th>
-                      <th className="p-3 text-right">Amount</th>
-                      <th className="p-3">Payment Type</th>
-                      <th className="p-3">Transaction ID</th>
-                      <th className="p-3">Method</th>
-                      <th className="p-3">Updated By</th>
-                      <th className="p-3 pr-4">Notes</th>
+                      <th className="p-3 pl-4 whitespace-nowrap">Date & Time</th>
+                      <th className="p-3 text-right whitespace-nowrap">Amount</th>
+                      <th className="p-3 whitespace-nowrap">Payment Type</th>
+                      <th className="p-3 whitespace-nowrap">Transaction ID</th>
+                      <th className="p-3 whitespace-nowrap">Method</th>
+                      <th className="p-3 whitespace-nowrap">Updated By</th>
+                      <th className="p-3 pr-4 whitespace-nowrap">Notes</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
-                    {historyList.length === 0 ? (
+                    {isLoading ? (
+                      <tr>
+                        <td colSpan={7} className="text-center py-6 text-zinc-500 text-[10px]">
+                          Loading records...
+                        </td>
+                      </tr>
+                    ) : historyList.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="text-center py-6 text-zinc-500 text-[10px]">
                           No payment history records found.
@@ -250,9 +225,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                       </tr>
                     ) : (
                       historyList.map((h, index) => {
-                        let displayDate = h.date;
+                        let displayDate = h.payment_date || h.date;
                         try {
-                          displayDate = new Date(h.date).toLocaleString('en-IN', {
+                          displayDate = new Date(h.payment_date || h.date).toLocaleString('en-IN', {
                             day: '2-digit',
                             month: 'short',
                             year: 'numeric',
@@ -262,25 +237,25 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                           });
                         } catch (e) {}
 
-                        const displayType = h.paymentType || (paymentObj ? ((paymentObj as any).Payment_type || paymentObj.payment_type) : '') || 'Payment';
+                        const displayType = h.payment_type || h.paymentType || (paymentObj ? ((paymentObj as any).Payment_type || paymentObj.payment_type) : '') || 'Payment';
 
                         return (
                           <tr key={index} className="hover:bg-zinc-800/30 text-zinc-300">
-                            <td className="p-3 pl-4 text-[10px] text-zinc-400">{displayDate}</td>
-                            <td className="p-3 text-right font-bold text-emerald-400">
+                            <td className="p-3 pl-4 text-[10px] text-zinc-400 whitespace-nowrap">{displayDate}</td>
+                            <td className="p-3 text-right font-bold text-emerald-400 whitespace-nowrap">
                               {formatINR(Number(h.amount) || 0)}
                             </td>
-                            <td className="p-3">
-                              <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[9px] font-bold text-zinc-200">
+                            <td className="p-3 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[9px] font-bold text-zinc-200 whitespace-nowrap">
                                 {displayType}
                               </span>
                             </td>
-                            <td className="p-3 text-[10px] text-zinc-400">
-                              {(!h.transactionId || h.transactionId.trim() === '' || h.transactionId === 'null') ? 'N/A' : h.transactionId}
+                            <td className="p-3 text-[10px] text-zinc-400 whitespace-nowrap">
+                              {(!h.transaction_id && !h.transactionId || h.transaction_id?.trim() === '' || h.transaction_id === 'null' || h.transactionId?.trim() === '' || h.transactionId === 'null') ? 'N/A' : (h.transaction_id || h.transactionId)}
                             </td>
-                            <td className="p-3 text-[10px] text-zinc-300">{h.paymentMode || 'N/A'}</td>
-                            <td className="p-3 text-[10px] text-zinc-400">{h.updatedBy || 'N/A'}</td>
-                            <td className="p-3 pr-4 text-[10px] text-zinc-400 max-w-[150px] truncate" title={h.notes}>{h.notes || '-'}</td>
+                            <td className="p-3 text-[10px] text-zinc-300 whitespace-nowrap">{h.payment_mode || h.paymentMode || 'N/A'}</td>
+                            <td className="p-3 text-[10px] text-zinc-400 whitespace-nowrap">{h.updated_by || h.updatedBy || 'N/A'}</td>
+                            <td className="p-3 pr-4 text-[10px] text-zinc-400 min-w-[150px] max-w-[250px] truncate" title={h.notes}>{h.notes || '-'}</td>
                           </tr>
                         );
                       })

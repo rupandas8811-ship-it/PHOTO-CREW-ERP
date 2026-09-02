@@ -870,11 +870,11 @@ const MainAppContent: React.FC = () => {
       <RoleSwitcher sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       {/* Main Container */}
-      <div className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-3 md:p-4 lg:p-4 flex flex-col lg:flex-row gap-4 relative">
+      <div className="flex-1 max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] w-full mx-auto p-2 sm:p-3 md:p-4 lg:p-4 flex flex-col lg:flex-row gap-4 relative">
         
         {/* DESKTOP SIDEBAR PANEL */}
         {sidebarOpen && (
-          <div className="hidden lg:block flex-shrink-0 w-64 transition-all duration-300">
+          <div className="hidden lg:block flex-shrink-0 w-64 2xl:w-72 min-[1920px]:w-80 min-[2560px]:w-96 transition-all duration-300">
             <div className="sticky top-20">
               {renderSidebarContent()}
             </div>

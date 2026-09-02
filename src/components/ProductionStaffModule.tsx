@@ -9,6 +9,7 @@ import {
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
+import { AddNoteModal } from './AddNoteModal';
 import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
 import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof } from '../utils';
 
@@ -588,6 +589,7 @@ export const ProductionStaffModule: React.FC = () => {
     setTimeout(() => setToastMessage(null), 4000);
   };
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+  const [noteModalData, setNoteModalData] = useState<{ leadId: string, orderId?: string, customerName: string } | null>(null);
   const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
 
   const toggleOrderDetails = (orderId: string) => {
@@ -786,7 +788,7 @@ export const ProductionStaffModule: React.FC = () => {
     server_upload_confirmed: boolean;
     server_upload_event_date: string;
     server_upload_folder_name: string;
-    event_configs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean }>;
+    event_configs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean; serverFileLink?: string }>;
   }>({ 
     confirmation_proof: '', 
     selectedIds: [],
@@ -799,7 +801,7 @@ export const ProductionStaffModule: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
   const openEditingCompletedModal = (grp: any, delivItem: any) => {
-    const eventConfigs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean }> = {};
+    const eventConfigs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean; serverFileLink?: string }> = {};
     const orderId = grp.orderId || (delivItem as any).orderId || grp.leadId || '';
     const cleanOrdId = String(orderId).trim().toLowerCase();
 
@@ -836,6 +838,12 @@ export const ProductionStaffModule: React.FC = () => {
           item.assignmentObj?.server_upload_folder_name ||
           ''
         ).trim();
+        const existingServerFileLink = existingConfirmed ? (
+          item.assignmentObj?.server_file_link ||
+          item.assignmentObj?.upload_link ||
+          savedVerif?.upload_link_path ||
+          ''
+        ).trim() : '';
 
         eventConfigs[evtKey] = {
           eventKey: evtKey,
@@ -843,7 +851,8 @@ export const ProductionStaffModule: React.FC = () => {
           eventName: `${item.eventName || grp.eventName || 'Event'} - ${item.deliverableName || item.speciality || 'Task'}`,
           eventDate: existingEventDate,
           folderName: existingFolderName,
-          confirmed: existingConfirmed
+          confirmed: existingConfirmed,
+          serverFileLink: existingServerFileLink
         };
       }
     });
@@ -855,7 +864,8 @@ export const ProductionStaffModule: React.FC = () => {
       eventName: `${delivItem.eventName || grp.eventName || 'Event'} - ${delivItem.deliverableName || delivItem.speciality || 'Task'}`,
       eventDate: delivItem.eventDate || grp.eventDate || '',
       folderName: '',
-      confirmed: false
+      confirmed: false,
+      serverFileLink: ''
     };
 
     const savedTargetVerif = (clientAcceptanceVerifications || []).find(v => {
@@ -1297,9 +1307,13 @@ export const ProductionStaffModule: React.FC = () => {
         folderName: customerReviewForm.server_upload_folder_name,
         eventName: 'Event'
       };
-      if (!cfg.confirmed || !cfg.eventDate?.trim() || !cfg.folderName?.trim()) {
+      if (!cfg.confirmed || !cfg.eventDate?.trim() || !cfg.folderName?.trim() || !cfg.serverFileLink?.trim()) {
         const evtName = cfg.eventName || 'the event';
-        alert(`Please tick "Edited Folder Uploaded in Server" and enter both Event Date and Folder Name for ${evtName}.`);
+        alert(`Please tick "Edited Folder Uploaded in Server" and enter Event Date, Folder Name, and Server File Link for ${evtName}.`);
+        return;
+      }
+      if (!cfg.serverFileLink?.trim()) {
+        alert(`Please provide the Server File Link for ${cfg.eventName || 'the event'}.`);
         return;
       }
     }
@@ -1591,9 +1605,9 @@ Thank you.`;
         folderName: editingCompletedForm.server_upload_folder_name,
         eventName: 'Event'
       };
-      if (!cfg.confirmed || !cfg.eventDate?.trim() || !cfg.folderName?.trim()) {
+      if (!cfg.confirmed || !cfg.eventDate?.trim() || !cfg.folderName?.trim() || !cfg.serverFileLink?.trim()) {
         const evtName = cfg.eventName || 'the event';
-        alert(`Please tick "Edited Folder Uploaded in Server" and enter both Event Date and Folder Name for ${evtName}.`);
+        alert(`Please tick "Edited Folder Uploaded in Server" and enter Event Date, Folder Name, and Server File Link for ${evtName}.`);
         return;
       }
     }
@@ -1637,7 +1651,9 @@ Thank you.`;
           server_upload_folder_name: serverFolderName,
           server_upload_confirmed_at: timestamp,
           server_upload_confirmed_by: staffName || currentUser?.name || 'Production Staff',
-          edited_folder_uploaded_to_server: true
+          edited_folder_uploaded_to_server: true,
+          server_file_link: (cfg.serverFileLink || '').trim(),
+          upload_link: (cfg.serverFileLink || '').trim()
         };
 
         await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Completed' as any, assignPayload);
@@ -1980,7 +1996,7 @@ Thank you.`;
                               <th className="px-3.5 py-2.5 font-bold">Event Name</th>
                               <th className="px-3.5 py-2.5 font-bold">Assigned Task</th>
                               <th className="px-3.5 py-2.5 font-bold">Target Delivery Date</th>
-                              <th className="px-3.5 py-2.5 font-bold">Note</th>
+                              
                               <th className="px-3.5 py-2.5 font-bold">Current Status</th>
                               <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
                               <th className="px-3.5 py-2.5 font-bold">Customer Proof</th>
@@ -2044,23 +2060,7 @@ Thank you.`;
                                     {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
                                   </td>
 
-                                  {/* 6. Note */}
-                                  <td className="px-3.5 py-3 font-mono whitespace-nowrap">
-                                     {delivItem.prodObj?.project_notes ? (
-                                       <button
-                                         onClick={() => setSelectedNote(delivItem.prodObj?.project_notes)}
-                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-lg text-xs font-bold transition-all cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98]"
-                                       >
-                                         <FileText className="w-3.5 h-3.5 shrink-0" />
-                                         Click to Read
-                                       </button>
-                                     ) : (
-                                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
-                                         No Note
-                                       </span>
-                                     )}
-                                  </td>
-
+                                  
                                   {/* 7. Current Status */}
                                   <td className="px-3.5 py-3 whitespace-nowrap">
                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold border ${delivBadge.color}`}>
@@ -2243,6 +2243,18 @@ Thank you.`;
                                         className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-purple-600/20 hover:text-purple-300 font-bold flex items-center gap-2 transition-colors cursor-pointer"
                                       >
                                         <Eye className="w-4 h-4 text-purple-400" /> View Details
+                                      </button>
+                                      
+                                      {/* Add Note */}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActiveDropdownId(null);
+                                          setNoteModalData({ leadId: grp.leadId || grp.orderId, orderId: grp.orderId, customerName: grp.customerName });
+                                        }}
+                                        className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-amber-600/20 hover:text-amber-300 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                                      >
+                                        <span className="w-4 h-4 flex items-center justify-center text-amber-400">📝</span> Add Note
                                       </button>
 
                                       {/* View Customer Confirmation Proof */}
@@ -2650,6 +2662,18 @@ Thank you.`;
                                     <Eye className="w-4 h-4 text-purple-400" /> View Details
                                   </button>
 
+                                  {/* Add Note */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveDropdownId(null);
+                                      setNoteModalData({ leadId: grp.leadId || grp.orderId, orderId: grp.orderId, customerName: grp.customerName });
+                                    }}
+                                    className="w-full text-left px-4 py-3 text-xs text-zinc-200 hover:bg-amber-600/20 hover:text-amber-300 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
+                                  >
+                                    <span className="w-4 h-4 flex items-center justify-center text-amber-400">📝</span> Add Note
+                                  </button>
+
                                   {/* View Customer Confirmation Proof */}
                                   {(() => {
                                     const proof = parseCustomerProof(delivItem.assignmentObj, delivItem.prodObj, delivItem.orderObj);
@@ -2927,212 +2951,7 @@ Thank you.`;
                     </p>
                   </div>
 
-                  {/* ========================================================= */}
-                  {/* SERVER UPLOAD CONFIRMATION CHECKLIST */}
-                  {/* ========================================================= */}
-                  <div className="space-y-3 pt-2 border-t border-zinc-800">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-xs font-mono font-bold text-zinc-200 uppercase flex items-center gap-1.5">
-                        <span>📁</span>
-                        <span>Server Upload Confirmation</span>
-                      </label>
-                      <span className="text-[10px] text-zinc-500 font-mono">Server Checklist</span>
-                    </div>
 
-                    <div className="space-y-3 animate-in fade-in duration-200">
-                      {uniqueEventKeys.length === 0 ? (
-                        <p className="text-xs text-zinc-500 italic">Select at least one deliverable below to configure server checklist.</p>
-                      ) : (
-                          uniqueEventKeys.map((evtKey: string) => {
-                            const sampleDeliv = selectedDeliverables.find((d: any) => d.assignmentId === evtKey);
-                            const rawDate = sampleDeliv?.eventDate || customerReviewModal.group?.eventDate || '';
-                            const defaultEvtDate = formatDateToDDMMYY(rawDate) || rawDate;
-
-                            const evtCfg = customerReviewForm.event_configs[evtKey] || {
-                              eventKey: evtKey,
-                              eventId: sampleDeliv?.eventId || '',
-                              eventName: sampleDeliv?.eventName || customerReviewModal.group.eventName || 'Event',
-                              eventDate: customerReviewForm.server_upload_event_date || defaultEvtDate,
-                              folderName: customerReviewForm.server_upload_folder_name || '',
-                              confirmed: customerReviewForm.server_upload_confirmed,
-                              isSaved: false
-                            };
-
-                            // If already saved and confirmed, display formatted confirmation state
-                            if (evtCfg.isSaved && evtCfg.confirmed) {
-                              return (
-                                <div key={evtKey} className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 space-y-2">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs sm:text-sm">
-                                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                                      <span>✓ Edited Folder Uploaded in Server</span>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setCustomerReviewForm(prev => ({
-                                          ...prev,
-                                          event_configs: {
-                                            ...prev.event_configs,
-                                            [evtKey]: {
-                                              ...evtCfg,
-                                              isSaved: false
-                                            }
-                                          }
-                                        }));
-                                      }}
-                                      className="text-[11px] text-zinc-400 hover:text-white underline cursor-pointer"
-                                    >
-                                      Edit
-                                    </button>
-                                  </div>
-
-                                  {uniqueEventKeys.length > 1 && (
-                                    <div className="text-[11px] font-bold text-emerald-300">
-                                      Event: {evtCfg.eventName}
-                                    </div>
-                                  )}
-
-                                  <div className="text-xs text-zinc-300 font-mono space-y-1 pl-6 pt-1 border-t border-emerald-900/50">
-                                    <div><span className="text-zinc-500">Event Date:</span> <strong className="text-white">{evtCfg.eventDate}</strong></div>
-                                    <div><span className="text-zinc-500">Folder Name:</span> <strong className="text-white">{evtCfg.folderName}</strong></div>
-                                  </div>
-                                </div>
-                              );
-                            }
-
-                            // Interactive Checklist Card
-                            return (
-                              <div key={evtKey} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
-                                {uniqueEventKeys.length > 1 && (
-                                  <div className="text-xs font-bold text-amber-300 pb-1 border-b border-zinc-800">
-                                    Event: {evtCfg.eventName}
-                                  </div>
-                                )}
-
-                                <label className="flex items-start gap-3 cursor-pointer select-none">
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(evtCfg.confirmed)}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked;
-                                      setCustomerReviewForm(prev => {
-                                        const updatedConfigs = {
-                                          ...prev.event_configs,
-                                          [evtKey]: {
-                                            ...evtCfg,
-                                            confirmed: checked,
-                                            eventDate: evtCfg.eventDate || defaultEvtDate,
-                                            folderName: evtCfg.folderName || ''
-                                          }
-                                        };
-                                        return {
-                                          ...prev,
-                                          server_upload_confirmed: checked,
-                                          server_upload_event_date: updatedConfigs[evtKey].eventDate,
-                                          server_upload_folder_name: updatedConfigs[evtKey].folderName || '',
-                                          event_configs: updatedConfigs
-                                        };
-                                      });
-                                    }}
-                                    className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-amber-500 focus:ring-amber-500 cursor-pointer shrink-0"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <span className="text-xs font-bold text-white block">
-                                      Edited Folder Uploaded in Server
-                                    </span>
-                                    <span className="text-[10px] text-zinc-400 block mt-0.5">
-                                      Tick checkbox to confirm that the Edited Folder has been uploaded to the Server.
-                                    </span>
-                                  </div>
-                                </label>
-
-                                {evtCfg.confirmed && (
-                                  <div className="pt-3 border-t border-zinc-800/80 space-y-3 animate-in fade-in duration-200">
-                                    <div className="text-xs font-mono font-bold text-zinc-300 uppercase">
-                                      Server Upload Confirmation
-                                    </div>
-
-                                    <div>
-                                      <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
-                                        Event Date <span className="text-rose-400">*</span>
-                                      </label>
-                                      <input
-                                        type="text"
-                                        placeholder="DD-MM-YY (e.g. 21-08-26)"
-                                        value={evtCfg.eventDate}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setCustomerReviewForm(prev => ({
-                                            ...prev,
-                                            server_upload_event_date: val,
-                                            event_configs: {
-                                              ...prev.event_configs,
-                                              [evtKey]: {
-                                                ...evtCfg,
-                                                eventDate: val
-                                              }
-                                            }
-                                          }));
-                                        }}
-                                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
-                                        required
-                                      />
-                                    </div>
-
-                                    <div>
-                                      <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
-                                        Folder Name <span className="text-rose-400">*</span>
-                                      </label>
-                                      <input
-                                        type="text"
-                                        placeholder="Enter folder name"
-                                        value={evtCfg.folderName || ''}
-                                        onChange={(e) => {
-                                          const val = e.target.value;
-                                          setCustomerReviewForm(prev => ({
-                                            ...prev,
-                                            server_upload_folder_name: val,
-                                            event_configs: {
-                                              ...prev.event_configs,
-                                              [evtKey]: {
-                                                ...evtCfg,
-                                                folderName: val
-                                              }
-                                            }
-                                          }));
-                                        }}
-                                        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-500 font-mono"
-                                        required
-                                      />
-                                    </div>
-
-                                    <div className="pt-1 flex justify-end">
-                                      <button
-                                        type="button"
-                                        onClick={handleSaveCustomerReviewServerConfirmation}
-                                        disabled={isSubmitting || !evtCfg.eventDate?.trim() || !evtCfg.folderName?.trim()}
-                                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl cursor-pointer flex items-center gap-1.5 transition-colors shadow-sm"
-                                      >
-                                        <CheckCircle2 className="w-3.5 h-3.5" />
-                                        <span>Save Confirmation</span>
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-
-                  {renderDeliverableChecklist(
-                    customerReviewModal.group,
-                    customerReviewForm.selectedIds,
-                    (ids) => setCustomerReviewForm(prev => ({ ...prev, selectedIds: ids })),
-                    ['Editing Started', 'Customer Review']
-                  )}
                 </form>
               </div>
 
@@ -3339,82 +3158,88 @@ Thank you.`;
                     )}
                   </div>
 
-                  {/* Server Upload Confirmation Section - ONLY AFTER CUSTOMER REVIEW IMAGE UPLOAD */}
-                  {Boolean(editingCompletedForm.confirmation_proof) ? (
-                    <div className="p-4 bg-zinc-950 border border-indigo-500/30 rounded-xl space-y-4 animate-in fade-in duration-200">
-                      <div className="text-[11px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-emerald-400">📁</span>
-                          <span>Server Upload Confirmation</span>
-                        </span>
-                        <span className="text-[10px] text-rose-400 font-normal">* Mandatory Checklist</span>
-                      </div>
+                  {renderDeliverableChecklist(
+                    editingCompletedModal.group,
+                    editingCompletedForm.selectedIds,
+                    (ids) => setEditingCompletedForm({ ...editingCompletedForm, selectedIds: ids }),
+                    ['Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress']
+                  )}
 
-                      {uniqueEventKeys.length > 0 ? (
-                        uniqueEventKeys.map((evtKey: string) => {
-                          const evtCfg = editingCompletedForm.event_configs[evtKey] || {
-                            eventKey: evtKey,
-                            eventId: '',
-                            eventName: 'Event',
-                            eventDate: editingCompletedForm.server_upload_event_date || '',
-                            folderName: editingCompletedForm.server_upload_folder_name || '',
-                            confirmed: editingCompletedForm.server_upload_confirmed
-                          };
+                  {/* SERVER UPLOAD CONFIRMATION CHECKLIST */}
+                  <div className="p-4 bg-zinc-950 border border-indigo-500/30 rounded-xl space-y-4">
+                    <div className="text-[11px] font-mono font-bold text-zinc-300 uppercase flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <span className="text-emerald-400">📁</span>
+                        <span>Server Upload Confirmation</span>
+                      </span>
+                      <span className="text-[10px] text-rose-400 font-normal">* Mandatory Checklist</span>
+                    </div>
+                    {uniqueEventKeys.length > 0 ? (
+                      uniqueEventKeys.map((evtKey: string) => {
+                        const evtCfg = editingCompletedForm.event_configs[evtKey] || {
+                          eventKey: evtKey,
+                          eventId: '',
+                          eventName: 'Event',
+                          eventDate: editingCompletedForm.server_upload_event_date || '',
+                          folderName: editingCompletedForm.server_upload_folder_name || '',
+                          confirmed: editingCompletedForm.server_upload_confirmed,
+                          serverFileLink: ''
+                        };
+                        const matchingDeliv = selectedDeliverables.find((d: any) => d.assignmentId === evtKey);
+                        const eventDisplayName = evtCfg.eventName || matchingDeliv?.eventName || 'Event';
+                        const defaultEvtDate = evtCfg.eventDate || matchingDeliv?.eventDate || editingCompletedModal.group?.eventDate || '';
 
-                          const matchingDeliv = selectedDeliverables.find((d: any) => d.assignmentId === evtKey);
-                          const eventDisplayName = evtCfg.eventName || matchingDeliv?.eventName || 'Event';
-                          const defaultEvtDate = evtCfg.eventDate || matchingDeliv?.eventDate || editingCompletedModal.group?.eventDate || '';
+                        return (
+                          <div key={evtKey} className="space-y-3 bg-zinc-900/80 p-3.5 rounded-xl border border-zinc-800">
+                            {uniqueEventKeys.length > 1 && (
+                              <div className="text-xs font-bold text-indigo-300 pb-2 border-b border-zinc-800/80 flex items-center justify-between">
+                                <span>Event: <strong className="text-white">{eventDisplayName}</strong></span>
+                                {defaultEvtDate && <span className="text-[10px] text-zinc-400 font-mono">({defaultEvtDate})</span>}
+                              </div>
+                            )}
 
-                          return (
-                            <div key={evtKey} className="space-y-3 bg-zinc-900/80 p-3.5 rounded-xl border border-zinc-800">
-                              {uniqueEventKeys.length > 1 && (
-                                <div className="text-xs font-bold text-indigo-300 pb-2 border-b border-zinc-800/80 flex items-center justify-between">
-                                  <span>Event: <strong className="text-white">{eventDisplayName}</strong></span>
-                                  {defaultEvtDate && <span className="text-[10px] text-zinc-400 font-mono">({defaultEvtDate})</span>}
-                                </div>
-                              )}
+                            <label className="flex items-start gap-3 cursor-pointer select-none">
+                              <input
+                                type="checkbox"
+                                id={`server_upload_confirmed_checkbox_${evtKey}`}
+                                checked={Boolean(evtCfg.confirmed)}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setEditingCompletedForm(prev => {
+                                    const curCfg = prev.event_configs[evtKey] || evtCfg;
+                                    const updatedConfigs = {
+                                      ...prev.event_configs,
+                                      [evtKey]: {
+                                        ...curCfg,
+                                        confirmed: checked,
+                                        eventDate: curCfg.eventDate || defaultEvtDate,
+                                        folderName: curCfg.folderName || ''
+                                      }
+                                    };
+                                    return {
+                                      ...prev,
+                                      server_upload_confirmed: checked,
+                                      server_upload_event_date: updatedConfigs[evtKey].eventDate,
+                                      server_upload_folder_name: updatedConfigs[evtKey].folderName || '',
+                                      event_configs: updatedConfigs
+                                    };
+                                  });
+                                }}
+                                className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <span className="text-xs font-bold text-white block">
+                                  Edited Folder Uploaded in Server
+                                </span>
+                                <span className="text-[10px] text-zinc-400 block mt-0.5">
+                                  Mark this checkbox only after the edited folder has been uploaded to the server.
+                                </span>
+                              </div>
+                            </label>
 
-                              <label className="flex items-start gap-3 cursor-pointer select-none">
-                                <input
-                                  type="checkbox"
-                                  id={`server_upload_confirmed_checkbox_${evtKey}`}
-                                  checked={Boolean(evtCfg.confirmed)}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
-                                    setEditingCompletedForm(prev => {
-                                      const curCfg = prev.event_configs[evtKey] || evtCfg;
-                                      const updatedConfigs = {
-                                        ...prev.event_configs,
-                                        [evtKey]: {
-                                          ...curCfg,
-                                          confirmed: checked,
-                                          eventDate: curCfg.eventDate || defaultEvtDate,
-                                          folderName: curCfg.folderName || ''
-                                        }
-                                      };
-                                      return {
-                                        ...prev,
-                                        server_upload_confirmed: checked,
-                                        server_upload_event_date: updatedConfigs[evtKey].eventDate,
-                                        server_upload_folder_name: updatedConfigs[evtKey].folderName || '',
-                                        event_configs: updatedConfigs
-                                      };
-                                    });
-                                  }}
-                                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-indigo-600 focus:ring-indigo-500 cursor-pointer shrink-0"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <span className="text-xs font-bold text-white block">
-                                    Edited Folder Uploaded in Server
-                                  </span>
-                                  <span className="text-[10px] text-zinc-400 block mt-0.5">
-                                    Mark this checkbox only after the edited folder has been uploaded to the server.
-                                  </span>
-                                </div>
-                              </label>
-
-                              {evtCfg.confirmed && (
-                                <div className="pt-3 border-t border-zinc-800/80 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in duration-200">
+                            {evtCfg.confirmed && (
+                              <div className="pt-3 border-t border-zinc-800/80 space-y-3 animate-in fade-in duration-200">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                   <div>
                                     <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
                                       Event Date <span className="text-rose-400">*</span>
@@ -3442,7 +3267,6 @@ Thank you.`;
                                       required
                                     />
                                   </div>
-
                                   <div>
                                     <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
                                       Folder Name <span className="text-rose-400">*</span>
@@ -3450,7 +3274,7 @@ Thank you.`;
                                     <input
                                       type="text"
                                       id={`server_upload_folder_name_input_${evtKey}`}
-                                      placeholder="Enter folder name (e.g., Final_22Aug_Event2_Edited)"
+                                      placeholder="Enter folder name"
                                       value={evtCfg.folderName || ''}
                                       onChange={(e) => {
                                         const val = e.target.value;
@@ -3471,19 +3295,42 @@ Thank you.`;
                                     />
                                   </div>
                                 </div>
-                              )}
-                            </div>
-                          );
-                        })
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="p-3 bg-zinc-950/60 border border-zinc-800 rounded-xl text-center">
-                      <span className="text-[11px] text-zinc-500 font-mono">
-                        Upload customer review image above to unlock the server upload checklist.
-                      </span>
-                    </div>
-                  )}
+                                {/* SERVER FILE LINK - Requirement */}
+                                <div>
+                                  <label className="block text-[11px] font-mono font-bold text-zinc-300 uppercase mb-1">
+                                    SERVER FILE LINK <span className="text-rose-400">*</span>
+                                  </label>
+                                  <input
+                                    type="text"
+                                    id={`server_file_link_input_${evtKey}`}
+                                    placeholder="Paste final server file link here"
+                                    value={evtCfg.serverFileLink || ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setEditingCompletedForm(prev => ({
+                                        ...prev,
+                                        event_configs: {
+                                          ...prev.event_configs,
+                                          [evtKey]: {
+                                            ...evtCfg,
+                                            serverFileLink: val
+                                          }
+                                        }
+                                      }));
+                                    }}
+                                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
+                                    required
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-xs text-zinc-500 italic">Select at least one deliverable above to configure server checklist.</p>
+                    )}
+                  </div>
 
                   {renderDeliverableChecklist(
                     editingCompletedModal.group,
@@ -3583,6 +3430,17 @@ Thank you.`;
           onClose={() => setSelectedProjectForDetail(null)}
           orderId={typeof selectedProjectForDetail === 'string' ? selectedProjectForDetail : selectedProjectForDetail.orderId}
           eventId={typeof selectedProjectForDetail === 'object' && selectedProjectForDetail ? selectedProjectForDetail.eventId : undefined}
+        />
+      )}
+
+      {/* Add Note Modal */}
+      {noteModalData && (
+        <AddNoteModal
+          isOpen={true}
+          onClose={() => setNoteModalData(null)}
+          leadId={noteModalData.leadId}
+          orderId={noteModalData.orderId}
+          customerName={noteModalData.customerName}
         />
       )}
 

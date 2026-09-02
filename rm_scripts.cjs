@@ -1,0 +1,15 @@
+const fs = require('fs');
+fs.unlinkSync('rm_block.cjs');
+fs.unlinkSync('modify_editing_completed.cjs');
+fs.unlinkSync('update_submit.cjs');
+fs.unlinkSync('update_val.cjs');
+fs.unlinkSync('fix_validation.cjs');
+fs.unlinkSync('fix_syntax.cjs');
+fs.unlinkSync('fix_checklist.cjs');
+fs.unlinkSync('fix_customer_review.cjs');
+fs.unlinkSync('update_open.cjs');
+fs.unlinkSync('add_history_link.cjs');
+fs.unlinkSync('remove_target.txt');
+fs.unlinkSync('remove_target2.txt');
+fs.unlinkSync('edit_target.txt');
+fs.unlinkSync('edit_target2.txt');
