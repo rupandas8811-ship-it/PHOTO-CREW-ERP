@@ -280,11 +280,21 @@ export const OperationsLeads: React.FC = () => {
     assignedEquipment: string[];
     orderId?: string;
     eventId?: string;
+    assignmentId?: string;
     eventName?: string;
     eqReceived?: any; 
     eqHandover?: any; 
   } | null>(null);
-  const [selectedEventImages, setSelectedEventImages] = useState<{ staffName: string, assetCollection: any, evStart: any, evEnd: any } | null>(null);
+  const [selectedEventImages, setSelectedEventImages] = useState<{ 
+    staffName: string; 
+    orderId?: string;
+    eventId?: string;
+    assignmentId?: string;
+    eventName?: string;
+    assetCollection: any; 
+    evStart: any; 
+    evEnd: any; 
+  } | null>(null);
   const [imagePreviewModal, setImagePreviewModal] = useState<{ url: string, date: string, time: string, staffName: string, stage: string } | null>(null);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ left: number, top: number, width: number, maxHeight: number, openUpward: boolean }>({ left: 0, top: 0, width: 220, maxHeight: 280, openUpward: false });
@@ -717,6 +727,7 @@ export const OperationsLeads: React.FC = () => {
     mobile: string;
     event_name: string;
     event_id?: string;
+    assignment_id?: string;
     event_date: string;
     reporting_date: string;
     reporting_time: string;
@@ -1247,6 +1258,7 @@ export const OperationsLeads: React.FC = () => {
               mobile: sa.mobile || st?.mobile || '',
               event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
               event_id: ev.id,
+              assignment_id: sa.assignment_id,
               event_date: ev.event_date || ord.event_date || '',
               reporting_date: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
               reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
@@ -1276,22 +1288,28 @@ export const OperationsLeads: React.FC = () => {
 
           names.forEach((name, nameIdx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
-            const saMatch = staffAssignments?.find(sa => sa.order_id === ord.order_id && sa.staff_name?.toLowerCase() === name.toLowerCase());
+            const assignedTask = taskSlotRoles[nameIdx] || st?.role || 'Staff';
+            const saMatch = staffAssignments?.find(sa => 
+              sa.order_id === ord.order_id && 
+              sa.staff_name?.toLowerCase() === name.toLowerCase() && 
+              (sa.event_id === ev.id || (!sa.event_id && !ev.id) || (sa.staff_role && assignedTask && sa.staff_role.toLowerCase() === assignedTask.toLowerCase()))
+            ) || staffAssignments?.find(sa => sa.order_id === ord.order_id && sa.staff_name?.toLowerCase() === name.toLowerCase());
             const historyMatch = leadStaffAssignmentHistory?.find(h => (h.order_id === ord.order_id || h.lead_id === ord.lead_id) && h.assigned_staff?.toLowerCase().includes(name.toLowerCase()));
 
-            const assignedTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
+            const finalAssignedTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
             const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
-            const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord, saMatch?.assignment_id, assignedTask);
+            const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, name, ord, saMatch?.assignment_id, finalAssignedTask);
             const memberEquipment = resolveStaffEquipment(name, saMatch, ev, nameIdx);
 
             staffDetailsList.push({
               staff_name: name,
-              staff_role: assignedTask,
-              assigned_task: assignedTask,
+              staff_role: finalAssignedTask,
+              assigned_task: finalAssignedTask,
               staff_type: st?.staff_type || 'In-House',
               mobile: mobileNum,
               event_name: ev.event_name || ord.event_type || 'Event',
               event_id: ev.id,
+              assignment_id: saMatch?.assignment_id,
               event_date: ev.event_date || ord.event_date || '',
               reporting_date: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
               reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
@@ -1319,6 +1337,7 @@ export const OperationsLeads: React.FC = () => {
           staff_type: sa.staff_type || st?.staff_type || 'In-House',
           mobile: sa.mobile || st?.mobile || '',
           event_name: ord.event_type || 'Main Event',
+          assignment_id: sa.assignment_id,
           event_date: ord.event_date || '',
           reporting_date: ord.Reporting_date || lead?.Reporting_date || ord.event_date || '',
           reporting_time: ord.reporting_time || op?.reporting_time || '',
@@ -4026,6 +4045,7 @@ export const OperationsLeads: React.FC = () => {
                       const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
                       const orderId = selectedEquipmentStatus.orderId;
                       const eventId = selectedEquipmentStatus.eventId;
+                      const assignmentId = selectedEquipmentStatus.assignmentId;
                       
                       if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
                       const matches = leadEquipmentHistory.filter(h => {
@@ -4036,7 +4056,15 @@ export const OperationsLeads: React.FC = () => {
                         }
                         const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
                         if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
-                        if (eventId && parsed.event_id && eventId !== 'gen' && parsed.event_id !== 'gen' && parsed.event_id !== eventId) return false;
+                        
+                        const hEventId = parsed.event_id || h.event_id;
+                        const hAssignmentId = parsed.assignment_id || h.assignment_id;
+                        
+                        if (assignmentId && hAssignmentId) {
+                          if (hAssignmentId !== assignmentId) return false;
+                        } else if (eventId && hEventId && eventId !== 'gen' && hEventId !== 'gen' && hEventId !== eventId) {
+                          return false;
+                        }
                         
                         const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
                         const eqName = (h.equipment_name || '').toLowerCase();

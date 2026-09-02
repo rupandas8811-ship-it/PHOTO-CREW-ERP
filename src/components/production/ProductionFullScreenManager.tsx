@@ -81,10 +81,13 @@ export const ProductionFullScreenManager: React.FC = () => {
       const isAssignOpsModal = (text.includes('assign operations staff') || text.includes('assign operations')) && 
                                (text.includes('order id') || text.includes('customer') || text.includes('step workflow wizard'));
 
+      const isAssignEditorModal = text.includes('assign editor') || 
+                                  (overlay.querySelector('#production_workflow_modal') !== null && text.includes('assign editor'));
+
       const isClientAcceptanceModal = text.includes('client acceptance verification deck') ||
                                       (text.includes('client acceptance') && (text.includes('project id') || text.includes('tracking id') || text.includes('approve client acceptance')));
 
-      return hasWorkflowModalCard || isAssignedTeamModal || isWorkflowWizardModal || isAssignOpsModal || isClientAcceptanceModal;
+      return hasWorkflowModalCard || isAssignedTeamModal || isWorkflowWizardModal || isAssignOpsModal || isClientAcceptanceModal || isAssignEditorModal;
     };
 
     const lockBackground = () => {
@@ -158,6 +161,11 @@ export const ProductionFullScreenManager: React.FC = () => {
           if (isAssignedTeamModal && !overlay.classList.contains('prod-assigned-team-overlay')) {
             overlay.classList.add('prod-assigned-team-overlay');
           }
+          const isAssignEditorModal = overlayText.includes('assign editor') || 
+                                      (overlay.querySelector('#production_workflow_modal') !== null && overlayText.includes('assign editor'));
+          if (isAssignEditorModal && !overlay.classList.contains('prod-assign-editor-overlay')) {
+            overlay.classList.add('prod-assign-editor-overlay');
+          }
 
           // 2. Mark inner card as full screen container
           const modalCard = overlay.querySelector<HTMLElement>('#production_workflow_modal') ||
@@ -206,6 +214,11 @@ export const ProductionFullScreenManager: React.FC = () => {
               }
               if (isAssignedTeamModal && !body.classList.contains('prod-assigned-team-body')) {
                 body.classList.add('prod-assigned-team-body');
+              }
+              const isAssignEditorModal = overlayText.includes('assign editor') || 
+                                          (modalCard.querySelector('#production_workflow_modal') !== null && overlayText.includes('assign editor'));
+              if (isAssignEditorModal && !body.classList.contains('prod-assign-editor-body')) {
+                body.classList.add('prod-assign-editor-body');
               }
             }
 
