@@ -158,6 +158,26 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
                   <span>{state.activeTab === 'calendar' ? '📋 Leads Directory' : 'Sales Calendar'}</span>
                 </button>
               </div>
+
+              {/* Create Quotation Button */}
+              {state.canEdit && (
+                <button
+                  id="btn_create_new_lead"
+                  type="button"
+                  onClick={() => {
+                    if (typeof state.setActiveTab === 'function') {
+                      state.setActiveTab('create');
+                    }
+                    if (typeof state.setSelectedLead === 'function') {
+                      state.setSelectedLead(null);
+                    }
+                  }}
+                  className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl transition-all shadow-lg shadow-emerald-500/20 cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4 stroke-[3]" />
+                  <span>Create Quotation</span>
+                </button>
+              )}
             </div>
           </div>
         )}
