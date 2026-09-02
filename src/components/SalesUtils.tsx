@@ -1078,7 +1078,7 @@ export const generateQuotationPDF = (
 
       const items = (eventDeliverables || []).filter(Boolean);
 
-      unsortedEvents.push({
+      eventsToRender.push({
         eventName,
         eventDate: event.event_start_date || event.event_date || "",
         eventTime: event.event_time || event.event_start_time || "",
@@ -1090,16 +1090,6 @@ export const generateQuotationPDF = (
         deliverables: items
       });
     });
-
-    // 2. Sort by event date ascending
-    unsortedEvents.sort((a, b) => {
-      const dateA = new Date(a.eventDate || "9999-12-31").getTime();
-      const dateB = new Date(b.eventDate || "9999-12-31").getTime();
-      return dateA - dateB;
-    });
-
-    // 3. Push to eventsToRender
-    eventsToRender.push(...unsortedEvents);
   } else {
     eventsToRender.push({
       eventName: displayEventType,
