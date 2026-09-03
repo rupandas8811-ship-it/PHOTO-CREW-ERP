@@ -1178,6 +1178,7 @@ export const StaffModule: React.FC = () => {
                 taskStatus: currentStaffStatus,
                 rawFootageVerificationStatus: getVerificationStatus(orderId, ev.id || 'ev'),
                 rawFootageLink: (sa as any)?.raw_footage_link || '',
+                assignmentId: (sa as any)?.assignment_id || null,
                 coordinator: op?.operations_coordinator || 'Unassigned',
                 createdAt: lead.created_at || order?.created_at || (ev as any)?.created_at || ''
               });
@@ -1251,6 +1252,7 @@ export const StaffModule: React.FC = () => {
               taskStatus: currentStaffStatus,
               rawFootageVerificationStatus: getVerificationStatus(orderId, 'gen'),
               rawFootageLink: (sa as any)?.raw_footage_link || '',
+              assignmentId: (sa as any)?.assignment_id || null,
               coordinator: op?.operations_coordinator || 'Unassigned',
               createdAt: lead.created_at || order?.created_at || ''
             });
@@ -1933,6 +1935,9 @@ export const StaffModule: React.FC = () => {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            assignment_id: booking.assignmentId || null,
             equipment_name: p.equipmentName,
             equipment_status: effectiveEquipmentStatus,
             returned_by: staffName,
@@ -1944,6 +1949,7 @@ export const StaffModule: React.FC = () => {
               photo_url: p.photoUrl,
               event_id: booking.eventId,
               event_name: booking.eventName,
+              assignment_id: booking.assignmentId || null,
               order_id: booking.orderId,
               lead_id: booking.leadId,
               raw_footage_link: modalRawFootageLink || null,
@@ -1961,6 +1967,9 @@ export const StaffModule: React.FC = () => {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            assignment_id: booking.assignmentId || null,
             equipment_name: 'Equipment Handover Photo Proof',
             equipment_status: 'Equipment Not Handover',
             returned_by: staffName,
@@ -1972,6 +1981,7 @@ export const StaffModule: React.FC = () => {
               photo_url: null,
               event_id: booking.eventId,
               event_name: booking.eventName,
+              assignment_id: booking.assignmentId || null,
               order_id: booking.orderId,
               lead_id: booking.leadId,
               raw_footage_link: modalRawFootageLink || null,
@@ -1987,6 +1997,9 @@ export const StaffModule: React.FC = () => {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            assignment_id: booking.assignmentId || null,
             equipment_name: 'Footage Handover',
             equipment_status: 'Footage Handover Completed',
             returned_by: staffName,
@@ -1998,6 +2011,7 @@ export const StaffModule: React.FC = () => {
               photo_url: null,
               event_id: booking.eventId,
               event_name: booking.eventName,
+              assignment_id: booking.assignmentId || null,
               order_id: booking.orderId,
               lead_id: booking.leadId,
               raw_footage_link: modalRawFootageLink || null,
@@ -2019,6 +2033,9 @@ export const StaffModule: React.FC = () => {
             await pushInsert('lead_equipment_history', {
               lead_id: booking.leadId || null,
               order_id: booking.orderId || null,
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
+              assignment_id: booking.assignmentId || null,
               equipment_name: eqItem.name,
               equipment_status: 'Equipment Handover Completed',
               returned_by: staffName,
@@ -2029,6 +2046,7 @@ export const StaffModule: React.FC = () => {
                 staff_name: staffName,
                 event_id: booking.eventId,
                 event_name: booking.eventName,
+                assignment_id: booking.assignmentId || null,
                 order_id: booking.orderId,
                 lead_id: booking.leadId,
                 raw_footage_link: modalRawFootageLink || null,

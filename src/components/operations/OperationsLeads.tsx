@@ -4328,6 +4328,7 @@ export const OperationsLeads: React.FC = () => {
             const normStaffName = (member.staff_name || '').trim().toLowerCase();
             const normEvName = (member.event_name || '').trim().toLowerCase();
             const memberEvId = member.event_id;
+            const memberAssignmentId = member.assignment_id;
             
             let rawLink: string | null = null;
 
@@ -4337,10 +4338,12 @@ export const OperationsLeads: React.FC = () => {
                 if (rf.order_id !== receivingFootageOrderId) return false;
                 const upBy = (rf.uploaded_by || '').trim().toLowerCase();
                 if (upBy && upBy !== normStaffName) return false;
+
+                if (memberAssignmentId && rf.assignment_id && rf.assignment_id !== memberAssignmentId) return false;
                 if (memberEvId && rf.event_id) {
                   if (rf.event_id !== memberEvId) return false;
                 } else if (rf.event_name) {
-                  if (rf.event_name.trim().toLowerCase() !== normEvName) return false;
+                  if (rf.event_name.trim().toLowerCase() !== normEvName && normEvName !== 'general event') return false;
                 }
                 return true;
               });
@@ -4354,8 +4357,10 @@ export const OperationsLeads: React.FC = () => {
               const saMatch = staffAssignments.find(sa => {
                 if (sa.order_id !== receivingFootageOrderId) return false;
                 if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return false;
+
+                if (memberAssignmentId && sa.assignment_id && sa.assignment_id !== memberAssignmentId) return false;
                 if (memberEvId && sa.event_id && sa.event_id !== memberEvId) return false;
-                if (!memberEvId && normEvName && sa.event_name && sa.event_name.trim().toLowerCase() !== normEvName) return false;
+                if (!memberEvId && normEvName && sa.event_name && sa.event_name.trim().toLowerCase() !== normEvName && normEvName !== 'general event') return false;
                 return true;
               });
               if (saMatch) {
@@ -4372,16 +4377,25 @@ export const OperationsLeads: React.FC = () => {
                 if (h.order_id !== receivingFootageOrderId) return false;
                 let parsed: any = {};
                 if (h.remarks) {
-                  try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                  try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e) {}
                 }
-                const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
+                const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
                 if (retBy !== normStaffName) return false;
-                if (memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
+
+                const hAssignmentId = parsed.assignment_id || h.assignment_id;
+                if (memberAssignmentId && hAssignmentId && hAssignmentId !== memberAssignmentId) return false;
+
+                const hEventId = parsed.event_id || h.event_id;
+                if (memberEvId && hEventId && hEventId !== memberEvId) return false;
+
+                const hEventName = (parsed.event_name || h.event_name || '').trim().toLowerCase();
+                if (normEvName && hEventName && hEventName !== normEvName && normEvName !== 'general event' && hEventName !== 'general event') return false;
+
                 return !!(parsed.raw_footage_link || parsed.drive_link);
               });
               if (hMatch && hMatch.remarks) {
                 try {
-                  const parsed = JSON.parse(hMatch.remarks);
+                  const parsed = typeof hMatch.remarks === 'string' ? JSON.parse(hMatch.remarks) : hMatch.remarks;
                   rawLink = parsed.raw_footage_link || parsed.drive_link || null;
                 } catch (e) {}
               }
@@ -5024,8 +5038,9 @@ export const OperationsLeads: React.FC = () => {
                             <tbody className="divide-y divide-zinc-800/60 text-xs">
                               {members.map((member, mIdx) => {
                                 const normStaffName = (member.staff_name || '').trim().toLowerCase();
-                                const normEvName = (group.eventName || '').trim().toLowerCase();
+                                const normEvName = (group.eventName || member.event_name || '').trim().toLowerCase();
                                 const memberEvId = member.event_id;
+                                const memberAssignmentId = member.assignment_id;
 
                                 const rowEqKey = `${ord.order_id}-${memberEvId || 'gen'}-${member.staff_name}-${mIdx}`;
                                 const isEqOpen = openEquipmentDropdownKey === rowEqKey;
@@ -5038,7 +5053,7 @@ export const OperationsLeads: React.FC = () => {
                                     
                                     let parsed: any = {};
                                     if (h.remarks) {
-                                      try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                                      try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e) {}
                                     }
 
                                     const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
@@ -5046,18 +5061,25 @@ export const OperationsLeads: React.FC = () => {
                                       return false;
                                     }
 
-                                    const hEventId = parsed.event_id;
-                                    const hEventName = parsed.event_name;
-                                    const hProofType = (parsed.proof_type || '').toLowerCase();
+                                    // STRICT ASSIGNMENT ID MATCHING
+                                    const hAssignmentId = parsed.assignment_id || h.assignment_id;
+                                    if (memberAssignmentId && hAssignmentId) {
+                                      if (hAssignmentId !== memberAssignmentId) return false;
+                                    }
+
+                                    // STRICT EVENT MATCHING
+                                    const hEventId = parsed.event_id || h.event_id;
+                                    const hEventName = (parsed.event_name || h.event_name || '').trim().toLowerCase();
                                     
-                                    // Match event Id strictly if both exist and neither is 'gen'
-                                    if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) {
-                                      if (!normEvName || !hEventName || (hEventName.trim().toLowerCase() !== normEvName && normEvName !== 'general event' && hEventName.trim().toLowerCase() !== 'general event')) {
-                                        return false;
-                                      }
+                                    if (memberEvId && memberEvId !== 'gen') {
+                                      if (hEventId && hEventId !== 'gen' && hEventId !== memberEvId) return false;
+                                      if (normEvName && hEventName && hEventName !== normEvName && normEvName !== 'general event' && hEventName !== 'general event') return false;
+                                    } else if (normEvName && normEvName !== 'general event') {
+                                      if (hEventName && hEventName !== normEvName && hEventName !== 'general event') return false;
                                     }
                                     
                                     const eqName = (h.equipment_name || '').toLowerCase();
+                                    const hProofType = (parsed.proof_type || '').toLowerCase();
                                     const eqStatus = (h.equipment_status || hProofType || '').toLowerCase().trim();
 
                                     if (equipName && eqName.includes(equipName.toLowerCase())) {
@@ -5128,7 +5150,7 @@ export const OperationsLeads: React.FC = () => {
                                 const hasEqAssigned = effectiveAssignedEq.length > 0;
 
                                 let equipmentStatusText = hasEqAssigned ? 'Assigned' : 'No Equipment Assigned';
-                                if (hasEqAssigned) {
+                                if (hasEqAssigned || assetCollection || eqHandover) {
                                   const hasHandoverPhoto = eqHandover && getRecordMeta(eqHandover).url;
                                   const isHandoverDone = eqHandover && (
                                     hasHandoverPhoto || 
@@ -5149,7 +5171,7 @@ export const OperationsLeads: React.FC = () => {
                                   } else if (isReceivedDone) {
                                     equipmentStatusText = hasReceivedPhoto ? '✅ Received' : 'Assigned / Received';
                                   } else {
-                                    equipmentStatusText = 'Assigned';
+                                    equipmentStatusText = hasEqAssigned ? 'Assigned' : 'Verification Available';
                                   }
                                 }
 
@@ -5165,10 +5187,14 @@ export const OperationsLeads: React.FC = () => {
                                     if (rf.order_id !== ord.order_id) return false;
                                     const upBy = (rf.uploaded_by || '').trim().toLowerCase();
                                     if (upBy && upBy !== normStaffName) return false;
+                                    
+                                    if (memberAssignmentId && rf.assignment_id) {
+                                      if (rf.assignment_id !== memberAssignmentId) return false;
+                                    }
                                     if (memberEvId && rf.event_id) {
                                       if (rf.event_id !== memberEvId) return false;
-                                    } else if (rf.event_name) {
-                                      if (rf.event_name.trim().toLowerCase() !== normEvName) return false;
+                                    } else if (normEvName && rf.event_name) {
+                                      if (rf.event_name.trim().toLowerCase() !== normEvName && normEvName !== 'general event') return false;
                                     }
                                     return true;
                                   });
@@ -5181,8 +5207,12 @@ export const OperationsLeads: React.FC = () => {
                                   const saMatch = staffAssignments.find(sa => {
                                     if (sa.order_id !== ord.order_id) return false;
                                     if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return false;
+
+                                    if (memberAssignmentId && sa.assignment_id) {
+                                      if (sa.assignment_id !== memberAssignmentId) return false;
+                                    }
                                     if (memberEvId && sa.event_id && sa.event_id !== memberEvId) return false;
-                                    if (!memberEvId && normEvName && sa.event_name && sa.event_name.trim().toLowerCase() !== normEvName) return false;
+                                    if (!memberEvId && normEvName && sa.event_name && sa.event_name.trim().toLowerCase() !== normEvName && normEvName !== 'general event') return false;
                                     return true;
                                   });
                                   if (saMatch) {
@@ -5195,31 +5225,50 @@ export const OperationsLeads: React.FC = () => {
 
                                 if (!rawFootageLink && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
                                   const hMatch = leadEquipmentHistory.find(h => {
-                                    if (h.order_id !== ord.order_id) return false;
+                                    if (h.order_id !== ord.order_id && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
                                     let parsed: any = {};
                                     if (h.remarks) {
-                                      try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                                      try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e) {}
                                     }
-                                    const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
+                                    const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
                                     if (retBy !== normStaffName) return false;
-                                    if (memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
-                                    
+
+                                    const hAssignmentId = parsed.assignment_id || h.assignment_id;
+                                    if (memberAssignmentId && hAssignmentId && hAssignmentId !== memberAssignmentId) return false;
+
+                                    const hEventId = parsed.event_id || h.event_id;
+                                    if (memberEvId && hEventId && hEventId !== memberEvId) return false;
+
+                                    const hEventName = (parsed.event_name || h.event_name || '').trim().toLowerCase();
+                                    if (normEvName && hEventName && hEventName !== normEvName && normEvName !== 'general event' && hEventName !== 'general event') return false;
+
                                     return !!(parsed.raw_footage_link || parsed.drive_link);
                                   });
                                   if (hMatch && hMatch.remarks) {
                                     try {
-                                      const parsed = JSON.parse(hMatch.remarks);
+                                      const parsed = typeof hMatch.remarks === 'string' ? JSON.parse(hMatch.remarks) : hMatch.remarks;
                                       rawFootageLink = parsed.raw_footage_link || parsed.drive_link || null;
                                     } catch (e) {}
                                   }
                                 }
 
-                                const rfVerification = leadEquipmentHistory?.find(h => 
-                                  h.order_id === ord.order_id && 
-                                  h.equipment_name === 'Raw Footage Verification' && 
-                                  (h.returned_by || '').trim().toLowerCase() === normStaffName &&
-                                  (!memberEvId || (() => { try { return JSON.parse(h.remarks || '{}').event_id === memberEvId; } catch(e) { return false; } })())
-                                );
+                                const rfVerification = leadEquipmentHistory?.find(h => {
+                                  if (h.order_id !== ord.order_id) return false;
+                                  if (h.equipment_name !== 'Raw Footage Verification') return false;
+                                  const retBy = (h.returned_by || '').trim().toLowerCase();
+                                  if (retBy !== normStaffName) return false;
+
+                                  let parsed: any = {};
+                                  if (h.remarks) { try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e) {} }
+
+                                  const hAssignmentId = parsed.assignment_id || h.assignment_id;
+                                  if (memberAssignmentId && hAssignmentId && hAssignmentId !== memberAssignmentId) return false;
+
+                                  const hEventId = parsed.event_id || h.event_id;
+                                  if (memberEvId && hEventId && hEventId !== memberEvId) return false;
+
+                                  return true;
+                                });
                                 const verificationStatus = rfVerification?.equipment_status || 'Pending Verification';
 
                                 return (
@@ -5251,35 +5300,39 @@ export const OperationsLeads: React.FC = () => {
 
                                     {/* 5. Equipment Status */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                                      {hasEqAssigned ? (
-                                        <button 
-                                          type="button"
-                                          onClick={() => setSelectedEquipmentStatus({ 
-                                            staffName: member.staff_name, 
-                                            assignedEquipment: effectiveAssignedEq.length > 0 ? effectiveAssignedEq : (member.assigned_equipment || []),
-                                            orderId: ord.order_id,
-                                            eventId: memberEvId,
-                                            eventName: member.event_name,
-                                            eqReceived: assetCollection, 
-                                            eqHandover 
-                                          })}
-                                          className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
-                                          title="Click to view equipment verification images"
-                                        >
-                                          {equipmentStatusText}
-                                        </button>
-                                      ) : (
-                                        <span className="text-zinc-500 font-semibold text-xs font-mono">
-                                          No Equipment Assigned
-                                        </span>
-                                      )}
+                                      <button 
+                                        type="button"
+                                        onClick={() => setSelectedEquipmentStatus({ 
+                                          staffName: member.staff_name, 
+                                          assignedEquipment: effectiveAssignedEq.length > 0 ? effectiveAssignedEq : (member.assigned_equipment || []),
+                                          orderId: ord.order_id,
+                                          eventId: memberEvId,
+                                          eventName: member.event_name,
+                                          assignmentId: member.assignment_id,
+                                          eqReceived: assetCollection, 
+                                          eqHandover 
+                                        })}
+                                        className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
+                                        title="Click to view equipment verification images"
+                                      >
+                                        {equipmentStatusText}
+                                      </button>
                                     </td>
 
                                     {/* 6. Event Images */}
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <button 
                                         type="button"
-                                        onClick={() => setSelectedEventImages({ staffName: member.staff_name, assetCollection, evStart, evEnd })}
+                                        onClick={() => setSelectedEventImages({ 
+                                          staffName: member.staff_name, 
+                                          orderId: ord.order_id,
+                                          eventId: memberEvId,
+                                          eventName: member.event_name,
+                                          assignmentId: member.assignment_id,
+                                          assetCollection, 
+                                          evStart, 
+                                          evEnd 
+                                        })}
                                         className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
                                       >
                                         {eventImageStatusText}
