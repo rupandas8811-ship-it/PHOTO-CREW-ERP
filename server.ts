@@ -358,6 +358,20 @@ async function startServer() {
       }
     }
 
+    if (table === 'v_task_assignment_details') {
+      const validCols = new Set([
+        'assignment_id', 'order_id', 'event_id', 'event_name', 'staff_id',
+        'staff_name', 'staff_role', 'task_status', 'raw_footage_link',
+        'event_start_photo', 'event_end_photo', 'equipment_received_photo',
+        'equipment_handover_photo', 'created_at', 'updated_at'
+      ]);
+      for (const k of Object.keys(clone)) {
+        if (!validCols.has(k)) {
+          delete clone[k];
+        }
+      }
+    }
+
     if (table === 'raw_footage') {
       const validCols = new Set([
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received',
@@ -1143,6 +1157,151 @@ async function startServer() {
       res.json({ success: true, data: { record: dbData?.[0] || userUpdates } });
     } catch (err: any) {
       console.error(`[Server Auth Update Exception]`, err);
+      res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
+  // --- Task Assignment Details Persistent Local File & Supabase Helpers ---
+  const tadFilePath = path.join(caDataDir, 'task_assignment_details.json');
+
+  const readTaskAssignmentDetailsFromFile = (): any[] => {
+    try {
+      if (!fs.existsSync(caDataDir)) {
+        fs.mkdirSync(caDataDir, { recursive: true });
+      }
+      if (!fs.existsSync(tadFilePath)) {
+        fs.writeFileSync(tadFilePath, JSON.stringify([]), 'utf-8');
+        return [];
+      }
+      const raw = fs.readFileSync(tadFilePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.warn('[Server TaskAssignmentDetails] Error reading file:', e);
+      return [];
+    }
+  };
+
+  const writeTaskAssignmentDetailsToFile = (records: any[]) => {
+    try {
+      if (!fs.existsSync(caDataDir)) {
+        fs.mkdirSync(caDataDir, { recursive: true });
+      }
+      fs.writeFileSync(tadFilePath, JSON.stringify(records, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('[Server TaskAssignmentDetails] Error writing file:', e);
+    }
+  };
+
+  app.post('/api/task-assignment-details/save', async (req, res) => {
+    try {
+      const payload = req.body;
+      const {
+        assignment_id,
+        order_id,
+        event_id,
+        event_name,
+        staff_id,
+        staff_name,
+        staff_role,
+        task_status,
+        raw_footage_link,
+        event_start_photo,
+        event_end_photo,
+        equipment_received_photo,
+        equipment_handover_photo
+      } = payload;
+
+      if (!assignment_id) {
+        return res.status(400).json({ success: false, error: 'assignment_id is required' });
+      }
+
+      const existingRecords = readTaskAssignmentDetailsFromFile();
+      const existingIdx = existingRecords.findIndex((r: any) => String(r.assignment_id).trim() === String(assignment_id).trim());
+
+      const now = new Date().toISOString();
+      let updatedRecord: any;
+
+      if (existingIdx >= 0) {
+        const prev = existingRecords[existingIdx];
+        updatedRecord = {
+          ...prev,
+          order_id: order_id || prev.order_id,
+          event_id: event_id !== undefined ? event_id : prev.event_id,
+          event_name: event_name !== undefined ? event_name : prev.event_name,
+          staff_id: staff_id !== undefined ? staff_id : prev.staff_id,
+          staff_name: staff_name !== undefined ? staff_name : prev.staff_name,
+          staff_role: staff_role !== undefined ? staff_role : prev.staff_role,
+          task_status: task_status !== undefined ? task_status : prev.task_status,
+          raw_footage_link: raw_footage_link !== undefined ? raw_footage_link : prev.raw_footage_link,
+          event_start_photo: event_start_photo !== undefined ? event_start_photo : prev.event_start_photo,
+          event_end_photo: event_end_photo !== undefined ? event_end_photo : prev.event_end_photo,
+          equipment_received_photo: equipment_received_photo !== undefined ? equipment_received_photo : prev.equipment_received_photo,
+          equipment_handover_photo: equipment_handover_photo !== undefined ? equipment_handover_photo : prev.equipment_handover_photo,
+          updated_at: now
+        };
+        existingRecords[existingIdx] = updatedRecord;
+      } else {
+        updatedRecord = {
+          assignment_id,
+          order_id: order_id || '',
+          event_id: event_id || null,
+          event_name: event_name || null,
+          staff_id: staff_id || null,
+          staff_name: staff_name || null,
+          staff_role: staff_role || null,
+          task_status: task_status || 'Assigned',
+          raw_footage_link: raw_footage_link || null,
+          event_start_photo: event_start_photo || null,
+          event_end_photo: event_end_photo || null,
+          equipment_received_photo: equipment_received_photo || null,
+          equipment_handover_photo: equipment_handover_photo || null,
+          created_at: now,
+          updated_at: now
+        };
+        existingRecords.push(updatedRecord);
+      }
+
+      writeTaskAssignmentDetailsToFile(existingRecords);
+
+      // Also attempt to upsert into Supabase v_task_assignment_details table if present
+      try {
+        const db = getServerSupabase();
+        await db.from('v_task_assignment_details').upsert(updatedRecord, {
+          onConflict: 'assignment_id'
+        });
+      } catch (dbErr) {
+        // Suppress if view or table
+      }
+
+      console.log(`[Server TaskAssignmentDetails] Saved record for assignment_id: ${assignment_id}`);
+      res.json({ success: true, data: updatedRecord });
+    } catch (err: any) {
+      console.error('[Server TaskAssignmentDetails Exception]', err);
+      res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
+  app.get('/api/task-assignment-details/list', async (req, res) => {
+    try {
+      let records = readTaskAssignmentDetailsFromFile();
+
+      // Check if Supabase table has records
+      try {
+        const db = getServerSupabase();
+        const { data: dbRecords, error } = await db.from('v_task_assignment_details').select('*');
+        if (!error && Array.isArray(dbRecords) && dbRecords.length > 0) {
+          const map = new Map<string, any>();
+          records.forEach((r: any) => map.set(String(r.assignment_id), r));
+          dbRecords.forEach((r: any) => map.set(String(r.assignment_id), { ...map.get(String(r.assignment_id)), ...r }));
+          records = Array.from(map.values());
+          writeTaskAssignmentDetailsToFile(records);
+        }
+      } catch (_) {}
+
+      res.json({ success: true, data: records });
+    } catch (err: any) {
+      console.error('[Server TaskAssignmentDetails List Exception]', err);
       res.status(500).json({ success: false, error: err.message || String(err) });
     }
   });

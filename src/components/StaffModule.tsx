@@ -679,7 +679,7 @@ const StaffReportingDetailsCell = ({ b }: { b: any }) => {
 }
 
 export const StaffModule: React.FC = () => {
-  const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead, pushInsert, pushUpdate } = useRole();
+  const { currentUser, staff, leads, orders, operations, staffAssignments, taskAssignmentDetails, saveTaskAssignmentDetail, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead, pushInsert, pushUpdate } = useRole();
 
   // Resolve staff member
   const staffMember = (staff || []).find(s => 
@@ -1580,10 +1580,15 @@ export const StaffModule: React.FC = () => {
             const historyRecord = {
               lead_id: booking.leadId || null,
               order_id: booking.orderId || null,
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
+              assignment_id: booking.assignmentId || null,
               equipment_name: eqName,
               equipment_status: 'Asset Collected (Draft)',
               returned_by: staffName,
               returned_at: timestamp,
+              photo_url: finalUrl,
+              proof_type: 'Event Start Asset Draft',
               remarks: JSON.stringify({
                 asset_id: assetId,
                 proof_type: 'Event Start Asset Draft',
@@ -1592,6 +1597,7 @@ export const StaffModule: React.FC = () => {
                 photo_url: finalUrl,
                 event_id: booking.eventId || 'ev',
                 event_name: booking.eventName,
+                assignment_id: booking.assignmentId || null,
                 order_id: booking.orderId,
                 lead_id: booking.leadId,
                 uploaded_at: timestamp,
@@ -1623,6 +1629,22 @@ export const StaffModule: React.FC = () => {
           };
           setStaffStatuses(nextStatuses);
           localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
+
+          // Save to v_task_assignment_details
+          if (assetProofsToSave.length > 0 && assetProofsToSave[0].photoUrl) {
+            const assignmentIdToSave = booking.assignmentId || `ASST-${booking.orderId}-${booking.eventId || 'ev'}-${(staffName || '').replace(/\s+/g, '')}`;
+            await saveTaskAssignmentDetail({
+              assignment_id: assignmentIdToSave,
+              order_id: booking.orderId,
+              event_id: booking.eventId,
+              event_name: booking.eventName,
+              staff_id: staffMember?.id || currentUser?.id || '',
+              staff_name: staffName,
+              staff_role: booking.assignedRole,
+              equipment_received_photo: assetProofsToSave[0].photoUrl,
+              task_status: 'Assigned Crew'
+            });
+          }
 
           // Close modal immediately and restore scrolling
           setPhotoModalData(null);
@@ -1667,10 +1689,15 @@ export const StaffModule: React.FC = () => {
             const historyRecord = {
               lead_id: booking.leadId || null,
               order_id: booking.orderId || null,
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
+              assignment_id: booking.assignmentId || null,
               equipment_name: eqName,
               equipment_status: 'Equipment Received',
               returned_by: staffName,
               returned_at: timestamp,
+              photo_url: finalUrl,
+              proof_type: 'Equipment Received',
               remarks: JSON.stringify({
                 asset_id: assetId,
                 proof_type: 'Equipment Received',
@@ -1679,6 +1706,7 @@ export const StaffModule: React.FC = () => {
                 photo_url: finalUrl,
                 event_id: booking.eventId || 'ev',
                 event_name: booking.eventName,
+                assignment_id: booking.assignmentId || null,
                 order_id: booking.orderId,
                 lead_id: booking.leadId,
                 uploaded_at: timestamp,
@@ -1713,10 +1741,15 @@ export const StaffModule: React.FC = () => {
           const startHistoryRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            assignment_id: booking.assignmentId || null,
             equipment_name: 'Event Start Photo Proof',
             equipment_status: 'Event Started',
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: finalStartUrl,
+            proof_type: 'Event Start',
             remarks: JSON.stringify({
               asset_id: 'Event Start',
               proof_type: 'Event Start',
@@ -1725,6 +1758,7 @@ export const StaffModule: React.FC = () => {
               photo_url: finalStartUrl,
               event_id: booking.eventId || 'ev',
               event_name: booking.eventName,
+              assignment_id: booking.assignmentId || null,
               order_id: booking.orderId,
               lead_id: booking.leadId,
               uploaded_at: timestamp,
@@ -1754,6 +1788,22 @@ export const StaffModule: React.FC = () => {
           };
           setStaffProofs(nextProofs);
           localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
+
+          // Save to v_task_assignment_details
+          const assignmentIdToSave = booking.assignmentId || `ASST-${booking.orderId}-${booking.eventId || 'ev'}-${(staffName || '').replace(/\s+/g, '')}`;
+          const eqRecProof = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof');
+          await saveTaskAssignmentDetail({
+            assignment_id: assignmentIdToSave,
+            order_id: booking.orderId,
+            event_id: booking.eventId,
+            event_name: booking.eventName,
+            staff_id: staffMember?.id || currentUser?.id || '',
+            staff_name: staffName,
+            staff_role: booking.assignedRole,
+            equipment_received_photo: eqRecProof?.photoUrl || undefined,
+            event_start_photo: finalStartUrl,
+            task_status: 'Event Started'
+          });
 
           if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('staff_status_updated'));
@@ -1942,6 +1992,8 @@ export const StaffModule: React.FC = () => {
             equipment_status: effectiveEquipmentStatus,
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: p.photoUrl || null,
+            proof_type: stage === 'Event Complete' ? 'Event End' : stage,
             remarks: JSON.stringify({
               asset_id: p.assetId,
               proof_type: stage === 'Event Complete' ? 'Event End' : stage,
@@ -2111,6 +2163,32 @@ export const StaffModule: React.FC = () => {
       };
       setStaffProofs(nextProofs);
       localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
+
+      // Save to v_task_assignment_details
+      const assignmentIdToSave = booking.assignmentId || `ASST-${booking.orderId}-${booking.eventId || 'ev'}-${(staffName || '').replace(/\s+/g, '')}`;
+      const detailPayload: any = {
+        assignment_id: assignmentIdToSave,
+        order_id: booking.orderId,
+        event_id: booking.eventId,
+        event_name: booking.eventName,
+        staff_id: staffMember?.id || currentUser?.id || '',
+        staff_name: staffName,
+        staff_role: booking.assignedRole,
+        task_status: nextStatus
+      };
+      if (modalRawFootageLink) {
+        detailPayload.raw_footage_link = modalRawFootageLink;
+      }
+      if (stage === 'Event Complete' && uploadedProofs.length > 0) {
+        detailPayload.event_end_photo = uploadedProofs[0].photoUrl;
+      }
+      if (stage === 'Equipment Handover' && uploadedProofs.length > 0) {
+        detailPayload.equipment_handover_photo = uploadedProofs[0].photoUrl;
+      }
+      if (stage === 'Equipment Received' && uploadedProofs.length > 0) {
+        detailPayload.equipment_received_photo = uploadedProofs[0].photoUrl;
+      }
+      await saveTaskAssignmentDetail(detailPayload);
 
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('staff_status_updated'));

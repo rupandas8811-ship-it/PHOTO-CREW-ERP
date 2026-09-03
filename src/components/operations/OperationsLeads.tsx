@@ -201,6 +201,7 @@ export const OperationsLeads: React.FC = () => {
     updateOrderStage,
     rawFootage,
     staffAssignments,
+    taskAssignmentDetails,
     saveStaffAssignments,
     updateLead,
     payments,
@@ -5182,7 +5183,22 @@ export const OperationsLeads: React.FC = () => {
 
                                 // 4. Raw Footage Link
                                 let rawFootageLink: string | null = null;
-                                if (rawFootage && rawFootage.length > 0) {
+                                if (taskAssignmentDetails && taskAssignmentDetails.length > 0) {
+                                  const tadMatch = taskAssignmentDetails.find(tad => {
+                                    if (tad.order_id !== ord.order_id) return false;
+                                    if ((tad.staff_name || '').trim().toLowerCase() !== normStaffName) return false;
+                                    if (memberAssignmentId && tad.assignment_id) {
+                                      if (String(tad.assignment_id).trim() !== String(memberAssignmentId).trim()) return false;
+                                    }
+                                    if (memberEvId && tad.event_id && tad.event_id !== memberEvId) return false;
+                                    return !!tad.raw_footage_link;
+                                  });
+                                  if (tadMatch && tadMatch.raw_footage_link) {
+                                    rawFootageLink = tadMatch.raw_footage_link;
+                                  }
+                                }
+
+                                if (!rawFootageLink && rawFootage && rawFootage.length > 0) {
                                   const rfMatch = rawFootage.find(rf => {
                                     if (rf.order_id !== ord.order_id) return false;
                                     const upBy = (rf.uploaded_by || '').trim().toLowerCase();
