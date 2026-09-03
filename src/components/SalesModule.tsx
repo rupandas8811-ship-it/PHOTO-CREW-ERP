@@ -1031,14 +1031,14 @@ const generateQuotationPDF = (
     const simTable = (itemsCount: number, hideHeader: boolean) => {
       let currentTableY = simY + (hideHeader ? 4 : (4 + 7.5));
       // Only force a page break if there is not enough room for the header and at least one row
-      if (currentTableY + 15 > 250) {
+      if (currentTableY + 15 > 275) {
         simY = 52;
         simPageCount++;
         currentTableY = simY + (hideHeader ? 4 : (4 + 7.5));
       }
       for (let i = 0; i < itemsCount; i++) {
         const rowH = Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
-        if (currentTableY + rowH > 250) {
+        if (currentTableY + rowH > 275) {
           currentTableY = 52 + (hideHeader ? 0 : 7.5);
           simPageCount++;
         }
@@ -1049,14 +1049,14 @@ const generateQuotationPDF = (
 
     eventsToRender.forEach((evObj) => {
       // Event Name / Title height (approx 10.5)
-      if (simY + 10.5 > 250) {
+      if (simY + 10.5 > 275) {
         simY = 52;
         simPageCount++;
       }
       simY += 10.5;
 
       // Customer details card height (26)
-      if (simY + 26 > 250) {
+      if (simY + 26 > 275) {
         simY = 52;
         simPageCount++;
       }
@@ -1078,7 +1078,7 @@ const generateQuotationPDF = (
     }
 
     const pricingH = 4.5 + cfg.pricingCardHeight;
-    if (simY + pricingH > 250) {
+    if (simY + pricingH > 275) {
       simY = 52;
       simPageCount++;
     }
@@ -1097,7 +1097,7 @@ const generateQuotationPDF = (
       simBoxH += 2;
 
       const remarksH = 4.5 + simBoxH;
-      if (simY + remarksH > 250) {
+      if (simY + remarksH > 275) {
         simY = 52;
         simPageCount++;
       }
@@ -1105,7 +1105,7 @@ const generateQuotationPDF = (
     }
 
     // 8. TERMS & CONDITIONS (Boxed)
-    if (simY + 4.5 > 250) {
+    if (simY + 4.5 > 275) {
       simY = 52;
       simPageCount++;
     }
@@ -1122,7 +1122,7 @@ const generateQuotationPDF = (
         const wrapped = doc.splitTextToSize(cleanTerm, 163);
         const termH = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
 
-        if (tempY + termH > 248) {
+        if (tempY + termH > 271) {
           if (collectedOnPage === 0) {
             // Force break page
             simY = 52;
@@ -1144,7 +1144,7 @@ const generateQuotationPDF = (
     }
 
     // 9. PHOTOCREW PICTURES FOOTER (Always Last, at footerY = 255)
-    if (simY > 250) {
+    if (simY > 245) {
       simY = 52;
       simPageCount++;
     }
@@ -1356,7 +1356,7 @@ const generateQuotationPDF = (
     });
 
     // Only force a page break if there is not enough room for the title, header, and at least one row
-    if (currentY + 4 + 7.5 + 15 > 250) {
+    if (currentY + 4 + 7.5 + 15 > 275) {
       currentY = createNewPage();
     }
     doc.setFont('helvetica', 'bold');
@@ -1365,7 +1365,7 @@ const generateQuotationPDF = (
     doc.text(title, 15, currentY);
     currentY += 4;
 
-    if (currentY + 7.5 > 250) {
+    if (currentY + 7.5 > 275) {
       currentY = createNewPage();
     }
 
@@ -1390,7 +1390,7 @@ const generateQuotationPDF = (
       const wrappedName = doc.splitTextToSize(item.name, 154);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
-      if (currentY + rowHeight > 250) {
+      if (currentY + rowHeight > 275) {
         doc.line(15, currentY, 195, currentY);
         currentY = createNewPage();
 
@@ -1449,7 +1449,7 @@ const generateQuotationPDF = (
     });
 
     // Only force a page break if there is not enough room for the title, header, and at least one row
-    if (currentY + 4 + 7.5 + 15 > 250) {
+    if (currentY + 4 + 7.5 + 15 > 275) {
       currentY = createNewPage();
     }
     doc.setFont('helvetica', 'bold');
@@ -1458,7 +1458,7 @@ const generateQuotationPDF = (
     doc.text(title, 15, currentY);
     currentY += 4;
 
-    if (currentY + 7.5 > 250) {
+    if (currentY + 7.5 > 275) {
       currentY = createNewPage();
     }
 
@@ -1483,7 +1483,7 @@ const generateQuotationPDF = (
       const wrappedName = doc.splitTextToSize(item.name, 154);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
-      if (currentY + rowHeight > 250) {
+      if (currentY + rowHeight > 275) {
         doc.line(15, currentY, 195, currentY);
         currentY = createNewPage();
 
@@ -1538,7 +1538,7 @@ const generateQuotationPDF = (
     });
 
     // Only force a page break if there is not enough room for the title, header, and at least one row
-    if (currentY + 4 + 7.5 + 15 > 250) {
+    if (currentY + 4 + 7.5 + 15 > 275) {
       currentY = createNewPage();
     }
     doc.setFont('helvetica', 'bold');
@@ -1547,7 +1547,7 @@ const generateQuotationPDF = (
     doc.text(title, 15, currentY);
     currentY += 4;
 
-    if (currentY + 7.5 > 250) {
+    if (currentY + 7.5 > 275) {
       currentY = createNewPage();
     }
     doc.setFillColor(30, 41, 59); // Slate-800
@@ -1568,7 +1568,7 @@ const generateQuotationPDF = (
       const wrappedName = doc.splitTextToSize(cleanedItemName, 166);
       const rowHeight = Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
 
-      if (currentY + rowHeight > 250) {
+      if (currentY + rowHeight > 275) {
         doc.line(15, currentY, 195, currentY);
         currentY = createNewPage();
 
@@ -1610,7 +1610,7 @@ const generateQuotationPDF = (
   // Now, iterate through events and draw the specified blocks
   eventsToRender.forEach((evObj, idx) => {
     // 1. EVENT NAME & META DETAILS
-    if (currentY + 11 > 250) {
+    if (currentY + 11 > 275) {
       currentY = createNewPage();
     }
 
@@ -1642,7 +1642,7 @@ const generateQuotationPDF = (
     currentY += 6;
 
     // 2. CUSTOMER DETAILS CARD
-    if (currentY + 26 > 250) {
+    if (currentY + 26 > 275) {
       currentY = createNewPage();
     }
 
@@ -1708,7 +1708,7 @@ const generateQuotationPDF = (
 
   // 5. PRICING SUMMARY CARD
   const pricingCardTotalH = 4.5 + cfg.pricingCardHeight;
-  if (currentY + pricingCardTotalH > 250) {
+  if (currentY + pricingCardTotalH > 275) {
     currentY = createNewPage();
   }
 
@@ -1791,7 +1791,7 @@ const generateQuotationPDF = (
   // We do not increment currentY or draw the section.
 
   // 8. TERMS AND CONDITIONS
-  if (currentY + 4.5 > 250) {
+  if (currentY + 4.5 > 275) {
     currentY = createNewPage();
   }
 
@@ -1814,7 +1814,7 @@ const generateQuotationPDF = (
       const wrapped = doc.splitTextToSize(cleanTerm, 163); // fits beautifully inside 180mm box with margins and padding
       const termHeight = (wrapped.length * cfg.termsSpacing) + 3; // spacing between terms
 
-      if (tempY + termHeight > 248) {
+      if (tempY + termHeight > 271) {
         if (pageTerms.length === 0) {
           // Force break page if not even one term fits
           currentY = createNewPage();
@@ -1860,7 +1860,7 @@ const generateQuotationPDF = (
   // 9. PHOTOCREW PICTURES FOOTER (Always Last)
   // Check if we have enough space for the footer on the current final page.
   // If not, we create a new page for it.
-  if (currentY > 250) {
+  if (currentY > 245) {
     currentY = createNewPage();
   }
 
