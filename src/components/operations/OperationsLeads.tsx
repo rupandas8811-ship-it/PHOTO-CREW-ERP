@@ -1710,64 +1710,60 @@ export const OperationsLeads: React.FC = () => {
         const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
         const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim());
 
-        if (orderStaffAssignments.length > 0) {
-          orderStaffAssignments.forEach((sa, saIdx) => {
-            const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase());
-            const stType = sa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
-            const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+        // Track used assignment_ids from orderStaffAssignments to avoid duplicate mapping
+        const usedSaIds = new Set<string>();
 
-            staffList.push({
-              id: sa.assignment_id || ('slot_' + Math.random().toString(36).substr(2, 6)),
-              staff_role: sa.staff_role || taskGroups[0]?.roleName || 'General Staff',
-              staff_id: sa.staff_id || st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
-              staff_name: sa.staff_name,
-              mobile: sa.mobile || st?.mobile || '',
-              staff_type: cleanType,
-              equipment: sa.equipment || staffEquipments[saIdx] || []
-            });
-          });
-        } else if (existingNames.length > 0) {
-          let namePointer = 0;
-          if (taskGroups.length > 0) {
-            taskGroups.forEach(task => {
-              for (let i = 0; i < task.targetQty; i++) {
-                const assignedName = existingNames[namePointer] || '';
-                namePointer++;
+        const getSlotId = (roleName: string, slotIdx: number) => {
+          const cleanRole = roleName.replace(/[^a-zA-Z0-9]/g, '');
+          const cleanEv = String(evId).replace(/[^a-zA-Z0-9]/g, '');
+          const cleanOrd = String(order.order_id).replace(/[^a-zA-Z0-9]/g, '');
+          return `ASST-${cleanOrd}-${cleanEv}-${cleanRole}-${slotIdx}`;
+        };
+
+        if (taskGroups.length > 0) {
+          let legacyNamePointer = 0;
+          taskGroups.forEach(task => {
+            const matchingDbAssignments = orderStaffAssignments.filter(sa =>
+              !usedSaIds.has(sa.assignment_id) &&
+              (sa.staff_role === task.roleName || isRoleMatch(sa.staff_role, task.roleName))
+            );
+
+            for (let i = 0; i < task.targetQty; i++) {
+              const matchedSa = matchingDbAssignments[i];
+              if (matchedSa) {
+                usedSaIds.add(matchedSa.assignment_id);
+                const st = staff?.find(s => s.name?.toLowerCase() === matchedSa.staff_name?.toLowerCase());
+                const stType = matchedSa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+                const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+
+                staffList.push({
+                  id: matchedSa.assignment_id || getSlotId(task.roleName, i),
+                  staff_role: matchedSa.staff_role || task.roleName,
+                  staff_id: matchedSa.staff_id || st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
+                  staff_name: matchedSa.staff_name || '',
+                  mobile: matchedSa.mobile || st?.mobile || '',
+                  staff_type: cleanType,
+                  equipment: matchedSa.equipment || []
+                });
+              } else if (existingNames.length > legacyNamePointer) {
+                const assignedName = existingNames[legacyNamePointer] || '';
+                legacyNamePointer++;
                 const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
                 const stType = st?.staff_type || (st as any)?.Staff_Type || 'In-House';
                 const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
 
                 staffList.push({
-                  id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                  id: getSlotId(task.roleName, i),
                   staff_role: task.roleName,
                   staff_id: st?.staff_id || (assignedName ? 'MOCK-' + Math.random().toString(36).substr(2, 4) : ''),
                   staff_name: assignedName,
-                  mobile: st?.mobile || mobilesList[namePointer - 1] || '',
+                  mobile: st?.mobile || mobilesList[legacyNamePointer - 1] || '',
                   staff_type: cleanType,
-                  equipment: staffEquipments[namePointer - 1] || []
+                  equipment: staffEquipments[legacyNamePointer - 1] || []
                 });
-              }
-            });
-          } else {
-            existingNames.forEach((assignedName, idx) => {
-              const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
-              staffList.push({
-                id: 'slot_' + Math.random().toString(36).substr(2, 6),
-                staff_role: st?.role || 'Team Member',
-                staff_id: st?.staff_id || (assignedName ? 'MOCK-' + Math.random().toString(36).substr(2, 4) : ''),
-                staff_name: assignedName,
-                mobile: st?.mobile || mobilesList[idx] || '',
-                staff_type: 'In-House',
-                equipment: staffEquipments[idx] || []
-              });
-            });
-          }
-        } else {
-          if (taskGroups.length > 0) {
-            taskGroups.forEach(task => {
-              for (let i = 0; i < task.targetQty; i++) {
+              } else {
                 staffList.push({
-                  id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                  id: getSlotId(task.roleName, i),
                   staff_role: task.roleName,
                   staff_id: '',
                   staff_name: '',
@@ -1776,26 +1772,58 @@ export const OperationsLeads: React.FC = () => {
                   equipment: []
                 });
               }
-            });
-          }
-        }
+            }
+          });
 
-        // Ensure every task group has at least targetQty slots in staffList
-        taskGroups.forEach(task => {
-          const currentSlots = staffList.filter(s => s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
-          const missingCount = task.targetQty - currentSlots.length;
-          for (let m = 0; m < missingCount; m++) {
+          // Append any remaining orderStaffAssignments not matched to taskGroups
+          orderStaffAssignments.forEach((sa, saIdx) => {
+            if (!usedSaIds.has(sa.assignment_id)) {
+              usedSaIds.add(sa.assignment_id);
+              const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase());
+              const stType = sa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+              const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+
+              staffList.push({
+                id: sa.assignment_id || getSlotId(sa.staff_role || 'GeneralStaff', saIdx),
+                staff_role: sa.staff_role || 'General Staff',
+                staff_id: sa.staff_id || st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
+                staff_name: sa.staff_name || '',
+                mobile: sa.mobile || st?.mobile || '',
+                staff_type: cleanType,
+                equipment: sa.equipment || staffEquipments[saIdx] || []
+              });
+            }
+          });
+        } else if (orderStaffAssignments.length > 0) {
+          orderStaffAssignments.forEach((sa, saIdx) => {
+            const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase());
+            const stType = sa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+            const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+
             staffList.push({
-              id: 'slot_' + Math.random().toString(36).substr(2, 6),
-              staff_role: task.roleName,
-              staff_id: '',
-              staff_name: '',
-              mobile: '',
-              staff_type: 'In-House',
-              equipment: []
+              id: sa.assignment_id || getSlotId(sa.staff_role || 'GeneralStaff', saIdx),
+              staff_role: sa.staff_role || 'General Staff',
+              staff_id: sa.staff_id || st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
+              staff_name: sa.staff_name || '',
+              mobile: sa.mobile || st?.mobile || '',
+              staff_type: cleanType,
+              equipment: sa.equipment || staffEquipments[saIdx] || []
             });
-          }
-        });
+          });
+        } else if (existingNames.length > 0) {
+          existingNames.forEach((assignedName, idx) => {
+            const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
+            staffList.push({
+              id: getSlotId(st?.role || 'Team Member', idx),
+              staff_role: st?.role || 'Team Member',
+              staff_id: st?.staff_id || (assignedName ? 'MOCK-' + Math.random().toString(36).substr(2, 4) : ''),
+              staff_name: assignedName,
+              mobile: st?.mobile || mobilesList[idx] || '',
+              staff_type: 'In-House',
+              equipment: staffEquipments[idx] || []
+            });
+          });
+        }
 
         initialAllocations[evId] = {
            reporting_date: targetLead.Reporting_date || ev.event_date || '',
@@ -2018,7 +2046,7 @@ export const OperationsLeads: React.FC = () => {
           alloc.staff.forEach((st: any) => {
             if (st.staff_name && st.staff_name.trim() !== '') {
                allAssignedStaff.push({
-                 assignment_id: st.id && !st.id.startsWith('slot_') ? st.id : undefined,
+                 assignment_id: st.id ? st.id : undefined,
                  staff_role: st.staff_role,
                  staff_id: st.staff_id,
                  staff_name: st.staff_name,

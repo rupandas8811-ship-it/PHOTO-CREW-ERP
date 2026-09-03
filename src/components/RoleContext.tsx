@@ -4700,7 +4700,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       // Try matching an existing DB assignment by:
       // 1. Exact assignment_id
       let matched = existingDbAssignments.find(ed => 
-        a.assignment_id && !a.assignment_id.startsWith('slot_') && ed.assignment_id === a.assignment_id
+        a.assignment_id && ed.assignment_id === a.assignment_id
       );
 
       // 2. Matching event + staff_id/staff_name + staff_role
@@ -4743,7 +4743,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
 
       const assignId = matched?.assignment_id || 
-        (a.assignment_id && !a.assignment_id.startsWith('slot_') ? a.assignment_id : `ASST-${Math.floor(100000 + Math.random() * 900000)}`);
+        (a.assignment_id ? a.assignment_id : `ASST-${Math.floor(100000 + Math.random() * 900000)}`);
 
       // Rich React/Local representation with event details
       const reactAssignRecord: StaffAssignment = {
