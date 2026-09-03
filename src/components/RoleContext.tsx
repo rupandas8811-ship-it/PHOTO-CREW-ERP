@@ -2671,21 +2671,26 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           } catch (e) {}
 
           const enriched = dbStaffAssignments.map((sa: any) => {
+            let staffName = sa.staff_name || '';
+            if (staffName.includes('__SLOT__')) {
+              staffName = staffName.split('__SLOT__')[0];
+            }
+            const cleanSa = { ...sa, staff_name: staffName };
             const cached = cachedAssignments.find((c: any) => 
-              (c.assignment_id && c.assignment_id === sa.assignment_id) ||
-              (c.order_id === sa.order_id && (c.staff_id === sa.staff_id || (c.staff_name && sa.staff_name && c.staff_name.toLowerCase() === sa.staff_name.toLowerCase())))
+              (c.assignment_id && c.assignment_id === cleanSa.assignment_id) ||
+              (c.order_id === cleanSa.order_id && (c.staff_id === cleanSa.staff_id || (c.staff_name && cleanSa.staff_name && c.staff_name.toLowerCase() === cleanSa.staff_name.toLowerCase())))
             );
             if (cached) {
               return {
-                ...sa,
-                event_id: cached.event_id || sa.event_id || '',
-                event_name: cached.event_name || sa.event_name || '',
-                equipment: cached.equipment || sa.equipment || [],
-                mobile: cached.mobile || sa.mobile || '',
-                staff_type: cached.staff_type || sa.staff_type || 'In-House'
+                ...cleanSa,
+                event_id: cached.event_id || cleanSa.event_id || '',
+                event_name: cached.event_name || cleanSa.event_name || '',
+                equipment: cached.equipment || cleanSa.equipment || [],
+                mobile: cached.mobile || cleanSa.mobile || '',
+                staff_type: cached.staff_type || cleanSa.staff_type || 'In-House'
               };
             }
-            return sa;
+            return cleanSa;
           });
           setStaffAssignments(enriched);
         }
@@ -4687,6 +4692,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       const assignId = a.assignment_id || `ASST-${orderId}-${a.event_id || 'evt'}-${aStaffNameTrimmed.replace(/[^a-z0-9]/gi, '').slice(0, 10)}-${Math.floor(Math.random()*1000)}`;
 
+      const slotPart = assignId.split('-').pop() || Math.floor(Math.random()*1000).toString();
+      const dbStaffName = `${a.staff_name}__SLOT__${slotPart}`;
+
       const finalReactAssignment = {
         assignment_id: assignId,
         order_id: orderId,
@@ -4716,7 +4724,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           updates: {
             staff_role: a.staff_role,
             staff_id: a.staff_id || matched.staff_id,
-            staff_name: a.staff_name,
+            staff_name: dbStaffName,
             assignment_date: (a as any).assignment_date || matched.assignment_date || assignDate,
             assignment_status: a.assignment_status || matched.assignment_status || 'Assigned',
             task_status: a.task_status || matched.task_status || 'Assigned',
@@ -4735,7 +4743,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           order_id: orderId,
           staff_role: a.staff_role,
           staff_id: a.staff_id,
-          staff_name: a.staff_name,
+          staff_name: dbStaffName,
           assignment_date: (a as any).assignment_date || assignDate,
           assignment_status: a.assignment_status || 'Assigned',
           task_status: a.task_status || 'Assigned',
@@ -4921,7 +4929,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         // Sync local React state and cache with freshly fetched verified records from DB
         setStaffAssignments(prev => {
           const otherOrders = prev.filter(sa => sa.order_id !== orderId);
-          const combined = [...otherOrders, ...verified];
+          const cleanVerified = verified.map((v: any) => {
+            let staffName = v.staff_name || '';
+            if (staffName.includes('__SLOT__')) {
+              staffName = staffName.split('__SLOT__')[0];
+            }
+            return { ...v, staff_name: staffName };
+          });
+          const combined = [...otherOrders, ...cleanVerified];
           try {
             localStorage.setItem('erp_staff_assignments', JSON.stringify(combined));
           } catch (e) {}

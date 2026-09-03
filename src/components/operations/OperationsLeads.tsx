@@ -3219,7 +3219,7 @@ export const OperationsLeads: React.FC = () => {
 
                             return taskGroups.map((task, groupIdx) => {
                               const taskSlots = allocStaff.filter((s: any) => s.staff_role === task.roleName);
-                              const slotsToRender = taskSlots.length > 0 ? taskSlots : Array.from({ length: task.targetQty || 1 }, () => ({
+                              const slotsToRender = [...taskSlots, ...Array.from({ length: Math.max(0, (task.targetQty || 1) - taskSlots.length) }, () => ({
                                 id: 'slot_' + Math.random().toString(36).substr(2, 6),
                                 staff_role: task.roleName,
                                 staff_id: '',
@@ -3227,7 +3227,7 @@ export const OperationsLeads: React.FC = () => {
                                 mobile: '',
                                 staff_type: 'In-House' as const,
                                 equipment: []
-                              }));
+                              }))];
 
                               const assignedCount = taskSlots.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
 
@@ -3273,12 +3273,17 @@ export const OperationsLeads: React.FC = () => {
                                                   const newType = e.target.value as 'In-House' | 'Freelancer';
                                                   setEventAllocations((prev: any) => {
                                                     const existingAlloc = prev[evId] || { staff: [] };
+                                                    let found = false;
                                                     const updatedStaff = existingAlloc.staff.map((s: any) => {
                                                       if (s.id === slot.id || s === slot) {
+                                                        found = true;
                                                         return { ...s, staff_type: newType, staff_name: '', staff_id: '', mobile: '' };
                                                       }
                                                       return s;
                                                     });
+                                                    if (!found) {
+                                                      updatedStaff.push({ ...slot, staff_type: newType, staff_name: '', staff_id: '', mobile: '' });
+                                                    }
                                                     return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
                                                   });
                                                 }}
@@ -3300,8 +3305,10 @@ export const OperationsLeads: React.FC = () => {
 
                                                   setEventAllocations((prev: any) => {
                                                     const existingAlloc = prev[evId] || { staff: [] };
+                                                    let found = false;
                                                     const updatedStaff = existingAlloc.staff.map((s: any) => {
                                                       if (s.id === slot.id || s === slot) {
+                                                        found = true;
                                                         return {
                                                           ...s,
                                                           staff_name: selectedName,
@@ -3311,6 +3318,14 @@ export const OperationsLeads: React.FC = () => {
                                                       }
                                                       return s;
                                                     });
+                                                    if (!found) {
+                                                      updatedStaff.push({
+                                                        ...slot,
+                                                        staff_name: selectedName,
+                                                        staff_id: staffId,
+                                                        mobile: memberInfo?.mobile || ''
+                                                      });
+                                                    }
                                                     return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
                                                   });
                                                 }}
@@ -3425,8 +3440,10 @@ export const OperationsLeads: React.FC = () => {
                                                  onToggleEquipment={(eqName) => {
                                                    setEventAllocations((prev: any) => {
                                                      const existingAlloc = prev[evId] || { staff: [] };
+                                                     let found = false;
                                                      const updatedStaff = existingAlloc.staff.map((s: any) => {
                                                        if (s.id === slot.id || s === slot) {
+                                                         found = true;
                                                          const currentEq = s.equipment || [];
                                                          const isSelected = currentEq.includes(eqName);
                                                          return {
@@ -3438,6 +3455,12 @@ export const OperationsLeads: React.FC = () => {
                                                        }
                                                        return s;
                                                      });
+                                                     if (!found) {
+                                                       updatedStaff.push({
+                                                         ...slot,
+                                                         equipment: [eqName]
+                                                       });
+                                                     }
                                                      return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
                                                    });
                                                  }}
