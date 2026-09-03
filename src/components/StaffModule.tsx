@@ -465,6 +465,10 @@ const getBookingProofStatus = (
     if (parsed.assignment_id && b.assignmentId && parsed.assignment_id !== b.assignmentId) {
       return;
     }
+    // If the record has an assignment ID, but the current booking does not, it belongs to another specific assignment.
+    if (parsed.assignment_id && !b.assignmentId) {
+      return;
+    }
 
     const bEvId = b.eventId;
     const hEvId = parsed.event_id;
@@ -791,12 +795,10 @@ export const StaffModule: React.FC = () => {
           const keysToUpdate: string[] = [];
           if (parsedAssignmentId) {
             keysToUpdate.push(`${leh.order_id}_${parsedAssignmentId}_${currentStaffNorm}`);
-          }
-          if (eventId) {
-            keysToUpdate.push(`${leh.order_id}_${eventId}_${currentStaffNorm}`);
-          }
-          if (eventId && parsedRole) {
+          } else if (eventId && parsedRole) {
             keysToUpdate.push(`${leh.order_id}_${eventId}_${parsedRole.toLowerCase()}_${currentStaffNorm}`);
+          } else if (eventId) {
+            keysToUpdate.push(`${leh.order_id}_${eventId}_${currentStaffNorm}`);
           }
 
           let effStatus = parsedStatus;
@@ -1182,7 +1184,15 @@ export const StaffModule: React.FC = () => {
                 if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
                 const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
                 if (rStaff !== staffName.toLowerCase()) return false;
+                
                 if (p.assignment_id && assignmentId && p.assignment_id !== assignmentId) return false;
+                if (p.assignment_id && !assignmentId) return false;
+                
+                if (assignmentId && !p.assignment_id) {
+                  if (p.event_id && ev.id && p.event_id !== 'gen' && p.event_id !== 'ev' && ev.id !== 'gen' && ev.id !== 'ev' && p.event_id !== ev.id) return false;
+                  if (p.staff_role && assignedRole && p.staff_role.trim().toLowerCase() !== assignedRole.trim().toLowerCase()) return false;
+                }
+
                 if (p.event_id && ev.id && p.event_id !== 'gen' && p.event_id !== 'ev' && ev.id !== 'gen' && ev.id !== 'ev' && p.event_id !== ev.id) return false;
                 return Boolean(p.raw_footage_link);
               });
@@ -1280,7 +1290,14 @@ export const StaffModule: React.FC = () => {
               if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
               const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
               if (rStaff !== staffName.toLowerCase()) return false;
+              
               if (p.assignment_id && assignmentId && p.assignment_id !== assignmentId) return false;
+              if (p.assignment_id && !assignmentId) return false;
+              
+              if (assignmentId && !p.assignment_id) {
+                if (p.staff_role && assignedRole && p.staff_role.trim().toLowerCase() !== assignedRole.trim().toLowerCase()) return false;
+              }
+
               return Boolean(p.raw_footage_link);
             });
             if (hMatch) {
@@ -1861,10 +1878,7 @@ export const StaffModule: React.FC = () => {
                 updated_at: timestamp
               });
             } else {
-              await pushUpdate('staff_assignments', 'order_id', booking.orderId, {
-                task_status: 'Event Started',
-                updated_at: timestamp
-              });
+              console.warn('Cannot update staff_assignment: missing assignment_id');
             }
 
             // Calculate overall stage across ALL assigned staff members
@@ -2224,7 +2238,7 @@ export const StaffModule: React.FC = () => {
             assignment_status: 'Assigned'
           });
         } else {
-          await pushUpdate('staff_assignments', 'order_id', booking.orderId, updateAssignmentPayload);
+          console.warn('Cannot update staff_assignment: missing assignment_id');
         }
 
         const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, nextStatus, nextStatuses, orders, leads, staffAssignments);

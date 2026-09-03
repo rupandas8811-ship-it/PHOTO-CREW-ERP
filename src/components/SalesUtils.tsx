@@ -1211,26 +1211,22 @@ export const generateQuotationPDF = (
     let simPageCount = 1;
 
     const simTable = (itemsCount: number, hideHeader: boolean) => {
-      let tableH = hideHeader ? 4 : (4 + 7.5); 
-      for (let i = 0; i < itemsCount; i++) {
-        tableH += Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
-      }
-      if (simY + tableH > 250 && tableH <= (250 - 52)) {
+      let currentTableY = simY + (hideHeader ? 4 : (4 + 7.5));
+      // Only force a page break if there is not enough room for the header and at least one row
+      if (currentTableY + 15 > 250) {
         simY = 52;
         simPageCount++;
-      } else {
-        let currentTableY = simY + (hideHeader ? 4 : (4 + 7.5));
-        for (let i = 0; i < itemsCount; i++) {
-          const rowH = Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
-          if (currentTableY + rowH > 250) {
-            currentTableY = 52 + (hideHeader ? 0 : 7.5);
-            simPageCount++;
-          }
-          currentTableY += rowH;
-        }
-        simY = currentTableY;
+        currentTableY = simY + (hideHeader ? 4 : (4 + 7.5));
       }
-      simY += cfg.tableSpacing;
+      for (let i = 0; i < itemsCount; i++) {
+        const rowH = Math.max(7.5, 1 * cfg.rowTextHeight + cfg.rowPadding);
+        if (currentTableY + rowH > 250) {
+          currentTableY = 52 + (hideHeader ? 0 : 7.5);
+          simPageCount++;
+        }
+        currentTableY += rowH;
+      }
+      simY = currentTableY + cfg.tableSpacing;
     };
 
     // Customer details card height (26)
@@ -1541,11 +1537,8 @@ export const generateQuotationPDF = (
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
 
-    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
-      currentY = createNewPage();
-    }
-
-    if (currentY + 4 > 250) {
+    // Only force a page break if there is not enough room for the title, header, and at least one row
+    if (currentY + 4 + 7.5 + 15 > 250) {
       currentY = createNewPage();
     }
     doc.setFont('helvetica', 'bold');
@@ -1637,11 +1630,8 @@ export const generateQuotationPDF = (
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
 
-    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
-      currentY = createNewPage();
-    }
-
-    if (currentY + 4 > 250) {
+    // Only force a page break if there is not enough room for the title, header, and at least one row
+    if (currentY + 4 + 7.5 + 15 > 250) {
       currentY = createNewPage();
     }
     doc.setFont('helvetica', 'bold');
@@ -1729,11 +1719,8 @@ export const generateQuotationPDF = (
       tableH += Math.max(7.5, wrappedName.length * cfg.rowTextHeight + cfg.rowPadding);
     });
 
-    if (currentY + tableH > 250 && tableH <= (250 - 52)) {
-      currentY = createNewPage();
-    }
-
-    if (currentY + 4 > 250) {
+    // Only force a page break if there is not enough room for the title, header, and at least one row
+    if (currentY + 4 + 7.5 + 15 > 250) {
       currentY = createNewPage();
     }
     doc.setFont('helvetica', 'bold');

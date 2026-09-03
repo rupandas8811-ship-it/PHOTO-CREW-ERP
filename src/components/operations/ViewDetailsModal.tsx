@@ -397,7 +397,21 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
         if (h.remarks) {
           try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch (e) {}
         }
+        const recordStaff = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+        const bookingStaff = (booking.staffName || booking.name || '').trim().toLowerCase();
+        
+        if (bookingStaff && recordStaff && recordStaff !== bookingStaff) return false;
+        
         if (parsed.assignment_id && booking.assignmentId && parsed.assignment_id !== booking.assignmentId) return false;
+        
+        if (parsed.assignment_id && !booking.assignmentId) return false;
+        
+        if (booking.assignmentId && !parsed.assignment_id) {
+          // If the record has no assignment ID but our booking does, fallback to event/role matching
+          if (parsed.event_id && booking.eventId && parsed.event_id !== 'gen' && parsed.event_id !== 'ev' && booking.eventId !== 'gen' && booking.eventId !== 'ev' && parsed.event_id !== booking.eventId) return false;
+          if (parsed.staff_role && booking.assignedRole && parsed.staff_role.trim().toLowerCase() !== booking.assignedRole.trim().toLowerCase()) return false;
+        }
+
         if (parsed.event_id && booking.eventId && parsed.event_id !== 'gen' && parsed.event_id !== 'ev' && booking.eventId !== 'gen' && booking.eventId !== 'ev' && parsed.event_id !== booking.eventId) return false;
       }
       return true;
