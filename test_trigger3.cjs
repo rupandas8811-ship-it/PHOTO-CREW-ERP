@@ -4,8 +4,10 @@ const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SU
 
 async function check() {
   const { data, error } = await supabase.rpc('execute_sql', { sql: `
-    SELECT * FROM pg_indexes WHERE indexname = 'idx_unique_staff_per_order';
+    SELECT trigger_name, event_manipulation, event_object_table, action_statement
+    FROM information_schema.triggers
+    WHERE event_object_table = 'staff_assignments';
   ` });
-  console.log("Indexes:", data, error);
+  console.log("Triggers:", data, error);
 }
 check();

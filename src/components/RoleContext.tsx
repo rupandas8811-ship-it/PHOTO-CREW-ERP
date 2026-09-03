@@ -4692,8 +4692,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       const assignId = a.assignment_id || `ASST-${orderId}-${a.event_id || 'evt'}-${aStaffNameTrimmed.replace(/[^a-z0-9]/gi, '').slice(0, 10)}-${Math.floor(Math.random()*1000)}`;
 
-      const slotPart = assignId.split('-').pop() || Math.floor(Math.random()*1000).toString();
-      const dbStaffName = `${a.staff_name}__SLOT__${slotPart}`;
+      const dbStaffName = `${a.staff_name}__SLOT__${assignId}`;
 
       const finalReactAssignment = {
         assignment_id: assignId,
@@ -4761,7 +4760,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Preserve any existing assignments for this order that were not part of this edit batch
     for (const ed of existingDbAssignments) {
       if (!matchedDbAssignmentIds.has(ed.assignment_id) && !finalReactAssignments.some(r => r.assignment_id === ed.assignment_id)) {
-        finalReactAssignments.push(ed);
+        const copy = { ...ed };
+        if (copy.staff_name && copy.staff_name.includes('__SLOT__')) {
+          copy.staff_name = copy.staff_name.split('__SLOT__')[0];
+        }
+        finalReactAssignments.push(copy);
       }
     }
 
