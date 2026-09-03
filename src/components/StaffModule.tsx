@@ -1554,6 +1554,7 @@ export const StaffModule: React.FC = () => {
 
   // Submit Equipment Photos & Update Task Status
   const handleConfirmStatusUpdate = async () => {
+    console.log('[DEBUG] handleConfirmStatusUpdate clicked:', { photoModalData });
     if (!photoModalData || isSubmitting) return;
     const { booking, stage } = photoModalData;
     setSubmitError(null);
@@ -2124,7 +2125,9 @@ export const StaffModule: React.FC = () => {
     }
 
     // Validate mandatory Raw Footage Link for Footage Handover
+    console.log('[DEBUG] Submit click:', { stage, modalRawFootageLink: `"${modalRawFootageLink}"` });
     if (stage === 'Equipment Handover' && (!modalRawFootageLink || !modalRawFootageLink.trim())) {
+      console.log('[DEBUG] Validation failed: missing link');
       missingOther.push('Raw Footage Drive Link');
     }
 
@@ -2466,6 +2469,7 @@ export const StaffModule: React.FC = () => {
       console.error('Error updating status:', error);
       showToast(`❌ Failed to submit ${stage}: ${error.message || 'Unknown error'}`);
     } finally {
+      console.log('[DEBUG] Setting isSubmitting to false');
       setIsSubmitting(false);
     }
   };
@@ -3131,7 +3135,10 @@ export const StaffModule: React.FC = () => {
                     <input
                       type="url"
                       value={modalRawFootageLink}
-                      onChange={(e) => setModalRawFootageLink(e.target.value)}
+                      onChange={(e) => {
+                        console.log('[DEBUG] Raw link changed:', e.target.value);
+                        setModalRawFootageLink(e.target.value);
+                      }}
                       placeholder="https://drive.google.com/drive/folders/..."
                       className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono"
                     />
