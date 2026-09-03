@@ -1559,6 +1559,35 @@ export const StaffModule: React.FC = () => {
     const { booking, stage } = photoModalData;
     setSubmitError(null);
 
+    // Determine exact assignment_id
+    let resolvedAssignmentId = booking.assignmentId;
+    if (!resolvedAssignmentId && booking.orderId) {
+      const matchingSA = staffAssignments?.find(sa => {
+        if (sa.order_id !== booking.orderId) return false;
+        if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+        if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
+        if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === (booking.eventName || '').trim().toLowerCase()) return false;
+        return true;
+      });
+      if (matchingSA?.assignment_id) {
+        resolvedAssignmentId = matchingSA.assignment_id;
+      } else {
+        resolvedAssignmentId = `ASST-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+        await pushInsert('staff_assignments', {
+          assignment_id: resolvedAssignmentId,
+          order_id: booking.orderId,
+          staff_id: staffMember?.id || currentUser?.id || '',
+          staff_name: staffName,
+          staff_role: booking.assignedRole || 'Crew Member',
+          event_id: booking.eventId !== 'ev' ? booking.eventId : null,
+          event_name: booking.eventName,
+          task_status: 'Assigned',
+          assignment_status: 'Assigned',
+          assignment_date: booking.eventDate || new Date().toISOString().split('T')[0]
+        });
+      }
+    }
+
     // --- EVENT START WORKFLOW ---
     if (stage === 'Event Start') {
       const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
@@ -1593,35 +1622,6 @@ export const StaffModule: React.FC = () => {
       try {
         setIsSubmitting(true);
         const timestamp = new Date().toISOString();
-
-        // Determine exact assignment_id
-        let resolvedAssignmentId = booking.assignmentId;
-        if (!resolvedAssignmentId && booking.orderId) {
-          const matchingSA = staffAssignments?.find(sa => {
-            if (sa.order_id !== booking.orderId) return false;
-            if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-            if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
-            if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === (booking.eventName || '').trim().toLowerCase()) return false;
-            return true;
-          });
-          if (matchingSA?.assignment_id) {
-            resolvedAssignmentId = matchingSA.assignment_id;
-          } else {
-            resolvedAssignmentId = `ASST-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
-            await pushInsert('staff_assignments', {
-              assignment_id: resolvedAssignmentId,
-              order_id: booking.orderId,
-              staff_id: staffMember?.id || currentUser?.id || '',
-              staff_name: staffName,
-              staff_role: booking.assignedRole || 'Crew Member',
-              event_id: booking.eventId !== 'ev' ? booking.eventId : null,
-              event_name: booking.eventName,
-              task_status: 'Assigned',
-              assignment_status: 'Assigned',
-              assignment_date: booking.eventDate || new Date().toISOString().split('T')[0]
-            });
-          }
-        }
 
         // 1. FIRST IMAGE ONLY (Applicable only if staff has equipment): Asset / Equipment Received Image is provided
         if (hasEquipment && hasAssetColl && !hasEventStart) {
@@ -1959,35 +1959,6 @@ export const StaffModule: React.FC = () => {
       try {
         setIsSubmitting(true);
         const timestamp = new Date().toISOString();
-
-        // Determine exact assignment_id
-        let resolvedAssignmentId = booking.assignmentId;
-        if (!resolvedAssignmentId && booking.orderId) {
-          const matchingSA = staffAssignments?.find(sa => {
-            if (sa.order_id !== booking.orderId) return false;
-            if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-            if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
-            if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === (booking.eventName || '').trim().toLowerCase()) return false;
-            return true;
-          });
-          if (matchingSA?.assignment_id) {
-            resolvedAssignmentId = matchingSA.assignment_id;
-          } else {
-            resolvedAssignmentId = `ASST-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
-            await pushInsert('staff_assignments', {
-              assignment_id: resolvedAssignmentId,
-              order_id: booking.orderId,
-              staff_id: staffMember?.id || currentUser?.id || '',
-              staff_name: staffName,
-              staff_role: booking.assignedRole || 'Crew Member',
-              event_id: booking.eventId !== 'ev' ? booking.eventId : null,
-              event_name: booking.eventName,
-              task_status: 'Assigned',
-              assignment_status: 'Assigned',
-              assignment_date: booking.eventDate || new Date().toISOString().split('T')[0]
-            });
-          }
-        }
 
         // Upload image normally using existing workflow
         let finalUrl = rawUrl;
