@@ -345,6 +345,19 @@ async function startServer() {
       }
     }
 
+    if (table === 'staff_assignments') {
+      const validCols = new Set([
+        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name',
+        'assignment_date', 'assignment_status', 'task_status', 'updated_at',
+        'updated_by', 'raw_footage_link', 'created_at'
+      ]);
+      for (const k of Object.keys(clone)) {
+        if (!validCols.has(k)) {
+          delete clone[k];
+        }
+      }
+    }
+
     if (table === 'raw_footage') {
       const validCols = new Set([
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received',
@@ -505,8 +518,6 @@ async function startServer() {
                   staff_role: itm.staff_role || matched.staff_role,
                   staff_id: itm.staff_id || matched.staff_id,
                   staff_name: itm.staff_name || matched.staff_name,
-                  event_id: itm.event_id || matched.event_id || '',
-                  event_name: itm.event_name || matched.event_name || '',
                   assignment_date: itm.assignment_date || matched.assignment_date,
                   assignment_status: itm.assignment_status || matched.assignment_status,
                   task_status: itm.task_status || matched.task_status,

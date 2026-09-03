@@ -1714,9 +1714,9 @@ export const OperationsLeads: React.FC = () => {
         const usedSaIds = new Set<string>();
 
         const getSlotId = (roleName: string, slotIdx: number) => {
-          const cleanRole = roleName.replace(/[^a-zA-Z0-9]/g, '');
-          const cleanEv = String(evId).replace(/[^a-zA-Z0-9]/g, '');
-          const cleanOrd = String(order.order_id).replace(/[^a-zA-Z0-9]/g, '');
+          const cleanRole = roleName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
+          const cleanEv = String(evId).replace(/[^a-zA-Z0-9]/g, '').slice(-10);
+          const cleanOrd = String(order.order_id).replace(/[^a-zA-Z0-9]/g, '').slice(-10);
           return `ASST-${cleanOrd}-${cleanEv}-${cleanRole}-${slotIdx}`;
         };
 
