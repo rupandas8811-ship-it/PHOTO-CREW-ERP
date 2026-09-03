@@ -1804,7 +1804,10 @@ export function getEventTeamMemberStaffMapping(params: {
     // Source A: finalAssignments (from assignment modal save)
     if (finalAssignments && finalAssignments.length > 0) {
       finalAssignments.forEach(a => {
-        if ((a.event_id === evId || (!a.event_id && totalEvents === 1) || a.event_name === eventName) && a.staff_name && a.staff_name.trim()) {
+        const isEvMatch = a.event_id
+          ? (a.event_id === evId || a.event_id.includes(evId))
+          : (totalEvents === 1 || (a.event_name && a.event_name.toLowerCase() === eventName.toLowerCase()));
+        if (isEvMatch && a.staff_name && a.staff_name.trim()) {
           assignedStaffPool.push({
             staff_name: a.staff_name,
             staff_id: a.staff_id,
@@ -1841,11 +1844,16 @@ export function getEventTeamMemberStaffMapping(params: {
     // Source C: staffAssignments from database
     const orderIdToMatch = order?.order_id || lead?.lead_id;
     if (orderIdToMatch) {
-      const orderAssigns = staffAssignments.filter(sa => 
-        (sa.order_id === orderIdToMatch || sa.order_id === order?.order_id || sa.order_id === lead?.lead_id) &&
-        (sa.event_id === evId || (!sa.event_id && totalEvents === 1) || (sa.event_name && (sa.event_name.toLowerCase() === eventName.toLowerCase() || sa.event_name.toLowerCase() === eventType.toLowerCase()))) &&
-        sa.assignment_status !== 'Cancelled'
-      );
+      const orderAssigns = staffAssignments.filter(sa => {
+        if (sa.order_id !== orderIdToMatch && sa.order_id !== order?.order_id && sa.order_id !== lead?.lead_id) return false;
+        if (sa.assignment_status === 'Cancelled') return false;
+        if (sa.event_id && evId) return sa.event_id === evId || sa.event_id.includes(evId);
+        if (!sa.event_id && totalEvents === 1) return true;
+        if (!sa.event_id && sa.event_name) {
+          return sa.event_name.toLowerCase() === eventName.toLowerCase() || sa.event_name.toLowerCase() === eventType.toLowerCase();
+        }
+        return false;
+      });
       orderAssigns.forEach(sa => {
         if (sa.staff_name && sa.staff_name.trim() && sa.staff_name.toLowerCase() !== 'unassigned' && sa.staff_name.toLowerCase() !== 'none') {
           const already = assignedStaffPool.some(p => p.staff_name.toLowerCase() === sa.staff_name.toLowerCase() && (!sa.staff_role || p.staff_role?.toLowerCase() === sa.staff_role?.toLowerCase()));

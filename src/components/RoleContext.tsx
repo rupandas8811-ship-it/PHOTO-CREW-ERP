@@ -4724,6 +4724,24 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         );
       }
 
+      // 4. Matching event + staff_role (if updating an unassigned task slot in same event)
+      if (!matched) {
+        matched = existingDbAssignments.find(ed => 
+          !matchedDbAssignmentIds.has(ed.assignment_id) &&
+          isSameEvent(ed) &&
+          ((ed.staff_role || '').trim().toLowerCase() === (a.staff_role || '').trim().toLowerCase())
+        );
+      }
+
+      // 5. Matching across order_id by staff_id/staff_name (prevents duplicate key constraint on order_id + staff_name)
+      if (!matched) {
+        matched = existingDbAssignments.find(ed => 
+          !matchedDbAssignmentIds.has(ed.assignment_id) &&
+          ((a.staff_id && ed.staff_id && !a.staff_id.startsWith('MOCK-') && ed.staff_id === a.staff_id) ||
+           ((ed.staff_name || '').trim().toLowerCase() === aStaffNameLower))
+        );
+      }
+
       const assignId = matched?.assignment_id || 
         (a.assignment_id && !a.assignment_id.startsWith('slot_') ? a.assignment_id : `ASST-${Math.floor(100000 + Math.random() * 900000)}`);
 
@@ -4767,21 +4785,40 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
         });
       } else {
-        // Genuinely new assignment slot/task for this event
-        newInsertsForDb.push({
-          assignment_id: assignId,
-          order_id: orderId,
-          event_id: a.event_id || '',
-          event_name: a.event_name || '',
-          staff_role: a.staff_role,
-          staff_id: a.staff_id,
-          staff_name: a.staff_name,
-          assignment_date: assignDate,
-          assignment_status: a.assignment_status || 'Assigned',
-          task_status: a.task_status || 'Assigned',
-          updated_at: timestamp,
-          updated_by: changedBy
-        });
+        // Genuinely new assignment slot/task for this order
+        const existingNewIndex = newInsertsForDb.findIndex(n => 
+          n.order_id === orderId && 
+          ((a.staff_id && n.staff_id && !a.staff_id.startsWith('MOCK-') && n.staff_id === a.staff_id) ||
+           ((n.staff_name || '').trim().toLowerCase() === aStaffNameLower))
+        );
+
+        if (existingNewIndex >= 0) {
+          const existingNew = newInsertsForDb[existingNewIndex];
+          if (a.event_id && !existingNew.event_id.includes(a.event_id)) {
+            existingNew.event_id = existingNew.event_id ? `${existingNew.event_id}, ${a.event_id}` : a.event_id;
+          }
+          if (a.event_name && !existingNew.event_name.includes(a.event_name)) {
+            existingNew.event_name = existingNew.event_name ? `${existingNew.event_name}, ${a.event_name}` : a.event_name;
+          }
+          if (a.staff_role && !existingNew.staff_role.includes(a.staff_role)) {
+            existingNew.staff_role = `${existingNew.staff_role}, ${a.staff_role}`;
+          }
+        } else {
+          newInsertsForDb.push({
+            assignment_id: assignId,
+            order_id: orderId,
+            event_id: a.event_id || '',
+            event_name: a.event_name || '',
+            staff_role: a.staff_role,
+            staff_id: a.staff_id,
+            staff_name: a.staff_name,
+            assignment_date: assignDate,
+            assignment_status: a.assignment_status || 'Assigned',
+            task_status: a.task_status || 'Assigned',
+            updated_at: timestamp,
+            updated_by: changedBy
+          });
+        }
       }
     }
 

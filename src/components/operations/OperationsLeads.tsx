@@ -1238,9 +1238,9 @@ export const OperationsLeads: React.FC = () => {
       lead.events.forEach((ev: any, evIdx: number) => {
         const evId = ev.id || '';
         const evOrderAssignments = orderAssignments.filter(sa => {
-          if (sa.event_id && evId) return sa.event_id === evId;
+          if (sa.event_id && evId) return sa.event_id === evId || sa.event_id.includes(evId);
           if (!sa.event_id && totalEvents === 1) return true;
-          if (sa.event_name) {
+          if (!sa.event_id && sa.event_name) {
             const evName = (ev.event_name || ev.event_type || '').toLowerCase();
             return sa.event_name.toLowerCase() === evName;
           }
@@ -1681,9 +1681,9 @@ export const OperationsLeads: React.FC = () => {
         const isMultiEv = totalEvents > 1;
         const orderStaffAssignments = staffAssignments?.filter(sa => {
           if (!sa || sa.order_id !== order.order_id || sa.assignment_status === 'Cancelled') return false;
-          if (sa.event_id && evId) return sa.event_id === evId;
+          if (sa.event_id && evId) return sa.event_id === evId || sa.event_id.includes(evId);
           if (!sa.event_id && totalEvents === 1) return true;
-          if (sa.event_name) {
+          if (!sa.event_id && sa.event_name) {
             const evName = (ev.event_name || ev.event_type || '').toLowerCase();
             return sa.event_name.toLowerCase() === evName;
           }
