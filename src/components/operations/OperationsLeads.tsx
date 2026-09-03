@@ -1209,23 +1209,6 @@ export const OperationsLeads: React.FC = () => {
         });
       }
 
-      // 4. Check leadEquipmentHistory ONLY if strictly linked to this specific staff member
-      if (eqList.length === 0 && leadEquipmentHistory) {
-        const hist = leadEquipmentHistory.filter(h => 
-          (h.order_id === ord.order_id || (ord.lead_id && h.lead_id === ord.lead_id))
-        );
-        hist.forEach(h => {
-          let parsed: any = {};
-          if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
-          const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-          if (staffMatch && (staffMatch === normName || staffMatch.includes(normName) || normName.includes(staffMatch))) {
-            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection' && !h.equipment_name.includes('Footage')) {
-              eqList.push(h.equipment_name);
-            }
-          }
-        });
-      }
-
       const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
       return Array.from(new Set(cleanList));
     };

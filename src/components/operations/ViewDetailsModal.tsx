@@ -385,19 +385,29 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   const returnedEquipmentList = useMemo(() => equipmentDetailsList.filter(e => e.isReturned), [equipmentDetailsList]);
   const pendingEquipmentList = useMemo(() => equipmentDetailsList.filter(e => !e.isReturned), [equipmentDetailsList]);
 
-  // Extract Proof Records for this order
+  // Extract Proof Records for this order or specific booking
   const proofRecords = useMemo(() => {
     return (leadEquipmentHistory || []).filter(h => {
-      if (h.order_id && finalOrderId && h.order_id === finalOrderId) return true;
-      if (h.lead_id && lead?.lead_id && h.lead_id === lead.lead_id) return true;
-      return false;
+      const matchOrder = (finalOrderId && h.order_id === finalOrderId) || (lead?.lead_id && h.lead_id === lead.lead_id);
+      if (!matchOrder) return false;
+
+      // If a specific booking is being viewed, filter strictly for that task/event
+      if (booking) {
+        let parsed: any = {};
+        if (h.remarks) {
+          try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch (e) {}
+        }
+        if (parsed.assignment_id && booking.assignmentId && parsed.assignment_id !== booking.assignmentId) return false;
+        if (parsed.event_id && booking.eventId && parsed.event_id !== 'gen' && parsed.event_id !== 'ev' && booking.eventId !== 'gen' && booking.eventId !== 'ev' && parsed.event_id !== booking.eventId) return false;
+      }
+      return true;
     }).map(h => {
       let photoUrl = '';
       let rawFootageLink = '';
       let proofType = h.equipment_status || 'Proof';
       if (h.remarks) {
         try {
-          const parsed = JSON.parse(h.remarks);
+          const parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks;
           photoUrl = parsed.photo_url || photoUrl;
           rawFootageLink = parsed.raw_footage_link || rawFootageLink;
           proofType = parsed.proof_type || proofType;
@@ -414,7 +424,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
         rawFootageLink
       };
     });
-  }, [leadEquipmentHistory, finalOrderId, lead]);
+  }, [leadEquipmentHistory, finalOrderId, lead, booking]);
 
   if (!isOpen || (!orderId && !booking)) return null;
 
@@ -911,7 +921,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
           </div>
 
           {/* Section 4: Uploaded Verification Proof Images & Handover Docs */}
-          {!(currentRole === 'Operations Team' || currentRole === 'Operation Staff') && (
+          {true && (
             <div className="bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-4 sm:p-5 space-y-4">
               <h4 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2 border-b border-zinc-800 pb-2 font-mono">
                 <Camera className="w-4 h-4 text-emerald-400" /> Uploaded Proofs & Handover Docs ({proofRecords.length})

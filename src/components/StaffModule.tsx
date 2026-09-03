@@ -435,8 +435,8 @@ const getBookingProofStatus = (
 ) => {
   const normStaffName = (currentStaffName || '').trim().toLowerCase();
   const staffKey = `${b.orderId}_${b.eventId || 'ev'}_${normStaffName}`;
-  const genKey = `${b.orderId}_gen_${normStaffName}`;
-  const proofObj = staffProofs[b.key] || staffProofs[staffKey] || staffProofs[genKey] || {};
+  const asgnKey = b.assignmentId ? `${b.orderId}_${b.assignmentId}_${normStaffName}` : '';
+  const proofObj = staffProofs[b.key] || (asgnKey ? staffProofs[asgnKey] : {}) || staffProofs[staffKey] || {};
 
   let hasAssetInHistory = false;
   let hasStartInHistory = false;
@@ -461,9 +461,18 @@ const getBookingProofStatus = (
                          (recordStaffId && currentStaffMemberId && recordStaffId === currentStaffMemberId);
     if (!staffMatches) return;
 
+    // Strict Task Isolation Matching
+    if (parsed.assignment_id && b.assignmentId && parsed.assignment_id !== b.assignmentId) {
+      return;
+    }
+
     const bEvId = b.eventId;
     const hEvId = parsed.event_id;
     if (bEvId && hEvId && bEvId !== 'gen' && bEvId !== 'ev' && hEvId !== 'gen' && hEvId !== 'ev' && bEvId !== hEvId) {
+      return;
+    }
+
+    if (parsed.staff_role && b.assignedRole && parsed.staff_role.trim().toLowerCase() !== b.assignedRole.trim().toLowerCase()) {
       return;
     }
 
@@ -725,8 +734,19 @@ export const StaffModule: React.FC = () => {
         if (sa.staff_name && sa.staff_name.toLowerCase() === staffName.toLowerCase()) {
           const statusVal = (sa as any).task_status || sa.assignment_status;
           if (statusVal && statusVal !== 'Assigned') {
-            const key = `${sa.order_id}_gen_${staffName.toLowerCase()}`;
-            newStatuses[key] = statusVal;
+            const normName = staffName.toLowerCase();
+            if (sa.assignment_id) {
+              newStatuses[`${sa.order_id}_${sa.assignment_id}_${normName}`] = statusVal;
+            }
+            if (sa.event_id) {
+              newStatuses[`${sa.order_id}_${sa.event_id}_${normName}`] = statusVal;
+            }
+            if (sa.event_id && sa.staff_role) {
+              newStatuses[`${sa.order_id}_${sa.event_id}_${sa.staff_role.toLowerCase()}_${normName}`] = statusVal;
+            }
+            if (!sa.event_id && !sa.assignment_id) {
+              newStatuses[`${sa.order_id}_gen_${normName}`] = statusVal;
+            }
           }
         }
       });
@@ -760,56 +780,70 @@ export const StaffModule: React.FC = () => {
           let photoUrl = (leh as any).photo_url || '';
           let assetId = (leh as any).asset_id || '';
           let parsedStatus = '';
+          let parsedAssignmentId = parsed.assignment_id || '';
+          let parsedRole = parsed.staff_role || '';
           
           if (parsed.photo_url) photoUrl = parsed.photo_url;
           if (parsed.asset_id) assetId = parsed.asset_id;
           if (parsed.event_id) eventId = parsed.event_id;
           if (parsed.current_status) parsedStatus = parsed.current_status;
           
-          const key = `${leh.order_id}_${eventId}_${staffName.trim().toLowerCase()}`;
-
-          // Status restoration: If parsedStatus exists, override the status for this specific event key
-          if (parsedStatus && parsedStatus !== 'Assigned Crew') {
-             newStatuses[key] = parsedStatus;
-          } else if (leh.equipment_status === 'Event Started') {
-             newStatuses[key] = 'Event Started';
-          } else if (leh.equipment_status === 'Event Complete') {
-             newStatuses[key] = 'Event Ended';
-          } else if (leh.equipment_status === 'Equipment Handover') {
-             newStatuses[key] = 'Footage Handover';
+          const keysToUpdate: string[] = [];
+          if (parsedAssignmentId) {
+            keysToUpdate.push(`${leh.order_id}_${parsedAssignmentId}_${currentStaffNorm}`);
+          }
+          if (eventId) {
+            keysToUpdate.push(`${leh.order_id}_${eventId}_${currentStaffNorm}`);
+          }
+          if (eventId && parsedRole) {
+            keysToUpdate.push(`${leh.order_id}_${eventId}_${parsedRole.toLowerCase()}_${currentStaffNorm}`);
           }
 
-          if (photoUrl) {
-            const stage = leh.equipment_status;
-            const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
-                               stage === 'Event Start' || stage === 'Event Started' ? 'eventStartProofs' :
-                               stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
-                               stage === 'Event Complete' || stage === 'Event Ended' ? 'completeProofs' : 'startProofs';
-            
-            const existing = newProofs[key] || {};
-            const proofArr = existing[proofField] ? [...existing[proofField]!] : [];
-            const proofItem: EquipmentProofItem = {
-              equipmentName: leh.equipment_name,
-              assetId: assetId || `EQ-${leh.equipment_name}`,
-              photoUrl: photoUrl,
-              capturedAt: leh.returned_at || new Date().toISOString()
-            };
+          let effStatus = parsedStatus;
+          if (!effStatus || effStatus === 'Assigned Crew') {
+            if (leh.equipment_status === 'Event Started') effStatus = 'Event Started';
+            else if (leh.equipment_status === 'Event Complete') effStatus = 'Event Ended';
+            else if (leh.equipment_status === 'Equipment Handover') effStatus = 'Footage Handover';
+          }
 
-            // Only add if not already present (using equipmentName to dedup)
-            if (!proofArr.some(p => p.equipmentName === proofItem.equipmentName)) {
-              proofArr.push(proofItem);
+          keysToUpdate.forEach(key => {
+            // Status restoration: If effStatus exists, override status for this key
+            if (effStatus && effStatus !== 'Assigned Crew') {
+               newStatuses[key] = effStatus;
             }
 
-            newProofs[key] = {
-              ...existing,
-              [proofField]: proofArr
-            };
-          }
+            if (photoUrl) {
+              const stage = leh.equipment_status;
+              const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
+                                 stage === 'Event Start' || stage === 'Event Started' ? 'eventStartProofs' :
+                                 stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
+                                 stage === 'Event Complete' || stage === 'Event Ended' ? 'completeProofs' : 'startProofs';
+              
+              const existing = newProofs[key] || {};
+              const proofArr = existing[proofField] ? [...existing[proofField]!] : [];
+              const proofItem: EquipmentProofItem = {
+                equipmentName: leh.equipment_name,
+                assetId: assetId || `EQ-${leh.equipment_name}`,
+                photoUrl: photoUrl,
+                capturedAt: leh.returned_at || new Date().toISOString()
+              };
+
+              // Only add if not already present (using equipmentName to dedup)
+              if (!proofArr.some(p => p.equipmentName === proofItem.equipmentName)) {
+                proofArr.push(proofItem);
+              }
+
+              newProofs[key] = {
+                ...existing,
+                [proofField]: proofArr
+              };
+            }
+          });
         }
       });
     }
 
-    // Merge with local storage state to preserve anything that hasn't been synced (or override with DB state)
+    // Merge with local storage state
     setStaffStatuses(prev => {
        const merged = { ...prev, ...newStatuses };
        localStorage.setItem('staff_event_statuses_v2', JSON.stringify(merged));
@@ -1039,21 +1073,6 @@ export const StaffModule: React.FC = () => {
         }
       }
 
-      // 4. Check leadEquipmentHistory strictly for this staff
-      if (eqNames.length === 0 && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
-        leadEquipmentHistory.forEach(h => {
-          if (h.order_id && h.order_id !== orderIdStr && (!leadIdStr || h.lead_id !== leadIdStr)) return;
-          let parsed: any = {};
-          if (h.remarks) { try { parsed = JSON.parse(h.remarks); } catch(e) {} }
-          const staffMatch = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-          if (staffMatch && (staffMatch === normName || staffMatch.includes(normName) || normName.includes(staffMatch))) {
-            if (h.equipment_name && !h.equipment_name.includes('Photo Proof') && !h.equipment_name.includes('Verification') && h.equipment_name !== 'Asset Collection' && !h.equipment_name.includes('Footage')) {
-              eqNames.push(h.equipment_name);
-            }
-          }
-        });
-      }
-
       // Filter invalid placeholders
       const cleanNames = eqNames.filter(item => 
         item && item.trim() && 
@@ -1139,22 +1158,47 @@ export const StaffModule: React.FC = () => {
               assignedRole = sa.staff_role;
             }
 
-            const uniqueKey = `${orderId}_${ev.id || 'ev'}_${staffName.toLowerCase()}`;
+            const assignmentId = sa?.assignment_id || '';
+            const uniqueKey = assignmentId 
+              ? `${orderId}_${assignmentId}_${staffName.toLowerCase()}`
+              : `${orderId}_${ev.id || 'ev'}_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
+
             // Only use global or order-level status if it hasn't progressed to an active state.
             // If it has progressed globally but this staff member has no specific event history, they should start at Assigned Crew.
             const fallbackStatus = op?.event_status || 'Assigned Crew';
             const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
-            let currentStaffStatus = staffStatuses[uniqueKey];
+            let currentStaffStatus = staffStatuses[uniqueKey] || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] : undefined) || staffStatuses[`${orderId}_${ev.id || 'ev'}_${staffName.toLowerCase()}`];
             if (!currentStaffStatus) {
                 const saStatus = (sa as any)?.task_status;
                 const isSaAdvanced = saStatus && ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(saStatus.toLowerCase());
                 currentStaffStatus = (!isSaAdvanced && saStatus) ? saStatus : (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
             }
 
+            let resolvedRawLink = (sa as any)?.raw_footage_link || '';
+            if (!resolvedRawLink && leadEquipmentHistory) {
+              const hMatch = leadEquipmentHistory.find(h => {
+                if (h.order_id !== orderId && h.lead_id !== lead.lead_id) return false;
+                let p: any = {};
+                if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
+                const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
+                if (rStaff !== staffName.toLowerCase()) return false;
+                if (p.assignment_id && assignmentId && p.assignment_id !== assignmentId) return false;
+                if (p.event_id && ev.id && p.event_id !== 'gen' && p.event_id !== 'ev' && ev.id !== 'gen' && ev.id !== 'ev' && p.event_id !== ev.id) return false;
+                return Boolean(p.raw_footage_link);
+              });
+              if (hMatch) {
+                try {
+                  const p = typeof hMatch.remarks === 'string' ? JSON.parse(hMatch.remarks) : hMatch.remarks;
+                  resolvedRawLink = p.raw_footage_link || '';
+                } catch(e){}
+              }
+            }
+
             // Only remove from staff active bookings AFTER Footage Handover has been submitted
             if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
               bookings.push({
                 key: uniqueKey,
+                assignmentId: assignmentId,
                 orderId: orderId,
                 leadId: lead.lead_id,
                 eventId: ev.id || 'ev',
@@ -1177,7 +1221,7 @@ export const StaffModule: React.FC = () => {
                 equipmentItems: assignedEqItems,
                 taskStatus: currentStaffStatus,
                 rawFootageVerificationStatus: getVerificationStatus(orderId, ev.id || 'ev'),
-                rawFootageLink: (sa as any)?.raw_footage_link || '',
+                rawFootageLink: resolvedRawLink,
                 coordinator: op?.operations_coordinator || 'Unassigned',
                 createdAt: lead.created_at || order?.created_at || (ev as any)?.created_at || ''
               });
@@ -1214,20 +1258,44 @@ export const StaffModule: React.FC = () => {
 
           const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, null, -1, orderId, lead.lead_id, op);
 
-          const uniqueKey = `${orderId}_gen_${staffName.toLowerCase()}`;
+          const assignmentId = sa?.assignment_id || '';
+          const uniqueKey = assignmentId 
+            ? `${orderId}_${assignmentId}_${staffName.toLowerCase()}`
+            : `${orderId}_gen_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
+
           const fallbackStatus = op?.event_status || 'Assigned Crew';
           const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
-          let currentStaffStatus = staffStatuses[uniqueKey];
+          let currentStaffStatus = staffStatuses[uniqueKey] || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] : undefined);
           if (!currentStaffStatus) {
               const saStatus = (sa as any)?.task_status;
               const isSaAdvanced = saStatus && ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(saStatus.toLowerCase());
               currentStaffStatus = (!isSaAdvanced && saStatus) ? saStatus : (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
           }
 
+          let resolvedRawLink = (sa as any)?.raw_footage_link || '';
+          if (!resolvedRawLink && leadEquipmentHistory) {
+            const hMatch = leadEquipmentHistory.find(h => {
+              if (h.order_id !== orderId && h.lead_id !== lead.lead_id) return false;
+              let p: any = {};
+              if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
+              const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
+              if (rStaff !== staffName.toLowerCase()) return false;
+              if (p.assignment_id && assignmentId && p.assignment_id !== assignmentId) return false;
+              return Boolean(p.raw_footage_link);
+            });
+            if (hMatch) {
+              try {
+                const p = typeof hMatch.remarks === 'string' ? JSON.parse(hMatch.remarks) : hMatch.remarks;
+                resolvedRawLink = p.raw_footage_link || '';
+              } catch(e){}
+            }
+          }
+
           // Only remove from staff active bookings AFTER Footage Handover has been submitted
           if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
             bookings.push({
               key: uniqueKey,
+              assignmentId: assignmentId,
               orderId: orderId,
               leadId: lead.lead_id,
               eventId: 'gen',
@@ -1250,7 +1318,7 @@ export const StaffModule: React.FC = () => {
               equipmentItems: assignedEqItems,
               taskStatus: currentStaffStatus,
               rawFootageVerificationStatus: getVerificationStatus(orderId, 'gen'),
-              rawFootageLink: (sa as any)?.raw_footage_link || '',
+              rawFootageLink: resolvedRawLink,
               coordinator: op?.operations_coordinator || 'Unassigned',
               createdAt: lead.created_at || order?.created_at || ''
             });
@@ -1377,10 +1445,20 @@ export const StaffModule: React.FC = () => {
 
       if (!staffMatches) return false;
 
-      // 4. Match Event ID if present and not 'gen'/'ev'
+      // 4. Strict assignment matching if present
+      if (parsed.assignment_id && booking.assignmentId && parsed.assignment_id !== booking.assignmentId) {
+        return false;
+      }
+
+      // 5. Match Event ID if present and not 'gen'/'ev'
       const bookingEventId = booking.eventId;
       const historyEventId = parsed.event_id;
       if (bookingEventId && historyEventId && bookingEventId !== 'gen' && bookingEventId !== 'ev' && historyEventId !== 'gen' && historyEventId !== 'ev' && bookingEventId !== historyEventId) {
+        return false;
+      }
+
+      // 6. Match Role if present
+      if (parsed.staff_role && booking.assignedRole && parsed.staff_role.trim().toLowerCase() !== booking.assignedRole.trim().toLowerCase()) {
         return false;
       }
 
@@ -1583,9 +1661,11 @@ export const StaffModule: React.FC = () => {
               returned_by: staffName,
               returned_at: timestamp,
               remarks: JSON.stringify({
+                assignment_id: booking.assignmentId || '',
                 asset_id: assetId,
                 proof_type: 'Event Start Asset Draft',
                 staff_name: staffName,
+                staff_role: booking.assignedRole || '',
                 staff_id: staffMember?.id || currentUser?.id || '',
                 photo_url: finalUrl,
                 event_id: booking.eventId || 'ev',
@@ -1670,9 +1750,11 @@ export const StaffModule: React.FC = () => {
               returned_by: staffName,
               returned_at: timestamp,
               remarks: JSON.stringify({
+                assignment_id: booking.assignmentId || '',
                 asset_id: assetId,
                 proof_type: 'Equipment Received',
                 staff_name: staffName,
+                staff_role: booking.assignedRole || '',
                 staff_id: staffMember?.id || currentUser?.id || '',
                 photo_url: finalUrl,
                 event_id: booking.eventId || 'ev',
@@ -1716,9 +1798,11 @@ export const StaffModule: React.FC = () => {
             returned_by: staffName,
             returned_at: timestamp,
             remarks: JSON.stringify({
+              assignment_id: booking.assignmentId || '',
               asset_id: 'Event Start',
               proof_type: 'Event Start',
               staff_name: staffName,
+              staff_role: booking.assignedRole || '',
               staff_id: staffMember?.id || currentUser?.id || '',
               photo_url: finalStartUrl,
               event_id: booking.eventId || 'ev',
@@ -1762,13 +1846,16 @@ export const StaffModule: React.FC = () => {
             const matchingSA = staffAssignments?.find(sa => {
               if (!sa || sa.order_id !== booking.orderId) return false;
               if (!sa.staff_name || sa.staff_name.trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-              if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
-              if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== (booking.eventName || '').trim().toLowerCase()) return false;
-              return true;
+              if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+              if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+              if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+              return false;
             });
 
-            if (matchingSA?.assignment_id) {
-              await pushUpdate('staff_assignments', 'assignment_id', matchingSA.assignment_id, {
+            const targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+
+            if (targetAssignmentId) {
+              await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
                 task_status: 'Event Started',
                 assignment_status: 'Assigned',
                 updated_at: timestamp
@@ -1938,9 +2025,12 @@ export const StaffModule: React.FC = () => {
             returned_by: staffName,
             returned_at: timestamp,
             remarks: JSON.stringify({
+              assignment_id: booking.assignmentId || '',
               asset_id: p.assetId,
               proof_type: stage === 'Event Complete' ? 'Event End' : stage,
               staff_name: staffName,
+              staff_role: booking.assignedRole || '',
+              staff_id: staffMember?.id || currentUser?.id || '',
               photo_url: p.photoUrl,
               event_id: booking.eventId,
               event_name: booking.eventName,
@@ -1966,9 +2056,12 @@ export const StaffModule: React.FC = () => {
             returned_by: staffName,
             returned_at: timestamp,
             remarks: JSON.stringify({
+              assignment_id: booking.assignmentId || '',
               asset_id: 'Equipment Handover',
               proof_type: 'Equipment Handover',
               staff_name: staffName,
+              staff_role: booking.assignedRole || '',
+              staff_id: staffMember?.id || currentUser?.id || '',
               photo_url: null,
               event_id: booking.eventId,
               event_name: booking.eventName,
@@ -1992,9 +2085,12 @@ export const StaffModule: React.FC = () => {
             returned_by: staffName,
             returned_at: timestamp,
             remarks: JSON.stringify({
+              assignment_id: booking.assignmentId || '',
               asset_id: 'Footage Handover',
               proof_type: 'Footage Handover',
               staff_name: staffName,
+              staff_role: booking.assignedRole || '',
+              staff_id: staffMember?.id || currentUser?.id || '',
               photo_url: null,
               event_id: booking.eventId,
               event_name: booking.eventName,
@@ -2024,9 +2120,13 @@ export const StaffModule: React.FC = () => {
               returned_by: staffName,
               returned_at: timestamp,
               remarks: JSON.stringify({
+                assignment_id: booking.assignmentId || '',
                 asset_id: eqItem.assetId || '',
                 proof_type: 'Equipment Handover',
                 staff_name: staffName,
+                staff_role: booking.assignedRole || '',
+                staff_id: staffMember?.id || currentUser?.id || '',
+                photo_url: null,
                 event_id: booking.eventId,
                 event_name: booking.eventName,
                 order_id: booking.orderId,
@@ -2108,15 +2208,18 @@ export const StaffModule: React.FC = () => {
         }
 
         const matchingSA = staffAssignments?.find(sa => {
-          if (sa.order_id !== booking.orderId) return false;
+          if (!sa || sa.order_id !== booking.orderId) return false;
           if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
-          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== booking.eventName.trim().toLowerCase()) return false;
-          return true;
+          if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+          return false;
         });
 
-        if (matchingSA?.assignment_id) {
-          await pushUpdate('staff_assignments', 'assignment_id', matchingSA.assignment_id, {
+        const targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+
+        if (targetAssignmentId) {
+          await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
             ...updateAssignmentPayload,
             assignment_status: 'Assigned'
           });
