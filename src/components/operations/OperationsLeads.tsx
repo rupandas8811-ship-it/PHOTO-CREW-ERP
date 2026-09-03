@@ -1786,7 +1786,7 @@ export const OperationsLeads: React.FC = () => {
         const isMultiEv = totalEvents > 1;
         const orderStaffAssignments = staffAssignments?.filter(sa => {
           if (!sa || sa.order_id !== order.order_id || sa.assignment_status === 'Cancelled') return false;
-          if (sa.event_id && evId) return sa.event_id === evId || sa.event_id.includes(evId);
+          if (sa.event_id && evId) return String(sa.event_id) === String(evId);
           if (!sa.event_id && totalEvents === 1) return true;
           if (!sa.event_id && sa.event_name) {
             const evName = (ev.event_name || ev.event_type || '').toLowerCase();
@@ -1830,7 +1830,7 @@ export const OperationsLeads: React.FC = () => {
           taskGroups.forEach(task => {
             const matchingDbAssignments = orderStaffAssignments.filter(sa =>
               !usedSaIds.has(sa.assignment_id) &&
-              (sa.staff_role === task.roleName || isRoleMatch(sa.staff_role, task.roleName))
+              (sa.staff_role?.trim().toLowerCase() === task.roleName.trim().toLowerCase())
             );
 
             for (let i = 0; i < task.targetQty; i++) {
@@ -1854,7 +1854,7 @@ export const OperationsLeads: React.FC = () => {
                 staffList.push({
                   id: matchedSa.assignment_id || getSlotId(task.roleName, i),
                   staff_role: matchedSa.staff_role || task.roleName,
-                  staff_id: matchedSa.staff_id || st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
+                  staff_id: matchedSa.staff_id || st?.staff_id || 'STF-0000',
                   staff_name: matchedSa.staff_name || '',
                   mobile: matchedSa.mobile || st?.mobile || '',
                   staff_type: cleanType,
@@ -1870,7 +1870,7 @@ export const OperationsLeads: React.FC = () => {
                 staffList.push({
                   id: getSlotId(task.roleName, i),
                   staff_role: task.roleName,
-                  staff_id: st?.staff_id || (assignedName ? 'MOCK-' + Math.random().toString(36).substr(2, 4) : ''),
+                  staff_id: st?.staff_id || 'STF-0000',
                   staff_name: assignedName,
                   mobile: st?.mobile || mobilesList[legacyNamePointer - 1] || '',
                   staff_type: cleanType,
@@ -1910,7 +1910,7 @@ export const OperationsLeads: React.FC = () => {
             staffList.push({
               id: sa.assignment_id || getSlotId(sa.staff_role || 'GeneralStaff', saIdx),
               staff_role: sa.staff_role || 'General Staff',
-              staff_id: sa.staff_id || st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
+              staff_id: sa.staff_id || st?.staff_id || 'STF-0000',
               staff_name: sa.staff_name || '',
               mobile: sa.mobile || st?.mobile || '',
               staff_type: cleanType,
@@ -1928,7 +1928,7 @@ export const OperationsLeads: React.FC = () => {
             staffList.push({
               id: getSlotId(st?.role || 'Team Member', idx),
               staff_role: st?.role || 'Team Member',
-              staff_id: st?.staff_id || (assignedName ? 'MOCK-' + Math.random().toString(36).substr(2, 4) : ''),
+              staff_id: st?.staff_id || (assignedName ? 'STF-0000' : ''),
               staff_name: assignedName,
               mobile: st?.mobile || mobilesList[idx] || '',
               staff_type: 'In-House',
