@@ -814,7 +814,7 @@ async function startServer() {
         db.from('lead_staff_assignment_history').select('*').order('assigned_at', { ascending: false }),
         db.from('lead_equipment_history').select('*').order('returned_at', { ascending: false }),
         db.from('lead_events').select('*').order('created_at', { ascending: true }),
-        Promise.resolve({ data: [], error: null }),
+        db.from('v_task_assignment_details').select('*'),
         db.from('production_specialties').select('*'),
         db.from('editor_assignments').select('*'),
         db.from('production_staff').select('*'),

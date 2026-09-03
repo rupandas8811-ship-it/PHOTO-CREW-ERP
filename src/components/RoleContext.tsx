@@ -1446,7 +1446,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'previous_stage', 'new_stage'
       ],
       staff_assignments: [
-        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name', 'assignment_date', 'assignment_status'
+        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name', 'assignment_date', 'assignment_status', 'task_status', 'raw_footage_link', 'event_id', 'event_name', 'updated_at', 'updated_by'
       ],
       lead_status_history: [
         'id', 'lead_id', 'order_id', 'old_status', 'new_status', 'changed_by', 'changed_by_role', 'remarks', 'created_at'
@@ -1455,7 +1455,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'history_id', 'lead_id', 'order_id', 'assigned_role', 'assigned_staff', 'assigned_by', 'assigned_at'
       ],
       lead_equipment_history: [
-        'id', 'lead_id', 'order_id', 'equipment_name', 'equipment_status', 'returned_by', 'returned_at', 'remarks', 'photo_url', 'asset_id', 'event_id', 'event_name', 'proof_type', 'created_at'
+        'id', 'lead_id', 'order_id', 'assignment_id', 'equipment_name', 'equipment_status', 'returned_by', 'returned_at', 'remarks', 'photo_url', 'asset_id', 'event_id', 'event_name', 'proof_type', 'created_at'
       ],
       equipment_handovers: [
         'handover_id', 'order_id', 'equipment_name', 'return_status', 'return_date', 'returned_by', 'notes', 'created_at'
@@ -4692,13 +4692,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       const assignId = a.assignment_id || `ASST-${orderId}-${a.event_id || 'evt'}-${aStaffNameTrimmed.replace(/[^a-z0-9]/gi, '').slice(0, 10)}-${Math.floor(Math.random()*1000)}`;
 
-      const dbStaffName = `${a.staff_name}__SLOT__${assignId}`;
+      const resolvedStaffId = a.staff_id || (staff?.find(s => s.name?.trim().toLowerCase() === aStaffNameTrimmed.toLowerCase()) as any)?.staff_id || (staff?.find(s => s.name?.trim().toLowerCase() === aStaffNameTrimmed.toLowerCase()) as any)?.id || 'STF-0000';
+      const dbStaffName = a.staff_name;
 
       const finalReactAssignment = {
         assignment_id: assignId,
         order_id: orderId,
         staff_role: a.staff_role,
-        staff_id: a.staff_id || '',
+        staff_id: resolvedStaffId,
         staff_name: a.staff_name,
         assignment_date: (a as any).assignment_date || assignDate,
         assignment_status: a.assignment_status || 'Assigned',
@@ -4722,13 +4723,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           matchValue: matched.assignment_id,
           updates: {
             staff_role: a.staff_role,
-            staff_id: a.staff_id || matched.staff_id,
+            staff_id: resolvedStaffId || matched.staff_id,
             staff_name: dbStaffName,
             assignment_date: (a as any).assignment_date || matched.assignment_date || assignDate,
             assignment_status: a.assignment_status || matched.assignment_status || 'Assigned',
             task_status: a.task_status || matched.task_status || 'Assigned',
-            event_id: a.event_id || matched.event_id,
-            event_name: a.event_name || matched.event_name,
+            event_id: a.event_id || matched.event_id || null,
+            event_name: a.event_name || matched.event_name || null,
             equipment: Array.isArray(a.equipment) ? a.equipment : [],
             mobile: a.mobile || matched.mobile || '',
             staff_type: a.staff_type || matched.staff_type || 'In-House',
@@ -4741,13 +4742,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           assignment_id: assignId,
           order_id: orderId,
           staff_role: a.staff_role,
-          staff_id: a.staff_id,
+          staff_id: resolvedStaffId,
           staff_name: dbStaffName,
           assignment_date: (a as any).assignment_date || assignDate,
           assignment_status: a.assignment_status || 'Assigned',
           task_status: a.task_status || 'Assigned',
-          event_id: a.event_id || '',
-          event_name: a.event_name || '',
+          event_id: a.event_id || null,
+          event_name: a.event_name || null,
           equipment: Array.isArray(a.equipment) ? a.equipment : [],
           mobile: a.mobile || '',
           staff_type: a.staff_type || 'In-House',

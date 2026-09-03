@@ -4210,8 +4210,52 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
-                    const startMeta = getRecordMeta(selectedEventImages.evStart);
-                    const endMeta = getRecordMeta(selectedEventImages.evEnd);
+                    const findHistoryForEventImages = (stages: string[]) => {
+                      if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
+                      const orderId = selectedEventImages.orderId;
+                      const eventId = selectedEventImages.eventId;
+                      const assignmentId = selectedEventImages.assignmentId;
+                      const staffNorm = (selectedEventImages.staffName || '').trim().toLowerCase();
+                      
+                      const matches = leadEquipmentHistory.filter(h => {
+                        if (orderId && h.order_id && h.order_id !== orderId) return false;
+                        
+                        let parsed: any = {};
+                        if (h.remarks) {
+                          try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                        }
+                        
+                        const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+                        if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
+                        
+                        const hEventId = parsed.event_id || h.event_id;
+                        const hAssignmentId = parsed.assignment_id || h.assignment_id;
+                        
+                        if (assignmentId && hAssignmentId) {
+                          if (hAssignmentId !== assignmentId) return false;
+                        } else if (eventId && hEventId && eventId !== 'gen' && hEventId !== 'gen' && hEventId !== eventId) {
+                          return false;
+                        }
+                        
+                        const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
+                        const eqName = (h.equipment_name || '').toLowerCase();
+                        return stages.some(s => {
+                          const sNorm = s.toLowerCase();
+                          return eqStatus.includes(sNorm) || eqName.includes(sNorm);
+                        });
+                      });
+                      
+                      const withPhoto = matches.find(m => {
+                        const meta = getRecordMeta(m);
+                        return !!meta.url;
+                      });
+                      return withPhoto || matches[0] || null;
+                    };
+
+                    const startRecord = selectedEventImages.evStart || findHistoryForEventImages(['Event Start', 'Event Started', 'Event Start Photo Proof']);
+                    const endRecord = selectedEventImages.evEnd || findHistoryForEventImages(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof', 'Event End Photo Proof']);
+                    const startMeta = getRecordMeta(startRecord);
+                    const endMeta = getRecordMeta(endRecord);
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
@@ -5032,14 +5076,19 @@ export const OperationsLeads: React.FC = () => {
                                       try { parsed = JSON.parse(h.remarks); } catch(e) {}
                                     }
 
+                                    const hAssignmentId = h.assignment_id || parsed.assignment_id;
+                                    if (member.assignment_id && hAssignmentId && member.assignment_id !== hAssignmentId) {
+                                      return false;
+                                    }
+
                                     const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
                                     if (!retBy || !normStaffName || (retBy !== normStaffName && !normStaffName.includes(retBy) && !retBy.includes(normStaffName))) {
                                       return false;
                                     }
 
-                                    const hEventId = parsed.event_id;
-                                    const hEventName = parsed.event_name;
-                                    const hProofType = (parsed.proof_type || '').toLowerCase();
+                                    const hEventId = parsed.event_id || h.event_id;
+                                    const hEventName = parsed.event_name || h.event_name;
+                                    const hProofType = (parsed.proof_type || h.proof_type || '').toLowerCase();
                                     
                                     // Match event Id strictly if both exist and neither is 'gen'
                                     if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) {
@@ -5074,7 +5123,7 @@ export const OperationsLeads: React.FC = () => {
 
                                 const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof', 'Asset Collection', 'Received', 'Equipment Received / Asset Picture'], 'Asset Collection');
                                 const evStart = getRecordForStage(['Event Start', 'Event Started', 'Event Start Photo Proof'], 'Event Start');
-                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof'], 'Event Completion');
+                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof', 'Event End Photo Proof'], 'Event End');
                                 const eqHandover = getRecordForStage(['Equipment Handover', 'Equipment Handover Photo Proof', 'Equipment Handover Completed', 'Footage Handover', 'Asset Return Photo Proof', 'Handover', 'Returned'], 'Equipment Handover');
 
                                 // 1. Real-time individual staff status for this event (Event Workflow)
@@ -5250,6 +5299,7 @@ export const OperationsLeads: React.FC = () => {
                                             assignedEquipment: effectiveAssignedEq.length > 0 ? effectiveAssignedEq : (member.assigned_equipment || []),
                                             orderId: ord.order_id,
                                             eventId: memberEvId,
+                                            assignmentId: member.assignment_id,
                                             eventName: member.event_name,
                                             eqReceived: assetCollection, 
                                             eqHandover 
@@ -5270,7 +5320,16 @@ export const OperationsLeads: React.FC = () => {
                                     <td className="py-3 px-3.5 text-center whitespace-nowrap">
                                       <button 
                                         type="button"
-                                        onClick={() => setSelectedEventImages({ staffName: member.staff_name, assetCollection, evStart, evEnd })}
+                                        onClick={() => setSelectedEventImages({ 
+                                          staffName: member.staff_name, 
+                                          orderId: ord.order_id,
+                                          eventId: memberEvId,
+                                          assignmentId: member.assignment_id,
+                                          eventName: member.event_name,
+                                          assetCollection, 
+                                          evStart, 
+                                          evEnd 
+                                        })}
                                         className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
                                       >
                                         {eventImageStatusText}

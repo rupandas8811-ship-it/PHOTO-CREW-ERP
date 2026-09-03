@@ -1810,10 +1810,16 @@ export const StaffModule: React.FC = () => {
           const startHistoryRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            assignment_id: booking.assignmentId || null,
             equipment_name: 'Event Start Photo Proof',
             equipment_status: 'Event Started',
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: finalStartUrl,
+            asset_id: 'Event Start',
+            proof_type: 'Event Start',
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
             remarks: JSON.stringify({
               assignment_id: booking.assignmentId || '',
               asset_id: 'Event Start',
@@ -2034,10 +2040,16 @@ export const StaffModule: React.FC = () => {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            assignment_id: booking.assignmentId || null,
             equipment_name: p.equipmentName,
             equipment_status: effectiveEquipmentStatus,
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: p.photoUrl || null,
+            asset_id: p.assetId || null,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            proof_type: stage === 'Event Complete' ? 'Event End' : stage,
             remarks: JSON.stringify({
               assignment_id: booking.assignmentId || '',
               asset_id: p.assetId,
@@ -2058,6 +2070,14 @@ export const StaffModule: React.FC = () => {
           };
 
           await pushInsert('lead_equipment_history', historyRecord);
+
+          // If stage is Event Complete, also record with 'Event End Photo Proof' so DB view v_task_assignment_details (which filters by 'Event End Photo Proof') populates event_end_photo
+          if (stage === 'Event Complete' && p.equipmentName === 'Event Completion Photo Proof') {
+            await pushInsert('lead_equipment_history', {
+              ...historyRecord,
+              equipment_name: 'Event End Photo Proof'
+            });
+          }
         }
       } else if (stage === 'Equipment Handover') {
         if (hasEquipment) {
@@ -2065,10 +2085,16 @@ export const StaffModule: React.FC = () => {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            assignment_id: booking.assignmentId || null,
             equipment_name: 'Equipment Handover Photo Proof',
             equipment_status: 'Equipment Not Handover',
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: null,
+            asset_id: 'Equipment Handover',
+            proof_type: 'Equipment Handover',
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
             remarks: JSON.stringify({
               assignment_id: booking.assignmentId || '',
               asset_id: 'Equipment Handover',
@@ -2094,10 +2120,16 @@ export const StaffModule: React.FC = () => {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            assignment_id: booking.assignmentId || null,
             equipment_name: 'Footage Handover',
             equipment_status: 'Footage Handover Completed',
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: null,
+            asset_id: 'Footage Handover',
+            proof_type: 'Footage Handover',
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
             remarks: JSON.stringify({
               assignment_id: booking.assignmentId || '',
               asset_id: 'Footage Handover',
@@ -2129,10 +2161,16 @@ export const StaffModule: React.FC = () => {
             await pushInsert('lead_equipment_history', {
               lead_id: booking.leadId || null,
               order_id: booking.orderId || null,
+              assignment_id: booking.assignmentId || null,
               equipment_name: eqItem.name,
               equipment_status: 'Equipment Handover Completed',
               returned_by: staffName,
               returned_at: timestamp,
+              photo_url: null,
+              asset_id: eqItem.assetId || null,
+              proof_type: 'Equipment Handover',
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
               remarks: JSON.stringify({
                 assignment_id: booking.assignmentId || '',
                 asset_id: eqItem.assetId || '',

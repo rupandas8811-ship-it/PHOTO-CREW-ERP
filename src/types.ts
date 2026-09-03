@@ -592,6 +592,22 @@ export interface ClientAcceptanceVerification {
   updated_at?: string;
 }
 
+export interface TaskAssignmentDetail {
+  order_id: string;
+  event_id: string | null;
+  event_name: string | null;
+  assignment_id: string;
+  staff_id: string | null;
+  staff_name: string;
+  staff_role: string;
+  task_status: string | null;
+  raw_footage_link: string | null;
+  event_start_photo: string | null;
+  event_end_photo: string | null;
+  equipment_received_photo: string | null;
+  equipment_handover_photo: string | null;
+}
+
 export interface StaffAssignment {
   assignment_id: string;
   order_id: string;
@@ -714,11 +730,18 @@ export interface LeadEquipmentHistory {
   id?: string;
   lead_id: string;
   order_id?: string;
+  assignment_id?: string;
   equipment_name: string;
   equipment_status: string;
   returned_by?: string;
   returned_at?: string;
+  photo_url?: string;
+  asset_id?: string;
+  event_id?: string;
+  event_name?: string;
+  proof_type?: string;
   remarks?: string;
+  created_at?: string;
 }
 
 export interface UnlockOverride {
