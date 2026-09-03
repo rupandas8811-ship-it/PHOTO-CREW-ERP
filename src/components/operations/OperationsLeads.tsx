@@ -4077,11 +4077,12 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
-                    const findHistoryForModal = (stages: string[]) => {
+                    const findHistoryForModal = (stages: string[], isHandover: boolean = false) => {
                       const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
                       const orderId = selectedEquipmentStatus.orderId;
                       const eventId = selectedEquipmentStatus.eventId;
                       const assignmentId = selectedEquipmentStatus.assignmentId;
+                      const eventName = (selectedEquipmentStatus.eventName || '').trim().toLowerCase();
                       
                       if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
                       const matches = leadEquipmentHistory.filter(h => {
@@ -4095,18 +4096,32 @@ export const OperationsLeads: React.FC = () => {
                         
                         const hEventId = parsed.event_id || h.event_id;
                         const hAssignmentId = parsed.assignment_id || h.assignment_id;
+                        const hEventName = (parsed.event_name || h.event_name || '').trim().toLowerCase();
                         
                         if (assignmentId && hAssignmentId) {
                           if (hAssignmentId !== assignmentId) return false;
                         } else if (eventId && hEventId && eventId !== 'gen' && hEventId !== 'gen' && hEventId !== eventId) {
-                          return false;
+                          if (eventName && hEventName && hEventName !== eventName && eventName !== 'general event' && hEventName !== 'general event') {
+                            return false;
+                          }
                         }
                         
                         const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
                         const eqName = (h.equipment_name || '').toLowerCase();
+                        const hProofType = (parsed.proof_type || '').toLowerCase();
+
+                        const isHandoverRecord = eqStatus.includes('handover') || eqStatus.includes('return') || eqStatus.includes('returned') || eqName.includes('handover') || eqName.includes('return') || hProofType.includes('handover') || hProofType.includes('return');
+                        const isReceivedRecord = eqStatus.includes('received') || eqStatus.includes('asset collection') || eqName.includes('asset collection') || eqName.includes('received') || hProofType.includes('received') || hProofType.includes('asset collection');
+
+                        if (isHandover) {
+                          if (isReceivedRecord && !isHandoverRecord) return false;
+                        } else {
+                          if (isHandoverRecord && !isReceivedRecord) return false;
+                        }
+
                         return stages.some(s => {
                           const sNorm = s.toLowerCase();
-                          return eqStatus.includes(sNorm) || eqName.includes(sNorm);
+                          return eqStatus.includes(sNorm) || eqName.includes(sNorm) || hProofType.includes(sNorm);
                         });
                       });
                       
@@ -4117,8 +4132,8 @@ export const OperationsLeads: React.FC = () => {
                       return withPhoto || matches[0] || null;
                     };
 
-                    const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received']);
-                    const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return']);
+                    const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received'], false);
+                    const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return'], true);
                     const recMeta = getRecordMeta(recRecord);
                     const handMeta = getRecordMeta(handRecord);
                     return (
