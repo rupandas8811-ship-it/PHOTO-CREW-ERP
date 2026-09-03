@@ -1389,7 +1389,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
       operations: [
         'operation_id', 'order_id', 'photographer_assigned', 'videographer_assigned', 
-        'drone_operator_assigned', 'assistant_assigned', 'equipment_kit', 'reporting_time', 
+        'drone_operator_assigned', 'assistant_assigned', 'equipment_kit', 'equipment_allocated', 'reporting_time', 
         'event_status', 'remarks', 'updated_by', 'Upload_Notes_Remarks', 'upload_notes_remarks',
         'Raw_Footage_Drive_Link', 'raw_footage_drive_link'
       ],
@@ -1446,7 +1446,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'previous_stage', 'new_stage'
       ],
       staff_assignments: [
-        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name', 'assignment_date', 'assignment_status', 'task_status', 'raw_footage_link', 'event_id', 'event_name', 'updated_at', 'updated_by'
+        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name', 'assignment_date', 'assignment_status', 'task_status', 'raw_footage_link', 'event_id', 'event_name', 'equipment', 'assigned_equipment', 'equipment_details', 'mobile', 'staff_type', 'updated_at', 'updated_by'
       ],
       lead_status_history: [
         'id', 'lead_id', 'order_id', 'old_status', 'new_status', 'changed_by', 'changed_by_role', 'remarks', 'created_at'
@@ -1455,7 +1455,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'history_id', 'lead_id', 'order_id', 'assigned_role', 'assigned_staff', 'assigned_by', 'assigned_at'
       ],
       lead_equipment_history: [
-        'id', 'lead_id', 'order_id', 'assignment_id', 'equipment_name', 'equipment_status', 'returned_by', 'returned_at', 'remarks', 'photo_url', 'asset_id', 'event_id', 'event_name', 'proof_type', 'created_at'
+        'id', 'lead_id', 'order_id', 'assignment_id', 'equipment_name', 'equipment_serial', 'equipment_status', 'assigned_to_name', 'assigned_to_id', 'assigned_at', 'returned_by', 'returned_at', 'condition_on_return', 'remarks', 'photo_url', 'asset_id', 'event_id', 'event_name', 'proof_type', 'created_at', 'updated_at'
       ],
       equipment_handovers: [
         'handover_id', 'order_id', 'equipment_name', 'return_status', 'return_date', 'returned_by', 'notes', 'created_at'
@@ -1465,7 +1465,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'is_read', 'recipient_role'
       ],
       equipment: [
-        'equipment_id', 'equipment_name', 'brand', 'Equipment_Category', 'Equipment_Status'
+        'equipment_id', 'id', 'name', 'equipment_name', 'category', 'brand', 'model', 'serial_number', 'status', 'current_holder_name', 'current_order_id', 'condition', 'notes', 'Equipment_Category', 'Equipment_Status', 'created_at', 'updated_at'
       ],
       editor_assignments: [
         'assignment_id', 'production_id', 'staff_id', 'staff_name', 'speciality', 
@@ -1489,7 +1489,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'id', 'lead_id', 'event_type', 'event_name', 'event_shoot_type', 'event_date', 
         'event_end_date', 'event_start_time', 'event_end_time', 'event_location', 
         'google_maps_link', 'guest_pax', 'staff_pax', 'assigned_staff_names', 
-        'assigned_staff_mobiles', 'reporting_date', 'Reporting_date', 'reporting_time',
+        'assigned_staff_mobiles', 'assigned_equipment', 'reporting_date', 'Reporting_date', 'reporting_time',
         'created_at', 'updated_at'
       ]
     };
@@ -2682,10 +2682,19 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             );
 
             let resolvedEq: string[] = [];
-            if (cached && Array.isArray(cached.equipment) && cached.equipment.length > 0) {
+            const rawDbEq = cleanSa.equipment || cleanSa.assigned_equipment;
+            if (Array.isArray(rawDbEq) && rawDbEq.length > 0) {
+              resolvedEq = rawDbEq.filter((item: any) => typeof item === 'string' && item.trim());
+            } else if (typeof rawDbEq === 'string' && rawDbEq.trim()) {
+              try {
+                const parsed = JSON.parse(rawDbEq);
+                if (Array.isArray(parsed)) resolvedEq = parsed.filter((item: any) => typeof item === 'string' && item.trim());
+              } catch(e) {
+                const cleaned = rawDbEq.replace(/^\{|\}$/g, '');
+                if (cleaned) resolvedEq = cleaned.split(',').map((s: string) => s.trim().replace(/^"|"$/g, '')).filter(Boolean);
+              }
+            } else if (cached && Array.isArray(cached.equipment) && cached.equipment.length > 0) {
               resolvedEq = cached.equipment;
-            } else if (Array.isArray(cleanSa.equipment) && cleanSa.equipment.length > 0) {
-              resolvedEq = cleanSa.equipment;
             }
 
             let resolvedEventId = cached?.event_id || cleanSa.event_id || '';
@@ -2743,7 +2752,20 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             if (resolvedEq.length === 0 && dbOperations && dbOperations.length > 0) {
               const op = dbOperations.find((o: any) => o.order_id === cleanSa.order_id);
               if (op?.equipment_kit && typeof op.equipment_kit === 'string' && op.equipment_kit.trim()) {
-                const kits = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
+                let kits: string[] = [];
+                try {
+                  const parsed = JSON.parse(op.equipment_kit);
+                  if (Array.isArray(parsed)) {
+                    parsed.forEach((k: any) => {
+                      if (Array.isArray(k.equipment)) {
+                         k.equipment.forEach((e: string) => { if(e) kits.push(e.trim()) });
+                      }
+                    });
+                    kits = Array.from(new Set(kits));
+                  }
+                } catch(e) {
+                  kits = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
                 const orderAssignmentsForSa = dbStaffAssignments.filter((s: any) => s.order_id === cleanSa.order_id);
                 if (orderAssignmentsForSa.length === 1 && kits.length > 0) {
                   resolvedEq = kits;

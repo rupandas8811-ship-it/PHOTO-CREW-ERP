@@ -623,6 +623,8 @@ export interface StaffAssignment {
   event_id?: string;
   event_name?: string;
   equipment?: string[];
+  assigned_equipment?: string[];
+  equipment_details?: any[];
   mobile?: string;
   staff_type?: string;
   raw_footage_link?: string;
@@ -680,6 +682,9 @@ export interface Notification {
 
 export interface Equipment {
   equipment_id: string;
+  id?: string;
+  name?: string;
+  category?: string;
   equipment_name: string;
   equipment_type: string;
   brand: string;
@@ -688,6 +693,9 @@ export interface Equipment {
   quantity: number;
   available_quantity: number;
   status: 'Available' | 'Assigned' | 'Maintenance' | 'Damaged' | 'Lost' | 'Retired' | string;
+  current_holder_name?: string;
+  current_order_id?: string;
+  condition?: string;
   purchase_date: string;
   purchase_price?: number;
   storage_location?: string;
@@ -732,9 +740,14 @@ export interface LeadEquipmentHistory {
   order_id?: string;
   assignment_id?: string;
   equipment_name: string;
+  equipment_serial?: string;
   equipment_status: string;
+  assigned_to_name?: string;
+  assigned_to_id?: string;
+  assigned_at?: string;
   returned_by?: string;
   returned_at?: string;
+  condition_on_return?: string;
   photo_url?: string;
   asset_id?: string;
   event_id?: string;
@@ -742,6 +755,7 @@ export interface LeadEquipmentHistory {
   proof_type?: string;
   remarks?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface UnlockOverride {
