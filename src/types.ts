@@ -612,24 +612,6 @@ export interface StaffAssignment {
   raw_footage_link?: string;
 }
 
-export interface TaskAssignmentDetail {
-  order_id: string;
-  event_id?: string | null;
-  event_name?: string | null;
-  assignment_id: string;
-  staff_id?: string | null;
-  staff_name?: string | null;
-  staff_role?: string | null;
-  task_status?: string | null;
-  raw_footage_link?: string | null;
-  event_start_photo?: string | null;
-  event_end_photo?: string | null;
-  equipment_received_photo?: string | null;
-  equipment_handover_photo?: string | null;
-  created_at?: string;
-  updated_at?: string;
-}
-
 export interface LeadStaffAssignmentHistory {
   id?: string;
   lead_id: string;

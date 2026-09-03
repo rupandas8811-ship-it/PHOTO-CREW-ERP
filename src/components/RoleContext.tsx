@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
-import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, TaskAssignmentDetail, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent, CalendarMemo, ClientAcceptanceVerification } from '../types';
+import { User, Lead, LeadPackage, Order, Operation, RawFootage, Production, Payment, ActivityLog, UserRole, CurrentStage, EditingStatus, Staff, Notification, Equipment, Package, StaffAssignment, LeadStaffAssignmentHistory, LeadEquipmentHistory, ProductionSpeciality, EditorAssignment, PaymentStatus, EquipmentHandover, UnlockOverride, DEPARTMENT_STAGES, ROLE_DEPARTMENT_MAP, Department, LeadEvent, CalendarMemo, ClientAcceptanceVerification } from '../types';
 import { INITIAL_USERS, INITIAL_LEADS, INITIAL_ORDERS, INITIAL_OPERATIONS, INITIAL_RAW_FOOTAGE, INITIAL_PRODUCTION, INITIAL_PAYMENTS, INITIAL_LOGS, INITIAL_EQUIPMENT } from '../data';
 import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
@@ -218,22 +218,6 @@ interface RoleContextType {
   toggleUserStatus: (id: string) => Promise<void>;
   resetUserPassword: (id: string, newPassword: string) => Promise<void>;
   staffAssignments: StaffAssignment[];
-  taskAssignmentDetails: TaskAssignmentDetail[];
-  saveTaskAssignmentDetail: (payload: {
-    assignment_id: string;
-    order_id: string;
-    event_id?: string | null;
-    event_name?: string | null;
-    staff_id?: string | null;
-    staff_name?: string | null;
-    staff_role?: string | null;
-    task_status?: string | null;
-    raw_footage_link?: string | null;
-    event_start_photo?: string | null;
-    event_end_photo?: string | null;
-    equipment_received_photo?: string | null;
-    equipment_handover_photo?: string | null;
-  }) => Promise<void>;
   leadStaffAssignmentHistory: LeadStaffAssignmentHistory[];
   leadEquipmentHistory: LeadEquipmentHistory[];
   addLeadEquipmentHistory: (history: Omit<LeadEquipmentHistory, 'id'>) => Promise<void>;
@@ -940,94 +924,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [equipment, setEquipment] = useState<Equipment[]>([]);
 
   const [staffAssignments, setStaffAssignments] = useState<StaffAssignment[]>([]);
-  const [taskAssignmentDetails, setTaskAssignmentDetails] = useState<TaskAssignmentDetail[]>(() => {
-    try {
-      const saved = localStorage.getItem('erp_v_task_assignment_details');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-
-  const saveTaskAssignmentDetail = async (payload: {
-    assignment_id: string;
-    order_id: string;
-    event_id?: string | null;
-    event_name?: string | null;
-    staff_id?: string | null;
-    staff_name?: string | null;
-    staff_role?: string | null;
-    task_status?: string | null;
-    raw_footage_link?: string | null;
-    event_start_photo?: string | null;
-    event_end_photo?: string | null;
-    equipment_received_photo?: string | null;
-    equipment_handover_photo?: string | null;
-  }) => {
-    if (!payload.assignment_id) return;
-
-    const now = new Date().toISOString();
-    let updatedRecord: TaskAssignmentDetail;
-
-    setTaskAssignmentDetails(prev => {
-      const existingIdx = prev.findIndex(d => String(d.assignment_id).trim() === String(payload.assignment_id).trim());
-      let next: TaskAssignmentDetail[];
-
-      if (existingIdx >= 0) {
-        const prevRec = prev[existingIdx];
-        updatedRecord = {
-          ...prevRec,
-          order_id: payload.order_id || prevRec.order_id,
-          event_id: payload.event_id !== undefined ? payload.event_id : prevRec.event_id,
-          event_name: payload.event_name !== undefined ? payload.event_name : prevRec.event_name,
-          staff_id: payload.staff_id !== undefined ? payload.staff_id : prevRec.staff_id,
-          staff_name: payload.staff_name !== undefined ? payload.staff_name : prevRec.staff_name,
-          staff_role: payload.staff_role !== undefined ? payload.staff_role : prevRec.staff_role,
-          task_status: payload.task_status !== undefined ? payload.task_status : prevRec.task_status,
-          raw_footage_link: payload.raw_footage_link !== undefined ? payload.raw_footage_link : prevRec.raw_footage_link,
-          event_start_photo: payload.event_start_photo !== undefined ? payload.event_start_photo : prevRec.event_start_photo,
-          event_end_photo: payload.event_end_photo !== undefined ? payload.event_end_photo : prevRec.event_end_photo,
-          equipment_received_photo: payload.equipment_received_photo !== undefined ? payload.equipment_received_photo : prevRec.equipment_received_photo,
-          equipment_handover_photo: payload.equipment_handover_photo !== undefined ? payload.equipment_handover_photo : prevRec.equipment_handover_photo,
-          updated_at: now
-        };
-        next = [...prev];
-        next[existingIdx] = updatedRecord;
-      } else {
-        updatedRecord = {
-          assignment_id: payload.assignment_id,
-          order_id: payload.order_id,
-          event_id: payload.event_id || null,
-          event_name: payload.event_name || null,
-          staff_id: payload.staff_id || null,
-          staff_name: payload.staff_name || null,
-          staff_role: payload.staff_role || null,
-          task_status: payload.task_status || 'Assigned',
-          raw_footage_link: payload.raw_footage_link || null,
-          event_start_photo: payload.event_start_photo || null,
-          event_end_photo: payload.event_end_photo || null,
-          equipment_received_photo: payload.equipment_received_photo || null,
-          equipment_handover_photo: payload.equipment_handover_photo || null,
-          created_at: now,
-          updated_at: now
-        };
-        next = [...prev, updatedRecord];
-      }
-
-      try { localStorage.setItem('erp_v_task_assignment_details', JSON.stringify(next)); } catch (e) {}
-      return next;
-    });
-
-    try {
-      await fetch('/api/task-assignment-details/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    } catch (err) {
-      console.warn('[RoleContext] Error saving task assignment detail via server API:', err);
-    }
-  };
 
   const [leadStaffAssignmentHistory, setLeadStaffAssignmentHistory] = useState<LeadStaffAssignmentHistory[]>([]);
   const [leadEquipmentHistory, setLeadEquipmentHistory] = useState<LeadEquipmentHistory[]>([]);
@@ -2820,18 +2716,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
         } catch (caErr) {
           console.warn('[RoleContext] Error loading client acceptance verifications:', caErr);
-        }
-
-        // Fetch task assignment details
-        try {
-          const tadRes = await fetch('/api/task-assignment-details/list');
-          const parsedTad = await safeParseResponse(tadRes);
-          if (parsedTad.ok && parsedTad.isJson && parsedTad.data?.success && Array.isArray(parsedTad.data?.data)) {
-            setTaskAssignmentDetails(parsedTad.data.data);
-            try { localStorage.setItem('erp_v_task_assignment_details', JSON.stringify(parsedTad.data.data)); } catch (e) {}
-          }
-        } catch (tadErr) {
-          console.warn('[RoleContext] Error loading task assignment details:', tadErr);
         }
         
         updateDiagnosticMetric('read', 'ok');
@@ -8674,8 +8558,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         deleteRawFootage,
         clientAcceptanceVerifications,
         saveClientAcceptanceVerification,
-        taskAssignmentDetails,
-        saveTaskAssignmentDetail,
         isProductionDashboardActive,
         setIsProductionDashboardActive,
       }}
