@@ -4671,13 +4671,19 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     const assignDate = timestamp.split('T')[0];
 
+    // Build unique staff consolidation for database table staff_assignments
+    // idx_unique_staff_per_order enforces UNIQUE (order_id, lower(trim(staff_name)))
+    const consolidatedStaffMap = new Map<string, {
+      primaryItem: StaffAssignment;
+      allRoles: string[];
+      allEventIds: string[];
+      allEventNames: string[];
+    }>();
+
     for (const a of assignments) {
       const aStaffNameTrimmed = (a.staff_name || '').trim();
-      const aStaffNameLower = aStaffNameTrimmed.toLowerCase();
+      const key = aStaffNameTrimmed.toLowerCase();
       if (!aStaffNameTrimmed) continue;
-
-      const targetEvId = a.event_id || '';
-      const targetEvName = (a.event_name || '').trim().toLowerCase();
 
       // History entry
       historyInserts.push({
@@ -4689,82 +4695,59 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         assigned_at: timestamp
       });
 
-      // Helper to check if an existing assignment belongs to the same event as candidate 'a'
-      const isSameEvent = (ed: StaffAssignment) => {
-        if (targetEvId && ed.event_id) return ed.event_id === targetEvId;
-        if (targetEvName && ed.event_name) return (ed.event_name || '').trim().toLowerCase() === targetEvName;
-        if (!targetEvId && !ed.event_id) return true;
-        return false;
-      };
-
-      // Try matching an existing DB assignment by:
-      // 1. Exact assignment_id
-      let matched = existingDbAssignments.find(ed => 
-        a.assignment_id && ed.assignment_id === a.assignment_id
-      );
-
-      // 2. Matching event + staff_id/staff_name + staff_role
-      if (!matched) {
-        matched = existingDbAssignments.find(ed => 
-          !matchedDbAssignmentIds.has(ed.assignment_id) &&
-          isSameEvent(ed) &&
-          ((a.staff_id && ed.staff_id && !a.staff_id.startsWith('MOCK-') && ed.staff_id === a.staff_id) ||
-           (aStaffNameLower !== '' && (ed.staff_name || '').trim().toLowerCase() === aStaffNameLower)) &&
-          ((ed.staff_role || '').trim().toLowerCase() === (a.staff_role || '').trim().toLowerCase())
-        );
+      if (consolidatedStaffMap.has(key)) {
+        const existing = consolidatedStaffMap.get(key)!;
+        if (a.staff_role && !existing.allRoles.includes(a.staff_role)) {
+          existing.allRoles.push(a.staff_role);
+        }
+        if (a.event_id && !existing.allEventIds.includes(a.event_id)) {
+          existing.allEventIds.push(a.event_id);
+        }
+        if (a.event_name && !existing.allEventNames.includes(a.event_name)) {
+          existing.allEventNames.push(a.event_name);
+        }
+      } else {
+        consolidatedStaffMap.set(key, {
+          primaryItem: a,
+          allRoles: a.staff_role ? [a.staff_role] : [],
+          allEventIds: a.event_id ? [a.event_id] : [],
+          allEventNames: a.event_name ? [a.event_name] : []
+        });
       }
 
-      // 3. Matching event + staff_id/staff_name
-      if (!matched) {
-        matched = existingDbAssignments.find(ed => 
-          !matchedDbAssignmentIds.has(ed.assignment_id) &&
-          isSameEvent(ed) &&
-          ((a.staff_id && ed.staff_id && !a.staff_id.startsWith('MOCK-') && ed.staff_id === a.staff_id) ||
-           (aStaffNameLower !== '' && (ed.staff_name || '').trim().toLowerCase() === aStaffNameLower))
-        );
-      }
-
-      // 4. Matching event + staff_role (if updating an unassigned task slot in same event)
-      if (!matched) {
-        matched = existingDbAssignments.find(ed => 
-          !matchedDbAssignmentIds.has(ed.assignment_id) &&
-          isSameEvent(ed) &&
-          ((ed.staff_role || '').trim().toLowerCase() === (a.staff_role || '').trim().toLowerCase())
-        );
-      }
-
-      // 5. Matching across order_id by staff_id/staff_name (prevents duplicate key constraint on order_id + staff_name)
-      if (!matched) {
-        matched = existingDbAssignments.find(ed => 
-          !matchedDbAssignmentIds.has(ed.assignment_id) &&
-          ((a.staff_id && ed.staff_id && !a.staff_id.startsWith('MOCK-') && ed.staff_id === a.staff_id) ||
-           (aStaffNameLower !== '' && (ed.staff_name || '').trim().toLowerCase() === aStaffNameLower))
-        );
-      }
-
-      const assignId = matched?.assignment_id || 
-        (a.assignment_id ? a.assignment_id : `ASST-${Math.floor(100000 + Math.random() * 900000)}`);
-
-      // Rich React/Local representation with event details
-      const reactAssignRecord: StaffAssignment = {
-        assignment_id: assignId,
+      // Also track in React state list
+      finalReactAssignments.push({
+        assignment_id: a.assignment_id || `ASST-${Math.floor(100000 + Math.random() * 900000)}`,
         order_id: orderId,
         staff_role: a.staff_role,
-        staff_id: a.staff_id || matched?.staff_id || '',
+        staff_id: a.staff_id || '',
         staff_name: a.staff_name,
-        assignment_date: (a as any).assignment_date || matched?.assignment_date || assignDate,
-        assignment_status: a.assignment_status || matched?.assignment_status || 'Assigned',
-        task_status: a.task_status || matched?.task_status || 'Assigned',
-        event_id: a.event_id || matched?.event_id || '',
-        event_name: a.event_name || matched?.event_name || '',
+        assignment_date: (a as any).assignment_date || assignDate,
+        assignment_status: a.assignment_status || 'Assigned',
+        task_status: a.task_status || 'Assigned',
+        event_id: a.event_id || '',
+        event_name: a.event_name || '',
         equipment: a.equipment || [],
         mobile: a.mobile || '',
         staff_type: a.staff_type || 'In-House',
         updated_by: changedBy
-      };
-      finalReactAssignments.push(reactAssignRecord);
+      });
+    }
 
-      // Now prepare DB operation for staff_assignments table:
+    // Prepare DB operation for staff_assignments table (1 record per unique staff member per order)
+    for (const [key, consolidated] of consolidatedStaffMap.entries()) {
+      const pItem = consolidated.primaryItem;
+      const combinedRole = consolidated.allRoles.join(', ');
+      const combinedEventId = consolidated.allEventIds.join(', ');
+      const combinedEventName = consolidated.allEventNames.join(', ');
+
+      // Find if this staff member already has a row in existingDbAssignments for this order
+      const matched = existingDbAssignments.find(ed =>
+        !matchedDbAssignmentIds.has(ed.assignment_id) &&
+        ((pItem.staff_id && ed.staff_id && !pItem.staff_id.startsWith('MOCK-') && ed.staff_id === pItem.staff_id) ||
+         ((ed.staff_name || '').trim().toLowerCase() === key))
+      );
+
       if (matched) {
         matchedDbAssignmentIds.add(matched.assignment_id);
 
@@ -4772,31 +4755,28 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           matchColumn: 'assignment_id',
           matchValue: matched.assignment_id,
           updates: {
-            staff_role: a.staff_role || matched.staff_role,
-            staff_id: a.staff_id || matched.staff_id,
-            staff_name: a.staff_name || matched.staff_name,
-            event_id: a.event_id || matched.event_id || '',
-            event_name: a.event_name || matched.event_name || '',
-            assignment_date: (a as any).assignment_date || matched.assignment_date || assignDate,
-            assignment_status: a.assignment_status || matched.assignment_status || 'Assigned',
-            task_status: a.task_status || matched.task_status || 'Assigned',
+            staff_role: combinedRole || matched.staff_role,
+            staff_id: pItem.staff_id || matched.staff_id,
+            staff_name: pItem.staff_name || matched.staff_name,
+            assignment_date: (pItem as any).assignment_date || matched.assignment_date || assignDate,
+            assignment_status: pItem.assignment_status || matched.assignment_status || 'Assigned',
+            task_status: pItem.task_status || matched.task_status || 'Assigned',
             updated_at: timestamp,
             updated_by: changedBy
           }
         });
       } else {
-        // Genuinely new assignment slot/task for this order
+        // New unique staff assignment record for this order
+        const assignId = pItem.assignment_id || `ASST-${orderId}-${key.replace(/[^a-z0-9]/g, '').slice(0, 10)}`;
         newInsertsForDb.push({
           assignment_id: assignId,
           order_id: orderId,
-          event_id: a.event_id || '',
-          event_name: a.event_name || '',
-          staff_role: a.staff_role,
-          staff_id: a.staff_id,
-          staff_name: a.staff_name,
+          staff_role: combinedRole,
+          staff_id: pItem.staff_id,
+          staff_name: pItem.staff_name,
           assignment_date: assignDate,
-          assignment_status: a.assignment_status || 'Assigned',
-          task_status: a.task_status || 'Assigned',
+          assignment_status: pItem.assignment_status || 'Assigned',
+          task_status: pItem.task_status || 'Assigned',
           updated_at: timestamp,
           updated_by: changedBy
         });
