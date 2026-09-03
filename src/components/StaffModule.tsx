@@ -1155,6 +1155,7 @@ export const StaffModule: React.FC = () => {
             if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
               bookings.push({
                 key: uniqueKey,
+                assignmentId: sa?.assignment_id || null,
                 orderId: orderId,
                 leadId: lead.lead_id,
                 eventId: ev.id || 'ev',
@@ -1228,6 +1229,7 @@ export const StaffModule: React.FC = () => {
           if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
             bookings.push({
               key: uniqueKey,
+              assignmentId: sa?.assignment_id || null,
               orderId: orderId,
               leadId: lead.lead_id,
               eventId: 'gen',
@@ -1550,6 +1552,35 @@ export const StaffModule: React.FC = () => {
         setIsSubmitting(true);
         const timestamp = new Date().toISOString();
 
+        // Determine exact assignment_id
+        let resolvedAssignmentId = booking.assignmentId;
+        if (!resolvedAssignmentId && booking.orderId) {
+          const matchingSA = staffAssignments?.find(sa => {
+            if (sa.order_id !== booking.orderId) return false;
+            if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+            if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
+            if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === (booking.eventName || '').trim().toLowerCase()) return false;
+            return true;
+          });
+          if (matchingSA?.assignment_id) {
+            resolvedAssignmentId = matchingSA.assignment_id;
+          } else {
+            resolvedAssignmentId = `ASST-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+            await pushInsert('staff_assignments', {
+              assignment_id: resolvedAssignmentId,
+              order_id: booking.orderId,
+              staff_id: staffMember?.id || currentUser?.id || '',
+              staff_name: staffName,
+              staff_role: booking.assignedRole || 'Crew Member',
+              event_id: booking.eventId !== 'ev' ? booking.eventId : null,
+              event_name: booking.eventName,
+              task_status: 'Assigned',
+              assignment_status: 'Assigned',
+              assignment_date: booking.eventDate || new Date().toISOString().split('T')[0]
+            });
+          }
+        }
+
         // 1. FIRST IMAGE ONLY (Applicable only if staff has equipment): Asset / Equipment Received Image is provided
         if (hasEquipment && hasAssetColl && !hasEventStart) {
           const assetProofsToSave: EquipmentProofItem[] = [];
@@ -1575,13 +1606,21 @@ export const StaffModule: React.FC = () => {
               capturedAt: timestamp
             });
 
+            if (supabaseClient && resolvedAssignmentId) {
+              try {
+                await supabaseClient.from('lead_equipment_history').delete().eq('assignment_id', resolvedAssignmentId).eq('equipment_name', eqName);
+              } catch(e) {}
+            }
+
             const historyRecord = {
               lead_id: booking.leadId || null,
               order_id: booking.orderId || null,
+              assignment_id: resolvedAssignmentId || null,
               equipment_name: eqName,
               equipment_status: 'Asset Collected (Draft)',
               returned_by: staffName,
               returned_at: timestamp,
+              photo_url: finalUrl,
               remarks: JSON.stringify({
                 asset_id: assetId,
                 proof_type: 'Event Start Asset Draft',
@@ -1592,6 +1631,7 @@ export const StaffModule: React.FC = () => {
                 event_name: booking.eventName,
                 order_id: booking.orderId,
                 lead_id: booking.leadId,
+                assignment_id: resolvedAssignmentId || null,
                 uploaded_at: timestamp,
                 uploaded_by: staffName,
                 current_status: 'Assigned Crew'
@@ -1621,6 +1661,19 @@ export const StaffModule: React.FC = () => {
           };
           setStaffStatuses(nextStatuses);
           localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
+
+          // Verification Step
+          if (supabaseClient && resolvedAssignmentId) {
+            try {
+              const { data: vRows } = await supabaseClient
+                .from('v_task_assignment_details')
+                .select('*')
+                .eq('assignment_id', resolvedAssignmentId);
+              if (vRows && vRows.length > 0) {
+                console.log('[Verification Success] Re-fetched task row:', vRows[0]);
+              }
+            } catch (ve) {}
+          }
 
           // Close modal immediately and restore scrolling
           setPhotoModalData(null);
@@ -1662,13 +1715,21 @@ export const StaffModule: React.FC = () => {
               capturedAt: timestamp
             });
 
+            if (supabaseClient && resolvedAssignmentId) {
+              try {
+                await supabaseClient.from('lead_equipment_history').delete().eq('assignment_id', resolvedAssignmentId).eq('equipment_name', eqName);
+              } catch(e) {}
+            }
+
             const historyRecord = {
               lead_id: booking.leadId || null,
               order_id: booking.orderId || null,
+              assignment_id: resolvedAssignmentId || null,
               equipment_name: eqName,
               equipment_status: 'Equipment Received',
               returned_by: staffName,
               returned_at: timestamp,
+              photo_url: finalUrl,
               remarks: JSON.stringify({
                 asset_id: assetId,
                 proof_type: 'Equipment Received',
@@ -1679,6 +1740,7 @@ export const StaffModule: React.FC = () => {
                 event_name: booking.eventName,
                 order_id: booking.orderId,
                 lead_id: booking.leadId,
+                assignment_id: resolvedAssignmentId || null,
                 uploaded_at: timestamp,
                 uploaded_by: staffName,
                 current_status: 'Event Started'
@@ -1708,13 +1770,21 @@ export const StaffModule: React.FC = () => {
             capturedAt: timestamp
           });
 
+          if (supabaseClient && resolvedAssignmentId) {
+            try {
+              await supabaseClient.from('lead_equipment_history').delete().eq('assignment_id', resolvedAssignmentId).eq('equipment_name', 'Event Start Photo Proof');
+            } catch(e) {}
+          }
+
           const startHistoryRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            assignment_id: resolvedAssignmentId || null,
             equipment_name: 'Event Start Photo Proof',
             equipment_status: 'Event Started',
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: finalStartUrl,
             remarks: JSON.stringify({
               asset_id: 'Event Start',
               proof_type: 'Event Start',
@@ -1725,6 +1795,7 @@ export const StaffModule: React.FC = () => {
               event_name: booking.eventName,
               order_id: booking.orderId,
               lead_id: booking.leadId,
+              assignment_id: resolvedAssignmentId || null,
               uploaded_at: timestamp,
               uploaded_by: staffName,
               current_status: 'Event Started'
@@ -1759,23 +1830,10 @@ export const StaffModule: React.FC = () => {
 
           // Update database tables: staff_assignments, operations, orders, leads
           if (booking.orderId) {
-            const matchingSA = staffAssignments?.find(sa => {
-              if (!sa || sa.order_id !== booking.orderId) return false;
-              if (!sa.staff_name || sa.staff_name.trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-              if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
-              if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== (booking.eventName || '').trim().toLowerCase()) return false;
-              return true;
-            });
-
-            if (matchingSA?.assignment_id) {
-              await pushUpdate('staff_assignments', 'assignment_id', matchingSA.assignment_id, {
+            if (resolvedAssignmentId) {
+              await pushUpdate('staff_assignments', 'assignment_id', resolvedAssignmentId, {
                 task_status: 'Event Started',
                 assignment_status: 'Assigned',
-                updated_at: timestamp
-              });
-            } else {
-              await pushUpdate('staff_assignments', 'order_id', booking.orderId, {
-                task_status: 'Event Started',
                 updated_at: timestamp
               });
             }
@@ -1930,13 +1988,21 @@ export const StaffModule: React.FC = () => {
       // Record lead equipment history
       if (uploadedProofs.length > 0) {
         for (const p of uploadedProofs) {
+          if (supabaseClient && resolvedAssignmentId) {
+            try {
+              await supabaseClient.from('lead_equipment_history').delete().eq('assignment_id', resolvedAssignmentId).eq('equipment_name', p.equipmentName);
+            } catch (e) {}
+          }
+
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            assignment_id: resolvedAssignmentId || null,
             equipment_name: p.equipmentName,
             equipment_status: effectiveEquipmentStatus,
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: p.photoUrl || null,
             remarks: JSON.stringify({
               asset_id: p.assetId,
               proof_type: stage === 'Event Complete' ? 'Event End' : stage,
@@ -1946,6 +2012,7 @@ export const StaffModule: React.FC = () => {
               event_name: booking.eventName,
               order_id: booking.orderId,
               lead_id: booking.leadId,
+              assignment_id: resolvedAssignmentId || null,
               raw_footage_link: modalRawFootageLink || null,
               uploaded_at: timestamp,
               uploaded_by: staffName,
@@ -1958,13 +2025,21 @@ export const StaffModule: React.FC = () => {
       } else if (stage === 'Equipment Handover') {
         if (hasEquipment) {
           // Record Equipment Not Handover when photo was not uploaded for assigned equipment
+          if (supabaseClient && resolvedAssignmentId) {
+            try {
+              await supabaseClient.from('lead_equipment_history').delete().eq('assignment_id', resolvedAssignmentId).eq('equipment_name', 'Equipment Handover Photo Proof');
+            } catch (e) {}
+          }
+
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            assignment_id: resolvedAssignmentId || null,
             equipment_name: 'Equipment Handover Photo Proof',
             equipment_status: 'Equipment Not Handover',
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: null,
             remarks: JSON.stringify({
               asset_id: 'Equipment Handover',
               proof_type: 'Equipment Handover',
@@ -1974,6 +2049,7 @@ export const StaffModule: React.FC = () => {
               event_name: booking.eventName,
               order_id: booking.orderId,
               lead_id: booking.leadId,
+              assignment_id: resolvedAssignmentId || null,
               raw_footage_link: modalRawFootageLink || null,
               uploaded_at: timestamp,
               uploaded_by: staffName,
@@ -1984,13 +2060,21 @@ export const StaffModule: React.FC = () => {
           await pushInsert('lead_equipment_history', historyRecord);
         } else {
           // Staff has NO equipment assigned -> Record Footage Handover
+          if (supabaseClient && resolvedAssignmentId) {
+            try {
+              await supabaseClient.from('lead_equipment_history').delete().eq('assignment_id', resolvedAssignmentId).eq('equipment_name', 'Footage Handover');
+            } catch (e) {}
+          }
+
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
+            assignment_id: resolvedAssignmentId || null,
             equipment_name: 'Footage Handover',
             equipment_status: 'Footage Handover Completed',
             returned_by: staffName,
             returned_at: timestamp,
+            photo_url: null,
             remarks: JSON.stringify({
               asset_id: 'Footage Handover',
               proof_type: 'Footage Handover',
@@ -2000,6 +2084,7 @@ export const StaffModule: React.FC = () => {
               event_name: booking.eventName,
               order_id: booking.orderId,
               lead_id: booking.leadId,
+              assignment_id: resolvedAssignmentId || null,
               raw_footage_link: modalRawFootageLink || null,
               uploaded_at: timestamp,
               uploaded_by: staffName,
@@ -2019,6 +2104,7 @@ export const StaffModule: React.FC = () => {
             await pushInsert('lead_equipment_history', {
               lead_id: booking.leadId || null,
               order_id: booking.orderId || null,
+              assignment_id: resolvedAssignmentId || null,
               equipment_name: eqItem.name,
               equipment_status: 'Equipment Handover Completed',
               returned_by: staffName,
@@ -2031,6 +2117,7 @@ export const StaffModule: React.FC = () => {
                 event_name: booking.eventName,
                 order_id: booking.orderId,
                 lead_id: booking.leadId,
+                assignment_id: resolvedAssignmentId || null,
                 raw_footage_link: modalRawFootageLink || null,
                 uploaded_at: timestamp,
                 uploaded_by: staffName,
@@ -2107,21 +2194,26 @@ export const StaffModule: React.FC = () => {
           updateAssignmentPayload.raw_footage_link = modalRawFootageLink;
         }
 
-        const matchingSA = staffAssignments?.find(sa => {
-          if (sa.order_id !== booking.orderId) return false;
-          if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id !== booking.eventId) return false;
-          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() !== booking.eventName.trim().toLowerCase()) return false;
-          return true;
-        });
-
-        if (matchingSA?.assignment_id) {
-          await pushUpdate('staff_assignments', 'assignment_id', matchingSA.assignment_id, {
+        if (resolvedAssignmentId) {
+          await pushUpdate('staff_assignments', 'assignment_id', resolvedAssignmentId, {
             ...updateAssignmentPayload,
             assignment_status: 'Assigned'
           });
-        } else {
-          await pushUpdate('staff_assignments', 'order_id', booking.orderId, updateAssignmentPayload);
+        }
+
+        // Re-fetch and verify updated task assignment detail row from Supabase
+        if (supabaseClient && resolvedAssignmentId) {
+          try {
+            const { data: verifiedRows } = await supabaseClient
+              .from('v_task_assignment_details')
+              .select('*')
+              .eq('assignment_id', resolvedAssignmentId);
+            if (verifiedRows && verifiedRows.length > 0) {
+              console.log('[Verification Success] Re-fetched task row:', verifiedRows[0]);
+            }
+          } catch (veErr) {
+            console.warn('Verification query failed:', veErr);
+          }
         }
 
         const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, nextStatus, nextStatuses, orders, leads, staffAssignments);
