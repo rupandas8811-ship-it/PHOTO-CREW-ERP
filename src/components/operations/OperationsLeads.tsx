@@ -450,7 +450,7 @@ export const OperationsLeads: React.FC = () => {
       const roles = getEventRolesForEvent(ev, idx, configs, events.length);
       const evLabel = ev.event_name || ev.event_type || `Event ${idx + 1}`;
       if (roles && roles.length > 0) {
-        const formatted = roles.map((r: any) => formatQtyItem(typeof r === 'string' ? r : (r.name || r.role || JSON.stringify(r))));
+        const formatted = roles.map((r: any) => formatQtyItem(r));
         if (events.length > 1) {
           lines.push(`${evLabel}: ${formatted.join(', ')}`);
         } else {
@@ -1119,9 +1119,10 @@ export const OperationsLeads: React.FC = () => {
                 eqList.push((item.name || item.equipment_name).trim());
               }
             });
-            // Direct explicit assignment on this staff assignment record (even if empty)
             const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
-            return Array.from(new Set(cleanList));
+            if (cleanList.length > 0) {
+              return Array.from(new Set(cleanList));
+            }
           } else if (typeof rawEq === 'string') {
             const trimmedStr = rawEq.trim();
             if (trimmedStr) {
@@ -1139,7 +1140,9 @@ export const OperationsLeads: React.FC = () => {
                 trimmedStr.split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
               }
               const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
-              return Array.from(new Set(cleanList));
+              if (cleanList.length > 0) {
+                return Array.from(new Set(cleanList));
+              }
             }
           }
         }
@@ -1149,43 +1152,78 @@ export const OperationsLeads: React.FC = () => {
       if (eqList.length === 0 && ev && ev.assigned_staff_mobiles) {
         const mobilesRaw = ev.assigned_staff_mobiles || '';
         const assignedNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-        const resolvedIdx = nameIdx !== undefined && nameIdx >= 0 ? nameIdx : assignedNames.indexOf(normName);
+        let resolvedIdx = assignedNames.findIndex((n: string) => n === normName || n.includes(normName) || normName.includes(n));
+        if (resolvedIdx === -1 && nameIdx !== undefined && nameIdx >= 0 && nameIdx < assignedNames.length) {
+          resolvedIdx = nameIdx;
+        }
 
         if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
           try {
             const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
             const staffEquipments = JSON.parse(parts[1]);
             if (Array.isArray(staffEquipments)) {
-              if (resolvedIdx >= 0 && Array.isArray(staffEquipments[resolvedIdx])) {
+              if (resolvedIdx >= 0 && Array.isArray(staffEquipments[resolvedIdx]) && staffEquipments[resolvedIdx].length > 0) {
                 staffEquipments[resolvedIdx].forEach((eq: string) => { if (eq && eq.trim()) eqList.push(eq.trim()); });
                 const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
-                return Array.from(new Set(cleanList));
+                if (cleanList.length > 0) {
+                  return Array.from(new Set(cleanList));
+                }
+              } else if (assignedNames.length === 1 && Array.isArray(staffEquipments[0]) && staffEquipments[0].length > 0) {
+                staffEquipments[0].forEach((eq: string) => { if (eq && eq.trim()) eqList.push(eq.trim()); });
+                const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
+                if (cleanList.length > 0) {
+                  return Array.from(new Set(cleanList));
+                }
               }
             }
           } catch (e) {}
         } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-          // Legacy format: ONLY assign if this is the ONLY assigned staff member for this event
-          if (assignedNames.length === 1 && (resolvedIdx === 0 || resolvedIdx === -1)) {
+          if (assignedNames.length === 1 || resolvedIdx >= 0) {
             const parts = mobilesRaw.split(' || EQUIPMENT: ');
             if (parts[1]) {
               parts[1].split(',').forEach((s: string) => { if (s.trim()) eqList.push(s.trim()); });
+              const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
+              if (cleanList.length > 0) {
+                return Array.from(new Set(cleanList));
+              }
             }
           }
         }
       }
 
-      // 3. Check active staffAssignments strictly for this specific staff & event
+      // 3. Check other events for this order/lead in case ev was not matched or generic
+      if (eqList.length === 0 && lead?.events && lead.events.length > 0) {
+        for (const otherEv of lead.events) {
+          if (!otherEv.assigned_staff_mobiles) continue;
+          const otherNames = otherEv.assigned_staff_names ? otherEv.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+          const idx = otherNames.findIndex((n: string) => n === normName || n.includes(normName) || normName.includes(n));
+          if (idx >= 0 && otherEv.assigned_staff_mobiles.includes(' || EQUIPMENT: JSON:')) {
+            try {
+              const parts = otherEv.assigned_staff_mobiles.split(' || EQUIPMENT: JSON:');
+              const parsedEqs = JSON.parse(parts[1]);
+              if (Array.isArray(parsedEqs) && Array.isArray(parsedEqs[idx]) && parsedEqs[idx].length > 0) {
+                parsedEqs[idx].forEach((eq: string) => { if (eq && eq.trim()) eqList.push(eq.trim()); });
+                const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
+                if (cleanList.length > 0) {
+                  return Array.from(new Set(cleanList));
+                }
+              }
+            } catch(e) {}
+          }
+        }
+      }
+
+      // 4. Check active staffAssignments strictly for this specific staff & order
       if (eqList.length === 0 && staffAssignments) {
         const matchingSAs = staffAssignments.filter(s => 
           (s.order_id === ord.order_id || (ord.lead_id && s.order_id === ord.lead_id)) && 
           (s.staff_name || '').trim().toLowerCase() === normName &&
-          s.assignment_status !== 'Cancelled' &&
-          (!ev?.id || !s.event_id || s.event_id === ev.id)
+          s.assignment_status !== 'Cancelled'
         );
         matchingSAs.forEach(s => {
           const sEq = s.equipment || s.assigned_equipment;
           if (sEq) {
-            if (Array.isArray(sEq)) {
+            if (Array.isArray(sEq) && sEq.length > 0) {
               sEq.forEach((item: any) => { 
                 if (typeof item === 'string' && item.trim()) eqList.push(item.trim());
                 else if (item && typeof item === 'object' && (item.name || item.equipment_name)) eqList.push((item.name || item.equipment_name).trim());
@@ -1207,6 +1245,49 @@ export const OperationsLeads: React.FC = () => {
             }
           }
         });
+        const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
+        if (cleanList.length > 0) {
+          return Array.from(new Set(cleanList));
+        }
+      }
+
+      // 5. Check leadEquipmentHistory for active equipment for this staff or order
+      if (eqList.length === 0 && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
+        const activeHistory = leadEquipmentHistory.filter(h => 
+          (h.order_id === ord.order_id || (ord.lead_id && h.lead_id === ord.lead_id)) &&
+          h.equipment_status !== 'Returned' &&
+          !h.returned_at
+        );
+        if (activeHistory.length > 0) {
+          // If active records exist for this staff member specifically
+          const staffHist = activeHistory.filter(h => 
+            (h.returned_by || '').trim().toLowerCase() === normName ||
+            (h.remarks || '').toLowerCase().includes(normName) ||
+            (sa?.assignment_id && h.assignment_id === sa.assignment_id)
+          );
+          const source = staffHist.length > 0 ? staffHist : (getAssignedStaffNamesForOrder(ord).length === 1 ? activeHistory : []);
+          source.forEach(h => {
+            if (h.equipment_name && h.equipment_name.trim()) {
+              eqList.push(h.equipment_name.trim());
+            }
+          });
+          const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
+          if (cleanList.length > 0) {
+            return Array.from(new Set(cleanList));
+          }
+        }
+      }
+
+      // 6. Check operations.equipment_kit fallback
+      if (eqList.length === 0) {
+        const op = getOpDetails(ord.order_id);
+        if (op?.equipment_kit && typeof op.equipment_kit === 'string' && op.equipment_kit.trim()) {
+          const kits = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
+          const totalStaffAssigned = getAssignedStaffNamesForOrder(ord);
+          if (totalStaffAssigned.length <= 1) {
+            return Array.from(new Set(kits));
+          }
+        }
       }
 
       const cleanList = eqList.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
@@ -1234,7 +1315,7 @@ export const OperationsLeads: React.FC = () => {
           evOrderAssignments.forEach((sa, saIdx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
             const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
-            const saEq = resolveStaffEquipment(sa.staff_name, sa, ev, saIdx);
+            const saEq = resolveStaffEquipment(sa.staff_name, sa, ev);
 
             staffDetailsList.push({
               staff_name: sa.staff_name,
@@ -1642,7 +1723,7 @@ export const OperationsLeads: React.FC = () => {
     if (targetLead?.events && targetLead.events.length > 0) {
       const totalEvents = targetLead.events.length;
       targetLead.events.forEach((ev, index) => {
-        const evId = ev.id || `EV-N/A-${index}`;
+        const evId = ev.id || `ev-${index + 1}`;
         const staffList: any[] = [];
         
         const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
@@ -1719,6 +1800,16 @@ export const OperationsLeads: React.FC = () => {
                 const stType = matchedSa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
                 const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
 
+                const saNormName = (matchedSa.staff_name || '').trim().toLowerCase();
+                const nameIdxInEv = existingNames.findIndex((n: string) => n.toLowerCase() === saNormName || n.toLowerCase().includes(saNormName) || saNormName.includes(n.toLowerCase()));
+                const resolvedEq = (matchedSa.equipment && Array.isArray(matchedSa.equipment) && matchedSa.equipment.length > 0)
+                  ? matchedSa.equipment
+                  : (nameIdxInEv >= 0 && staffEquipments[nameIdxInEv] && staffEquipments[nameIdxInEv].length > 0)
+                  ? staffEquipments[nameIdxInEv]
+                  : (existingNames.length === 1 && assignedEquipment.length > 0)
+                  ? assignedEquipment
+                  : [];
+
                 staffList.push({
                   id: matchedSa.assignment_id || getSlotId(task.roleName, i),
                   staff_role: matchedSa.staff_role || task.roleName,
@@ -1726,7 +1817,7 @@ export const OperationsLeads: React.FC = () => {
                   staff_name: matchedSa.staff_name || '',
                   mobile: matchedSa.mobile || st?.mobile || '',
                   staff_type: cleanType,
-                  equipment: matchedSa.equipment || []
+                  equipment: resolvedEq
                 });
               } else if (existingNames.length > legacyNamePointer) {
                 const assignedName = existingNames[legacyNamePointer] || '';
@@ -1742,7 +1833,7 @@ export const OperationsLeads: React.FC = () => {
                   staff_name: assignedName,
                   mobile: st?.mobile || mobilesList[legacyNamePointer - 1] || '',
                   staff_type: cleanType,
-                  equipment: staffEquipments[legacyNamePointer - 1] || []
+                  equipment: staffEquipments[legacyNamePointer - 1] || (existingNames.length === 1 && assignedEquipment.length > 0 ? assignedEquipment : [])
                 });
               } else {
                 staffList.push({
@@ -1757,31 +1848,23 @@ export const OperationsLeads: React.FC = () => {
               }
             }
           });
-
-          // Append any remaining orderStaffAssignments not matched to taskGroups
-          orderStaffAssignments.forEach((sa, saIdx) => {
-            if (!usedSaIds.has(sa.assignment_id)) {
-              usedSaIds.add(sa.assignment_id);
-              const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase());
-              const stType = sa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
-              const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
-
-              staffList.push({
-                id: sa.assignment_id || getSlotId(sa.staff_role || 'GeneralStaff', saIdx),
-                staff_role: sa.staff_role || 'General Staff',
-                staff_id: sa.staff_id || st?.staff_id || ('MOCK-' + Math.random().toString(36).substr(2, 4)),
-                staff_name: sa.staff_name || '',
-                mobile: sa.mobile || st?.mobile || '',
-                staff_type: cleanType,
-                equipment: sa.equipment || staffEquipments[saIdx] || []
-              });
-            }
-          });
         } else if (orderStaffAssignments.length > 0) {
           orderStaffAssignments.forEach((sa, saIdx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase());
             const stType = sa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
             const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+
+            const saNormName = (sa.staff_name || '').trim().toLowerCase();
+            const nameIdxInEv = existingNames.findIndex((n: string) => n.toLowerCase() === saNormName || n.toLowerCase().includes(saNormName) || saNormName.includes(n.toLowerCase()));
+            const resolvedEq = (sa.equipment && Array.isArray(sa.equipment) && sa.equipment.length > 0)
+              ? sa.equipment
+              : (nameIdxInEv >= 0 && staffEquipments[nameIdxInEv] && staffEquipments[nameIdxInEv].length > 0)
+              ? staffEquipments[nameIdxInEv]
+              : (staffEquipments[saIdx] && staffEquipments[saIdx].length > 0)
+              ? staffEquipments[saIdx]
+              : (existingNames.length === 1 && assignedEquipment.length > 0)
+              ? assignedEquipment
+              : [];
 
             staffList.push({
               id: sa.assignment_id || getSlotId(sa.staff_role || 'GeneralStaff', saIdx),
@@ -1790,12 +1873,17 @@ export const OperationsLeads: React.FC = () => {
               staff_name: sa.staff_name || '',
               mobile: sa.mobile || st?.mobile || '',
               staff_type: cleanType,
-              equipment: sa.equipment || staffEquipments[saIdx] || []
+              equipment: resolvedEq
             });
           });
         } else if (existingNames.length > 0) {
           existingNames.forEach((assignedName, idx) => {
             const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
+            const resolvedEq = (staffEquipments[idx] && staffEquipments[idx].length > 0)
+              ? staffEquipments[idx]
+              : (existingNames.length === 1 && assignedEquipment.length > 0)
+              ? assignedEquipment
+              : [];
             staffList.push({
               id: getSlotId(st?.role || 'Team Member', idx),
               staff_role: st?.role || 'Team Member',
@@ -1803,7 +1891,7 @@ export const OperationsLeads: React.FC = () => {
               staff_name: assignedName,
               mobile: st?.mobile || mobilesList[idx] || '',
               staff_type: 'In-House',
-              equipment: staffEquipments[idx] || []
+              equipment: resolvedEq
             });
           });
         }
@@ -3025,7 +3113,7 @@ export const OperationsLeads: React.FC = () => {
                     });
 
                   return sortedEventsWithMeta.map(({ ev, originalIndex }, displayIndex) => {
-                    const evId = ev.id || `EV-N/A-${originalIndex}`;
+                    const evId = ev.id || `ev-${originalIndex + 1}`;
                     const allocation = eventAllocations[evId] || { staff: [] };
                     const allocStaff = allocation.staff || [];
                     
@@ -3193,12 +3281,14 @@ export const OperationsLeads: React.FC = () => {
                               }
                             });
 
-                            // Ensure any staff_role existing in allocStaff is also in tasksMap
-                            allocStaff.forEach((s: any) => {
-                              if (s.staff_role && !tasksMap.has(s.staff_role)) {
-                                tasksMap.set(s.staff_role, { roleName: s.staff_role, targetQty: 1 });
-                              }
-                            });
+                            // Only if NO roles were specified by Sales at all, fallback to existing allocStaff
+                            if (tasksMap.size === 0) {
+                              allocStaff.forEach((s: any) => {
+                                if (s.staff_role && !tasksMap.has(s.staff_role)) {
+                                  tasksMap.set(s.staff_role, { roleName: s.staff_role, targetQty: 1 });
+                                }
+                              });
+                            }
 
                             const taskGroups = Array.from(tasksMap.values());
 
@@ -3218,16 +3308,19 @@ export const OperationsLeads: React.FC = () => {
                             }
 
                             return taskGroups.map((task, groupIdx) => {
-                              const taskSlots = allocStaff.filter((s: any) => s.staff_role === task.roleName);
-                              const slotsToRender = [...taskSlots, ...Array.from({ length: Math.max(0, (task.targetQty || 1) - taskSlots.length) }, () => ({
-                                id: 'slot_' + Math.random().toString(36).substr(2, 6),
-                                staff_role: task.roleName,
-                                staff_id: '',
-                                staff_name: '',
-                                mobile: '',
-                                staff_type: 'In-House' as const,
-                                equipment: []
-                              }))];
+                              const taskSlots = allocStaff.filter((s: any) => s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
+                              const slotsToRender = [
+                                ...taskSlots.slice(0, task.targetQty),
+                                ...Array.from({ length: Math.max(0, (task.targetQty || 1) - taskSlots.length) }, () => ({
+                                  id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                                  staff_role: task.roleName,
+                                  staff_id: '',
+                                  staff_name: '',
+                                  mobile: '',
+                                  staff_type: 'In-House' as const,
+                                  equipment: []
+                                }))
+                              ];
 
                               const assignedCount = taskSlots.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
 
@@ -5164,6 +5257,11 @@ export const OperationsLeads: React.FC = () => {
 
                                 // Filter out invalid/empty placeholder names
                                 effectiveAssignedEq = effectiveAssignedEq.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
+
+                                if (effectiveAssignedEq.length === 0 && member.staff_name) {
+                                  const evMatch = parentLead?.events?.find((e: any) => e.id === member.event_id || (e.event_name || e.event_type) === member.event_name);
+                                  effectiveAssignedEq = resolveStaffEquipment(member.staff_name, member, evMatch);
+                                }
 
                                 const hasEqAssigned = effectiveAssignedEq.length > 0;
 

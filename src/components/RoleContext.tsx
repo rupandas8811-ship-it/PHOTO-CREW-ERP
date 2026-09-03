@@ -2680,18 +2680,91 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               (c.assignment_id && c.assignment_id === cleanSa.assignment_id) ||
               (c.order_id === cleanSa.order_id && (c.staff_id === cleanSa.staff_id || (c.staff_name && cleanSa.staff_name && c.staff_name.toLowerCase() === cleanSa.staff_name.toLowerCase())))
             );
-            if (cached) {
-              return {
-                ...cleanSa,
-                event_id: cached.event_id || cleanSa.event_id || '',
-                event_name: cached.event_name || cleanSa.event_name || '',
-                equipment: cached.equipment || cleanSa.equipment || [],
-                mobile: cached.mobile || cleanSa.mobile || '',
-                staff_type: cached.staff_type || cleanSa.staff_type || 'In-House'
-              };
+
+            let resolvedEq: string[] = [];
+            if (cached && Array.isArray(cached.equipment) && cached.equipment.length > 0) {
+              resolvedEq = cached.equipment;
+            } else if (Array.isArray(cleanSa.equipment) && cleanSa.equipment.length > 0) {
+              resolvedEq = cleanSa.equipment;
             }
-            return cleanSa;
+
+            let resolvedEventId = cached?.event_id || cleanSa.event_id || '';
+            let resolvedEventName = cached?.event_name || cleanSa.event_name || '';
+            let resolvedMobile = cached?.mobile || cleanSa.mobile || '';
+            let resolvedStaffType = cached?.staff_type || cleanSa.staff_type || 'In-House';
+
+            // Hydrate from dbLeadEvents if equipment is still empty
+            if (resolvedEq.length === 0 && dbLeadEvents && dbLeadEvents.length > 0) {
+              const ord = dbOrders?.find((o: any) => o.order_id === cleanSa.order_id);
+              const targetLeadId = ord?.lead_id;
+              const matchingEvents = dbLeadEvents.filter((e: any) => 
+                (resolvedEventId && e.id === resolvedEventId) ||
+                (targetLeadId && e.lead_id === targetLeadId)
+              );
+
+              const normStaff = staffName.trim().toLowerCase();
+              for (const ev of matchingEvents) {
+                if (!ev.assigned_staff_mobiles) continue;
+                const assignedNames = ev.assigned_staff_names 
+                  ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) 
+                  : [];
+                const staffIdx = assignedNames.findIndex((n: string) => n === normStaff || n.includes(normStaff) || normStaff.includes(n));
+
+                if (ev.assigned_staff_mobiles.includes(' || EQUIPMENT: JSON:')) {
+                  try {
+                    const parts = ev.assigned_staff_mobiles.split(' || EQUIPMENT: JSON:');
+                    const parsedEqs = JSON.parse(parts[1]);
+                    if (Array.isArray(parsedEqs)) {
+                      if (staffIdx >= 0 && Array.isArray(parsedEqs[staffIdx]) && parsedEqs[staffIdx].length > 0) {
+                        resolvedEq = parsedEqs[staffIdx].filter((eq: any) => typeof eq === 'string' && eq.trim());
+                        if (!resolvedEventId && ev.id) resolvedEventId = ev.id;
+                        if (!resolvedEventName) resolvedEventName = ev.event_name || ev.event_type || '';
+                        break;
+                      } else if (assignedNames.length === 1 && Array.isArray(parsedEqs[0]) && parsedEqs[0].length > 0) {
+                        resolvedEq = parsedEqs[0].filter((eq: any) => typeof eq === 'string' && eq.trim());
+                        break;
+                      }
+                    }
+                  } catch (e) {}
+                } else if (ev.assigned_staff_mobiles.includes(' || EQUIPMENT: ')) {
+                  const parts = ev.assigned_staff_mobiles.split(' || EQUIPMENT: ');
+                  if (parts[1]) {
+                    const eqItems = parts[1].split(',').map((s: string) => s.trim()).filter(Boolean);
+                    if (eqItems.length > 0 && (staffIdx >= 0 || assignedNames.length === 1)) {
+                      resolvedEq = eqItems;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+
+            // Hydrate from dbOperations if still empty
+            if (resolvedEq.length === 0 && dbOperations && dbOperations.length > 0) {
+              const op = dbOperations.find((o: any) => o.order_id === cleanSa.order_id);
+              if (op?.equipment_kit && typeof op.equipment_kit === 'string' && op.equipment_kit.trim()) {
+                const kits = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
+                const orderAssignmentsForSa = dbStaffAssignments.filter((s: any) => s.order_id === cleanSa.order_id);
+                if (orderAssignmentsForSa.length === 1 && kits.length > 0) {
+                  resolvedEq = kits;
+                }
+              }
+            }
+
+            return {
+              ...cleanSa,
+              event_id: resolvedEventId,
+              event_name: resolvedEventName,
+              equipment: resolvedEq,
+              mobile: resolvedMobile,
+              staff_type: resolvedStaffType
+            };
           });
+
+          try {
+            localStorage.setItem('erp_staff_assignments', JSON.stringify(enriched));
+          } catch (e) {}
+
           setStaffAssignments(enriched);
         }
         
@@ -4758,14 +4831,31 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    // Preserve any existing assignments for this order that were not part of this edit batch
+    // For any existing assignments for this order that were not part of this edit batch:
+    // If the assignment belongs to an event that was edited in this batch, it represents a removed or excess slot.
+    // Mark it as Cancelled in the database so it does not linger or reappear.
+    const touchedEventIds = new Set(assignments.map(a => a.event_id).filter(Boolean));
     for (const ed of existingDbAssignments) {
       if (!matchedDbAssignmentIds.has(ed.assignment_id) && !finalReactAssignments.some(r => r.assignment_id === ed.assignment_id)) {
-        const copy = { ...ed };
-        if (copy.staff_name && copy.staff_name.includes('__SLOT__')) {
-          copy.staff_name = copy.staff_name.split('__SLOT__')[0];
+        const belongsToTouchedEvent = ed.event_id && touchedEventIds.has(ed.event_id);
+        if (belongsToTouchedEvent && ed.assignment_status !== 'Cancelled') {
+          updatedAssignments.push({
+            matchColumn: 'assignment_id',
+            matchValue: ed.assignment_id,
+            updates: {
+              assignment_status: 'Cancelled',
+              task_status: 'Cancelled',
+              updated_at: timestamp,
+              updated_by: changedBy
+            }
+          });
+        } else if (!belongsToTouchedEvent) {
+          const copy = { ...ed };
+          if (copy.staff_name && copy.staff_name.includes('__SLOT__')) {
+            copy.staff_name = copy.staff_name.split('__SLOT__')[0];
+          }
+          finalReactAssignments.push(copy);
         }
-        finalReactAssignments.push(copy);
       }
     }
 
@@ -7689,6 +7779,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         return ld;
       })
     );
+
+    // Sync team members to linked orders in memory and database
+    const incomingTeamVal = (finalUpdates as any).Team_member ?? (finalUpdates as any).Team_Members ?? (finalUpdates as any).team_members;
+    if (incomingTeamVal !== undefined) {
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.lead_id === leadId) {
+            return {
+              ...o,
+              team_members: incomingTeamVal,
+              Team_Members: incomingTeamVal,
+              Team_member: incomingTeamVal,
+              updated_at: timestamp
+            };
+          }
+          return o;
+        })
+      );
+      const linkedOrders = orders.filter(o => o.lead_id === leadId);
+      for (const lo of linkedOrders) {
+        pushUpdate('orders', 'order_id', lo.order_id, {
+          team_members: incomingTeamVal,
+          updated_at: timestamp
+        }).catch(err => console.warn('Could not sync team_members to orders table', err));
+      }
+    }
 
     const newStatus = finalUpdates.current_status;
     if (newStatus && newStatus !== oldStatus) {

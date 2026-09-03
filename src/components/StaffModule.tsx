@@ -1051,20 +1051,29 @@ export const StaffModule: React.FC = () => {
       if (eqNames.length === 0 && evObj?.assigned_staff_mobiles) {
         const mobilesRaw = evObj.assigned_staff_mobiles;
         const assignedNames = evObj.assigned_staff_names ? evObj.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-        const resolvedIdx = staffIdx >= 0 ? staffIdx : assignedNames.indexOf(normName);
+        let resolvedIdx = assignedNames.findIndex((n: string) => n === normName || n.includes(normName) || normName.includes(n));
+        if (resolvedIdx === -1 && staffIdx >= 0 && staffIdx < assignedNames.length) {
+          resolvedIdx = staffIdx;
+        }
 
         if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
           try {
             const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
             const staffEqs = JSON.parse(parts[1]);
-            if (staffEqs && resolvedIdx >= 0 && staffEqs[resolvedIdx] && Array.isArray(staffEqs[resolvedIdx])) {
-              staffEqs[resolvedIdx].forEach((eqStr: string) => {
-                if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim());
-              });
+            if (staffEqs && Array.isArray(staffEqs)) {
+              if (resolvedIdx >= 0 && Array.isArray(staffEqs[resolvedIdx]) && staffEqs[resolvedIdx].length > 0) {
+                staffEqs[resolvedIdx].forEach((eqStr: string) => {
+                  if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim());
+                });
+              } else if (assignedNames.length === 1 && Array.isArray(staffEqs[0]) && staffEqs[0].length > 0) {
+                staffEqs[0].forEach((eqStr: string) => {
+                  if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim());
+                });
+              }
             }
           } catch(e) {}
         } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-          if (assignedNames.length === 1 && (resolvedIdx === 0 || resolvedIdx === -1)) {
+          if (assignedNames.length === 1 || resolvedIdx >= 0) {
             const parts = mobilesRaw.split(' || EQUIPMENT: ');
             if (parts[1]) {
               parts[1].split(',').forEach((s: string) => {
@@ -1072,6 +1081,56 @@ export const StaffModule: React.FC = () => {
               });
             }
           }
+        }
+      }
+
+      // 4. Check other events for this order/lead
+      if (eqNames.length === 0 && leads && leads.length > 0) {
+        const targetLead = leads.find((l: any) => l.lead_id === leadIdStr || l.order_id === orderIdStr);
+        if (targetLead?.events && targetLead.events.length > 0) {
+          for (const ev of targetLead.events) {
+            if (!ev.assigned_staff_mobiles) continue;
+            const evNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
+            const idx = evNames.findIndex((n: string) => n === normName || n.includes(normName) || normName.includes(n));
+            if (idx >= 0 && ev.assigned_staff_mobiles.includes(' || EQUIPMENT: JSON:')) {
+              try {
+                const parts = ev.assigned_staff_mobiles.split(' || EQUIPMENT: JSON:');
+                const parsed = JSON.parse(parts[1]);
+                if (Array.isArray(parsed) && Array.isArray(parsed[idx]) && parsed[idx].length > 0) {
+                  parsed[idx].forEach((eqStr: string) => { if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim()); });
+                  break;
+                }
+              } catch(e) {}
+            }
+          }
+        }
+      }
+
+      // 5. Check leadEquipmentHistory
+      if (eqNames.length === 0 && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
+        const activeHist = leadEquipmentHistory.filter(h => 
+          (h.order_id === orderIdStr || (leadIdStr && h.lead_id === leadIdStr)) &&
+          h.equipment_status !== 'Returned' &&
+          !h.returned_at
+        );
+        if (activeHist.length > 0) {
+          const staffHist = activeHist.filter(h => 
+            (h.returned_by || '').trim().toLowerCase() === normName ||
+            (h.remarks || '').toLowerCase().includes(normName) ||
+            (saObj?.assignment_id && h.assignment_id === saObj.assignment_id)
+          );
+          const source = staffHist.length > 0 ? staffHist : activeHist;
+          source.forEach(h => {
+            if (h.equipment_name && h.equipment_name.trim()) eqNames.push(h.equipment_name.trim());
+          });
+        }
+      }
+
+      // 6. Check opObj.equipment_kit
+      if (eqNames.length === 0 && opObj?.equipment_kit && typeof opObj.equipment_kit === 'string') {
+        const kits = opObj.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
+        if (kits.length > 0) {
+          eqNames.push(...kits);
         }
       }
 

@@ -1024,12 +1024,10 @@ export function parseDeliverablesWithQty(
   return result;
 }
 
-export function formatQtyItem(raw: string | undefined | null): string {
-  if (!raw || typeof raw !== "string") return "";
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-  const { qty, text } = parseQtyAndText(trimmed);
-  if (!text) return trimmed;
+export function formatQtyItem(raw: any): string {
+  if (!raw) return "";
+  const { qty, text } = parseQtyAndText(raw);
+  if (!text) return typeof raw === "string" ? raw : "";
   return `${qty} × ${text}`;
 }
 
@@ -1454,10 +1452,34 @@ export const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): EventTeamM
     }
   };
 
-  // 1. Inspect direct events on lead (lead.events)
+  // 1. PRIMARY SOURCE OF TRUTH: Sales Step 3 saved data on Lead or Order
+  // (lead.Team_Members, lead.Team_member, lead.team_members, order.team_members)
+  const leadCandidates = [
+    lead?.Team_Members,
+    lead?.Team_member,
+    lead?.team_members,
+    (lead as any)?.Team_members,
+    (lead as any)?.team_member,
+    (lead as any)?.order_team_members
+  ];
+  for (const c of leadCandidates) {
+    if (c) {
+      const parsed = parseRaw(c);
+      if (parsed) {
+        processParsedData(parsed);
+        if (configs.length > 0) {
+          // If valid Step 3 team members are found on the lead/order, return immediately.
+          // Never combine with older/stale package template data.
+          return configs;
+        }
+      }
+    }
+  }
+
+  // 2. Direct events on lead (lead.events) if they hold Step 3 team members
   if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
     lead.events.forEach((ev: any) => {
-      const tm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included || [];
+      const tm = ev.team_members || ev.Team_Members || ev.team_members_included || ev.inclusions;
       const parsedTm = Array.isArray(tm) ? tm : parseRaw(tm) || [];
       if (parsedTm.length > 0) {
         configs.push({
@@ -1467,42 +1489,35 @@ export const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): EventTeamM
         });
       }
     });
+    if (configs.length > 0) {
+      return configs;
+    }
   }
 
-  // 2. Inspect lead packages (all packages for this lead)
-  if (leadPkgs && Array.isArray(leadPkgs)) {
-    leadPkgs.forEach((lp: any) => {
-      const pkgId = lp.package_id || lp.id;
+  // 3. Fallback to active lead package ONLY if lead-level Step 3 data is missing
+  if (leadPkgs && Array.isArray(leadPkgs) && leadPkgs.length > 0) {
+    const activePkgId = lead?.Select_Package_Option || lead?.selected_package_id;
+    const activePkg = leadPkgs.find(lp => lp.package_id === activePkgId || lp.id === activePkgId) || leadPkgs[0];
+    if (activePkg) {
+      const pkgId = activePkg.package_id || activePkg.id;
       const candidates = [
-        lp.Team_Members_Included,
-        lp.team_members_included,
-        lp.editable_inclusions,
-        lp.Team_Members,
-        lp.team_members
+        activePkg.Team_Members_Included,
+        activePkg.team_members_included,
+        activePkg.Team_Members,
+        activePkg.team_members,
+        activePkg.editable_inclusions
       ];
-      candidates.forEach(c => {
+      for (const c of candidates) {
         if (c) {
           const parsed = parseRaw(c);
           processParsedData(parsed, pkgId);
+          if (configs.length > 0) {
+            return configs;
+          }
         }
-      });
-    });
-  }
-
-  // 3. Inspect lead-level columns
-  const leadCandidates = [
-    lead?.Team_Members,
-    lead?.Team_member,
-    (lead as any)?.team_members,
-    lead?.Team_Members_Included,
-    (lead as any)?.team_members_included
-  ];
-  leadCandidates.forEach(c => {
-    if (c) {
-      const parsed = parseRaw(c);
-      processParsedData(parsed);
+      }
     }
-  });
+  }
 
   return configs;
 };
@@ -1510,66 +1525,70 @@ export const extractTeamMembersConfig = (lead: any, leadPkgs: any[]): EventTeamM
 export const getEventRolesForEvent = (ev: any, index: number, configList: EventTeamMemberConfig[], totalEvents: number = 1): any[] => {
   if (!ev) return [];
 
-  // 1. Direct event properties
-  const directTm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included;
-  if (directTm) {
-    if (Array.isArray(directTm) && directTm.length > 0) return directTm;
-    if (typeof directTm === 'string') {
-      try {
-        const parsed = JSON.parse(directTm);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      } catch (e) {
-        const list = directTm.split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
-        if (list.length > 0) return list;
+  if (!configList || configList.length === 0) {
+    const directTm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included;
+    if (directTm) {
+      if (Array.isArray(directTm) && directTm.length > 0) return directTm;
+      if (typeof directTm === 'string') {
+        try {
+          const parsed = JSON.parse(directTm);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch (e) {
+          const list = directTm.split(/,|\n/).map((s: string) => s.trim()).filter(Boolean);
+          if (list.length > 0) return list;
+        }
       }
     }
+    return [];
   }
 
-  if (!configList || configList.length === 0) return [];
+  const rawEvId = String(ev.id || ev.event_id || '').trim();
+  const evId = rawEvId.toLowerCase();
+  const cleanEvId = evId.replace(/[^a-z0-9]/g, '');
 
-  const evId = String(ev.id || ev.event_id || '').toLowerCase().trim();
-  const evName = String(ev.event_name || '').toLowerCase().trim();
-  const evType = String(ev.event_type || '').toLowerCase().trim();
-  const customName = String(ev.custom_event_name || ev.custom_event_type || '').toLowerCase().trim();
-
-  // 2. Strict ID matching first
+  // 1. Strict ID matching first
   if (evId) {
     const matchById = configList.find(c => {
       if (!c.event_id) return false;
       const cId = c.event_id.toLowerCase().trim();
-      return cId === evId || cId.endsWith(`_${evId}`) || cId.endsWith(`-${evId}`);
+      if (cId === evId) return true;
+      if (cId.endsWith(`_${evId}`) || cId.endsWith(`-${evId}`)) return true;
+      if (evId.endsWith(`_${cId}`) || evId.endsWith(`-${cId}`)) return true;
+      const cleanCId = cId.replace(/[^a-z0-9]/g, '');
+      if (cleanCId && cleanCId === cleanEvId) return true;
+      return false;
     });
-    if (matchById && matchById.team_members?.length > 0) return matchById.team_members;
+    if (matchById && matchById.team_members && matchById.team_members.length > 0) {
+      return matchById.team_members;
+    }
   }
 
-  // 3. Name or Type matching
-  if (evName || evType || customName) {
-    const matchByName = configList.find(c => {
-      const cName = (c.event_name || '').toLowerCase().trim();
-      if (!cName) return false;
-      
-      const cleanCName = cName.includes('_') ? cName.split('_').slice(1).join('_').trim() : cName;
-
-      return (
-        (evName && (cName === evName || cleanCName === evName)) ||
-        (evType && (cName === evType || cleanCName === evType)) ||
-        (customName && (cName === customName || cleanCName === customName))
-      );
-    });
-    if (matchByName && matchByName.team_members?.length > 0) return matchByName.team_members;
+  // Also check if ev has a fallback sequence ID like EV-1 or EV-2
+  const fallbackId = `ev-${index + 1}`;
+  const matchByFallback = configList.find(c => {
+    if (!c.event_id) return false;
+    const cId = c.event_id.toLowerCase().trim();
+    return cId === fallbackId || cId.endsWith(`_${fallbackId}`) || cId.endsWith(`-${fallbackId}`);
+  });
+  if (matchByFallback && matchByFallback.team_members && matchByFallback.team_members.length > 0) {
+    return matchByFallback.team_members;
   }
 
-  // 4. Index matching for multi-event configurations
-  if (totalEvents > 1 && configList[index] && configList[index].team_members?.length > 0) {
-    return configList[index].team_members;
-  }
-
-  // 5. Single-event lead fallback: any config with team members
+  // 2. Single-event quotation / order: if totalEvents is 1 and configList has a single config
   if (totalEvents === 1) {
-    const anyValidConfig = configList.find(c => c.team_members && c.team_members.length > 0);
-    if (anyValidConfig) return anyValidConfig.team_members;
+    if (configList.length === 1 && configList[0].team_members && configList[0].team_members.length > 0) {
+      return configList[0].team_members;
+    }
+    const defaultCfg = configList.find(c => !c.event_id || c.event_id.toLowerCase() === 'default');
+    if (defaultCfg && defaultCfg.team_members && defaultCfg.team_members.length > 0) {
+      return defaultCfg.team_members;
+    }
   }
 
+  // NOTE: For multi-event orders (totalEvents > 1):
+  // NEVER use array index (configList[index]).
+  // NEVER use arbitrary fallback.
+  // NEVER combine Event 1 and Event 2.
   return [];
 };
 
@@ -1991,21 +2010,23 @@ export function getEventTeamMemberStaffMapping(params: {
       }
     });
 
-    // 4. Any leftover assigned staff in pool not mapped to a required slot
-    assignedStaffPool.forEach(staffMember => {
-      if (!staffMember.used) {
-        mappings.push({
-          teamMemberRole: staffMember.staff_role || 'Crew Member',
-          assignedStaffName: staffMember.staff_name,
-          assignedStaffId: staffMember.staff_id,
-          assignedStaffRole: staffMember.staff_role || 'Crew Member',
-          assignedStaffType: staffMember.staff_type || 'In-House',
-          status: staffMember.status || 'Assigned',
-          equipment: staffMember.equipment || [],
-          mobile: staffMember.mobile || ''
-        });
-      }
-    });
+    // 4. Any leftover assigned staff in pool not mapped to a required slot (only when no required slots were specified)
+    if (requiredSlots.length === 0) {
+      assignedStaffPool.forEach(staffMember => {
+        if (!staffMember.used) {
+          mappings.push({
+            teamMemberRole: staffMember.staff_role || 'Crew Member',
+            assignedStaffName: staffMember.staff_name,
+            assignedStaffId: staffMember.staff_id,
+            assignedStaffRole: staffMember.staff_role || 'Crew Member',
+            assignedStaffType: staffMember.staff_type || 'In-House',
+            status: staffMember.status || 'Assigned',
+            equipment: staffMember.equipment || [],
+            mobile: staffMember.mobile || ''
+          });
+        }
+      });
+    }
 
     // 5. If no required slots were configured at all, and no staff in pool
     if (mappings.length === 0) {
