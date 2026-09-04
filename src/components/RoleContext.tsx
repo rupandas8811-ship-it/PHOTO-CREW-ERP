@@ -1410,7 +1410,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ],
       raw_footage: [
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received', 'server_path', 
-        'uploaded_by', 'uploaded_date', 'status'
+        'uploaded_by', 'uploaded_date', 'status', 'assignment_id', 'event_id', 'event_name'
       ],
       production: [
         'production_id', 'tracking_id', 'editor_assigned', 'raw_footage_location', 
@@ -1973,6 +1973,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                 } : a);
                 try {
                   localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+                } catch (_) {}
+                return updated;
+              });
+            }
+            if (table === 'staff_assignments') {
+              setStaffAssignments(prev => {
+                const updated = prev.map(a => (matchColumn === 'assignment_id' ? a.assignment_id === finalMatchValue : (matchColumn === 'order_id' ? a.order_id === finalMatchValue : false)) ? {
+                  ...a,
+                  ...updates,
+                  ...sanitized
+                } : a);
+                try {
+                  localStorage.setItem('erp_staff_assignments', JSON.stringify(updated));
+                } catch (_) {}
+                return updated;
+              });
+            }
+            if (table === 'raw_footage') {
+              setRawFootage(prev => {
+                const updated = prev.map(rf => (matchColumn === 'tracking_id' ? rf.tracking_id === finalMatchValue : (matchColumn === 'order_id' ? rf.order_id === finalMatchValue : false)) ? {
+                  ...rf,
+                  ...updates,
+                  ...sanitized
+                } : rf);
+                try {
+                  localStorage.setItem('erp_raw_footage', JSON.stringify(updated));
                 } catch (_) {}
                 return updated;
               });

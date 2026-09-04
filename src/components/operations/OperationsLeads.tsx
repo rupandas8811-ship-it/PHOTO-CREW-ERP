@@ -4008,7 +4008,7 @@ export const OperationsLeads: React.FC = () => {
 
                            return (
                              <div className="space-y-4">
-                               {staffNamesToCheck.map(staffName => {
+                               {staffNamesToCheck.map((staffName, sIdx) => {
                                  const memberInfo = staff?.find(st => st.name === staffName);
                                  if (!memberInfo) return null;
 
@@ -4084,7 +4084,7 @@ export const OperationsLeads: React.FC = () => {
                                  const hasConflict = conflictingEvents.length > 0;
 
                                  return (
-                                   <div key={staffName} className="mt-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4 text-left shadow-md">
+                                   <div key={`${staffName}_${sIdx}`} className="mt-4 p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-4 text-left shadow-md">
                                      {/* Header */}
                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
                                        <div>
@@ -4623,10 +4623,10 @@ export const OperationsLeads: React.FC = () => {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-800/60">
-                        {assignedCrewList.map((c) => {
+                        {assignedCrewList.map((c, cIdx) => {
                           const hasLink = !!(c.raw_footage_link && c.raw_footage_link.trim());
                           return (
-                            <tr key={c.staff_name} className="hover:bg-zinc-900/50">
+                            <tr key={c.assignment_id || `${c.staff_name}_${cIdx}`} className="hover:bg-zinc-900/50">
                               <td className="py-2.5 px-3 font-bold text-white">{c.staff_name}</td>
                               <td className="py-2.5 px-3 text-zinc-300 font-mono text-[11px]">{c.staff_role}</td>
                               <td className="py-2.5 px-3">

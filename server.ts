@@ -349,7 +349,10 @@ async function startServer() {
       const validCols = new Set([
         'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name',
         'assignment_date', 'assignment_status', 'task_status', 'updated_at',
-        'updated_by', 'raw_footage_link', 'created_at'
+        'updated_by', 'raw_footage_link', 'created_at',
+        'equipment_received_photo', 'equipment_handover_photo', 'event_end_photo',
+        'event_id', 'event_name', 'equipment', 'assigned_equipment', 'equipment_details',
+        'mobile', 'staff_type'
       ]);
       for (const k of Object.keys(clone)) {
         if (!validCols.has(k)) {
@@ -361,7 +364,8 @@ async function startServer() {
     if (table === 'raw_footage') {
       const validCols = new Set([
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received',
-        'server_path', 'uploaded_by', 'uploaded_date', 'status'
+        'server_path', 'uploaded_by', 'uploaded_date', 'status',
+        'assignment_id', 'event_id', 'event_name'
       ]);
       if (!clone.tracking_id) {
         clone.tracking_id = `TRK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;

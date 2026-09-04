@@ -1189,7 +1189,7 @@ export const StaffModule: React.FC = () => {
       let hasEventAssignment = false;
 
       if (lead.events && lead.events.length > 0) {
-        lead.events.forEach((ev: any) => {
+        lead.events.forEach((ev: any, evIdx: number) => {
           const assignedNames = ev.assigned_staff_names 
             ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) 
             : [];
@@ -1222,15 +1222,20 @@ export const StaffModule: React.FC = () => {
             }
 
             const assignmentId = sa?.assignment_id || '';
+            const evIdentifier = ev.id || `evt_${evIdx}`;
             const uniqueKey = assignmentId 
-              ? `${orderId}_${assignmentId}_${staffName.toLowerCase()}`
-              : `${orderId}_${ev.id || 'ev'}_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
+              ? `${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`
+              : `${orderId}_${evIdentifier}_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
 
             // Only use global or order-level status if it hasn't progressed to an active state.
             // If it has progressed globally but this staff member has no specific event history, they should start at Assigned Crew.
             const fallbackStatus = op?.event_status || 'Assigned Crew';
             const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
-            let currentStaffStatus = staffStatuses[uniqueKey] || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] : undefined) || staffStatuses[`${orderId}_${ev.id || 'ev'}_${staffName.toLowerCase()}`];
+            let currentStaffStatus = staffStatuses[uniqueKey] 
+              || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] : undefined) 
+              || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`] : undefined) 
+              || staffStatuses[`${orderId}_${ev.id || 'ev'}_${staffName.toLowerCase()}`]
+              || staffStatuses[`${orderId}_${evIdentifier}_${staffName.toLowerCase()}`];
             if (!currentStaffStatus) {
                 const saStatus = (sa as any)?.task_status;
                 const isSaAdvanced = saStatus && ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(saStatus.toLowerCase());
@@ -1335,12 +1340,14 @@ export const StaffModule: React.FC = () => {
 
           const assignmentId = sa?.assignment_id || '';
           const uniqueKey = assignmentId 
-            ? `${orderId}_${assignmentId}_${staffName.toLowerCase()}`
+            ? `${orderId}_${assignmentId}_gen_${staffName.toLowerCase()}`
             : `${orderId}_gen_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
 
           const fallbackStatus = op?.event_status || 'Assigned Crew';
           const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
-          let currentStaffStatus = staffStatuses[uniqueKey] || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] : undefined);
+          let currentStaffStatus = staffStatuses[uniqueKey] 
+            || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] : undefined)
+            || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_gen_${staffName.toLowerCase()}`] : undefined);
           if (!currentStaffStatus) {
               const saStatus = (sa as any)?.task_status;
               const isSaAdvanced = saStatus && ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(saStatus.toLowerCase());
@@ -1410,9 +1417,23 @@ export const StaffModule: React.FC = () => {
       }
     });
 
+    // Ensure all keys in bookings are guaranteed unique
+    const seenKeys = new Set<string>();
+    const deduplicatedBookings = bookings.map((b, idx) => {
+      let finalKey = b.key;
+      if (seenKeys.has(finalKey)) {
+        finalKey = `${finalKey}_${idx}`;
+      }
+      seenKeys.add(finalKey);
+      return {
+        ...b,
+        key: finalKey
+      };
+    });
+
     // Strictly sort all assigned bookings Latest -> Oldest
-    bookings.sort(sortBookingsLatestFirst);
-    setActiveBookings(bookings);
+    deduplicatedBookings.sort(sortBookingsLatestFirst);
+    setActiveBookings(deduplicatedBookings);
   }, [leads, orders, operations, staffAssignments, staffName, staff, equipment, staffStatuses]);
 
   // Helper to safely upload base64 images without throwing SyntaxError on HTML server error responses
@@ -1944,13 +1965,21 @@ export const StaffModule: React.FC = () => {
               return false;
             });
 
-            const targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+            const eqReceivedPhoto = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof')?.photoUrl || allProofsToSave[0]?.photoUrl;
+            let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+            if (!targetAssignmentId && staffAssignments) {
+              const fallbackSA = staffAssignments.find(sa => sa.order_id === booking.orderId && (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
+              if (fallbackSA) {
+                targetAssignmentId = fallbackSA.assignment_id;
+              }
+            }
 
             if (targetAssignmentId) {
               await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
                 task_status: 'Event Started',
                 assignment_status: 'Assigned',
-                updated_at: timestamp
+                updated_at: timestamp,
+                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto } : {})
               });
             } else {
               console.warn('Cannot update staff_assignment: missing assignment_id');
@@ -2357,12 +2386,13 @@ export const StaffModule: React.FC = () => {
         if (modalRawFootageLink) {
           updateAssignmentPayload.raw_footage_link = modalRawFootageLink;
         }
-        if (stage === 'Equipment Received' && uploadedProofs.length > 0 && uploadedProofs[0].photoUrl) {
-          updateAssignmentPayload.equipment_received_photo = uploadedProofs[0].photoUrl;
-        } else if (stage === 'Equipment Handover' && uploadedProofs.length > 0 && uploadedProofs[0].photoUrl) {
-          updateAssignmentPayload.equipment_handover_photo = uploadedProofs[0].photoUrl;
-        } else if (stage === 'Event Complete' && uploadedProofs.length > 0 && uploadedProofs[0].photoUrl) {
-          updateAssignmentPayload.event_end_photo = uploadedProofs[0].photoUrl;
+        const targetPhotoUrl = uploadedProofs.find(p => p.photoUrl)?.photoUrl || uploadedProofs[0]?.photoUrl;
+        if (stage === 'Equipment Received' && targetPhotoUrl) {
+          updateAssignmentPayload.equipment_received_photo = targetPhotoUrl;
+        } else if (stage === 'Equipment Handover' && targetPhotoUrl) {
+          updateAssignmentPayload.equipment_handover_photo = targetPhotoUrl;
+        } else if (stage === 'Event Complete' && targetPhotoUrl) {
+          updateAssignmentPayload.event_end_photo = targetPhotoUrl;
         }
 
         const matchingSA = staffAssignments?.find(sa => {
@@ -2374,7 +2404,13 @@ export const StaffModule: React.FC = () => {
           return false;
         });
 
-        const targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+        let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+        if (!targetAssignmentId && staffAssignments) {
+          const fallbackSA = staffAssignments.find(sa => sa.order_id === booking.orderId && (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
+          if (fallbackSA) {
+            targetAssignmentId = fallbackSA.assignment_id;
+          }
+        }
 
         if (targetAssignmentId) {
           await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
@@ -2670,7 +2706,7 @@ export const StaffModule: React.FC = () => {
                         const displayName = ev.eventName || ev.orderId || 'Event';
                         return (
                           <div
-                            key={ev.key || eIdx}
+                            key={`${ev.key || 'ev'}_${eIdx}`}
                             className="w-full truncate text-[8px] sm:text-[9px] leading-tight px-1 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 font-medium text-left"
                             title={displayName}
                           >
@@ -2738,7 +2774,7 @@ export const StaffModule: React.FC = () => {
                           </thead>
                           <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
                             {calendarModalEvents.map((ev, idx) => (
-                              <tr key={ev.key || idx} className="bg-zinc-950/30 select-text hover:bg-zinc-900/40 transition-colors">
+                              <tr key={`${ev.key || 'calev'}_${idx}`} className="bg-zinc-950/30 select-text hover:bg-zinc-900/40 transition-colors">
                                 <td className="p-3.5 pl-4 font-bold text-zinc-100">
                                   {ev.eventName || 'Photography Event'}
                                 </td>
@@ -2814,7 +2850,7 @@ export const StaffModule: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60 text-sm">
-                  {[...activeBookings].sort(sortOrder === 'latest' ? sortBookingsLatestFirst : sortBookingsOldestFirst).map((b) => {
+                  {[...activeBookings].sort(sortOrder === 'latest' ? sortBookingsLatestFirst : sortBookingsOldestFirst).map((b, bIdx) => {
                     const proofStatus = getBookingProofStatus(b, leadEquipmentHistory, staffProofs, staffName, staffMember?.id || currentUser?.id);
                     const isStarted = (b.taskStatus === 'Event Started' || b.taskStatus === 'Event Start') && proofStatus.isEventStartComplete;
                     const isCompleted = b.taskStatus === 'Event Completed' || b.taskStatus === 'Event Complete' || proofStatus.isEventComplete;
@@ -2824,7 +2860,7 @@ export const StaffModule: React.FC = () => {
                     const hasEquipmentHandover = proofStatus.isHandoverComplete;
 
                     return (
-                      <tr key={b.key} className="hover:bg-zinc-800/30 transition-colors">
+                      <tr key={b.key || `task_${bIdx}`} className="hover:bg-zinc-800/30 transition-colors">
                         <td className="py-4 px-6 font-mono font-bold text-amber-400">{b.orderId}</td>
                         <td className="py-4 px-6 font-bold text-white">{b.customerName}</td>
                         <td className="py-4 px-6">
