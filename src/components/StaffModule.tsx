@@ -1564,7 +1564,21 @@ export const StaffModule: React.FC = () => {
     }
 
     const existingRawLink = booking.rawFootageLink || saRecord?.raw_footage_link || (() => {
-      const rf = rawFootage?.find(r => r.order_id === booking.orderId && (r.assignment_id === booking.assignmentId || (r.uploaded_by || '').trim().toLowerCase() === staffName.trim().toLowerCase()));
+      const rf = rawFootage?.find(r => {
+        if (r.order_id !== booking.orderId) return false;
+        if (booking.assignmentId && r.assignment_id) {
+          return r.assignment_id === booking.assignmentId;
+        }
+        const upBy = (r.uploaded_by || '').trim().toLowerCase();
+        if (upBy && upBy !== staffName.trim().toLowerCase()) return false;
+        if (booking.eventId && r.event_id) {
+          return r.event_id === booking.eventId;
+        }
+        if (booking.eventName && r.event_name) {
+          return r.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase();
+        }
+        return !booking.eventId && !r.event_id;
+      });
       return rf?.server_path || rf?.drive_link || '';
     })();
 
@@ -1793,11 +1807,16 @@ export const StaffModule: React.FC = () => {
               return false;
             });
 
-            const eqReceivedPhoto = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof')?.photoUrl || allProofsToSave[0]?.photoUrl;
+            const eqReceivedPhotoItem = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof');
+            const eqReceivedPhoto = eqReceivedPhotoItem ? eqReceivedPhotoItem.photoUrl : undefined;
             const startPhotoUrl = allProofsToSave.find(p => p.equipmentName === 'Event Start Photo Proof')?.photoUrl;
             let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
             if (!targetAssignmentId && staffAssignments) {
-              const fallbackSA = staffAssignments.find(sa => sa.order_id === booking.orderId && (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
+              const fallbackSA = staffAssignments.find(sa => 
+                sa.order_id === booking.orderId && 
+                (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase() &&
+                ((booking.eventId && sa.event_id === booking.eventId) || (booking.eventName && sa.event_name?.trim().toLowerCase() === booking.eventName.trim().toLowerCase()))
+              );
               if (fallbackSA) {
                 targetAssignmentId = fallbackSA.assignment_id;
               }
@@ -2032,13 +2051,34 @@ export const StaffModule: React.FC = () => {
         nextStatus = stage;
       }
 
+      const matchingSA = staffAssignments?.find(sa => {
+        if (!sa || sa.order_id !== booking.orderId) return false;
+        if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+        if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+        if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+        if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+        return false;
+      });
+
+      let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+      if (!targetAssignmentId && staffAssignments) {
+        const fallbackSA = staffAssignments.find(sa => 
+          sa.order_id === booking.orderId && 
+          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase() &&
+          ((booking.eventId && sa.event_id === booking.eventId) || (booking.eventName && sa.event_name?.trim().toLowerCase() === booking.eventName.trim().toLowerCase()))
+        );
+        if (fallbackSA) {
+          targetAssignmentId = fallbackSA.assignment_id;
+        }
+      }
+
       // Record lead equipment history
       if (uploadedProofs.length > 0) {
         for (const p of uploadedProofs) {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
-            assignment_id: booking.assignmentId || null,
+            assignment_id: targetAssignmentId || booking.assignmentId || null,
             equipment_name: p.equipmentName,
             equipment_status: effectiveEquipmentStatus,
             returned_by: staffName,
@@ -2049,7 +2089,7 @@ export const StaffModule: React.FC = () => {
             event_name: booking.eventName || null,
             proof_type: stage === 'Event Complete' ? 'Event End' : stage,
             remarks: JSON.stringify({
-              assignment_id: booking.assignmentId || '',
+              assignment_id: targetAssignmentId || booking.assignmentId || '',
               asset_id: p.assetId,
               proof_type: stage === 'Event Complete' ? 'Event End' : stage,
               staff_name: staffName,
@@ -2083,7 +2123,7 @@ export const StaffModule: React.FC = () => {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
-            assignment_id: booking.assignmentId || null,
+            assignment_id: targetAssignmentId || booking.assignmentId || null,
             equipment_name: 'Equipment Handover Photo Proof',
             equipment_status: 'Equipment Not Handover',
             returned_by: staffName,
@@ -2094,7 +2134,7 @@ export const StaffModule: React.FC = () => {
             event_id: booking.eventId || null,
             event_name: booking.eventName || null,
             remarks: JSON.stringify({
-              assignment_id: booking.assignmentId || '',
+              assignment_id: targetAssignmentId || booking.assignmentId || '',
               asset_id: 'Equipment Handover',
               proof_type: 'Equipment Handover',
               staff_name: staffName,
@@ -2118,7 +2158,7 @@ export const StaffModule: React.FC = () => {
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
-            assignment_id: booking.assignmentId || null,
+            assignment_id: targetAssignmentId || booking.assignmentId || null,
             equipment_name: 'Equipment Handover',
             equipment_status: 'Footage Handover Completed',
             returned_by: staffName,
@@ -2129,7 +2169,7 @@ export const StaffModule: React.FC = () => {
             event_id: booking.eventId || null,
             event_name: booking.eventName || null,
             remarks: JSON.stringify({
-              assignment_id: booking.assignmentId || '',
+              assignment_id: targetAssignmentId || booking.assignmentId || '',
               asset_id: 'Footage Handover',
               proof_type: 'Footage Handover',
               staff_name: staffName,
@@ -2159,7 +2199,7 @@ export const StaffModule: React.FC = () => {
             await pushInsert('lead_equipment_history', {
               lead_id: booking.leadId || null,
               order_id: booking.orderId || null,
-              assignment_id: booking.assignmentId || null,
+              assignment_id: targetAssignmentId || booking.assignmentId || null,
               equipment_name: 'Equipment Handover',
               equipment_status: 'Equipment Handover Completed',
               returned_by: staffName,
@@ -2170,7 +2210,7 @@ export const StaffModule: React.FC = () => {
               event_id: booking.eventId || null,
               event_name: booking.eventName || null,
               remarks: JSON.stringify({
-                assignment_id: booking.assignmentId || '',
+                assignment_id: targetAssignmentId || booking.assignmentId || '',
                 asset_id: eqItem.assetId || '',
                 proof_type: 'Equipment Handover',
                 staff_name: staffName,

@@ -1365,7 +1365,7 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
                                     </button>
                                   ) : (
                                     <a
-                                      href={p.url.startsWith('http') ? p.url : `https://${p.url}`}
+                                      href={p.url && p.url.startsWith('http') ? p.url : p.url ? `https://${p.url}` : '#'}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       referrerPolicy="no-referrer"

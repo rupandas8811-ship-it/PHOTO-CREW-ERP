@@ -922,13 +922,17 @@ export function getEquipmentVerificationData(params: {
   orderId?: string;
   eventId?: string;
   staffName: string;
+  staffAssignment?: any;
   staffAssignments?: any[];
   leadEquipmentHistory?: any[];
 }): EquipmentVerificationData {
-  const { assignmentId, orderId, eventId, staffName, staffAssignments = [], leadEquipmentHistory = [] } = params;
+  const { assignmentId, orderId, eventId, staffName, staffAssignment, staffAssignments = [], leadEquipmentHistory = [] } = params;
 
-  // 1. Match exact assignment from staffAssignments
-  let sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  // 1. Match exact assignment from staffAssignments or staffAssignment param
+  let sa = staffAssignment || (assignmentId ? staffAssignments.find(s => s.assignment_id === assignmentId) : null);
+  if (!sa && assignmentId && staffAssignments.length > 0) {
+    sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  }
   if (!sa && orderId) {
     sa = staffAssignments.find(s => 
       s.order_id === orderId && 
@@ -954,12 +958,19 @@ export function getEquipmentVerificationData(params: {
     if (recPhoto && !recTime) recTime = parts[1]?.split('.')[0] || null;
   }
 
-  // 2. Check lead_equipment_history ONLY for matching assignment_id or matching (order_id + event_id + staff)
+  // 2. Check lead_equipment_history strictly for matching assignment_id or matching (order_id + event_id + staff)
   const matchingHistory = leadEquipmentHistory.filter(h => {
-    if (assignmentId && h.assignment_id && h.assignment_id === assignmentId) return true;
+    let parsed: any = {};
+    if (h.remarks) {
+      try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch (e) {}
+    }
+    const hAssignmentId = h.assignment_id || parsed.assignment_id;
+    if (assignmentId && hAssignmentId) {
+      return hAssignmentId === assignmentId;
+    }
     if (orderId && h.order_id === orderId) {
       if (eventId && h.event_id && h.event_id !== eventId) return false;
-      const retBy = (h.returned_by || '').trim().toLowerCase();
+      const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
       const stNorm = (staffName || '').trim().toLowerCase();
       if (retBy && stNorm && (retBy === stNorm || retBy.includes(stNorm) || stNorm.includes(retBy))) return true;
     }
@@ -967,9 +978,13 @@ export function getEquipmentVerificationData(params: {
   });
 
   matchingHistory.forEach(h => {
-    const pType = (h.proof_type || h.equipment_status || '').toLowerCase();
-    const hUrl = h.photo_url || null;
-    const hTimeStr = h.created_at || h.returned_at || null;
+    let parsed: any = {};
+    if (h.remarks) {
+      try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch (e) {}
+    }
+    const pType = (parsed.proof_type || h.proof_type || h.equipment_name || h.equipment_status || '').toLowerCase();
+    const hUrl = h.photo_url || parsed.photo_url || null;
+    const hTimeStr = h.created_at || h.returned_at || parsed.uploaded_at || null;
 
     if (!recPhoto && (pType.includes('received') || pType.includes('collection'))) {
       recPhoto = hUrl;
@@ -1014,11 +1029,16 @@ export function getEventImagesData(params: {
   orderId?: string;
   eventId?: string;
   staffName: string;
+  staffAssignment?: any;
   staffAssignments?: any[];
+  leadEquipmentHistory?: any[];
 }): EventImagesData {
-  const { assignmentId, orderId, eventId, staffName, staffAssignments = [] } = params;
+  const { assignmentId, orderId, eventId, staffName, staffAssignment, staffAssignments = [], leadEquipmentHistory = [] } = params;
 
-  let sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  let sa = staffAssignment || (assignmentId ? staffAssignments.find(s => s.assignment_id === assignmentId) : null);
+  if (!sa && assignmentId && staffAssignments.length > 0) {
+    sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  }
   if (!sa && orderId) {
     sa = staffAssignments.find(s => 
       s.order_id === orderId && 
@@ -1045,6 +1065,53 @@ export function getEventImagesData(params: {
     endTime = parts[1]?.split('.')[0] || null;
   }
 
+  // Fallback to leadEquipmentHistory if sa doesn't have start/end photo
+  if ((!startPhoto || !endPhoto) && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
+    const matchingHistory = leadEquipmentHistory.filter(h => {
+      let parsed: any = {};
+      if (h.remarks) {
+        try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch (e) {}
+      }
+      const hAssignmentId = h.assignment_id || parsed.assignment_id;
+      if (assignmentId && hAssignmentId) {
+        return hAssignmentId === assignmentId;
+      }
+      if (orderId && h.order_id === orderId) {
+        if (eventId && h.event_id && h.event_id !== eventId) return false;
+        const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+        const stNorm = (staffName || '').trim().toLowerCase();
+        if (retBy && stNorm && (retBy === stNorm || retBy.includes(stNorm) || stNorm.includes(retBy))) return true;
+      }
+      return false;
+    });
+
+    matchingHistory.forEach(h => {
+      let parsed: any = {};
+      if (h.remarks) {
+        try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch (e) {}
+      }
+      const pType = (parsed.proof_type || h.proof_type || h.equipment_name || h.equipment_status || '').toLowerCase();
+      const hUrl = h.photo_url || parsed.photo_url || null;
+      const hTimeStr = h.created_at || h.returned_at || parsed.uploaded_at || null;
+
+      if (!startPhoto && (pType.includes('event start') || pType.includes('eventstart'))) {
+        startPhoto = hUrl;
+        if (hTimeStr) {
+          startDate = hTimeStr.split('T')[0];
+          startTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
+        }
+      }
+
+      if (!endPhoto && (pType.includes('event end') || pType.includes('event complete') || pType.includes('eventcomplete'))) {
+        endPhoto = hUrl;
+        if (hTimeStr) {
+          endDate = hTimeStr.split('T')[0];
+          endTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
+        }
+      }
+    });
+  }
+
   return {
     assignmentId: assignmentId || sa?.assignment_id || 'UNKNOWN',
     staffName: sa?.staff_name || staffName,
@@ -1069,12 +1136,18 @@ export function getRawFootageData(params: {
   orderId?: string;
   eventId?: string;
   staffName: string;
+  staffAssignment?: any;
   staffAssignments?: any[];
   rawFootageList?: any[];
+  rawFootage?: any[];
 }): RawFootageData {
-  const { assignmentId, orderId, eventId, staffName, staffAssignments = [], rawFootageList = [] } = params;
+  const { assignmentId, orderId, eventId, staffName, staffAssignment, staffAssignments = [], rawFootageList = [], rawFootage = [] } = params;
+  const rfList = rawFootageList.length > 0 ? rawFootageList : rawFootage;
 
-  let sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  let sa = staffAssignment || (assignmentId ? staffAssignments.find(s => s.assignment_id === assignmentId) : null);
+  if (!sa && assignmentId && staffAssignments.length > 0) {
+    sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  }
   if (!sa && orderId) {
     sa = staffAssignments.find(s => 
       s.order_id === orderId && 
@@ -1085,9 +1158,11 @@ export function getRawFootageData(params: {
 
   let rawLink: string | null = sa?.raw_footage_link || null;
 
-  if (!rawLink && rawFootageList && rawFootageList.length > 0) {
-    const match = rawFootageList.find(rf => {
-      if (assignmentId && rf.assignment_id === assignmentId) return true;
+  if (!rawLink && rfList && rfList.length > 0) {
+    const match = rfList.find(rf => {
+      if (assignmentId && rf.assignment_id) {
+        return rf.assignment_id === assignmentId;
+      }
       if (orderId && rf.order_id === orderId) {
         if (eventId && rf.event_id && rf.event_id !== eventId) return false;
         const upBy = (rf.uploaded_by || '').trim().toLowerCase();

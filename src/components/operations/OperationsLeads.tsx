@@ -4043,6 +4043,7 @@ export const OperationsLeads: React.FC = () => {
                     const eqData = getEquipmentVerificationData({
                       assignmentId: selectedEquipmentStatus.assignmentId,
                       staffAssignment: selectedEquipmentStatus.taskDetails || matchingSA,
+                      staffAssignments,
                       leadEquipmentHistory,
                       staffName: selectedEquipmentStatus.staffName,
                       orderId: selectedEquipmentStatus.orderId,
@@ -4144,13 +4145,22 @@ export const OperationsLeads: React.FC = () => {
                     const evData = getEventImagesData({
                       assignmentId: selectedEventImages.assignmentId,
                       staffAssignment: selectedEventImages.taskDetails || matchingSA,
+                      staffAssignments,
                       leadEquipmentHistory,
                       staffName: selectedEventImages.staffName,
                       orderId: selectedEventImages.orderId,
                       eventId: selectedEventImages.eventId
                     });
-                    const startMeta = evData.eventStart;
-                    const endMeta = evData.eventEnd;
+                    const startMeta = {
+                      url: evData?.eventStartPhoto || (evData as any)?.eventStart?.url || null,
+                      date: evData?.eventStartDate || (evData as any)?.eventStart?.date || '-',
+                      time: evData?.eventStartTime || (evData as any)?.eventStart?.time || '-'
+                    };
+                    const endMeta = {
+                      url: evData?.eventEndPhoto || (evData as any)?.eventEnd?.url || null,
+                      date: evData?.eventEndDate || (evData as any)?.eventEnd?.date || '-',
+                      time: evData?.eventEndTime || (evData as any)?.eventEnd?.time || '-'
+                    };
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
@@ -4259,6 +4269,7 @@ export const OperationsLeads: React.FC = () => {
             const rfResult = getRawFootageData({
               assignmentId: member.assignment_id,
               staffAssignment: matchingSA,
+              staffAssignments,
               rawFootage,
               leadEquipmentHistory,
               staffName: member.staff_name,
@@ -5042,7 +5053,6 @@ export const OperationsLeads: React.FC = () => {
 
                                 let equipmentStatusText = hasEqAssigned ? 'Assigned' : 'No Equipment Assigned';
                                 if (hasEqAssigned) {
-                                  const saRecord = staffAssignments?.find(sa => sa.assignment_id === member.assignment_id);
                                   const receivedPhotoUrl = saRecord?.equipment_received_photo;
                                   const handoverPhotoUrl = saRecord?.equipment_handover_photo;
 
