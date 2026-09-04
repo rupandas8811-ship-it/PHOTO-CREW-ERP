@@ -4521,6 +4521,7 @@ export const OperationsLeads: React.FC = () => {
             if (!rawLink && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
               const hMatch = leadEquipmentHistory.find(h => {
                 if (h.order_id !== receivingFootageOrderId) return false;
+                let parsed: any = {};
                 if (h.remarks) {
                   try { parsed = JSON.parse(h.remarks); } catch(e) {}
                 }
@@ -5215,13 +5216,24 @@ export const OperationsLeads: React.FC = () => {
 
                                     const hEventId = parsed.event_id || h.event_id;
                                     const hEventName = parsed.event_name || h.event_name;
-                                    const hProofType = (parsed.proof_type || h.proof_type || '').toLowerCase();
+                                    const hProofType = (parsed.proof_type || h.proof_type || '').toLowerCase().trim();
+                                    const eqName = (h.equipment_name || '').toLowerCase().trim();
+                                    const eqStatus = (h.equipment_status || '').toLowerCase().trim();
                                     
                                     const isSearchingReceived = stages.some(s => s.toLowerCase().includes('received') || s.toLowerCase().includes('asset collection'));
                                     const isSearchingHandover = stages.some(s => s.toLowerCase().includes('handover') || s.toLowerCase().includes('return'));
+                                    const isSearchingStart = stages.some(s => s.toLowerCase().includes('start'));
+                                    const isSearchingEnd = stages.some(s => s.toLowerCase().includes('complete') || s.toLowerCase().includes('end'));
 
-                                    if (isSearchingReceived && hProofType.includes('handover')) return false;
-                                    if (isSearchingHandover && hProofType.includes('received')) return false;
+                                    const isRecordHandover = eqName.includes('handover') || eqName.includes('asset return') || eqStatus.includes('handover') || eqStatus.includes('return') || hProofType.includes('handover') || hProofType.includes('return');
+                                    const isRecordReceived = eqName.includes('asset collection') || eqName.includes('equipment received') || eqStatus.includes('asset collected') || eqStatus.includes('received') || hProofType.includes('asset collection') || hProofType.includes('received');
+                                    const isRecordStart = eqName.includes('event start') || eqStatus.includes('event start') || hProofType.includes('event start');
+                                    const isRecordEnd = eqName.includes('event completion') || eqName.includes('event end') || eqStatus.includes('event complete') || eqStatus.includes('event ended') || hProofType.includes('event end') || hProofType.includes('event complete');
+
+                                    if (isSearchingReceived && (isRecordHandover || isRecordEnd || isRecordStart)) return false;
+                                    if (isSearchingHandover && (isRecordReceived || isRecordStart || isRecordEnd)) return false;
+                                    if (isSearchingStart && (isRecordHandover || isRecordEnd || isRecordReceived)) return false;
+                                    if (isSearchingEnd && (isRecordReceived || isRecordStart || isRecordHandover)) return false;
                                     
                                     // Match event Id strictly if both exist and neither is 'gen'
                                     if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) {
@@ -5229,9 +5241,6 @@ export const OperationsLeads: React.FC = () => {
                                         return false;
                                       }
                                     }
-                                    
-                                    const eqName = (h.equipment_name || '').toLowerCase();
-                                    const eqStatus = (h.equipment_status || hProofType || '').toLowerCase().trim();
 
                                     if (equipName && eqName.includes(equipName.toLowerCase())) {
                                       return true; 

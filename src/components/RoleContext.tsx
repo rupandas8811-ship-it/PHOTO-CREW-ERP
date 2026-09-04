@@ -1409,7 +1409,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'notes_special_customizations', 'additional_services_cost', 'team_members', 'deliverables', 'editable_inclusions', 'editable_deliverables', 'created_at'
       ],
       raw_footage: [
-        'tracking_id', 'order_id', 'event_completed_date', 'raw_received', 'server_path', 
+        'tracking_id', 'order_id', 'event_completed_date', 'raw_received', 'server_path', 'drive_link',
         'uploaded_by', 'uploaded_date', 'status', 'assignment_id', 'event_id', 'event_name'
       ],
       production: [
