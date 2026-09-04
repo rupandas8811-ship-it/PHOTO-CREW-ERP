@@ -1112,8 +1112,7 @@ export const StaffModule: React.FC = () => {
               || staffStatuses[`${orderId}_${evIdentifier}_${staffName.toLowerCase()}`];
             if (!currentStaffStatus) {
                 const saStatus = (sa as any)?.task_status;
-                const isSaAdvanced = saStatus && ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(saStatus.toLowerCase());
-                currentStaffStatus = (!isSaAdvanced && saStatus) ? saStatus : (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
+                currentStaffStatus = saStatus || (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
             }
 
             let resolvedRawLink = (sa as any)?.raw_footage_link || '';
@@ -1224,8 +1223,7 @@ export const StaffModule: React.FC = () => {
             || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_gen_${staffName.toLowerCase()}`] : undefined);
           if (!currentStaffStatus) {
               const saStatus = (sa as any)?.task_status;
-              const isSaAdvanced = saStatus && ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(saStatus.toLowerCase());
-              currentStaffStatus = (!isSaAdvanced && saStatus) ? saStatus : (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
+              currentStaffStatus = saStatus || (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
           }
 
           let resolvedRawLink = (sa as any)?.raw_footage_link || '';
@@ -1804,11 +1802,11 @@ export const StaffModule: React.FC = () => {
                 targetAssignmentId = fallbackSA.assignment_id;
               }
             }
-            if (!targetAssignmentId) {
-              targetAssignmentId = `SA-${booking.orderId}-${booking.eventId || 'ev'}-${staffName.replace(/\s+/g, '')}`;
-            }
 
-            if (targetAssignmentId) {
+            const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
+
+            if (existingSA) {
+              targetAssignmentId = existingSA.assignment_id;
               await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
                 task_status: 'Event Started',
                 assignment_status: 'Assigned',
@@ -1818,7 +1816,7 @@ export const StaffModule: React.FC = () => {
                 ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: timestamp } : {})
               });
             } else {
-              const newAssignmentId = `SA-${booking.orderId}-${booking.eventId || 'ev'}-${Date.now()}`;
+              const newAssignmentId = targetAssignmentId || `SA-${booking.orderId}-${booking.eventId || 'ev'}-${Date.now()}`;
               targetAssignmentId = newAssignmentId;
               await pushInsert('staff_assignments', {
                 assignment_id: newAssignmentId,
@@ -2291,13 +2289,16 @@ export const StaffModule: React.FC = () => {
           updateAssignmentPayload.event_end_time = timestamp;
         }
 
-        if (targetAssignmentId) {
+        const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
+
+        if (existingSA) {
+          targetAssignmentId = existingSA.assignment_id;
           await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
             ...updateAssignmentPayload,
             assignment_status: 'Assigned'
           });
         } else {
-          const newAssignmentId = `SA-${booking.orderId}-${booking.eventId || 'ev'}-${Date.now()}`;
+          const newAssignmentId = targetAssignmentId || `SA-${booking.orderId}-${booking.eventId || 'ev'}-${Date.now()}`;
           targetAssignmentId = newAssignmentId;
           await pushInsert('staff_assignments', {
             assignment_id: newAssignmentId,
