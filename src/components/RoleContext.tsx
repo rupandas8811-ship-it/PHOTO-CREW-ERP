@@ -1447,7 +1447,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'previous_stage', 'new_stage'
       ],
       staff_assignments: [
-        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name', 'assignment_date', 'assignment_status', 'task_status', 'raw_footage_link', 'event_id', 'event_name', 'equipment', 'assigned_equipment', 'equipment_details', 'mobile', 'staff_type', 'updated_at', 'updated_by'
+        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name', 'assignment_date', 'assignment_status', 'task_status', 'raw_footage_link', 'event_id', 'event_name', 'equipment', 'assigned_equipment', 'equipment_details', 'mobile', 'staff_type', 'updated_at', 'updated_by', 'equipment_received_photo', 'equipment_handover_photo'
       ],
       lead_status_history: [
         'id', 'lead_id', 'order_id', 'old_status', 'new_status', 'changed_by', 'changed_by_role', 'remarks', 'created_at'

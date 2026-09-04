@@ -2373,9 +2373,6 @@ export const StaffModule: React.FC = () => {
           equipment_status: effectiveEquipmentStatus,
           remarks: `Updated by ${staffName}: Stage updated to ${nextStatus}`
         };
-        if (modalRawFootageLink) {
-          opsPayload.raw_footage_drive_link = modalRawFootageLink;
-        }
 
         const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
         if (calculatedOverallStage !== currentStage) {
