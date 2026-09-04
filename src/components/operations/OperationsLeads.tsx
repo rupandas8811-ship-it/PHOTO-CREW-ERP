@@ -4048,10 +4048,14 @@ export const OperationsLeads: React.FC = () => {
                       orderId: selectedEquipmentStatus.orderId,
                       eventId: selectedEquipmentStatus.eventId
                     });
-                    const recUrl = eqData.received.url;
-                    const recTime = eqData.received.date;
-                    const handUrl = eqData.handover.url;
-                    const handTime = eqData.handover.date;
+                    const recUrl = eqData?.equipmentReceivedPhoto || (eqData as any)?.received?.url || null;
+                    const recTime = eqData?.equipmentReceivedDate 
+                      ? (eqData.equipmentReceivedTime ? `${eqData.equipmentReceivedDate}T${eqData.equipmentReceivedTime}` : eqData.equipmentReceivedDate) 
+                      : (eqData as any)?.received?.date || null;
+                    const handUrl = eqData?.equipmentHandoverPhoto || (eqData as any)?.handover?.url || null;
+                    const handTime = eqData?.equipmentHandoverDate 
+                      ? (eqData.equipmentHandoverTime ? `${eqData.equipmentHandoverDate}T${eqData.equipmentHandoverTime}` : eqData.equipmentHandoverDate) 
+                      : (eqData as any)?.handover?.date || null;
 
                     return (
                       <>

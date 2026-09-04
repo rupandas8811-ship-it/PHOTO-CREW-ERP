@@ -693,7 +693,7 @@ const StaffReportingDetailsCell = ({ b }: { b: any }) => {
 }
 
 export const StaffModule: React.FC = () => {
-  const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead, pushInsert, pushUpdate } = useRole();
+  const { currentUser, staff, leads, orders, operations, staffAssignments, equipment, leadEquipmentHistory, addLeadEquipmentHistory, refreshData, updateLead, pushInsert, pushUpdate, rawFootage } = useRole();
 
   // Resolve staff member
   const staffMember = (staff || []).find(s => 
