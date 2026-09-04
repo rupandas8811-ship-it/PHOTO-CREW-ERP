@@ -1168,14 +1168,15 @@ export const StaffModule: React.FC = () => {
       'completed', 'closed', 'order closed', 'delivered'
     ];
 
-    const getVerificationStatus = (orderId: string, eventId: string) => {
+    const getVerificationStatus = (orderId: string, eventId: string, assignmentId: string) => {
       const rfVerification = leadEquipmentHistory?.find(h => 
-        h.order_id === orderId && 
-        h.equipment_name === 'Raw Footage Verification' && 
-        (h.returned_by || '').trim().toLowerCase() === staffName.toLowerCase() &&
-        (!eventId || eventId === 'gen' || (() => { try { return JSON.parse(h.remarks || '{}').event_id === eventId; } catch(e) { return false; } })())
+        h.order_id === orderId &&
+        h.equipment_name === "Raw Footage Verification" &&
+        (h.returned_by || "").trim().toLowerCase() === staffName.toLowerCase() &&
+        (!assignmentId || (() => { try { return JSON.parse(h.remarks || "{}").assignment_id === assignmentId; } catch(e) { return false; } })()) &&
+        (!eventId || eventId === "gen" || (() => { try { return JSON.parse(h.remarks || "{}").event_id === eventId; } catch(e) { return false; } })())
       );
-      return rfVerification?.equipment_status || 'Pending Verification';
+      return rfVerification?.equipment_status || "Pending Verification";
     };
 
     (leads || []).forEach((lead) => {
@@ -1289,7 +1290,7 @@ export const StaffModule: React.FC = () => {
                 guestPax: ev.guest_pax || (lead as any).guest_pax || 'N/A',
                 equipmentItems: assignedEqItems,
                 taskStatus: currentStaffStatus,
-                rawFootageVerificationStatus: getVerificationStatus(orderId, ev.id || 'ev'),
+                rawFootageVerificationStatus: getVerificationStatus(orderId, ev.id || 'ev', assignmentId),
                 rawFootageLink: resolvedRawLink,
                 coordinator: op?.operations_coordinator || 'Unassigned',
                 createdAt: lead.created_at || order?.created_at || (ev as any)?.created_at || ''
@@ -1393,7 +1394,7 @@ export const StaffModule: React.FC = () => {
               guestPax: (lead as any).guest_pax || 'N/A',
               equipmentItems: assignedEqItems,
               taskStatus: currentStaffStatus,
-              rawFootageVerificationStatus: getVerificationStatus(orderId, 'gen'),
+              rawFootageVerificationStatus: getVerificationStatus(orderId, 'gen', assignmentId),
               rawFootageLink: resolvedRawLink,
               coordinator: op?.operations_coordinator || 'Unassigned',
               createdAt: lead.created_at || order?.created_at || ''

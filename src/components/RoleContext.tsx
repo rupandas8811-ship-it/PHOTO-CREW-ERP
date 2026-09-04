@@ -2682,7 +2682,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             };
             const cached = cachedAssignments.find((c: any) => 
               (c.assignment_id && c.assignment_id === cleanSa.assignment_id) ||
-              (c.order_id === cleanSa.order_id && (c.staff_id === cleanSa.staff_id || (c.staff_name && cleanSa.staff_name && c.staff_name.toLowerCase() === cleanSa.staff_name.toLowerCase())))
+              (c.order_id === cleanSa.order_id && 
+               (c.staff_id === cleanSa.staff_id || (c.staff_name && cleanSa.staff_name && c.staff_name.toLowerCase() === cleanSa.staff_name.toLowerCase())) &&
+               (!cleanSa.event_id || c.event_id === cleanSa.event_id))
             );
 
             let resolvedEq: string[] = [];
@@ -2701,10 +2703,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               resolvedEq = cached.equipment;
             }
 
-            let resolvedEventId = cached?.event_id || cleanSa.event_id || '';
-            let resolvedEventName = cached?.event_name || cleanSa.event_name || '';
-            let resolvedMobile = cached?.mobile || cleanSa.mobile || '';
-            let resolvedStaffType = cached?.staff_type || cleanSa.staff_type || 'In-House';
+            let resolvedEventId = cleanSa.event_id || cached?.event_id || '';
+            let resolvedEventName = cleanSa.event_name || cached?.event_name || '';
+            let resolvedMobile = cleanSa.mobile || cached?.mobile || '';
+            let resolvedStaffType = cleanSa.staff_type || cached?.staff_type || 'In-House';
 
             // Hydrate from dbLeadEvents if equipment is still empty
             if (resolvedEq.length === 0 && dbLeadEvents && dbLeadEvents.length > 0) {

@@ -1420,7 +1420,10 @@ export const generateQuotationPDF = (
     pageDoc.setTextColor(230, 230, 230);
     pageDoc.text('www.photocrewpictures.com', 195, logoY + 4, { align: 'right' });
     pageDoc.text('info@photocrewpictures.com', 195, logoY + 8.5, { align: 'right' });
-    pageDoc.text('Customer Support: +91 8618865134', 195, logoY + 13, { align: 'right' });
+    const customerSupportMobile = lead?.sales_staff_mobile ? String(lead.sales_staff_mobile).trim() : '';
+    if (customerSupportMobile) {
+      pageDoc.text(`Customer Support: ${customerSupportMobile.startsWith('+') ? '' : '+91 '}${customerSupportMobile}`, 195, logoY + 13, { align: 'right' });
+    }
 
     // Header Meta Row: Quote Number, Quote Date, and Validity Date
     pageDoc.setFillColor(28, 28, 35);
@@ -1466,7 +1469,12 @@ export const generateQuotationPDF = (
     pageDoc.setFont('helvetica', 'normal');
     pageDoc.setFontSize(7.5);
     pageDoc.setTextColor(100, 116, 139);
-    pageDoc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Customer Support: +91 8618865134', 15, footerY + 9);
+    const customerSupportMobile = lead?.sales_staff_mobile ? String(lead.sales_staff_mobile).trim() : '';
+    if (customerSupportMobile) {
+      pageDoc.text(`Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Customer Support: ${customerSupportMobile.startsWith('+') ? '' : '+91 '}${customerSupportMobile}`, 15, footerY + 9);
+    } else {
+      pageDoc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com', 15, footerY + 9);
+    }
 
     pageDoc.setFont('helvetica', 'bold');
     pageDoc.setFontSize(8);
@@ -1973,12 +1981,6 @@ export const generateQuotationPDF = (
   // PAYMENT DETAILS section is hidden from the quotation PDF.
   // We do not increment currentY or draw the section.
 
-  // NOTE: Add Customer Support note where the user's red annotation is shown
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(239, 68, 68); // Red color for visibility as requested
-  doc.text('Customer Support: +91 8618865134', 15, currentY);
-  currentY += 6;
 
   // 8. TERMS AND CONDITIONS
   if (currentY + 4.5 > 275) {
