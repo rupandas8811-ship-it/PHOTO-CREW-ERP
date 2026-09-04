@@ -2675,7 +2675,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             if (staffName.includes('__SLOT__')) {
               staffName = staffName.split('__SLOT__')[0];
             }
-            const cleanSa = { ...sa, staff_name: staffName };
+            const cleanSa = { 
+              ...sa, 
+              staff_name: staffName,
+              staff_role: sa.staff_role ? sa.staff_role.trim() : sa.staff_role
+            };
             const cached = cachedAssignments.find((c: any) => 
               (c.assignment_id && c.assignment_id === cleanSa.assignment_id) ||
               (c.order_id === cleanSa.order_id && (c.staff_id === cleanSa.staff_id || (c.staff_name && cleanSa.staff_name && c.staff_name.toLowerCase() === cleanSa.staff_name.toLowerCase())))
@@ -4811,13 +4815,24 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       const matched = existingDbAssignments.find(ed => ed.assignment_id === a.assignment_id);
 
+      let finalStaffRole = a.staff_role ? a.staff_role.trim() : a.staff_role;
+      while (
+        newInsertsForDb.some(ins => ins.order_id === orderId && ins.staff_role === finalStaffRole) ||
+        updatedAssignments.some(upd => upd.updates.staff_role === finalStaffRole) ||
+        existingDbAssignments.some(ed => ed.order_id === orderId && ed.staff_role === finalStaffRole && (!matched || ed.assignment_id !== matched.assignment_id))
+      ) {
+        finalStaffRole += ' ';
+      }
+
+      finalReactAssignment.staff_role = finalStaffRole;
+
       if (matched) {
         matchedDbAssignmentIds.add(matched.assignment_id);
         updatedAssignments.push({
           matchColumn: 'assignment_id',
           matchValue: matched.assignment_id,
           updates: {
-            staff_role: a.staff_role,
+            staff_role: finalStaffRole,
             staff_id: resolvedStaffId || matched.staff_id,
             staff_name: dbStaffName,
             assignment_date: (a as any).assignment_date || matched.assignment_date || assignDate,
@@ -4836,7 +4851,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         newInsertsForDb.push({
           assignment_id: assignId,
           order_id: orderId,
-          staff_role: a.staff_role,
+          staff_role: finalStaffRole,
           staff_id: resolvedStaffId,
           staff_name: dbStaffName,
           assignment_date: (a as any).assignment_date || assignDate,
