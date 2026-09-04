@@ -1264,10 +1264,13 @@ export const OperationsLeads: React.FC = () => {
         try {
           const parsedKits = JSON.parse(orderOp.equipment_kit);
           if (Array.isArray(parsedKits)) {
-            const taskMatch = parsedKits.find((k: any) => 
-               (k.staff_name || '').toLowerCase() === normName &&
-               (ev && k.event_id === ev.id)
-            );
+            const taskMatch = parsedKits.find((k: any) => {
+               if ((k.staff_name || '').toLowerCase() !== normName) return false;
+               if (ev && k.event_id && k.event_id !== ev.id) return false;
+               if (saMatch?.assignment_id && k.assignment_id && saMatch.assignment_id !== k.assignment_id) return false;
+               if (!saMatch?.assignment_id && saMatch?.staff_role && k.staff_role && saMatch.staff_role !== k.staff_role) return false;
+               return true;
+            });
             if (taskMatch && Array.isArray(taskMatch.equipment)) {
                taskMatch.equipment.forEach((e: string) => eqList.push(e));
             }
@@ -2156,6 +2159,7 @@ export const OperationsLeads: React.FC = () => {
       // Gather all selected equipment across all events into a JSON string to preserve exact task-to-equipment mappings
       const kitMapping = allAssignedStaff.map(st => ({
         event_id: st.event_id,
+        assignment_id: st.assignment_id,
         staff_name: st.staff_name,
         staff_role: st.staff_role,
         equipment: st.equipment || []
@@ -5185,8 +5189,15 @@ export const OperationsLeads: React.FC = () => {
                                     }
 
                                     const hAssignmentId = h.assignment_id || parsed.assignment_id;
-                                    if (member.assignment_id && hAssignmentId && member.assignment_id !== hAssignmentId) {
-                                      return false;
+                                    if (member.assignment_id) {
+                                      if (hAssignmentId && member.assignment_id !== hAssignmentId) return false;
+                                      if (!hAssignmentId) {
+                                        const hEventId = parsed.event_id || h.event_id;
+                                        if (memberEvId && memberEvId !== 'gen' && hEventId && hEventId !== 'gen' && hEventId !== memberEvId) return false;
+                                        if (!hEventId && memberEvId) return false; // Must have matching event if strict
+                                        const hRole = parsed.staff_role || h.staff_role;
+                                        if (hRole && member.staff_role && hRole.trim().toLowerCase() !== member.staff_role.trim().toLowerCase()) return false;
+                                      }
                                     }
 
                                     const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
@@ -5316,6 +5327,7 @@ export const OperationsLeads: React.FC = () => {
                                 if (rawFootage && rawFootage.length > 0) {
                                   const rfMatch = rawFootage.find(rf => {
                                     if (rf.order_id !== ord.order_id) return false;
+                                    if (member.assignment_id && rf.assignment_id && member.assignment_id !== rf.assignment_id) return false;
                                     const upBy = (rf.uploaded_by || '').trim().toLowerCase();
                                     if (upBy && upBy !== normStaffName) return false;
                                     if (memberEvId && rf.event_id) {
@@ -5353,8 +5365,10 @@ export const OperationsLeads: React.FC = () => {
                                     if (h.remarks) {
                                       try { parsed = JSON.parse(h.remarks); } catch(e) {}
                                     }
-                                    if (member.assignment_id && parsed.assignment_id && parsed.assignment_id !== member.assignment_id) return false;
-                                    if (memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
+                                    const hAssignmentId = parsed.assignment_id || h.assignment_id;
+                                    if (member.assignment_id && hAssignmentId && hAssignmentId !== member.assignment_id) return false;
+                                    if (member.assignment_id && !hAssignmentId && memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
+                                    if (!member.assignment_id && memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
                                     const retBy = (h.returned_by || parsed.staff_name || "").trim().toLowerCase();
                                     if (retBy !== normStaffName) return false;
                                     if (memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
