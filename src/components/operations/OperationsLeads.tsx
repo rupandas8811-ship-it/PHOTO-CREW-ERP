@@ -504,6 +504,74 @@ export const OperationsLeads: React.FC = () => {
   const [additionalReceived, setAdditionalReceived] = useState<number>(0);
   const [transactionId, setTransactionId] = useState('');
 
+  const [isFetchingModalData, setIsFetchingModalData] = useState(false);
+
+  const openEquipmentVerification = async (member: any, ord: any, memberEvId: string, assetCollection: any, eqHandover: any) => {
+    setIsFetchingModalData(true);
+    try {
+      let taskDetails = undefined;
+      if (member.assignment_id) {
+        const { data, error } = await supabaseClient
+          .from('v_task_assignment_details')
+          .select('*')
+          .eq('assignment_id', member.assignment_id)
+          .single();
+        if (!error && data) {
+          taskDetails = data;
+        }
+      }
+      setSelectedEquipmentStatus({ 
+        staffName: member.staff_name, 
+        assignedEquipment: member.effectiveAssignedEq || (member.assigned_equipment || []),
+        orderId: ord.order_id,
+        eventId: memberEvId,
+        assignmentId: member.assignment_id,
+        eventName: member.event_name,
+        eqReceived: assetCollection, 
+        eqHandover,
+        taskDetails
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsFetchingModalData(false);
+    }
+  };
+
+  const openEventImages = async (member: any, ord: any, memberEvId: string, assetCollection: any, evStart: any, evEnd: any, eqHandover: any) => {
+    setIsFetchingModalData(true);
+    try {
+      let taskDetails = undefined;
+      if (member.assignment_id) {
+        const { data, error } = await supabaseClient
+          .from('v_task_assignment_details')
+          .select('*')
+          .eq('assignment_id', member.assignment_id)
+          .single();
+        if (!error && data) {
+          taskDetails = data;
+        }
+      }
+      setSelectedEventImages({ 
+        staffName: member.staff_name, 
+        orderId: ord.order_id,
+        eventId: memberEvId,
+        assignmentId: member.assignment_id,
+        eventName: member.event_name,
+        assetCollection, 
+        evStart, 
+        evEnd, 
+        eqHandover,
+        taskDetails
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsFetchingModalData(false);
+    }
+  };
+
+
   useEffect(() => {
     if (receivingFootageOrderId) {
       const existingPayment = payments.find((p) => p.order_id === receivingFootageOrderId);
@@ -4164,7 +4232,7 @@ export const OperationsLeads: React.FC = () => {
                           <td className="py-3 px-3 text-center">
                             {recUrl ? (
                               <button
-                                onClick={() => setImagePreviewModal({ url: recMeta.url, date: recMeta.date, time: recMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
+                                onClick={() => setImagePreviewModal({ url: recUrl, date: recTime ? formatDateDDMMYY(recTime) : '-', time: recTime ? convertTo12Hour(recTime.split('T')[1]?.split('.')[0] || '') : '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -4173,15 +4241,15 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recMeta.time}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recTime ? formatDateDDMMYY(recTime) : '-'}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recTime ? convertTo12Hour(recTime.split('T')[1]?.split('.')[0] || '') : '-'}</td>
                         </tr>
                         <tr className="hover:bg-zinc-800/20">
                           <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
                           <td className="py-3 px-3 text-center">
                             {handUrl ? (
                               <button
-                                onClick={() => setImagePreviewModal({ url: handMeta.url, date: handMeta.date, time: handMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
+                                onClick={() => setImagePreviewModal({ url: handUrl, date: handTime ? formatDateDDMMYY(handTime) : '-', time: handTime ? convertTo12Hour(handTime.split('T')[1]?.split('.')[0] || '') : '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -4190,8 +4258,8 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handMeta.time}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handTime ? formatDateDDMMYY(handTime) : '-'}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handTime ? convertTo12Hour(handTime.split('T')[1]?.split('.')[0] || '') : '-'}</td>
                         </tr>
                       </>
                     );
@@ -4284,8 +4352,13 @@ export const OperationsLeads: React.FC = () => {
 
                     const startRecord = selectedEventImages.evStart || findHistoryForEventImages(['Event Start', 'Event Started', 'Event Start Photo Proof']);
                     const endRecord = selectedEventImages.evEnd || findHistoryForEventImages(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof', 'Event End Photo Proof']);
-                    const startMeta = getRecordMeta(startRecord);
-                    const endMeta = getRecordMeta(endRecord);
+                    let startMeta = getRecordMeta(startRecord);
+                    let endMeta = getRecordMeta(endRecord);
+                    
+                    if (selectedEventImages.taskDetails) {
+                       startMeta.url = selectedEventImages.taskDetails.event_start_photo || startMeta.url;
+                       endMeta.url = selectedEventImages.taskDetails.event_end_photo || endMeta.url;
+                    }
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
