@@ -2327,6 +2327,11 @@ export const StaffModule: React.FC = () => {
         if (modalRawFootageLink) {
           updateAssignmentPayload.raw_footage_link = modalRawFootageLink;
         }
+        if (stage === 'Equipment Received' && uploadedProofs.length > 0 && uploadedProofs[0].photoUrl) {
+          updateAssignmentPayload.equipment_received_photo = uploadedProofs[0].photoUrl;
+        } else if (stage === 'Equipment Handover' && uploadedProofs.length > 0 && uploadedProofs[0].photoUrl) {
+          updateAssignmentPayload.equipment_handover_photo = uploadedProofs[0].photoUrl;
+        }
 
         const matchingSA = staffAssignments?.find(sa => {
           if (!sa || sa.order_id !== booking.orderId) return false;
