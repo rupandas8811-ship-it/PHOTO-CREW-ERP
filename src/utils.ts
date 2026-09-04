@@ -1573,6 +1573,21 @@ export const getEventRolesForEvent = (ev: any, index: number, configList: EventT
   if (matchByFallback && matchByFallback.team_members && matchByFallback.team_members.length > 0) {
     return matchByFallback.team_members;
   }
+  
+  // Fallback by event name for older records where UUID wasn't generated synchronously
+  if (ev.event_name || ev.event_type) {
+    const evName = String(ev.event_name || ev.event_type).toLowerCase().trim();
+    if (evName) {
+      const matchByName = configList.find(c => {
+        if (!c.event_name) return false;
+        const cName = c.event_name.toLowerCase().trim();
+        return cName === evName;
+      });
+      if (matchByName && matchByName.team_members && matchByName.team_members.length > 0) {
+        return matchByName.team_members;
+      }
+    }
+  }
 
   // 2. Single-event quotation / order: if totalEvents is 1 and configList has a single config
   if (totalEvents === 1) {

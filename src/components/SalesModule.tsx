@@ -1238,7 +1238,7 @@ const generateQuotationPDF = (
     pageDoc.setTextColor(230, 230, 230);
     pageDoc.text('www.photocrewpictures.com', 195, logoY + 4, { align: 'right' });
     pageDoc.text('info@photocrewpictures.com', 195, logoY + 8.5, { align: 'right' });
-    pageDoc.text('+91 9060144016', 195, logoY + 13, { align: 'right' });
+    pageDoc.text('Customer Support: +91 8618865134', 195, logoY + 13, { align: 'right' });
 
     // Header Meta Row: Quote Number, Quote Date, and Validity Date
     pageDoc.setFillColor(28, 28, 35);
@@ -1284,7 +1284,7 @@ const generateQuotationPDF = (
     pageDoc.setFont('helvetica', 'normal');
     pageDoc.setFontSize(7.5);
     pageDoc.setTextColor(100, 116, 139);
-    pageDoc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Phone: +91 9060144016', 15, footerY + 9);
+    pageDoc.text('Website : https://www.photocrewpictures.com/  |  Email: info@photocrewpictures.com  |  Customer Support: +91 8618865134', 15, footerY + 9);
 
     pageDoc.setFont('helvetica', 'bold');
     pageDoc.setFontSize(8);
@@ -1789,6 +1789,13 @@ const generateQuotationPDF = (
   // 6. PAYMENT DETAILS CARD (Completely hidden/removed as requested)
   // PAYMENT DETAILS section is hidden from the quotation PDF.
   // We do not increment currentY or draw the section.
+
+  // NOTE: Add Customer Support note where the user's red annotation is shown
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(239, 68, 68); // Red color for visibility as requested
+  doc.text('Customer Support: +91 8618865134', 15, currentY);
+  currentY += 6;
 
   // 8. TERMS AND CONDITIONS
   if (currentY + 4.5 > 275) {
@@ -6478,7 +6485,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           } else {
             finalEventsList.push({
               ...eventData,
-              id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+              id: window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `EV-${Date.now().toString().slice(-8)}`
             });
           }
 
@@ -7481,7 +7488,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       let finalEventsList = [...(createdLeadId ? createEvents : crmEvents)];
       if (finalEventsList.length === 0 && (eventForm.event_type || eventForm.event_name || eventForm.event_date || eventForm.event_location)) {
         finalEventsList.push({
-          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`,
+          id: window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `EV-${Date.now().toString().slice(-8)}`,
           event_type: eventForm.event_type || '',
           event_name: eventForm.event_name || '',
           event_shoot_type: eventForm.event_shoot_type || '',
@@ -7710,7 +7717,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       } else {
         const newEv: LeadEvent = {
           ...eventData,
-          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+          id: window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `EV-${Date.now().toString().slice(-8)}`
         };
         setCrmEvents(prev => [...prev, newEv]);
         showToastMsg("Event added to list.", "success");
@@ -7722,7 +7729,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       } else {
         const newEv: LeadEvent = {
           ...eventData,
-          id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+          id: window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `EV-${Date.now().toString().slice(-8)}`
         };
         setCreateEvents(prev => [...prev, newEv]);
         showToastMsg("Event added to list.", "success");
@@ -8819,7 +8826,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         } else {
           finalEventsList.push({
             ...eventData,
-            id: `EV-${Math.floor(1000 + Math.random() * 9000)}`
+            id: window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `EV-${Date.now().toString().slice(-8)}`
           });
         }
         

@@ -7731,7 +7731,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
       
       const existingIds = existingEvents?.map(e => String(e.id)) || [];
-      const incomingIds = updatedEvents.map(e => e.id).filter(id => id && !id.startsWith('EV-'));
+      const incomingIds = updatedEvents.map(e => String(e.id)).filter(id => id && !id.startsWith('EV-'));
 
       // 2. Delete removed events
       const idsToDelete = existingIds.filter(id => !incomingIds.includes(id));
@@ -7746,9 +7746,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       // 3. Upsert (Insert new, Update existing)
       await Promise.all(updatedEvents.map(async (ev) => {
-        const isNew = !ev.id || ev.id.startsWith('EV-');
+        const isNew = !ev.id || ev.id.startsWith('EV-') || !existingIds.includes(String(ev.id));
         
-        const eventPayload = {
+        const eventPayload: any = {
           lead_id: leadId,
           event_type: ev.event_type || '',
           event_name: ev.event_name || '',
@@ -7767,6 +7767,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           Reporting_date: ev.reporting_date || (ev as any).Reporting_date || null,
           reporting_time: ev.reporting_time || null
         };
+        
+        if (ev.id && !ev.id.startsWith('EV-') && isNew) {
+           eventPayload.id = ev.id;
+        }
 
         if (isNew) {
           const insRes = await pushInsert('lead_events', eventPayload);
