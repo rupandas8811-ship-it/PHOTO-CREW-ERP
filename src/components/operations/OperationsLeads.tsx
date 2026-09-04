@@ -5170,6 +5170,7 @@ export const OperationsLeads: React.FC = () => {
                             </thead>
                             <tbody className="divide-y divide-zinc-800/60 text-xs">
                               {members.map((member, mIdx) => {
+                                const saRecord = staffAssignments?.find(sa => sa.assignment_id === member.assignment_id);
                                 const normStaffName = (member.staff_name || '').trim().toLowerCase();
                                 const normEvName = (group.eventName || '').trim().toLowerCase();
                                 const memberEvId = member.event_id;
@@ -5293,20 +5294,24 @@ export const OperationsLeads: React.FC = () => {
 
                                 let equipmentStatusText = hasEqAssigned ? 'Assigned' : 'No Equipment Assigned';
                                 if (hasEqAssigned) {
-                                  const hasHandoverPhoto = eqHandover && getRecordMeta(eqHandover).url;
-                                  const isHandoverDone = eqHandover && (
+                                  const saRecord = staffAssignments?.find(sa => sa.assignment_id === member.assignment_id);
+                                  const receivedPhotoUrl = saRecord?.equipment_received_photo;
+                                  const handoverPhotoUrl = saRecord?.equipment_handover_photo;
+
+                                  const hasHandoverPhoto = (eqHandover && getRecordMeta(eqHandover).url) || handoverPhotoUrl;
+                                  const isHandoverDone = (eqHandover && (
                                     hasHandoverPhoto || 
                                     eqHandover.equipment_status?.toLowerCase().includes('handover') || 
                                     eqHandover.equipment_status?.toLowerCase().includes('returned') ||
                                     eqHandover.equipment_status === 'Equipment Handover Completed'
-                                  );
+                                  )) || !!handoverPhotoUrl;
 
-                                  const hasReceivedPhoto = assetCollection && getRecordMeta(assetCollection).url;
-                                  const isReceivedDone = assetCollection && (
+                                  const hasReceivedPhoto = (assetCollection && getRecordMeta(assetCollection).url) || receivedPhotoUrl;
+                                  const isReceivedDone = (assetCollection && (
                                     hasReceivedPhoto || 
                                     assetCollection.equipment_status?.toLowerCase().includes('received') ||
                                     assetCollection.equipment_status === 'Equipment Received'
-                                  );
+                                  )) || !!receivedPhotoUrl;
 
                                   if (isHandoverDone) {
                                     equipmentStatusText = hasHandoverPhoto ? '✅ Handed Over' : 'Assigned / Handed Over';
@@ -5318,9 +5323,12 @@ export const OperationsLeads: React.FC = () => {
                                 }
 
                                 // 3. Event Image Status Text
+                                const evStartPhotoUrl = saRecord?.event_start_photo;
+                                const evEndPhotoUrl = saRecord?.event_end_photo;
+
                                 let eventImageStatusText = '❌ Pending';
-                                if (evEnd && getRecordMeta(evEnd).url) eventImageStatusText = '✅ Event End';
-                                else if (evStart && getRecordMeta(evStart).url) eventImageStatusText = '✅ Event Start';
+                                if ((evEnd && getRecordMeta(evEnd).url) || evEndPhotoUrl) eventImageStatusText = '✅ Event End';
+                                else if ((evStart && getRecordMeta(evStart).url) || evStartPhotoUrl) eventImageStatusText = '✅ Event Start';
 
                                 // 4. Raw Footage Link
                                 let rawFootageLink: string | null = null;
