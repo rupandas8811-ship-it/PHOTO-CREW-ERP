@@ -2361,6 +2361,8 @@ export const StaffModule: React.FC = () => {
           updateAssignmentPayload.equipment_received_photo = uploadedProofs[0].photoUrl;
         } else if (stage === 'Equipment Handover' && uploadedProofs.length > 0 && uploadedProofs[0].photoUrl) {
           updateAssignmentPayload.equipment_handover_photo = uploadedProofs[0].photoUrl;
+        } else if (stage === 'Event Complete' && uploadedProofs.length > 0 && uploadedProofs[0].photoUrl) {
+          updateAssignmentPayload.event_end_photo = uploadedProofs[0].photoUrl;
         }
 
         const matchingSA = staffAssignments?.find(sa => {
