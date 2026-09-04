@@ -462,11 +462,12 @@ const getBookingProofStatus = (
     if (!staffMatches) return;
 
     // Strict Task Isolation Matching
-    if (parsed.assignment_id && b.assignmentId && parsed.assignment_id !== b.assignmentId) {
+    const hAssignmentId = h.assignment_id || parsed.assignment_id;
+    if (hAssignmentId && b.assignmentId && hAssignmentId !== b.assignmentId) {
       return;
     }
     // If the record has an assignment ID, but the current booking does not, it belongs to another specific assignment.
-    if (parsed.assignment_id && !b.assignmentId) {
+    if (hAssignmentId && !b.assignmentId) {
       return;
     }
 
@@ -1245,10 +1246,11 @@ export const StaffModule: React.FC = () => {
                 const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
                 if (rStaff !== staffName.toLowerCase()) return false;
                 
-                if (p.assignment_id && assignmentId && p.assignment_id !== assignmentId) return false;
-                if (p.assignment_id && !assignmentId) return false;
+                const hAssignmentId = h.assignment_id || p.assignment_id;
+                if (hAssignmentId && assignmentId && hAssignmentId !== assignmentId) return false;
+                if (hAssignmentId && !assignmentId) return false;
                 
-                if (assignmentId && !p.assignment_id) {
+                if (assignmentId && !hAssignmentId) {
                   if (p.event_id && ev.id && p.event_id !== 'gen' && p.event_id !== 'ev' && ev.id !== 'gen' && ev.id !== 'ev' && p.event_id !== ev.id) return false;
                   if (p.staff_role && assignedRole && p.staff_role.trim().toLowerCase() !== assignedRole.trim().toLowerCase()) return false;
                 }
@@ -1351,10 +1353,11 @@ export const StaffModule: React.FC = () => {
               const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
               if (rStaff !== staffName.toLowerCase()) return false;
               
-              if (p.assignment_id && assignmentId && p.assignment_id !== assignmentId) return false;
-              if (p.assignment_id && !assignmentId) return false;
+              const hAssignmentId = h.assignment_id || p.assignment_id;
+              if (hAssignmentId && assignmentId && hAssignmentId !== assignmentId) return false;
+              if (hAssignmentId && !assignmentId) return false;
               
-              if (assignmentId && !p.assignment_id) {
+              if (assignmentId && !hAssignmentId) {
                 if (p.staff_role && assignedRole && p.staff_role.trim().toLowerCase() !== assignedRole.trim().toLowerCase()) return false;
               }
 
@@ -1523,7 +1526,8 @@ export const StaffModule: React.FC = () => {
       if (!staffMatches) return false;
 
       // 4. Strict assignment matching if present
-      if (parsed.assignment_id && booking.assignmentId && parsed.assignment_id !== booking.assignmentId) {
+      const hAssignmentId = h.assignment_id || parsed.assignment_id;
+      if (booking.assignmentId && hAssignmentId && hAssignmentId !== booking.assignmentId) {
         return false;
       }
 
@@ -1581,8 +1585,8 @@ export const StaffModule: React.FC = () => {
     }
 
     // Check local staffProofs fallback (strictly for this staff member's key)
-    const staffKey = `${booking.orderId}_${booking.eventId || 'ev'}_${staffName.trim().toLowerCase()}`;
-    const genKey = `${booking.orderId}_gen_${staffName.trim().toLowerCase()}`;
+    const staffKey = `${booking.orderId}_${booking.eventId || 'ev'}_${booking.assignmentId || 'no_asst'}_${staffName.trim().toLowerCase()}`;
+    const genKey = `${booking.orderId}_gen_${booking.assignmentId || 'no_asst'}_${staffName.trim().toLowerCase()}`;
     const localProofObj = staffProofs[booking.key] || staffProofs[staffKey] || staffProofs[genKey];
     if (localProofObj) {
       if (localProofObj.equipmentReceivedProofs) {

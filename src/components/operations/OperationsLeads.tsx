@@ -5,7 +5,7 @@ import { useRole } from '../RoleContext';
 import { 
   Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
 } from 'lucide-react';
-import { Order, CurrentStage, Staff, Equipment } from '../../types';
+import { Order, CurrentStage, Staff, Equipment, TaskAssignmentDetail } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';
 import { StatusText } from '../ui/StatusText';
 import { SafeProofImage } from '../ui/SafeProofImage';
@@ -282,8 +282,10 @@ export const OperationsLeads: React.FC = () => {
     eventId?: string;
     assignmentId?: string;
     eventName?: string;
+    taskDetails?: TaskAssignmentDetail;
     eqReceived?: any; 
-    eqHandover?: any; 
+    eqHandover?: any;
+    taskDetails?: TaskAssignmentDetail; 
   } | null>(null);
   const [selectedEventImages, setSelectedEventImages] = useState<{ 
     staffName: string; 
@@ -291,6 +293,7 @@ export const OperationsLeads: React.FC = () => {
     eventId?: string;
     assignmentId?: string;
     eventName?: string;
+    taskDetails?: TaskAssignmentDetail;
     assetCollection: any; 
     evStart: any; 
     evEnd: any; 
@@ -4144,56 +4147,22 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
-                    const findHistoryForModal = (stages: string[]) => {
-                      const staffNorm = (selectedEquipmentStatus.staffName || '').trim().toLowerCase();
-                      const orderId = selectedEquipmentStatus.orderId;
-                      const eventId = selectedEquipmentStatus.eventId;
-                      const assignmentId = selectedEquipmentStatus.assignmentId;
-                      
-                      if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
-                      const matches = leadEquipmentHistory.filter(h => {
-                        if (orderId && h.order_id && h.order_id !== orderId) return false;
-                        let parsed: any = {};
-                        if (h.remarks) {
-                          try { parsed = JSON.parse(h.remarks); } catch(e) {}
-                        }
-                        const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-                        if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
-                        
-                        const hEventId = parsed.event_id || h.event_id;
-                        const hAssignmentId = parsed.assignment_id || h.assignment_id;
-                        
-                        if (assignmentId) {
-                          if (hAssignmentId !== assignmentId) return false;
-                        } else if (eventId && eventId !== "gen" && eventId !== "ev") {
-                          if (hEventId && hEventId !== "gen" && hEventId !== "ev" && hEventId !== eventId) return false;
-                        }
-                        
-                        const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
-                        const eqName = (h.equipment_name || '').toLowerCase();
-                        return stages.some(s => {
-                          const sNorm = s.toLowerCase();
-                          return eqStatus.includes(sNorm) || eqName.includes(sNorm);
-                        });
-                      });
-                      
-                      const withPhoto = matches.find(m => {
-                        const meta = getRecordMeta(m);
-                        return !!meta.url;
-                      });
-                      return withPhoto || matches[0] || null;
-                    };
+                    let recUrl = getRecordMeta(selectedEquipmentStatus.eqReceived).url;
+                    let handUrl = getRecordMeta(selectedEquipmentStatus.eqHandover).url;
+                    let recTime = getRecordMeta(selectedEquipmentStatus.eqReceived).date;
+                    let handTime = getRecordMeta(selectedEquipmentStatus.eqHandover).date;
 
-                    const recRecord = selectedEquipmentStatus.eqReceived || findHistoryForModal(['Equipment Received', 'Asset Collection', 'Received']);
-                    const handRecord = selectedEquipmentStatus.eqHandover || findHistoryForModal(['Equipment Handover', 'Returned', 'Handover', 'Asset Return']);
-                    const recMeta = getRecordMeta(recRecord);
-                    const handMeta = getRecordMeta(handRecord);
+                    if (selectedEquipmentStatus.taskDetails) {
+                       recUrl = selectedEquipmentStatus.taskDetails.equipment_received_photo || recUrl;
+                       handUrl = selectedEquipmentStatus.taskDetails.equipment_handover_photo || handUrl;
+                    }
+
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
                           <td className="py-3 px-3 text-white font-bold">Equipment Received</td>
                           <td className="py-3 px-3 text-center">
-                            {recMeta.url ? (
+                            {recUrl ? (
                               <button
                                 onClick={() => setImagePreviewModal({ url: recMeta.url, date: recMeta.date, time: recMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
@@ -4210,7 +4179,7 @@ export const OperationsLeads: React.FC = () => {
                         <tr className="hover:bg-zinc-800/20">
                           <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
                           <td className="py-3 px-3 text-center">
-                            {handMeta.url ? (
+                            {handUrl ? (
                               <button
                                 onClick={() => setImagePreviewModal({ url: handMeta.url, date: handMeta.date, time: handMeta.time, staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
@@ -5368,16 +5337,11 @@ export const OperationsLeads: React.FC = () => {
                                       {hasEqAssigned ? (
                                         <button 
                                           type="button"
-                                          onClick={() => setSelectedEquipmentStatus({ 
-                                            staffName: member.staff_name, 
-                                            assignedEquipment: effectiveAssignedEq.length > 0 ? effectiveAssignedEq : (member.assigned_equipment || []),
-                                            orderId: ord.order_id,
-                                            eventId: memberEvId,
-                                            assignmentId: member.assignment_id,
-                                            eventName: member.event_name,
-                                            eqReceived: assetCollection, 
-                                            eqHandover 
-                                          })}
+                                          onClick={() => {
+                                            const eqToPass = effectiveAssignedEq.length > 0 ? effectiveAssignedEq : (member.assigned_equipment || []);
+                                            member.effectiveAssignedEq = eqToPass;
+                                            openEquipmentVerification(member, ord, memberEvId, assetCollection, eqHandover);
+                                          }}
                                           className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline font-bold text-xs"
                                           title="Click to view equipment verification images"
                                         >

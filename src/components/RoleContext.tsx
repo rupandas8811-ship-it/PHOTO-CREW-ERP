@@ -927,6 +927,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [leadStaffAssignmentHistory, setLeadStaffAssignmentHistory] = useState<LeadStaffAssignmentHistory[]>([]);
   const [leadEquipmentHistory, setLeadEquipmentHistory] = useState<LeadEquipmentHistory[]>([]);
+  const [taskAssignmentDetails, setTaskAssignmentDetails] = useState<TaskAssignmentDetail[]>([]);
 
   const [specialities, setSpecialities] = useState<ProductionSpeciality[]>([
     { speciality_id: 'SPC-001', name: 'Wedding Video Editor', active: true },
