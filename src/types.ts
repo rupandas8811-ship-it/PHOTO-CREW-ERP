@@ -611,6 +611,7 @@ export interface TaskAssignmentDetail {
 export interface StaffAssignment {
   assignment_id: string;
   order_id: string;
+  lead_id?: string;
   staff_role: string;
   staff_id: string;
   staff_name: string;
@@ -620,14 +621,51 @@ export interface StaffAssignment {
   whatsapp_sent_status?: string;
   task_status?: string;
   updated_by?: string;
+  updated_at?: string;
   event_id?: string;
   event_name?: string;
+  event_date?: string;
+  reporting_time?: string;
   equipment?: string[];
   assigned_equipment?: string[];
   equipment_details?: any[];
   mobile?: string;
   staff_type?: string;
   raw_footage_link?: string;
+  equipment_received_photo?: string;
+  event_start_photo?: string;
+  event_start_time?: string;
+  event_end_photo?: string;
+  event_end_time?: string;
+  equipment_handover_photo?: string;
+  equipment_handover_notes?: string;
+  equipment_handover_to?: string;
+  proofs?: any;
+  notes?: string;
+  remarks?: string;
+}
+
+export interface StaffTaskSubmission {
+  id?: string;
+  assignment_id?: string;
+  order_id: string;
+  lead_id?: string;
+  event_id?: string;
+  event_name?: string;
+  staff_id?: string;
+  staff_name: string;
+  staff_role?: string;
+  submission_type: 'equipment_received' | 'event_start' | 'event_complete' | 'equipment_handover' | 'raw_footage';
+  task_status?: string;
+  photo_url?: string;
+  proof_photos?: any;
+  raw_footage_link?: string;
+  handover_to?: string;
+  handover_notes?: string;
+  equipment_name?: string;
+  asset_id?: string;
+  remarks?: string;
+  created_at?: string;
 }
 
 export interface LeadStaffAssignmentHistory {

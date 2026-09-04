@@ -347,13 +347,32 @@ async function startServer() {
 
     if (table === 'staff_assignments') {
       const validCols = new Set([
-        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name',
+        'assignment_id', 'order_id', 'lead_id', 'task_id', 'slot_number', 'staff_role', 'staff_id', 'staff_name',
         'assignment_date', 'assignment_status', 'task_status', 'updated_at',
         'updated_by', 'raw_footage_link', 'created_at',
-        'equipment_received_photo', 'equipment_handover_photo', 'event_end_photo',
-        'event_id', 'event_name', 'equipment', 'assigned_equipment', 'equipment_details',
-        'mobile', 'staff_type'
+        'equipment_received_photo', 'equipment_handover_photo', 'equipment_handover_notes',
+        'equipment_handover_to', 'event_start_photo', 'event_start_time',
+        'event_end_photo', 'event_end_time', 'event_id', 'event_name', 'event_date',
+        'reporting_time', 'equipment', 'assigned_equipment', 'equipment_details',
+        'mobile', 'staff_type', 'proofs', 'notes', 'remarks'
       ]);
+      for (const k of Object.keys(clone)) {
+        if (!validCols.has(k)) {
+          delete clone[k];
+        }
+      }
+    }
+
+    if (table === 'staff_task_submissions') {
+      const validCols = new Set([
+        'id', 'assignment_id', 'order_id', 'lead_id', 'event_id', 'event_name',
+        'staff_id', 'staff_name', 'staff_role', 'submission_type', 'task_status',
+        'photo_url', 'proof_photos', 'raw_footage_link', 'handover_to',
+        'handover_notes', 'equipment_name', 'asset_id', 'remarks', 'created_at'
+      ]);
+      if (!clone.created_at) {
+        clone.created_at = new Date().toISOString();
+      }
       for (const k of Object.keys(clone)) {
         if (!validCols.has(k)) {
           delete clone[k];
@@ -364,7 +383,7 @@ async function startServer() {
     if (table === 'raw_footage') {
       const validCols = new Set([
         'tracking_id', 'order_id', 'event_completed_date', 'raw_received',
-        'server_path', 'uploaded_by', 'uploaded_date', 'status',
+        'server_path', 'drive_link', 'uploaded_by', 'uploaded_date', 'status',
         'assignment_id', 'event_id', 'event_name'
       ]);
       if (!clone.tracking_id) {
@@ -374,7 +393,7 @@ async function startServer() {
         clone.event_completed_date = new Date().toISOString().split('T')[0];
       }
       if (clone.raw_received === undefined) {
-        clone.raw_received = clone.status === 'Received' || !!clone.server_path;
+        clone.raw_received = clone.status === 'Received' || !!clone.server_path || !!clone.drive_link;
       }
       if (!clone.status) {
         clone.status = clone.raw_received ? 'Received' : 'Pending';

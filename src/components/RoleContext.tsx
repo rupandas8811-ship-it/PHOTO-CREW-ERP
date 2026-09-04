@@ -1447,7 +1447,19 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'previous_stage', 'new_stage'
       ],
       staff_assignments: [
-        'assignment_id', 'order_id', 'staff_role', 'staff_id', 'staff_name', 'assignment_date', 'assignment_status', 'task_status', 'raw_footage_link', 'event_id', 'event_name', 'equipment', 'assigned_equipment', 'equipment_details', 'mobile', 'staff_type', 'updated_at', 'updated_by', 'equipment_received_photo', 'equipment_handover_photo', 'event_end_photo'
+        'assignment_id', 'order_id', 'lead_id', 'task_id', 'slot_number', 'staff_role', 'staff_id', 'staff_name',
+        'assignment_date', 'assignment_status', 'task_status', 'raw_footage_link',
+        'event_id', 'event_name', 'event_date', 'reporting_time',
+        'equipment', 'assigned_equipment', 'equipment_details', 'mobile', 'staff_type',
+        'updated_at', 'updated_by', 'equipment_received_photo', 'equipment_handover_photo',
+        'equipment_handover_notes', 'equipment_handover_to', 'event_start_photo', 'event_start_time',
+        'event_end_photo', 'event_end_time', 'proofs', 'notes', 'remarks', 'created_at'
+      ],
+      staff_task_submissions: [
+        'id', 'assignment_id', 'order_id', 'lead_id', 'event_id', 'event_name',
+        'staff_id', 'staff_name', 'staff_role', 'submission_type', 'task_status',
+        'photo_url', 'proof_photos', 'raw_footage_link', 'handover_to',
+        'handover_notes', 'equipment_name', 'asset_id', 'remarks', 'created_at'
       ],
       lead_status_history: [
         'id', 'lead_id', 'order_id', 'old_status', 'new_status', 'changed_by', 'changed_by_role', 'remarks', 'created_at'
@@ -4826,7 +4838,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       const finalReactAssignment = {
         assignment_id: assignId,
         order_id: orderId,
-        staff_role: a.staff_role,
+        lead_id: leadId,
+        staff_role: a.staff_role ? a.staff_role.trim() : 'Staff',
         staff_id: resolvedStaffId,
         staff_name: a.staff_name,
         assignment_date: (a as any).assignment_date || assignDate,
@@ -4843,17 +4856,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       finalReactAssignments.push(finalReactAssignment);
 
       const matched = existingDbAssignments.find(ed => ed.assignment_id === a.assignment_id);
-
-      let finalStaffRole = a.staff_role ? a.staff_role.trim() : a.staff_role;
-      while (
-        newInsertsForDb.some(ins => ins.order_id === orderId && ins.staff_role === finalStaffRole) ||
-        updatedAssignments.some(upd => upd.updates.staff_role === finalStaffRole) ||
-        existingDbAssignments.some(ed => ed.order_id === orderId && ed.staff_role === finalStaffRole && (!matched || ed.assignment_id !== matched.assignment_id))
-      ) {
-        finalStaffRole += ' ';
-      }
-
-      finalReactAssignment.staff_role = finalStaffRole;
+      const finalStaffRole = a.staff_role ? a.staff_role.trim() : 'Staff';
 
       if (matched) {
         matchedDbAssignmentIds.add(matched.assignment_id);
@@ -4861,6 +4864,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           matchColumn: 'assignment_id',
           matchValue: matched.assignment_id,
           updates: {
+            lead_id: leadId,
             staff_role: finalStaffRole,
             staff_id: resolvedStaffId || matched.staff_id,
             staff_name: dbStaffName,
@@ -4880,6 +4884,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         newInsertsForDb.push({
           assignment_id: assignId,
           order_id: orderId,
+          lead_id: leadId,
           staff_role: finalStaffRole,
           staff_id: resolvedStaffId,
           staff_name: dbStaffName,

@@ -1966,6 +1966,7 @@ export const StaffModule: React.FC = () => {
             });
 
             const eqReceivedPhoto = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof')?.photoUrl || allProofsToSave[0]?.photoUrl;
+            const startPhotoUrl = allProofsToSave.find(p => p.equipmentName === 'Event Start Photo Proof')?.photoUrl;
             let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
             if (!targetAssignmentId && staffAssignments) {
               const fallbackSA = staffAssignments.find(sa => sa.order_id === booking.orderId && (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
@@ -1979,10 +1980,34 @@ export const StaffModule: React.FC = () => {
                 task_status: 'Event Started',
                 assignment_status: 'Assigned',
                 updated_at: timestamp,
-                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto } : {})
+                updated_by: staffName,
+                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto } : {}),
+                ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: timestamp } : {})
               });
             } else {
               console.warn('Cannot update staff_assignment: missing assignment_id');
+            }
+
+            // Insert into dedicated staff_task_submissions audit table
+            try {
+              await pushInsert('staff_task_submissions', {
+                assignment_id: targetAssignmentId || null,
+                order_id: booking.orderId,
+                lead_id: booking.leadId || null,
+                event_id: booking.eventId || null,
+                event_name: booking.eventName || null,
+                staff_name: staffName,
+                staff_role: booking.assignedRole || null,
+                staff_id: staffMember?.id || currentUser?.id || null,
+                submission_type: 'event_start',
+                task_status: 'Event Started',
+                photo_url: startPhotoUrl || eqReceivedPhoto || null,
+                proof_photos: allProofsToSave,
+                remarks: `Event started by ${staffName} on ${timestamp}`,
+                created_at: timestamp
+              });
+            } catch (subErr) {
+              console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
             }
 
             // Calculate overall stage across ALL assigned staff members
@@ -2381,7 +2406,8 @@ export const StaffModule: React.FC = () => {
       if (booking.orderId) {
         const updateAssignmentPayload: any = {
           task_status: nextStatus,
-          updated_at: timestamp
+          updated_at: timestamp,
+          updated_by: staffName
         };
         if (modalRawFootageLink) {
           updateAssignmentPayload.raw_footage_link = modalRawFootageLink;
@@ -2391,8 +2417,10 @@ export const StaffModule: React.FC = () => {
           updateAssignmentPayload.equipment_received_photo = targetPhotoUrl;
         } else if (stage === 'Equipment Handover' && targetPhotoUrl) {
           updateAssignmentPayload.equipment_handover_photo = targetPhotoUrl;
+          updateAssignmentPayload.equipment_handover_to = staffName;
         } else if (stage === 'Event Complete' && targetPhotoUrl) {
           updateAssignmentPayload.event_end_photo = targetPhotoUrl;
+          updateAssignmentPayload.event_end_time = timestamp;
         }
 
         const matchingSA = staffAssignments?.find(sa => {
@@ -2419,6 +2447,33 @@ export const StaffModule: React.FC = () => {
           });
         } else {
           console.warn('Cannot update staff_assignment: missing assignment_id');
+        }
+
+        // Insert into dedicated staff_task_submissions audit table
+        try {
+          const subType = stage === 'Equipment Received' ? 'equipment_received'
+            : stage === 'Equipment Handover' ? 'equipment_handover'
+            : 'event_complete';
+
+          await pushInsert('staff_task_submissions', {
+            assignment_id: targetAssignmentId || null,
+            order_id: booking.orderId,
+            lead_id: booking.leadId || null,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            staff_name: staffName,
+            staff_role: booking.assignedRole || null,
+            staff_id: staffMember?.id || currentUser?.id || null,
+            submission_type: subType,
+            task_status: nextStatus,
+            photo_url: targetPhotoUrl || null,
+            proof_photos: uploadedProofs,
+            raw_footage_link: modalRawFootageLink || null,
+            remarks: `${stage} updated by ${staffName} on ${timestamp}`,
+            created_at: timestamp
+          });
+        } catch (subErr) {
+          console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
         }
 
         const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, nextStatus, nextStatuses, orders, leads, staffAssignments);
