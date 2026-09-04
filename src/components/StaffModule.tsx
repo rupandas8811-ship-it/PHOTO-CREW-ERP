@@ -2076,7 +2076,15 @@ export const StaffModule: React.FC = () => {
       );
 
       for (const item of reqItems) {
-        const rawUrl = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
+        let rawUrl = null;
+        if (stage === 'Equipment Received') {
+          rawUrl = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'];
+        } else if (stage === 'Equipment Handover') {
+          rawUrl = modalPhotos[item.name] || modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'];
+        } else {
+          rawUrl = modalPhotos[item.name];
+        }
+        
         if (rawUrl) {
           const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
           const finalUrl = await safeUploadImage(rawUrl, fileName);
