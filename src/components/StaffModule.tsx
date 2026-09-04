@@ -2098,6 +2098,25 @@ export const StaffModule: React.FC = () => {
         }
       }
 
+      if (uploadedProofs.length === 0) {
+        let fallbackPhoto = null;
+        if (stage === 'Equipment Received') {
+          fallbackPhoto = modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Equipment Received'];
+        } else if (stage === 'Equipment Handover') {
+          fallbackPhoto = modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover'];
+        }
+        if (fallbackPhoto) {
+          const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
+          const finalUrl = await safeUploadImage(fallbackPhoto, fileName);
+          uploadedProofs.push({
+            equipmentName: stage === 'Equipment Handover' ? 'Equipment Handover' : 'Equipment Received',
+            assetId: booking.assignmentId || stage,
+            photoUrl: finalUrl,
+            capturedAt: timestamp
+          });
+        }
+      }
+
       const effectiveEquipmentStatus = 
         stage === 'Event Complete' ? 'Event Ended' :
         stage === 'Equipment Handover' ? (hasEquipment ? (hasHandoverPhoto ? 'Equipment Handover Completed' : 'Equipment Not Handover') : 'Footage Handover Completed') : stage;
@@ -2289,6 +2308,9 @@ export const StaffModule: React.FC = () => {
           await pushInsert('raw_footage', {
             tracking_id: rfTrackingId,
             order_id: booking.orderId,
+            assignment_id: booking.assignmentId || null,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
             event_completed_date: booking.eventDate || timestamp.split('T')[0],
             server_path: modalRawFootageLink,
             uploaded_by: staffName,

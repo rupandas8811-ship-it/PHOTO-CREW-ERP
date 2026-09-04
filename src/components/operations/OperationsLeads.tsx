@@ -520,6 +520,9 @@ export const OperationsLeads: React.FC = () => {
           taskDetails = data;
         }
       }
+      if (!taskDetails && member.assignment_id && staffAssignments) {
+        taskDetails = staffAssignments.find(sa => sa.assignment_id === member.assignment_id);
+      }
       setSelectedEquipmentStatus({ 
         staffName: member.staff_name, 
         assignedEquipment: member.effectiveAssignedEq || (member.assigned_equipment || []),
@@ -4225,8 +4228,12 @@ export const OperationsLeads: React.FC = () => {
                     let handTime = getRecordMeta(selectedEquipmentStatus.eqHandover).date;
 
                     if (selectedEquipmentStatus.taskDetails) {
-                       recUrl = selectedEquipmentStatus.taskDetails.equipment_received_photo || recUrl;
-                       handUrl = selectedEquipmentStatus.taskDetails.equipment_handover_photo || handUrl;
+                       if (selectedEquipmentStatus.taskDetails.equipment_received_photo) {
+                         recUrl = selectedEquipmentStatus.taskDetails.equipment_received_photo;
+                       }
+                       if (selectedEquipmentStatus.taskDetails.equipment_handover_photo) {
+                         handUrl = selectedEquipmentStatus.taskDetails.equipment_handover_photo;
+                       }
                     }
 
                     return (
@@ -5209,6 +5216,12 @@ export const OperationsLeads: React.FC = () => {
                                     const hEventId = parsed.event_id || h.event_id;
                                     const hEventName = parsed.event_name || h.event_name;
                                     const hProofType = (parsed.proof_type || h.proof_type || '').toLowerCase();
+                                    
+                                    const isSearchingReceived = stages.some(s => s.toLowerCase().includes('received') || s.toLowerCase().includes('asset collection'));
+                                    const isSearchingHandover = stages.some(s => s.toLowerCase().includes('handover') || s.toLowerCase().includes('return'));
+
+                                    if (isSearchingReceived && hProofType.includes('handover')) return false;
+                                    if (isSearchingHandover && hProofType.includes('received')) return false;
                                     
                                     // Match event Id strictly if both exist and neither is 'gen'
                                     if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) {
