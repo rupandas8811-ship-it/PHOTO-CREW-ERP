@@ -1,0 +1,1489 @@
+import { supabaseClient } from '../supabaseClient';
+import { 
+  deserializeLeadEvents, 
+  extractTeamMembersConfig, 
+  getEventRolesForEvent, 
+  parseQtyAndText, 
+  convertTimeToDbFormat 
+} from '../utils';
+
+// ============================================================================
+// Types and Interfaces
+// ============================================================================
+
+export interface SalesTaskRequirement {
+  taskId: string;
+  orderId: string;
+  leadId?: string;
+  eventId: string;
+  eventName: string;
+  eventType: string;
+  customEventName?: string;
+  eventDate?: string;
+  eventStartTime?: string;
+  eventEndDate?: string;
+  eventEndTime?: string;
+  reportingDate?: string;
+  reportingTime?: string;
+  location?: string;
+  roleName: string;
+  roleSlug: string;
+  slotNumber: number; // 1-indexed: 1, 2, 3...
+  totalQtyForRole: number;
+}
+
+export interface OperationsSlotAllocation {
+  id: string; // Slot ID or Assignment ID (e.g. ASST-... or slot identifier)
+  assignment_id?: string;
+  task_id: string;
+  order_id: string;
+  lead_id?: string;
+  event_id: string;
+  event_name: string;
+  event_date?: string;
+  reporting_date?: string;
+  reporting_time?: string;
+  staff_role: string;
+  slot_number: number;
+  staff_id: string;
+  staff_name: string;
+  staff_type: 'In-House' | 'Freelancer';
+  mobile: string;
+  equipment: string[];
+  equipment_received_photo?: string | null;
+  equipment_handover_photo?: string | null;
+  equipment_handover_to?: string | null;
+  equipment_handover_notes?: string | null;
+  event_start_photo?: string | null;
+  event_start_time?: string | null;
+  event_end_photo?: string | null;
+  event_end_time?: string | null;
+  raw_footage_link?: string | null;
+  task_status?: string;
+  assignment_status?: string;
+  updated_at?: string;
+  updated_by?: string;
+}
+
+export interface EventAllocationGroup {
+  eventId: string;
+  eventName: string;
+  eventType: string;
+  eventDate: string;
+  eventStartTime: string;
+  eventEndDate: string;
+  eventEndTime: string;
+  reportingDate: string;
+  reportingTime: string;
+  location: string;
+  staff: OperationsSlotAllocation[];
+  equipment: string[];
+}
+
+export interface EquipmentVerificationData {
+  assignmentId: string;
+  staffName: string;
+  staffRole?: string;
+  eventId?: string;
+  eventName?: string;
+  assignedEquipment: string[];
+  equipmentReceivedPhoto: string | null;
+  equipmentReceivedDate: string | null;
+  equipmentReceivedTime: string | null;
+  equipmentHandoverPhoto: string | null;
+  equipmentHandoverDate: string | null;
+  equipmentHandoverTime: string | null;
+  equipmentHandoverTo: string | null;
+  taskStatus: string;
+}
+
+export interface EventImagesData {
+  assignmentId: string;
+  staffName: string;
+  staffRole?: string;
+  eventId?: string;
+  eventName?: string;
+  eventStartPhoto: string | null;
+  eventStartDate: string | null;
+  eventStartTime: string | null;
+  eventEndPhoto: string | null;
+  eventEndDate: string | null;
+  eventEndTime: string | null;
+  taskStatus: string;
+}
+
+export interface RawFootageData {
+  assignmentId: string;
+  orderId: string;
+  eventId?: string;
+  eventName?: string;
+  staffName: string;
+  staffRole?: string;
+  rawFootageLink: string | null;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+// ============================================================================
+// Helper Utilities
+// ============================================================================
+
+export function sanitizeSlug(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '') || 'role';
+}
+
+export function generateDeterministicTaskId(orderId: string, eventId: string, roleName: string, slotNumber: number): string {
+  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '');
+  const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '');
+  const roleSlug = sanitizeSlug(roleName);
+  return `TASK_${cleanOrder}_${cleanEvent}_${roleSlug}_s${slotNumber}`;
+}
+
+export function generateDeterministicAssignmentId(orderId: string, eventId: string, roleName: string, slotNumber: number): string {
+  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '');
+  const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '');
+  const roleSlug = sanitizeSlug(roleName);
+  return `ASST-${cleanOrder}-${cleanEvent}-${roleSlug}-${slotNumber}`;
+}
+
+// ============================================================================
+// 1. Sales -> Operations: Load Requirements and Task Slots
+// ============================================================================
+
+/**
+ * Loads the exact event-wise team member requirements saved by Sales.
+ * Handles QTY > 1 by generating independent requirement slots.
+ * Guarantees that Event A requirements never merge into Event B.
+ */
+export function loadSalesEventRequirements(
+  lead: any,
+  order?: any,
+  leadPkgs: any[] = []
+): { events: any[]; requirements: SalesTaskRequirement[] } {
+  const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0
+    ? lead.events
+    : (lead?.notes_special_customizations ? deserializeLeadEvents(lead.notes_special_customizations).events : []);
+
+  const totalEvents = rawEvents.length > 0 ? rawEvents.length : 1;
+  const teamConfigs = extractTeamMembersConfig(lead, leadPkgs);
+
+  const orderId = order?.order_id || lead?.lead_id || 'ORD-0000';
+  const leadId = lead?.lead_id || order?.lead_id || orderId;
+
+  const resolvedEvents = rawEvents.length > 0
+    ? rawEvents
+    : [{
+        id: 'default_event',
+        event_name: order?.event_name || lead?.event_name || order?.event_type || lead?.event_type || 'Main Event',
+        event_type: order?.event_type || lead?.event_type || 'Main Event',
+        custom_event_name: order?.custom_event_name || lead?.custom_event_name,
+        event_date: order?.event_date || lead?.event_date || '',
+        event_start_time: order?.event_time || lead?.event_time || '',
+        event_end_date: order?.event_end_date || lead?.event_end_date || '',
+        event_end_time: order?.event_end_time || lead?.event_end_time || '',
+        reporting_date: order?.Reporting_date || lead?.Reporting_date || order?.event_date || '',
+        reporting_time: order?.reporting_time || lead?.reporting_time || '',
+        event_location: order?.event_location || lead?.event_location || ''
+      }];
+
+  const requirements: SalesTaskRequirement[] = [];
+
+  resolvedEvents.forEach((ev: any, evIdx: number) => {
+    const evId = String(ev.id || ev.event_id || `ev_${evIdx}`);
+    const rawEType = ev.event_type || lead?.event_type || order?.event_type || 'Main Event';
+    const eventType = rawEType === 'Other' ? (ev.custom_event_type || lead?.custom_event_type || 'Other') : rawEType;
+
+    let eventName = 'Main Event';
+    if (ev.event_name === 'Other') {
+      eventName = ev.custom_event_name || 'Other';
+    } else if (ev.custom_event_name && ev.custom_event_name.trim() !== '') {
+      eventName = ev.custom_event_name;
+    } else if (ev.event_name && ev.event_name.trim() !== '') {
+      eventName = ev.event_name;
+    } else if (lead?.custom_event_name && lead.custom_event_name.trim() !== '') {
+      eventName = lead.custom_event_name;
+    } else if (lead?.event_name && lead.event_name !== 'Other' && lead.event_name.trim() !== '') {
+      eventName = lead.event_name;
+    } else if (order?.event_name && order.event_name !== 'Other' && order.event_name.trim() !== '') {
+      eventName = order.event_name;
+    } else if (eventType && eventType !== 'Main Event') {
+      eventName = eventType;
+    }
+
+    const eventDate = ev.event_date || order?.event_date || lead?.event_date || '';
+    const eventStartTime = ev.event_start_time || ev.event_time || order?.event_time || lead?.event_time || '';
+    const eventEndDate = ev.event_end_date || ev.Event_End_Date || order?.event_end_date || lead?.event_end_date || '';
+    const eventEndTime = ev.event_end_time || order?.event_end_time || '';
+    const reportingDate = ev.reporting_date || ev.Reporting_date || order?.Reporting_date || lead?.Reporting_date || eventDate || '';
+    const reportingTime = ev.reporting_time || order?.reporting_time || lead?.reporting_time || '';
+    const location = ev.event_location || order?.event_location || lead?.event_location || '';
+
+    // Extract roles for this specific event
+    const includedRoles = getEventRolesForEvent(ev, evIdx, teamConfigs, totalEvents);
+
+    // Group and parse quantities
+    const roleQuantities: { roleName: string; qty: number }[] = [];
+    includedRoles.forEach((roleStr: string) => {
+      const { qty, text } = parseQtyAndText(roleStr);
+      const roleName = (text || roleStr).trim();
+      if (!roleName) return;
+      const targetQty = qty || 1;
+      const existing = roleQuantities.find(r => r.roleName.toLowerCase() === roleName.toLowerCase());
+      if (existing) {
+        existing.qty += targetQty;
+      } else {
+        roleQuantities.push({ roleName, qty: targetQty });
+      }
+    });
+
+    // Generate separate task slots for each requirement
+    roleQuantities.forEach(({ roleName, qty }) => {
+      const roleSlug = sanitizeSlug(roleName);
+      for (let slot = 1; slot <= qty; slot++) {
+        const taskId = generateDeterministicTaskId(orderId, evId, roleName, slot);
+        requirements.push({
+          taskId,
+          orderId,
+          leadId,
+          eventId: evId,
+          eventName,
+          eventType,
+          customEventName: ev.custom_event_name,
+          eventDate,
+          eventStartTime,
+          eventEndDate,
+          eventEndTime,
+          reportingDate,
+          reportingTime,
+          location,
+          roleName,
+          roleSlug,
+          slotNumber: slot,
+          totalQtyForRole: qty
+        });
+      }
+    });
+  });
+
+  return { events: resolvedEvents, requirements };
+}
+
+// ============================================================================
+// 2. Build Initial Allocations for Operations Modal
+// ============================================================================
+
+/**
+ * Builds the initial event allocations state for the Operations modal.
+ * Matches existing DB assignments deterministically by event_id, staff_role, and slot_number.
+ * Preserves each slot's assigned staff, equipment, photos, and links without mixing data across events.
+ */
+export function buildInitialEventAllocations(params: {
+  lead: any;
+  order: any;
+  leadPkgs?: any[];
+  existingStaffAssignments?: any[];
+  staffList?: any[];
+  operationsRecord?: any;
+}): Record<string, EventAllocationGroup> {
+  const {
+    lead,
+    order,
+    leadPkgs = [],
+    existingStaffAssignments = [],
+    staffList = [],
+    operationsRecord
+  } = params;
+
+  const { events, requirements } = loadSalesEventRequirements(lead, order, leadPkgs);
+  const orderId = order?.order_id || lead?.lead_id || '';
+
+  // Filter existing staff assignments for this specific order
+  const orderAssignments = (existingStaffAssignments || []).filter(sa => 
+    sa.order_id === orderId && sa.assignment_status !== 'Cancelled'
+  );
+
+  const allocations: Record<string, EventAllocationGroup> = {};
+
+  events.forEach((ev: any, evIdx: number) => {
+    const evId = String(ev.id || ev.event_id || `ev_${evIdx}`);
+    const evReqs = requirements.filter(r => r.eventId === evId);
+
+    const eventName = evReqs[0]?.eventName || ev.event_name || 'Main Event';
+    const eventType = evReqs[0]?.eventType || ev.event_type || 'Main Event';
+    const eventDate = ev.event_date || order?.event_date || lead?.event_date || '';
+    const eventStartTime = ev.event_start_time || ev.event_time || order?.event_time || '';
+    const eventEndDate = ev.event_end_date || order?.event_end_date || '';
+    const eventEndTime = ev.event_end_time || order?.event_end_time || '';
+    const reportingDate = ev.reporting_date || lead?.Reporting_date || eventDate || '';
+    const reportingTime = ev.reporting_time || operationsRecord?.reporting_time || order?.reporting_time || '';
+    const location = ev.event_location || order?.event_location || '';
+
+    // Find DB assignments that match this event
+    const eventDbAssignments = orderAssignments.filter(sa => {
+      if (sa.event_id && sa.event_id === evId) return true;
+      if (!sa.event_id && events.length === 1) return true;
+      if (sa.event_name && sa.event_name.trim().toLowerCase() === eventName.trim().toLowerCase()) return true;
+      return false;
+    });
+
+    const usedDbAssignmentIds = new Set<string>();
+    const slotAllocations: OperationsSlotAllocation[] = [];
+
+    // Map each Sales requirement to an assignment slot
+    evReqs.forEach(req => {
+      // Find matching existing assignment:
+      // 1. By exact task_id or assignment_id if saved
+      // 2. By event_id + matching role + matching slot_number
+      // 3. By matching role from unused event assignments
+      let matchedSa = eventDbAssignments.find(sa => 
+        !usedDbAssignmentIds.has(sa.assignment_id) &&
+        (sa.task_id === req.taskId || sa.assignment_id === generateDeterministicAssignmentId(orderId, evId, req.roleName, req.slotNumber))
+      );
+
+      if (!matchedSa) {
+        matchedSa = eventDbAssignments.find(sa => 
+          !usedDbAssignmentIds.has(sa.assignment_id) &&
+          (sa.staff_role || '').trim().toLowerCase() === req.roleName.trim().toLowerCase() &&
+          Number(sa.slot_number || 1) === req.slotNumber
+        );
+      }
+
+      if (!matchedSa) {
+        matchedSa = eventDbAssignments.find(sa => 
+          !usedDbAssignmentIds.has(sa.assignment_id) &&
+          (sa.staff_role || '').trim().toLowerCase() === req.roleName.trim().toLowerCase()
+        );
+      }
+
+      if (matchedSa) {
+        usedDbAssignmentIds.add(matchedSa.assignment_id);
+      }
+
+      const assignedStaffName = matchedSa?.staff_name || '';
+      const st = staffList?.find(s => s.name?.toLowerCase() === assignedStaffName.toLowerCase());
+      const stType = matchedSa?.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
+      const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
+
+      const canonicalAssignmentId = matchedSa?.assignment_id || generateDeterministicAssignmentId(orderId, evId, req.roleName, req.slotNumber);
+
+      // Parse equipment strictly for this slot
+      let slotEq: string[] = [];
+      if (matchedSa) {
+        if (Array.isArray(matchedSa.equipment)) {
+          slotEq = matchedSa.equipment;
+        } else if (typeof matchedSa.equipment === 'string') {
+          try {
+            const parsed = JSON.parse(matchedSa.equipment);
+            slotEq = Array.isArray(parsed) ? parsed : [matchedSa.equipment];
+          } catch (e) {
+            slotEq = matchedSa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean);
+          }
+        }
+      }
+
+      slotAllocations.push({
+        id: canonicalAssignmentId,
+        assignment_id: canonicalAssignmentId,
+        task_id: req.taskId,
+        order_id: orderId,
+        lead_id: req.leadId,
+        event_id: evId,
+        event_name: eventName,
+        event_date: eventDate,
+        reporting_date: reportingDate,
+        reporting_time: reportingTime,
+        staff_role: req.roleName,
+        slot_number: req.slotNumber,
+        staff_id: matchedSa?.staff_id || st?.staff_id || (assignedStaffName ? 'STF-0000' : ''),
+        staff_name: assignedStaffName,
+        staff_type: cleanType,
+        mobile: matchedSa?.mobile || st?.mobile || st?.phone || '',
+        equipment: slotEq,
+        equipment_received_photo: matchedSa?.equipment_received_photo || null,
+        equipment_handover_photo: matchedSa?.equipment_handover_photo || null,
+        equipment_handover_to: matchedSa?.equipment_handover_to || null,
+        equipment_handover_notes: matchedSa?.equipment_handover_notes || null,
+        event_start_photo: matchedSa?.event_start_photo || null,
+        event_start_time: matchedSa?.event_start_time || null,
+        event_end_photo: matchedSa?.event_end_photo || null,
+        event_end_time: matchedSa?.event_end_time || null,
+        raw_footage_link: matchedSa?.raw_footage_link || null,
+        task_status: matchedSa?.task_status || 'Pending',
+        assignment_status: matchedSa?.assignment_status || 'Assigned',
+        updated_at: matchedSa?.updated_at,
+        updated_by: matchedSa?.updated_by
+      });
+    });
+
+    // If there were any extra legacy assignments for this event not in Sales requirements, retain them as extra slots
+    eventDbAssignments.forEach(extraSa => {
+      if (!usedDbAssignmentIds.has(extraSa.assignment_id) && extraSa.staff_name) {
+        usedDbAssignmentIds.add(extraSa.assignment_id);
+        const st = staffList?.find(s => s.name?.toLowerCase() === extraSa.staff_name.toLowerCase());
+        slotAllocations.push({
+          id: extraSa.assignment_id,
+          assignment_id: extraSa.assignment_id,
+          task_id: extraSa.task_id || `TASK_EXTRA_${extraSa.assignment_id}`,
+          order_id: orderId,
+          lead_id: extraSa.lead_id || lead?.lead_id,
+          event_id: evId,
+          event_name: eventName,
+          event_date: eventDate,
+          reporting_date: reportingDate,
+          reporting_time: reportingTime,
+          staff_role: extraSa.staff_role || 'General Staff',
+          slot_number: extraSa.slot_number || 1,
+          staff_id: extraSa.staff_id || st?.staff_id || 'STF-0000',
+          staff_name: extraSa.staff_name,
+          staff_type: extraSa.staff_type || 'In-House',
+          mobile: extraSa.mobile || st?.mobile || '',
+          equipment: Array.isArray(extraSa.equipment) ? extraSa.equipment : [],
+          equipment_received_photo: extraSa.equipment_received_photo || null,
+          equipment_handover_photo: extraSa.equipment_handover_photo || null,
+          equipment_handover_to: extraSa.equipment_handover_to || null,
+          equipment_handover_notes: extraSa.equipment_handover_notes || null,
+          event_start_photo: extraSa.event_start_photo || null,
+          event_start_time: extraSa.event_start_time || null,
+          event_end_photo: extraSa.event_end_photo || null,
+          event_end_time: extraSa.event_end_time || null,
+          raw_footage_link: extraSa.raw_footage_link || null,
+          task_status: extraSa.task_status || 'Pending',
+          assignment_status: extraSa.assignment_status || 'Assigned',
+          updated_at: extraSa.updated_at,
+          updated_by: extraSa.updated_by
+        });
+      }
+    });
+
+    allocations[evId] = {
+      eventId: evId,
+      eventName,
+      eventType,
+      eventDate,
+      eventStartTime,
+      eventEndDate,
+      eventEndTime,
+      reportingDate,
+      reportingTime,
+      location,
+      staff: slotAllocations,
+      equipment: Array.from(new Set(slotAllocations.flatMap(s => s.equipment || [])))
+    };
+  });
+
+  return allocations;
+}
+
+// ============================================================================
+// 3. Supabase Storage: Persistent Image Upload Helper
+// ============================================================================
+
+/**
+ * Uploads a proof photo (Equipment Received, Equipment Handover, Event Start, Event End)
+ * to Supabase Storage at: operations/{assignment_id}/{category}/{filename}.
+ * Returns the permanent public URL.
+ */
+export async function uploadProofImage(params: {
+  assignmentId: string;
+  category: 'equipment-received' | 'equipment-handover' | 'event-start' | 'event-end';
+  photoInput: File | Blob | string;
+  customFilename?: string;
+}): Promise<string> {
+  const { assignmentId, category, photoInput, customFilename } = params;
+
+  if (!assignmentId || !assignmentId.trim()) {
+    throw new Error('Assignment ID is required for photo upload.');
+  }
+
+  // If already a remote URL, return it
+  if (typeof photoInput === 'string') {
+    const trimmed = photoInput.trim();
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+  }
+
+  let blob: Blob;
+  let contentType = 'image/jpeg';
+  let base64DataUri: string | null = null;
+
+  if (photoInput instanceof File || photoInput instanceof Blob) {
+    blob = photoInput;
+    contentType = photoInput.type || 'image/jpeg';
+    try {
+      base64DataUri = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(photoInput);
+      });
+    } catch (e) {
+      console.warn('[OperationsService] FileReader fallback error:', e);
+    }
+  } else if (typeof photoInput === 'string' && photoInput.trim().startsWith('data:')) {
+    base64DataUri = photoInput.trim();
+    const parts = base64DataUri.split(';base64,');
+    contentType = parts[0].replace('data:', '') || 'image/jpeg';
+    const byteCharacters = atob(parts[1]);
+    const byteArrays = [];
+    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+      const slice = byteCharacters.slice(offset, offset + 512);
+      const byteNumbers = new Array(slice.length);
+      for (let i = 0; i < slice.length; i++) {
+        byteNumbers[i] = slice.charCodeAt(i);
+      }
+      byteArrays.push(new Uint8Array(byteNumbers));
+    }
+    blob = new Blob(byteArrays, { type: contentType });
+  } else {
+    throw new Error('Invalid image input format. Must be File, Blob, or base64 data URI.');
+  }
+
+  const cleanAssignId = assignmentId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+  const fname = customFilename || `proof_${Date.now()}_${Math.floor(Math.random() * 10000)}.${ext}`;
+  const storagePath = `${cleanAssignId}/${category}/${fname}`;
+
+  // 1. Try Direct Client Upload to 'operations' bucket first
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.storage
+        .from('operations')
+        .upload(storagePath, blob, {
+          contentType,
+          upsert: true
+        });
+
+      if (!error && data) {
+        const { data: publicData } = supabaseClient.storage
+          .from('operations')
+          .getPublicUrl(storagePath);
+
+        if (publicData?.publicUrl) {
+          console.log('[OperationsService] Uploaded directly to Supabase storage:', publicData.publicUrl);
+          return publicData.publicUrl;
+        }
+      }
+    } catch (directErr) {
+      console.warn('[OperationsService] Direct storage upload warning:', directErr);
+    }
+  }
+
+  // 2. Server Proxy Upload fallback via /api/upload-proof
+  if (base64DataUri) {
+    try {
+      const resp = await fetch('/api/upload-proof', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          base64: base64DataUri,
+          fileName: storagePath,
+          contentType,
+          bucketName: 'operations'
+        })
+      });
+      const resData = await resp.json();
+      if (resData.success && resData.publicUrl) {
+        console.log('[OperationsService] Uploaded successfully via server proxy:', resData.publicUrl);
+        return resData.publicUrl;
+      }
+    } catch (proxyErr) {
+      console.error('[OperationsService] Server proxy upload error:', proxyErr);
+    }
+  }
+
+  // 3. Fallback to base64 Data URI if network storage fails
+  if (base64DataUri) {
+    console.warn('[OperationsService] Storage upload failed; falling back to Data URI');
+    return base64DataUri;
+  }
+
+  throw new Error('Failed to upload proof image to Supabase Storage.');
+}
+
+// ============================================================================
+// 4. Operations Service Methods: Discrete Single-Assignment Actions
+// ============================================================================
+
+/**
+ * Uploads Equipment Received image for a specific assignment.
+ * Updates ONLY equipment_received_photo for that exact assignment_id.
+ */
+export async function uploadEquipmentReceived(params: {
+  assignmentId: string;
+  orderId: string;
+  eventId?: string;
+  eventName?: string;
+  staffName: string;
+  photoInput: File | Blob | string;
+  remarks?: string;
+  updatedBy?: string;
+  pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
+  pushInsertFn?: (table: string, payload: any) => Promise<any>;
+}): Promise<{ success: boolean; photoUrl: string }> {
+  const { assignmentId, orderId, eventId, eventName, staffName, photoInput, remarks, updatedBy, pushUpdateFn, pushInsertFn } = params;
+  const timestamp = new Date().toISOString();
+
+  // 1. Upload to Supabase Storage
+  const photoUrl = await uploadProofImage({
+    assignmentId,
+    category: 'equipment-received',
+    photoInput
+  });
+
+  // 2. Update staff_assignments row ONLY
+  const updatePayload = {
+    equipment_received_photo: photoUrl,
+    task_status: 'Equipment Received',
+    assignment_status: 'Assigned',
+    updated_at: timestamp,
+    updated_by: updatedBy || staffName
+  };
+
+  if (pushUpdateFn) {
+    await pushUpdateFn('staff_assignments', 'assignment_id', assignmentId, updatePayload);
+  } else if (supabaseClient) {
+    await supabaseClient
+      .from('staff_assignments')
+      .update(updatePayload)
+      .eq('assignment_id', assignmentId);
+  }
+
+  // 3. Record audit trail in lead_equipment_history and staff_task_submissions
+  try {
+    const historyPayload = {
+      order_id: orderId,
+      assignment_id: assignmentId,
+      event_id: eventId || null,
+      event_name: eventName || null,
+      equipment_name: 'Equipment Received Proof',
+      equipment_status: 'Received',
+      proof_type: 'equipment_received',
+      photo_url: photoUrl,
+      returned_by: staffName,
+      created_at: timestamp,
+      remarks: remarks || `Equipment Received proof uploaded by ${staffName}`
+    };
+    if (pushInsertFn) {
+      await pushInsertFn('lead_equipment_history', historyPayload);
+    } else if (supabaseClient) {
+      await supabaseClient.from('lead_equipment_history').insert([historyPayload]);
+    }
+  } catch (err) {
+    console.warn('[OperationsService] lead_equipment_history insert note:', err);
+  }
+
+  return { success: true, photoUrl };
+}
+
+/**
+ * Uploads Equipment Handover image for a specific assignment.
+ * Updates ONLY equipment_handover_photo for that exact assignment_id.
+ * NEVER overwrites or falls back to equipment_received_photo.
+ */
+export async function uploadEquipmentHandover(params: {
+  assignmentId: string;
+  orderId: string;
+  eventId?: string;
+  eventName?: string;
+  staffName: string;
+  photoInput: File | Blob | string;
+  handoverTo?: string;
+  handoverNotes?: string;
+  updatedBy?: string;
+  pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
+  pushInsertFn?: (table: string, payload: any) => Promise<any>;
+}): Promise<{ success: boolean; photoUrl: string }> {
+  const { assignmentId, orderId, eventId, eventName, staffName, photoInput, handoverTo, handoverNotes, updatedBy, pushUpdateFn, pushInsertFn } = params;
+  const timestamp = new Date().toISOString();
+
+  // 1. Upload to Supabase Storage
+  const photoUrl = await uploadProofImage({
+    assignmentId,
+    category: 'equipment-handover',
+    photoInput
+  });
+
+  // 2. Update staff_assignments row ONLY
+  const updatePayload = {
+    equipment_handover_photo: photoUrl,
+    equipment_handover_to: handoverTo || staffName,
+    equipment_handover_notes: handoverNotes || null,
+    task_status: 'Equipment Handover',
+    updated_at: timestamp,
+    updated_by: updatedBy || staffName
+  };
+
+  if (pushUpdateFn) {
+    await pushUpdateFn('staff_assignments', 'assignment_id', assignmentId, updatePayload);
+  } else if (supabaseClient) {
+    await supabaseClient
+      .from('staff_assignments')
+      .update(updatePayload)
+      .eq('assignment_id', assignmentId);
+  }
+
+  // 3. Record audit trail in lead_equipment_history
+  try {
+    const historyPayload = {
+      order_id: orderId,
+      assignment_id: assignmentId,
+      event_id: eventId || null,
+      event_name: eventName || null,
+      equipment_name: 'Equipment Handover Proof',
+      equipment_status: 'Handover',
+      proof_type: 'equipment_handover',
+      photo_url: photoUrl,
+      returned_by: staffName,
+      created_at: timestamp,
+      remarks: handoverNotes || `Equipment Handover to ${handoverTo || staffName} proof uploaded by ${staffName}`
+    };
+    if (pushInsertFn) {
+      await pushInsertFn('lead_equipment_history', historyPayload);
+    } else if (supabaseClient) {
+      await supabaseClient.from('lead_equipment_history').insert([historyPayload]);
+    }
+  } catch (err) {
+    console.warn('[OperationsService] lead_equipment_history handover insert note:', err);
+  }
+
+  return { success: true, photoUrl };
+}
+
+/**
+ * Uploads Event Start photo for a specific assignment.
+ * Updates ONLY event_start_photo and event_start_time for that exact assignment_id.
+ */
+export async function uploadEventStart(params: {
+  assignmentId: string;
+  orderId: string;
+  eventId?: string;
+  eventName?: string;
+  staffName: string;
+  photoInput: File | Blob | string;
+  remarks?: string;
+  updatedBy?: string;
+  pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
+  pushInsertFn?: (table: string, payload: any) => Promise<any>;
+}): Promise<{ success: boolean; photoUrl: string }> {
+  const { assignmentId, orderId, eventId, eventName, staffName, photoInput, remarks, updatedBy, pushUpdateFn, pushInsertFn } = params;
+  const timestamp = new Date().toISOString();
+
+  // 1. Upload to Supabase Storage
+  const photoUrl = await uploadProofImage({
+    assignmentId,
+    category: 'event-start',
+    photoInput
+  });
+
+  // 2. Update staff_assignments row ONLY
+  const updatePayload = {
+    event_start_photo: photoUrl,
+    event_start_time: timestamp,
+    task_status: 'Event Started',
+    updated_at: timestamp,
+    updated_by: updatedBy || staffName
+  };
+
+  if (pushUpdateFn) {
+    await pushUpdateFn('staff_assignments', 'assignment_id', assignmentId, updatePayload);
+  } else if (supabaseClient) {
+    await supabaseClient
+      .from('staff_assignments')
+      .update(updatePayload)
+      .eq('assignment_id', assignmentId);
+  }
+
+  return { success: true, photoUrl };
+}
+
+/**
+ * Uploads Event Complete / End photo for a specific assignment.
+ * Updates ONLY event_end_photo and event_end_time for that exact assignment_id.
+ */
+export async function uploadEventEnd(params: {
+  assignmentId: string;
+  orderId: string;
+  eventId?: string;
+  eventName?: string;
+  staffName: string;
+  photoInput: File | Blob | string;
+  remarks?: string;
+  updatedBy?: string;
+  pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
+  pushInsertFn?: (table: string, payload: any) => Promise<any>;
+}): Promise<{ success: boolean; photoUrl: string }> {
+  const { assignmentId, orderId, eventId, eventName, staffName, photoInput, remarks, updatedBy, pushUpdateFn, pushInsertFn } = params;
+  const timestamp = new Date().toISOString();
+
+  // 1. Upload to Supabase Storage
+  const photoUrl = await uploadProofImage({
+    assignmentId,
+    category: 'event-end',
+    photoInput
+  });
+
+  // 2. Update staff_assignments row ONLY
+  const updatePayload = {
+    event_end_photo: photoUrl,
+    event_end_time: timestamp,
+    task_status: 'Event Completed',
+    updated_at: timestamp,
+    updated_by: updatedBy || staffName
+  };
+
+  if (pushUpdateFn) {
+    await pushUpdateFn('staff_assignments', 'assignment_id', assignmentId, updatePayload);
+  } else if (supabaseClient) {
+    await supabaseClient
+      .from('staff_assignments')
+      .update(updatePayload)
+      .eq('assignment_id', assignmentId);
+  }
+
+  return { success: true, photoUrl };
+}
+
+/**
+ * Uploads/Saves Raw Footage Link for a specific assignment.
+ * Saves ONLY for that exact assignment_id. Never spills into other tasks or events.
+ */
+export async function uploadRawFootage(params: {
+  assignmentId: string;
+  orderId: string;
+  eventId?: string;
+  eventName?: string;
+  staffName: string;
+  rawFootageLink: string;
+  updatedBy?: string;
+  pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
+  pushInsertFn?: (table: string, payload: any) => Promise<any>;
+}): Promise<{ success: boolean }> {
+  const { assignmentId, orderId, eventId, eventName, staffName, rawFootageLink, updatedBy, pushUpdateFn, pushInsertFn } = params;
+  const timestamp = new Date().toISOString();
+  const cleanLink = (rawFootageLink || '').trim();
+
+  // 1. Update staff_assignments row ONLY
+  const updatePayload = {
+    raw_footage_link: cleanLink,
+    updated_at: timestamp,
+    updated_by: updatedBy || staffName
+  };
+
+  if (pushUpdateFn) {
+    await pushUpdateFn('staff_assignments', 'assignment_id', assignmentId, updatePayload);
+  } else if (supabaseClient) {
+    await supabaseClient
+      .from('staff_assignments')
+      .update(updatePayload)
+      .eq('assignment_id', assignmentId);
+  }
+
+  // 2. Upsert in raw_footage table with exact assignment_id and event_id
+  try {
+    const rfPayload = {
+      order_id: orderId,
+      assignment_id: assignmentId,
+      event_id: eventId || null,
+      event_name: eventName || null,
+      server_path: cleanLink,
+      drive_link: cleanLink,
+      uploaded_by: staffName,
+      uploaded_date: timestamp,
+      raw_received: 'Yes',
+      status: 'Received'
+    };
+
+    if (pushInsertFn) {
+      await pushInsertFn('raw_footage', rfPayload);
+    } else if (supabaseClient) {
+      await supabaseClient.from('raw_footage').insert([rfPayload]);
+    }
+  } catch (rfErr) {
+    console.warn('[OperationsService] raw_footage insert note:', rfErr);
+  }
+
+  return { success: true };
+}
+
+// ============================================================================
+// 5. Query Resolvers: Single Source of Truth for Modals and UI
+// ============================================================================
+
+/**
+ * Resolves Equipment Verification data strictly from assignment_id.
+ * Equipment Handover will NEVER display Equipment Received image as fallback.
+ */
+export function getEquipmentVerificationData(params: {
+  assignmentId?: string;
+  orderId?: string;
+  eventId?: string;
+  staffName: string;
+  staffAssignments?: any[];
+  leadEquipmentHistory?: any[];
+}): EquipmentVerificationData {
+  const { assignmentId, orderId, eventId, staffName, staffAssignments = [], leadEquipmentHistory = [] } = params;
+
+  // 1. Match exact assignment from staffAssignments
+  let sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  if (!sa && orderId) {
+    sa = staffAssignments.find(s => 
+      s.order_id === orderId && 
+      (!eventId || s.event_id === eventId) &&
+      (s.staff_name || '').trim().toLowerCase() === (staffName || '').trim().toLowerCase()
+    );
+  }
+
+  const assignedEq: string[] = sa?.equipment && Array.isArray(sa.equipment)
+    ? sa.equipment
+    : (typeof sa?.equipment === 'string' ? sa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+
+  let recPhoto = sa?.equipment_received_photo || null;
+  let handPhoto = sa?.equipment_handover_photo || null;
+  let recDate: string | null = null;
+  let recTime: string | null = null;
+  let handDate: string | null = null;
+  let handTime: string | null = null;
+
+  if (sa?.updated_at) {
+    const parts = sa.updated_at.split('T');
+    if (recPhoto && !recDate) recDate = parts[0];
+    if (recPhoto && !recTime) recTime = parts[1]?.split('.')[0] || null;
+  }
+
+  // 2. Check lead_equipment_history ONLY for matching assignment_id or matching (order_id + event_id + staff)
+  const matchingHistory = leadEquipmentHistory.filter(h => {
+    if (assignmentId && h.assignment_id && h.assignment_id === assignmentId) return true;
+    if (orderId && h.order_id === orderId) {
+      if (eventId && h.event_id && h.event_id !== eventId) return false;
+      const retBy = (h.returned_by || '').trim().toLowerCase();
+      const stNorm = (staffName || '').trim().toLowerCase();
+      if (retBy && stNorm && (retBy === stNorm || retBy.includes(stNorm) || stNorm.includes(retBy))) return true;
+    }
+    return false;
+  });
+
+  matchingHistory.forEach(h => {
+    const pType = (h.proof_type || h.equipment_status || '').toLowerCase();
+    const hUrl = h.photo_url || null;
+    const hTimeStr = h.created_at || h.returned_at || null;
+
+    if (!recPhoto && (pType.includes('received') || pType.includes('collection'))) {
+      recPhoto = hUrl;
+      if (hTimeStr) {
+        recDate = hTimeStr.split('T')[0];
+        recTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
+      }
+    }
+
+    if (!handPhoto && (pType.includes('handover') || pType.includes('return'))) {
+      handPhoto = hUrl;
+      if (hTimeStr) {
+        handDate = hTimeStr.split('T')[0];
+        handTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
+      }
+    }
+  });
+
+  return {
+    assignmentId: assignmentId || sa?.assignment_id || 'UNKNOWN',
+    staffName: sa?.staff_name || staffName,
+    staffRole: sa?.staff_role,
+    eventId: sa?.event_id || eventId,
+    eventName: sa?.event_name,
+    assignedEquipment: assignedEq,
+    equipmentReceivedPhoto: recPhoto,
+    equipmentReceivedDate: recDate,
+    equipmentReceivedTime: recTime,
+    equipmentHandoverPhoto: handPhoto,
+    equipmentHandoverDate: handDate,
+    equipmentHandoverTime: handTime,
+    equipmentHandoverTo: sa?.equipment_handover_to || null,
+    taskStatus: sa?.task_status || 'Pending'
+  };
+}
+
+/**
+ * Resolves Event Start & Event Complete images strictly from assignment_id.
+ */
+export function getEventImagesData(params: {
+  assignmentId?: string;
+  orderId?: string;
+  eventId?: string;
+  staffName: string;
+  staffAssignments?: any[];
+}): EventImagesData {
+  const { assignmentId, orderId, eventId, staffName, staffAssignments = [] } = params;
+
+  let sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  if (!sa && orderId) {
+    sa = staffAssignments.find(s => 
+      s.order_id === orderId && 
+      (!eventId || s.event_id === eventId) &&
+      (s.staff_name || '').trim().toLowerCase() === (staffName || '').trim().toLowerCase()
+    );
+  }
+
+  let startPhoto = sa?.event_start_photo || null;
+  let endPhoto = sa?.event_end_photo || null;
+  let startDate: string | null = null;
+  let startTime: string | null = null;
+  let endDate: string | null = null;
+  let endTime: string | null = null;
+
+  if (sa?.event_start_time) {
+    const parts = sa.event_start_time.split('T');
+    startDate = parts[0];
+    startTime = parts[1]?.split('.')[0] || null;
+  }
+  if (sa?.event_end_time) {
+    const parts = sa.event_end_time.split('T');
+    endDate = parts[0];
+    endTime = parts[1]?.split('.')[0] || null;
+  }
+
+  return {
+    assignmentId: assignmentId || sa?.assignment_id || 'UNKNOWN',
+    staffName: sa?.staff_name || staffName,
+    staffRole: sa?.staff_role,
+    eventId: sa?.event_id || eventId,
+    eventName: sa?.event_name,
+    eventStartPhoto: startPhoto,
+    eventStartDate: startDate,
+    eventStartTime: startTime,
+    eventEndPhoto: endPhoto,
+    eventEndDate: endDate,
+    eventEndTime: endTime,
+    taskStatus: sa?.task_status || 'Pending'
+  };
+}
+
+/**
+ * Resolves Raw Footage details strictly for this assignment slot.
+ */
+export function getRawFootageData(params: {
+  assignmentId?: string;
+  orderId?: string;
+  eventId?: string;
+  staffName: string;
+  staffAssignments?: any[];
+  rawFootageList?: any[];
+}): RawFootageData {
+  const { assignmentId, orderId, eventId, staffName, staffAssignments = [], rawFootageList = [] } = params;
+
+  let sa = staffAssignments.find(s => s.assignment_id === assignmentId);
+  if (!sa && orderId) {
+    sa = staffAssignments.find(s => 
+      s.order_id === orderId && 
+      (!eventId || s.event_id === eventId) &&
+      (s.staff_name || '').trim().toLowerCase() === (staffName || '').trim().toLowerCase()
+    );
+  }
+
+  let rawLink: string | null = sa?.raw_footage_link || null;
+
+  if (!rawLink && rawFootageList && rawFootageList.length > 0) {
+    const match = rawFootageList.find(rf => {
+      if (assignmentId && rf.assignment_id === assignmentId) return true;
+      if (orderId && rf.order_id === orderId) {
+        if (eventId && rf.event_id && rf.event_id !== eventId) return false;
+        const upBy = (rf.uploaded_by || '').trim().toLowerCase();
+        const stNorm = (staffName || '').trim().toLowerCase();
+        if (upBy && stNorm && (upBy === stNorm || upBy.includes(stNorm) || stNorm.includes(upBy))) return true;
+      }
+      return false;
+    });
+    if (match) {
+      rawLink = match.server_path || match.drive_link || null;
+    }
+  }
+
+  return {
+    assignmentId: assignmentId || sa?.assignment_id || 'UNKNOWN',
+    orderId: orderId || sa?.order_id || 'UNKNOWN',
+    eventId: sa?.event_id || eventId,
+    eventName: sa?.event_name,
+    staffName: sa?.staff_name || staffName,
+    staffRole: sa?.staff_role,
+    rawFootageLink: rawLink,
+    updatedAt: sa?.updated_at,
+    updatedBy: sa?.updated_by
+  };
+}
+
+// ============================================================================
+// 6. Comprehensive Staff Assignment Persistence Orchestration
+// ============================================================================
+
+export interface ExecuteSaveAssignmentsParams {
+  orderId: string;
+  leadId: string;
+  assignments: {
+    assignment_id?: string;
+    task_id?: string;
+    staff_role: string;
+    staff_id: string;
+    staff_name: string;
+    mobile?: string;
+    staff_type?: string;
+    equipment?: string[];
+    event_id?: string;
+    event_name?: string;
+    slot_number?: number;
+    task_status?: string;
+    assignment_status?: string;
+    equipment_received_photo?: string | null;
+    equipment_handover_photo?: string | null;
+    equipment_handover_to?: string | null;
+    equipment_handover_notes?: string | null;
+    event_start_photo?: string | null;
+    event_start_time?: string | null;
+    event_end_photo?: string | null;
+    event_end_time?: string | null;
+    raw_footage_link?: string | null;
+  }[];
+  targetStage?: string;
+  metaPayload?: {
+    updatedEvents?: any[];
+    equipmentKit?: string;
+    reportingTime?: string;
+    eventDate?: string;
+    eventTime?: string;
+    remarks?: string;
+    equipmentUpdates?: { equipmentId: string; status: string }[];
+    equipmentHistoryInserts?: any[];
+  };
+  existingStaffAssignments: any[];
+  currentUserName?: string;
+  currentRole?: string;
+  staffList?: any[];
+  pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
+  pushInsertFn?: (table: string, payload: any) => Promise<any>;
+}
+
+export async function executeSaveStaffAssignments(params: ExecuteSaveAssignmentsParams): Promise<{
+  success: boolean;
+  savedAssignments: any[];
+  opUpdates: any;
+  orderUpdates: any;
+  leadUpdates: any;
+}> {
+  const {
+    orderId,
+    leadId,
+    assignments,
+    targetStage,
+    metaPayload,
+    existingStaffAssignments = [],
+    currentUserName,
+    currentRole,
+    staffList = [],
+    pushUpdateFn,
+    pushInsertFn
+  } = params;
+
+  if (!orderId) {
+    throw new Error('Missing Required Field: orderId is required.');
+  }
+
+  const timestamp = new Date().toISOString();
+  const assignDate = timestamp.split('T')[0];
+  const changedBy = currentUserName || 'Operations Team';
+
+  // 1. Fetch existing assignments directly from DB to prevent stale state
+  let existingDbAssignments: any[] = [];
+  if (supabaseClient) {
+    try {
+      const { data: dbData } = await supabaseClient
+        .from('staff_assignments')
+        .select('*')
+        .eq('order_id', orderId);
+      if (dbData && Array.isArray(dbData)) {
+        existingDbAssignments = dbData;
+      }
+    } catch (fetchErr) {
+      console.warn('[OperationsService] Could not fetch existing staff assignments from DB:', fetchErr);
+    }
+  }
+  if (existingDbAssignments.length === 0 && existingStaffAssignments.length > 0) {
+    existingDbAssignments = existingStaffAssignments.filter(sa => sa.order_id === orderId);
+  }
+
+  const updatedAssignments: { matchColumn: string; matchValue: string; updates: any }[] = [];
+  const newInsertsForDb: any[] = [];
+  const finalAssignmentsForState: any[] = [];
+  const matchedDbAssignmentIds = new Set<string>();
+
+  // 2. Process each submitted assignment slot
+  for (const a of assignments) {
+    const aStaffNameTrimmed = (a.staff_name || '').trim();
+    if (!aStaffNameTrimmed) continue;
+
+    const eventId = a.event_id || 'ev';
+    const roleName = a.staff_role ? a.staff_role.trim() : 'Staff';
+    const slotNumber = a.slot_number || 1;
+
+    // Resolve or retain canonical assignment_id and task_id
+    const deterministicAssignId = a.assignment_id || generateDeterministicAssignmentId(orderId, eventId, roleName, slotNumber);
+    const deterministicTaskId = a.task_id || generateDeterministicTaskId(orderId, eventId, roleName, slotNumber);
+
+    const st = staffList.find(s => s.name?.trim().toLowerCase() === aStaffNameTrimmed.toLowerCase());
+    const resolvedStaffId = a.staff_id || (st as any)?.staff_id || (st as any)?.id || 'STF-0000';
+    const staffType = a.staff_type || (st as any)?.staff_type || (st as any)?.Staff_Type || 'In-House';
+
+    // Find if this assignment slot already exists in DB
+    const matched = existingDbAssignments.find(ed => 
+      ed.assignment_id === deterministicAssignId ||
+      ed.assignment_id === a.assignment_id ||
+      (ed.task_id && ed.task_id === deterministicTaskId) ||
+      (ed.event_id === eventId && (ed.staff_role || '').trim().toLowerCase() === roleName.toLowerCase() && Number(ed.slot_number || 1) === slotNumber)
+    );
+
+    const canonicalAssignId = matched?.assignment_id || deterministicAssignId;
+
+    // Parse equipment safely
+    const cleanEquipment = Array.isArray(a.equipment) ? a.equipment : [];
+
+    const slotPayload = {
+      assignment_id: canonicalAssignId,
+      task_id: deterministicTaskId,
+      order_id: orderId,
+      lead_id: leadId || null,
+      event_id: eventId,
+      event_name: a.event_name || null,
+      staff_role: roleName,
+      slot_number: slotNumber,
+      staff_id: resolvedStaffId,
+      staff_name: aStaffNameTrimmed,
+      mobile: a.mobile || (st as any)?.mobile || (st as any)?.phone || '',
+      staff_type: staffType,
+      equipment: cleanEquipment,
+      assigned_equipment: cleanEquipment.join(', '),
+      assignment_date: (a as any).assignment_date || matched?.assignment_date || assignDate,
+      assignment_status: a.assignment_status || matched?.assignment_status || 'Assigned',
+      task_status: a.task_status || matched?.task_status || 'Assigned',
+      // Strictly preserve existing photos and footage unless explicitly passed in this assignment
+      equipment_received_photo: a.equipment_received_photo !== undefined ? a.equipment_received_photo : (matched?.equipment_received_photo || null),
+      equipment_handover_photo: a.equipment_handover_photo !== undefined ? a.equipment_handover_photo : (matched?.equipment_handover_photo || null),
+      equipment_handover_to: a.equipment_handover_to !== undefined ? a.equipment_handover_to : (matched?.equipment_handover_to || null),
+      equipment_handover_notes: a.equipment_handover_notes !== undefined ? a.equipment_handover_notes : (matched?.equipment_handover_notes || null),
+      event_start_photo: a.event_start_photo !== undefined ? a.event_start_photo : (matched?.event_start_photo || null),
+      event_start_time: a.event_start_time !== undefined ? a.event_start_time : (matched?.event_start_time || null),
+      event_end_photo: a.event_end_photo !== undefined ? a.event_end_photo : (matched?.event_end_photo || null),
+      event_end_time: a.event_end_time !== undefined ? a.event_end_time : (matched?.event_end_time || null),
+      raw_footage_link: a.raw_footage_link !== undefined ? a.raw_footage_link : (matched?.raw_footage_link || null),
+      updated_at: timestamp,
+      updated_by: changedBy
+    };
+
+    finalAssignmentsForState.push(slotPayload);
+
+    if (matched) {
+      matchedDbAssignmentIds.add(matched.assignment_id);
+      updatedAssignments.push({
+        matchColumn: 'assignment_id',
+        matchValue: matched.assignment_id,
+        updates: slotPayload
+      });
+    } else {
+      newInsertsForDb.push(slotPayload);
+    }
+  }
+
+  // 3. Mark removed assignments as Cancelled if event was edited
+  const touchedEventIds = new Set(assignments.map(a => a.event_id).filter(Boolean));
+  for (const ed of existingDbAssignments) {
+    if (!matchedDbAssignmentIds.has(ed.assignment_id) && !finalAssignmentsForState.some(r => r.assignment_id === ed.assignment_id)) {
+      const belongsToTouchedEvent = ed.event_id && touchedEventIds.has(ed.event_id);
+      if (belongsToTouchedEvent && ed.assignment_status !== 'Cancelled') {
+        updatedAssignments.push({
+          matchColumn: 'assignment_id',
+          matchValue: ed.assignment_id,
+          updates: {
+            assignment_status: 'Cancelled',
+            task_status: 'Cancelled',
+            updated_at: timestamp,
+            updated_by: changedBy
+          }
+        });
+      } else if (!belongsToTouchedEvent) {
+        finalAssignmentsForState.push({ ...ed });
+      }
+    }
+  }
+
+  // 4. Prepare operations update payload
+  const opUpdates: any = {
+    updated_by: changedBy
+  };
+  for (const a of assignments) {
+    const roleLower = (a.staff_role || '').toLowerCase();
+    if (roleLower.includes('photographer')) opUpdates.photographer_assigned = a.staff_name;
+    else if (roleLower.includes('videographer')) opUpdates.videographer_assigned = a.staff_name;
+    else if (roleLower.includes('drone') || roleLower.includes('aerial')) opUpdates.drone_operator_assigned = a.staff_name;
+    else if (roleLower.includes('assistant')) opUpdates.assistant_assigned = a.staff_name;
+  }
+  if (metaPayload?.equipmentKit !== undefined) opUpdates.equipment_kit = metaPayload.equipmentKit;
+  if (metaPayload?.reportingTime) opUpdates.reporting_time = metaPayload.reportingTime;
+  if (metaPayload?.remarks !== undefined) opUpdates.remarks = metaPayload.remarks;
+  if (metaPayload?.eventDate) opUpdates.event_date = metaPayload.eventDate;
+  if (metaPayload?.eventTime) opUpdates.event_time = metaPayload.eventTime;
+  if (targetStage) {
+    opUpdates.event_status = targetStage;
+    opUpdates.current_stage = targetStage;
+  }
+  opUpdates.assigned_staff = assignments.map(a => a.staff_name).join(', ');
+  opUpdates.assigned_roles = assignments.map(a => a.staff_role).join(', ');
+
+  // 5. Prepare order & lead updates
+  const finalStage = targetStage || 'Assigned Crew';
+  const preventDowngradeStages = [
+    'Event Started', 'Event Completed', 'Raw Footage Received',
+    'Editor Assigned', 'Editing Started', 'Editing In Progress',
+    'Internal QC Review', 'Client Review Sent', 'Internal Review',
+    'Client Review', 'Revision Required', 'Revision In Progress',
+    'Revision', 'Final Approval', 'Ready for Delivery',
+    'Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'
+  ];
+  const shouldUpdateStage = targetStage && targetStage !== 'Order Confirmed' && !preventDowngradeStages.includes(targetStage);
+
+  const orderUpdates: any = {
+    updated_by: changedBy
+  };
+  if (metaPayload?.eventDate) orderUpdates.event_date = metaPayload.eventDate;
+  if (metaPayload?.eventTime) orderUpdates.event_time = metaPayload.eventTime;
+  if (shouldUpdateStage) {
+    orderUpdates.current_stage = finalStage;
+  }
+
+  const leadUpdates: any = {
+    updated_by: changedBy,
+    assigned_staff: assignments.map(a => a.staff_name).join(', '),
+    assigned_roles: assignments.map(a => a.staff_role).join(', ')
+  };
+  if (metaPayload?.updatedEvents) leadUpdates.events = metaPayload.updatedEvents;
+  if (metaPayload?.equipmentKit !== undefined) leadUpdates.assigned_equipment = metaPayload.equipmentKit;
+  if (metaPayload?.reportingTime) leadUpdates.reporting_time = metaPayload.reportingTime;
+  if (shouldUpdateStage) {
+    leadUpdates.current_status = finalStage;
+    leadUpdates.status = finalStage;
+  }
+
+  // 6. Execute DB writes in parallel
+  const dbPromises: Promise<any>[] = [];
+
+  // Updates for existing assignments
+  for (const item of updatedAssignments) {
+    if (pushUpdateFn) {
+      dbPromises.push(pushUpdateFn('staff_assignments', item.matchColumn, item.matchValue, item.updates));
+    } else if (supabaseClient) {
+      dbPromises.push(
+        supabaseClient.from('staff_assignments').update(item.updates).eq(item.matchColumn, item.matchValue) as unknown as Promise<any>
+      );
+    }
+  }
+
+  // Inserts for new assignments
+  for (const item of newInsertsForDb) {
+    if (pushInsertFn) {
+      dbPromises.push(pushInsertFn('staff_assignments', item));
+    } else if (supabaseClient) {
+      dbPromises.push(
+        supabaseClient.from('staff_assignments').insert([item]) as unknown as Promise<any>
+      );
+    }
+  }
+
+  // Operations table update
+  if (pushUpdateFn) {
+    dbPromises.push(pushUpdateFn('operations', 'order_id', orderId, opUpdates));
+  } else if (supabaseClient) {
+    dbPromises.push(supabaseClient.from('operations').update(opUpdates).eq('order_id', orderId) as unknown as Promise<any>);
+  }
+
+  // Orders table update
+  if (pushUpdateFn) {
+    dbPromises.push(pushUpdateFn('orders', 'order_id', orderId, orderUpdates));
+  } else if (supabaseClient) {
+    dbPromises.push(supabaseClient.from('orders').update(orderUpdates).eq('order_id', orderId) as unknown as Promise<any>);
+  }
+
+  // Leads table update
+  if (leadId) {
+    if (pushUpdateFn) {
+      dbPromises.push(pushUpdateFn('leads', 'lead_id', leadId, leadUpdates));
+    } else if (supabaseClient) {
+      dbPromises.push(supabaseClient.from('leads').update(leadUpdates).eq('lead_id', leadId) as unknown as Promise<any>);
+    }
+  }
+
+  // Equipment statuses
+  if (metaPayload?.equipmentUpdates) {
+    for (const eqUp of metaPayload.equipmentUpdates) {
+      if (pushUpdateFn) {
+        dbPromises.push(pushUpdateFn('equipment', 'equipment_id', eqUp.equipmentId, { status: eqUp.status, updated_at: timestamp }));
+      } else if (supabaseClient) {
+        dbPromises.push(supabaseClient.from('equipment').update({ status: eqUp.status, updated_at: timestamp }).eq('equipment_id', eqUp.equipmentId) as unknown as Promise<any>);
+      }
+    }
+  }
+
+  // Equipment history inserts
+  if (metaPayload?.equipmentHistoryInserts) {
+    for (const hIns of metaPayload.equipmentHistoryInserts) {
+      if (pushInsertFn) {
+        dbPromises.push(pushInsertFn('lead_equipment_history', hIns));
+      } else if (supabaseClient) {
+        dbPromises.push(supabaseClient.from('lead_equipment_history').insert([hIns]) as unknown as Promise<any>);
+      }
+    }
+  }
+
+  await Promise.allSettled(dbPromises);
+
+  return {
+    success: true,
+    savedAssignments: finalAssignmentsForState,
+    opUpdates,
+    orderUpdates,
+    leadUpdates
+  };
+}
+
+/**
+ * Fetches assignments for an order from Supabase.
+ */
+export async function getAssignments(orderId: string): Promise<any[]> {
+  if (!supabaseClient || !orderId) return [];
+  const { data, error } = await supabaseClient
+    .from('staff_assignments')
+    .select('*')
+    .eq('order_id', orderId)
+    .neq('assignment_status', 'Cancelled');
+  if (error) {
+    console.warn('[OperationsService] getAssignments error:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Fetches details for a specific assignment_id.
+ */
+export async function getAssignmentDetails(assignmentId: string): Promise<any | null> {
+  if (!supabaseClient || !assignmentId) return null;
+  const { data, error } = await supabaseClient
+    .from('staff_assignments')
+    .select('*')
+    .eq('assignment_id', assignmentId)
+    .single();
+  if (error) {
+    console.warn('[OperationsService] getAssignmentDetails error:', error);
+    return null;
+  }
+  return data;
+}
+

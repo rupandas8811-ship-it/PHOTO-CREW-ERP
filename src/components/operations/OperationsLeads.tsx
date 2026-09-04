@@ -35,6 +35,12 @@ import {
 } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
 import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
+import { 
+  buildInitialEventAllocations, 
+  getEquipmentVerificationData, 
+  getEventImagesData, 
+  getRawFootageData 
+} from '../../services/operationsAssignmentService';
 
 const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId, setMenuCoords, setActiveMenuItems }: any) => {
   return (
@@ -1743,203 +1749,14 @@ export const OperationsLeads: React.FC = () => {
     // Calculate expected roles for loading
     const teamMembersConfig = extractTeamMembersConfig(targetLead, targetLeadPkgs);
 
-    const initialAllocations: Record<string, any> = {};
-    if (targetLead?.events && targetLead.events.length > 0) {
-      const totalEvents = targetLead.events.length;
-      targetLead.events.forEach((ev, index) => {
-        const evId = ev.id || `ev-${index + 1}`;
-        const staffList: any[] = [];
-        
-        const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
+    const initialAllocations = buildInitialEventAllocations({
+      targetLead,
+      targetLeadPkgs,
+      order,
+      staffAssignments: staffAssignments || [],
+      staffList: staff || []
+    });
 
-        // Group roles into tasks
-        const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
-        includedRoles.forEach((roleItem: any) => {
-          const { qty, text } = parseQtyAndText(roleItem);
-          const roleName = (text || (typeof roleItem === 'string' ? roleItem : '')).trim();
-          if (!roleName) return;
-          if (tasksMap.has(roleName)) {
-            tasksMap.get(roleName)!.targetQty += (qty || 1);
-          } else {
-            tasksMap.set(roleName, { roleName, targetQty: qty || 1 });
-          }
-        });
-        const taskGroups = Array.from(tasksMap.values());
-
-        const isMultiEv = totalEvents > 1;
-        const orderStaffAssignments = staffAssignments?.filter(sa => {
-          if (!sa || sa.order_id !== order.order_id || sa.assignment_status === 'Cancelled') return false;
-          if (sa.event_id && evId) return String(sa.event_id) === String(evId);
-          if (!sa.event_id && totalEvents === 1) return true;
-          if (!sa.event_id && sa.event_name) {
-            const evName = (ev.event_name || ev.event_type || '').toLowerCase();
-            return sa.event_name.toLowerCase() === evName;
-          }
-          return false;
-        }) || [];
-        const existingNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean) : [];
-
-        let assignedEquipment: string[] = [];
-        let mobilesRaw = ev.assigned_staff_mobiles || '';
-        let staffEquipments: string[][] = [];
-        if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
-           const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
-           mobilesRaw = parts[0];
-           try {
-              staffEquipments = JSON.parse(parts[1]);
-           } catch(e) {}
-           assignedEquipment = Array.from(new Set(staffEquipments.flat()));
-        } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-          const parts = mobilesRaw.split(' || EQUIPMENT: ');
-          mobilesRaw = parts[0];
-          assignedEquipment = parts[1] ? parts[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-        }
-        
-        const cleanMobilesRaw = mobilesRaw.split(' || EQUIPMENT:')[0] || '';
-        const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim());
-
-        // Track used assignment_ids from orderStaffAssignments to avoid duplicate mapping
-        const usedSaIds = new Set<string>();
-
-        const getSlotId = (roleName: string, slotIdx: number) => {
-          const cleanRole = roleName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
-          const cleanEv = String(evId).replace(/[^a-zA-Z0-9]/g, '').slice(-10);
-          const cleanOrd = String(order.order_id).replace(/[^a-zA-Z0-9]/g, '').slice(-10);
-          return `ASST-${cleanOrd}-${cleanEv}-${cleanRole}-${slotIdx}`;
-        };
-
-        if (taskGroups.length > 0) {
-          let legacyNamePointer = 0;
-          taskGroups.forEach(task => {
-            const matchingDbAssignments = orderStaffAssignments.filter(sa =>
-              !usedSaIds.has(sa.assignment_id) &&
-              (sa.staff_role?.trim().toLowerCase() === task.roleName.trim().toLowerCase()) &&
-              (!sa.event_id || sa.event_id === evId)
-            );
-
-            for (let i = 0; i < task.targetQty; i++) {
-              const matchedSa = matchingDbAssignments[i];
-              if (matchedSa) {
-                usedSaIds.add(matchedSa.assignment_id);
-                const st = staff?.find(s => s.name?.toLowerCase() === matchedSa.staff_name?.toLowerCase());
-                const stType = matchedSa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
-                const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
-
-                const saNormName = (matchedSa.staff_name || '').trim().toLowerCase();
-                const nameIdxInEv = existingNames.findIndex((n: string) => n.toLowerCase() === saNormName || n.toLowerCase().includes(saNormName) || saNormName.includes(n.toLowerCase()));
-                const resolvedEq = (matchedSa.equipment && Array.isArray(matchedSa.equipment) && matchedSa.equipment.length > 0)
-                  ? matchedSa.equipment
-                  : (nameIdxInEv >= 0 && staffEquipments[nameIdxInEv] && staffEquipments[nameIdxInEv].length > 0)
-                  ? staffEquipments[nameIdxInEv]
-                  : (existingNames.length === 1 && assignedEquipment.length > 0)
-                  ? assignedEquipment
-                  : [];
-
-                staffList.push({
-                  id: matchedSa.assignment_id || getSlotId(task.roleName, i),
-                  staff_role: matchedSa.staff_role || task.roleName,
-                  staff_id: matchedSa.staff_id || st?.staff_id || 'STF-0000',
-                  staff_name: matchedSa.staff_name || '',
-                  mobile: matchedSa.mobile || st?.mobile || '',
-                  staff_type: cleanType,
-                  equipment: resolvedEq
-                });
-              } else if (existingNames.length > legacyNamePointer) {
-                const assignedName = existingNames[legacyNamePointer] || '';
-                legacyNamePointer++;
-                const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
-                const stType = st?.staff_type || (st as any)?.Staff_Type || 'In-House';
-                const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
-
-                staffList.push({
-                  id: getSlotId(task.roleName, i),
-                  staff_role: task.roleName,
-                  staff_id: st?.staff_id || 'STF-0000',
-                  staff_name: assignedName,
-                  mobile: st?.mobile || mobilesList[legacyNamePointer - 1] || '',
-                  staff_type: cleanType,
-                  equipment: staffEquipments[legacyNamePointer - 1] || (existingNames.length === 1 && assignedEquipment.length > 0 ? assignedEquipment : [])
-                });
-              } else {
-                staffList.push({
-                  id: getSlotId(task.roleName, i),
-                  staff_role: task.roleName,
-                  staff_id: '',
-                  staff_name: '',
-                  mobile: '',
-                  staff_type: 'In-House',
-                  equipment: []
-                });
-              }
-            }
-          });
-        } else if (orderStaffAssignments.length > 0) {
-          orderStaffAssignments.forEach((sa, saIdx) => {
-            const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase());
-            const stType = sa.staff_type || st?.staff_type || (st as any)?.Staff_Type || 'In-House';
-            const cleanType = (stType === 'Freelancer' || stType === 'freelancer') ? 'Freelancer' : 'In-House';
-
-            const saNormName = (sa.staff_name || '').trim().toLowerCase();
-            const nameIdxInEv = existingNames.findIndex((n: string) => n.toLowerCase() === saNormName || n.toLowerCase().includes(saNormName) || saNormName.includes(n.toLowerCase()));
-            const resolvedEq = (sa.equipment && Array.isArray(sa.equipment) && sa.equipment.length > 0)
-              ? sa.equipment
-              : (nameIdxInEv >= 0 && staffEquipments[nameIdxInEv] && staffEquipments[nameIdxInEv].length > 0)
-              ? staffEquipments[nameIdxInEv]
-              : (staffEquipments[saIdx] && staffEquipments[saIdx].length > 0)
-              ? staffEquipments[saIdx]
-              : (existingNames.length === 1 && assignedEquipment.length > 0)
-              ? assignedEquipment
-              : [];
-
-            staffList.push({
-              id: sa.assignment_id || getSlotId(sa.staff_role || 'GeneralStaff', saIdx),
-              staff_role: sa.staff_role || 'General Staff',
-              staff_id: sa.staff_id || st?.staff_id || 'STF-0000',
-              staff_name: sa.staff_name || '',
-              mobile: sa.mobile || st?.mobile || '',
-              staff_type: cleanType,
-              equipment: resolvedEq
-            });
-          });
-        } else if (existingNames.length > 0) {
-          existingNames.forEach((assignedName, idx) => {
-            const st = staff?.find(s => s.name?.toLowerCase() === assignedName.toLowerCase());
-            const resolvedEq = (staffEquipments[idx] && staffEquipments[idx].length > 0)
-              ? staffEquipments[idx]
-              : (existingNames.length === 1 && assignedEquipment.length > 0)
-              ? assignedEquipment
-              : [];
-            staffList.push({
-              id: getSlotId(st?.role || 'Team Member', idx),
-              staff_role: st?.role || 'Team Member',
-              staff_id: st?.staff_id || (assignedName ? 'STF-0000' : ''),
-              staff_name: assignedName,
-              mobile: st?.mobile || mobilesList[idx] || '',
-              staff_type: 'In-House',
-              equipment: resolvedEq
-            });
-          });
-        }
-
-        initialAllocations[evId] = {
-           reporting_date: targetLead.Reporting_date || ev.event_date || '',
-           reporting_time: ev.reporting_time || '',
-           event_start_time: ev.event_start_time || '',
-           event_end_time: ev.event_end_time || '',
-           staff: staffList,
-           equipment: assignedEquipment
-        };
-      });
-    } else if (targetLead) {
-       initialAllocations['default'] = {
-           reporting_date: targetLead.Reporting_date || '',
-           reporting_time: targetLead.reporting_time || '',
-           event_start_time: '',
-           event_end_time: '',
-           staff: [],
-           equipment: []
-       };
-     }
     setEventAllocations(initialAllocations);
     setEquipmentSearchQueryByEvent({});
     setIsEquipmentDropdownOpenByEvent({});
@@ -4222,19 +4039,19 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
-                    let recUrl = getRecordMeta(selectedEquipmentStatus.eqReceived).url;
-                    let handUrl = getRecordMeta(selectedEquipmentStatus.eqHandover).url;
-                    let recTime = getRecordMeta(selectedEquipmentStatus.eqReceived).date;
-                    let handTime = getRecordMeta(selectedEquipmentStatus.eqHandover).date;
-
-                    if (selectedEquipmentStatus.taskDetails) {
-                       if (selectedEquipmentStatus.taskDetails.equipment_received_photo) {
-                         recUrl = selectedEquipmentStatus.taskDetails.equipment_received_photo;
-                       }
-                       if (selectedEquipmentStatus.taskDetails.equipment_handover_photo) {
-                         handUrl = selectedEquipmentStatus.taskDetails.equipment_handover_photo;
-                       }
-                    }
+                    const matchingSA = staffAssignments?.find(sa => sa.assignment_id === selectedEquipmentStatus.assignmentId);
+                    const eqData = getEquipmentVerificationData({
+                      assignmentId: selectedEquipmentStatus.assignmentId,
+                      staffAssignment: selectedEquipmentStatus.taskDetails || matchingSA,
+                      leadEquipmentHistory,
+                      staffName: selectedEquipmentStatus.staffName,
+                      orderId: selectedEquipmentStatus.orderId,
+                      eventId: selectedEquipmentStatus.eventId
+                    });
+                    const recUrl = eqData.received.url;
+                    const recTime = eqData.received.date;
+                    const handUrl = eqData.handover.url;
+                    const handTime = eqData.handover.date;
 
                     return (
                       <>
@@ -4319,57 +4136,17 @@ export const OperationsLeads: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
                   {(() => {
-                    const findHistoryForEventImages = (stages: string[]) => {
-                      if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
-                      const orderId = selectedEventImages.orderId;
-                      const eventId = selectedEventImages.eventId;
-                      const assignmentId = selectedEventImages.assignmentId;
-                      const staffNorm = (selectedEventImages.staffName || '').trim().toLowerCase();
-                      
-                      const matches = leadEquipmentHistory.filter(h => {
-                        if (orderId && h.order_id && h.order_id !== orderId) return false;
-                        
-                        let parsed: any = {};
-                        if (h.remarks) {
-                          try { parsed = JSON.parse(h.remarks); } catch(e) {}
-                        }
-                        
-                        const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-                        if (retBy && staffNorm && retBy !== staffNorm && !staffNorm.includes(retBy) && !retBy.includes(staffNorm)) return false;
-                        
-                        const hEventId = parsed.event_id || h.event_id;
-                        const hAssignmentId = parsed.assignment_id || h.assignment_id;
-                        
-                        if (assignmentId) {
-                          if (hAssignmentId !== assignmentId) return false;
-                        } else if (eventId && eventId !== "gen" && eventId !== "ev") {
-                          if (hEventId && hEventId !== "gen" && hEventId !== "ev" && hEventId !== eventId) return false;
-                        }
-                        
-                        const eqStatus = (h.equipment_status || parsed.proof_type || '').toLowerCase();
-                        const eqName = (h.equipment_name || '').toLowerCase();
-                        return stages.some(s => {
-                          const sNorm = s.toLowerCase();
-                          return eqStatus.includes(sNorm) || eqName.includes(sNorm);
-                        });
-                      });
-                      
-                      const withPhoto = matches.find(m => {
-                        const meta = getRecordMeta(m);
-                        return !!meta.url;
-                      });
-                      return withPhoto || matches[0] || null;
-                    };
-
-                    const startRecord = selectedEventImages.evStart || findHistoryForEventImages(['Event Start', 'Event Started', 'Event Start Photo Proof']);
-                    const endRecord = selectedEventImages.evEnd || findHistoryForEventImages(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof', 'Event End Photo Proof']);
-                    let startMeta = getRecordMeta(startRecord);
-                    let endMeta = getRecordMeta(endRecord);
-                    
-                    if (selectedEventImages.taskDetails) {
-                       startMeta.url = selectedEventImages.taskDetails.event_start_photo || startMeta.url;
-                       endMeta.url = selectedEventImages.taskDetails.event_end_photo || endMeta.url;
-                    }
+                    const matchingSA = staffAssignments?.find(sa => sa.assignment_id === selectedEventImages.assignmentId);
+                    const evData = getEventImagesData({
+                      assignmentId: selectedEventImages.assignmentId,
+                      staffAssignment: selectedEventImages.taskDetails || matchingSA,
+                      leadEquipmentHistory,
+                      staffName: selectedEventImages.staffName,
+                      orderId: selectedEventImages.orderId,
+                      eventId: selectedEventImages.eventId
+                    });
+                    const startMeta = evData.eventStart;
+                    const endMeta = evData.eventEnd;
                     return (
                       <>
                         <tr className="hover:bg-zinc-800/20">
@@ -4377,7 +4154,7 @@ export const OperationsLeads: React.FC = () => {
                           <td className="py-3 px-3 text-center">
                             {startMeta.url ? (
                               <button
-                                onClick={() => setImagePreviewModal({ url: startMeta.url, date: startMeta.date, time: startMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Start' })}
+                                onClick={() => setImagePreviewModal({ url: startMeta.url, date: startMeta.date || '-', time: startMeta.time || '-', staffName: selectedEventImages.staffName, stage: 'Event Start' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -4386,15 +4163,15 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{startMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{startMeta.time}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{startMeta.date || '-'}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{startMeta.time || '-'}</td>
                         </tr>
                         <tr className="hover:bg-zinc-800/20">
                           <td className="py-3 px-3 text-white font-bold">Event Complete</td>
                           <td className="py-3 px-3 text-center">
                             {endMeta.url ? (
                               <button
-                                onClick={() => setImagePreviewModal({ url: endMeta.url, date: endMeta.date, time: endMeta.time, staffName: selectedEventImages.staffName, stage: 'Event Complete' })}
+                                onClick={() => setImagePreviewModal({ url: endMeta.url, date: endMeta.date || '-', time: endMeta.time || '-', staffName: selectedEventImages.staffName, stage: 'Event Complete' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -4403,8 +4180,8 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{endMeta.date}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{endMeta.time}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{endMeta.date || '-'}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{endMeta.time || '-'}</td>
                         </tr>
                       </>
                     );
@@ -4474,77 +4251,22 @@ export const OperationsLeads: React.FC = () => {
 
         if (staffDetails.length > 0) {
           assignedCrewList = staffDetails.map(member => {
-            const normStaffName = (member.staff_name || '').trim().toLowerCase();
-            const normEvName = (member.event_name || '').trim().toLowerCase();
-            const memberEvId = member.event_id;
-            
-            let rawLink: string | null = null;
-
-            // 1. Check rawFootage table
-            if (rawFootage && rawFootage.length > 0) {
-              const rfMatch = rawFootage.find(rf => {
-                if (rf.order_id !== receivingFootageOrderId) return false;
-                const upBy = (rf.uploaded_by || '').trim().toLowerCase();
-                if (upBy && upBy !== normStaffName) return false;
-                if (memberEvId && rf.event_id) {
-                  if (rf.event_id !== memberEvId) return false;
-                } else if (rf.event_name) {
-                  if (rf.event_name.trim().toLowerCase() !== normEvName) return false;
-                }
-                return true;
-              });
-              if (rfMatch) {
-                rawLink = rfMatch.server_path || rfMatch.drive_link || null;
-              }
-            }
-
-            if (!rawLink && staffAssignments && staffAssignments.length > 0) {
-              const saMatch = staffAssignments.find(sa => {
-                if (sa.order_id !== receivingFootageOrderId) return false;
-                if (member.assignment_id && sa.assignment_id && sa.assignment_id !== member.assignment_id) return false;
-                if (memberEvId && sa.event_id && sa.event_id !== memberEvId) return false;
-                if (memberEvId && sa.event_id && sa.event_id !== memberEvId) return false;
-                if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return false;
-                if (memberEvId && sa.event_id && sa.event_id !== memberEvId) return false;
-                if (!memberEvId && normEvName && sa.event_name && sa.event_name.trim().toLowerCase() !== normEvName) return false;
-                return true;
-              });
-              if (saMatch) {
-                const saLink = saMatch.raw_footage_link || (saMatch as any).drive_link || (saMatch as any).raw_footage_location;
-                if (saLink && saLink.trim() && saLink.trim() !== 'Pending') {
-                  rawLink = saLink.trim();
-                }
-              }
-            }
-
-            // 3. Check leadEquipmentHistory
-            if (!rawLink && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
-              const hMatch = leadEquipmentHistory.find(h => {
-                if (h.order_id !== receivingFootageOrderId) return false;
-                let parsed: any = {};
-                if (h.remarks) {
-                  try { parsed = JSON.parse(h.remarks); } catch(e) {}
-                }
-                if (member.assignment_id && parsed.assignment_id && parsed.assignment_id !== member.assignment_id) return false;
-                if (memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
-                const retBy = (h.returned_by || parsed.staff_name || '').trim().toLowerCase();
-                if (retBy !== normStaffName) return false;
-                if (memberEvId && parsed.event_id && parsed.event_id !== memberEvId) return false;
-                return !!(parsed.raw_footage_link || parsed.drive_link);
-              });
-              if (hMatch && hMatch.remarks) {
-                try {
-                  const parsed = JSON.parse(hMatch.remarks);
-                  rawLink = parsed.raw_footage_link || parsed.drive_link || null;
-                } catch (e) {}
-              }
-            }
+            const matchingSA = staffAssignments?.find(sa => sa.assignment_id === member.assignment_id);
+            const rfResult = getRawFootageData({
+              assignmentId: member.assignment_id,
+              staffAssignment: matchingSA,
+              rawFootage,
+              leadEquipmentHistory,
+              staffName: member.staff_name,
+              orderId: receivingFootageOrderId,
+              eventId: member.event_id
+            });
 
             return {
               staff_name: member.staff_name,
               staff_role: member.staff_role || 'Operations Staff',
               event_name: member.event_name,
-              raw_footage_link: rawLink || ''
+              raw_footage_link: rfResult.link || ''
             };
           });
         }
