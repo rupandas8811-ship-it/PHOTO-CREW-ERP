@@ -4765,7 +4765,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       const customerName = ord?.customer_name || 'Valued Client';
       const eventType = ord?.event_type || 'Event';
       const eventDate = ord?.event_date || 'N/A';
-      const reportingTime = opUpdates.reporting_time || op?.reporting_time || '08:00';
+      const reportingTime = result.opUpdates?.reporting_time || op?.reporting_time || '08:00';
 
       return [
         // 1. New Event Assigned
