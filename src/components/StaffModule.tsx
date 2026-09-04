@@ -972,7 +972,7 @@ export const StaffModule: React.FC = () => {
 
       let eqNames: string[] = [];
 
-      // 1. Direct staff assignment equipment
+      // 1. Direct staff assignment equipment from exact assignment record ONLY
       if (saObj) {
         const saEqRaw = saObj.equipment || saObj.assigned_equipment;
         if (saEqRaw !== undefined && saEqRaw !== null) {
@@ -1006,132 +1006,6 @@ export const StaffModule: React.FC = () => {
               }
             }
           }
-        }
-      }
-
-      // 2. Check other staffAssignments strictly for this staff and event
-      if (eqNames.length === 0 && staffAssignments && staffAssignments.length > 0) {
-        const matchedSAs = staffAssignments.filter(s => 
-          (s.order_id === orderIdStr || (leadIdStr && s.lead_id === leadIdStr)) &&
-          s.staff_name && s.staff_name.trim().toLowerCase() === normName &&
-          s.assignment_status !== 'Cancelled' &&
-          (!evObj?.id || !s.event_id || s.event_id === evObj.id)
-        );
-        matchedSAs.forEach(s => {
-          const sEq = s.equipment || s.assigned_equipment;
-          if (sEq) {
-            if (Array.isArray(sEq)) {
-              sEq.forEach((item: any) => {
-                if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
-                else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
-                  eqNames.push(item.equipment_name || item.name);
-                }
-              });
-            } else if (typeof sEq === 'string') {
-              try {
-                const p = JSON.parse(sEq);
-                if (Array.isArray(p)) {
-                  p.forEach((item: any) => {
-                    if (typeof item === 'string' && item.trim()) eqNames.push(item.trim());
-                    else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
-                      eqNames.push(item.equipment_name || item.name);
-                    }
-                  });
-                } else {
-                  sEq.split(',').forEach((str: string) => { if (str.trim()) eqNames.push(str.trim()); });
-                }
-              } catch(e) {
-                sEq.split(',').forEach((str: string) => { if (str.trim()) eqNames.push(str.trim()); });
-              }
-            }
-          }
-        });
-      }
-
-      // 3. Check mobilesRaw encoded equipment
-      if (eqNames.length === 0 && evObj?.assigned_staff_mobiles) {
-        const mobilesRaw = evObj.assigned_staff_mobiles;
-        const assignedNames = evObj.assigned_staff_names ? evObj.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-        let resolvedIdx = assignedNames.findIndex((n: string) => n === normName || n.includes(normName) || normName.includes(n));
-        if (resolvedIdx === -1 && staffIdx >= 0 && staffIdx < assignedNames.length) {
-          resolvedIdx = staffIdx;
-        }
-
-        if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
-          try {
-            const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
-            const staffEqs = JSON.parse(parts[1]);
-            if (staffEqs && Array.isArray(staffEqs)) {
-              if (resolvedIdx >= 0 && Array.isArray(staffEqs[resolvedIdx]) && staffEqs[resolvedIdx].length > 0) {
-                staffEqs[resolvedIdx].forEach((eqStr: string) => {
-                  if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim());
-                });
-              } else if (assignedNames.length === 1 && Array.isArray(staffEqs[0]) && staffEqs[0].length > 0) {
-                staffEqs[0].forEach((eqStr: string) => {
-                  if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim());
-                });
-              }
-            }
-          } catch(e) {}
-        } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
-          if (assignedNames.length === 1 || resolvedIdx >= 0) {
-            const parts = mobilesRaw.split(' || EQUIPMENT: ');
-            if (parts[1]) {
-              parts[1].split(',').forEach((s: string) => {
-                if (s.trim()) eqNames.push(s.trim());
-              });
-            }
-          }
-        }
-      }
-
-      // 4. Check other events for this order/lead
-      if (eqNames.length === 0 && leads && leads.length > 0) {
-        const targetLead = leads.find((l: any) => l.lead_id === leadIdStr || l.order_id === orderIdStr);
-        if (targetLead?.events && targetLead.events.length > 0) {
-          for (const ev of targetLead.events) {
-            if (!ev.assigned_staff_mobiles) continue;
-            const evNames = ev.assigned_staff_names ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-            const idx = evNames.findIndex((n: string) => n === normName || n.includes(normName) || normName.includes(n));
-            if (idx >= 0 && ev.assigned_staff_mobiles.includes(' || EQUIPMENT: JSON:')) {
-              try {
-                const parts = ev.assigned_staff_mobiles.split(' || EQUIPMENT: JSON:');
-                const parsed = JSON.parse(parts[1]);
-                if (Array.isArray(parsed) && Array.isArray(parsed[idx]) && parsed[idx].length > 0) {
-                  parsed[idx].forEach((eqStr: string) => { if (eqStr && eqStr.trim()) eqNames.push(eqStr.trim()); });
-                  break;
-                }
-              } catch(e) {}
-            }
-          }
-        }
-      }
-
-      // 5. Check leadEquipmentHistory
-      if (eqNames.length === 0 && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
-        const activeHist = leadEquipmentHistory.filter(h => 
-          (h.order_id === orderIdStr || (leadIdStr && h.lead_id === leadIdStr)) &&
-          h.equipment_status !== 'Returned' &&
-          !h.returned_at
-        );
-        if (activeHist.length > 0) {
-          const staffHist = activeHist.filter(h => 
-            (h.returned_by || '').trim().toLowerCase() === normName ||
-            (h.remarks || '').toLowerCase().includes(normName) ||
-            (saObj?.assignment_id && h.assignment_id === saObj.assignment_id)
-          );
-          const source = staffHist.length > 0 ? staffHist : activeHist;
-          source.forEach(h => {
-            if (h.equipment_name && h.equipment_name.trim()) eqNames.push(h.equipment_name.trim());
-          });
-        }
-      }
-
-      // 6. Check opObj.equipment_kit
-      if (eqNames.length === 0 && opObj?.equipment_kit && typeof opObj.equipment_kit === 'string') {
-        const kits = opObj.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
-        if (kits.length > 0) {
-          eqNames.push(...kits);
         }
       }
 
@@ -1765,13 +1639,10 @@ export const StaffModule: React.FC = () => {
         missingList.push('2. Event Start Image');
       }
 
-      // If user uploaded only Asset Collection photo and wants to save draft
-      if (hasEquipment && hasAssetColl && !hasEventStart) {
-        // Allow saving draft asset image
-      } else if (missingList.length > 0) {
+      if (missingList.length > 0) {
         setSubmitError({
           title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
-          message: 'The following required image(s) are missing:',
+          message: 'The following required image(s) are missing to start the event:',
           details: missingList
         });
         return;
@@ -1781,96 +1652,7 @@ export const StaffModule: React.FC = () => {
         setIsSubmitting(true);
         const timestamp = new Date().toISOString();
 
-        // 1. FIRST IMAGE ONLY (Applicable only if staff has equipment): Asset / Equipment Received Image is provided
-        if (hasEquipment && hasAssetColl && !hasEventStart) {
-          const assetProofsToSave: EquipmentProofItem[] = [];
-
-          for (const itemKey of assetKeys) {
-            const rawUrl = modalPhotos[itemKey] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'];
-            if (!rawUrl) continue;
-
-            const fileName = `proofs/${booking.orderId || booking.leadId}_AssetCollection_Draft_${Date.now()}.jpg`;
-            const finalUrl = await safeUploadImage(rawUrl, fileName);
-
-            if (!finalUrl) {
-              throw new Error("Failed to upload Equipment Received / Asset Picture.");
-            }
-
-            const eqName = itemKey;
-            const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
-
-            assetProofsToSave.push({
-              equipmentName: eqName,
-              assetId: assetId,
-              photoUrl: finalUrl,
-              capturedAt: timestamp
-            });
-
-            const historyRecord = {
-              lead_id: booking.leadId || null,
-              order_id: booking.orderId || null,
-              assignment_id: booking.assignmentId || null,
-              equipment_name: eqName,
-              equipment_status: 'Asset Collected (Draft)',
-              returned_by: staffName,
-              returned_at: timestamp,
-              remarks: JSON.stringify({
-                assignment_id: booking.assignmentId || '',
-                asset_id: assetId,
-                proof_type: 'Event Start Asset Draft',
-                staff_name: staffName,
-                staff_role: booking.assignedRole || '',
-                staff_id: staffMember?.id || currentUser?.id || '',
-                photo_url: finalUrl,
-                event_id: booking.eventId || 'ev',
-                event_name: booking.eventName,
-                order_id: booking.orderId,
-                lead_id: booking.leadId,
-                uploaded_at: timestamp,
-                uploaded_by: staffName,
-                current_status: 'Assigned Crew'
-              })
-            };
-
-            await pushInsert('lead_equipment_history', historyRecord);
-          }
-
-          // Save locally in staffProofs (under equipmentReceivedProofs) so it is retained on reopen / refresh
-          const existingProofs = staffProofs[booking.key] || {};
-          const updatedEventProofs = {
-            ...existingProofs,
-            equipmentReceivedProofs: assetProofsToSave
-          };
-          const nextProofs = {
-            ...staffProofs,
-            [booking.key]: updatedEventProofs
-          };
-          setStaffProofs(nextProofs);
-          localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
-
-          // Ensure local status remains Assigned Crew
-          const nextStatuses = {
-            ...staffStatuses,
-            [booking.key]: 'Assigned Crew'
-          };
-          setStaffStatuses(nextStatuses);
-          localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
-
-          // Close modal immediately and restore scrolling
-          setPhotoModalData(null);
-          setModalPhotos({});
-          document.body.style.overflow = '';
-          showToast("✅ Equipment Received / Asset Image saved!");
-
-          try {
-            await refreshData();
-          } catch (e) {
-            console.warn('refreshData error ignored:', e);
-          }
-          return;
-        }
-
-        // 2. BOTH IMAGES PRESENT or EVENT START IMAGE
+        // BOTH IMAGES PRESENT or EVENT START IMAGE
         if ((hasEquipment && hasAssetColl && hasEventStart) || (!hasEquipment && hasEventStart)) {
           const allProofsToSave: EquipmentProofItem[] = [];
 
@@ -1925,7 +1707,7 @@ export const StaffModule: React.FC = () => {
             await pushInsert('lead_equipment_history', historyRecord);
           }
 
-          // B. Save Event Start Image
+          // B. Save Event Start Image (strictly to event_start_photo)
           const rawStartUrl = modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image'];
           if (!rawStartUrl) {
             throw new Error("Event Start Image is missing.");
@@ -2021,6 +1803,9 @@ export const StaffModule: React.FC = () => {
               if (fallbackSA) {
                 targetAssignmentId = fallbackSA.assignment_id;
               }
+            }
+            if (!targetAssignmentId) {
+              targetAssignmentId = `SA-${booking.orderId}-${booking.eventId || 'ev'}-${staffName.replace(/\s+/g, '')}`;
             }
 
             if (targetAssignmentId) {
@@ -3312,11 +3097,7 @@ export const StaffModule: React.FC = () => {
                 ) : photoModalData.stage === 'Event Start' ? (
                   <>
                     <CheckCircle className="w-4 h-4" />
-                    {!(photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0)
-                      ? 'Confirm Event Start'
-                      : (modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image']) 
-                        ? 'Confirm Event Start' 
-                        : 'Save Equipment / Asset Image'}
+                    Confirm Event Start
                   </>
                 ) : photoModalData.stage === 'Event Complete' ? (
                   <>
