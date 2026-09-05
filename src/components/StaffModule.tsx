@@ -1554,13 +1554,37 @@ export const StaffModule: React.FC = () => {
       }
     }
 
-    // Direct check from staff_assignments row
+    // Direct check from staff_assignments row (strictly mapped by unique assignments to avoid cross-leakage)
     const saRecord = staffAssignments?.find(sa => {
       if (sa.order_id !== booking.orderId) return false;
-      if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
-      if (booking.eventId && sa.event_id && sa.event_id === booking.eventId && (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()) return true;
-      if ((sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()) return true;
-      return false;
+      if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+      
+      // If booking has assignmentId, it must match EXACTLY
+      if (booking.assignmentId && sa.assignment_id) {
+        return sa.assignment_id === booking.assignmentId;
+      }
+      
+      // If booking has eventId and it is not a generic placeholder, it must match EXACTLY
+      if (booking.eventId && booking.eventId !== 'ev' && sa.event_id) {
+        return sa.event_id === booking.eventId;
+      }
+      
+      // If booking has eventName, it must match EXACTLY
+      if (booking.eventName && sa.event_name) {
+        return sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase();
+      }
+      
+      // If the staff member is assigned to multiple events under the same order,
+      // a general name-only match is forbidden to prevent leakage.
+      const otherSameStaffAssignments = staffAssignments.filter(s => 
+        s.order_id === booking.orderId && 
+        (s.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
+      );
+      if (otherSameStaffAssignments.length > 1) {
+        return false; // Prevent matching any incorrect slot by name only
+      }
+      
+      return true;
     });
 
     if (saRecord) {
@@ -1631,17 +1655,34 @@ export const StaffModule: React.FC = () => {
     const existingRawLink = booking.rawFootageLink || saRecord?.raw_footage_link || (() => {
       const rf = rawFootage?.find(r => {
         if (r.order_id !== booking.orderId) return false;
+        
+        // Strict assignment ID check
         if (booking.assignmentId && r.assignment_id) {
           return r.assignment_id === booking.assignmentId;
         }
+        
         const upBy = (r.uploaded_by || '').trim().toLowerCase();
         if (upBy && upBy !== staffName.trim().toLowerCase()) return false;
-        if (booking.eventId && r.event_id) {
+        
+        // Strict event ID check
+        if (booking.eventId && booking.eventId !== 'ev' && r.event_id) {
           return r.event_id === booking.eventId;
         }
+        
+        // Strict event name check
         if (booking.eventName && r.event_name) {
           return r.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase();
         }
+        
+        // If there are multiple assignments for this staff member in this order, do not merge them
+        const otherAssignmentsCount = staffAssignments?.filter(sa => 
+          sa.order_id === booking.orderId && 
+          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
+        ).length || 0;
+        if (otherAssignmentsCount > 1) {
+          return false;
+        }
+        
         return !booking.eventId && !r.event_id;
       });
       return rf?.server_path || rf?.drive_link || '';
@@ -2319,15 +2360,41 @@ export const StaffModule: React.FC = () => {
         const matchingSA = staffAssignments?.find(sa => {
           if (!sa || sa.order_id !== booking.orderId) return false;
           if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-          if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
-          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
-          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+          
+          if (booking.assignmentId && sa.assignment_id) {
+            return sa.assignment_id === booking.assignmentId;
+          }
+          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id) {
+            return sa.event_id === booking.eventId;
+          }
+          if (booking.eventName && sa.event_name) {
+            return sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase();
+          }
           return false;
         });
 
         let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
         if (!targetAssignmentId && staffAssignments) {
-          const fallbackSA = staffAssignments.find(sa => sa.order_id === booking.orderId && (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
+          const fallbackSA = staffAssignments.find(sa => {
+            if (sa.order_id !== booking.orderId) return false;
+            if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+            
+            if (booking.eventId && booking.eventId !== 'ev' && sa.event_id) {
+              return sa.event_id === booking.eventId;
+            }
+            if (booking.eventName && sa.event_name) {
+              return sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase();
+            }
+            
+            const otherSameStaffAssignments = staffAssignments.filter(s => 
+              s.order_id === booking.orderId && 
+              (s.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
+            );
+            if (otherSameStaffAssignments.length > 1) {
+              return false;
+            }
+            return true;
+          });
           if (fallbackSA) {
             targetAssignmentId = fallbackSA.assignment_id;
           }

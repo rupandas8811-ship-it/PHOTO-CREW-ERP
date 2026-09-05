@@ -4350,7 +4350,7 @@ export const OperationsLeads: React.FC = () => {
               staff_name: member.staff_name,
               staff_role: member.staff_role || 'Operations Staff',
               event_name: member.event_name,
-              raw_footage_link: rfResult.link || ''
+              raw_footage_link: rfResult.rawFootageLink || rfResult.link || ''
             };
           });
         }

@@ -120,6 +120,7 @@ export interface RawFootageData {
   staffName: string;
   staffRole?: string;
   rawFootageLink: string | null;
+  link?: string | null;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -1253,6 +1254,7 @@ export function getRawFootageData(params: {
     staffName: sa?.staff_name || staffName,
     staffRole: sa?.staff_role,
     rawFootageLink: rawLink,
+    link: rawLink,
     updatedAt: sa?.updated_at,
     updatedBy: sa?.updated_by
   };
