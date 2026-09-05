@@ -14603,8 +14603,26 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 return 'N/A';
               };
 
+              const normalizeSalesText = (value: any): string => {
+                if (typeof value === 'string') return value;
+                if (Array.isArray(value)) {
+                  return value.map(item => {
+                    if (typeof item === 'string') return item;
+                    if (item && typeof item === 'object') {
+                      return item.name || item.role || item.text || item.title || JSON.stringify(item);
+                    }
+                    return String(item || '');
+                  }).join(' ');
+                }
+                if (value && typeof value === 'object') {
+                  return value.name || value.role || value.text || value.title || JSON.stringify(value);
+                }
+                if (value == null) return '';
+                return String(value);
+              };
+
               const getTeamValue = (pkg: any, key: string) => {
-                const text = ((pkg.team_members || '') + ' ' + (pkg.deliverables || '')).toLowerCase();
+                const text = (normalizeSalesText(pkg.team_members) + ' ' + normalizeSalesText(pkg.deliverables)).toLowerCase();
                 
                 if (key === 'photographer') {
                   if (text.includes('candid photographer') && text.includes('traditional photographer')) {

@@ -703,7 +703,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
             let dateToUse = '';
             if (role === 'production') {
               // Production calendar shows target delivery date only
-              dateToUse = evTargetDeliveryDate || evSavedEventDate;
+              dateToUse = evTargetDeliveryDate;
             } else {
               // Sales/Ops/Ops Staff calendars show actual event date
               dateToUse = evSavedEventDate || evTargetDeliveryDate;

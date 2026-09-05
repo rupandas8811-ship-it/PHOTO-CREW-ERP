@@ -5,7 +5,7 @@ import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
-import { serializeLeadEvents, deserializeLeadEvents } from '../utils';
+import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { executeSaveStaffAssignments } from '../services/operationsAssignmentService';
 
@@ -6073,6 +6073,21 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addStaff = async (member: Omit<Staff, "staff_id">) => {
+    const newMobileClean = cleanPhone(member.mobile);
+    const newEmailClean = cleanEmail(member.email);
+
+    for (const s of staff) {
+      const existingMobileClean = cleanPhone(s.mobile);
+      const existingEmailClean = cleanEmail(s.email);
+
+      if (newMobileClean && existingMobileClean && newMobileClean === existingMobileClean) {
+        throw new Error("This mobile number is already registered.");
+      }
+      if (newEmailClean && existingEmailClean && newEmailClean === existingEmailClean) {
+        throw new Error("This email is already registered.");
+      }
+    }
+
     const staffId = `STF-${Math.floor(1000 + Math.random() * 9000)}`;
     const timestamp = new Date().toISOString();
     const newStaff: Staff = {

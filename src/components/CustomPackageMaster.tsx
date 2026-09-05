@@ -202,6 +202,25 @@ export const CustomPackageMaster: React.FC = () => {
     }, 400);
   };
 
+  // Reusable sales text normalization helper to safely handle strings, arrays, objects, nulls, etc.
+  const normalizeSalesText = (value: any): string => {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+      return value.map(item => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+          return item.name || item.role || item.text || item.title || JSON.stringify(item);
+        }
+        return String(item || '');
+      }).join(' ');
+    }
+    if (value && typeof value === 'object') {
+      return value.name || value.role || value.text || value.title || JSON.stringify(value);
+    }
+    if (value == null) return '';
+    return String(value);
+  };
+
   // Helper to check if a Role is used in any package / lead / order / staff assignment
   const isRoleInUse = (roleNameToCheck: string): boolean => {
     if (!roleNameToCheck) return false;
@@ -209,17 +228,21 @@ export const CustomPackageMaster: React.FC = () => {
 
     // Check packages
     for (const pkg of packages || []) {
-      const tm = (pkg.team_members || '').toLowerCase();
+      const tm = normalizeSalesText(pkg.team_members).toLowerCase();
       if (tm.includes(searchTarget)) return true;
     }
 
     // Check leads
     for (const lead of leads || []) {
-      const tm = (lead.Team_Members || '').toLowerCase();
+      const tm = normalizeSalesText(lead.Team_Members || lead.team_members).toLowerCase();
       if (tm.includes(searchTarget)) return true;
       if (lead.events && Array.isArray(lead.events)) {
         for (const ev of lead.events) {
-          const evTm = ((ev as any).team_members || (ev as any).assigned_staff_names || (ev as any).roles || '').toLowerCase();
+          const evTm = (
+            normalizeSalesText((ev as any).team_members) + ' ' +
+            normalizeSalesText((ev as any).assigned_staff_names) + ' ' +
+            normalizeSalesText((ev as any).roles)
+          ).toLowerCase();
           if (evTm.includes(searchTarget)) return true;
         }
       }
@@ -227,13 +250,18 @@ export const CustomPackageMaster: React.FC = () => {
 
     // Check lead packages
     for (const lp of leadPackages || []) {
-      const tm = (lp.team_members || '').toLowerCase();
+      const tm = normalizeSalesText(lp.team_members).toLowerCase();
       if (tm.includes(searchTarget)) return true;
     }
 
     // Check orders
     for (const ord of orders || []) {
-      const tm = ((ord as any).team_members || (ord as any).Team_Members || '').toLowerCase();
+      const tm = (
+        normalizeSalesText((ord as any).team_members) + ' ' +
+        normalizeSalesText((ord as any).Team_Members) + ' ' +
+        normalizeSalesText((ord as any).assigned_staff_names) + ' ' +
+        normalizeSalesText((ord as any).roles)
+      ).toLowerCase();
       if (tm.includes(searchTarget)) return true;
     }
 

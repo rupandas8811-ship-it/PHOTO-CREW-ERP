@@ -766,6 +766,132 @@ export const StaffModule: React.FC = () => {
   const staffName = staffMember?.name || currentUser?.name || 'Staff';
   const staffMobile = staffMember?.mobile || currentUser?.mobile || '';
 
+  // Helper to strictly resolve raw footage link by assignment to prevent cross-leakage
+  const resolveRawFootageLink = (
+    orderId: string,
+    assignmentId: string | null | undefined,
+    eventId: string | null | undefined,
+    eventName: string | null | undefined,
+    directRawLink?: string | null
+  ): string => {
+    // 1. If we already have a direct raw link from staff_assignments, that is the primary source of truth!
+    if (directRawLink) return directRawLink;
+
+    // 2. Query rawFootage table records with strict matching
+    if (rawFootage && rawFootage.length > 0) {
+      // Find matching raw footage
+      const rfMatches = rawFootage.filter(r => r.order_id === orderId);
+      if (rfMatches.length > 0) {
+        // First try to match EXACT assignment_id
+        if (assignmentId) {
+          const match = rfMatches.find(r => r.assignment_id === assignmentId);
+          if (match) return match.server_path || match.drive_link || '';
+        }
+
+        // Check if there are multiple assignments for this staff member in this order
+        const otherAssignments = staffAssignments?.filter(sa => 
+          sa.order_id === orderId && 
+          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
+        ) || [];
+
+        // If there are multiple assignments, we can ONLY match if we have a strict event match
+        if (otherAssignments.length > 1) {
+          if (eventId && eventId !== 'ev' && eventId !== 'gen') {
+            const match = rfMatches.find(r => r.event_id === eventId);
+            if (match) return match.server_path || match.drive_link || '';
+          }
+          if (eventName) {
+            const match = rfMatches.find(r => r.event_name && r.event_name.trim().toLowerCase() === eventName.trim().toLowerCase());
+            if (match) return match.server_path || match.drive_link || '';
+          }
+          // If no strict assignment or event match, return empty to prevent mixing
+          return '';
+        } else {
+          // If there is only one assignment for this staff, we can safely fallback to the record matching by staff name (uploaded_by)
+          const match = rfMatches.find(r => 
+            (r.uploaded_by || '').trim().toLowerCase() === staffName.trim().toLowerCase()
+          );
+          if (match) return match.server_path || match.drive_link || '';
+        }
+      }
+    }
+
+    // 3. Query leadEquipmentHistory with strict matching
+    if (leadEquipmentHistory && leadEquipmentHistory.length > 0) {
+      const hMatches = leadEquipmentHistory.filter(h => h.order_id === orderId);
+      if (hMatches.length > 0) {
+        // Try strict assignment ID first
+        if (assignmentId) {
+          const match = hMatches.find(h => {
+            let p: any = {};
+            if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
+            const hAssignmentId = h.assignment_id || p.assignment_id;
+            return hAssignmentId === assignmentId && !!p.raw_footage_link;
+          });
+          if (match) {
+            try {
+              const p = typeof match.remarks === 'string' ? JSON.parse(match.remarks) : match.remarks;
+              return p.raw_footage_link || '';
+            } catch(e){}
+          }
+        }
+
+        // Check if multiple assignments exist for this staff
+        const otherAssignments = staffAssignments?.filter(sa => 
+          sa.order_id === orderId && 
+          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
+        ) || [];
+
+        if (otherAssignments.length > 1) {
+          // Must match event exactly to avoid cross-leakage
+          if (eventId && eventId !== 'ev' && eventId !== 'gen') {
+            const match = hMatches.find(h => {
+              let p: any = {};
+              if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
+              return p.event_id === eventId && !!p.raw_footage_link;
+            });
+            if (match) {
+              try {
+                const p = typeof match.remarks === 'string' ? JSON.parse(match.remarks) : match.remarks;
+                return p.raw_footage_link || '';
+              } catch(e){}
+            }
+          }
+          if (eventName) {
+            const match = hMatches.find(h => {
+              let p: any = {};
+              if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
+              return p.event_name && p.event_name.trim().toLowerCase() === eventName.trim().toLowerCase() && !!p.raw_footage_link;
+            });
+            if (match) {
+              try {
+                const p = typeof match.remarks === 'string' ? JSON.parse(match.remarks) : match.remarks;
+                return p.raw_footage_link || '';
+              } catch(e){}
+            }
+          }
+          return '';
+        } else {
+          // Single assignment: match by staff name
+          const match = hMatches.find(h => {
+            let p: any = {};
+            if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
+            const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
+            return rStaff === staffName.toLowerCase() && !!p.raw_footage_link;
+          });
+          if (match) {
+            try {
+              const p = typeof match.remarks === 'string' ? JSON.parse(match.remarks) : match.remarks;
+              return p.raw_footage_link || '';
+            } catch(e){}
+          }
+        }
+      }
+    }
+
+    return '';
+  };
+
   // Local state for assignments
   const [activeBookings, setActiveBookings] = useState<any[]>([]);
   const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
@@ -1117,10 +1243,107 @@ export const StaffModule: React.FC = () => {
       return rfVerification?.equipment_status || "Pending Verification";
     };
 
+    const processedAssignmentIds = new Set<string>();
+    const processedUniqueKeys = new Set<string>();
+
+    const myAssignments = (staffAssignments || []).filter(sa => 
+      sa && sa.assignment_status !== 'Cancelled' &&
+      (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
+    );
+
+    myAssignments.forEach(sa => {
+      let lead = (leads || []).find(l => l.lead_id === sa.lead_id);
+      const order = (orders || []).find(o => o.order_id === sa.order_id);
+      if (!lead && order) {
+        lead = (leads || []).find(l => l.lead_id === order.lead_id);
+      }
+      const op = (operations || []).find(o => o.order_id === sa.order_id);
+      const orderId = sa.order_id;
+
+      let ev = sa.event_id ? lead?.events?.find((e: any) => e.id === sa.event_id) : null;
+      if (!ev && sa.event_name && lead?.events) {
+        ev = lead.events.find((e: any) => {
+          const sEvName = (sa.event_name || '').trim().toLowerCase();
+          const evName1 = (e.event_name || '').trim().toLowerCase();
+          const evName2 = (e.event_type || '').trim().toLowerCase();
+          return sEvName === evName1 || sEvName === evName2;
+        });
+      }
+
+      const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, -1, orderId, lead?.lead_id, op);
+
+      // Role
+      const staffObj = staff?.find(s => (s.name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
+      let assignedRole = staffObj ? staffObj.role : 'Crew Member';
+      if (sa.staff_role) {
+        assignedRole = sa.staff_role;
+      }
+
+      const assignmentId = sa.assignment_id;
+      const evIdentifier = ev?.id || sa.event_id || 'ev';
+      const uniqueKey = `${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`;
+
+      const fallbackStatus = op?.event_status || 'Assigned Crew';
+      const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
+      let currentStaffStatus = staffStatuses[uniqueKey] 
+        || staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] 
+        || staffStatuses[`${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`] 
+        || staffStatuses[`${orderId}_${evIdentifier}_${staffName.toLowerCase()}`]
+        || sa.task_status;
+      if (!currentStaffStatus) {
+        currentStaffStatus = isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus;
+      }
+
+      const resolvedRawLink = resolveRawFootageLink(
+        orderId,
+        assignmentId,
+        evIdentifier,
+        ev ? (ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A')) : (sa.event_name || 'General Event'),
+        sa.raw_footage_link
+      );
+
+      if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
+        bookings.push({
+          key: uniqueKey,
+          assignmentId: assignmentId,
+          orderId: orderId,
+          leadId: lead?.lead_id || sa.lead_id || '',
+          eventId: evIdentifier,
+          eventName: ev ? (ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A')) : (sa.event_name || 'General Event'),
+          customerName: lead?.customer_name || order?.customer_name || 'N/A',
+          customerMobile: lead?.mobile || order?.mobile || 'N/A',
+          customerWhatsapp: lead?.whatsapp_number || lead?.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
+          customerAddress: lead?.address || lead?.client_residence_address || lead?.city || 'N/A',
+          shootType: ev?.event_shoot_type || lead?.shoot_type || sa.staff_role || 'N/A',
+          assignedRole: assignedRole,
+          eventDate: ev?.event_date || lead?.event_date || sa.event_date || 'N/A',
+          eventStartTime: ev?.event_start_time || lead?.event_time || 'N/A',
+          eventEndDate: ev?.event_end_date || ev?.event_date || lead?.event_date || 'N/A',
+          eventEndTime: ev?.event_end_time || 'N/A',
+          reportingDate: ev?.reporting_date || ev?.event_date || lead?.Reporting_date || lead?.event_date || 'N/A',
+          reportingTime: ev?.reporting_time || lead?.reporting_time || 'N/A',
+          venue: ev?.event_location || lead?.event_location || 'N/A',
+          googleMapsLink: ev?.google_maps_link || 'N/A',
+          guestPax: ev?.guest_pax || (lead as any)?.guest_pax || 'N/A',
+          equipmentItems: assignedEqItems,
+          taskStatus: currentStaffStatus,
+          rawFootageVerificationStatus: getVerificationStatus(orderId, evIdentifier, assignmentId),
+          rawFootageLink: resolvedRawLink,
+          coordinator: op?.operations_coordinator || 'Unassigned',
+          createdAt: lead?.created_at || order?.created_at || (ev as any)?.created_at || sa.created_at || '',
+          equipmentReceivedTime: sa.equipment_received_time || (sa as any).equipment_received_time || null,
+          equipmentHandoverTime: sa.equipment_handover_time || (sa as any).equipment_handover_time || null,
+          eventStartTime: sa.event_start_time || (sa as any).event_start_time || null,
+          eventEndTime: sa.event_end_time || (sa as any).event_end_time || null
+        });
+        processedAssignmentIds.add(assignmentId);
+        processedUniqueKeys.add(uniqueKey);
+      }
+    });
+
     (leads || []).forEach((lead) => {
       const order = (orders || []).find(o => o.lead_id === lead.lead_id);
       const op = (operations || []).find(o => o.order_id === (order?.order_id || lead.lead_id));
-
       const orderId = order?.order_id || `OR-${lead.lead_id.replace(/^LD-?/, '')}`;
 
       let hasEventAssignment = false;
@@ -1136,7 +1359,6 @@ export const StaffModule: React.FC = () => {
 
             const staffIdx = assignedNames.indexOf(staffName.toLowerCase());
 
-            // Extract ONLY equipment assigned to this staff member
             const sa = staffAssignments?.find(s => {
               if (s.order_id !== orderId) return false;
               if (s.staff_name?.toLowerCase() !== staffName.toLowerCase()) return false;
@@ -1149,23 +1371,30 @@ export const StaffModule: React.FC = () => {
               }
               return true;
             });
+
+            if (sa && processedAssignmentIds.has(sa.assignment_id)) {
+              return; 
+            }
+
+            const assignmentId = sa?.assignment_id || '';
+            const evIdentifier = ev.id || `evt_${evIdx}`;
+            
             const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, staffIdx, orderId, lead.lead_id, op);
 
-            // Role
             const staffObj = staff?.find(s => (s.name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
             let assignedRole = staffObj ? staffObj.role : 'Crew Member';
             if (sa?.staff_role) {
               assignedRole = sa.staff_role;
             }
 
-            const assignmentId = sa?.assignment_id || '';
-            const evIdentifier = ev.id || `evt_${evIdx}`;
             const uniqueKey = assignmentId 
               ? `${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`
               : `${orderId}_${evIdentifier}_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
 
-            // Only use global or order-level status if it hasn't progressed to an active state.
-            // If it has progressed globally but this staff member has no specific event history, they should start at Assigned Crew.
+            if (processedUniqueKeys.has(uniqueKey)) {
+              return; 
+            }
+
             const fallbackStatus = op?.event_status || 'Assigned Crew';
             const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
             let currentStaffStatus = staffStatuses[uniqueKey] 
@@ -1178,39 +1407,14 @@ export const StaffModule: React.FC = () => {
                 currentStaffStatus = saStatus || (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
             }
 
-            let resolvedRawLink = (sa as any)?.raw_footage_link || '';
-            if (!resolvedRawLink && leadEquipmentHistory) {
-              const hMatch = leadEquipmentHistory.find(h => {
-                if (h.order_id !== orderId && h.lead_id !== lead.lead_id) return false;
-                let p: any = {};
-                if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
-                const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
-                if (rStaff !== staffName.toLowerCase()) return false;
-                
-                const hAssignmentId = h.assignment_id || p.assignment_id;
-                if (hAssignmentId && assignmentId && hAssignmentId !== assignmentId) return false;
-                if (hAssignmentId && !assignmentId) return false;
-                
-                if (assignmentId && !hAssignmentId) {
-                  if (p.event_id && ev.id && p.event_id !== 'gen' && p.event_id !== 'ev' && ev.id !== 'gen' && ev.id !== 'ev' && p.event_id !== ev.id) return false;
-                  if (p.staff_role && assignedRole && p.staff_role.trim().toLowerCase() !== assignedRole.trim().toLowerCase()) return false;
-                }
+            const resolvedRawLink = resolveRawFootageLink(
+              orderId,
+              assignmentId,
+              ev.id || 'ev',
+              ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
+              (sa as any)?.raw_footage_link
+            );
 
-                if (p.event_id && ev.id && p.event_id !== 'gen' && p.event_id !== 'ev' && ev.id !== 'gen' && ev.id !== 'ev' && p.event_id !== ev.id) return false;
-                if (!p.raw_footage_link) return false;
-              // Add strict check for event name if there's no assignment_id
-              if (!hAssignmentId && p.event_name && (sa as any)?.event_name && p.event_name.trim().toLowerCase() !== (sa as any).event_name.trim().toLowerCase()) return false;
-              return true;
-              });
-              if (hMatch) {
-                try {
-                  const p = typeof hMatch.remarks === 'string' ? JSON.parse(hMatch.remarks) : hMatch.remarks;
-                  resolvedRawLink = p.raw_footage_link || '';
-                } catch(e){}
-              }
-            }
-
-            // Only remove from staff active bookings AFTER Footage Handover has been submitted
             if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
               bookings.push({
                 key: uniqueKey,
@@ -1239,8 +1443,14 @@ export const StaffModule: React.FC = () => {
                 rawFootageVerificationStatus: getVerificationStatus(orderId, ev.id || 'ev', assignmentId),
                 rawFootageLink: resolvedRawLink,
                 coordinator: op?.operations_coordinator || 'Unassigned',
-                createdAt: lead.created_at || order?.created_at || (ev as any)?.created_at || ''
+                createdAt: lead.created_at || order?.created_at || (ev as any)?.created_at || '',
+                equipmentReceivedTime: sa ? (sa.equipment_received_time || (sa as any).equipment_received_time || null) : null,
+                equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null,
+                eventStartTime: sa ? (sa.event_start_time || (sa as any).event_start_time || null) : null,
+                eventEndTime: sa ? (sa.event_end_time || (sa as any).event_end_time || null) : null
               });
+              processedUniqueKeys.add(uniqueKey);
+              if (assignmentId) processedAssignmentIds.add(assignmentId);
             }
           }
         });
@@ -1272,12 +1482,20 @@ export const StaffModule: React.FC = () => {
             assignedRole = sa.staff_role;
           }
 
+          if (sa && processedAssignmentIds.has(sa.assignment_id)) {
+            return;
+          }
+
           const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, null, -1, orderId, lead.lead_id, op);
 
           const assignmentId = sa?.assignment_id || '';
           const uniqueKey = assignmentId 
             ? `${orderId}_${assignmentId}_gen_${staffName.toLowerCase()}`
             : `${orderId}_gen_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
+
+          if (processedUniqueKeys.has(uniqueKey)) {
+            return;
+          }
 
           const fallbackStatus = op?.event_status || 'Assigned Crew';
           const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
@@ -1289,34 +1507,14 @@ export const StaffModule: React.FC = () => {
               currentStaffStatus = saStatus || (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
           }
 
-          let resolvedRawLink = (sa as any)?.raw_footage_link || '';
-          if (!resolvedRawLink && leadEquipmentHistory) {
-            const hMatch = leadEquipmentHistory.find(h => {
-              if (h.order_id !== orderId && h.lead_id !== lead.lead_id) return false;
-              let p: any = {};
-              if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
-              const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
-              if (rStaff !== staffName.toLowerCase()) return false;
-              
-              const hAssignmentId = h.assignment_id || p.assignment_id;
-              if (hAssignmentId && assignmentId && hAssignmentId !== assignmentId) return false;
-              if (hAssignmentId && !assignmentId) return false;
-              
-              if (assignmentId && !hAssignmentId) {
-                if (p.staff_role && assignedRole && p.staff_role.trim().toLowerCase() !== assignedRole.trim().toLowerCase()) return false;
-              }
+          const resolvedRawLink = resolveRawFootageLink(
+            orderId,
+            assignmentId,
+            'gen',
+            lead.event_name || lead.shoot_type || 'General Event',
+            (sa as any)?.raw_footage_link
+          );
 
-              return Boolean(p.raw_footage_link);
-            });
-            if (hMatch) {
-              try {
-                const p = typeof hMatch.remarks === 'string' ? JSON.parse(hMatch.remarks) : hMatch.remarks;
-                resolvedRawLink = p.raw_footage_link || '';
-              } catch(e){}
-            }
-          }
-
-          // Only remove from staff active bookings AFTER Footage Handover has been submitted
           if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
             bookings.push({
               key: uniqueKey,
@@ -1345,8 +1543,14 @@ export const StaffModule: React.FC = () => {
               rawFootageVerificationStatus: getVerificationStatus(orderId, 'gen', assignmentId),
               rawFootageLink: resolvedRawLink,
               coordinator: op?.operations_coordinator || 'Unassigned',
-              createdAt: lead.created_at || order?.created_at || ''
+              createdAt: lead.created_at || order?.created_at || '',
+              equipmentReceivedTime: sa ? (sa.equipment_received_time || (sa as any).equipment_received_time || null) : null,
+              equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null,
+              eventStartTime: sa ? (sa.event_start_time || (sa as any).event_start_time || null) : null,
+              eventEndTime: sa ? (sa.event_end_time || (sa as any).event_end_time || null) : null
             });
+            processedUniqueKeys.add(uniqueKey);
+            if (assignmentId) processedAssignmentIds.add(assignmentId);
           }
         }
       }
@@ -1652,41 +1856,13 @@ export const StaffModule: React.FC = () => {
       }
     }
 
-    const existingRawLink = booking.rawFootageLink || saRecord?.raw_footage_link || (() => {
-      const rf = rawFootage?.find(r => {
-        if (r.order_id !== booking.orderId) return false;
-        
-        // Strict assignment ID check
-        if (booking.assignmentId && r.assignment_id) {
-          return r.assignment_id === booking.assignmentId;
-        }
-        
-        const upBy = (r.uploaded_by || '').trim().toLowerCase();
-        if (upBy && upBy !== staffName.trim().toLowerCase()) return false;
-        
-        // Strict event ID check
-        if (booking.eventId && booking.eventId !== 'ev' && r.event_id) {
-          return r.event_id === booking.eventId;
-        }
-        
-        // Strict event name check
-        if (booking.eventName && r.event_name) {
-          return r.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase();
-        }
-        
-        // If there are multiple assignments for this staff member in this order, do not merge them
-        const otherAssignmentsCount = staffAssignments?.filter(sa => 
-          sa.order_id === booking.orderId && 
-          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
-        ).length || 0;
-        if (otherAssignmentsCount > 1) {
-          return false;
-        }
-        
-        return !booking.eventId && !r.event_id;
-      });
-      return rf?.server_path || rf?.drive_link || '';
-    })();
+    const existingRawLink = resolveRawFootageLink(
+      booking.orderId,
+      booking.assignmentId,
+      booking.eventId,
+      booking.eventName,
+      booking.rawFootageLink || saRecord?.raw_footage_link
+    );
 
     setModalPhotos(existingPhotos);
     setModalRawFootageLink(existingRawLink || '');
@@ -3169,6 +3345,19 @@ export const StaffModule: React.FC = () => {
                     (item.isEventStart ? (modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image']) : undefined) ||
                     (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
 
+                  const isAsset = item.isAsset || (item.name && ((item.name || '').toLowerCase().includes('asset collection') || (item.name || '').toLowerCase().includes('equipment received')));
+                  const isEventStart = item.isEventStart || (item.name && (item.name || '').toLowerCase().includes('event start'));
+                  const isEventEnd = item.name && ((item.name || '').toLowerCase().includes('event completion') || (item.name || '').toLowerCase().includes('event end'));
+                  const isHandover = item.name && ((item.name || '').toLowerCase().includes('handover') || (item.name || '').toLowerCase().includes('return'));
+
+                  let uploadTime = null;
+                  if (photoModalData?.booking) {
+                    if (isAsset) uploadTime = photoModalData.booking.equipmentReceivedTime;
+                    else if (isEventStart) uploadTime = photoModalData.booking.eventStartTime;
+                    else if (isEventEnd) uploadTime = photoModalData.booking.eventEndTime;
+                    else if (isHandover) uploadTime = photoModalData.booking.equipmentHandoverTime;
+                  }
+
                   return (
                     <div key={idx} className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
                       <div className="flex justify-between items-center">
@@ -3178,6 +3367,12 @@ export const StaffModule: React.FC = () => {
                             {item.displayName || item.name} {item.optional ? <span className="text-zinc-500 text-xs font-normal">(Optional)</span> : <span className="text-rose-400 text-xs font-normal">(Required)</span>}
                           </div>
                           <div className="text-[10px] font-mono text-zinc-400">Asset ID: {item.assetId}</div>
+                          {uploadTime && (
+                            <div className="text-[10px] text-amber-400/80 mt-1 flex items-center gap-1 font-semibold">
+                              <Clock className="w-3 h-3" />
+                              Uploaded: {new Date(uploadTime).toLocaleString()}
+                            </div>
+                          )}
                         </div>
                         {currentPhoto ? (
                           <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">

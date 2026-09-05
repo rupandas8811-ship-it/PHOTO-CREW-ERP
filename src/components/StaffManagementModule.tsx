@@ -135,80 +135,84 @@ export const StaffManagementModule: React.FC = () => {
       Skill: skills
     };
 
-    if (editingStaffId) {
-      const { mobile: _m, email: _e, ...safePayload } = payload;
-      updateStaff(editingStaffId, safePayload);
+    try {
+      if (editingStaffId) {
+        const { mobile: _m, email: _e, ...safePayload } = payload;
+        await updateStaff(editingStaffId, safePayload);
 
-      // If a new password was provided during edit, update the user credentials
-      if (staffPassword && staffPassword.length >= 6) {
-        try {
-          const cleanPwd = staffPassword.trim();
-          const targetEmail = (email || '').trim().toLowerCase();
-          const targetMobile10 = (mobile || '').replace(/\D/g, '').slice(-10);
-          
-          let userRec = users.find(u => {
-            const uEmail = (u.email || '').trim().toLowerCase();
-            const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
-            if (targetEmail && uEmail === targetEmail) return true;
-            if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
-            return false;
-          });
+        // If a new password was provided during edit, update the user credentials
+        if (staffPassword && staffPassword.length >= 6) {
+          try {
+            const cleanPwd = staffPassword.trim();
+            const targetEmail = (email || '').trim().toLowerCase();
+            const targetMobile10 = (mobile || '').replace(/\D/g, '').slice(-10);
+            
+            let userRec = users.find(u => {
+              const uEmail = (u.email || '').trim().toLowerCase();
+              const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
+              if (targetEmail && uEmail === targetEmail) return true;
+              if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
+              return false;
+            });
 
-          if (!userRec && supabaseClient) {
-            const { data: dbUsers } = await supabaseClient.from('users').select('*');
-            if (dbUsers) {
-              userRec = dbUsers.find(u => {
-                const uEmail = (u.email || '').trim().toLowerCase();
-                const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
-                if (targetEmail && uEmail === targetEmail) return true;
-                if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
-                return false;
-              });
+            if (!userRec && supabaseClient) {
+              const { data: dbUsers } = await supabaseClient.from('users').select('*');
+              if (dbUsers) {
+                userRec = dbUsers.find(u => {
+                  const uEmail = (u.email || '').trim().toLowerCase();
+                  const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
+                  if (targetEmail && uEmail === targetEmail) return true;
+                  if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
+                  return false;
+                });
+              }
             }
-          }
 
-          if (userRec) {
-            await resetUserPassword(userRec.id, cleanPwd);
-          } else {
-            await addUser(name, email, mobile, 'Operation Staff', status === 'Active', cleanPwd);
+            if (userRec) {
+              await resetUserPassword(userRec.id, cleanPwd);
+            } else {
+              await addUser(name, email, mobile, 'Operation Staff', status === 'Active', cleanPwd);
+            }
+          } catch (pwErr) {
+            console.warn("Could not update staff login password:", pwErr);
           }
-        } catch (pwErr) {
-          console.warn("Could not update staff login password:", pwErr);
         }
+
+        alert('Staff member updated successfully!');
+        setEditingStaffId(null);
+      } else {
+        await addStaff(payload);
+
+        // Also create login user with the specified password for authentication
+        try {
+          await addUser(name, email, mobile, 'Operation Staff', status === 'Active', staffPassword);
+        } catch (authErr) {
+          console.warn("Auto-create login user warning:", authErr);
+        }
+
+        alert('Staff member registered and login password configured successfully!');
       }
 
-      alert('Staff member updated successfully!');
-      setEditingStaffId(null);
-    } else {
-      addStaff(payload);
+      // Reset Form
+      setName('');
+      setMobile('');
+      setWhatsappNumber('');
+      setEmail('');
+      setStaffPassword('');
+      setRole('Editor');
+      setDepartment('Editing');
+      setStatus('Active');
+      setJoiningDate(new Date().toISOString().split('T')[0]);
+      setProfilePhoto('');
+      setNotes('');
+      setProdSpeciality('');
+      setSkills([]);
+      setExperience('Junior Editor (1-2 Years)');
 
-      // Also create login user with the specified password for authentication
-      try {
-        await addUser(name, email, mobile, 'Operation Staff', status === 'Active', staffPassword);
-      } catch (authErr) {
-        console.warn("Auto-create login user warning:", authErr);
-      }
-
-      alert('Staff member registered and login password configured successfully!');
+      setActiveSubTab('list');
+    } catch (err: any) {
+      alert(err.message || 'Failed to register or update staff member.');
     }
-
-    // Reset Form
-    setName('');
-    setMobile('');
-    setWhatsappNumber('');
-    setEmail('');
-    setStaffPassword('');
-    setRole('Editor');
-    setDepartment('Editing');
-    setStatus('Active');
-    setJoiningDate(new Date().toISOString().split('T')[0]);
-    setProfilePhoto('');
-    setNotes('');
-    setProdSpeciality('');
-    setSkills([]);
-    setExperience('Junior Editor (1-2 Years)');
-
-    setActiveSubTab('list');
   };
 
   const handleResetStaffPasswordModal = async (e: React.FormEvent) => {

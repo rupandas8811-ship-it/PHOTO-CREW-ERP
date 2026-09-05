@@ -501,8 +501,42 @@ async function startServer() {
     return clone;
   }
 
+  function cleanPhone(phone: string | undefined): string {
+    if (!phone) return '';
+    const cleaned = String(phone).replace(/[^\d]/g, '');
+    return cleaned.length >= 10 ? cleaned.slice(-10) : cleaned;
+  }
+
+  function cleanEmail(email: string | undefined): string {
+    if (!email) return '';
+    return String(email).trim().toLowerCase();
+  }
+
   async function executeWithSelfHealing(table: string, operation: 'insert' | 'update' | 'upsert', payload: any, matchCol?: string, matchVal?: any) {
     const db = getServerSupabase();
+
+    if (table === 'operations_staff' && operation === 'insert') {
+      const item = Array.isArray(payload) ? payload[0] : payload;
+      if (item) {
+        const incomingMobile = cleanPhone(item.mobile);
+        const incomingEmail = cleanEmail(item.email);
+
+        const { data: existingStaff, error: fetchErr } = await db.from('operations_staff').select('*');
+        if (!fetchErr && Array.isArray(existingStaff)) {
+          for (const s of existingStaff) {
+            const dbMobile = cleanPhone(s.mobile);
+            const dbEmail = cleanEmail(s.email);
+
+            if (incomingMobile && dbMobile && incomingMobile === dbMobile) {
+              return { success: false, error: 'This mobile number is already registered.' };
+            }
+            if (incomingEmail && dbEmail && incomingEmail === dbEmail) {
+              return { success: false, error: 'This email is already registered.' };
+            }
+          }
+        }
+      }
+    }
 
     // Map equipment_handovers to lead_equipment_history to ensure persistence without schema errors
     if (table === 'equipment_handovers') {
