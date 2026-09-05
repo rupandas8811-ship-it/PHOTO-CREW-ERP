@@ -1168,10 +1168,10 @@ export const ProductionStaffModule: React.FC = () => {
         });
     });
 
-    // Group deliverables by Order ID for this staff member
+    // Group deliverables by Order ID + Event ID for this staff member
     const groupsMap = new Map<string, any>();
     individualDeliverables.forEach(item => {
-      const groupKey = item.orderId;
+      const groupKey = `${item.orderId}_${item.eventId || 'default'}`;
       if (!groupsMap.has(groupKey)) {
         groupsMap.set(groupKey, {
           groupId: groupKey,
@@ -2126,7 +2126,7 @@ Thank you.`;
                                   {/* 4. Assigned Task (Deliverable) */}
                                   <td className="px-3.5 py-3 font-bold text-zinc-300">
                                     <div className="flex items-center gap-1.5">
-                                      <span>🎯 {delivName}</span>
+                                      <span>🎯 {delivQty} × {delivName}</span>
                                       {delivQty > 1 && (
                                         <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-300 font-mono text-[10px] border border-zinc-800">
                                           x{delivQty}
@@ -2515,7 +2515,7 @@ Thank you.`;
                                   <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Assigned Task</div>
                                   <div className="text-xs font-bold text-purple-300 break-words flex items-start gap-1.5">
                                     <span className="shrink-0 mt-0.5">🎯</span>
-                                    <span className="flex-1">{delivName}</span>
+                                    <span className="flex-1">{delivQty} × {delivName}</span>
                                   </div>
                                   <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">{delivItem.assignmentId}</span>
                                 </div>
@@ -3511,6 +3511,9 @@ Thank you.`;
           onClose={() => setSelectedProjectForDetail(null)}
           orderId={typeof selectedProjectForDetail === 'string' ? selectedProjectForDetail : selectedProjectForDetail.orderId}
           eventId={typeof selectedProjectForDetail === 'object' && selectedProjectForDetail ? selectedProjectForDetail.eventId : undefined}
+          isProductionStaff={true}
+          assignedStaffId={resolvedStaffId}
+          assignedStaffName={staffName}
         />
       )}
 

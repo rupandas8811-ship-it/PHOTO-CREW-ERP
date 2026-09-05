@@ -4,7 +4,7 @@ import {
   X, User, Phone, Mail, MapPin, DollarSign, Calendar, Clock, Film, 
   CheckCircle, CheckCircle2, AlertCircle, RefreshCw, Layers, ArrowRight, Shield, FileText, Landmark, Eye, ExternalLink
 } from 'lucide-react';
-import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl } from '../utils';
+import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl, parseQtyAndText } from '../utils';
 import { CurrentStage } from '../types';
 
 interface ProjectDetailModalProps {
@@ -12,6 +12,9 @@ interface ProjectDetailModalProps {
   onClose: () => void;
   orderId: string | null;
   eventId?: string | null;
+  isProductionStaff?: boolean;
+  assignedStaffId?: string;
+  assignedStaffName?: string;
 }
 
 const STAGES_ORDER: CurrentStage[] = [
@@ -34,7 +37,15 @@ const STAGES_ORDER: CurrentStage[] = [
   'Closed'
 ];
 
-export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, onClose, orderId, eventId }) => {
+export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  orderId, 
+  eventId,
+  isProductionStaff,
+  assignedStaffId,
+  assignedStaffName
+}) => {
   const { orders, leads, operations, rawFootage, production, payments, logs, currentRole, equipmentHandovers, editorAssignments } = useRole();
   const [activeTab, setActiveTab] = useState<'overview' | 'sales' | 'operations' | 'production' | 'billing'>('overview');
   const [proofImageZoom, setProofImageZoom] = useState<string | null>(null);
@@ -166,6 +177,124 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({ isOpen, 
   const resolvedEvents = targetEvent 
     ? [targetEvent] 
     : (allResolvedEvents.length > 0 ? allResolvedEvents : []);
+
+  if (isProductionStaff) {
+    const myAssignments = editorAssignments ? editorAssignments.filter((ea) => {
+      const matchOrder = ea.order_id === orderId || ea.production_id === orderId || (prod && ea.production_id === prod.production_id);
+      const matchEvent = !eventId || ea.event_id === eventId || (targetEvent && (ea.event_id === targetEvent.id || ea.event_id === targetEvent.eventName || ea.event_id === targetEvent.eventType));
+      const matchStaff = !assignedStaffId && !assignedStaffName ? true : (
+        (assignedStaffId && ea.staff_id === assignedStaffId) ||
+        (assignedStaffName && ea.staff_name && ea.staff_name.toLowerCase() === assignedStaffName.toLowerCase())
+      );
+      return matchOrder && matchEvent && matchStaff;
+    }) : [];
+
+    const currentEv = targetEvent || resolvedEvents[0] || {};
+
+    return (
+      <div id="project_detail_master_modal" className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+        <div id="project_detail_modal_card" className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col relative">
+          
+          <div className="p-4 border-b border-zinc-800 bg-zinc-900/90 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="p-1 px-2.5 bg-purple-500/15 text-purple-400 border border-purple-500/30 rounded text-[10px] font-mono tracking-wider font-bold">
+                ASSIGNED EVENT DETAILS
+              </span>
+              <span className="text-xs font-mono text-zinc-400">Order ID: {orderId}</span>
+            </div>
+            <button 
+              onClick={onClose}
+              className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="p-6 overflow-y-auto space-y-5 text-zinc-300">
+            {/* 1. Event Type, 2. Event Name, 3. Event Date, 4. Event Location */}
+            <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 space-y-4 font-sans">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block">1. Event Type</span>
+                  <div className="text-sm font-bold text-amber-400 font-mono mt-0.5">
+                    {currentEv.eventType || 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block">2. Event Name</span>
+                  <div className="text-sm font-bold text-white font-mono mt-0.5">
+                    {currentEv.eventName || 'N/A'}
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block">3. Event Date</span>
+                  <div className="text-sm font-bold text-zinc-200 font-mono mt-0.5 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-rose-400" />
+                    <span>{currentEv.eventDate || 'N/A'}</span>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block">4. Event Location</span>
+                  <div className="text-xs text-zinc-300 mt-1 flex items-start gap-1 leading-snug">
+                    <MapPin className="w-4 h-4 text-zinc-500 shrink-0 mt-0.5" />
+                    <span>{currentEv.eventLocation || order.event_location || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. Deliverables assigned & 6. Deliverable Quantity */}
+            <div className="space-y-3">
+              <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+                <span>5 & 6. Assigned Deliverables & Quantity</span>
+                <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px]">
+                  {myAssignments.length} {myAssignments.length === 1 ? 'Deliverable' : 'Deliverables'}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {myAssignments.length > 0 ? (
+                  myAssignments.map((assignment, idx) => {
+                    const rawDeliv = assignment.speciality || assignment.deliverable || 'Deliverable';
+                    const parsed = parseQtyAndText(rawDeliv);
+                    const qty = assignment.qty || assignment.quantity || parsed.qty || 1;
+                    return (
+                      <div key={assignment.assignment_id || idx} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 flex items-center justify-between gap-3 font-mono">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-purple-400">🎯</span>
+                          <span className="text-xs font-bold text-white truncate">{parsed.text || rawDeliv}</span>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-500 uppercase">Quantity:</span>
+                          <span className="px-2.5 py-1 rounded bg-zinc-950 text-purple-300 text-xs font-black border border-zinc-800">
+                            {qty}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="p-6 text-center bg-zinc-900/30 border border-zinc-800 rounded-xl text-zinc-500 text-xs italic font-mono">
+                    No deliverables assigned to this staff member for this specific event.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 border-t border-zinc-800 bg-zinc-900/90 flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl font-bold text-xs font-mono transition-all cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+
+        </div>
+      </div>
+    );
+  }
 
   // Stage sequence mapping helper
   const currentIndex = STAGES_ORDER.indexOf(order.current_stage);
