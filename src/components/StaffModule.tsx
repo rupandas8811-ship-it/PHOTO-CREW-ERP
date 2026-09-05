@@ -765,7 +765,7 @@ export const StaffModule: React.FC = () => {
   const staffName = staffMember?.name || currentUser?.name || 'Staff';
   const staffMobile = staffMember?.mobile || currentUser?.mobile || '';
 
-  // Helper to strictly resolve raw footage link by assignment to prevent cross-leakage
+  // Helper to strictly resolve raw footage link by exact assignment_id from raw_footage.server_path
   const resolveRawFootageLink = (
     orderId: string,
     assignmentId: string | null | undefined,
@@ -773,63 +773,12 @@ export const StaffModule: React.FC = () => {
     eventName: string | null | undefined,
     directRawLink?: string | null
   ): string => {
-    // 1. If we already have a direct raw link from staff_assignments, that is the primary source of truth!
-    if (directRawLink) return directRawLink;
-
-    // 2. Query rawFootage table records with strict matching (assignment_id or event_id)
-    if (rawFootage && rawFootage.length > 0) {
-      const rfMatches = rawFootage.filter(r => r.order_id === orderId);
-      if (rfMatches.length > 0) {
-        if (assignmentId) {
-          const match = rfMatches.find(r => r.assignment_id === assignmentId);
-          if (match) return match.server_path || match.drive_link || '';
-        }
-        if (eventId && eventId !== 'ev' && eventId !== 'gen') {
-          const match = rfMatches.find(r => r.event_id === eventId);
-          if (match) return match.server_path || match.drive_link || '';
-        }
-        if (eventName) {
-          const match = rfMatches.find(r => r.event_name && r.event_name.trim().toLowerCase() === eventName.trim().toLowerCase());
-          if (match) return match.server_path || match.drive_link || '';
-        }
+    if (assignmentId && rawFootage && rawFootage.length > 0) {
+      const match = rawFootage.find(r => r.assignment_id === assignmentId);
+      if (match) {
+        return match.server_path || '';
       }
     }
-
-    // 3. Query leadEquipmentHistory with strict matching (assignment_id or event_id)
-    if (leadEquipmentHistory && leadEquipmentHistory.length > 0) {
-      const hMatches = leadEquipmentHistory.filter(h => h.order_id === orderId);
-      if (hMatches.length > 0) {
-        if (assignmentId) {
-          const match = hMatches.find(h => {
-            let p: any = {};
-            if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
-            const hAssignmentId = h.assignment_id || p.assignment_id;
-            return hAssignmentId === assignmentId && !!p.raw_footage_link;
-          });
-          if (match) {
-            try {
-              const p = typeof match.remarks === 'string' ? JSON.parse(match.remarks) : match.remarks;
-              return p.raw_footage_link || '';
-            } catch(e){}
-          }
-        }
-        if (eventId && eventId !== 'ev' && eventId !== 'gen') {
-          const match = hMatches.find(h => {
-            let p: any = {};
-            if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
-            const hEventId = h.event_id || p.event_id;
-            return hEventId === eventId && !!p.raw_footage_link;
-          });
-          if (match) {
-            try {
-              const p = typeof match.remarks === 'string' ? JSON.parse(match.remarks) : match.remarks;
-              return p.raw_footage_link || '';
-            } catch(e){}
-          }
-        }
-      }
-    }
-
     return '';
   };
 
@@ -2517,25 +2466,32 @@ export const StaffModule: React.FC = () => {
           }
         }
 
-        if (modalRawFootageLink && booking.orderId) {
+        if (booking.orderId) {
           try {
-            const rfTrackingId = `TRK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-            await pushInsert('raw_footage', {
+            const targetAsgId = targetAssignmentId || booking.assignmentId || '';
+            const existingRf = rawFootage?.find(rf => targetAsgId && rf.assignment_id === targetAsgId);
+            const rfTrackingId = existingRf?.tracking_id || `TRK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+            const rfPayload = {
               tracking_id: rfTrackingId,
               order_id: booking.orderId,
-              assignment_id: targetAssignmentId || booking.assignmentId || null,
+              assignment_id: targetAsgId || null,
               event_id: booking.eventId || null,
               event_name: booking.eventName || null,
               event_completed_date: booking.eventDate || timestamp.split('T')[0],
-              server_path: modalRawFootageLink,
-              drive_link: modalRawFootageLink,
+              server_path: modalRawFootageLink || '',
+              drive_link: modalRawFootageLink || '',
               uploaded_by: staffName,
               uploaded_date: timestamp,
-              raw_received: true,
-              status: 'Received'
-            });
+              raw_received: Boolean(modalRawFootageLink),
+              status: modalRawFootageLink ? 'Received' : 'Pending'
+            };
+            if (existingRf) {
+              await pushUpdate('raw_footage', 'tracking_id', existingRf.tracking_id, rfPayload);
+            } else if (modalRawFootageLink) {
+              await pushInsert('raw_footage', rfPayload);
+            }
           } catch (rfErr) {
-            console.warn('[StatusUpdate] raw_footage insert warning:', rfErr);
+            console.warn('[StatusUpdate] raw_footage save warning:', rfErr);
           }
         }
 
@@ -2570,9 +2526,6 @@ export const StaffModule: React.FC = () => {
           updated_at: timestamp,
           updated_by: staffName
         };
-        if (modalRawFootageLink) {
-          updateAssignmentPayload.raw_footage_link = modalRawFootageLink;
-        }
         const targetPhotoUrl = uploadedProofs.find(p => p.photoUrl)?.photoUrl || uploadedProofs[0]?.photoUrl;
         if (stage === 'Equipment Received' && targetPhotoUrl) {
           updateAssignmentPayload.equipment_received_photo = targetPhotoUrl;

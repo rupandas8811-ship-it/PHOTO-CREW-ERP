@@ -924,49 +924,48 @@ export async function uploadRawFootage(params: {
   updatedBy?: string;
   pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
   pushInsertFn?: (table: string, payload: any) => Promise<any>;
+  rawFootageList?: any[];
 }): Promise<{ success: boolean }> {
-  const { assignmentId, orderId, eventId, eventName, staffName, rawFootageLink, updatedBy, pushUpdateFn, pushInsertFn } = params;
+  const { assignmentId, orderId, eventId, eventName, staffName, rawFootageLink, updatedBy, pushUpdateFn, pushInsertFn, rawFootageList = [] } = params;
   const timestamp = new Date().toISOString();
   const cleanLink = (rawFootageLink || '').trim();
 
-  // 1. Update staff_assignments row ONLY
-  const updatePayload = {
-    raw_footage_link: cleanLink,
-    updated_at: timestamp,
-    updated_by: updatedBy || staffName
-  };
-
-  if (pushUpdateFn) {
-    await pushUpdateFn('staff_assignments', 'assignment_id', assignmentId, updatePayload);
-  } else if (supabaseClient) {
-    await supabaseClient
-      .from('staff_assignments')
-      .update(updatePayload)
-      .eq('assignment_id', assignmentId);
-  }
-
-  // 2. Upsert in raw_footage table with exact assignment_id and event_id
+  // Upsert strictly in raw_footage table matching assignment_id
   try {
+    const existingRf = rawFootageList.find(rf => assignmentId && rf.assignment_id === assignmentId);
+    const rfTrackingId = existingRf?.tracking_id || `TRK-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const rfPayload = {
+      tracking_id: rfTrackingId,
       order_id: orderId,
-      assignment_id: assignmentId,
+      assignment_id: assignmentId || null,
       event_id: eventId || null,
       event_name: eventName || null,
       server_path: cleanLink,
       drive_link: cleanLink,
       uploaded_by: staffName,
       uploaded_date: timestamp,
-      raw_received: 'Yes',
-      status: 'Received'
+      raw_received: Boolean(cleanLink),
+      status: cleanLink ? 'Received' : 'Pending'
     };
 
-    if (pushInsertFn) {
+    if (existingRf && pushUpdateFn) {
+      await pushUpdateFn('raw_footage', 'tracking_id', existingRf.tracking_id, rfPayload);
+    } else if (pushInsertFn) {
       await pushInsertFn('raw_footage', rfPayload);
     } else if (supabaseClient) {
-      await supabaseClient.from('raw_footage').insert([rfPayload]);
+      if (existingRf?.tracking_id) {
+        await supabaseClient
+          .from('raw_footage')
+          .update(rfPayload)
+          .eq('tracking_id', existingRf.tracking_id);
+      } else {
+        await supabaseClient
+          .from('raw_footage')
+          .insert([rfPayload]);
+      }
     }
   } catch (rfErr) {
-    console.warn('[OperationsService] raw_footage insert note:', rfErr);
+    console.warn('[OperationsService] raw_footage upsert note:', rfErr);
   }
 
   return { success: true };
@@ -1201,26 +1200,11 @@ export function getRawFootageData(params: {
     );
   }
 
-  let rawLink: string | null = sa?.raw_footage_link || null;
-
-  if (!rawLink && rfList && rfList.length > 0) {
-    const match = rfList.find(rf => {
-      if (rf.order_id !== orderId) return false;
-
-      // Try matching EXACT assignment_id if both have it
-      if (assignmentId && rf.assignment_id) {
-        return rf.assignment_id === assignmentId;
-      }
-
-      // Match strictly by event_id if present and valid
-      if (eventId && eventId !== 'ev' && eventId !== 'gen' && rf.event_id && rf.event_id !== 'ev' && rf.event_id !== 'gen') {
-        return rf.event_id === eventId;
-      }
-
-      return false;
-    });
+  let rawLink: string | null = null;
+  if (assignmentId && rfList && rfList.length > 0) {
+    const match = rfList.find(rf => rf.assignment_id === assignmentId);
     if (match) {
-      rawLink = match.server_path || match.drive_link || null;
+      rawLink = match.server_path || null;
     }
   }
 
