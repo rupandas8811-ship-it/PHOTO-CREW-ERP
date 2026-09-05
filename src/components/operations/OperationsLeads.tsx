@@ -4121,13 +4121,11 @@ export const OperationsLeads: React.FC = () => {
                       eventId: selectedEquipmentStatus.eventId
                     });
                     const recUrl = eqData?.equipmentReceivedPhoto || (eqData as any)?.received?.url || null;
-                    const recTime = eqData?.equipmentReceivedDate 
-                      ? (eqData.equipmentReceivedTime ? `${eqData.equipmentReceivedDate}T${eqData.equipmentReceivedTime}` : eqData.equipmentReceivedDate) 
-                      : (eqData as any)?.received?.date || null;
+                    const recDate = eqData?.equipmentReceivedDate || (eqData as any)?.received?.date || '-';
+                    const recTime = eqData?.equipmentReceivedTime || (eqData as any)?.received?.time || '-';
                     const handUrl = eqData?.equipmentHandoverPhoto || (eqData as any)?.handover?.url || null;
-                    const handTime = eqData?.equipmentHandoverDate 
-                      ? (eqData.equipmentHandoverTime ? `${eqData.equipmentHandoverDate}T${eqData.equipmentHandoverTime}` : eqData.equipmentHandoverDate) 
-                      : (eqData as any)?.handover?.date || null;
+                    const handDate = eqData?.equipmentHandoverDate || (eqData as any)?.handover?.date || '-';
+                    const handTime = eqData?.equipmentHandoverTime || (eqData as any)?.handover?.time || '-';
 
                     return (
                       <>
@@ -4136,7 +4134,7 @@ export const OperationsLeads: React.FC = () => {
                           <td className="py-3 px-3 text-center">
                             {recUrl ? (
                               <button
-                                onClick={() => setImagePreviewModal({ url: recUrl, date: recTime ? formatISTDate(recTime) : '-', time: recTime ? formatISTTime12Hour(recTime) : '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
+                                onClick={() => setImagePreviewModal({ url: recUrl, date: recDate || '-', time: recTime || '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -4145,15 +4143,15 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recTime ? formatISTDate(recTime) : '-'}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recTime ? formatISTTime12Hour(recTime) : '-'}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recDate || '-'}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recTime || '-'}</td>
                         </tr>
                         <tr className="hover:bg-zinc-800/20">
                           <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
                           <td className="py-3 px-3 text-center">
                             {handUrl ? (
                               <button
-                                onClick={() => setImagePreviewModal({ url: handUrl, date: handTime ? formatISTDate(handTime) : '-', time: handTime ? formatISTTime12Hour(handTime) : '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
+                                onClick={() => setImagePreviewModal({ url: handUrl, date: handDate || '-', time: handTime || '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -4162,8 +4160,8 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handTime ? formatISTDate(handTime) : '-'}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handTime ? formatISTTime12Hour(handTime) : '-'}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handDate || '-'}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handTime || '-'}</td>
                         </tr>
                       </>
                     );
