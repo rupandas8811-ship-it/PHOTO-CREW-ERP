@@ -4,7 +4,9 @@ import {
   extractTeamMembersConfig, 
   getEventRolesForEvent, 
   parseQtyAndText, 
-  convertTimeToDbFormat 
+  convertTimeToDbFormat,
+  formatISTDate,
+  formatISTTime12Hour
 } from '../utils';
 
 // ============================================================================
@@ -1008,24 +1010,12 @@ export function getEquipmentVerificationData(params: {
 
   let recPhoto = sa?.equipment_received_photo || null;
   let handPhoto = sa?.equipment_handover_photo || null;
-  let recDate: string | null = null;
-  let recTime: string | null = null;
-  let handDate: string | null = null;
-  let handTime: string | null = null;
+  let recTimestamp = (sa as any)?.equipment_received_time || null;
+  let handTimestamp = (sa as any)?.equipment_handover_time || null;
 
-  if (sa?.updated_at || (sa as any)?.equipment_handover_time) {
-    const recTimestamp = (sa as any).equipment_received_time || sa.updated_at;
-    if (recPhoto && recTimestamp) {
-      const parts = recTimestamp.split('T');
-      if (!recDate) recDate = parts[0];
-      if (!recTime) recTime = parts[1]?.split('.')[0] || null;
-    }
-    const handTimestamp = (sa as any).equipment_handover_time || (handPhoto ? sa.updated_at : null);
-    if (handPhoto && handTimestamp) {
-      const parts = handTimestamp.split('T');
-      if (!handDate) handDate = parts[0];
-      if (!handTime) handTime = parts[1]?.split('.')[0] || null;
-    }
+  if (sa?.updated_at) {
+    if (recPhoto && !recTimestamp) recTimestamp = sa.updated_at;
+    if (handPhoto && !handTimestamp) handTimestamp = sa.updated_at;
   }
 
   // 2. Check lead_equipment_history strictly for matching assignment_id or matching (order_id + event_id + staff)
@@ -1058,20 +1048,19 @@ export function getEquipmentVerificationData(params: {
 
     if (pType.includes('received') || pType.includes('collection')) {
       if (!recPhoto) recPhoto = hUrl;
-      if (hTimeStr) {
-        if (!recDate) recDate = hTimeStr.split('T')[0];
-        if (!recTime) recTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
-      }
+      if (hTimeStr && !recTimestamp) recTimestamp = hTimeStr;
     }
 
     if (pType.includes('handover') || pType.includes('return')) {
       if (!handPhoto) handPhoto = hUrl;
-      if (hTimeStr) {
-        if (!handDate) handDate = hTimeStr.split('T')[0];
-        if (!handTime) handTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
-      }
+      if (hTimeStr && !handTimestamp) handTimestamp = hTimeStr;
     }
   });
+
+  const recDate = recTimestamp ? formatISTDate(recTimestamp) : null;
+  const recTime = recTimestamp ? formatISTTime12Hour(recTimestamp) : null;
+  const handDate = handTimestamp ? formatISTDate(handTimestamp) : null;
+  const handTime = handTimestamp ? formatISTTime12Hour(handTimestamp) : null;
 
   return {
     assignmentId: assignmentId || sa?.assignment_id || 'UNKNOWN',
@@ -1119,24 +1108,11 @@ export function getEventImagesData(params: {
 
   let startPhoto = sa?.event_start_photo || null;
   let endPhoto = sa?.event_end_photo || null;
-  let startDate: string | null = null;
-  let startTime: string | null = null;
-  let endDate: string | null = null;
-  let endTime: string | null = null;
-
-  if (sa?.event_start_time) {
-    const parts = sa.event_start_time.split('T');
-    startDate = parts[0];
-    startTime = parts[1]?.split('.')[0] || null;
-  }
-  if (sa?.event_end_time) {
-    const parts = sa.event_end_time.split('T');
-    endDate = parts[0];
-    endTime = parts[1]?.split('.')[0] || null;
-  }
+  let startTimestamp = sa?.event_start_time || null;
+  let endTimestamp = sa?.event_end_time || null;
 
   // Fallback to leadEquipmentHistory if sa doesn't have start/end photo
-  if ((!startPhoto || !endPhoto) && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
+  if ((!startPhoto || !endPhoto || !startTimestamp || !endTimestamp) && leadEquipmentHistory && leadEquipmentHistory.length > 0) {
     const matchingHistory = leadEquipmentHistory.filter(h => {
       let parsed: any = {};
       if (h.remarks) {
@@ -1166,21 +1142,20 @@ export function getEventImagesData(params: {
 
       if (!startPhoto && (pType.includes('event start') || pType.includes('eventstart'))) {
         startPhoto = hUrl;
-        if (hTimeStr) {
-          startDate = hTimeStr.split('T')[0];
-          startTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
-        }
+        if (hTimeStr && !startTimestamp) startTimestamp = hTimeStr;
       }
 
       if (!endPhoto && (pType.includes('event end') || pType.includes('event complete') || pType.includes('eventcomplete'))) {
         endPhoto = hUrl;
-        if (hTimeStr) {
-          endDate = hTimeStr.split('T')[0];
-          endTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
-        }
+        if (hTimeStr && !endTimestamp) endTimestamp = hTimeStr;
       }
     });
   }
+
+  const startDate = startTimestamp ? formatISTDate(startTimestamp) : null;
+  const startTime = startTimestamp ? formatISTTime12Hour(startTimestamp) : null;
+  const endDate = endTimestamp ? formatISTDate(endTimestamp) : null;
+  const endTime = endTimestamp ? formatISTTime12Hour(endTimestamp) : null;
 
   return {
     assignmentId: assignmentId || sa?.assignment_id || 'UNKNOWN',

@@ -2282,6 +2282,7 @@ export function formatISTTime12Hour(dateVal?: string | null | Date): string {
       timeZone: 'Asia/Kolkata',
       hour: '2-digit',
       minute: '2-digit',
+      second: '2-digit',
       hour12: true
     }).format(d);
   } catch (e) {

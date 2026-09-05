@@ -5165,9 +5165,11 @@ export const OperationsLeads: React.FC = () => {
                                   const rfMatch = rawFootage.find(rf => {
                                     if (rf.order_id !== ord.order_id) return false;
                                     if (member.assignment_id && rf.assignment_id && rf.assignment_id === member.assignment_id) return true;
-                                    const upBy = (rf.uploaded_by || '').trim().toLowerCase();
-                                    if (upBy && normStaffName && (upBy === normStaffName || upBy.includes(normStaffName) || normStaffName.includes(upBy))) return true;
-                                    return !member.assignment_id;
+                                    if (memberEvId && memberEvId !== 'ev' && memberEvId !== 'gen' && rf.event_id && rf.event_id === memberEvId) {
+                                      const rfStaff = (rf.staff_name || rf.uploaded_by || '').trim().toLowerCase();
+                                      if (!rfStaff || rfStaff === normStaffName || rfStaff.includes(normStaffName) || normStaffName.includes(rfStaff)) return true;
+                                    }
+                                    return false;
                                   });
                                   if (rfMatch) {
                                     rawFootageLink = rfMatch.server_path || rfMatch.drive_link || null;
@@ -5179,9 +5181,11 @@ export const OperationsLeads: React.FC = () => {
                                     const saLink = sa.raw_footage_link || (sa as any).drive_link || (sa as any).raw_footage_location;
                                     if (!saLink || !saLink.trim() || saLink.trim() === 'Pending') return false;
                                     if (member.assignment_id && sa.assignment_id && sa.assignment_id === member.assignment_id) return true;
-                                    const stName = (sa.staff_name || "").trim().toLowerCase();
-                                    if (stName && normStaffName && (stName === normStaffName || stName.includes(normStaffName) || normStaffName.includes(stName))) return true;
-                                    return !member.assignment_id;
+                                    if (memberEvId && memberEvId !== 'ev' && memberEvId !== 'gen' && sa.event_id && sa.event_id === memberEvId) {
+                                      const stName = (sa.staff_name || "").trim().toLowerCase();
+                                      if (stName === normStaffName) return true;
+                                    }
+                                    return false;
                                   });
                                   if (saMatch) {
                                     const saLink = saMatch.raw_footage_link || (saMatch as any).drive_link || (saMatch as any).raw_footage_location;
@@ -5202,9 +5206,12 @@ export const OperationsLeads: React.FC = () => {
                                     if (!rfLink) return false;
                                     const hAssignmentId = parsed.assignment_id || h.assignment_id;
                                     if (member.assignment_id && hAssignmentId && hAssignmentId === member.assignment_id) return true;
-                                    const retBy = (h.returned_by || parsed.staff_name || "").trim().toLowerCase();
-                                    if (retBy && normStaffName && (retBy === normStaffName || retBy.includes(normStaffName) || normStaffName.includes(retBy))) return true;
-                                    return !member.assignment_id;
+                                    const hEventId = parsed.event_id || h.event_id;
+                                    if (memberEvId && memberEvId !== 'ev' && memberEvId !== 'gen' && hEventId === memberEvId) {
+                                      const retBy = (h.returned_by || parsed.staff_name || "").trim().toLowerCase();
+                                      if (!retBy || retBy === normStaffName) return true;
+                                    }
+                                    return false;
                                   });
                                   if (hMatch && hMatch.remarks) {
                                     try {
