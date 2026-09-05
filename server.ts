@@ -270,6 +270,21 @@ async function startServer() {
       }
     }
 
+    // Handle malformed array literal or array type errors
+    if (lowerMsg.includes('malformed array literal') || lowerMsg.includes('array')) {
+      console.warn(`[Server Self-Healing] Found malformed array literal error in table "${table}". Cleaning empty/invalid array inputs...`);
+      for (const [k, v] of Object.entries(nextPayload)) {
+        if (v === '' || v === '""' || v === "''" || (Array.isArray(v) && v.length === 0)) {
+          nextPayload[k] = null;
+          healed = true;
+        } else if (typeof v === 'string' && v.includes(',')) {
+          const arr = v.split(',').map(s => s.trim()).filter(Boolean);
+          nextPayload[k] = arr.length > 0 ? arr : null;
+          healed = true;
+        }
+      }
+    }
+
     return healed ? nextPayload : null;
   };
 
@@ -356,6 +371,45 @@ async function startServer() {
         'reporting_time', 'equipment', 'assigned_equipment', 'equipment_details',
         'mobile', 'staff_type', 'proofs', 'notes', 'remarks'
       ]);
+      if (!clone.assignment_id && (clone.order_id || clone.lead_id || clone.staff_name)) {
+        const rawId = `SA-${clone.order_id || clone.lead_id || 'gen'}-${Date.now()}`;
+        clone.assignment_id = rawId.length > 50 ? rawId.slice(0, 50) : rawId;
+      }
+
+      if (Array.isArray(clone.equipment)) {
+        clone.equipment = clone.equipment.length > 0 ? clone.equipment : null;
+      } else if (typeof clone.equipment === 'string') {
+        const trimmed = clone.equipment.trim();
+        clone.equipment = trimmed ? trimmed.split(',').map((s: string) => s.trim()).filter(Boolean) : null;
+      } else if (!clone.equipment) {
+        clone.equipment = null;
+      }
+
+      if (Array.isArray(clone.assigned_equipment)) {
+        clone.assigned_equipment = clone.assigned_equipment.length > 0 ? clone.assigned_equipment : null;
+      } else if (typeof clone.assigned_equipment === 'string') {
+        const trimmed = clone.assigned_equipment.trim();
+        clone.assigned_equipment = trimmed ? trimmed.split(',').map((s: string) => s.trim()).filter(Boolean) : null;
+      } else if (!clone.assigned_equipment) {
+        clone.assigned_equipment = null;
+      }
+
+      if (Array.isArray(clone.proofs)) {
+        clone.proofs = clone.proofs.length > 0 ? clone.proofs : null;
+      } else if (typeof clone.proofs === 'string') {
+        const trimmed = clone.proofs.trim();
+        clone.proofs = trimmed ? trimmed.split(',').map((s: string) => s.trim()).filter(Boolean) : null;
+      } else if (!clone.proofs) {
+        clone.proofs = null;
+      }
+
+      const varchar50Cols = ['assignment_id', 'task_id', 'order_id', 'lead_id', 'staff_id', 'assignment_status', 'task_status', 'reporting_time', 'staff_type', 'event_id', 'updated_by'];
+      for (const vCol of varchar50Cols) {
+        if (typeof clone[vCol] === 'string' && clone[vCol].length > 50) {
+          clone[vCol] = clone[vCol].substring(0, 50);
+        }
+      }
+
       for (const k of Object.keys(clone)) {
         if (!validCols.has(k)) {
           delete clone[k];
@@ -518,44 +572,62 @@ async function startServer() {
         }
       }
 
-      if (table === 'staff_assignments' && (res.error?.message?.includes('idx_unique_staff_per_order') || res.error?.code === '23505')) {
-        console.warn(`[Server DB] Handled idx_unique_staff_per_order constraint on staff_assignments. Updating existing records instead of failing insert.`);
+      if (table === 'staff_assignments') {
+        console.warn(`[Server DB] Handled constraint/error on staff_assignments (${res.error?.message || res.error?.code}). Upserting/updating existing records instead of failing.`);
         const items = Array.isArray(currentPayload) ? currentPayload : [currentPayload];
         const updatedRows: any[] = [];
         for (const itm of items) {
-          if (itm && itm.order_id && itm.staff_name) {
+          if (!itm) continue;
+          let handled = false;
+
+          // 1. Try matching by assignment_id if present
+          if (itm.assignment_id) {
+            const { data: matchedById } = await db.from('staff_assignments').select('*').eq('assignment_id', itm.assignment_id);
+            if (matchedById && matchedById.length > 0) {
+              const { data: upd, error: updErr } = await db.from('staff_assignments').update(itm).eq('assignment_id', itm.assignment_id).select();
+              if (!updErr && upd && upd.length > 0) {
+                updatedRows.push(upd[0]);
+                handled = true;
+              }
+            }
+          }
+
+          // 2. Try matching by order_id + staff_name if not handled
+          if (!handled && itm.order_id && itm.staff_name) {
             const trimmedName = itm.staff_name.trim();
-            const { data: matchedRows } = await db
-              .from('staff_assignments')
-              .select('*')
-              .eq('order_id', itm.order_id);
-            
+            const { data: matchedRows } = await db.from('staff_assignments').select('*').eq('order_id', itm.order_id);
             const matched = (matchedRows || []).find((r: any) => 
               (r.staff_name || '').trim().toLowerCase() === trimmedName.toLowerCase() ||
               (itm.staff_id && r.staff_id === itm.staff_id)
             );
             if (matched) {
-              const { data: upd } = await db
-                .from('staff_assignments')
-                .update({
-                  staff_role: itm.staff_role || matched.staff_role,
-                  staff_id: itm.staff_id || matched.staff_id,
-                  staff_name: itm.staff_name || matched.staff_name,
-                  assignment_date: itm.assignment_date || matched.assignment_date,
-                  assignment_status: itm.assignment_status || matched.assignment_status,
-                  task_status: itm.task_status || matched.task_status,
-                  updated_at: new Date().toISOString(),
-                  updated_by: itm.updated_by || matched.updated_by
-                })
-                .eq('assignment_id', matched.assignment_id)
-                .select();
-              if (upd && upd.length > 0) {
+              const { data: upd, error: updErr } = await db.from('staff_assignments').update({
+                ...itm,
+                staff_role: itm.staff_role || matched.staff_role,
+                staff_id: itm.staff_id || matched.staff_id,
+                staff_name: itm.staff_name || matched.staff_name,
+                assignment_date: itm.assignment_date || matched.assignment_date,
+                assignment_status: itm.assignment_status || matched.assignment_status,
+                task_status: itm.task_status || matched.task_status,
+                updated_at: new Date().toISOString(),
+                updated_by: itm.updated_by || matched.updated_by
+              }).eq('assignment_id', matched.assignment_id).select();
+              if (!updErr && upd && upd.length > 0) {
                 updatedRows.push(upd[0]);
-              } else {
-                updatedRows.push(matched);
+                handled = true;
               }
+            }
+          }
+
+          // 3. Fallback upsert by assignment_id
+          if (!handled) {
+            const assignId = itm.assignment_id || `SA-${itm.order_id || 'gen'}-${Date.now()}`;
+            const cleanItm = { ...itm, assignment_id: assignId };
+            const { data: upsertData, error: upsertErr } = await db.from('staff_assignments').upsert(cleanItm, { onConflict: 'assignment_id' }).select();
+            if (!upsertErr && upsertData && upsertData.length > 0) {
+              updatedRows.push(upsertData[0]);
             } else {
-              updatedRows.push(itm);
+              updatedRows.push(cleanItm);
             }
           }
         }

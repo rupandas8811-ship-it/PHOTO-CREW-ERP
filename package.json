@@ -24,6 +24,7 @@
     "esbuild": "^0.28.2",
     "express": "^4.22.2",
     "firebase": "^12.15.0",
+    "heic2any": "^0.0.4",
     "http-node": "^1.2.0",
     "http-proxy-middleware": "^4.1.1",
     "isomorphic-git": "^1.38.5",

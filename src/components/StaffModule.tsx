@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import heic2any from 'heic2any';
 import { useRole } from './RoleContext';
 import { MapPin, Calendar, Clock, Briefcase, Camera, User, Phone, MessageSquare, Eye, CheckCircle, AlertCircle, Upload, X, Play, ShieldCheck, ChevronRight, ChevronLeft, Video, Loader2 } from 'lucide-react';
 import { Lead, Order, Operation, StaffAssignment, EquipmentHandover } from '../types';
@@ -374,39 +375,101 @@ const sortBookingsOldestFirst = (a: any, b: any): number => {
   return String(a.orderId || a.key || '').localeCompare(String(b.orderId || b.key || ''));
 };
 
-// Utility for image compression before storage
-const compressImage = (file: File): Promise<string> => {
+// Utility for image compression before storage - converted to robust HEIC-friendly JPEG canvas resizer with transparent PNG fill fallback
+const compressImage = async (file: File): Promise<string> => {
+  let activeFile: File | Blob = file;
+  
+  const nameLower = file.name?.toLowerCase() || '';
+  const typeLower = file.type?.toLowerCase() || '';
+  
+  if (nameLower.endsWith('.heic') || nameLower.endsWith('.heif') || typeLower.includes('heic') || typeLower.includes('heif')) {
+    try {
+      console.log('[HEIC Conversion] Converting HEIC/HEIF file to JPEG using heic2any...', file.name);
+      const converted = await heic2any({
+        blob: file,
+        toType: 'image/jpeg',
+        quality: 0.8
+      });
+      if (Array.isArray(converted)) {
+        activeFile = converted[0];
+      } else {
+        activeFile = converted;
+      }
+      console.log('[HEIC Conversion] Conversion successful!');
+    } catch (err) {
+      console.warn('[HEIC Conversion] heic2any failed to convert HEIC/HEIF, attempting fallback to raw file', err);
+    }
+  }
+
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
       const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        const maxDim = 800;
-        if (width > height && width > maxDim) {
-          height = Math.round((height * maxDim) / width);
-          width = maxDim;
-        } else if (height > maxDim) {
-          width = Math.round((width * maxDim) / height);
-          height = maxDim;
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        } else {
-          resolve(e.target?.result as string);
+      
+      const drawToCanvas = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          if (!width || !height) {
+            resolve(dataUrl);
+            return;
+          }
+
+          const maxDim = 1200;
+          if (width > height && width > maxDim) {
+            height = Math.round((height * maxDim) / width);
+            width = maxDim;
+          } else if (height > maxDim) {
+            width = Math.round((width * maxDim) / height);
+            height = maxDim;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // Fill with solid white background to avoid transparent PNGs turning black
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          } else {
+            resolve(dataUrl);
+          }
+        } catch (err) {
+          console.warn('Canvas compression failed, falling back to original image', err);
+          resolve(dataUrl);
         }
       };
-      img.onerror = reject;
-      img.src = e.target?.result as string;
+
+      img.onload = () => {
+        if (typeof img.decode === 'function') {
+          img.decode()
+            .then(drawToCanvas)
+            .catch((decodeErr) => {
+              console.warn('Image decode failed, drawing anyway', decodeErr);
+              drawToCanvas();
+            });
+        } else {
+          drawToCanvas();
+        }
+      };
+      
+      img.onerror = (err) => {
+        console.warn('Image load failed in compressImage, using original data url', err);
+        resolve(dataUrl);
+      };
+      
+      img.src = dataUrl;
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.onerror = (err) => {
+      console.warn('FileReader failed, rejecting', err);
+      reject(err);
+    };
+    reader.readAsDataURL(activeFile);
   });
 };
 
@@ -1344,7 +1407,9 @@ export const StaffModule: React.FC = () => {
       console.log("[UploadProof] Using client-side Supabase upload as fallback...");
       
       // Convert base64 to Blob
-      const base64Data = base64Url.replace(/^data:image\/\w+;base64,/, '');
+      const base64Data = base64Url.includes(';base64,') 
+        ? base64Url.split(';base64,')[1] 
+        : base64Url.replace(/^data:[^;]+;base64,/, '');
       const byteCharacters = atob(base64Data);
       const byteArrays = [];
       
@@ -1877,48 +1942,53 @@ export const StaffModule: React.FC = () => {
               console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
             }
 
-            // Calculate overall stage across ALL assigned staff members
-            const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, 'Event Started', nextStatuses, orders, leads, staffAssignments);
-            const currentOrd = orders?.find(o => o.order_id === booking.orderId);
-            const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
-            const calculatedOverallStage = getCalculatedOrderStage(
-              currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
-              allStaffStatuses
-            );
+            // Wrap parent status updates safely so minor errors never crash submission
+            try {
+              const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, 'Event Started', nextStatuses, orders, leads, staffAssignments);
+              const currentOrd = orders?.find(o => o.order_id === booking.orderId);
+              const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
+              const calculatedOverallStage = getCalculatedOrderStage(
+                currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
+                allStaffStatuses
+              );
 
-            const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
-            const payload: any = {
-              remarks: `Event Started by ${staffName} on ${timestamp}`
-            };
-            if (calculatedOverallStage !== currentStage) {
-               payload.event_status = calculatedOverallStage;
-               payload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
-            } else {
-               payload.remarks += ` (Waiting for remaining assigned crew to start)`;
-            }
-
-            await pushUpdate('operations', 'order_id', booking.orderId, payload);
-
-            if (calculatedOverallStage !== currentStage) {
-              await pushUpdate('orders', 'order_id', booking.orderId, {
-                current_stage: calculatedOverallStage,
-                updated_by: staffName,
-                updated_at: timestamp
-              });
-
-              if (booking.leadId) {
-                await updateLead(booking.leadId, {
-                  status: calculatedOverallStage as any,
-                  current_status: calculatedOverallStage as any,
-                  updated_by: staffName
-                });
+              const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
+              const payload: any = {
+                remarks: `Event Started by ${staffName} on ${timestamp}`
+              };
+              if (calculatedOverallStage !== currentStage) {
+                 payload.event_status = calculatedOverallStage;
+                 payload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
+              } else {
+                 payload.remarks += ` (Waiting for remaining assigned crew to start)`;
               }
+
+              await pushUpdate('operations', 'order_id', booking.orderId, payload);
+
+              if (calculatedOverallStage !== currentStage) {
+                await pushUpdate('orders', 'order_id', booking.orderId, {
+                  current_stage: calculatedOverallStage,
+                  updated_by: staffName,
+                  updated_at: timestamp
+                });
+
+                if (booking.leadId) {
+                  await updateLead(booking.leadId, {
+                    status: calculatedOverallStage as any,
+                    current_status: calculatedOverallStage as any,
+                    updated_by: staffName
+                  });
+                }
+              }
+            } catch (parentErr) {
+              console.warn('[StaffModule] Parent status update warning on Event Start:', parentErr);
             }
           }
 
           // Close modal immediately and restore scrolling
           setPhotoModalData(null);
           setModalPhotos({});
+          setSubmitError(null);
           document.body.style.overflow = '';
           showToast("✅ Event Started confirmed and saved successfully!");
 
@@ -1937,6 +2007,7 @@ export const StaffModule: React.FC = () => {
         showToast(`❌ ${error?.message || 'Failed to update status.'}`);
       } finally {
         setIsSubmitting(false);
+        document.body.style.overflow = '';
       }
       return;
     }
@@ -2321,11 +2392,18 @@ export const StaffModule: React.FC = () => {
         const targetPhotoUrl = uploadedProofs.find(p => p.photoUrl)?.photoUrl || uploadedProofs[0]?.photoUrl;
         if (stage === 'Equipment Received' && targetPhotoUrl) {
           updateAssignmentPayload.equipment_received_photo = targetPhotoUrl;
-        } else if (stage === 'Equipment Handover' && targetPhotoUrl) {
-          updateAssignmentPayload.equipment_handover_photo = targetPhotoUrl;
+          updateAssignmentPayload.equipment_received_time = timestamp;
+        } else if (stage === 'Equipment Handover') {
+          if (targetPhotoUrl) {
+            updateAssignmentPayload.equipment_handover_photo = targetPhotoUrl;
+          }
           updateAssignmentPayload.equipment_handover_to = staffName;
-        } else if (stage === 'Event Complete' && targetPhotoUrl) {
-          updateAssignmentPayload.event_end_photo = targetPhotoUrl;
+          updateAssignmentPayload.equipment_handover_time = timestamp;
+          updateAssignmentPayload.equipment_handover_date = timestamp.split('T')[0];
+        } else if (stage === 'Event Complete') {
+          if (targetPhotoUrl) {
+            updateAssignmentPayload.event_end_photo = targetPhotoUrl;
+          }
           updateAssignmentPayload.event_end_time = timestamp;
         }
 
@@ -2381,42 +2459,46 @@ export const StaffModule: React.FC = () => {
           console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
         }
 
-        const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, nextStatus, nextStatuses, orders, leads, staffAssignments);
-        const currentOrd = orders?.find(o => o.order_id === booking.orderId);
-        const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
-        const calculatedOverallStage = getCalculatedOrderStage(
-          currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
-          allStaffStatuses
-        );
+        try {
+          const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, nextStatus, nextStatuses, orders, leads, staffAssignments);
+          const currentOrd = orders?.find(o => o.order_id === booking.orderId);
+          const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
+          const calculatedOverallStage = getCalculatedOrderStage(
+            currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
+            allStaffStatuses
+          );
 
-        const opsPayload: any = {
-          equipment_status: effectiveEquipmentStatus,
-          remarks: `Updated by ${staffName}: Stage updated to ${nextStatus}`
-        };
+          const opsPayload: any = {
+            equipment_status: effectiveEquipmentStatus,
+            remarks: `Updated by ${staffName}: Stage updated to ${nextStatus}`
+          };
 
-        const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
-        if (calculatedOverallStage !== currentStage) {
-          opsPayload.event_status = calculatedOverallStage;
-          opsPayload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
+          const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
+          if (calculatedOverallStage !== currentStage) {
+            opsPayload.event_status = calculatedOverallStage;
+            opsPayload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
 
-          await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
+            await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
 
-          await pushUpdate('orders', 'order_id', booking.orderId, { 
-            current_stage: calculatedOverallStage,
-            updated_by: staffName,
-            updated_at: timestamp
-          });
-
-          if (booking.leadId) {
-            await updateLead(booking.leadId, { 
-              status: calculatedOverallStage as any,
-              current_status: calculatedOverallStage as any,
-              updated_by: staffName
+            await pushUpdate('orders', 'order_id', booking.orderId, { 
+              current_stage: calculatedOverallStage,
+              updated_by: staffName,
+              updated_at: timestamp
             });
+
+            if (booking.leadId) {
+              await updateLead(booking.leadId, { 
+                status: calculatedOverallStage as any,
+                current_status: calculatedOverallStage as any,
+                updated_by: staffName
+              });
+            }
+          } else {
+            opsPayload.remarks += ' (Waiting for remaining assigned crew)';
+            await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
           }
-        } else {
-          opsPayload.remarks += ' (Waiting for remaining assigned crew)';
-          await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
+        } catch (parentErr) {
+          console.warn('[StaffModule] Parent stage calculation error ignored:', parentErr);
         }
       }
 
@@ -2424,6 +2506,7 @@ export const StaffModule: React.FC = () => {
       setPhotoModalData(null);
       setModalPhotos({});
       setModalRawFootageLink('');
+      setSubmitError(null);
       document.body.style.overflow = '';
       const stageLabel = stage === 'Event Complete' ? 'Event End' : stage;
       showToast(`✅ ${stageLabel} submitted & saved successfully!`);
@@ -2439,6 +2522,7 @@ export const StaffModule: React.FC = () => {
       showToast(`❌ Failed to submit ${stage}: ${error.message || 'Unknown error'}`);
     } finally {
       setIsSubmitting(false);
+      document.body.style.overflow = '';
     }
   };
   // Calendar View & Navigation state

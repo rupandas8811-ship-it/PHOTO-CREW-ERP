@@ -136,17 +136,19 @@ export function sanitizeSlug(str: string): string {
 }
 
 export function generateDeterministicTaskId(orderId: string, eventId: string, roleName: string, slotNumber: number): string {
-  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '');
-  const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '');
-  const roleSlug = sanitizeSlug(roleName);
-  return `TASK_${cleanOrder}_${cleanEvent}_${roleSlug}_s${slotNumber}`;
+  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 15);
+  const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 10);
+  const roleSlug = sanitizeSlug(roleName).slice(0, 12);
+  const rawId = `TASK_${cleanOrder}_${cleanEvent}_${roleSlug}_s${slotNumber}`;
+  return rawId.length > 50 ? rawId.slice(0, 50) : rawId;
 }
 
 export function generateDeterministicAssignmentId(orderId: string, eventId: string, roleName: string, slotNumber: number): string {
-  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '');
-  const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '');
-  const roleSlug = sanitizeSlug(roleName);
-  return `ASST-${cleanOrder}-${cleanEvent}-${roleSlug}-${slotNumber}`;
+  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 15);
+  const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 10);
+  const roleSlug = sanitizeSlug(roleName).slice(0, 12);
+  const rawId = `ASST-${cleanOrder}-${cleanEvent}-${roleSlug}-${slotNumber}`;
+  return rawId.length > 50 ? rawId.slice(0, 50) : rawId;
 }
 
 // ============================================================================
@@ -281,29 +283,47 @@ export function loadSalesEventRequirements(
  * Preserves each slot's assigned staff, equipment, photos, and links without mixing data across events.
  */
 export function buildInitialEventAllocations(params: {
-  lead: any;
+  lead?: any;
+  targetLead?: any;
   order: any;
   leadPkgs?: any[];
+  targetLeadPkgs?: any[];
   existingStaffAssignments?: any[];
+  staffAssignments?: any[];
   staffList?: any[];
   operationsRecord?: any;
 }): Record<string, EventAllocationGroup> {
-  const {
-    lead,
-    order,
-    leadPkgs = [],
-    existingStaffAssignments = [],
-    staffList = [],
-    operationsRecord
-  } = params;
+  const lead = params.lead || params.targetLead;
+  const order = params.order;
+  const leadPkgs = params.leadPkgs || params.targetLeadPkgs || [];
+  const existingStaffAssignments = params.existingStaffAssignments || params.staffAssignments || [];
+  const staffList = params.staffList || [];
+  const operationsRecord = params.operationsRecord;
 
   const { events, requirements } = loadSalesEventRequirements(lead, order, leadPkgs);
   const orderId = order?.order_id || lead?.lead_id || '';
+  const leadId = lead?.lead_id || order?.lead_id || '';
 
-  // Filter existing staff assignments for this specific order
+  // Filter existing staff assignments for this specific order/lead
   const orderAssignments = (existingStaffAssignments || []).filter(sa => 
-    sa.order_id === orderId && sa.assignment_status !== 'Cancelled'
+    (
+      (orderId && sa.order_id === orderId) || 
+      (leadId && sa.order_id === leadId) ||
+      (orderId && sa.lead_id === orderId) ||
+      (leadId && sa.lead_id === leadId)
+    ) && 
+    sa.assignment_status !== 'Cancelled'
   );
+
+  let parsedKitMapping: any[] = [];
+  if (operationsRecord?.equipment_kit && typeof operationsRecord.equipment_kit === 'string') {
+    try {
+      const parsed = JSON.parse(operationsRecord.equipment_kit);
+      if (Array.isArray(parsed)) {
+        parsedKitMapping = parsed;
+      }
+    } catch (e) {}
+  }
 
   const allocations: Record<string, EventAllocationGroup> = {};
 
@@ -323,9 +343,13 @@ export function buildInitialEventAllocations(params: {
 
     // Find DB assignments that match this event
     const eventDbAssignments = orderAssignments.filter(sa => {
-      if (sa.event_id && sa.event_id === evId) return true;
-      if (!sa.event_id && events.length === 1) return true;
-      if (sa.event_name && sa.event_name.trim().toLowerCase() === eventName.trim().toLowerCase()) return true;
+      if (sa.event_id && (sa.event_id === evId || sa.event_id === ev.id || sa.event_id === ev.event_id)) return true;
+      if (sa.event_name && (
+        sa.event_name.trim().toLowerCase() === eventName.trim().toLowerCase() ||
+        sa.event_name.trim().toLowerCase() === (ev.event_name || '').trim().toLowerCase() ||
+        sa.event_name.trim().toLowerCase() === (ev.event_type || '').trim().toLowerCase()
+      )) return true;
+      if (!sa.event_id && !sa.event_name && events.length === 1) return true;
       return false;
     });
 
@@ -372,15 +396,27 @@ export function buildInitialEventAllocations(params: {
       // Parse equipment strictly for this slot
       let slotEq: string[] = [];
       if (matchedSa) {
-        if (Array.isArray(matchedSa.equipment)) {
+        if (Array.isArray(matchedSa.equipment) && matchedSa.equipment.length > 0) {
           slotEq = matchedSa.equipment;
-        } else if (typeof matchedSa.equipment === 'string') {
+        } else if (typeof matchedSa.equipment === 'string' && matchedSa.equipment.trim()) {
           try {
             const parsed = JSON.parse(matchedSa.equipment);
             slotEq = Array.isArray(parsed) ? parsed : [matchedSa.equipment];
           } catch (e) {
             slotEq = matchedSa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean);
           }
+        } else if (typeof matchedSa.assigned_equipment === 'string' && matchedSa.assigned_equipment.trim()) {
+          slotEq = matchedSa.assigned_equipment.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+      }
+
+      if (slotEq.length === 0 && parsedKitMapping.length > 0) {
+        const kitMatch = parsedKitMapping.find((km: any) => 
+          (km.assignment_id && matchedSa && km.assignment_id === matchedSa.assignment_id) ||
+          (km.event_id === evId && assignedStaffName && km.staff_name && km.staff_name.trim().toLowerCase() === assignedStaffName.trim().toLowerCase())
+        );
+        if (kitMatch && Array.isArray(kitMatch.equipment)) {
+          slotEq = kitMatch.equipment;
         }
       }
 
@@ -423,6 +459,30 @@ export function buildInitialEventAllocations(params: {
       if (!usedDbAssignmentIds.has(extraSa.assignment_id) && extraSa.staff_name) {
         usedDbAssignmentIds.add(extraSa.assignment_id);
         const st = staffList?.find(s => s.name?.toLowerCase() === extraSa.staff_name.toLowerCase());
+        let extraEq: string[] = [];
+        if (Array.isArray(extraSa.equipment) && extraSa.equipment.length > 0) {
+          extraEq = extraSa.equipment;
+        } else if (typeof extraSa.equipment === 'string' && extraSa.equipment.trim()) {
+          try {
+            const parsed = JSON.parse(extraSa.equipment);
+            extraEq = Array.isArray(parsed) ? parsed : [extraSa.equipment];
+          } catch (e) {
+            extraEq = extraSa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean);
+          }
+        } else if (typeof extraSa.assigned_equipment === 'string' && extraSa.assigned_equipment.trim()) {
+          extraEq = extraSa.assigned_equipment.split(',').map((s: string) => s.trim()).filter(Boolean);
+        }
+
+        if (extraEq.length === 0 && parsedKitMapping.length > 0) {
+          const kitMatch = parsedKitMapping.find((km: any) => 
+            (km.assignment_id && km.assignment_id === extraSa.assignment_id) ||
+            (km.event_id === evId && km.staff_name && km.staff_name.trim().toLowerCase() === extraSa.staff_name.trim().toLowerCase())
+          );
+          if (kitMatch && Array.isArray(kitMatch.equipment)) {
+            extraEq = kitMatch.equipment;
+          }
+        }
+
         slotAllocations.push({
           id: extraSa.assignment_id,
           assignment_id: extraSa.assignment_id,
@@ -440,7 +500,7 @@ export function buildInitialEventAllocations(params: {
           staff_name: extraSa.staff_name,
           staff_type: extraSa.staff_type || 'In-House',
           mobile: extraSa.mobile || st?.mobile || '',
-          equipment: Array.isArray(extraSa.equipment) ? extraSa.equipment : [],
+          equipment: extraEq,
           equipment_received_photo: extraSa.equipment_received_photo || null,
           equipment_handover_photo: extraSa.equipment_handover_photo || null,
           equipment_handover_to: extraSa.equipment_handover_to || null,
@@ -952,10 +1012,19 @@ export function getEquipmentVerificationData(params: {
   let handDate: string | null = null;
   let handTime: string | null = null;
 
-  if (sa?.updated_at) {
-    const parts = sa.updated_at.split('T');
-    if (recPhoto && !recDate) recDate = parts[0];
-    if (recPhoto && !recTime) recTime = parts[1]?.split('.')[0] || null;
+  if (sa?.updated_at || (sa as any)?.equipment_handover_time) {
+    const recTimestamp = (sa as any).equipment_received_time || sa.updated_at;
+    if (recPhoto && recTimestamp) {
+      const parts = recTimestamp.split('T');
+      if (!recDate) recDate = parts[0];
+      if (!recTime) recTime = parts[1]?.split('.')[0] || null;
+    }
+    const handTimestamp = (sa as any).equipment_handover_time || (handPhoto ? sa.updated_at : null);
+    if (handPhoto && handTimestamp) {
+      const parts = handTimestamp.split('T');
+      if (!handDate) handDate = parts[0];
+      if (!handTime) handTime = parts[1]?.split('.')[0] || null;
+    }
   }
 
   // 2. Check lead_equipment_history strictly for matching assignment_id or matching (order_id + event_id + staff)
@@ -986,19 +1055,19 @@ export function getEquipmentVerificationData(params: {
     const hUrl = h.photo_url || parsed.photo_url || null;
     const hTimeStr = h.created_at || h.returned_at || parsed.uploaded_at || null;
 
-    if (!recPhoto && (pType.includes('received') || pType.includes('collection'))) {
-      recPhoto = hUrl;
+    if (pType.includes('received') || pType.includes('collection')) {
+      if (!recPhoto) recPhoto = hUrl;
       if (hTimeStr) {
-        recDate = hTimeStr.split('T')[0];
-        recTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
+        if (!recDate) recDate = hTimeStr.split('T')[0];
+        if (!recTime) recTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
       }
     }
 
-    if (!handPhoto && (pType.includes('handover') || pType.includes('return'))) {
-      handPhoto = hUrl;
+    if (pType.includes('handover') || pType.includes('return')) {
+      if (!handPhoto) handPhoto = hUrl;
       if (hTimeStr) {
-        handDate = hTimeStr.split('T')[0];
-        handTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
+        if (!handDate) handDate = hTimeStr.split('T')[0];
+        if (!handTime) handTime = hTimeStr.split('T')[1]?.split('.')[0] || null;
       }
     }
   });
@@ -1319,27 +1388,51 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
 
     const canonicalAssignId = matched?.assignment_id || deterministicAssignId;
 
-    // Parse equipment safely
-    const cleanEquipment = Array.isArray(a.equipment) ? a.equipment : [];
+    // Parse equipment safely into array of strings
+    let cleanEquipment: string[] = [];
+    const eqVal = a.equipment as unknown;
+    if (Array.isArray(eqVal)) {
+      cleanEquipment = eqVal.map((e: any) => String(e).trim()).filter(Boolean);
+    } else if (typeof eqVal === 'string' && eqVal.trim()) {
+      cleanEquipment = eqVal.split(',').map((e: string) => e.trim()).filter(Boolean);
+    } else if (Array.isArray((a as any).assigned_equipment)) {
+      cleanEquipment = (a as any).assigned_equipment.map((e: any) => String(e).trim()).filter(Boolean);
+    } else if (typeof (a as any).assigned_equipment === 'string' && (a as any).assigned_equipment.trim()) {
+      cleanEquipment = (a as any).assigned_equipment.split(',').map((e: string) => e.trim()).filter(Boolean);
+    }
+
+    const safeAssignId = (canonicalAssignId || '').length > 50 ? canonicalAssignId.slice(0, 50) : canonicalAssignId;
+    const safeTaskId = (deterministicTaskId || '').length > 50 ? deterministicTaskId.slice(0, 50) : deterministicTaskId;
+    const safeOrderId = (orderId || '').length > 50 ? orderId.slice(0, 50) : orderId;
+    const safeLeadId = leadId ? (leadId.length > 50 ? leadId.slice(0, 50) : leadId) : null;
+    const safeEventId = eventId ? (eventId.length > 50 ? eventId.slice(0, 50) : eventId) : eventId;
+    const safeStaffId = resolvedStaffId ? (resolvedStaffId.length > 50 ? resolvedStaffId.slice(0, 50) : resolvedStaffId) : resolvedStaffId;
+    const safeStaffType = staffType ? (staffType.length > 50 ? staffType.slice(0, 50) : staffType) : 'In-House';
+    const safeAssignStatus = (a.assignment_status || matched?.assignment_status || 'Assigned').slice(0, 50);
+    const safeTaskStatus = (a.task_status || matched?.task_status || 'Assigned').slice(0, 50);
+    const aReportingTime = (a as any).reporting_time || matched?.reporting_time || null;
+    const safeReportingTime = aReportingTime ? String(aReportingTime).slice(0, 50) : null;
+    const safeUpdatedBy = changedBy ? (changedBy.length > 50 ? changedBy.slice(0, 50) : changedBy) : changedBy;
 
     const slotPayload = {
-      assignment_id: canonicalAssignId,
-      task_id: deterministicTaskId,
-      order_id: orderId,
-      lead_id: leadId || null,
-      event_id: eventId,
+      assignment_id: safeAssignId,
+      task_id: safeTaskId,
+      order_id: safeOrderId,
+      lead_id: safeLeadId,
+      event_id: safeEventId,
       event_name: a.event_name || null,
       staff_role: roleName,
       slot_number: slotNumber,
-      staff_id: resolvedStaffId,
+      staff_id: safeStaffId,
       staff_name: aStaffNameTrimmed,
       mobile: a.mobile || (st as any)?.mobile || (st as any)?.phone || '',
-      staff_type: staffType,
+      staff_type: safeStaffType,
       equipment: cleanEquipment,
-      assigned_equipment: cleanEquipment.join(', '),
+      assigned_equipment: cleanEquipment,
       assignment_date: (a as any).assignment_date || matched?.assignment_date || assignDate,
-      assignment_status: a.assignment_status || matched?.assignment_status || 'Assigned',
-      task_status: a.task_status || matched?.task_status || 'Assigned',
+      assignment_status: safeAssignStatus,
+      task_status: safeTaskStatus,
+      reporting_time: safeReportingTime,
       // Strictly preserve existing photos and footage unless explicitly passed in this assignment
       equipment_received_photo: a.equipment_received_photo !== undefined ? a.equipment_received_photo : (matched?.equipment_received_photo || null),
       equipment_handover_photo: a.equipment_handover_photo !== undefined ? a.equipment_handover_photo : (matched?.equipment_handover_photo || null),
@@ -1351,7 +1444,7 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
       event_end_time: a.event_end_time !== undefined ? a.event_end_time : (matched?.event_end_time || null),
       raw_footage_link: a.raw_footage_link !== undefined ? a.raw_footage_link : (matched?.raw_footage_link || null),
       updated_at: timestamp,
-      updated_by: changedBy
+      updated_by: safeUpdatedBy
     };
 
     finalAssignmentsForState.push(slotPayload);
@@ -1467,7 +1560,7 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
       dbPromises.push(pushInsertFn('staff_assignments', item));
     } else if (supabaseClient) {
       dbPromises.push(
-        supabaseClient.from('staff_assignments').insert([item]) as unknown as Promise<any>
+        supabaseClient.from('staff_assignments').upsert([item], { onConflict: 'assignment_id' }) as unknown as Promise<any>
       );
     }
   }

@@ -1517,6 +1517,27 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
+    if (table === 'staff_assignments' && cloned) {
+      if (Array.isArray(cloned.equipment)) {
+        cloned.equipment = cloned.equipment.length > 0 ? cloned.equipment : null;
+      } else if (typeof cloned.equipment === 'string') {
+        const trimmed = cloned.equipment.trim();
+        cloned.equipment = trimmed ? trimmed.split(',').map((s: string) => s.trim()).filter(Boolean) : null;
+      }
+      if (Array.isArray(cloned.assigned_equipment)) {
+        cloned.assigned_equipment = cloned.assigned_equipment.length > 0 ? cloned.assigned_equipment : null;
+      } else if (typeof cloned.assigned_equipment === 'string') {
+        const trimmed = cloned.assigned_equipment.trim();
+        cloned.assigned_equipment = trimmed ? trimmed.split(',').map((s: string) => s.trim()).filter(Boolean) : null;
+      }
+      const varchar50Cols = ['assignment_id', 'task_id', 'order_id', 'lead_id', 'staff_id', 'assignment_status', 'task_status', 'reporting_time', 'staff_type', 'event_id', 'updated_by'];
+      for (const vCol of varchar50Cols) {
+        if (typeof cloned[vCol] === 'string' && cloned[vCol].length > 50) {
+          cloned[vCol] = cloned[vCol].substring(0, 50);
+        }
+      }
+    }
+
     const validCols = allowedColumns[table];
     if (validCols) {
       const sanitized: any = {};
