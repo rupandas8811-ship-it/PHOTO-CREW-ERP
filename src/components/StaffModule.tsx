@@ -280,6 +280,16 @@ const normalizeDateStr = (rawDateStr: string): string => {
 const getBookingTimestamp = (b: any): number => {
   if (!b) return 0;
   
+  // 1. Prioritize actual task/order received/created timestamp (createdAt / created_at / updatedAt / updated_at)
+  const rawCreated = b.createdAt || b.created_at || b.updatedAt || b.updated_at;
+  if (rawCreated) {
+    const parsed = new Date(rawCreated);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.getTime();
+    }
+  }
+
+  // 2. Fallback to event date / time only if created timestamp is missing/invalid
   const rawDate = (b.eventDate && b.eventDate !== 'N/A') 
     ? b.eventDate 
     : ((b.reportingDate && b.reportingDate !== 'N/A') ? b.reportingDate : '');
@@ -319,17 +329,6 @@ const getBookingTimestamp = (b: any): number => {
       const parsedDirect = new Date(rawDate);
       if (!isNaN(parsedDirect.getTime())) {
         timestamp = parsedDirect.getTime();
-      }
-    }
-  }
-
-  // Fallback to record creation time or update time if date was missing or invalid
-  if (!timestamp || isNaN(timestamp)) {
-    const fallback = b.createdAt || b.created_at || b.updatedAt || b.updated_at;
-    if (fallback) {
-      const parsedFb = new Date(fallback);
-      if (!isNaN(parsedFb.getTime())) {
-        timestamp = parsedFb.getTime();
       }
     }
   }
