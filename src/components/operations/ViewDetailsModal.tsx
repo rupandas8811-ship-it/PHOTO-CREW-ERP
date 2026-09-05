@@ -6,7 +6,7 @@ import {
   ChevronDown, ChevronUp, Users, Check, AlertCircle, RefreshCw, Box
 } from 'lucide-react';
 import { useRole } from '../RoleContext';
-import { deserializeLeadEvents, getEventTeamMemberStaffMapping, EventTeamMemberAssignmentGroup, formatDateDDMMYY, formatTime12Hour } from '../../utils';
+import { deserializeLeadEvents, getEventTeamMemberStaffMapping, EventTeamMemberAssignmentGroup, formatDateDDMMYY, formatTime12Hour, formatISTTimestamp } from '../../utils';
 import { SafeProofImage } from '../ui/SafeProofImage';
 
 interface ViewDetailsModalProps {
@@ -433,7 +433,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
         status: h.equipment_status,
         proofType,
         uploadedBy: h.returned_by || 'Staff',
-        uploadedAt: h.returned_at ? new Date(h.returned_at).toLocaleString() : 'N/A',
+        uploadedAt: h.returned_at ? formatISTTimestamp(h.returned_at) : 'N/A',
         photoUrl,
         rawFootageLink
       };

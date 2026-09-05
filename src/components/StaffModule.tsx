@@ -9,7 +9,7 @@ import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } fr
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
 import { AddNoteModal } from './AddNoteModal';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
-import { formatDateDDMMYY, formatTime12Hour } from '../utils';
+import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
   if (!dateStr || dateStr === '—') return '—';
@@ -777,50 +777,29 @@ export const StaffModule: React.FC = () => {
     // 1. If we already have a direct raw link from staff_assignments, that is the primary source of truth!
     if (directRawLink) return directRawLink;
 
-    // 2. Query rawFootage table records with strict matching
+    // 2. Query rawFootage table records with strict matching (assignment_id or event_id)
     if (rawFootage && rawFootage.length > 0) {
-      // Find matching raw footage
       const rfMatches = rawFootage.filter(r => r.order_id === orderId);
       if (rfMatches.length > 0) {
-        // First try to match EXACT assignment_id
         if (assignmentId) {
           const match = rfMatches.find(r => r.assignment_id === assignmentId);
           if (match) return match.server_path || match.drive_link || '';
         }
-
-        // Check if there are multiple assignments for this staff member in this order
-        const otherAssignments = staffAssignments?.filter(sa => 
-          sa.order_id === orderId && 
-          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
-        ) || [];
-
-        // If there are multiple assignments, we can ONLY match if we have a strict event match
-        if (otherAssignments.length > 1) {
-          if (eventId && eventId !== 'ev' && eventId !== 'gen') {
-            const match = rfMatches.find(r => r.event_id === eventId);
-            if (match) return match.server_path || match.drive_link || '';
-          }
-          if (eventName) {
-            const match = rfMatches.find(r => r.event_name && r.event_name.trim().toLowerCase() === eventName.trim().toLowerCase());
-            if (match) return match.server_path || match.drive_link || '';
-          }
-          // If no strict assignment or event match, return empty to prevent mixing
-          return '';
-        } else {
-          // If there is only one assignment for this staff, we can safely fallback to the record matching by staff name (uploaded_by)
-          const match = rfMatches.find(r => 
-            (r.uploaded_by || '').trim().toLowerCase() === staffName.trim().toLowerCase()
-          );
+        if (eventId && eventId !== 'ev' && eventId !== 'gen') {
+          const match = rfMatches.find(r => r.event_id === eventId);
+          if (match) return match.server_path || match.drive_link || '';
+        }
+        if (eventName) {
+          const match = rfMatches.find(r => r.event_name && r.event_name.trim().toLowerCase() === eventName.trim().toLowerCase());
           if (match) return match.server_path || match.drive_link || '';
         }
       }
     }
 
-    // 3. Query leadEquipmentHistory with strict matching
+    // 3. Query leadEquipmentHistory with strict matching (assignment_id or event_id)
     if (leadEquipmentHistory && leadEquipmentHistory.length > 0) {
       const hMatches = leadEquipmentHistory.filter(h => h.order_id === orderId);
       if (hMatches.length > 0) {
-        // Try strict assignment ID first
         if (assignmentId) {
           const match = hMatches.find(h => {
             let p: any = {};
@@ -835,49 +814,12 @@ export const StaffModule: React.FC = () => {
             } catch(e){}
           }
         }
-
-        // Check if multiple assignments exist for this staff
-        const otherAssignments = staffAssignments?.filter(sa => 
-          sa.order_id === orderId && 
-          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
-        ) || [];
-
-        if (otherAssignments.length > 1) {
-          // Must match event exactly to avoid cross-leakage
-          if (eventId && eventId !== 'ev' && eventId !== 'gen') {
-            const match = hMatches.find(h => {
-              let p: any = {};
-              if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
-              return p.event_id === eventId && !!p.raw_footage_link;
-            });
-            if (match) {
-              try {
-                const p = typeof match.remarks === 'string' ? JSON.parse(match.remarks) : match.remarks;
-                return p.raw_footage_link || '';
-              } catch(e){}
-            }
-          }
-          if (eventName) {
-            const match = hMatches.find(h => {
-              let p: any = {};
-              if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
-              return p.event_name && p.event_name.trim().toLowerCase() === eventName.trim().toLowerCase() && !!p.raw_footage_link;
-            });
-            if (match) {
-              try {
-                const p = typeof match.remarks === 'string' ? JSON.parse(match.remarks) : match.remarks;
-                return p.raw_footage_link || '';
-              } catch(e){}
-            }
-          }
-          return '';
-        } else {
-          // Single assignment: match by staff name
+        if (eventId && eventId !== 'ev' && eventId !== 'gen') {
           const match = hMatches.find(h => {
             let p: any = {};
             if (h.remarks) { try { p = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch(e){} }
-            const rStaff = (h.returned_by || p.staff_name || p.uploaded_by || '').trim().toLowerCase();
-            return rStaff === staffName.toLowerCase() && !!p.raw_footage_link;
+            const hEventId = h.event_id || p.event_id;
+            return hEventId === eventId && !!p.raw_footage_link;
           });
           if (match) {
             try {
@@ -3370,7 +3312,7 @@ export const StaffModule: React.FC = () => {
                           {uploadTime && (
                             <div className="text-[10px] text-amber-400/80 mt-1 flex items-center gap-1 font-semibold">
                               <Clock className="w-3 h-3" />
-                              Uploaded: {new Date(uploadTime).toLocaleString()}
+                              Uploaded: {formatISTTimestamp(uploadTime)}
                             </div>
                           )}
                         </div>

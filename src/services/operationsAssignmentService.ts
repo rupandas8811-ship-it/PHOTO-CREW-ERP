@@ -1237,26 +1237,11 @@ export function getRawFootageData(params: {
         return rf.assignment_id === assignmentId;
       }
 
-      // Check if there are multiple assignments for this staff member in this order
-      const otherAssignments = staffAssignments?.filter(s => 
-        s.order_id === orderId && 
-        (s.staff_name || '').trim().toLowerCase() === (staffName || '').trim().toLowerCase()
-      ) || [];
-
-      if (otherAssignments.length > 1) {
-        // With multiple assignments, we can ONLY match if we have a strict event_id match
-        if (eventId && eventId !== 'ev' && eventId !== 'gen' && rf.event_id && rf.event_id !== 'ev' && rf.event_id !== 'gen') {
-          return rf.event_id === eventId;
-        }
-        return false;
+      // Match strictly by event_id if present and valid
+      if (eventId && eventId !== 'ev' && eventId !== 'gen' && rf.event_id && rf.event_id !== 'ev' && rf.event_id !== 'gen') {
+        return rf.event_id === eventId;
       }
 
-      // Single assignment: match by uploaded_by staff name
-      const upBy = (rf.uploaded_by || '').trim().toLowerCase();
-      const stNorm = (staffName || '').trim().toLowerCase();
-      if (upBy && stNorm && (upBy === stNorm || upBy.includes(stNorm) || stNorm.includes(upBy))) {
-        return true;
-      }
       return false;
     });
     if (match) {

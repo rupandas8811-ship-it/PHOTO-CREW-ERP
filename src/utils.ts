@@ -2243,3 +2243,72 @@ export const checkTimeOverlap = (
   // existingStart < currentEnd AND existingEnd > currentStart
   return sA < eB && sB < eA;
 };
+
+/**
+ * Formats an ISO timestamp or date into IST (Asia/Kolkata) Date string (DD-MM-YYYY)
+ */
+export function formatISTDate(dateVal?: string | null | Date): string {
+  if (!dateVal) return 'N/A';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).formatToParts(d);
+    const day = parts.find(p => p.type === 'day')?.value || '01';
+    const month = parts.find(p => p.type === 'month')?.value || '01';
+    const year = parts.find(p => p.type === 'year')?.value || '2026';
+    return `${day}-${month}-${year}`;
+  } catch (e) {
+    return String(dateVal);
+  }
+}
+
+/**
+ * Formats an ISO timestamp or date into IST (Asia/Kolkata) 12-hour Time string (hh:mm AM/PM)
+ */
+export function formatISTTime12Hour(dateVal?: string | null | Date): string {
+  if (!dateVal) return 'N/A';
+  try {
+    if (typeof dateVal === 'string' && !dateVal.includes('T') && !dateVal.includes('-') && dateVal.includes(':')) {
+      return formatTime12Hour(dateVal);
+    }
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return formatTime12Hour(String(dateVal));
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }).format(d);
+  } catch (e) {
+    return formatTime12Hour(String(dateVal));
+  }
+}
+
+/**
+ * Formats an ISO timestamp into IST (Asia/Kolkata) full timestamp string for image uploads
+ */
+export function formatISTTimestamp(dateVal?: string | null | Date): string {
+  if (!dateVal) return 'N/A';
+  try {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal);
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    }).format(d);
+  } catch (e) {
+    return String(dateVal);
+  }
+}
+

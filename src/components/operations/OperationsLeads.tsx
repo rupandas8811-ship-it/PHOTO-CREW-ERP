@@ -22,6 +22,8 @@ import {
   convertTo12Hour, 
   formatDateDDMMYY,
   formatTime12Hour,
+  formatISTDate,
+  formatISTTime12Hour,
   formatQtyItem, 
   parseQtyAndText, 
   generateWhatsAppAssignmentMessage,
@@ -4134,7 +4136,7 @@ export const OperationsLeads: React.FC = () => {
                           <td className="py-3 px-3 text-center">
                             {recUrl ? (
                               <button
-                                onClick={() => setImagePreviewModal({ url: recUrl, date: recTime ? formatDateDDMMYY(recTime) : '-', time: recTime ? convertTo12Hour(recTime.split('T')[1]?.split('.')[0] || '') : '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
+                                onClick={() => setImagePreviewModal({ url: recUrl, date: recTime ? formatISTDate(recTime) : '-', time: recTime ? formatISTTime12Hour(recTime) : '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Received' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -4143,15 +4145,15 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recTime ? formatDateDDMMYY(recTime) : '-'}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recTime ? convertTo12Hour(recTime.split('T')[1]?.split('.')[0] || '') : '-'}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{recTime ? formatISTDate(recTime) : '-'}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{recTime ? formatISTTime12Hour(recTime) : '-'}</td>
                         </tr>
                         <tr className="hover:bg-zinc-800/20">
                           <td className="py-3 px-3 text-white font-bold">Equipment Handover</td>
                           <td className="py-3 px-3 text-center">
                             {handUrl ? (
                               <button
-                                onClick={() => setImagePreviewModal({ url: handUrl, date: handTime ? formatDateDDMMYY(handTime) : '-', time: handTime ? convertTo12Hour(handTime.split('T')[1]?.split('.')[0] || '') : '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
+                                onClick={() => setImagePreviewModal({ url: handUrl, date: handTime ? formatISTDate(handTime) : '-', time: handTime ? formatISTTime12Hour(handTime) : '-', staffName: selectedEquipmentStatus.staffName, stage: 'Equipment Handover' })}
                                 className="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 rounded-lg text-xs font-bold transition-colors cursor-pointer"
                               >
                                 View Image
@@ -4160,8 +4162,8 @@ export const OperationsLeads: React.FC = () => {
                               <span className="text-zinc-600 italic text-[11px]">Pending</span>
                             )}
                           </td>
-                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handTime ? formatDateDDMMYY(handTime) : '-'}</td>
-                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handTime ? convertTo12Hour(handTime.split('T')[1]?.split('.')[0] || '') : '-'}</td>
+                          <td className="py-3 px-3 text-center font-mono text-zinc-300">{handTime ? formatISTDate(handTime) : '-'}</td>
+                          <td className="py-3 px-3 text-right font-mono text-zinc-300">{handTime ? formatISTTime12Hour(handTime) : '-'}</td>
                         </tr>
                       </>
                     );

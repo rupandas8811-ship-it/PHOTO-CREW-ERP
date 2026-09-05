@@ -8,7 +8,7 @@ import {
   Package, MapPin, Phone, Mail, Tag, Award, Sparkles, Check, HardDrive
 } from 'lucide-react';
 import { useRole } from './RoleContext';
-import { formatINR, resolveStorageUrl, formatDateDDMMYY, formatTime12Hour } from '../utils';
+import { formatINR, resolveStorageUrl, formatDateDDMMYY, formatTime12Hour, formatISTDate, formatISTTime12Hour } from '../utils';
 
 export interface OrderHistoryModalProps {
   isOpen: boolean;
@@ -314,11 +314,8 @@ export const OrderHistoryModal: React.FC<OrderHistoryModalProps> = ({
         if (timestamp) {
           const dt = new Date(timestamp);
           if (!isNaN(dt.getTime())) {
-            const day = String(dt.getDate()).padStart(2, '0');
-            const month = String(dt.getMonth() + 1).padStart(2, '0');
-            const year = dt.getFullYear();
-            metaDate = `${day}-${month}-${year}`;
-            metaTime = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+            metaDate = formatISTDate(timestamp);
+            metaTime = formatISTTime12Hour(timestamp);
           }
         }
 
