@@ -15,6 +15,7 @@ import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { AddressAutocomplete } from '../AddressAutocomplete';
+import { TimePicker12Hour } from '../TimePicker12Hour';
 
 export const useSalesDashboardState = (externalActiveTab?: string, externalSetActiveTab?: (tab: any) => void) => {
   const { 
@@ -6146,16 +6147,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Event Start Time
               </label>
-              <input
+              <TimePicker12Hour
                 id="input_event_start_time"
-                type="time"
                 value={convertTo24Hour(eventForm.event_start_time)}
-                onChange={(e) => {
-                  const val24 = e.target.value;
+                onChange={(val24) => {
                   const val12 = convertTo12Hour(val24);
                   setEventForm({ ...eventForm, event_start_time: val12 });
                 }}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
               />
             </div>
 
@@ -6178,16 +6176,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Event End Time
               </label>
-              <input
+              <TimePicker12Hour
                 id="input_event_end_time"
-                type="time"
                 value={convertTo24Hour(eventForm.event_end_time)}
-                onChange={(e) => {
-                  const val24 = e.target.value;
+                onChange={(val24) => {
                   const val12 = convertTo12Hour(val24);
                   setEventForm({ ...eventForm, event_end_time: val12 });
                 }}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
               />
               {(() => {
                 const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);

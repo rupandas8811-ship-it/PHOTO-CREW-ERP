@@ -160,7 +160,7 @@ export type CurrentStage =
 
 export type EditingStatus = 'Footage Handover Verified' | 'Raw Footage Received' | 'Assigned Editor' | 'Editor Assigned' | 'Editing Started' | 'Editing In Progress' | 'Internal QC Review' | 'Customer Review' | 'Client Review Sent' | 'Revision Required' | 'Revision In Progress' | 'Client Acceptance' | 'Final Approval' | 'Project Delivered' | 'Editing Complete' | 'Client Review' | 'Project Completed' | 'Completed' | 'Business Owner Review' | 'Order Closed' | 'Closed';
 
-export type PaymentStatus = 'Pending' | 'Partially Paid' | 'Fully Paid';
+export type PaymentStatus = 'Pending' | 'Partially Paid' | 'Fully Paid' | 'Waiting for Approval';
 
 export interface User {
   id: string;

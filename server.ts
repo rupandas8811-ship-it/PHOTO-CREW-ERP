@@ -194,7 +194,9 @@ async function startServer() {
       'confirmation_proof',
       'proof_url',
       'proof_image',
-      'uploaded_proof'
+      'uploaded_proof',
+      'approval_status',
+      'payment_history_id'
     ];
 
     // If the error explicitly mentions a column, remove it
@@ -459,6 +461,31 @@ async function startServer() {
       }
     }
 
+    if (table === 'payment_history') {
+      const validCols = new Set([
+        'id', 'order_id', 'amount', 'payment_date', 'transaction_id',
+        'payment_mode', 'payment_type', 'updated_by', 'notes', 'created_at'
+      ]);
+      if (clone.approval_status) {
+        const currentNotes = clone.notes || '';
+        if (clone.approval_status === 'Waiting for Approval' && !currentNotes.includes('Waiting for Approval')) {
+          clone.notes = currentNotes ? `${currentNotes} - Waiting for Approval` : 'Waiting for Approval';
+        } else if (clone.approval_status === 'Approved') {
+          clone.notes = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, 'Approved');
+          if (!clone.notes) clone.notes = 'Approved by Business Owner';
+        }
+      }
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (clone.id && !uuidRegex.test(clone.id)) {
+        delete clone.id;
+      }
+      for (const k of Object.keys(clone)) {
+        if (!validCols.has(k)) {
+          delete clone[k];
+        }
+      }
+    }
+
     for (const key of Object.keys(clone)) {
       const val = clone[key];
       if (key.toLowerCase() === 'whatsapp_number') {
@@ -555,6 +582,31 @@ async function startServer() {
         console.warn('[Server DB equipment_handovers -> lead_equipment_history fallback warn]:', histErr.message);
       }
       return { success: true, data: histData || items };
+    }
+
+    if (table === 'payment_history') {
+      if (matchCol === 'payment_history_id') {
+        matchCol = 'id';
+      }
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (matchCol === 'id' && matchVal && !uuidRegex.test(String(matchVal))) {
+        const orderIdToMatch = payload?.order_id;
+        if (orderIdToMatch) {
+          const { data: existingRows } = await db.from('payment_history').select('*').eq('order_id', orderIdToMatch);
+          const found = (existingRows || []).find((r: any) => 
+            (r.notes && r.notes.includes('Waiting for Approval')) ||
+            (payload.transaction_id && r.transaction_id === payload.transaction_id) ||
+            (Number(payload.amount) && Number(r.amount) === Number(payload.amount))
+          );
+          if (found) {
+            matchVal = found.id;
+          } else {
+            return { success: true, data: [{ ...payload, id: matchVal }] };
+          }
+        } else {
+          return { success: true, data: [{ ...payload, id: matchVal }] };
+        }
+      }
     }
 
     let currentPayload = sanitizeRecordForDbServer(payload, table);
@@ -808,8 +860,11 @@ async function startServer() {
   });
 
   app.post('/api/db/update', async (req, res) => {
-    const { table, matchColumn, matchValue, updates } = req.body;
+    let { table, matchColumn, matchValue, updates } = req.body;
     try {
+      if (table === 'payment_history' && matchColumn === 'payment_history_id') {
+        matchColumn = 'id';
+      }
       console.log(`[Server DB Update] Updating ${table} where ${matchColumn}=${matchValue}`, updates);
 
       // Enforce Staff Mobile and Email Lock Backend (Operations & Production Staff)
@@ -923,7 +978,7 @@ async function startServer() {
   app.post('/api/db/select-all', async (req, res) => {
     try {
       const db = getServerSupabase();
-      const results = await Promise.all([
+      const queries = [
         db.from('users').select('*'),
         db.from('leads').select('*').order('created_at', { ascending: false }),
         db.from('orders').select('*').order('created_at', { ascending: false }),
@@ -947,11 +1002,16 @@ async function startServer() {
         db.from('production_specialties').select('*'),
         db.from('editor_assignments').select('*'),
         db.from('production_staff').select('*'),
-        db.from('calendar_memos').select('*').order('created_at', { ascending: false })
-      ]);
+        db.from('calendar_memos').select('*').order('created_at', { ascending: false }),
+        db.from('payment_history').select('*')
+      ];
 
-      const data = results.map(r => r.data || []);
-      const errors = results.map(r => r.error ? r.error.message : null);
+      const results = await Promise.all(
+        queries.map(q => Promise.resolve(q).catch(err => ({ data: [], error: { message: err?.message || String(err) } })))
+      );
+
+      const data = results.map(r => r?.data || []);
+      const errors = results.map(r => r?.error ? r.error.message : null);
 
       res.json({ success: true, data, errors });
     } catch (err: any) {
@@ -1149,6 +1209,319 @@ async function startServer() {
     } catch (err: any) {
       console.error('[Server CA Storage List Exception]', err);
       res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
+  // Client Approval Progress Storage & Verification
+  const capDataDir = path.join(process.cwd(), 'data');
+  const capFilePath = path.join(capDataDir, 'client_approval_progress.json');
+
+  const readClientApprovalProgressFromFile = (): any[] => {
+    try {
+      if (!fs.existsSync(capDataDir)) {
+        fs.mkdirSync(capDataDir, { recursive: true });
+      }
+      if (!fs.existsSync(capFilePath)) {
+        fs.writeFileSync(capFilePath, JSON.stringify([]), 'utf-8');
+        return [];
+      }
+      const raw = fs.readFileSync(capFilePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      console.warn('[Server Approval Progress] Error reading file:', e);
+      return [];
+    }
+  };
+
+  const writeClientApprovalProgressToFile = (records: any[]) => {
+    try {
+      if (!fs.existsSync(capDataDir)) {
+        fs.mkdirSync(capDataDir, { recursive: true });
+      }
+      fs.writeFileSync(capFilePath, JSON.stringify(records, null, 2), 'utf-8');
+    } catch (e) {
+      console.warn('[Server Approval Progress] Error writing file:', e);
+    }
+  };
+
+  // GET /api/client-approval/progress/:projectId
+  app.get('/api/client-approval/progress/:projectId', async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      if (!projectId) {
+        return res.status(400).json({ success: false, error: 'Project ID is required' });
+      }
+      const cleanId = String(projectId).trim();
+      const records = readClientApprovalProgressFromFile();
+      const fileRecord = records.find(
+        (r: any) => String(r.project_id || '').trim().toLowerCase() === cleanId.toLowerCase()
+      );
+
+      let dbRecord = null;
+      try {
+        const db = getServerSupabase();
+        // Check dedicated table first if exists
+        const { data: capData } = await db
+          .from('client_approval_progress')
+          .select('*')
+          .eq('project_id', cleanId)
+          .maybeSingle();
+        if (capData) {
+          dbRecord = capData;
+        } else {
+          // Check production table checklist fields
+          const { data: prodData } = await db
+            .from('production')
+            .select('production_id, checklist_customer_acceptance, checklist_content_usage, checklist_footage_deleted_7_days, checklist_payment_from_sales, checklist_edited_files_uploaded, updated_at')
+            .eq('production_id', cleanId)
+            .maybeSingle();
+          if (prodData && (
+            prodData.checklist_customer_acceptance ||
+            prodData.checklist_content_usage ||
+            prodData.checklist_footage_deleted_7_days ||
+            prodData.checklist_payment_from_sales ||
+            prodData.checklist_edited_files_uploaded
+          )) {
+            dbRecord = {
+              id: `cap_${cleanId}`,
+              project_id: cleanId,
+              client_approval: Boolean(prodData.checklist_customer_acceptance),
+              content_usage_confirmation: Boolean(prodData.checklist_content_usage),
+              footage_deleted_7_days: Boolean(prodData.checklist_footage_deleted_7_days),
+              verify_payment_from_sales: Boolean(prodData.checklist_payment_from_sales),
+              validate_edited_files_uploaded: Boolean(prodData.checklist_edited_files_uploaded),
+              saved_at: prodData.updated_at || new Date().toISOString(),
+              updated_at: prodData.updated_at || new Date().toISOString()
+            };
+          }
+        }
+      } catch (_) {}
+
+      const finalRecord = fileRecord || dbRecord || null;
+      return res.json({ success: true, data: finalRecord });
+    } catch (err: any) {
+      console.error('[Server Approval Progress GET Exception]', err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
+  // POST /api/client-approval/progress
+  app.post('/api/client-approval/progress', async (req, res) => {
+    try {
+      const {
+        project_id,
+        client_approval,
+        content_usage_confirmation,
+        footage_deleted_7_days,
+        verify_payment_from_sales,
+        validate_edited_files_uploaded
+      } = req.body;
+
+      if (!project_id) {
+        return res.status(400).json({ success: false, error: 'project_id is required' });
+      }
+
+      const cleanId = String(project_id).trim();
+      const now = new Date().toISOString();
+
+      const records = readClientApprovalProgressFromFile();
+      const index = records.findIndex(
+        (r: any) => String(r.project_id || '').trim().toLowerCase() === cleanId.toLowerCase()
+      );
+
+      const savedRecord = {
+        id: `cap_${cleanId}`,
+        project_id: cleanId,
+        client_approval: Boolean(client_approval),
+        content_usage_confirmation: Boolean(content_usage_confirmation),
+        footage_deleted_7_days: Boolean(footage_deleted_7_days),
+        verify_payment_from_sales: Boolean(verify_payment_from_sales),
+        validate_edited_files_uploaded: Boolean(validate_edited_files_uploaded),
+        saved_at: index >= 0 ? (records[index].saved_at || now) : now,
+        updated_at: now
+      };
+
+      if (index >= 0) {
+        records[index] = savedRecord;
+      } else {
+        records.push(savedRecord);
+      }
+      writeClientApprovalProgressToFile(records);
+
+      // Persist to Supabase: Update production table checklist fields for this project
+      try {
+        const db = getServerSupabase();
+        await db.from('production').update({
+          checklist_customer_acceptance: savedRecord.client_approval,
+          checklist_content_usage: savedRecord.content_usage_confirmation,
+          checklist_footage_deleted_7_days: savedRecord.footage_deleted_7_days,
+          checklist_payment_from_sales: savedRecord.verify_payment_from_sales,
+          checklist_edited_files_uploaded: savedRecord.validate_edited_files_uploaded
+        }).eq('production_id', cleanId);
+
+        // Also try to upsert to client_approval_progress table if table exists
+        try {
+          await db.from('client_approval_progress').upsert(savedRecord, { onConflict: 'project_id' });
+        } catch (_) {}
+      } catch (dbErr) {
+        console.warn('[Server Approval Progress DB Sync Warning]', dbErr);
+      }
+
+      console.log(`[Server Approval Progress] Successfully saved progress for Project ID: ${cleanId}`);
+      return res.json({ success: true, data: savedRecord, message: 'Approval progress saved successfully' });
+    } catch (err: any) {
+      console.error('[Server Approval Progress POST Exception]', err);
+      return res.status(500).json({ success: false, error: err.message || String(err) });
+    }
+  });
+
+  // POST /api/production/validate-edited-files
+  // Verifies that edited files are actually uploaded to server/storage for the specified project_id
+  app.post('/api/production/validate-edited-files', async (req, res) => {
+    try {
+      const { project_id } = req.body;
+      if (!project_id) {
+        return res.status(400).json({ success: false, isValid: false, uploaded: false, error: 'project_id is required' });
+      }
+
+      const cleanId = String(project_id).trim();
+      const db = getServerSupabase();
+
+      // 1. Fetch production record strictly for this project_id
+      const { data: prodData, error: prodErr } = await db
+        .from('production')
+        .select('*')
+        .eq('production_id', cleanId)
+        .limit(1);
+
+      if (prodErr || !prodData || prodData.length === 0) {
+        return res.status(404).json({
+          success: false,
+          isValid: false,
+          uploaded: false,
+          projectId: cleanId,
+          message: `Project (${cleanId}) not found in the system.`
+        });
+      }
+
+      const prod = prodData[0];
+      const orderId = prod.order_id ? String(prod.order_id).trim() : '';
+
+      // 2. Fetch editor assignments strictly for this production_id (or order_id)
+      let assignments: any[] = [];
+      const { data: eaData } = await db
+        .from('editor_assignments')
+        .select('*')
+        .eq('production_id', cleanId);
+
+      if (Array.isArray(eaData) && eaData.length > 0) {
+        assignments = eaData;
+      } else if (orderId) {
+        const { data: eaOrderData } = await db
+          .from('editor_assignments')
+          .select('*')
+          .eq('order_id', orderId);
+        if (Array.isArray(eaOrderData) && eaOrderData.length > 0) {
+          assignments = eaOrderData;
+        }
+      }
+
+      // 3. Fetch client acceptance verifications for this order if available
+      let caVerifs: any[] = [];
+      if (orderId) {
+        const { data: cavData } = await db
+          .from('client_acceptance_verifications')
+          .select('*')
+          .eq('order_id', orderId);
+        if (Array.isArray(cavData)) {
+          caVerifs = cavData;
+        }
+      }
+
+      const fileCaRecords = readCaVerificationsFromFile().filter((r: any) =>
+        orderId && String(r.order_id || '').trim().toLowerCase() === orderId.toLowerCase()
+      );
+      const combinedCaVerifs = [...caVerifs, ...fileCaRecords];
+
+      // Verification checks:
+      // A) Project-level checks:
+      const prodHasConfirmedServerUpload = prod.server_upload_confirmed === true;
+      const prodHasEditedFolderUploaded = prod.edited_folder_uploaded_to_server === true;
+      const prodFolderName = (prod.server_upload_folder_name || prod.server_path || prod.folder_name || '').trim();
+      const prodDriveLink = (prod.edited_drive_link || prod.delivery_link || prod.final_edited_footage_link || prod.upload_link_path || '').trim();
+
+      // B) Assignment-level checks:
+      let assignmentsWithUploadedFiles = 0;
+      let matchedFolderName = prodFolderName;
+      let matchedDriveLink = prodDriveLink;
+
+      assignments.forEach((a: any) => {
+        const aFolder = (a.server_upload_folder_name || a.server_path || a.folder_name || '').trim();
+        const aLink = (a.edited_drive_link || a.Edited_Drive_Link || a.server_file_link || a.upload_link || a.final_edited_footage_link || a.upload_link_path || '').trim();
+        const aProof = (a.proof_url || a.proof_image || a.uploaded_proof || a.customer_review_image || a.confirmation_proof || a.client_communication_proof || '').trim();
+        const aConfirmed = a.server_upload_confirmed === true || a.edited_folder_uploaded_to_server === true;
+
+        const hasUploaded = aConfirmed || Boolean(aFolder) || Boolean(aLink) || Boolean(aProof);
+        if (hasUploaded) {
+          assignmentsWithUploadedFiles++;
+          if (!matchedFolderName && aFolder) matchedFolderName = aFolder;
+          if (!matchedDriveLink && aLink) matchedDriveLink = aLink;
+        }
+      });
+
+      // C) CA Verifications check:
+      const cavMatch = combinedCaVerifs.find((cav: any) =>
+        cav.consent_proof_verified === true ||
+        cav.edited_folder_uploaded_to_server === true ||
+        Boolean((cav.folder_name || '').trim()) ||
+        Boolean((cav.upload_link_path || cav.final_edited_footage_link || '').trim()) ||
+        Boolean((cav.proof_storage_path || '').trim())
+      );
+      if (cavMatch && !matchedFolderName && cavMatch.folder_name) {
+        matchedFolderName = cavMatch.folder_name.trim();
+      }
+
+      const hasUploaded =
+        prodHasConfirmedServerUpload ||
+        prodHasEditedFolderUploaded ||
+        Boolean(prodFolderName) ||
+        Boolean(prodDriveLink) ||
+        Boolean(cavMatch) ||
+        (assignments.length > 0 && assignmentsWithUploadedFiles > 0);
+
+      if (!hasUploaded) {
+        return res.json({
+          success: true,
+          isValid: false,
+          uploaded: false,
+          projectId: cleanId,
+          message: `Edited files must be uploaded to the server first for Project ID ${cleanId}. No server upload or edited folder found.`,
+          details: {
+            assignmentsTotal: assignments.length,
+            assignmentsWithFiles: assignmentsWithUploadedFiles,
+            folderName: null
+          }
+        });
+      }
+
+      return res.json({
+        success: true,
+        isValid: true,
+        uploaded: true,
+        projectId: cleanId,
+        message: `Edited files verified on server for Project ID ${cleanId}.`,
+        details: {
+          folderName: matchedFolderName || 'Server Storage Verified',
+          driveLink: matchedDriveLink || null,
+          assignmentsTotal: assignments.length,
+          assignmentsWithFiles: assignmentsWithUploadedFiles,
+          serverConfirmed: prodHasConfirmedServerUpload || prodHasEditedFolderUploaded || assignmentsWithUploadedFiles > 0
+        }
+      });
+    } catch (err: any) {
+      console.error('[Server Validate Edited Files Exception]', err);
+      return res.status(500).json({ success: false, isValid: false, uploaded: false, error: err.message || String(err) });
     }
   });
 

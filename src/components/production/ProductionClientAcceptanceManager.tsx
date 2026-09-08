@@ -27,27 +27,85 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
   });
   
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [saveProgressSuccess, setSaveProgressSuccess] = useState(false);
+  const [isValidatingFiles, setIsValidatingFiles] = useState(false);
+  const [serverFilesVerified, setServerFilesVerified] = useState<boolean | null>(null);
+  const [serverFolderInfo, setServerFolderInfo] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string[]>([]);
   
-  // Reset state when a new prod is opened
+  // Restore saved state when a project is opened
   useEffect(() => {
-    if (activeProd) {
-      const statusNorm = (activeProd.current_status || activeProd.production_status || activeProd.editing_status || '').trim().toLowerCase();
-      const completedStatuses = ['client acceptance', 'business owner review', 'project completed', 'completed', 'order closed', 'closed', 'final approval', 'approved', 'ready for delivery', 'delivered'];
-      const isCompleted = completedStatuses.includes(statusNorm);
+    if (!activeProd) return;
 
-      setChecklist({
-        checklist_customer_acceptance: isCompleted ? !!activeProd.checklist_customer_acceptance : false,
-        checklist_content_usage: !!activeProd.checklist_content_usage,
-        checklist_footage_deleted_7_days: !!activeProd.checklist_footage_deleted_7_days,
-        checklist_payment_from_sales: !!activeProd.checklist_payment_from_sales,
-        checklist_edited_files_uploaded: !!activeProd.checklist_edited_files_uploaded,
-      });
-      setErrorMsg([]);
-      setIsSaving(false);
-      setIsSuccess(false);
-    }
+    const projectId = activeProd.production_id;
+    const statusNorm = (activeProd.current_status || activeProd.production_status || activeProd.editing_status || '').trim().toLowerCase();
+    const completedStatuses = ['client acceptance', 'business owner review', 'project completed', 'completed', 'order closed', 'closed', 'final approval', 'approved', 'ready for delivery', 'delivered'];
+    const isCompleted = completedStatuses.includes(statusNorm);
+
+    // 1. Initial baseline from activeProd
+    let initialChecklist = {
+      checklist_customer_acceptance: isCompleted ? !!activeProd.checklist_customer_acceptance : false,
+      checklist_content_usage: !!activeProd.checklist_content_usage,
+      checklist_footage_deleted_7_days: !!activeProd.checklist_footage_deleted_7_days,
+      checklist_payment_from_sales: !!activeProd.checklist_payment_from_sales,
+      checklist_edited_files_uploaded: !!activeProd.checklist_edited_files_uploaded,
+    };
+
+    // 2. Check localStorage cache for this exact Project ID
+    try {
+      const localCached = localStorage.getItem(`client_approval_progress_${projectId}`);
+      if (localCached) {
+        const parsed = JSON.parse(localCached);
+        if (parsed && parsed.project_id === projectId) {
+          initialChecklist = {
+            checklist_customer_acceptance: Boolean(parsed.client_approval ?? initialChecklist.checklist_customer_acceptance),
+            checklist_content_usage: Boolean(parsed.content_usage_confirmation ?? initialChecklist.checklist_content_usage),
+            checklist_footage_deleted_7_days: Boolean(parsed.footage_deleted_7_days ?? initialChecklist.checklist_footage_deleted_7_days),
+            checklist_payment_from_sales: Boolean(parsed.verify_payment_from_sales ?? initialChecklist.checklist_payment_from_sales),
+            checklist_edited_files_uploaded: Boolean(parsed.validate_edited_files_uploaded ?? initialChecklist.checklist_edited_files_uploaded),
+          };
+        }
+      }
+    } catch (_) {}
+
+    setChecklist(initialChecklist);
+    setErrorMsg([]);
+    setIsSaving(false);
+    setIsSavingProgress(false);
+    setSaveProgressSuccess(false);
+    setIsSuccess(false);
+    setServerFilesVerified(null);
+    setServerFolderInfo(null);
+
+    // 3. Fetch dedicated saved progress from server for this exact Project ID
+    let isCancelled = false;
+    const loadServerProgress = async () => {
+      try {
+        const res = await fetch(`/api/client-approval/progress/${encodeURIComponent(projectId)}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (!isCancelled && json.success && json.data) {
+            const serverData = json.data;
+            setChecklist(prev => ({
+              checklist_customer_acceptance: serverData.client_approval !== undefined ? Boolean(serverData.client_approval) : prev.checklist_customer_acceptance,
+              checklist_content_usage: serverData.content_usage_confirmation !== undefined ? Boolean(serverData.content_usage_confirmation) : prev.checklist_content_usage,
+              checklist_footage_deleted_7_days: serverData.footage_deleted_7_days !== undefined ? Boolean(serverData.footage_deleted_7_days) : prev.checklist_footage_deleted_7_days,
+              checklist_payment_from_sales: serverData.verify_payment_from_sales !== undefined ? Boolean(serverData.verify_payment_from_sales) : prev.checklist_payment_from_sales,
+              checklist_edited_files_uploaded: serverData.validate_edited_files_uploaded !== undefined ? Boolean(serverData.validate_edited_files_uploaded) : prev.checklist_edited_files_uploaded,
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn('[Client Approval] Could not fetch server progress:', err);
+      }
+    };
+    loadServerProgress();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [activeProd, activeProdId]);
 
   useEffect(() => {
@@ -151,14 +209,124 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     { key: 'checklist_content_usage', label: 'Content Usage Confirmation' },
     { key: 'checklist_footage_deleted_7_days', label: 'Footage Deleted in 7 Days' },
     { key: 'checklist_payment_from_sales', label: 'Verify Payment from Sales' },
-    { key: 'checklist_edited_files_uploaded', label: 'Validate Edited Files Uploaded' },
+    { key: 'checklist_edited_files_uploaded', label: 'Validate Edited Files Uploaded to Server' },
   ];
+
+  // Handle checking/unchecking with server-side validation for edited files
+  const handleItemToggle = async (key: string, checked: boolean) => {
+    if (!activeProd) return;
+
+    if (key === 'checklist_edited_files_uploaded') {
+      if (!checked) {
+        setChecklist(prev => ({ ...prev, [key]: false }));
+        setServerFilesVerified(null);
+        setServerFolderInfo(null);
+        return;
+      }
+
+      // User wants to check "Validate Edited Files Uploaded to Server" -> Perform Server-Side Validation!
+      setIsValidatingFiles(true);
+      setErrorMsg([]);
+      try {
+        const res = await fetch('/api/production/validate-edited-files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ project_id: activeProd.production_id })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.isValid) {
+          setChecklist(prev => ({ ...prev, [key]: false }));
+          setServerFilesVerified(false);
+          setServerFolderInfo(null);
+          setErrorMsg([
+            'SERVER FILE VALIDATION FAILED',
+            `Project ID: ${activeProd.production_id}`,
+            data.message || 'Required edited files must be uploaded to the server first.'
+          ]);
+        } else {
+          setChecklist(prev => ({ ...prev, [key]: true }));
+          setServerFilesVerified(true);
+          setServerFolderInfo(data.details?.folderName || 'Confirmed on Server');
+          setErrorMsg([]);
+        }
+      } catch (err: any) {
+        setChecklist(prev => ({ ...prev, [key]: false }));
+        setServerFilesVerified(false);
+        setErrorMsg([
+          'SERVER FILE VALIDATION ERROR',
+          `Could not verify edited files for Project ID: ${activeProd.production_id}`,
+          err.message || String(err)
+        ]);
+      } finally {
+        setIsValidatingFiles(false);
+      }
+      return;
+    }
+
+    setChecklist(prev => ({ ...prev, [key]: checked }));
+  };
+
+  // Save Progress - Persist state per Project ID without completing approval
+  const handleSaveProgress = async () => {
+    if (!activeProd) return;
+
+    setIsSavingProgress(true);
+    setErrorMsg([]);
+
+    try {
+      const payload = {
+        project_id: activeProd.production_id,
+        client_approval: checklist.checklist_customer_acceptance,
+        content_usage_confirmation: checklist.checklist_content_usage,
+        footage_deleted_7_days: checklist.checklist_footage_deleted_7_days,
+        verify_payment_from_sales: checklist.checklist_payment_from_sales,
+        validate_edited_files_uploaded: checklist.checklist_edited_files_uploaded
+      };
+
+      // 1. Cache to localStorage for instant local retrieval
+      try {
+        localStorage.setItem(`client_approval_progress_${activeProd.production_id}`, JSON.stringify(payload));
+      } catch (_) {}
+
+      // 2. Persist to server API dedicated storage
+      const res = await fetch('/api/client-approval/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        console.warn('[Client Approval] Server progress endpoint warning:', errJson);
+      }
+
+      // 3. Update production table checklist state
+      await pushUpdate('production', 'production_id', activeProd.production_id, {
+        ...checklist
+      });
+
+      setSaveProgressSuccess(true);
+      setTimeout(() => {
+        setActiveProdId(null);
+        setSaveProgressSuccess(false);
+        setIsSavingProgress(false);
+      }, 700);
+    } catch (err: any) {
+      console.error('[Client Approval] Error saving progress:', err);
+      setErrorMsg([
+        'FAILED TO SAVE PROGRESS',
+        'Could not save checklist progress for this project.',
+        err.message || String(err)
+      ]);
+      setIsSavingProgress(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeProd) return;
     
-    // Validate
+    // 1. Validate all checklist items are checked
     const missing: string[] = [];
     checklistItems.forEach(item => {
       if (!(checklist as any)[item.key]) {
@@ -169,7 +337,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     if (missing.length > 0) {
       setErrorMsg([
         'CLIENT APPROVAL CANNOT BE COMPLETED',
-        'Please complete:',
+        'Please complete all checklist items:',
         ...missing.map(m => `✗ ${m}`)
       ]);
       return;
@@ -179,7 +347,27 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     setErrorMsg([]);
     
     try {
-      // 1. Update checklist values and status
+      // 2. Server-side check: Verify edited files actually exist on the server for this Project ID
+      const valRes = await fetch('/api/production/validate-edited-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: activeProd.production_id })
+      });
+      const valData = await valRes.json();
+
+      if (!valRes.ok || !valData.isValid) {
+        setIsSaving(false);
+        setChecklist(prev => ({ ...prev, checklist_edited_files_uploaded: false }));
+        setServerFilesVerified(false);
+        setErrorMsg([
+          'CLIENT APPROVAL CANNOT BE COMPLETED',
+          'Validate Edited Files Uploaded to Server:',
+          `✗ ${valData.message || 'Required edited files are not uploaded to the server for Project ID ' + activeProd.production_id + '. Please upload the edited files first.'}`
+        ]);
+        return;
+      }
+
+      // 3. Update checklist values and status to Client Acceptance
       await pushUpdate('production', 'production_id', activeProd.production_id, {
         ...checklist,
         current_status: 'Client Acceptance',
@@ -187,8 +375,22 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         editing_status: 'Client Acceptance',
         status: 'Client Acceptance'
       });
+
+      // 4. Save completed progress to server storage
+      await fetch('/api/client-approval/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: activeProd.production_id,
+          client_approval: true,
+          content_usage_confirmation: true,
+          footage_deleted_7_days: true,
+          verify_payment_from_sales: true,
+          validate_edited_files_uploaded: true
+        })
+      }).catch(() => {});
       
-      // 2. Verify Database
+      // 5. Verify Database
       const { data: dbData, error: dbError } = await supabaseClient
         .from('production')
         .select('*')
@@ -204,12 +406,12 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         throw new Error(`The Production status was not saved as Client Acceptance.`);
       }
       
-      // 3. Refresh Data
+      // 6. Refresh Data
       if (refreshData) {
         await refreshData();
       }
       
-      // 4. Success - Close popup
+      // 7. Success - Close popup
       setIsSuccess(true);
       setTimeout(() => {
         setActiveProdId(null);
@@ -273,41 +475,93 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
              </div>
            )}
 
+           {saveProgressSuccess && (
+             <div className="p-3 bg-amber-950/80 border border-amber-500/50 rounded-xl text-amber-200 text-xs font-mono flex items-center gap-2 animate-in fade-in">
+               <span>✓</span> Progress saved for Project ID: <strong className="text-white">{activeProd.production_id}</strong>
+             </div>
+           )}
+
            <form id="client-approval-form" onSubmit={handleSubmit} className="space-y-4">
              <div className="space-y-3">
-               {checklistItems.map((item) => (
-                 <label key={item.key} className="flex items-start gap-3 p-3 rounded-xl border border-zinc-800/50 hover:border-zinc-700 bg-zinc-900/30 cursor-pointer transition-colors group">
-                   <input
-                     type="checkbox"
-                     checked={(checklist as any)[item.key]}
-                     onChange={(e) => setChecklist(prev => ({ ...prev, [item.key]: e.target.checked }))}
-                     className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900 transition-colors cursor-pointer"
-                   />
-                   <span className="text-xs font-semibold text-zinc-300 group-hover:text-white transition-colors">
-                     {item.label}
-                   </span>
-                 </label>
-               ))}
+               {checklistItems.map((item) => {
+                 const isEditedFilesItem = item.key === 'checklist_edited_files_uploaded';
+                 const isChecked = Boolean((checklist as any)[item.key]);
+
+                 return (
+                   <label
+                     key={item.key}
+                     className="flex items-start gap-3 p-3 rounded-xl border border-zinc-800/50 hover:border-zinc-700 bg-zinc-900/30 cursor-pointer transition-colors group relative"
+                   >
+                     <input
+                       type="checkbox"
+                       checked={isChecked}
+                       disabled={isEditedFilesItem && isValidatingFiles}
+                       onChange={(e) => handleItemToggle(item.key, e.target.checked)}
+                       className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900 transition-colors cursor-pointer disabled:opacity-50"
+                     />
+                     <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                       <span className="text-xs font-semibold text-zinc-300 group-hover:text-white transition-colors">
+                         {item.label}
+                       </span>
+
+                       {isEditedFilesItem && isValidatingFiles && (
+                         <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1 animate-pulse">
+                           <span className="animate-spin text-xs">⟳</span> Verifying Server...
+                         </span>
+                       )}
+
+                       {isEditedFilesItem && !isValidatingFiles && isChecked && (
+                         <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                           <span>✓</span> {serverFolderInfo ? `Verified: ${serverFolderInfo}` : 'Verified on Server'}
+                         </span>
+                       )}
+
+                       {isEditedFilesItem && !isValidatingFiles && serverFilesVerified === false && !isChecked && (
+                         <span className="text-[10px] text-rose-400 font-mono">
+                           ✗ Server Files Missing
+                         </span>
+                       )}
+                     </div>
+                   </label>
+                 );
+               })}
              </div>
            </form>
         </div>
         
-        <div className="px-5 py-4 sm:px-6 border-t border-zinc-900 bg-zinc-950/80 flex items-center gap-3">
+        <div className="px-5 py-4 sm:px-6 border-t border-zinc-900 bg-zinc-950/80 flex items-center gap-2 sm:gap-3">
            <button
              type="button"
              onClick={() => setActiveProdId(null)}
-             className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer border border-zinc-800"
+             className="py-3 px-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer border border-zinc-800"
            >
              Cancel
            </button>
+
+           <button
+             type="button"
+             onClick={handleSaveProgress}
+             disabled={isSavingProgress || isSaving || isSuccess}
+             className="py-3 px-4 bg-zinc-800 hover:bg-zinc-700 text-amber-300 hover:text-amber-200 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer border border-zinc-700 flex items-center justify-center gap-1.5 disabled:opacity-50"
+             title="Save current progress and resume later"
+           >
+             {isSavingProgress ? (
+               <><span className="animate-spin inline-block text-xs">⟳</span> SAVING...</>
+             ) : saveProgressSuccess ? (
+               <><span>✓</span> SAVED</>
+             ) : (
+               <><span>💾</span> SAVE</>
+             )}
+           </button>
+
            <button
              type="submit"
              form="client-approval-form"
-             disabled={isSaving || isSuccess}
-             className="flex-[2] py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+             disabled={isSaving || isSavingProgress || isSuccess}
+             className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-colors shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
            >
              {isSaving ? (
-               <><span className="animate-spin inline-block mr-1">⟳</span> SAVING CLIENT APPROVAL...</>
+               <><span className="animate-spin inline-block mr-1">⟳</span> SAVING APPROVAL...</>
              ) : isSuccess ? (
                <><span>✓</span> CLIENT APPROVED</>
              ) : (

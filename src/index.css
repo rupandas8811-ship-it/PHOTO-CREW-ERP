@@ -891,5 +891,13 @@ div.fixed.inset-0:has(h4 span.text-purple-300),
   }
 }
 
+@keyframes row-blink {
+  0%, 100% { opacity: 1; background-color: rgba(245, 158, 11, 0.18); }
+  50% { opacity: 0.55; background-color: rgba(245, 158, 11, 0.4); }
+}
+.animate-row-blink {
+  animation: row-blink 1.5s ease-in-out infinite;
+}
+
 
 

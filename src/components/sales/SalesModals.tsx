@@ -17,6 +17,7 @@ import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
 import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
+import { TimePicker12Hour } from '../TimePicker12Hour';
 
 export interface SalesModalsProps {
   [key: string]: any;
@@ -193,11 +194,10 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
                           <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                             Event Start Time *
                           </label>
-                          <input
-                            type="time"
-                            readOnly
+                          <TimePicker12Hour
+                            disabled
                             value={ev.event_start_time || ev.event_time || ''}
-                            className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                            onChange={() => {}}
                           />
                         </div>
                       </div>
@@ -234,15 +234,13 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
                           <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
                             Reporting Time *
                           </label>
-                          <input
-                            type="time"
+                          <TimePicker12Hour
                             required
                             value={evData.reporting_time}
-                            onChange={(e) => setFinalReportingForm({ 
+                            onChange={(val24) => setFinalReportingForm({ 
                               ...finalReportingForm, 
-                              [ev.id]: { ...evData, reporting_time: e.target.value } 
+                              [ev.id]: { ...evData, reporting_time: val24 } 
                             })}
-                            className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
                           />
                         </div>
                       </div>
@@ -281,11 +279,10 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
                       <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                         Event Start Time *
                       </label>
-                      <input
-                        type="time"
-                        readOnly
+                      <TimePicker12Hour
+                        disabled
                         value={selectedLead.event_time || selectedLead.reporting_time || ''}
-                        className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                        onChange={() => {}}
                       />
                     </div>
                   </div>
@@ -322,15 +319,13 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
                       <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
                         Reporting Time *
                       </label>
-                      <input
-                        type="time"
+                      <TimePicker12Hour
                         required
                         value={finalReportingForm['default']?.reporting_time || ''}
-                        onChange={(e) => setFinalReportingForm({ 
+                        onChange={(val24) => setFinalReportingForm({ 
                           ...finalReportingForm, 
-                          'default': { ...finalReportingForm['default'], reporting_time: e.target.value } 
+                          'default': { ...finalReportingForm['default'], reporting_time: val24 } 
                         })}
-                        className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
                       />
                     </div>
                   </div>
@@ -392,11 +387,9 @@ export const SalesModals: React.FC<SalesModalsProps> = (props) => {
                   <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
                     Follow-up Time <span className="text-slate-500">(Optional)</span>
                   </label>
-                  <input
-                    type="time"
+                  <TimePicker12Hour
                     value={step3FollowUpTime}
-                    onChange={(e) => setStep3FollowUpTime(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                    onChange={(val24) => setStep3FollowUpTime(val24)}
                   />
                 </div>
 

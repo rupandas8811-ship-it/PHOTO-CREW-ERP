@@ -17,6 +17,7 @@ import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
 import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
+import { TimePicker12Hour } from '../TimePicker12Hour';
 
 
 export interface SalesBookingConfirmationModalProps {
@@ -233,20 +234,18 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                                 <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
                                   Reporting Time *
                                 </label>
-                                <input
-                                  type="time"
+                                <TimePicker12Hour
                                   required
                                   value={repData.reporting_time || ''}
-                                  onChange={(e) => {
+                                  onChange={(val24) => {
                                     setEventsReporting(prev => ({
                                       ...prev,
                                       [key]: {
                                         ...(prev[key] || { reporting_date: '' }),
-                                        reporting_time: e.target.value
+                                        reporting_time: val24
                                       }
                                     }));
                                   }}
-                                  className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
                                 />
                               </div>
                             </div>
@@ -306,20 +305,18 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                             <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
                               Reporting Time *
                             </label>
-                            <input
-                              type="time"
+                            <TimePicker12Hour
                               required
                               value={eventsReporting['default']?.reporting_time || selectedLead.reporting_time || ''}
-                              onChange={(e) => {
+                              onChange={(val24) => {
                                 setEventsReporting(prev => ({
                                   ...prev,
                                   default: {
                                     ...(prev['default'] || { reporting_date: '' }),
-                                    reporting_time: e.target.value
+                                    reporting_time: val24
                                   }
                                 }));
                               }}
-                              className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
                             />
                           </div>
                         </div>

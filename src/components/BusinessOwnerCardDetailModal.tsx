@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Search, Calendar, Info } from 'lucide-react';
+import { X, Search, Calendar, Info, Download, FileSpreadsheet } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
 import { formatINR } from '../utils';
 
 interface ColumnDefinition {
@@ -20,6 +22,9 @@ interface BusinessOwnerCardDetailModalProps {
   totalLabel?: string;
   totalValue?: React.ReactNode;
   filterDescription?: string;
+  onDownloadPDF?: (records: any[]) => void;
+  onDownloadExcel?: (records: any[]) => void;
+  onDownloadCSV?: (records: any[]) => void;
 }
 
 export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModalProps> = ({
@@ -32,7 +37,10 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
   columns,
   totalLabel = 'Total Value',
   totalValue,
-  filterDescription
+  filterDescription,
+  onDownloadPDF,
+  onDownloadExcel,
+  onDownloadCSV
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -47,6 +55,112 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
       });
     });
   }, [data, searchTerm]);
+
+  // Download handlers for the displayed/filtered records
+  const handleDownloadPDF = () => {
+    if (onDownloadPDF) {
+      onDownloadPDF(filteredData);
+      return;
+    }
+    const doc = new jsPDF({ orientation: 'landscape' });
+    doc.setFontSize(16);
+    doc.text(`${title || 'Detail Report'}`, 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')} | Period: ${subtitle || 'All'} | Displayed Records: ${filteredData.length}`, 14, 22);
+
+    if (totalLabel && totalValue) {
+      doc.setFontSize(11);
+      doc.text(`${totalLabel}: ${typeof totalValue === 'string' || typeof totalValue === 'number' ? totalValue : ''}`, 14, 30);
+    }
+
+    let y = 38;
+    doc.setFontSize(9);
+    doc.setTextColor(100);
+
+    const printableCols = columns.filter(c => c.key !== 'actions' && c.label.toLowerCase() !== 'action');
+    let x = 14;
+    const colWidth = Math.max(25, Math.floor(260 / (printableCols.length || 1)));
+    printableCols.forEach((c) => {
+      doc.text(c.label.substring(0, 18), x, y);
+      x += colWidth;
+    });
+
+    y += 3;
+    doc.line(14, y, 280, y);
+    y += 6;
+
+    doc.setTextColor(0);
+    filteredData.forEach((row) => {
+      if (y > 185) {
+        doc.addPage();
+        y = 20;
+      }
+      x = 14;
+      printableCols.forEach((c) => {
+        let val = row[c.key];
+        if (typeof val === 'number' && (c.key.toLowerCase().includes('revenue') || c.key.toLowerCase().includes('received') || c.key.toLowerCase().includes('outstanding') || c.key.toLowerCase().includes('amount') || c.key.toLowerCase().includes('balance'))) {
+          val = `Rs.${val.toLocaleString('en-IN')}`;
+        } else if (val === null || val === undefined) {
+          val = '-';
+        }
+        doc.text(String(val).substring(0, 18), x, y);
+        x += colWidth;
+      });
+      y += 6;
+    });
+
+    const cleanTitle = (title || 'Report').replace(/[^a-zA-Z0-9_-]/g, '_');
+    doc.save(`${cleanTitle}_${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const handleDownloadExcel = () => {
+    if (onDownloadExcel) {
+      onDownloadExcel(filteredData);
+      return;
+    }
+    const printableCols = columns.filter(c => c.key !== 'actions' && c.label.toLowerCase() !== 'action');
+    const excelData = filteredData.map(row => {
+      const formattedRow: Record<string, any> = {};
+      printableCols.forEach(c => {
+        let val = row[c.key];
+        if (val === null || val === undefined) val = '';
+        formattedRow[c.label] = val;
+      });
+      return formattedRow;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Filtered Report');
+    const cleanTitle = (title || 'Report').replace(/[^a-zA-Z0-9_-]/g, '_');
+    XLSX.writeFile(workbook, `${cleanTitle}_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleDownloadCSV = () => {
+    if (onDownloadCSV) {
+      onDownloadCSV(filteredData);
+      return;
+    }
+    const printableCols = columns.filter(c => c.key !== 'actions' && c.label.toLowerCase() !== 'action');
+    const headers = printableCols.map(c => `"${c.label.replace(/"/g, '""')}"`);
+    const rows = filteredData.map(row => {
+      return printableCols.map(c => {
+        let val = row[c.key];
+        if (val === null || val === undefined) val = '';
+        return `"${String(val).replace(/"/g, '""')}"`;
+      }).join(',');
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    const cleanTitle = (title || 'Report').replace(/[^a-zA-Z0-9_-]/g, '_');
+    link.setAttribute("download", `${cleanTitle}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -154,10 +268,10 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
         </div>
 
         {/* Info & Metrics Bar */}
-        <div className="px-6 py-4 bg-zinc-900/40 border-b border-zinc-900/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="px-6 py-4 bg-zinc-900/40 border-b border-zinc-900/80 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-3">
             {/* Card Value representation */}
-            <div className="px-4 py-2 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center gap-3">
+            <div className="px-4 py-2 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center gap-3 shadow-inner">
               <span className="text-xs font-mono text-zinc-400">{totalLabel}:</span>
               <span className={`text-sm sm:text-base font-black font-mono ${activeColors.text}`}>
                 {totalValue}
@@ -165,24 +279,64 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
             </div>
 
             {/* Record count representation */}
-            <div className="px-4 py-2 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center gap-3">
+            <div className="px-4 py-2 bg-zinc-950 border border-zinc-850 rounded-xl flex items-center gap-3 shadow-inner">
               <span className="text-xs font-mono text-zinc-400">Records Count:</span>
               <span className="text-sm sm:text-base font-black font-mono text-zinc-200">
-                {data.length} {data.length === 1 ? 'Record' : 'Records'}
+                {filteredData.length} {filteredData.length === 1 ? 'Record' : 'Records'}
+                {searchTerm.trim() && data.length !== filteredData.length && (
+                  <span className="text-[10px] text-zinc-500 font-normal ml-1">of {data.length}</span>
+                )}
               </span>
             </div>
           </div>
 
-          {/* Search inside popup */}
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
-            <input
-              type="text"
-              placeholder="Search table..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8.5 pr-3 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 font-mono"
-            />
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Search inside popup */}
+            <div className="relative w-full sm:w-56">
+              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search records..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-8.5 pr-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700 font-mono"
+              />
+            </div>
+
+            {/* DOWNLOAD REPORT BUTTONS - ALWAYS VISIBLE */}
+            <div className="flex items-center gap-1.5 bg-zinc-950 border border-zinc-800 p-1 rounded-xl shadow-sm">
+              <div className="flex items-center gap-1.5 px-2 text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider">
+                <Download className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">Download:</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleDownloadPDF}
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                title="Download PDF report for current records"
+              >
+                <Download className="w-3.5 h-3.5 text-rose-400" />
+                <span>PDF</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadExcel}
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                title="Download Excel (.xlsx) report for current records"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Excel (.xlsx)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadCSV}
+                className="px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 hover:border-zinc-700 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+                title="Download CSV report for current records"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-400" />
+                <span>CSV</span>
+              </button>
+            </div>
           </div>
         </div>
 

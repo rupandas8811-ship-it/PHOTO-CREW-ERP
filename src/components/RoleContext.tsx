@@ -9,6 +9,19 @@ import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail } fr
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { executeSaveStaffAssignments } from '../services/operationsAssignmentService';
 
+export const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try {
+      return crypto.randomUUID();
+    } catch (_) {}
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 export const getStatusRank = (status: string | undefined | null): number => {
   if (!status) return 0;
   const s = status.trim();
@@ -100,6 +113,8 @@ interface RoleContextType {
   rawFootage: RawFootage[];
   production: Production[];
   payments: Payment[];
+  paymentHistory: any[];
+  approvePayment: (historyId: string, orderId: string) => Promise<void>;
   logs: ActivityLog[];
   staff: Staff[];
   addStaff: (member: Omit<Staff, 'staff_id'>) => Promise<void>;
@@ -916,6 +931,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [rawFootage, setRawFootage] = useState<RawFootage[]>([]);
   const [production, setProduction] = useState<Production[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [calendarMemos, setCalendarMemos] = useState<CalendarMemo[]>([]);
@@ -1294,6 +1310,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (table === 'raw_footage') {
       delete cloned.storage_type;
       delete cloned.upload_notes;
+    }
+
+    if (table === 'payment_history') {
+      delete cloned.payment_history_id;
+      delete cloned.approval_status;
+      delete cloned.lead_id;
     }
 
     if (table === 'users') {
@@ -1755,6 +1777,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             if (!san.created_at) san.created_at = new Date().toISOString();
             if (!san.return_date) san.return_date = new Date().toISOString().split('T')[0];
           }
+          if (table === 'payment_history') {
+            const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            if (!san.id || !uuidRegex.test(san.id)) {
+              san.id = generateUUID();
+            }
+          }
           return san;
         });
       } else {
@@ -1767,6 +1795,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
         }
         sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, record), table);
+        if (table === 'payment_history') {
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+          if (!sanitized.id || !uuidRegex.test(sanitized.id)) {
+            sanitized.id = generateUUID();
+          }
+        }
         if (table === 'operations_staff' && sanitized.staff_id) {
           sanitized.staff_id = mapToDbStaffId(sanitized.staff_id);
         }
@@ -1895,6 +1929,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     try {
       const sanitized = sanitizeTimeFieldsForDb(stripClientOnlyFields(table, updates), table);
       let finalMatchValue = matchValue;
+      if (table === 'payment_history') {
+        if (matchColumn === 'payment_history_id') {
+          matchColumn = 'id';
+        }
+      }
       if (table === 'operations_staff') {
         if (matchColumn === 'staff_id' && matchValue) {
           finalMatchValue = mapToDbStaffId(matchValue);
@@ -2463,7 +2502,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               supabaseClient.from('production_specialties').select('*'),
               supabaseClient.from('editor_assignments').select('*'),
               supabaseClient.from('production_staff').select('*'),
-              supabaseClient.from('calendar_memos').select('*').order('created_at', { ascending: false })
+              supabaseClient.from('calendar_memos').select('*').order('created_at', { ascending: false }),
+              supabaseClient.from('payment_history').select('*')
             ]);
           }
 
@@ -2473,12 +2513,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           'equipment', 'lead_packages', 'packages', 'staff_assignments', 
           'quotations', 'lead_status_history', 'lead_staff_assignment_history', 
           'lead_equipment_history', 'lead_events', 'equipment_handovers', 
-          'production_specialties', 'editor_assignments', 'production_staff', 'calendar_memos'
+          'production_specialties', 'editor_assignments', 'production_staff', 'calendar_memos', 'payment_history'
         ];
         
-        for (let i = 0; i < results.length; i++) {
-          if (results[i].error) {
-             console.warn(`Data Fetch Warning in table ${tables[i]}:`, results[i].error);
+        for (let i = 0; i < (results || []).length; i++) {
+          if (results[i]?.error) {
+             console.warn(`Data Fetch Warning in table ${tables[i] || i}:`, results[i].error);
              if (tables[i] === 'leads' && results[i].error.message?.includes('created_at')) {
                const fallbackRes = await supabaseClient.from('leads').select('*');
                results[i] = fallbackRes;
@@ -2490,32 +2530,34 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           }
         }
 
+        const safeResults = (results || []).map(r => r || { data: [] });
         const [
-          { data: dbUsers },
-          { data: dbLeads },
-          { data: dbOrders },
-          { data: dbOperations },
-          { data: dbRawFootage },
-          { data: dbProduction },
-          { data: dbPayments },
-          { data: dbLogs },
-          { data: dbStaff },
-          { data: dbNotifications },
-          { data: dbEquipment },
-          { data: dbLeadPackages },
-          { data: dbPackages },
-          { data: dbStaffAssignments },
-          { data: dbQuotations },
-          { data: dbStatusHistory },
-          { data: dbLeadStaffAssignmentHistory },
-          { data: dbLeadEquipmentHistory },
-          { data: dbLeadEvents },
-          { data: dbHandovers },
-          { data: dbSpecList },
-          { data: dbAssignList },
-          { data: dbProdStaff },
-          { data: dbCalendarMemos }
-        ] = results;
+          { data: dbUsers } = { data: [] },
+          { data: dbLeads } = { data: [] },
+          { data: dbOrders } = { data: [] },
+          { data: dbOperations } = { data: [] },
+          { data: dbRawFootage } = { data: [] },
+          { data: dbProduction } = { data: [] },
+          { data: dbPayments } = { data: [] },
+          { data: dbLogs } = { data: [] },
+          { data: dbStaff } = { data: [] },
+          { data: dbNotifications } = { data: [] },
+          { data: dbEquipment } = { data: [] },
+          { data: dbLeadPackages } = { data: [] },
+          { data: dbPackages } = { data: [] },
+          { data: dbStaffAssignments } = { data: [] },
+          { data: dbQuotations } = { data: [] },
+          { data: dbStatusHistory } = { data: [] },
+          { data: dbLeadStaffAssignmentHistory } = { data: [] },
+          { data: dbLeadEquipmentHistory } = { data: [] },
+          { data: dbLeadEvents } = { data: [] },
+          { data: dbHandovers } = { data: [] },
+          { data: dbSpecList } = { data: [] },
+          { data: dbAssignList } = { data: [] },
+          { data: dbProdStaff } = { data: [] },
+          { data: dbCalendarMemos } = { data: [] },
+          { data: dbPaymentHistory } = { data: [] }
+        ] = safeResults;
 
         if (dbUsers && dbUsers.length === 0) {
           await seedDatabase();
@@ -2585,6 +2627,32 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbRawFootage) setRawFootage(dbRawFootage);
         if (dbProduction) setProduction(dbProduction);
         if (dbPayments) setPayments(dbPayments);
+        if (dbPaymentHistory) {
+          const mappedHistory = dbPaymentHistory.map((h: any) => {
+            const isPending = h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval'));
+            return {
+              ...h,
+              approval_status: isPending ? 'Waiting for Approval' : 'Approved'
+            };
+          });
+          setPaymentHistory(mappedHistory);
+        }
+        try {
+          const cachedApprovals = localStorage.getItem('pending_payment_approvals');
+          if (cachedApprovals) {
+            const parsed = JSON.parse(cachedApprovals);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setPaymentHistory(prev => {
+                const map = new Map(prev.map(p => [p.id || p.payment_history_id, p]));
+                parsed.forEach((item: any) => {
+                  const key = item.id || item.payment_history_id;
+                  if (key) map.set(key, item);
+                });
+                return Array.from(map.values());
+              });
+            }
+          }
+        } catch (_) {}
         if (dbLogs) setLogs(dbLogs);
         if (dbHandovers && dbHandovers.length > 0) {
           setEquipmentHandovers(dbHandovers);
@@ -3007,7 +3075,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       { table: 'lead_staff_assignment_history', key: 'id', setter: setLeadStaffAssignmentHistory },
       { table: 'lead_equipment_history', key: 'id', setter: setLeadEquipmentHistory },
       { table: 'packages', key: 'package_id', setter: setPackages },
-      { table: 'calendar_memos', key: 'id', setter: setCalendarMemos }
+      { table: 'calendar_memos', key: 'id', setter: setCalendarMemos },
+      { table: 'payment_history', key: 'id', setter: setPaymentHistory }
     ].map(({ table, key, setter }) => {
       return supabaseClient
         .channel(`rt-${table}`)
@@ -4211,8 +4280,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         event_location: targetLead.event_location,
         package_name: packageName,
         quotation_amount: quotationAmount,
-        advance_received: advanceReceived,
-        balance_amount: quotationAmount - advanceReceived,
+        advance_received: 0,
+        balance_amount: quotationAmount,
         order_status: 'Confirmed',
         current_stage: 'Order Confirmed',
         sales_person: currentUserName,
@@ -4246,8 +4315,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         event_location: targetLead.event_location,
         package_name: packageName,
         quotation_amount: quotationAmount,
-        advance_received: advanceReceived,
-        balance_amount: quotationAmount - advanceReceived,
+        advance_received: 0,
+        balance_amount: quotationAmount,
         order_status: 'Confirmed',
         current_stage: 'Order Confirmed',
         sales_person: currentUserName,
@@ -4294,16 +4363,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     if (!paymentExistsInDb) {
       const paymentId = existingPaymentId || `PAY-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 10000)}`;
+      const hasAdvance = advanceReceived > 0;
+      const initialPaymentStatus: PaymentStatus = hasAdvance ? 'Waiting for Approval' : 'Pending';
       const newPayment: Payment = {
         payment_id: paymentId,
         order_id: masterOrderId,
         quotation_amount: quotationAmount,
-        advance_received: advanceReceived,
-        balance_due: quotationAmount - advanceReceived,
+        advance_received: 0,
+        balance_due: quotationAmount,
         final_payment_received: 0,
         payment_date: new Date().toISOString().split('T')[0],
         payment_proof_url: undefined,
-        payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
+        payment_status: initialPaymentStatus,
         transaction_id: cleanTxnId || undefined,
         Payment_type: 'Advance Payment',
         payment_type: 'Advance Payment',
@@ -4319,12 +4390,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         return [...prev, newPayment];
       });
     } else if (existingPaymentId) {
+      const hasAdvance = advanceReceived > 0;
+      const initialPaymentStatus: PaymentStatus = hasAdvance ? 'Waiting for Approval' : 'Pending';
       const updatedPaymentPayload = {
         quotation_amount: quotationAmount,
-        advance_received: advanceReceived,
-        balance_due: quotationAmount - advanceReceived,
+        advance_received: 0,
+        balance_due: quotationAmount,
         payment_date: new Date().toISOString().split('T')[0],
-        payment_status: advanceReceived >= quotationAmount ? 'Fully Paid' : (advanceReceived > 0 ? 'Partially Paid' : 'Pending'),
+        payment_status: initialPaymentStatus,
         transaction_id: cleanTxnId || undefined,
         Payment_type: 'Advance Payment',
         payment_type: 'Advance Payment'
@@ -4335,18 +4408,29 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       setPayments(prev => prev.map(p => p.payment_id === existingPaymentId ? { ...p, ...updatedPaymentPayload } : p));
     }
 
-    // Persist advance payment in payment history
+    // Persist advance payment in payment history with Waiting for Approval
     if (advanceReceived > 0) {
-      await pushInsert('payment_history', {
+      const newHistoryItem = {
+        id: generateUUID(),
         order_id: masterOrderId,
         amount: advanceReceived,
         payment_date: new Date().toISOString(),
         transaction_id: cleanTxnId || null,
         payment_mode: paymentMode || 'UPI',
         payment_type: 'Advance Payment',
-        updated_by: currentUserName || 'System',
-        notes: 'Initial advance payment on order confirmation'
-      });
+        updated_by: currentUserName || 'Sales',
+        notes: (notes && notes.trim() ? notes.trim() + ' - ' : '') + 'Initial advance payment on order confirmation - Waiting for Approval',
+        approval_status: 'Waiting for Approval'
+      };
+      await pushInsert('payment_history', newHistoryItem);
+      setPaymentHistory(prev => [newHistoryItem, ...prev]);
+
+      try {
+        const saved = localStorage.getItem('pending_payment_approvals');
+        const parsed = saved ? JSON.parse(saved) : [];
+        parsed.unshift(newHistoryItem);
+        localStorage.setItem('pending_payment_approvals', JSON.stringify(parsed));
+      } catch (_) {}
     }
 
     // Operations
@@ -5779,106 +5863,167 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     paymentNotes?: string,
     paymentType?: string
   ) => {
-    let isFullyPaid = false;
-    const targetPayment = augmentedPayments.find((p) => p.order_id === orderId);
-    if (!targetPayment) return;
+    const targetPayment = augmentedPayments.find((p) => p.order_id === orderId || p.lead_id === orderId) || payments.find(p => p.order_id === orderId || p.lead_id === orderId);
 
-    let actualAmountReceived = amountReceived;
-    const totalPaidBefore = targetPayment.advance_received + targetPayment.final_payment_received;
-    
-    // Prevent Paid Amount greater than Final Quotation Amount
-    if (totalPaidBefore + actualAmountReceived > targetPayment.quotation_amount) {
-      actualAmountReceived = targetPayment.quotation_amount - totalPaidBefore;
-    }
-    
-    if (actualAmountReceived <= 0 && totalPaidBefore >= targetPayment.quotation_amount) {
-      // Already fully paid, do not process duplicate payments
-      return;
-    }
-
-    const totalPaid = totalPaidBefore + actualAmountReceived;
-    const outstanding = Math.max(0, targetPayment.quotation_amount - totalPaid);
-    isFullyPaid = outstanding === 0;
+    const actualAmountReceived = Number(amountReceived) || 0;
     const resolvedProofUrl = proofUrl || 'https://photocrew-receipts.s3.amazonaws.com/rec-custom.pdf';
-    const finalPaymentType = paymentType || (targetPayment as any).Payment_type || targetPayment.payment_type || undefined;
+    const finalPaymentType = paymentType || (targetPayment as any)?.Payment_type || targetPayment?.payment_type || 'Shoot Time Payment';
     const cleanTxnId = (transactionId && typeof transactionId === 'string' && transactionId.trim() !== '' && transactionId.trim() !== 'N/A' && transactionId.trim() !== 'null' && transactionId.trim() !== 'NULL') ? transactionId.trim() : null;
-    const resolvedTxnId = cleanTxnId !== null ? cleanTxnId : (targetPayment.transaction_id || undefined);
+    const resolvedTxnId = cleanTxnId !== null ? cleanTxnId : (targetPayment?.transaction_id || undefined);
 
-    const rPay = await pushUpdate('payments', 'payment_id', targetPayment.payment_id, {
-      final_payment_received: targetPayment.final_payment_received + actualAmountReceived,
-      balance_due: outstanding,
-      payment_date: paymentDate,
-      payment_proof_url: resolvedProofUrl,
-      payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
-      transaction_id: resolvedTxnId,
-      payment_type: finalPaymentType
-    });
-    if (!rPay?.success) {
-      throw new Error("Failed to record payment in database: " + rPay?.error);
+    if (targetPayment) {
+      const rPay = await pushUpdate('payments', 'payment_id', targetPayment.payment_id, {
+        payment_status: 'Waiting for Approval',
+        transaction_id: resolvedTxnId,
+        payment_type: finalPaymentType
+      });
+      if (!rPay?.success) {
+        console.warn("Warning updating payment in database:", rPay?.error);
+      }
+
+      setPayments(prev => {
+        const exists = prev.some(p => p.payment_id === targetPayment.payment_id);
+        const updatedPayment = {
+          ...targetPayment,
+          payment_status: 'Waiting for Approval' as PaymentStatus,
+          transaction_id: resolvedTxnId,
+          Payment_type: finalPaymentType,
+          payment_type: finalPaymentType
+        };
+        if (exists) {
+          return prev.map(p => p.payment_id === targetPayment.payment_id ? { ...p, ...updatedPayment } : p);
+        }
+        return [...prev, updatedPayment];
+      });
     }
 
-    setPayments(prev => {
-      const exists = prev.some(p => p.payment_id === targetPayment.payment_id);
-      const updatedPayment = {
-        ...targetPayment,
-        final_payment_received: targetPayment.final_payment_received + actualAmountReceived,
-        balance_due: outstanding,
-        payment_date: paymentDate,
-        payment_proof_url: resolvedProofUrl,
-        payment_status: isFullyPaid ? 'Fully Paid' : 'Partially Paid',
-        transaction_id: resolvedTxnId,
-        Payment_type: finalPaymentType,
-        payment_type: finalPaymentType
-      };
-      if (exists) {
-        return prev.map(p => p.payment_id === targetPayment.payment_id ? { ...p, ...updatedPayment } : p);
-      }
-      return [...prev, updatedPayment];
-    });
+    const resolvedPaymentDate = paymentDate 
+      ? (paymentDate.includes('T') ? paymentDate : `${paymentDate}T${new Date().toTimeString().split(' ')[0]}`) 
+      : new Date().toISOString();
 
-    // Record payment in database history table
-    await pushInsert('payment_history', {
+    const userNote = (paymentNotes && paymentNotes.trim()) ? paymentNotes.trim() : 'Recorded by Sales';
+    const noteWithApprovalStatus = `${userNote} - Waiting for Approval`;
+
+    const newHistoryItem = {
+      id: generateUUID(),
       order_id: orderId,
       amount: actualAmountReceived,
-      payment_date: new Date().toISOString(),
+      payment_date: resolvedPaymentDate,
       transaction_id: cleanTxnId || null,
       payment_mode: paymentMode || 'UPI',
-      payment_type: finalPaymentType || 'Shoot Time Payment',
-      updated_by: currentUserName || 'System',
-      notes: paymentNotes || 'Recorded via update payment'
-    });
+      payment_type: finalPaymentType,
+      updated_by: currentUserName || 'Sales',
+      notes: noteWithApprovalStatus,
+      approval_status: 'Waiting for Approval'
+    };
 
-    // If fully paid, move order status to next transition or check if delivered first.
-    // If fully paid AND previous stage was delivered, we can transition stage to Closed!
-    const currentOrder = augmentedOrders.find((o) => o.order_id === orderId);
-    const currentStage = currentOrder ? currentOrder.current_stage : 'Payment Pending';
-    const timestamp = new Date().toISOString();
+    await pushInsert('payment_history', newHistoryItem);
+    setPaymentHistory(prev => [newHistoryItem, ...prev]);
 
-    if (currentOrder) {
-      const nextOutstanding = Math.max(0, currentOrder.balance_amount - actualAmountReceived);
-      const rOrd = await pushUpdate('orders', 'order_id', orderId, {
-        balance_amount: nextOutstanding,
-        updated_by: currentUserName,
-        updated_at: timestamp
-      });
-      if (!rOrd?.success) {
-        throw new Error("Failed to update order status: " + rOrd?.error);
-      }
+    try {
+      const saved = localStorage.getItem('pending_payment_approvals');
+      const parsed = saved ? JSON.parse(saved) : [];
+      parsed.unshift(newHistoryItem);
+      localStorage.setItem('pending_payment_approvals', JSON.stringify(parsed));
+    } catch (_) {}
 
-      setOrders(prev => prev.map(o => {
-        if (o.order_id === orderId) {
-          return {
-            ...o,
-            balance_amount: nextOutstanding,
-            updated_by: currentUserName,
-            updated_at: timestamp
-          };
-        }
-        return o;
-      }));
+    logActivity(`Submitted payment of ₹${actualAmountReceived} for Order ${orderId} - Waiting for Approval`, 'Finance', orderId);
+  };
+
+  const approvePayment = async (historyId: string, orderId: string) => {
+    let targetHistory = paymentHistory.find(h => h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId));
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(historyId);
+    if (!targetHistory && supabaseClient && isUuid) {
+      const { data } = await supabaseClient.from('payment_history').select('*').eq('id', historyId).maybeSingle();
+      if (data) targetHistory = data;
     }
 
-    logActivity(`Recorded payment of ₹${actualAmountReceived} for Order ${orderId}. Fully paid: ${isFullyPaid}`, 'Finance', orderId, currentStage, currentStage);
+    const cleanNotes = (targetHistory?.notes || '').replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, 'Approved');
+
+    await pushUpdate('payment_history', 'id', historyId, { 
+      order_id: orderId || targetHistory?.order_id,
+      notes: cleanNotes || 'Approved by Business Owner'
+    });
+
+    setPaymentHistory(prev => prev.map(h => (h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId)) ? { ...h, approval_status: 'Approved', notes: cleanNotes } : h));
+
+    try {
+      const saved = localStorage.getItem('pending_payment_approvals');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const filtered = parsed.filter((p: any) => p.id !== historyId && p.payment_history_id !== historyId);
+        localStorage.setItem('pending_payment_approvals', JSON.stringify(filtered));
+      }
+    } catch (_) {}
+
+    const amountToApply = Number(targetHistory?.amount) || 0;
+    const targetPayment = augmentedPayments.find(p => p.order_id === orderId || p.lead_id === orderId) || payments.find(p => p.order_id === orderId || p.lead_id === orderId);
+    const targetOrder = augmentedOrders.find(o => o.order_id === orderId || o.lead_id === orderId) || orders.find(o => o.order_id === orderId || o.lead_id === orderId);
+
+    const updatedHistoryList = paymentHistory.map(h => 
+      (h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId)) 
+        ? { ...h, approval_status: 'Approved', notes: cleanNotes } 
+        : h
+    );
+
+    const remainingPending = updatedHistoryList.some(h => 
+      (h.order_id === orderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
+      (h.id !== historyId && h.payment_history_id !== historyId && String(h.id) !== String(historyId)) && 
+      (h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval')))
+    );
+
+    const approvedHistories = updatedHistoryList.filter(h => 
+      (h.order_id === orderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
+      (h.approval_status === 'Approved' || (!h.notes || !h.notes.includes('Waiting for Approval')))
+    );
+
+    const totalApprovedReceived = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+    const quotationAmt = targetPayment?.quotation_amount || targetOrder?.quotation_amount || 0;
+    const outstanding = Math.max(0, quotationAmt - totalApprovedReceived);
+    const isFullyPaid = outstanding === 0 && quotationAmt > 0;
+
+    const newPaymentStatus: PaymentStatus = remainingPending 
+      ? 'Waiting for Approval' 
+      : (isFullyPaid ? 'Fully Paid' : (totalApprovedReceived > 0 ? 'Partially Paid' : 'Pending'));
+
+    if (targetPayment) {
+      const isAdvance = targetHistory?.payment_type === 'Advance Payment' || (targetPayment.advance_received || 0) === 0;
+      let newAdvance = Number(targetPayment.advance_received) || 0;
+      let newFinal = Number(targetPayment.final_payment_received) || 0;
+
+      if (isAdvance && newAdvance === 0) {
+        newAdvance = amountToApply;
+      } else {
+        newFinal = newFinal + amountToApply;
+      }
+
+      if (newAdvance + newFinal !== totalApprovedReceived) {
+        if (newAdvance === 0) newAdvance = Math.min(quotationAmt, totalApprovedReceived);
+        else newFinal = Math.max(0, totalApprovedReceived - newAdvance);
+      }
+
+      const paymentUpdates = {
+        advance_received: newAdvance,
+        final_payment_received: newFinal,
+        balance_due: outstanding,
+        payment_status: newPaymentStatus
+      };
+
+      await pushUpdate('payments', 'payment_id', targetPayment.payment_id, paymentUpdates);
+      setPayments(prev => prev.map(p => p.payment_id === targetPayment.payment_id ? { ...p, ...paymentUpdates } : p));
+    }
+
+    if (targetOrder) {
+      await pushUpdate('orders', 'order_id', targetOrder.order_id, {
+        balance_amount: outstanding,
+        advance_received: totalApprovedReceived,
+        updated_by: currentUserName,
+        updated_at: new Date().toISOString()
+      });
+      setOrders(prev => prev.map(o => o.order_id === targetOrder.order_id ? { ...o, balance_amount: outstanding, advance_received: totalApprovedReceived } : o));
+    }
+
+    logActivity(`Approved payment of ₹${amountToApply} for Order ${orderId}. Status: ${newPaymentStatus}`, 'Finance', orderId);
   };
 
   // User Management Admin features
@@ -8418,6 +8563,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         saveClientAcceptanceVerification,
         isProductionDashboardActive,
         setIsProductionDashboardActive,
+        paymentHistory,
+        approvePayment,
       }}
     >
       {children}

@@ -146,6 +146,7 @@ export const UserManagementModule: React.FC = () => {
   // Password reset state
   const [newResetPasswordValue, setNewResetPasswordValue] = useState('');
   const [showResetPassword, setShowResetPassword] = useState(false);
+  const [confirmResetPassword, setConfirmResetPassword] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
@@ -223,13 +224,18 @@ export const UserManagementModule: React.FC = () => {
       alert('Password cannot be spaces.');
       return;
     }
+    if (!confirmResetPassword) {
+      alert('Please check the confirmation box to confirm the password reset.');
+      return;
+    }
 
     try {
       setIsSaving(true);
       await resetUserPassword(resettingPasswordUser.id, newResetPasswordValue);
       setNewResetPasswordValue('');
+      setConfirmResetPassword(false);
       setResettingPasswordUser(null);
-      alert('Access credentials updated in secure index!');
+      alert(`Password for ${resettingPasswordUser.name} (${resettingPasswordUser.role}) has been reset successfully!`);
     } catch (err: any) {
       alert(`Failed to reset password: ${err.message || err}`);
     } finally {
@@ -1058,9 +1064,21 @@ export const UserManagementModule: React.FC = () => {
 
               {resettingPasswordUser && (
                 <form onSubmit={handleResetPasswordSubmit} className="space-y-4 text-xs">
-                  <div className="p-3 bg-slate-955 border border-slate-800 rounded font-medium">
-                    <span className="text-[10px] text-slate-500 uppercase font-mono block">Assignee Name:</span>
-                    <p className="font-bold text-slate-200 mt-0.5">{resettingPasswordUser.name}</p>
+                  <div className="p-3 bg-slate-955 border border-slate-800 rounded font-medium space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-500 uppercase font-mono">Target User & Role:</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                        resettingPasswordUser.role === 'Operations Team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20' :
+                        resettingPasswordUser.role === 'Production Team' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' :
+                        'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                      }`}>
+                        {resettingPasswordUser.role === 'Operations Team' ? 'Operations Dashboard User' :
+                         resettingPasswordUser.role === 'Production Team' ? 'Production Dashboard User' :
+                         resettingPasswordUser.role}
+                      </span>
+                    </div>
+                    <p className="font-bold text-slate-100 text-sm">{resettingPasswordUser.name}</p>
+                    <p className="text-[11px] text-slate-400 font-mono">{resettingPasswordUser.email} • {resettingPasswordUser.mobile}</p>
                   </div>
 
                   <div>
@@ -1069,7 +1087,7 @@ export const UserManagementModule: React.FC = () => {
                       <input
                         type={showResetPassword ? "text" : "password"}
                         required
-                        placeholder="Enter strong login key..."
+                        placeholder="Enter strong login key (min 6 chars)..."
                         value={newResetPasswordValue}
                         onChange={(e) => setNewResetPasswordValue(e.target.value)}
                         className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 pl-3 pr-10 text-slate-101 font-mono focus:ring-1 focus:ring-rose-405 focus:outline-none"
@@ -1082,23 +1100,39 @@ export const UserManagementModule: React.FC = () => {
                         {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1 font-medium">This takes effect instantly. The employee must log back in using this new security key.</p>
+                    <p className="text-[10px] text-slate-500 mt-1 font-medium">This takes effect instantly. The user will be able to log in with this new password.</p>
+                  </div>
+
+                  <div className="flex items-start gap-2 pt-2 pb-1 bg-slate-950/40 p-3 rounded-lg border border-slate-800">
+                    <input
+                      type="checkbox"
+                      id="confirm_reset_checkbox"
+                      checked={confirmResetPassword}
+                      onChange={(e) => setConfirmResetPassword(e.target.checked)}
+                      className="mt-0.5 rounded bg-slate-900 border-slate-700 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                    <label htmlFor="confirm_reset_checkbox" className="text-[11px] text-slate-300 select-none cursor-pointer leading-relaxed">
+                      I explicitly confirm I want to reset credentials for <strong className="text-white">{resettingPasswordUser.name}</strong> ({resettingPasswordUser.role}).
+                    </label>
                   </div>
 
                   <div className="flex justify-end gap-2 border-t border-slate-800 pt-3 font-medium">
                     <button
                       type="button"
-                      onClick={() => setResettingPasswordUser(null)}
+                      onClick={() => {
+                        setResettingPasswordUser(null);
+                        setConfirmResetPassword(false);
+                      }}
                       className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded cursor-pointer"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      disabled={isSaving}
+                      disabled={isSaving || !confirmResetPassword}
                       className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {isSaving ? 'Processing...' : 'Override Password Key'}
+                      {isSaving ? 'Processing...' : 'Confirm & Override Password'}
                     </button>
                   </div>
                 </form>

@@ -30,6 +30,7 @@ import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12H
 import { SalesCalendar } from './SalesCalendar';
 import { CustomPackageMaster } from './CustomPackageMaster';
 import { AddressAutocomplete } from './AddressAutocomplete';
+import { TimePicker12Hour } from './TimePicker12Hour';
 import { jsPDF } from 'jspdf';
 
 interface LocalEditableInputProps {
@@ -8114,16 +8115,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Event Start Time
               </label>
-              <input
+              <TimePicker12Hour
                 id="input_event_start_time"
-                type="time"
                 value={convertTo24Hour(eventForm.event_start_time)}
-                onChange={(e) => {
-                  const val24 = e.target.value;
+                onChange={(val24) => {
                   const val12 = convertTo12Hour(val24);
                   setEventForm({ ...eventForm, event_start_time: val12 });
                 }}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
               />
             </div>
 
@@ -8146,16 +8144,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <label className="block text-xs font-semibold text-slate-400 mb-1.5">
                 Event End Time
               </label>
-              <input
+              <TimePicker12Hour
                 id="input_event_end_time"
-                type="time"
                 value={convertTo24Hour(eventForm.event_end_time)}
-                onChange={(e) => {
-                  const val24 = e.target.value;
+                onChange={(val24) => {
                   const val12 = convertTo12Hour(val24);
                   setEventForm({ ...eventForm, event_end_time: val12 });
                 }}
-                className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none font-mono cursor-pointer"
               />
               {(() => {
                 const dateTimeErrMsg = getEventDateTimeErrorMessage(eventForm.event_date, eventForm.event_end_date, eventForm.event_start_time, eventForm.event_end_time);
@@ -9944,23 +9939,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         </div>
                         <div className="hidden">
                           <label className="block text-xs font-medium text-slate-400 mb-1">Event Time * (Required)</label>
-                          <input
-                            type="time"
+                          <TimePicker12Hour
                             value={followUpForm.event_time || (selectedLead?.events?.[0]?.event_start_time) || ''}
-                            onChange={(e) => setFollowUpForm({ ...followUpForm, event_time: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
+                            onChange={(val24) => setFollowUpForm({ ...followUpForm, event_time: val24 })}
                           />
                         </div>
                         <div>
                           <label className="block text-xs font-medium text-slate-400 mb-1">
                             Reporting Time * (Required)
                           </label>
-                          <input
-                            type="time"
+                          <TimePicker12Hour
                             required
                             value={followUpForm.reporting_time}
-                            onChange={(e) => setFollowUpForm({ ...followUpForm, reporting_time: e.target.value })}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                            onChange={(val24) => setFollowUpForm({ ...followUpForm, reporting_time: val24 })}
                           />
                         </div>
                       </div>
@@ -12415,20 +12406,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                 <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
                                   Reporting Time *
                                 </label>
-                                <input
-                                  type="time"
+                                <TimePicker12Hour
                                   required
                                   value={repData.reporting_time || ''}
-                                  onChange={(e) => {
+                                  onChange={(val24) => {
                                     setEventsReporting(prev => ({
                                       ...prev,
                                       [key]: {
                                         ...(prev[key] || { reporting_date: '' }),
-                                        reporting_time: e.target.value
+                                        reporting_time: val24
                                       }
                                     }));
                                   }}
-                                  className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
                                 />
                               </div>
                             </div>
@@ -12488,20 +12477,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <label className="block text-[10px] font-mono font-bold uppercase text-slate-400 mb-1">
                               Reporting Time *
                             </label>
-                            <input
-                              type="time"
+                            <TimePicker12Hour
                               required
                               value={eventsReporting['default']?.reporting_time || selectedLead.reporting_time || ''}
-                              onChange={(e) => {
+                              onChange={(val24) => {
                                 setEventsReporting(prev => ({
                                   ...prev,
                                   default: {
                                     ...(prev['default'] || { reporting_date: '' }),
-                                    reporting_time: e.target.value
+                                    reporting_time: val24
                                   }
                                 }));
                               }}
-                              className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-2.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500"
                             />
                           </div>
                         </div>
@@ -12672,11 +12659,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                             Event Start Time *
                           </label>
-                          <input
-                            type="time"
-                            readOnly
+                          <TimePicker12Hour
+                            disabled
                             value={ev.event_start_time || ev.event_time || ''}
-                            className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                            onChange={() => {}}
                           />
                         </div>
                       </div>
@@ -12713,15 +12699,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
                             Reporting Time *
                           </label>
-                          <input
-                            type="time"
+                          <TimePicker12Hour
                             required
                             value={evData.reporting_time}
-                            onChange={(e) => setFinalReportingForm({ 
+                            onChange={(val24) => setFinalReportingForm({ 
                               ...finalReportingForm, 
-                              [ev.id]: { ...evData, reporting_time: e.target.value } 
+                              [ev.id]: { ...evData, reporting_time: val24 } 
                             })}
-                            className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
                           />
                         </div>
                       </div>
@@ -12760,11 +12744,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <label className="block text-xs font-semibold text-slate-300 mb-1.5">
                         Event Start Time *
                       </label>
-                      <input
-                        type="time"
-                        readOnly
+                      <TimePicker12Hour
+                        disabled
                         value={selectedLead.event_time || selectedLead.reporting_time || ''}
-                        className="w-full h-10 bg-slate-900/90 border border-slate-800 rounded-lg px-3 text-xs text-slate-300 font-mono cursor-not-allowed focus:outline-none"
+                        onChange={() => {}}
                       />
                     </div>
                   </div>
@@ -12801,15 +12784,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       <label className="block text-xs font-semibold text-slate-300 mb-1.5 whitespace-nowrap">
                         Reporting Time *
                       </label>
-                      <input
-                        type="time"
+                      <TimePicker12Hour
                         required
                         value={finalReportingForm['default']?.reporting_time || ''}
-                        onChange={(e) => setFinalReportingForm({ 
+                        onChange={(val24) => setFinalReportingForm({ 
                           ...finalReportingForm, 
-                          'default': { ...finalReportingForm['default'], reporting_time: e.target.value } 
+                          'default': { ...finalReportingForm['default'], reporting_time: val24 } 
                         })}
-                        className="w-full h-10 bg-slate-900 border border-slate-750 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 rounded-lg px-3 text-xs text-slate-100 font-mono transition-all"
                       />
                     </div>
                   </div>
@@ -12870,11 +12851,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <label className="block text-[11px] font-bold text-slate-400 uppercase font-mono mb-1">
                   Follow-up Time <span className="text-slate-500">(Optional)</span>
                 </label>
-                <input
-                  type="time"
+                <TimePicker12Hour
                   value={step3FollowUpTime}
-                  onChange={(e) => setStep3FollowUpTime(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-750 rounded-lg py-2 px-3 text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs font-mono"
+                  onChange={(val24) => setStep3FollowUpTime(val24)}
                 />
               </div>
 
@@ -14180,16 +14159,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           </div>
                                           <div>
                                              <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
-                                             <input 
+                                             <TimePicker12Hour 
                                                id={`reporting_time_${ev.id}`}
-                                               type="time" 
+                                               required
                                                value={ev.reporting_time || ''} 
-                                               onChange={(e) => {
-                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: e.target.value } : eItem);
+                                               onChange={(val24) => {
+                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: val24 } : eItem);
                                                  setCrmEvents(updated);
                                                }} 
-                                               className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                               required 
                                              />
                                           </div>
                                         </div>

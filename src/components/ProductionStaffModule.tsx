@@ -11,6 +11,7 @@ import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { AddNoteModal } from './AddNoteModal';
+import { TimePicker12Hour } from './TimePicker12Hour';
 import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
 import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof } from '../utils';
 
@@ -2942,12 +2943,10 @@ Thank you.`;
                   <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
                     Estimated Completion Time <span className="text-rose-400">*</span>
                   </label>
-                  <input
-                    type="time"
+                  <TimePicker12Hour
                     required
                     value={editingStartedForm.estimated_completion_time}
-                    onChange={(e) => setEditingStartedForm({ ...editingStartedForm, estimated_completion_time: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                    onChange={(val24) => setEditingStartedForm({ ...editingStartedForm, estimated_completion_time: val24 })}
                   />
                 </div>
 

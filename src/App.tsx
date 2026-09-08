@@ -193,9 +193,11 @@ const MainAppContent: React.FC = () => {
         'owner_calendar',
         'owner_approval',
         'owner_summary',
+        'owner_leads_report',
         'owner_revenue',
         'owner_sales_report',
         'owner_staff_performance',
+        'password_reset',
         'dashboard',
         'sales',
         'operations',
@@ -311,6 +313,7 @@ const MainAppContent: React.FC = () => {
     | 'owner_sales_report'
     | 'owner_operations_report'
     | 'owner_production_report'
+    | 'password_reset'
     | 'notifications'
   >(() => {
     const savedUser = localStorage.getItem('erp_current_user');
@@ -781,8 +784,10 @@ const MainAppContent: React.FC = () => {
               { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
               { id: 'owner_approval', label: '3. Waiting Approval', icon: ShieldCheck, color: 'text-emerald-400', badge: pendingApprovalCount > 0 ? pendingApprovalCount : null },
               { id: 'owner_summary', label: '4. Revenue Summary', icon: FileText, color: 'text-blue-400' },
-              { id: 'owner_staff_performance', label: '📊 5. Staff Performance', icon: BarChart3, color: 'text-pink-400' },
-              { id: 'sales_staff_management', label: '6. Sales Staff Management', icon: Users, color: 'text-indigo-400' }
+              { id: 'owner_leads_report', label: '5. Leads Report', icon: FileText, color: 'text-cyan-400' },
+              { id: 'owner_staff_performance', label: '📊 6. Staff Performance', icon: BarChart3, color: 'text-pink-400' },
+              { id: 'sales_staff_management', label: '7. Sales Staff Management', icon: Users, color: 'text-indigo-400' },
+              { id: 'password_reset', label: 'Password Reset', icon: Shield, color: 'text-rose-400' }
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeTab === tab.id;
@@ -978,7 +983,7 @@ const MainAppContent: React.FC = () => {
                   <AccessDeniedView section={activeTab.split('_').join(' ').toUpperCase()} />
                 ) : (
                   <>
-                    {['owner_overview', 'owner_calendar', 'owner_approval', 'owner_summary', 'owner_revenue', 'owner_sales_report', 'owner_staff_performance'].includes(activeTab) && (
+                    {['owner_overview', 'owner_calendar', 'owner_approval', 'owner_summary', 'owner_leads_report', 'owner_revenue', 'owner_sales_report', 'owner_staff_performance', 'password_reset'].includes(activeTab) && (
                       <BusinessOwnerDashboard activeSection={activeTab} onSectionChange={(sec) => setActiveTab(sec as any)} />
                     )}
                     {activeTab === 'sales_analytics' && <SalesAnalytics />}

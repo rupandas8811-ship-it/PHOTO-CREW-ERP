@@ -52,6 +52,7 @@ import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl }
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
 import { AssignedStaffDropdown } from './AssignedStaffDropdown';
+import { OwnerPasswordResetModule } from './OwnerPasswordResetModule';
 
 interface BusinessOwnerDashboardProps {
   activeSection?: string;
@@ -81,7 +82,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
   } = useRole();
 
   // Internal section tab state if not controlled externally
-  const [internalSection, setInternalSection] = useState<'overview' | 'calendar' | 'approval' | 'summary' | 'staff_performance'>('overview');
+  const [internalSection, setInternalSection] = useState<'overview' | 'calendar' | 'approval' | 'summary' | 'leads_report' | 'staff_performance' | 'password_reset'>('overview');
   
   // Normalize current section ID
   const currentSection = useMemo(() => {
@@ -89,45 +90,66 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     if (initialSection === 'owner_calendar' || initialSection === 'calendar') return 'calendar';
     if (initialSection === 'owner_approval' || initialSection === 'approval') return 'approval';
     if (initialSection === 'owner_summary' || initialSection === 'summary') return 'summary';
+    if (initialSection === 'owner_leads_report' || initialSection === 'leads_report') return 'leads_report';
     if (initialSection === 'owner_staff_performance' || initialSection === 'staff_performance') return 'staff_performance';
+    if (initialSection === 'password_reset' || initialSection === 'owner_password_reset') return 'password_reset';
     return internalSection;
   }, [initialSection, internalSection]);
 
-  const handleSectionSwitch = (sec: 'overview' | 'calendar' | 'approval' | 'summary' | 'staff_performance') => {
+  const handleSectionSwitch = (sec: 'overview' | 'calendar' | 'approval' | 'summary' | 'leads_report' | 'staff_performance' | 'password_reset') => {
     setInternalSection(sec);
     if (onSectionChange) {
-      const mapKey = sec === 'overview' ? 'owner_overview' : sec === 'calendar' ? 'owner_calendar' : sec === 'approval' ? 'owner_approval' : sec === 'summary' ? 'owner_summary' : 'owner_staff_performance';
+      const mapKey = sec === 'overview' ? 'owner_overview' : sec === 'calendar' ? 'owner_calendar' : sec === 'approval' ? 'owner_approval' : sec === 'summary' ? 'owner_summary' : sec === 'leads_report' ? 'owner_leads_report' : sec === 'staff_performance' ? 'owner_staff_performance' : 'password_reset';
       onSectionChange(mapKey);
     }
   };
 
   // Date Filter State
   const [showFilters, setShowFilters] = useState(false);
-  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'this_month' | 'this_year' | 'custom'>('this_month');
+  const [datePreset, setDatePreset] = useState<'all' | 'today' | 'this_month' | 'last_month' | 'last_3_months' | 'this_year' | 'custom'>('this_month');
+
+  const formatYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   const [startDate, setStartDate] = useState<string>(() => {
     const d = new Date();
-    d.setDate(1);
-    return d.toISOString().split('T')[0];
+    return formatYMD(new Date(d.getFullYear(), d.getMonth(), 1));
   });
   const [endDate, setEndDate] = useState<string>(() => {
-    return new Date().toISOString().split('T')[0];
+    const d = new Date();
+    return formatYMD(new Date(d.getFullYear(), d.getMonth() + 1, 0));
   });
 
   // Apply date preset
-  const handlePresetChange = (preset: 'all' | 'today' | 'this_month' | 'this_year' | 'custom') => {
+  const handlePresetChange = (preset: 'all' | 'today' | 'this_month' | 'last_month' | 'last_3_months' | 'this_year' | 'custom') => {
     setDatePreset(preset);
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = formatYMD(today);
 
     if (preset === 'today') {
       setStartDate(todayStr);
       setEndDate(todayStr);
     } else if (preset === 'this_month') {
-      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+      const firstDay = formatYMD(new Date(today.getFullYear(), today.getMonth(), 1));
+      const lastDay = formatYMD(new Date(today.getFullYear(), today.getMonth() + 1, 0));
       setStartDate(firstDay);
-      setEndDate(todayStr);
+      setEndDate(lastDay);
+    } else if (preset === 'last_month') {
+      const firstDay = formatYMD(new Date(today.getFullYear(), today.getMonth() - 1, 1));
+      const lastDay = formatYMD(new Date(today.getFullYear(), today.getMonth(), 0));
+      setStartDate(firstDay);
+      setEndDate(lastDay);
+    } else if (preset === 'last_3_months') {
+      const firstDay = formatYMD(new Date(today.getFullYear(), today.getMonth() - 3, 1));
+      const lastDay = formatYMD(new Date(today.getFullYear(), today.getMonth(), 0));
+      setStartDate(firstDay);
+      setEndDate(lastDay);
     } else if (preset === 'this_year') {
-      const firstDayOfYear = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
+      const firstDayOfYear = formatYMD(new Date(today.getFullYear(), 0, 1));
       setStartDate(firstDayOfYear);
       setEndDate(todayStr);
     } else if (preset === 'all') {
@@ -586,6 +608,263 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     });
   }, [leads, orders, operations, production, startDate, endDate, datePreset]);
 
+  // Dedicated Production Projects Pipeline with Strict Event-Level Isolation and Zero Operations Data
+  const productionProjects = useMemo(() => {
+    const safeProd = Array.isArray(production) ? production : [];
+    const safeOrders = Array.isArray(orders) ? orders : [];
+    const safeLeads = Array.isArray(leads) ? leads : [];
+    const safeAssignments = Array.isArray(editorAssignments) ? editorAssignments : [];
+
+    // Pre-production stages that belong strictly to Sales or Operations
+    const preProductionStages = [
+      'new lead', 'follow up', 'follow-up', 'quotation sent', 'booking requested',
+      'order confirmed', 'confirm order', 'new order', 'order created',
+      'operations assigned', 'assigned crew', 'staff assigned', 'crew assigned',
+      'event scheduled', 'event started', 'event completed', 'event ended',
+      'footage handover', 'raw footage handover'
+    ];
+
+    // Build quick lookup maps for orders and leads
+    const orderMap = new Map<string, Order>();
+    safeOrders.forEach(o => {
+      if (o.order_id) orderMap.set(o.order_id, o);
+      if (o.lead_id) orderMap.set(o.lead_id, o);
+    });
+
+    const leadMap = new Map<string, Lead>();
+    safeLeads.forEach(l => {
+      if (l.lead_id) leadMap.set(l.lead_id, l);
+    });
+
+    // Helper to extract events for an order/lead
+    const getEventsForOrderLead = (ord?: Order, ld?: Lead): any[] => {
+      const rawLeadEvents = ld?.events && Array.isArray(ld.events) && ld.events.length > 0
+        ? ld.events
+        : (ord?.events && Array.isArray(ord.events) && ord.events.length > 0 ? ord.events : []);
+      const deserialized = (!rawLeadEvents || rawLeadEvents.length === 0) && (ld?.notes_special_customizations || ord?.notes_special_customizations)
+        ? deserializeLeadEvents(ld?.notes_special_customizations || ord?.notes_special_customizations).events
+        : [];
+      return rawLeadEvents.length > 0 ? rawLeadEvents : (deserialized.length > 0 ? deserialized : []);
+    };
+
+    const projectItems: any[] = [];
+    const processedEventKeys = new Set<string>();
+
+    // 1. Group production records by order/lead
+    const prodByTracking = new Map<string, Production[]>();
+    safeProd.forEach(p => {
+      if (!p || !p.production_id) return;
+      const tId = p.order_id || p.tracking_id || p.production_id;
+      if (!prodByTracking.has(tId)) {
+        prodByTracking.set(tId, []);
+      }
+      prodByTracking.get(tId)!.push(p);
+    });
+
+    // 2. Group assignments by order
+    const assignmentsByOrder = new Map<string, typeof safeAssignments>();
+    safeAssignments.forEach(a => {
+      if (!a) return;
+      const key = a.order_id || a.production_id;
+      if (!key) return;
+      if (!assignmentsByOrder.has(key)) {
+        assignmentsByOrder.set(key, []);
+      }
+      assignmentsByOrder.get(key)!.push(a);
+    });
+
+    // Gather all candidate keys that have production presence
+    const allCandidateKeys = new Set<string>([
+      ...prodByTracking.keys(),
+      ...assignmentsByOrder.keys()
+    ]);
+
+    // Also include orders marked in production / completed stages
+    safeOrders.forEach(o => {
+      const st = (o.current_stage || '').toLowerCase().trim();
+      if (
+        st.includes('production') ||
+        st.includes('editing') ||
+        st.includes('proof') ||
+        st.includes('client acceptance') ||
+        st.includes('approval') ||
+        st.includes('completed') ||
+        st.includes('closed')
+      ) {
+        if (o.order_id) allCandidateKeys.add(o.order_id);
+        if (o.lead_id) allCandidateKeys.add(o.lead_id);
+      }
+    });
+
+    allCandidateKeys.forEach(candidateKey => {
+      const linkedOrder = orderMap.get(candidateKey) || safeOrders.find(o => o.order_id === candidateKey || o.lead_id === candidateKey);
+      const linkedLead = leadMap.get(candidateKey) || (linkedOrder?.lead_id ? leadMap.get(linkedOrder.lead_id) : undefined);
+
+      const prodsForThis = prodByTracking.get(candidateKey) || 
+        (linkedOrder?.order_id ? prodByTracking.get(linkedOrder.order_id) : undefined) ||
+        (linkedOrder?.lead_id ? prodByTracking.get(linkedOrder.lead_id) : undefined) ||
+        [];
+
+      const assignmentsForThis = assignmentsByOrder.get(candidateKey) ||
+        (linkedOrder?.order_id ? assignmentsByOrder.get(linkedOrder.order_id) : undefined) ||
+        (linkedOrder?.lead_id ? assignmentsByOrder.get(linkedOrder.lead_id) : undefined) ||
+        [];
+
+      const hasProdRecord = prodsForThis.length > 0;
+      const hasAssignments = assignmentsForThis.length > 0;
+      const orderStage = (linkedOrder?.current_stage || '').toLowerCase().trim();
+      const isProdOrderStage = orderStage.includes('production') || orderStage.includes('editing') || orderStage.includes('proof') || orderStage.includes('acceptance') || orderStage.includes('closed') || orderStage.includes('completed');
+
+      if (!hasProdRecord && !hasAssignments && !isProdOrderStage) {
+        return;
+      }
+
+      // If strictly in operations or sales without production handover, skip
+      if (preProductionStages.includes(orderStage) && !hasProdRecord && !hasAssignments) {
+        return;
+      }
+
+      // Resolve events for this candidate
+      const events = getEventsForOrderLead(linkedOrder, linkedLead);
+
+      if (events.length > 1) {
+        // STRICT EVENT-LEVEL ISOLATION FOR MULTIPLE EVENTS
+        events.forEach((ev: any, idx: number) => {
+          const eventId = ev.id || ev.event_id || `EVT-${idx + 1}`;
+          const eventName = ev.event_name || ev.event_type || `Event ${idx + 1}`;
+          const uniqueEventKey = `${linkedOrder?.order_id || candidateKey}_${eventId}`;
+
+          if (processedEventKeys.has(uniqueEventKey)) return;
+          processedEventKeys.add(uniqueEventKey);
+
+          // Find production record specific to this event
+          const eventProd = prodsForThis.find(p => 
+            (p.event_id && (p.event_id === eventId || p.event_id === ev.id || p.event_id === ev.event_id)) ||
+            (p.custom_event_name && (p.custom_event_name === eventName || p.custom_event_name === ev.event_name || p.custom_event_name === ev.event_type))
+          ) || (prodsForThis.length === 1 && (!prodsForThis[0].event_id || prodsForThis[0].event_id === 'MULTIPLE') ? prodsForThis[0] : undefined);
+
+          // Find assignments strictly for this event
+          const eventAssignments = assignmentsForThis.filter(a => 
+            (a.event_id && (a.event_id === eventId || a.event_id === ev.id || a.event_id === ev.event_id || a.event_id === eventName))
+          );
+
+          // Target delivery date strictly for this event
+          let targetDate = ev.target_delivery_date || '';
+          if (!targetDate && eventProd?.target_delivery_date) targetDate = eventProd.target_delivery_date;
+          if (!targetDate && eventProd?.expected_delivery_date) targetDate = eventProd.expected_delivery_date;
+          if (!targetDate && eventAssignments.length > 0) {
+            const aDate = eventAssignments.find(a => a.target_finish_date && a.target_finish_date.trim() !== '')?.target_finish_date;
+            if (aDate) targetDate = aDate;
+          }
+
+          // Assigned editor strictly for this event
+          const editorNames = Array.from(new Set([
+            eventProd?.editor_assigned,
+            eventProd?.assigned_staff,
+            ...eventAssignments.map(a => a.staff_name).filter(Boolean)
+          ].filter(n => n && n !== 'Unassigned' && n !== 'None'))).join(', ') || 'Unassigned';
+
+          // Status strictly for this event
+          let status = eventProd?.editing_status || eventProd?.production_status || 'Pending';
+          if (eventAssignments.length > 0) {
+            const allDone = eventAssignments.every(a => ['Completed', 'Project Completed', 'Editing Complete', 'Editing Completed'].includes(a.status));
+            const anyActive = eventAssignments.some(a => ['Editing Started', 'In Progress', 'Customer Review', 'Client Review', 'Revision'].includes(a.status));
+            if (allDone) status = 'Editing Completed';
+            else if (anyActive) status = 'Editing In Progress';
+          }
+
+          projectItems.push({
+            id: uniqueEventKey,
+            production_id: eventProd?.production_id || `PRD-${uniqueEventKey}`,
+            order_id: linkedOrder?.order_id || candidateKey,
+            lead_id: linkedLead?.lead_id || linkedOrder?.lead_id || candidateKey,
+            customer_name: linkedOrder?.customer_name || linkedLead?.customer_name || eventProd?.customer_name || 'Client',
+            customer_mobile: linkedOrder?.mobile || linkedLead?.mobile || (eventProd as any)?.customer_mobile || '',
+            custom_event_name: eventName,
+            event_id: eventId,
+            event_date: ev.event_date || linkedOrder?.event_date || '',
+            delivery_date: targetDate,
+            editor: editorNames,
+            assigned_editor: editorNames,
+            prod_status: status,
+            proof_url: eventProd?.proof_url || (eventProd as any)?.delivery_link || '',
+            rawProd: eventProd,
+            rawOrder: linkedOrder,
+            rawLead: linkedLead,
+            created_at: (eventProd as any)?.created_at || linkedOrder?.created_at || linkedLead?.created_date || ''
+          });
+        });
+      } else {
+        // SINGLE EVENT OR STANDALONE PRODUCTION RECORD
+        const primaryProd = prodsForThis[0];
+        const primaryEv = events[0];
+        const uniqueKey = linkedOrder?.order_id || primaryProd?.production_id || candidateKey;
+
+        if (processedEventKeys.has(uniqueKey)) return;
+        processedEventKeys.add(uniqueKey);
+
+        const eventName = primaryProd?.custom_event_name || primaryEv?.event_name || primaryEv?.event_type || linkedOrder?.custom_event_name || linkedOrder?.event_type || linkedLead?.custom_event_name || linkedLead?.event_type || 'Event Project';
+        const eventDate = primaryProd?.event_date || primaryEv?.event_date || linkedOrder?.event_date || linkedLead?.event_date || '';
+
+        let targetDate = primaryProd?.target_delivery_date || primaryProd?.expected_delivery_date || primaryProd?.delivery_date || primaryEv?.target_delivery_date || (linkedLead as any)?.delivery_target_date || '';
+        if (!targetDate && assignmentsForThis.length > 0) {
+          const aDate = assignmentsForThis.find(a => a.target_finish_date && a.target_finish_date.trim() !== '')?.target_finish_date;
+          if (aDate) targetDate = aDate;
+        }
+
+        const editorNames = Array.from(new Set([
+          primaryProd?.editor_assigned,
+          primaryProd?.assigned_staff,
+          ...assignmentsForThis.map(a => a.staff_name).filter(Boolean)
+        ].filter(n => n && n !== 'Unassigned' && n !== 'None'))).join(', ') || 'Unassigned';
+
+        let status = primaryProd?.editing_status || primaryProd?.production_status || (linkedOrder?.current_stage && isProdOrderStage ? linkedOrder.current_stage : 'Pending');
+        if (assignmentsForThis.length > 0) {
+          const allDone = assignmentsForThis.every(a => ['Completed', 'Project Completed', 'Editing Complete', 'Editing Completed'].includes(a.status));
+          const anyActive = assignmentsForThis.some(a => ['Editing Started', 'In Progress', 'Customer Review', 'Client Review', 'Revision'].includes(a.status));
+          if (allDone) status = 'Editing Completed';
+          else if (anyActive) status = 'Editing In Progress';
+        }
+
+        projectItems.push({
+          id: uniqueKey,
+          production_id: primaryProd?.production_id || `PRD-${uniqueKey}`,
+          order_id: linkedOrder?.order_id || candidateKey,
+          lead_id: linkedLead?.lead_id || linkedOrder?.lead_id || candidateKey,
+          customer_name: primaryProd?.customer_name || linkedOrder?.customer_name || linkedLead?.customer_name || 'Client',
+          customer_mobile: (primaryProd as any)?.customer_mobile || linkedOrder?.mobile || linkedLead?.mobile || '',
+          custom_event_name: eventName,
+          event_id: primaryProd?.event_id || primaryEv?.id || 'EVT-01',
+          event_date: eventDate,
+          delivery_date: targetDate,
+          editor: editorNames,
+          assigned_editor: editorNames,
+          prod_status: status,
+          proof_url: primaryProd?.proof_url || (primaryProd as any)?.delivery_link || '',
+          rawProd: primaryProd,
+          rawOrder: linkedOrder,
+          rawLead: linkedLead,
+          created_at: (primaryProd as any)?.created_at || linkedOrder?.created_at || linkedLead?.created_date || ''
+        });
+      }
+    });
+
+    // Date range filtering helper
+    const isWithinDate = (dateStr?: string) => {
+      if (datePreset === 'all' || (!startDate && !endDate)) return true;
+      if (!dateStr) return true;
+      const cleanDate = dateStr.split('T')[0];
+      if (startDate && cleanDate < startDate) return false;
+      if (endDate && cleanDate > endDate) return false;
+      return true;
+    };
+
+    return projectItems.filter(item => {
+      const d = item.delivery_date || item.event_date || item.created_at || '';
+      return isWithinDate(d);
+    });
+  }, [production, orders, leads, editorAssignments, startDate, endDate, datePreset]);
+
   const boCardsData = useMemo(() => {
     // SALES
     const salesTotalLeads = unifiedPipeline.filter(i => i.hasEnteredSales);
@@ -600,19 +879,70 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     const opsUpcoming = opsAll.filter(i => i.event_date && new Date(i.event_date) >= new Date() && !(i.ops_status || '').toLowerCase().includes('complete'));
     const opsScheduled = opsAll.filter(i => (i.ops_status || '').toLowerCase().includes('scheduled') || i.assigned_crew !== 'Unassigned');
 
-    // PRODUCTION
-    const prodAll = unifiedPipeline.filter(i => i.hasEnteredProd);
-    const prodNew = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('raw') || (i.prod_status || '').toLowerCase().includes('new') || i.prod_status === 'Not Started');
-    const prodInProgress = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('progress') || (i.prod_status || '').toLowerCase().includes('started') || (i.prod_status || '').toLowerCase().includes('editing'));
-    const prodEditingCompleted = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('complete') || (i.prod_status || '').toLowerCase().includes('proof'));
-    const prodClientAcceptance = unifiedPipeline.filter(i => i.hasEnteredAcceptance);
+    // PRODUCTION - STRICTLY PRODUCTION-ONLY DATA & EVENT-LEVEL ISOLATED
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const isCompletedProject = (item: any) => {
+      const st = (item.prod_status || '').toLowerCase().trim();
+      return (
+        st.includes('completed') ||
+        st.includes('delivered') ||
+        st.includes('order closed') ||
+        st === 'closed' ||
+        st.includes('client acceptance') ||
+        st.includes('approved') ||
+        st.includes('final approval') ||
+        st.includes('client accepted')
+      );
+    };
+
+    const isOverdueProject = (item: any) => {
+      if (isCompletedProject(item)) return false;
+      const deadlineStr = item.delivery_date || (item.rawProd && (item.rawProd.target_delivery_date || item.rawProd.expected_delivery_date || item.rawProd.delivery_date));
+      if (!deadlineStr || deadlineStr.trim() === '' || deadlineStr === 'Pending' || deadlineStr === 'N/A' || deadlineStr === '—') return false;
+      const cleanDate = deadlineStr.split('T')[0];
+      const deadline = new Date(cleanDate);
+      if (isNaN(deadline.getTime())) return false;
+      return deadline < today;
+    };
+
+    const isInProgressProject = (item: any) => {
+      if (isCompletedProject(item)) return false;
+      const st = (item.prod_status || '').toLowerCase().trim();
+      return (
+        st.includes('progress') ||
+        st.includes('started') ||
+        st.includes('editing') ||
+        st.includes('review') ||
+        st.includes('revision') ||
+        st.includes('qc')
+      );
+    };
+
+    const isPendingProject = (item: any) => {
+      if (isCompletedProject(item) || isInProgressProject(item)) return false;
+      return true;
+    };
+
+    const prodTotal = productionProjects;
+    const prodPending = productionProjects.filter(isPendingProject);
+    const prodInProgress = productionProjects.filter(isInProgressProject);
+    const prodCompleted = productionProjects.filter(isCompletedProject);
+    const prodOverdue = productionProjects.filter(isOverdueProject);
 
     return {
       salesTotalLeads, salesConverted, salesLost, salesFollowup,
       opsNew, opsCompleted, opsUpcoming, opsScheduled, opsAll,
-      prodNew, prodInProgress, prodEditingCompleted, prodClientAcceptance, prodAll
+      // Production - 5 standardized production-only metrics
+      prodTotal, prodPending, prodInProgress, prodCompleted, prodOverdue,
+      // Aliases for backwards compatibility
+      prodNew: prodPending,
+      prodEditingCompleted: prodCompleted,
+      prodClientAcceptance: prodCompleted,
+      prodAll: prodTotal
     };
-  }, [unifiedPipeline]);
+  }, [unifiedPipeline, productionProjects]);
 
   const outstandingPaymentTotal = useMemo(() => {
     return filteredOrders.reduce((sum, o) => {
@@ -669,12 +999,24 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     }
 
     // PRODUCTION CARDS
-    if (selectedCard === 'prod_new' || selectedCard === 'prod_inprogress' || selectedCard === 'prod_editing_completed' || selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_prod' || selectedCard === 'overview_acceptance') {
-      return selectedCard === 'prod_new' ? boCardsData.prodNew
+    if (
+      selectedCard === 'prod_total' ||
+      selectedCard === 'prod_pending' ||
+      selectedCard === 'prod_new' ||
+      selectedCard === 'prod_inprogress' ||
+      selectedCard === 'prod_completed' ||
+      selectedCard === 'prod_editing_completed' ||
+      selectedCard === 'prod_client_acceptance' ||
+      selectedCard === 'prod_overdue' ||
+      selectedCard === 'overview_prod' ||
+      selectedCard === 'overview_acceptance'
+    ) {
+      return selectedCard === 'prod_total' ? boCardsData.prodTotal
+        : (selectedCard === 'prod_pending' || selectedCard === 'prod_new') ? boCardsData.prodPending
         : selectedCard === 'prod_inprogress' ? boCardsData.prodInProgress
-        : selectedCard === 'prod_editing_completed' ? boCardsData.prodEditingCompleted
-        : (selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_acceptance') ? boCardsData.prodClientAcceptance
-        : boCardsData.prodAll;
+        : (selectedCard === 'prod_completed' || selectedCard === 'prod_editing_completed' || selectedCard === 'prod_client_acceptance' || selectedCard === 'overview_acceptance') ? boCardsData.prodCompleted
+        : selectedCard === 'prod_overdue' ? boCardsData.prodOverdue
+        : boCardsData.prodTotal;
     }
 
     if (selectedCard === 'overview_closed') {
@@ -766,26 +1108,17 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       { key: 'lead_id', label: 'Lead ID', render: (item: any) => <span className="font-mono text-zinc-400 font-bold">{item.lead_id}</span> },
       { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-300 font-bold">{item.order_id || 'N/A'}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
-      { key: 'custom_event_name', label: 'Deliverable / Project', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
+      { key: 'custom_event_name', label: 'Event / Deliverable', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
       { key: 'delivery_date', label: 'Target Delivery', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.delivery_date ? item.delivery_date.split('T')[0] : 'N/A'}</span> },
-      { key: 'assigned_staff', label: 'Assigned Staff', render: (item: any) => <AssignedStaffDropdown leadId={item.lead_id} orderId={item.order_id} lead={item.rawLead} order={item.rawOrder} /> },
-      { key: 'ops_status', label: 'Ops Status', render: (item: any) => <span className="text-zinc-400 font-mono text-xs">{item.ops_status || 'N/A'}</span> },
+      { key: 'assigned_editor', label: 'Assigned Editor', render: (item: any) => <span className="font-mono text-zinc-300 text-xs font-semibold">{item.editor || item.assigned_editor || 'Unassigned'}</span> },
       { key: 'prod_status', label: 'Production Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
-          (item.prod_status || '').toLowerCase().includes('acceptance') || (item.prod_status || '').toLowerCase().includes('approved') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-          (item.prod_status || '').toLowerCase().includes('complete') ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
-          'bg-pink-500/10 text-pink-400 border-pink-500/20'
-        }`}>
-          {item.prod_status || 'In Production'}
-        </span>
-      )},
-      { key: 'current_status', label: 'Current Status', render: (item: any) => (
-        <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
-          (item.current_status || '').toLowerCase().includes('closed') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-          (item.current_status || '').toLowerCase().includes('acceptance') ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+          (item.prod_status || '').toLowerCase().includes('acceptance') || (item.prod_status || '').toLowerCase().includes('approved') || (item.prod_status || '').toLowerCase().includes('complete') || (item.prod_status || '').toLowerCase().includes('delivered') || (item.prod_status || '').toLowerCase().includes('closed') ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          (item.prod_status || '').toLowerCase().includes('progress') || (item.prod_status || '').toLowerCase().includes('started') || (item.prod_status || '').toLowerCase().includes('editing') || (item.prod_status || '').toLowerCase().includes('review') ? 'bg-orange-500/10 text-orange-400 border-orange-500/20' :
+          (item.prod_status || '').toLowerCase().includes('overdue') ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
           'bg-purple-500/10 text-purple-400 border-purple-500/20'
         }`}>
-          {item.current_status || 'In Production'}
+          {item.prod_status || 'Pending'}
         </span>
       )},
       { key: 'proof_url', label: 'Proof Link', render: (item: any) => item.proof_url ? (
@@ -827,12 +1160,16 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       case 'ops_scheduled': return { title: 'Total Scheduled Shoots', totalLabel: 'Scheduled Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Events where crew, equipment, and shoot timing have been scheduled.' };
       case 'overview_ops': return { title: 'Operations Pipeline Breakdown', totalLabel: 'Total Operations Count', totalValue: `${modalData.length}`, accentColor: 'blue' as const, filterDescription: 'Comprehensive overview of all operations tasks and event shoots.' };
 
-      case 'prod_new': return { title: 'Total New Projects (Production)', totalLabel: 'New Projects Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Projects with raw footage received, awaiting editor allocation and start.' };
-      case 'prod_inprogress': return { title: 'Total In Progress Editing', totalLabel: 'In Progress Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Projects actively being edited and color-graded by production staff.' };
-      case 'prod_editing_completed': return { title: 'Total Editing Complete', totalLabel: 'Editing Complete Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Projects with post-production finished and ready for review.' };
+      case 'prod_total': return { title: 'Total Production Projects', totalLabel: 'Total Projects Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'All post-production projects across all editing workflows.' };
+      case 'prod_pending':
+      case 'prod_new': return { title: 'Pending Production Projects', totalLabel: 'Pending Projects Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'Production projects awaiting editor allocation or editing start.' };
+      case 'prod_inprogress': return { title: 'Total In Progress Editing', totalLabel: 'In Progress Count', totalValue: `${modalData.length}`, accentColor: 'orange' as const, filterDescription: 'Projects actively being edited, reviewed, or revised by production staff.' };
+      case 'prod_completed':
+      case 'prod_editing_completed':
       case 'prod_client_acceptance':
-      case 'overview_acceptance': return { title: 'Total Client Acceptance', totalLabel: 'Client Accepted Count', totalValue: `${modalData.length}`, accentColor: 'emerald' as const, filterDescription: 'Projects reviewed and accepted by the client.' };
-      case 'overview_prod': return { title: 'Production Pipeline Breakdown', totalLabel: 'Total Production Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Comprehensive overview of deliverables across all editing phases.' };
+      case 'overview_acceptance': return { title: 'Total Completed Production Projects', totalLabel: 'Completed Count', totalValue: `${modalData.length}`, accentColor: 'emerald' as const, filterDescription: 'Projects where post-production editing is completed, delivered, or approved.' };
+      case 'prod_overdue': return { title: 'Overdue Production Projects', totalLabel: 'Overdue Count', totalValue: `${modalData.length}`, accentColor: 'rose' as const, filterDescription: 'Projects whose expected delivery date has passed and are not yet completed.' };
+      case 'overview_prod': return { title: 'Production Overview Breakdown', totalLabel: 'Total Production Count', totalValue: `${modalData.length}`, accentColor: 'purple' as const, filterDescription: 'Comprehensive overview of deliverables across all editing phases.' };
       case 'overview_closed': return { title: 'Closed & Completed Orders', totalLabel: 'Closed Orders Count', totalValue: `${modalData.length}`, accentColor: 'emerald' as const, filterDescription: 'Projects successfully completed, fully paid, and closed.' };
 
       default: return { title: 'Detail View', totalLabel: 'Total Count', totalValue: `${modalData.length}`, accentColor: 'amber' as const, filterDescription: 'Detailed view of matching records.' };
@@ -1222,51 +1559,74 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
           {/* Collapsible Date Filter Bar */}
           {showFilters && (
-            <div className="bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl flex flex-wrap items-center gap-2 animate-fade-in shadow-inner">
-              <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-xs font-mono">
-                <button
-                  onClick={() => handlePresetChange('this_month')}
-                  className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'this_month' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
-                >
-                  This Month
-                </button>
-                <button
-                  onClick={() => handlePresetChange('this_year')}
-                  className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'this_year' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
-                >
-                  This Year
-                </button>
-                <button
-                  onClick={() => handlePresetChange('all')}
-                  className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'all' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
-                >
-                  All Time
-                </button>
-                <button
-                  onClick={() => setDatePreset('custom')}
-                  className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'custom' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
-                >
-                  Custom
-                </button>
+            <div className="bg-zinc-950/40 border border-zinc-900 p-4 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-fade-in shadow-inner">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-xs font-mono">
+                  <button
+                    onClick={() => handlePresetChange('this_month')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'this_month' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    This Month
+                  </button>
+                  <button
+                    onClick={() => handlePresetChange('last_month')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'last_month' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    Last Month
+                  </button>
+                  <button
+                    onClick={() => handlePresetChange('last_3_months')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'last_3_months' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    Last 3 Months
+                  </button>
+                  <button
+                    onClick={() => handlePresetChange('this_year')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'this_year' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    This Year
+                  </button>
+                  <button
+                    onClick={() => handlePresetChange('all')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'all' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    All Time
+                  </button>
+                  <button
+                    onClick={() => setDatePreset('custom')}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${datePreset === 'custom' ? 'bg-amber-500 text-black font-bold' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    Custom
+                  </button>
+                </div>
+
+                {datePreset === 'custom' && (
+                  <div className="flex items-center gap-1.5 text-xs font-mono">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200 text-xs"
+                    />
+                    <span className="text-zinc-600">to</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200 text-xs"
+                    />
+                  </div>
+                )}
               </div>
 
-              {datePreset === 'custom' && (
-                <div className="flex items-center gap-1.5 text-xs font-mono">
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200 text-xs"
-                  />
-                  <span className="text-zinc-600">to</span>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200 text-xs"
-                  />
-                </div>
-              )}
+              {/* Active Date Range Display */}
+              <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400 bg-zinc-900/60 border border-zinc-800/80 px-3 py-1.5 rounded-xl">
+                <CalendarIcon className="w-3.5 h-3.5 text-amber-400" />
+                <span className="text-zinc-500 font-bold uppercase text-[10px]">Active Range:</span>
+                <span className="text-zinc-200 font-bold">
+                  {datePreset === 'all' ? 'All Time' : `${startDate} to ${endDate}`}
+                </span>
+              </div>
             </div>
           )}
 
@@ -1359,45 +1719,54 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
               </div>
             </div>
 
-            {/* PRODUCTION PERFORMANCE */}
+            {/* PRODUCTION OVERVIEW */}
             <div className="space-y-3">
-              <h3 className="text-xs font-black font-mono tracking-wider text-pink-400 uppercase">Production Performance</h3>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <h3 className="text-xs font-black font-mono tracking-wider text-pink-400 uppercase">Production Overview</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                 <CameraLensStatsCard
-                  label="Total New Projects"
-                  val={boCardsData.prodNew.length}
+                  label="Total Production Projects"
+                  val={boCardsData.prodTotal.length}
                   theme="purple"
-                  trendText="Raw Footage Ingest"
-                  lensLabel="PRIME 35mm"
-                  chartPoints={[5, 9, 7, 13, 11, 17, 15]}
-                  onClick={() => setSelectedCard('prod_new')}
+                  trendText="All Deliverables"
+                  lensLabel="PROD-ALL 35"
+                  chartPoints={[5, 9, 7, 13, 11, 17, boCardsData.prodTotal.length || 15]}
+                  onClick={() => setSelectedCard('prod_total')}
                 />
                 <CameraLensStatsCard
-                  label="Total In Progress"
+                  label="Pending Production Projects"
+                  val={boCardsData.prodPending.length}
+                  theme="amber"
+                  trendText="Awaiting Editor"
+                  lensLabel="PEND-28"
+                  chartPoints={[4, 7, 5, 10, 8, 12, boCardsData.prodPending.length || 6]}
+                  onClick={() => setSelectedCard('prod_pending')}
+                />
+                <CameraLensStatsCard
+                  label="In Progress"
                   val={boCardsData.prodInProgress.length}
                   theme="orange"
-                  trendText="Active Cutting"
+                  trendText="Active Editing"
                   lensLabel="V-EDIT 50"
-                  chartPoints={[8, 14, 11, 19, 16, 24, 22]}
+                  chartPoints={[8, 14, 11, 19, 16, 24, boCardsData.prodInProgress.length || 22]}
                   onClick={() => setSelectedCard('prod_inprogress')}
                 />
                 <CameraLensStatsCard
-                  label="Total Editing Completed"
-                  val={boCardsData.prodEditingCompleted.length}
-                  theme="cyan"
-                  trendText="Render Complete"
+                  label="Completed"
+                  val={boCardsData.prodCompleted.length}
+                  theme="green"
+                  trendText="Delivered & Closed"
                   lensLabel="MASTER 85"
-                  chartPoints={[12, 16, 14, 22, 20, 26, 28]}
-                  onClick={() => setSelectedCard('prod_editing_completed')}
+                  chartPoints={[12, 16, 14, 22, 20, 26, boCardsData.prodCompleted.length || 28]}
+                  onClick={() => setSelectedCard('prod_completed')}
                 />
                 <CameraLensStatsCard
-                  label="Total Client Acceptance"
-                  val={boCardsData.prodClientAcceptance.length}
-                  theme="green"
-                  trendText="Client Approved"
-                  lensLabel="RELEASE 24"
-                  chartPoints={[15, 20, 18, 26, 24, 32, 35]}
-                  onClick={() => setSelectedCard('prod_client_acceptance')}
+                  label="Overdue Projects"
+                  val={boCardsData.prodOverdue.length}
+                  theme="red"
+                  trendText="Past Due Date"
+                  lensLabel="ALERT 100"
+                  chartPoints={[2, 4, 3, 6, 5, 8, boCardsData.prodOverdue.length]}
+                  onClick={() => setSelectedCard('prod_overdue')}
                 />
               </div>
             </div>
@@ -1717,6 +2086,16 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       {/* SECTION 5: STAFF PERFORMANCE */}
       {currentSection === 'staff_performance' && (
         <OwnerStaffPerformanceReport />
+      )}
+
+      {/* SECTION: LEADS REPORT */}
+      {currentSection === 'leads_report' && (
+        <LeadsReportSection leads={leads} />
+      )}
+
+      {/* SECTION 6: PASSWORD RESET */}
+      {currentSection === 'password_reset' && (
+        <OwnerPasswordResetModule />
       )}
 
       {/* CARD DETAIL POPUP/MODAL */}
@@ -2298,6 +2677,318 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
 };
 
 /* ============================================================================
+   LEADS REPORT SECTION
+   ============================================================================ */
+interface LeadsReportSectionProps {
+  leads: Lead[];
+}
+
+const LeadsReportSection: React.FC<LeadsReportSectionProps> = ({ leads }) => {
+  const [leadsStartDate, setLeadsStartDate] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 6);
+    return d.toISOString().split('T')[0];
+  });
+  const [leadsEndDate, setLeadsEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedLeadStages, setSelectedLeadStages] = useState<string[]>([]);
+  const [selectedLeadEventType, setSelectedLeadEventType] = useState<string>('all');
+  const [leadSearchTerm, setLeadSearchTerm] = useState('');
+  const [showStageFilterDropdown, setShowStageFilterDropdown] = useState(false);
+
+  const allLeadStages = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      const st = l.status || l.current_status || 'New';
+      if (st) s.add(st);
+    });
+    return Array.from(s);
+  }, [leads]);
+
+  useEffect(() => {
+    if (allLeadStages.length > 0 && selectedLeadStages.length === 0) {
+      setSelectedLeadStages(allLeadStages);
+    }
+  }, [allLeadStages]);
+
+  const allLeadEventTypes = useMemo(() => {
+    const et = new Set<string>();
+    leads.forEach(l => {
+      if (l.event_type) et.add(l.event_type);
+    });
+    return Array.from(et);
+  }, [leads]);
+
+  const filteredLeadsReport = useMemo(() => {
+    return leads.filter(l => {
+      const dateVal = (l.created_date || l.created_at || '').split('T')[0];
+      if (leadsStartDate && leadsEndDate && dateVal) {
+        if (dateVal < leadsStartDate || dateVal > leadsEndDate) return false;
+      }
+
+      const stage = l.status || l.current_status || 'New';
+      if (selectedLeadStages.length > 0 && !selectedLeadStages.includes(stage)) {
+        return false;
+      }
+
+      if (selectedLeadEventType !== 'all' && l.event_type !== selectedLeadEventType) {
+        return false;
+      }
+
+      if (leadSearchTerm) {
+        const term = leadSearchTerm.toLowerCase();
+        const nameMatch = (l.customer_name || '').toLowerCase().includes(term);
+        const mobileMatch = (l.mobile || '').toLowerCase().includes(term);
+        const idMatch = (l.lead_id || '').toLowerCase().includes(term);
+        if (!nameMatch && !mobileMatch && !idMatch) return false;
+      }
+
+      return true;
+    });
+  }, [leads, leadsStartDate, leadsEndDate, selectedLeadStages, selectedLeadEventType, leadSearchTerm]);
+
+  const handleDownloadLeadsReport = () => {
+    const excelData = filteredLeadsReport.map(l => ({
+      'Lead ID': l.lead_id || '-',
+      'Customer Name': l.customer_name || '-',
+      'Mobile': l.mobile || '-',
+      'Email': l.email || '-',
+      'WhatsApp': l.whatsapp_number || '-',
+      'Lead Stage': l.status || l.current_status || 'New',
+      'Event Type': l.event_type || '-',
+      'Event Date': l.event_date || '-',
+      'Event Location': l.event_location || '-',
+      'Salesperson': l.sales_person || l.sales_staff_name || '-',
+      'Created Date': (l.created_date || l.created_at || '').split('T')[0] || '-'
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Leads Report');
+    XLSX.writeFile(workbook, `Leads_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-200">
+      
+      {/* Header & Controls Bar */}
+      <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-5 shadow-xl space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-black text-white tracking-wide flex items-center gap-2">
+              <FileText className="w-5 h-5 text-cyan-400" />
+              <span>Comprehensive Leads Report</span>
+            </h2>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Analyze and export all system leads filtered by date range, stages, and event types.
+            </p>
+          </div>
+
+          <button
+            onClick={handleDownloadLeadsReport}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs hover:from-cyan-400 hover:to-blue-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/20 cursor-pointer"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download Filtered Report ({filteredLeadsReport.length})</span>
+          </button>
+        </div>
+
+        {/* Filters Row */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3 border-t border-zinc-800">
+          
+          {/* Date From */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono font-bold uppercase text-zinc-400">From Date</label>
+            <input
+              type="date"
+              value={leadsStartDate}
+              onChange={(e) => setLeadsStartDate(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+
+          {/* Date To */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono font-bold uppercase text-zinc-400">To Date</label>
+            <input
+              type="date"
+              value={leadsEndDate}
+              onChange={(e) => setLeadsEndDate(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500"
+            />
+          </div>
+
+          {/* Event Type Filter */}
+          <div className="space-y-1">
+            <label className="text-[10px] font-mono font-bold uppercase text-zinc-400">Event Type</label>
+            <select
+              value={selectedLeadEventType}
+              onChange={(e) => setSelectedLeadEventType(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
+            >
+              <option value="all">All Event Types ({allLeadEventTypes.length})</option>
+              {allLeadEventTypes.map(et => (
+                <option key={et} value={et}>{et}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Stage Filter Multi-Select Dropdown */}
+          <div className="space-y-1 relative">
+            <label className="text-[10px] font-mono font-bold uppercase text-zinc-400">Lead Stages ({selectedLeadStages.length} / {allLeadStages.length})</label>
+            <button
+              type="button"
+              onClick={() => setShowStageFilterDropdown(!showStageFilterDropdown)}
+              className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 flex items-center justify-between hover:border-cyan-500 transition-colors cursor-pointer text-left"
+            >
+              <span className="truncate">
+                {selectedLeadStages.length === allLeadStages.length
+                  ? 'All Stages Selected'
+                  : selectedLeadStages.length === 0
+                  ? 'No Stages Selected'
+                  : `${selectedLeadStages.length} Stages Selected`}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-zinc-400 flex-shrink-0 ml-1" />
+            </button>
+
+            {showStageFilterDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-950 border border-zinc-800 rounded-xl p-3 shadow-2xl z-50 space-y-2 max-h-64 overflow-y-auto">
+                <div className="flex items-center justify-between pb-2 border-b border-zinc-800 text-[10px] font-mono">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLeadStages(allLeadStages)}
+                    className="text-cyan-400 hover:underline"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedLeadStages([])}
+                    className="text-zinc-400 hover:underline"
+                  >
+                    Clear All
+                  </button>
+                </div>
+                {allLeadStages.map(stage => {
+                  const isChecked = selectedLeadStages.includes(stage);
+                  return (
+                    <label key={stage} className="flex items-center gap-2 text-xs text-zinc-300 hover:text-white cursor-pointer py-1">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedLeadStages([...selectedLeadStages, stage]);
+                          } else {
+                            setSelectedLeadStages(selectedLeadStages.filter(s => s !== stage));
+                          }
+                        }}
+                        className="rounded border-zinc-700 bg-zinc-900 text-cyan-500 focus:ring-0 cursor-pointer"
+                      />
+                      <span className="truncate">{stage}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        {/* Search Bar & Quick Count */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+          <div className="w-full sm:w-72">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Search by name, mobile, lead ID..."
+                value={leadSearchTerm}
+                onChange={(e) => setLeadSearchTerm(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+          </div>
+          <div className="text-xs font-mono text-zinc-400">
+            Showing <span className="text-cyan-400 font-bold">{filteredLeadsReport.length}</span> of <span className="text-white font-bold">{leads.length}</span> total leads
+          </div>
+        </div>
+
+      </div>
+
+      {/* Leads Table Card */}
+      <div className="bg-zinc-900/80 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
+                <th className="py-3 px-4 font-bold">Lead ID / Date</th>
+                <th className="py-3 px-4 font-bold">Customer Name</th>
+                <th className="py-3 px-4 font-bold">Contact Details</th>
+                <th className="py-3 px-4 font-bold">Lead Stage</th>
+                <th className="py-3 px-4 font-bold">Event Type</th>
+                <th className="py-3 px-4 font-bold">Event Date</th>
+                <th className="py-3 px-4 font-bold">Assigned Sales / Staff</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-800/60">
+              {filteredLeadsReport.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-zinc-500 font-mono text-xs">
+                    No leads found matching the selected filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredLeadsReport.map((l) => {
+                  const createdDateStr = (l.created_date || l.created_at || '').split('T')[0];
+                  const stage = l.status || l.current_status || 'New';
+                  return (
+                    <tr key={l.lead_id} className="hover:bg-zinc-850/50 transition-colors">
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <div className="font-mono font-bold text-zinc-200">{l.lead_id}</div>
+                        <div className="text-[10px] text-zinc-400 font-mono">{createdDateStr || 'N/A'}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-white">{l.customer_name || 'Unnamed'}</div>
+                        {l.email && <div className="text-[11px] text-zinc-400">{l.email}</div>}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-zinc-200 font-mono">{l.mobile || '-'}</div>
+                        {l.whatsapp_number && <div className="text-[10px] text-zinc-400 font-mono">WA: {l.whatsapp_number}</div>}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold font-mono ${
+                          stage === 'Booked' || stage === 'Order Closed' || stage === 'Project Completed'
+                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                            : stage === 'Lost' || stage === 'Cancelled'
+                            ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+                            : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/30'
+                        }`}>
+                          {stage}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="text-zinc-200 font-medium">{l.event_type || 'General'}</span>
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <div className="text-zinc-200 font-mono">{l.event_date || 'TBD'}</div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="text-zinc-200">{l.sales_person || l.sales_staff_name || 'Unassigned'}</div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  );
+};
+
+/* ============================================================================
    REVENUE & PAYMENT SUMMARY SECTION 4
    ============================================================================ */
 interface RevenuePaymentSummarySectionProps {
@@ -2307,19 +2998,89 @@ interface RevenuePaymentSummarySectionProps {
   production: Production[];
 }
 
+const getPeriodDates = (period: 'this_month' | 'last_month' | 'last_3_months') => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+
+  let startYear = year;
+  let startMonth = month;
+  let endYear = year;
+  let endMonth = month;
+
+  if (period === 'this_month') {
+    startYear = year;
+    startMonth = month;
+    endYear = year;
+    endMonth = month;
+  } else if (period === 'last_month') {
+    startMonth = month - 1;
+    if (startMonth < 0) {
+      startMonth = 11;
+      startYear = year - 1;
+    }
+    endYear = startYear;
+    endMonth = startMonth;
+  } else if (period === 'last_3_months') {
+    startMonth = month - 2;
+    startYear = year;
+    if (startMonth < 0) {
+      startMonth += 12;
+      startYear = year - 1;
+    }
+    endYear = year;
+    endMonth = month;
+  }
+
+  const startDateObj = new Date(startYear, startMonth, 1);
+  const endDateObj = new Date(endYear, endMonth + 1, 0);
+
+  const formatDate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  return {
+    startDate: formatDate(startDateObj),
+    endDate: formatDate(endDateObj)
+  };
+};
+
+const getPeriodLabel = (period: string) => {
+  const now = new Date();
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  if (period === 'this_month') {
+    return `THIS MONTH — ${monthNames[now.getMonth()].toUpperCase()} ${now.getFullYear()}`;
+  } else if (period === 'last_month') {
+    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `LAST MONTH — ${monthNames[prevMonth.getMonth()].toUpperCase()} ${prevMonth.getFullYear()}`;
+  } else if (period === 'last_3_months') {
+    const m2 = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const m1 = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `LAST 3 MONTHS — ${monthNames[m2.getMonth()].toUpperCase()} + ${monthNames[m1.getMonth()].toUpperCase()} + ${monthNames[now.getMonth()].toUpperCase()} ${now.getFullYear()}`;
+  }
+  return 'SELECTED PERIOD';
+};
+
 const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> = ({
   orders,
   payments,
   leads,
   production
 }) => {
+  const { paymentHistory } = useRole();
   const [searchTerm, setSearchTerm] = useState('');
-  const [startDate, setStartDate] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().split('T')[0];
-  });
-  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedPeriod, setSelectedPeriod] = useState<'this_month' | 'last_month' | 'last_3_months'>('this_month');
+  const [startDate, setStartDate] = useState(() => getPeriodDates('this_month').startDate);
+  const [endDate, setEndDate] = useState(() => getPeriodDates('this_month').endDate);
+
+  useEffect(() => {
+    const { startDate: s, endDate: e } = getPeriodDates(selectedPeriod);
+    setStartDate(s);
+    setEndDate(e);
+  }, [selectedPeriod]);
 
   // Clickable summary card state
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -2335,11 +3096,22 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       const pay = payments.find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
       const prod = production.find(p => p.tracking_id === o.lead_id || p.order_id === o.lead_id || p.tracking_id === o.order_id);
 
+      const approvedHistories = (paymentHistory || []).filter(h => 
+        (h.order_id === o.order_id || h.order_id === o.lead_id) && 
+        (h.approval_status === 'Approved' || (!h.notes || !h.notes.includes('Waiting for Approval')))
+      );
+      const historyApprovedSum = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+
+      const hasPendingApproval = (paymentHistory || []).some(h => 
+        (h.order_id === o.order_id || h.order_id === o.lead_id) && 
+        (h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval')))
+      );
+
       const totalRevenue = o.quotation_amount || o.advance_received || 0;
-      const paymentReceived = pay 
-        ? ((pay.advance_received || 0) + (pay.final_payment_received || 0))
-        : (o.advance_received || 0);
-      const outstanding = pay ? pay.balance_due : (o.balance_amount || Math.max(0, totalRevenue - paymentReceived));
+      const paymentReceived = approvedHistories.length > 0
+        ? historyApprovedSum
+        : (pay && pay.payment_status !== 'Waiting for Approval' ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : 0);
+      const outstanding = Math.max(0, totalRevenue - paymentReceived);
 
       const isCompleted = ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed'].includes(o.current_stage) || prod?.editing_status === 'Client Acceptance';
       const isClosed = o.current_stage === 'Order Closed' || o.current_stage === 'Closed' || prod?.editing_status === 'Order Closed';
@@ -2347,6 +3119,8 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       const paymentDate = pay?.payment_date || o.created_at || o.event_date;
       const paymentType = pay?.payment_type || pay?.Payment_type || (pay?.final_payment_received ? 'Final Payment' : pay?.advance_received ? 'Advance Payment' : 'Standard Payment');
       const transactionId = pay?.transaction_id || '-';
+
+      const paymentStatus = hasPendingApproval ? 'Waiting for Approval' : (pay ? pay.payment_status : (outstanding <= 0 && totalRevenue > 0 ? 'Fully Paid' : (paymentReceived > 0 ? 'Partially Paid' : 'Pending')));
 
       return {
         orderId: o.order_id,
@@ -2360,62 +3134,92 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         totalRevenue,
         paymentReceived,
         outstanding,
-        paymentStatus: pay ? pay.payment_status : (outstanding <= 0 ? 'Fully Paid' : 'Pending'),
+        paymentStatus,
+        hasPendingApproval,
         currentStage: prod?.editing_status || o.current_stage || 'Confirmed',
         isCompleted,
         isClosed
       };
     });
-  }, [orders, payments, production]);
+  }, [orders, payments, production, paymentHistory]);
 
-  // Filtered by Search & Date & Payment Tab
-  const filtered = useMemo(() => {
-    return records.filter(r => {
+  // Base filtered by Search & Date & Payment Tab (used for KPI card totals)
+  const baseFiltered = useMemo(() => {
+    const matched = records.filter(r => {
       const matchSearch = 
+        !searchTerm.trim() ||
         r.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.eventName.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchDate = !startDate || !endDate || (r.eventDate >= startDate && r.eventDate <= endDate);
+      const itemDate = (r.eventDate ? r.eventDate.split('T')[0] : (r.paymentDate ? r.paymentDate.split('T')[0] : '')).trim();
+      const matchDate = !startDate || !endDate || !itemDate || (itemDate >= startDate && itemDate <= endDate);
 
       let matchTab = true;
       if (paymentTab === 'pending') {
-        matchTab = r.outstanding > 0 || r.paymentStatus === 'Pending' || r.paymentStatus === 'Partially Paid';
+        matchTab = r.outstanding > 0 || r.paymentStatus === 'Pending' || r.paymentStatus === 'Partially Paid' || r.hasPendingApproval;
       } else if (paymentTab === 'history') {
         matchTab = r.paymentReceived > 0 || r.paymentStatus === 'Fully Paid';
       }
 
       return matchSearch && matchDate && matchTab;
     });
+
+    return matched.sort((a, b) => {
+      if (a.hasPendingApproval && !b.hasPendingApproval) return -1;
+      if (!a.hasPendingApproval && b.hasPendingApproval) return 1;
+      return 0;
+    });
   }, [records, searchTerm, startDate, endDate, paymentTab]);
 
   // Totals for summary header
-  const totalRevSum = useMemo(() => filtered.reduce((s, r) => s + r.totalRevenue, 0), [filtered]);
-  const totalRecSum = useMemo(() => filtered.reduce((s, r) => s + r.paymentReceived, 0), [filtered]);
-  const totalOutSum = useMemo(() => filtered.reduce((s, r) => s + r.outstanding, 0), [filtered]);
-  const completedCount = useMemo(() => filtered.filter(r => r.isCompleted || r.isClosed).length, [filtered]);
-  const closedCount = useMemo(() => filtered.filter(r => r.isClosed).length, [filtered]);
+  const totalRevSum = useMemo(() => baseFiltered.reduce((s, r) => s + r.totalRevenue, 0), [baseFiltered]);
+  const totalRecSum = useMemo(() => baseFiltered.reduce((s, r) => s + r.paymentReceived, 0), [baseFiltered]);
+  const totalOutSum = useMemo(() => baseFiltered.reduce((s, r) => s + r.outstanding, 0), [baseFiltered]);
+  const completedCount = useMemo(() => baseFiltered.filter(r => r.isCompleted || r.isClosed).length, [baseFiltered]);
+  const closedCount = useMemo(() => baseFiltered.filter(r => r.isClosed).length, [baseFiltered]);
+
+  // Filtered by selected analytics card for Revenue table and reports
+  const filtered = useMemo(() => {
+    if (!selectedCard) return baseFiltered;
+    if (selectedCard === 'summary_revenue') {
+      return baseFiltered;
+    }
+    if (selectedCard === 'summary_payment') {
+      return baseFiltered.filter(r => r.paymentReceived > 0);
+    }
+    if (selectedCard === 'summary_outstanding') {
+      return baseFiltered.filter(r => r.outstanding > 0);
+    }
+    if (selectedCard === 'summary_completed') {
+      return baseFiltered.filter(r => r.isCompleted || r.isClosed);
+    }
+    if (selectedCard === 'summary_closed') {
+      return baseFiltered.filter(r => r.isClosed);
+    }
+    return baseFiltered;
+  }, [baseFiltered, selectedCard]);
 
   // Configs for Summary Card details
   const modalData = useMemo(() => {
     if (!selectedCard) return [];
     if (selectedCard === 'summary_revenue') {
-      return filtered;
+      return baseFiltered;
     }
     if (selectedCard === 'summary_payment') {
-      return filtered.filter(r => r.paymentReceived > 0);
+      return baseFiltered.filter(r => r.paymentReceived > 0);
     }
     if (selectedCard === 'summary_outstanding') {
-      return filtered.filter(r => r.outstanding > 0);
+      return baseFiltered.filter(r => r.outstanding > 0);
     }
     if (selectedCard === 'summary_completed') {
-      return filtered.filter(r => r.isCompleted || r.isClosed);
+      return baseFiltered.filter(r => r.isCompleted || r.isClosed);
     }
     if (selectedCard === 'summary_closed') {
-      return filtered.filter(r => r.isClosed);
+      return baseFiltered.filter(r => r.isClosed);
     }
     return [];
-  }, [selectedCard, filtered]);
+  }, [selectedCard, baseFiltered]);
 
   const modalColumns = useMemo(() => {
     const actionCol = { 
@@ -2575,61 +3379,96 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   }, [selectedCard, totalRevSum, totalRecSum, totalOutSum, completedCount, closedCount]);
 
   // Export CSV
-  const downloadCSV = () => {
+  const downloadCSV = (customRecords?: any[]) => {
+    const dataToExport = customRecords || filtered;
+    const cardTitle = selectedCard === 'summary_revenue' ? 'Total_Revenue'
+      : selectedCard === 'summary_payment' ? 'Payment_Received'
+      : selectedCard === 'summary_outstanding' ? 'Outstanding'
+      : selectedCard === 'summary_completed' ? 'Completed'
+      : selectedCard === 'summary_closed' ? 'Closed_Orders'
+      : 'Revenue_Summary';
+
     const headers = ['Order ID', 'Customer Name', 'Event Name', 'Event Date', 'Total Revenue (INR)', 'Payment Received (INR)', 'Outstanding (INR)', 'Payment Status', 'Current Status'];
-    const rows = filtered.map(r => [
-      r.orderId,
-      r.customerName,
-      r.eventName,
-      r.eventDate,
-      r.totalRevenue,
-      r.paymentReceived,
-      r.outstanding,
-      r.paymentStatus,
-      r.currentStage
+    const rows = dataToExport.map(r => [
+      `"${r.orderId || ''}"`,
+      `"${(r.customerName || '').replace(/"/g, '""')}"`,
+      `"${(r.eventName || '').replace(/"/g, '""')}"`,
+      `"${r.eventDate || ''}"`,
+      r.totalRevenue || 0,
+      r.paymentReceived || 0,
+      r.outstanding || 0,
+      `"${r.paymentStatus || ''}"`,
+      `"${r.currentStage || ''}"`
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Revenue_Payment_Summary_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `${cardTitle}_Report_${startDate || 'all'}_to_${endDate || 'all'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   // Export Excel (.xlsx)
-  const downloadExcel = () => {
-    const excelData = filtered.map(r => ({
-      'Order ID': r.orderId,
-      'Customer Name': r.customerName,
-      'Event Name': r.eventName,
-      'Event Date': r.eventDate,
-      'Total Revenue (₹)': r.totalRevenue,
-      'Payment Received (₹)': r.paymentReceived,
-      'Outstanding Balance (₹)': r.outstanding,
-      'Payment Status': r.paymentStatus,
-      'Current Status': r.currentStage
+  const downloadExcel = (customRecords?: any[]) => {
+    const dataToExport = customRecords || filtered;
+    const cardTitle = selectedCard === 'summary_revenue' ? 'Total_Revenue'
+      : selectedCard === 'summary_payment' ? 'Payment_Received'
+      : selectedCard === 'summary_outstanding' ? 'Outstanding'
+      : selectedCard === 'summary_completed' ? 'Completed'
+      : selectedCard === 'summary_closed' ? 'Closed_Orders'
+      : 'Revenue_Summary';
+
+    const excelData = dataToExport.map(r => ({
+      'Order ID': r.orderId || '',
+      'Customer Name': r.customerName || '',
+      'Event Name': r.eventName || '',
+      'Event Date': r.eventDate || '',
+      'Total Revenue (₹)': r.totalRevenue || 0,
+      'Payment Received (₹)': r.paymentReceived || 0,
+      'Outstanding Balance (₹)': r.outstanding || 0,
+      'Payment Status': r.paymentStatus || '',
+      'Current Status': r.currentStage || ''
     }));
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Revenue Summary');
-    XLSX.writeFile(workbook, `Revenue_Payment_Summary_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
+    XLSX.writeFile(workbook, `${cardTitle}_Report_${startDate || 'all'}_to_${endDate || 'all'}.xlsx`);
   };
 
   // Export PDF
-  const downloadPDF = () => {
+  const downloadPDF = (customRecords?: any[]) => {
+    const dataToExport = customRecords || filtered;
+    const cardLabel = selectedCard === 'summary_revenue' ? 'Total Revenue'
+      : selectedCard === 'summary_payment' ? 'Payment Received'
+      : selectedCard === 'summary_outstanding' ? 'Outstanding'
+      : selectedCard === 'summary_completed' ? 'Completed'
+      : selectedCard === 'summary_closed' ? 'Closed Orders'
+      : 'Revenue & Payment Summary';
+
+    const cardTitle = selectedCard === 'summary_revenue' ? 'Total_Revenue'
+      : selectedCard === 'summary_payment' ? 'Payment_Received'
+      : selectedCard === 'summary_outstanding' ? 'Outstanding'
+      : selectedCard === 'summary_completed' ? 'Completed'
+      : selectedCard === 'summary_closed' ? 'Closed_Orders'
+      : 'Revenue_Summary';
+
     const doc = new jsPDF({ orientation: 'landscape' });
 
     doc.setFontSize(16);
-    doc.text('Revenue & Payment Summary Report', 14, 15);
+    doc.text(`${cardLabel} Report`, 14, 15);
     doc.setFontSize(10);
-    doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')} | Date Range: ${startDate} to ${endDate}`, 14, 22);
+    doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')} | Date Range: ${startDate || 'All'} to ${endDate || 'All'} | Total Records: ${dataToExport.length}`, 14, 22);
+
+    const subTotalRev = dataToExport.reduce((s, r) => s + (r.totalRevenue || 0), 0);
+    const subTotalRec = dataToExport.reduce((s, r) => s + (r.paymentReceived || 0), 0);
+    const subTotalOut = dataToExport.reduce((s, r) => s + (r.outstanding || 0), 0);
 
     doc.setFontSize(11);
-    doc.text(`Total Revenue: Rs.${totalRevSum.toLocaleString('en-IN')} | Received: Rs.${totalRecSum.toLocaleString('en-IN')} | Outstanding: Rs.${totalOutSum.toLocaleString('en-IN')}`, 14, 30);
+    doc.text(`Total Revenue: Rs.${subTotalRev.toLocaleString('en-IN')} | Received: Rs.${subTotalRec.toLocaleString('en-IN')} | Outstanding: Rs.${subTotalOut.toLocaleString('en-IN')}`, 14, 30);
 
     let y = 40;
     doc.setFontSize(9);
@@ -2645,22 +3484,22 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
     doc.line(14, y, 280, y);
     y += 6;
 
-    filtered.forEach(r => {
+    dataToExport.forEach(r => {
       if (y > 180) {
         doc.addPage();
         y = 20;
       }
-      doc.text(String(r.orderId), 14, y);
-      doc.text(String(r.customerName).substring(0, 20), 45, y);
-      doc.text(String(r.eventName).substring(0, 22), 90, y);
-      doc.text(`Rs.${r.totalRevenue}`, 140, y);
-      doc.text(`Rs.${r.paymentReceived}`, 170, y);
-      doc.text(`Rs.${r.outstanding}`, 200, y);
-      doc.text(String(r.currentStage).substring(0, 18), 230, y);
+      doc.text(String(r.orderId || ''), 14, y);
+      doc.text(String(r.customerName || '').substring(0, 20), 45, y);
+      doc.text(String(r.eventName || '').substring(0, 22), 90, y);
+      doc.text(`Rs.${r.totalRevenue || 0}`, 140, y);
+      doc.text(`Rs.${r.paymentReceived || 0}`, 170, y);
+      doc.text(`Rs.${r.outstanding || 0}`, 200, y);
+      doc.text(String(r.currentStage || '').substring(0, 18), 230, y);
       y += 6;
     });
 
-    doc.save(`Revenue_Summary_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save(`${cardTitle}_Report_${startDate || 'all'}_to_${endDate || 'all'}.pdf`);
   };
 
   return (
@@ -2678,8 +3517,18 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           </p>
         </div>
 
-        {/* Filter / Download Button */}
+        {/* Period Filter & Filter / Download Button */}
         <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={selectedPeriod}
+            onChange={(e) => setSelectedPeriod(e.target.value as any)}
+            className="bg-zinc-900 border border-zinc-800 text-amber-400 font-mono text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:border-amber-500 cursor-pointer"
+          >
+            <option value="this_month">THIS MONTH</option>
+            <option value="last_month">LAST MONTH</option>
+            <option value="last_3_months">LAST 3 MONTHS</option>
+          </select>
+
           <button
             onClick={() => setShowFilters(!showFilters)}
             className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -2689,6 +3538,133 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
             <Filter className="w-3.5 h-3.5" />
             <span>Filter / Download</span>
           </button>
+        </div>
+      </div>
+
+      {/* Revenue & Payment Summary Filter & Export Panel (scoped strictly to this Revenue section) */}
+      {showFilters && (
+        <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 space-y-4 animate-in fade-in duration-200 shadow-xl">
+          <div className="flex items-center justify-between border-b border-zinc-850 pb-2.5">
+            <div className="flex items-center gap-2">
+              <Filter className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-xs font-mono font-bold uppercase tracking-wider text-amber-400">
+                Revenue & Payment Summary Filters
+              </span>
+              <span className="text-[10px] font-mono text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                Revenue Section Only
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowFilters(false)}
+              className="text-zinc-500 hover:text-white p-1 rounded-lg hover:bg-zinc-850 transition-colors cursor-pointer"
+              title="Close filter panel"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            {/* Subtab Selector hidden visually per user requirement */}
+            <div className="hidden">
+              <button type="button" onClick={() => setPaymentTab('all')}>All Records</button>
+              <button type="button" onClick={() => setPaymentTab('pending')}>Pending Payments</button>
+              <button type="button" onClick={() => setPaymentTab('history')}>Payment History</button>
+            </div>
+
+            {/* Search */}
+            <div className="relative w-full sm:w-72">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search Order ID, Customer..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
+              />
+            </div>
+
+            {/* Dates */}
+            <div className="flex items-center gap-2 text-xs font-mono w-full sm:w-auto">
+              <span className="text-zinc-500 uppercase text-[10px] font-bold">Dates:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
+              />
+              <span className="text-zinc-600">to</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Download Buttons Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5 border-t border-zinc-900">
+            <span className="text-[11px] font-mono text-zinc-400">
+              Active Records in Revenue: <span className="text-amber-400 font-bold">{filtered.length}</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider mr-1">Download:</span>
+              <button
+                onClick={downloadPDF}
+                className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-rose-400" />
+                <span>PDF</span>
+              </button>
+              <button
+                onClick={downloadExcel}
+                className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Excel (.xlsx)</span>
+              </button>
+              <button
+                onClick={downloadCSV}
+                className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-400" />
+                <span>CSV</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly Revenue & Payment Summary Box (3 summary cards hidden per requirement) */}
+      <div className="hidden bg-zinc-950 border border-zinc-850 rounded-2xl p-5 shadow-xl">
+        <div className="flex items-center justify-between mb-4 pb-3 border-b border-zinc-900">
+          <div className="text-xs font-mono font-bold text-amber-400 tracking-wider uppercase">
+            {getPeriodLabel(selectedPeriod)}
+          </div>
+          <div className="text-[11px] font-mono text-zinc-400">
+            Active Range: <span className="text-zinc-200">{startDate}</span> to <span className="text-zinc-200">{endDate}</span>
+          </div>
+        </div>
+
+        <div className="hidden grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="hidden bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400">TOTAL SALES</span>
+            <div className="text-2xl font-black text-white font-mono mt-2">{formatINR(totalRevSum)}</div>
+            <span className="text-[10px] font-mono text-blue-400 mt-1">Total order/sale value for selected period</span>
+          </div>
+
+          <div className="hidden bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400">ADVANCE / PAYMENT RECEIVED</span>
+            <div className="text-2xl font-black text-emerald-400 font-mono mt-2">{formatINR(totalRecSum)}</div>
+            <span className="text-[10px] font-mono text-emerald-500/80 mt-1">Approved collections (Excl. Waiting Approval)</span>
+          </div>
+
+          <div className="hidden bg-zinc-900/90 border border-zinc-800 rounded-xl p-4 flex flex-col justify-between">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-zinc-400">BALANCE / PENDING</span>
+            <div className="text-2xl font-black text-rose-400 font-mono mt-2">{formatINR(totalOutSum)}</div>
+            <span className="text-[10px] font-mono text-rose-400/80 mt-1">Amount still pending / due</span>
+          </div>
         </div>
       </div>
 
@@ -2747,108 +3723,80 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         />
       </div>
 
-      {showFilters && (
-        <div className="space-y-4 animate-in fade-in duration-200">
-          {/* Download Buttons Bar */}
-          <div className="flex flex-wrap items-center justify-end gap-2 bg-zinc-950/20 border border-zinc-900 p-3 rounded-xl">
-            <span className="text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-wider mr-2">Download:</span>
+      {/* Table */}
+      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
+        {/* Filtered Table Top Bar with Title & Download Report options */}
+        <div className="p-4 bg-zinc-900/70 border-b border-zinc-850 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <div className={`w-2.5 h-2.5 rounded-full ${
+              selectedCard === 'summary_revenue' ? 'bg-blue-400'
+              : selectedCard === 'summary_payment' ? 'bg-emerald-400'
+              : selectedCard === 'summary_outstanding' ? 'bg-rose-400'
+              : selectedCard === 'summary_completed' ? 'bg-amber-400'
+              : selectedCard === 'summary_closed' ? 'bg-indigo-400'
+              : 'bg-amber-400'
+            }`} />
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-zinc-200">
+              {selectedCard === 'summary_revenue' && 'Total Revenue Records'}
+              {selectedCard === 'summary_payment' && 'Payment Received Records'}
+              {selectedCard === 'summary_outstanding' && 'Outstanding / Pending Records'}
+              {selectedCard === 'summary_completed' && 'Completed Projects Records'}
+              {selectedCard === 'summary_closed' && 'Closed Orders Records'}
+              {!selectedCard && 'All Revenue & Payment Records'}
+            </span>
+            <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+              {filtered.length} {filtered.length === 1 ? 'Record' : 'Records'}
+            </span>
+            {startDate && endDate && (
+              <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
+                {startDate} to {endDate}
+              </span>
+            )}
+            {selectedCard && (
+              <button
+                type="button"
+                onClick={() => setSelectedCard(null)}
+                className="text-[10px] font-mono text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-750 px-2 py-0.5 rounded border border-zinc-700 transition-colors cursor-pointer ml-1"
+                title="Reset card filter and show all"
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
+
+          {/* Download Report options for displayed/filtered data */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider mr-1">Download Report:</span>
             <button
+              type="button"
               onClick={downloadPDF}
-              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+              title="Download PDF"
             >
               <Download className="w-3.5 h-3.5 text-rose-400" />
               <span>PDF</span>
             </button>
             <button
+              type="button"
               onClick={downloadExcel}
-              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+              title="Download Excel (.xlsx)"
             >
               <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
               <span>Excel (.xlsx)</span>
             </button>
             <button
+              type="button"
               onClick={downloadCSV}
-              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-700 text-zinc-200 hover:bg-zinc-800 text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
+              title="Download CSV"
             >
               <Download className="w-3.5 h-3.5 text-blue-400" />
               <span>CSV</span>
             </button>
           </div>
-
-          {/* Filter & Search Bar */}
-          <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-            {/* Subtab Selector */}
-            <div className="flex items-center gap-1.5 bg-zinc-900 p-1 rounded-xl border border-zinc-800 w-full sm:w-auto overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setPaymentTab('all')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  paymentTab === 'all'
-                    ? 'bg-amber-500 text-black shadow-sm'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                All Records
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentTab('pending')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  paymentTab === 'pending'
-                    ? 'bg-rose-500 text-white shadow-sm'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Pending Payments
-              </button>
-              <button
-                type="button"
-                onClick={() => setPaymentTab('history')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  paymentTab === 'history'
-                    ? 'bg-emerald-500 text-black shadow-sm'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                Payment History
-              </button>
-            </div>
-
-            {/* Search */}
-            <div className="relative w-full sm:w-72">
-              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                placeholder="Search Order ID, Customer..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-amber-500 font-mono"
-              />
-            </div>
-
-            {/* Dates */}
-            <div className="flex items-center gap-2 text-xs font-mono w-full sm:w-auto">
-              <span className="text-zinc-500 uppercase text-[10px] font-bold">Dates:</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
-              />
-              <span className="text-zinc-600">to</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
-              />
-            </div>
-          </div>
         </div>
-      )}
 
-      {/* Table */}
-      <div className="bg-zinc-950 border border-zinc-850 rounded-2xl overflow-hidden shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse min-w-max">
             <thead>
@@ -2874,7 +3822,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                 </tr>
               ) : (
                 filtered.map(r => (
-                  <tr key={r.orderId} className="hover:bg-zinc-900/50 transition-colors">
+                  <tr key={r.orderId} className={`hover:bg-zinc-900/50 transition-colors ${r.hasPendingApproval ? 'animate-row-blink bg-amber-500/10 border border-amber-500/30' : ''}`}>
                     <td className="py-3.5 px-4 font-bold text-amber-400">{r.orderId}</td>
                     <td className="py-3.5 px-4 font-sans font-bold text-zinc-200">{r.customerName}</td>
                     <td className="py-3.5 px-4 font-sans text-zinc-300">
@@ -2898,6 +3846,8 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                         r.paymentStatus === 'Fully Paid'
                           ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : r.paymentStatus === 'Waiting for Approval'
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
                           : r.paymentStatus === 'Partially Paid'
                           ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                           : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
@@ -2911,31 +3861,47 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
+                      <div className="flex items-center justify-center gap-1.5">
+                        {r.hasPendingApproval && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
+                              setSelectedPaymentHistoryOrder(fullOrder);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs shadow-md animate-pulse cursor-pointer whitespace-nowrap"
+                            title="Click to review and approve payment"
+                          >
+                            Waiting for Approval
+                          </button>
+                        )}
+                        <select
+                          onChange={(e) => {
+                            const val = e.target.value;
                             const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
-                            setSelectedPaymentHistoryOrder(fullOrder);
+                            if (val === 'payment_history' || val === 'waiting_approval') {
+                              setSelectedPaymentHistoryOrder(fullOrder);
+                            } else if (val === 'add_note') {
+                              setNoteModalOrder(fullOrder);
+                            }
+                            e.target.value = "";
                           }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-                          title="View Payment History"
+                          defaultValue=""
+                          className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer shadow-sm focus:outline-none ${
+                            r.hasPendingApproval
+                              ? 'bg-amber-500 hover:bg-amber-400 text-black border border-amber-600'
+                              : 'bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800'
+                          }`}
+                          title="Actions"
                         >
-                          <History className="w-3.5 h-3.5" />
-                          <span>Payment History</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
-                            setNoteModalOrder(fullOrder);
-                          }}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
-                          title="Add Note"
-                        >
-                          <FileText className="w-3.5 h-3.5" />
-                          <span>Add Note</span>
-                        </button>
+                          <option value="" disabled>Action ▾</option>
+                          {r.hasPendingApproval ? (
+                            <option value="waiting_approval">Waiting for Approval</option>
+                          ) : (
+                            <option value="payment_history">Payment History</option>
+                          )}
+                          <option value="add_note">Add Note</option>
+                        </select>
                       </div>
                     </td>
                   </tr>
@@ -2958,6 +3924,9 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         totalLabel={modalTitleAndMeta.totalLabel}
         totalValue={modalTitleAndMeta.totalValue}
         filterDescription={modalTitleAndMeta.filterDescription}
+        onDownloadPDF={downloadPDF}
+        onDownloadExcel={downloadExcel}
+        onDownloadCSV={downloadCSV}
       />
 
       {/* PAYMENT HISTORY MODAL */}

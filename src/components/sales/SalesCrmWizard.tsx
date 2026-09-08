@@ -17,6 +17,7 @@ import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
 import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, INITIAL_PACKAGES, SalesModuleProps, sortEventsAscending } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
+import { TimePicker12Hour } from '../TimePicker12Hour';
 
 export interface SalesCrmWizardProps {
   [key: string]: any;
@@ -1575,16 +1576,14 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                           </div>
                                           <div>
                                              <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
-                                             <input 
+                                             <TimePicker12Hour 
                                                id={`reporting_time_${ev.id}`}
-                                               type="time" 
+                                               required
                                                value={ev.reporting_time || ''} 
-                                               onChange={(e) => {
-                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: e.target.value } : eItem);
+                                               onChange={(val24) => {
+                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: val24 } : eItem);
                                                  setCrmEvents(updated);
                                                }} 
-                                               className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                               required 
                                              />
                                           </div>
                                         </div>
