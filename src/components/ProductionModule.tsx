@@ -2687,6 +2687,7 @@ Production Team`;
   const [caValidateEditedFiles, setCaValidateEditedFiles] = useState<boolean>(false);
   const [caValidatedServerUploads, setCaValidatedServerUploads] = useState<Record<string, boolean>>({});
   const [caUploadingProof, setCaUploadingProof] = useState<boolean>(false);
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
   const [caChecklist, setCaChecklist] = useState<Record<string, boolean>>({});
   const [caUploadConfirmations, setCaUploadConfirmations] = useState<Record<string, { confirmed: boolean; eventDate: string; folderName: string }>>({});
   const [caValidation, setCaValidation] = useState<Record<string, boolean>>({});
@@ -11766,7 +11767,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             />
                             <div className="space-y-0.5">
                               <span className="text-xs font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors block">
-                                5. Validate Edited Files Uploaded
+                                5. Validate Edited Files Uploaded to Server
                               </span>
                               <span className="text-[11px] text-zinc-400 leading-normal block">
                                 Validate and verify that the Editor has uploaded all edited files/folders to the server for each event.
@@ -11937,11 +11938,43 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       Cancel
                     </button>
                     <button
+                      type="button"
+                      disabled={isSaving || isSavingProgress || caUploadingProof}
+                      onClick={async () => {
+                        try {
+                          setIsSavingProgress(true);
+                          const updates: any = {
+                            checklist_customer_acceptance: caVerifyCustomerAcceptance,
+                            checklist_content_usage: caContentUsageConfirmation,
+                            checklist_footage_deleted_7_days: caFootageDeleted7Days,
+                            checklist_payment_from_sales: caVerifyPaymentSales,
+                            checklist_edited_files_uploaded: caValidateEditedFiles,
+                            server_upload_validated: caValidateEditedFiles,
+                            validated_server_uploads: caValidatedServerUploads
+                          };
+                          
+                          if (caConsentProofChecked) {
+                            updates.checklist_client_communication_proof = caConsentProofChecked;
+                          }
+                          
+                          await updateProduction(clientAcceptanceProd.production_id, updates);
+                          alert('Progress saved successfully.');
+                        } catch (err: any) {
+                          alert(`Failed to save progress: ${err.message}`);
+                        } finally {
+                          setIsSavingProgress(false);
+                        }
+                      }}
+                      className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 border border-zinc-700"
+                    >
+                      {isSavingProgress ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
                       type="submit"
-                      disabled={isSaving || caUploadingProof}
+                      disabled={isSaving || isSavingProgress || caUploadingProof}
                       className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
-                      <span>✓</span> {isSaving ? 'Submitting...' : 'Approve Client Acceptance'}
+                      <span>✓</span> {isSaving ? 'Submitting...' : 'CLIENT APPROVED'}
                     </button>
                   </div>
                 </form>

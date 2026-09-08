@@ -344,15 +344,74 @@ export function buildInitialEventAllocations(params: {
     const reportingTime = ev.reporting_time || operationsRecord?.reporting_time || order?.reporting_time || '';
     const location = ev.event_location || order?.event_location || '';
 
-    // Find DB assignments that match this event
+    // Build set of other event identifiers in this order to prevent cross-event leakage
+    const otherEventIds = new Set(
+      events
+        .filter((_, oIdx) => oIdx !== evIdx)
+        .flatMap((oe, oIdx) => [
+          String(oe.id || oe.event_id || `ev_${oIdx}`),
+          oe.id ? String(oe.id) : '',
+          oe.event_id ? String(oe.event_id) : '',
+          `ev_${oIdx}`
+        ])
+        .filter(Boolean)
+    );
+
+    // Find DB assignments that match this event strictly
     const eventDbAssignments = orderAssignments.filter(sa => {
-      if (sa.event_id && (sa.event_id === evId || sa.event_id === ev.id || sa.event_id === ev.event_id)) return true;
-      if (sa.event_name && (
-        sa.event_name.trim().toLowerCase() === eventName.trim().toLowerCase() ||
-        sa.event_name.trim().toLowerCase() === (ev.event_name || '').trim().toLowerCase() ||
-        sa.event_name.trim().toLowerCase() === (ev.event_type || '').trim().toLowerCase()
-      )) return true;
-      if (!sa.event_id && !sa.event_name && events.length === 1) return true;
+      const saEvId = sa.event_id ? String(sa.event_id) : '';
+
+      // If assignment has an event_id:
+      if (saEvId) {
+        // If it belongs to another event in this order, strictly reject!
+        if (otherEventIds.has(saEvId)) return false;
+        // If it matches this event's ID:
+        if (
+          saEvId === evId || 
+          (ev.id && saEvId === String(ev.id)) || 
+          (ev.event_id && saEvId === String(ev.event_id)) || 
+          saEvId === `ev_${evIdx}` ||
+          saEvId === `ev-${evIdx + 1}`
+        ) {
+          return true;
+        }
+      }
+
+      // Check deterministic task_id / assignment_id if present
+      if (sa.assignment_id && (
+        sa.assignment_id.includes(`-${evId}-`) || 
+        (ev.id && sa.assignment_id.includes(`-${ev.id}-`)) ||
+        sa.assignment_id.includes(`-ev-${evIdx + 1}-`) ||
+        sa.assignment_id.includes(`-ev_${evIdx}-`)
+      )) {
+        return true;
+      }
+      if (sa.task_id && (
+        sa.task_id.includes(`_${evId}_`) || 
+        (ev.id && sa.task_id.includes(`_${ev.id}_`)) ||
+        sa.task_id.includes(`_ev-${evIdx + 1}_`) ||
+        sa.task_id.includes(`_ev_${evIdx}_`)
+      )) {
+        return true;
+      }
+
+      // If single event order, unmapped assignments belong to this single event
+      if (events.length === 1) return true;
+
+      // If multiple events and sa has NO event_id or placeholder 'ev'/'general':
+      if (!saEvId || saEvId === 'ev' || saEvId === 'general') {
+        if (sa.event_name) {
+          const saNameLower = sa.event_name.trim().toLowerCase();
+          const thisEvNameLower = (eventName || ev.event_name || ev.event_type || '').trim().toLowerCase();
+          const matchesThis = saNameLower === thisEvNameLower;
+          const matchesOther = events.some((oe, oIdx) => {
+            if (oIdx === evIdx) return false;
+            return (oe.event_name || oe.event_type || '').trim().toLowerCase() === saNameLower;
+          });
+          if (matchesThis && !matchesOther) return true;
+        }
+      }
+
       return false;
     });
 
@@ -361,15 +420,20 @@ export function buildInitialEventAllocations(params: {
 
     // Map each Sales requirement to an assignment slot
     evReqs.forEach(req => {
+      const canonicalSlotAssignId = generateDeterministicAssignmentId(orderId, evId, req.roleName, req.slotNumber);
+
       // Find matching existing assignment:
-      // 1. By exact task_id or assignment_id if saved
-      // 2. By event_id + matching role + matching slot_number
-      // 3. By matching role from unused event assignments
+      // 1. By exact task_id or exact canonical assignment_id
       let matchedSa = eventDbAssignments.find(sa => 
         !usedDbAssignmentIds.has(sa.assignment_id) &&
-        (sa.task_id === req.taskId || sa.assignment_id === generateDeterministicAssignmentId(orderId, evId, req.roleName, req.slotNumber))
+        (
+          sa.task_id === req.taskId || 
+          sa.assignment_id === canonicalSlotAssignId ||
+          (sa.assignment_id && sa.assignment_id === req.taskId)
+        )
       );
 
+      // 2. By event_id + matching role + matching slot_number
       if (!matchedSa) {
         matchedSa = eventDbAssignments.find(sa => 
           !usedDbAssignmentIds.has(sa.assignment_id) &&
@@ -378,10 +442,14 @@ export function buildInitialEventAllocations(params: {
         );
       }
 
-      if (!matchedSa) {
+      // 3. Fallback for legacy assignments that have NO slot_number and NO task_id:
+      // ONLY allow matching slot 1 if the DB record has NO slot_number specified!
+      // NEVER allow slot 1 to steal slot 2's record or vice versa!
+      if (!matchedSa && req.slotNumber === 1) {
         matchedSa = eventDbAssignments.find(sa => 
           !usedDbAssignmentIds.has(sa.assignment_id) &&
-          (sa.staff_role || '').trim().toLowerCase() === req.roleName.trim().toLowerCase()
+          (sa.staff_role || '').trim().toLowerCase() === req.roleName.trim().toLowerCase() &&
+          (sa.slot_number === undefined || sa.slot_number === null || Number(sa.slot_number) === 1)
         );
       }
 
@@ -1344,10 +1412,17 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
 
     // Find if this assignment slot already exists in DB
     const matched = existingDbAssignments.find(ed => 
-      ed.assignment_id === deterministicAssignId ||
-      ed.assignment_id === a.assignment_id ||
-      (ed.task_id && ed.task_id === deterministicTaskId) ||
-      (ed.event_id === eventId && (ed.staff_role || '').trim().toLowerCase() === roleName.toLowerCase() && Number(ed.slot_number || 1) === slotNumber)
+      !matchedDbAssignmentIds.has(ed.assignment_id) && (
+        (a.assignment_id && ed.assignment_id === a.assignment_id) ||
+        (deterministicAssignId && ed.assignment_id === deterministicAssignId) ||
+        (a.task_id && ed.task_id === a.task_id) ||
+        (deterministicTaskId && ed.task_id === deterministicTaskId) ||
+        (
+          (ed.event_id === eventId || !ed.event_id) &&
+          (ed.staff_role || '').trim().toLowerCase() === roleName.toLowerCase() &&
+          Number(ed.slot_number || 1) === slotNumber
+        )
+      )
     );
 
     const canonicalAssignId = matched?.assignment_id || deterministicAssignId;

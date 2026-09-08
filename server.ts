@@ -659,45 +659,42 @@ async function startServer() {
       }
 
       if (table === 'staff_assignments') {
-        console.warn(`[Server DB] Handled constraint/error on staff_assignments (${res.error?.message || res.error?.code}). Upserting/updating existing records instead of failing.`);
+        console.warn(`[Server DB] Handled constraint/error on staff_assignments (${res.error?.message || res.error?.code}). Ensuring isolated slot assignment without overwriting other slots.`);
         const items = Array.isArray(currentPayload) ? currentPayload : [currentPayload];
         const updatedRows: any[] = [];
         for (const itm of items) {
           if (!itm) continue;
           let handled = false;
+          const targetAssignId = itm.assignment_id || (matchCol === 'assignment_id' ? matchVal : undefined);
 
-          // 1. Try matching by assignment_id if present
-          if (itm.assignment_id) {
-            const { data: matchedById } = await db.from('staff_assignments').select('*').eq('assignment_id', itm.assignment_id);
+          // 1. Try matching by exact assignment_id if present
+          if (targetAssignId) {
+            const cleanItm = { ...itm, assignment_id: targetAssignId };
+            const { data: matchedById } = await db.from('staff_assignments').select('*').eq('assignment_id', targetAssignId);
             if (matchedById && matchedById.length > 0) {
-              const { data: upd, error: updErr } = await db.from('staff_assignments').update(itm).eq('assignment_id', itm.assignment_id).select();
+              const { data: upd, error: updErr } = await db.from('staff_assignments').update(cleanItm).eq('assignment_id', targetAssignId).select();
               if (!updErr && upd && upd.length > 0) {
                 updatedRows.push(upd[0]);
+                handled = true;
+              }
+            } else {
+              const { data: ins, error: insErr } = await db.from('staff_assignments').upsert(cleanItm, { onConflict: 'assignment_id' }).select();
+              if (!insErr && ins && ins.length > 0) {
+                updatedRows.push(ins[0]);
                 handled = true;
               }
             }
           }
 
-          // 2. Try matching by order_id + staff_name if not handled
-          if (!handled && itm.order_id && itm.staff_name) {
-            const trimmedName = itm.staff_name.trim();
-            const { data: matchedRows } = await db.from('staff_assignments').select('*').eq('order_id', itm.order_id);
-            const matched = (matchedRows || []).find((r: any) => 
-              (r.staff_name || '').trim().toLowerCase() === trimmedName.toLowerCase() ||
-              (itm.staff_id && r.staff_id === itm.staff_id)
-            );
-            if (matched) {
+          // 2. Try matching by exact task_id if present
+          if (!handled && itm.task_id) {
+            const { data: matchedByTask } = await db.from('staff_assignments').select('*').eq('task_id', itm.task_id);
+            if (matchedByTask && matchedByTask.length > 0) {
+              const matchedAssignId = matchedByTask[0].assignment_id;
               const { data: upd, error: updErr } = await db.from('staff_assignments').update({
                 ...itm,
-                staff_role: itm.staff_role || matched.staff_role,
-                staff_id: itm.staff_id || matched.staff_id,
-                staff_name: itm.staff_name || matched.staff_name,
-                assignment_date: itm.assignment_date || matched.assignment_date,
-                assignment_status: itm.assignment_status || matched.assignment_status,
-                task_status: itm.task_status || matched.task_status,
-                updated_at: new Date().toISOString(),
-                updated_by: itm.updated_by || matched.updated_by
-              }).eq('assignment_id', matched.assignment_id).select();
+                assignment_id: matchedAssignId
+              }).eq('assignment_id', matchedAssignId).select();
               if (!updErr && upd && upd.length > 0) {
                 updatedRows.push(upd[0]);
                 handled = true;
@@ -705,9 +702,10 @@ async function startServer() {
             }
           }
 
-          // 3. Fallback upsert by assignment_id
+          // 3. Fallback: upsert as independent record with isolated assignment_id
+          // CRITICAL: NEVER match or overwrite by order_id + staff_name or staff_id alone!
           if (!handled) {
-            const assignId = itm.assignment_id || `SA-${itm.order_id || 'gen'}-${Date.now()}`;
+            const assignId = targetAssignId || `ASST-${itm.order_id || 'gen'}-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
             const cleanItm = { ...itm, assignment_id: assignId };
             const { data: upsertData, error: upsertErr } = await db.from('staff_assignments').upsert(cleanItm, { onConflict: 'assignment_id' }).select();
             if (!upsertErr && upsertData && upsertData.length > 0) {

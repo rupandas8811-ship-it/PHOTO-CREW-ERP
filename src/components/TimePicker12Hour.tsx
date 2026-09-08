@@ -18,7 +18,7 @@ export const TimePicker12Hour: React.FC<TimePicker12HourProps> = ({
   id
 }) => {
   const parseValue = (val: string) => {
-    if (!val) return { hour: '10', minute: '00', ampm: 'AM' };
+    if (!val) return { hour: '', minute: '', ampm: 'AM' };
     const clean = val.trim();
     const ampmMatch = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
     if (ampmMatch) {
@@ -31,7 +31,7 @@ export const TimePicker12Hour: React.FC<TimePicker12HourProps> = ({
     const parts = clean.split(':');
     if (parts.length >= 2) {
       let h24 = parseInt(parts[0], 10);
-      if (isNaN(h24)) h24 = 10;
+      if (isNaN(h24)) return { hour: '', minute: '', ampm: 'AM' };
       const min = parts[1].slice(0, 2).padStart(2, '0');
       const ampm = h24 >= 12 ? 'PM' : 'AM';
       let h12 = h24 % 12;
@@ -42,7 +42,7 @@ export const TimePicker12Hour: React.FC<TimePicker12HourProps> = ({
         ampm
       };
     }
-    return { hour: '10', minute: '00', ampm: 'AM' };
+    return { hour: '', minute: '', ampm: 'AM' };
   };
 
   const initial = parseValue(value);
@@ -58,7 +58,14 @@ export const TimePicker12Hour: React.FC<TimePicker12HourProps> = ({
   }, [value]);
 
   const updateTime = (newH: string, newM: string, newA: string) => {
-    let hNum = parseInt(newH, 10);
+    if (!newH && !newM) {
+      onChange('');
+      return;
+    }
+    const h = newH || '12';
+    const m = newM || '00';
+    
+    let hNum = parseInt(h, 10);
     if (isNaN(hNum)) hNum = 12;
     if (newA === 'PM' && hNum < 12) {
       hNum += 12;
@@ -66,7 +73,7 @@ export const TimePicker12Hour: React.FC<TimePicker12HourProps> = ({
       hNum = 0;
     }
     const h24Str = String(hNum).padStart(2, '0');
-    const mStr = (newM || '00').padStart(2, '0');
+    const mStr = (m || '00').padStart(2, '0');
     onChange(`${h24Str}:${mStr}`);
   };
 
@@ -89,6 +96,7 @@ export const TimePicker12Hour: React.FC<TimePicker12HourProps> = ({
         }}
         className="bg-slate-950 border border-slate-750 rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
       >
+        <option value="" disabled className="text-slate-500">HH</option>
         {hoursList.map(h => (
           <option key={h} value={h}>{h}</option>
         ))}
@@ -104,6 +112,7 @@ export const TimePicker12Hour: React.FC<TimePicker12HourProps> = ({
         }}
         className="bg-slate-950 border border-slate-750 rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
       >
+        <option value="" disabled className="text-slate-500">MM</option>
         {minutesList.map(m => (
           <option key={m} value={m}>{m}</option>
         ))}

@@ -2809,12 +2809,27 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               staff_name: staffName,
               staff_role: sa.staff_role ? sa.staff_role.trim() : sa.staff_role
             };
-            const cached = cachedAssignments.find((c: any) => 
-              (c.assignment_id && c.assignment_id === cleanSa.assignment_id) ||
-              (c.order_id === cleanSa.order_id && 
-               (c.staff_id === cleanSa.staff_id || (c.staff_name && cleanSa.staff_name && c.staff_name.toLowerCase() === cleanSa.staff_name.toLowerCase())) &&
-               (!cleanSa.event_id || c.event_id === cleanSa.event_id))
+
+            // 1. Direct match by assignment_id
+            let cached = cachedAssignments.find((c: any) => 
+              c.assignment_id && cleanSa.assignment_id && c.assignment_id === cleanSa.assignment_id
             );
+
+            // 2. Match by task_id
+            if (!cached && cleanSa.task_id) {
+              cached = cachedAssignments.find((c: any) => 
+                c.task_id && c.task_id === cleanSa.task_id
+              );
+            }
+
+            // 3. Match within the same event_id
+            if (!cached && cleanSa.order_id) {
+              cached = cachedAssignments.find((c: any) => 
+                c.order_id === cleanSa.order_id &&
+                (c.staff_id === cleanSa.staff_id || (c.staff_name && cleanSa.staff_name && c.staff_name.toLowerCase() === cleanSa.staff_name.toLowerCase())) &&
+                (cleanSa.event_id ? c.event_id === cleanSa.event_id : true)
+              );
+            }
 
             let resolvedEq: string[] = [];
             const rawDbEq = cleanSa.equipment || cleanSa.assigned_equipment;
@@ -2832,7 +2847,20 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               resolvedEq = cached.equipment;
             }
 
-            let resolvedEventId = cleanSa.event_id || cached?.event_id || '';
+            // Resolve event_id rigorously: from DB column, then from deterministic ID pattern, then cached
+            let resolvedEventId = cleanSa.event_id || '';
+            if (!resolvedEventId && cleanSa.assignment_id && cleanSa.assignment_id.startsWith('ASST-')) {
+              const parts = cleanSa.assignment_id.split('-');
+              if (parts.length >= 3 && parts[2]) resolvedEventId = parts[2];
+            }
+            if (!resolvedEventId && cleanSa.task_id && cleanSa.task_id.startsWith('TASK_')) {
+              const parts = cleanSa.task_id.split('_');
+              if (parts.length >= 3 && parts[2]) resolvedEventId = parts[2];
+            }
+            if (!resolvedEventId && cached?.event_id) {
+              resolvedEventId = cached.event_id;
+            }
+
             let resolvedEventName = cleanSa.event_name || cached?.event_name || '';
             let resolvedMobile = cleanSa.mobile || cached?.mobile || '';
             let resolvedStaffType = cleanSa.staff_type || cached?.staff_type || 'In-House';

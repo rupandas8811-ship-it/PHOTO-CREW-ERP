@@ -39,6 +39,8 @@ import { supabaseClient } from '../../supabaseClient';
 import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
 import { 
   buildInitialEventAllocations, 
+  generateDeterministicAssignmentId,
+  generateDeterministicTaskId,
   getEquipmentVerificationData, 
   getEventImagesData, 
   getRawFootageData 
@@ -814,6 +816,9 @@ export const OperationsLeads: React.FC = () => {
     event_name: string;
     event_id?: string;
     assignment_id?: string;
+    task_id?: string;
+    staff_id?: string;
+    slot_number?: number;
     event_date: string;
     reporting_date: string;
     reporting_time: string;
@@ -834,29 +839,41 @@ export const OperationsLeads: React.FC = () => {
     // 2. Match by order_id + staff_name + event_id + staff_role
     if (!sa) {
       sa = staffAssignments?.find(s => 
-        s.order_id === orderId && 
+        (s.order_id === orderId || s.order_id === ord.lead_id) && 
         s.staff_name?.trim().toLowerCase() === nameLower &&
-        (!eventId || eventId === 'gen' || !s.event_id || s.event_id === eventId) &&
+        (eventId && s.event_id ? (s.event_id === eventId || (s.event_id === `ev_${eventIndex}`)) : (!eventId || eventId === 'gen' || !s.event_id)) &&
         (!staffRole || s.staff_role?.trim().toLowerCase() === staffRole.trim().toLowerCase())
       );
     }
-    // Fallback match by order_id + staff_name
-    if (!sa) {
+
+    // 3. Fallback match strictly if eventId is not specified or general
+    if (!sa && (!eventId || eventId === 'gen')) {
       sa = staffAssignments?.find(s => 
-        s.order_id === orderId && 
+        (s.order_id === orderId || s.order_id === ord.lead_id) && 
         s.staff_name?.trim().toLowerCase() === nameLower
       );
     }
 
-    // 3. Check leadEquipmentHistory for live status proof/handover
-    const matchingHist = leadEquipmentHistory?.filter(h => 
-      h.order_id === orderId && 
-      (
-        (h.returned_by || '').trim().toLowerCase() === nameLower ||
-        (() => { try { return JSON.parse(h.remarks || '{}').staff_name?.trim().toLowerCase() === nameLower; } catch(e) { return false; } })()
-      ) &&
-      (!eventId || eventId === 'gen' || (() => { try { return JSON.parse(h.remarks || '{}').event_id === eventId; } catch(e) { return false; } })())
-    ).sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
+    // 4. Check leadEquipmentHistory for live status proof/handover strictly isolated to this event
+    const matchingHist = leadEquipmentHistory?.filter(h => {
+      if (h.order_id !== orderId && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
+      const retBy = (h.returned_by || '').trim().toLowerCase();
+      let parsed: any = {};
+      try { parsed = JSON.parse(h.remarks || '{}'); } catch(e) {}
+      const parsedName = (parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+      if (retBy !== nameLower && parsedName !== nameLower) return false;
+
+      const hAssignId = h.assignment_id || parsed.assignment_id;
+      if (assignmentId && hAssignId) {
+        return hAssignId === assignmentId;
+      }
+
+      const hEventId = parsed.event_id || h.event_id;
+      if (eventId && eventId !== 'gen' && hEventId && hEventId !== 'gen' && hEventId !== eventId && hEventId !== `ev_${eventIndex}`) {
+        return false;
+      }
+      return true;
+    }).sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
 
     if (matchingHist) {
       let histStatus = matchingHist.equipment_status;
@@ -1304,7 +1321,25 @@ export const OperationsLeads: React.FC = () => {
   const getAssignedStaffDetailsForOrder = (ord: Order): AssignedStaffDetails[] => {
     const lead = leads.find(l => (ord.lead_id && l.lead_id === ord.lead_id) || l.order_id === ord.order_id);
     const orderAssignments = staffAssignments ? staffAssignments.filter(sa => (sa.order_id === ord.order_id || sa.order_id === ord.lead_id || (ord.lead_id && sa.lead_id === ord.lead_id)) && sa.assignment_status !== 'Cancelled') : [];
-    const hasEventsAssignments = lead?.events?.some((ev: any) => ev.assigned_staff_names && ev.assigned_staff_names.trim());
+
+    const rawEvents = (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
+      ? lead.events
+      : ((ord as any)?.events && Array.isArray((ord as any).events) && (ord as any).events.length > 0
+        ? (ord as any).events
+        : (lead?.notes_special_customizations ? deserializeLeadEvents(lead.notes_special_customizations).events :
+           (ord?.notes_special_customizations ? deserializeLeadEvents(ord.notes_special_customizations).events : [])));
+
+    const resolvedEvents = rawEvents.length > 0 ? rawEvents : [{
+      id: 'ev_0',
+      event_name: ord.event_name || ord.event_type || lead?.event_name || lead?.event_type || 'Main Event',
+      event_type: ord.event_type || lead?.event_type || 'Main Event',
+      event_date: ord.event_date || lead?.event_date || '',
+      event_start_time: ord.event_time || lead?.event_time || '',
+      reporting_date: ord.Reporting_date || ord.event_date || '',
+      reporting_time: ord.reporting_time || ''
+    }];
+
+    const hasEventsAssignments = resolvedEvents.some((ev: any) => ev.assigned_staff_names && ev.assigned_staff_names.trim());
 
     if (orderAssignments.length === 0 && !hasEventsAssignments) {
       return [];
@@ -1312,134 +1347,156 @@ export const OperationsLeads: React.FC = () => {
 
     const staffDetailsList: AssignedStaffDetails[] = [];
     const op = getOpDetails(ord.order_id);
+    const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === (lead?.lead_id || ord.lead_id)) || [];
+    const teamMembersConfig = extractTeamMembersConfig(lead, targetLeadPkgs);
+    const totalEvents = resolvedEvents.length;
 
-    if (lead?.events && lead.events.length > 0) {
-      const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === lead.lead_id) || [];
-      const teamMembersConfig = extractTeamMembersConfig(lead, targetLeadPkgs);
-      const totalEvents = lead.events.length;
+    resolvedEvents.forEach((ev: any, evIdx: number) => {
+      const evId = String(ev.id || ev.event_id || `ev_${evIdx}`);
 
-      lead.events.forEach((ev: any, evIdx: number) => {
-        const evId = String(ev.id || ev.event_id || `ev_${evIdx}`);
-        const evOrderAssignments = orderAssignments.filter(sa => {
-          if (sa.event_id && evId) {
-            if (sa.event_id === evId || sa.event_id.includes(evId) || evId.includes(sa.event_id)) return true;
+      // Collect IDs of all other events to strictly prevent cross-event assignment leakage
+      const otherEventIds = new Set(
+        resolvedEvents
+          .filter((_, oIdx) => oIdx !== evIdx)
+          .flatMap((oe, oIdx) => [
+            String(oe.id || oe.event_id || `ev_${oIdx}`),
+            oe.id ? String(oe.id) : '',
+            oe.event_id ? String(oe.event_id) : '',
+            `ev_${oIdx}`
+          ])
+          .filter(Boolean)
+      );
+
+      // Strict assignment query for this specific event
+      const evOrderAssignments = orderAssignments.filter(sa => {
+        const saEvId = sa.event_id ? String(sa.event_id) : '';
+
+        if (saEvId) {
+          if (otherEventIds.has(saEvId)) return false;
+          if (saEvId === evId || (ev.id && saEvId === String(ev.id)) || (ev.event_id && saEvId === String(ev.event_id)) || saEvId === `ev_${evIdx}`) {
+            return true;
           }
-          if (totalEvents === 1) return true;
-          if (sa.event_id === 'ev' || sa.event_id === 'general' || !sa.event_id || sa.event_id.startsWith('ev_')) {
-            if (sa.event_name && (ev.event_name || ev.event_type)) {
-              const saEvName = sa.event_name.trim().toLowerCase();
-              const evName = (ev.event_name || ev.event_type || '').trim().toLowerCase();
-              if (saEvName === evName) return true;
-            }
-          }
-          if (sa.event_name && (ev.event_name || ev.event_type)) {
+        }
+
+        // Check canonical IDs
+        if (sa.assignment_id && (sa.assignment_id.includes(`-${evId}-`) || (ev.id && sa.assignment_id.includes(`-${ev.id}-`)))) {
+          return true;
+        }
+        if (sa.task_id && (sa.task_id.includes(`_${evId}_`) || (ev.id && sa.task_id.includes(`_${ev.id}_`)))) {
+          return true;
+        }
+
+        // Single event order fallback
+        if (totalEvents === 1) return true;
+
+        // Legacy / fallback assignment without explicit event_id
+        if (!saEvId || saEvId === 'ev' || saEvId === 'general') {
+          if (sa.event_name) {
             const saEvName = sa.event_name.trim().toLowerCase();
-            const evName = (ev.event_name || ev.event_type || '').trim().toLowerCase();
-            if (saEvName === evName) return true;
+            const thisEvName = (ev.event_name || ev.event_type || '').trim().toLowerCase();
+            const matchesThis = saEvName === thisEvName;
+            const matchesOther = resolvedEvents.some((oe, oIdx) => {
+              if (oIdx === evIdx) return false;
+              return (oe.event_name || oe.event_type || '').trim().toLowerCase() === saEvName;
+            });
+            if (matchesThis && !matchesOther) return true;
           }
-          return false;
-        });
+        }
+        return false;
+      });
 
-        const includedRoles = getEventRolesForEvent(ev, evIdx, teamMembersConfig, totalEvents);
-        const roleTargetQtyMap = new Map<string, { roleName: string; targetQty: number }>();
+      const includedRoles = getEventRolesForEvent(ev, evIdx, teamMembersConfig, totalEvents);
+
+      if (evOrderAssignments.length > 0) {
+        evOrderAssignments.forEach((sa, saIdx) => {
+          const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
+          const staffTaskStatus = getStaffTaskStatus(ord.order_id, evId, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
+          const saEq = resolveStaffEquipment(sa.staff_name, ord, sa, ev, saIdx);
+
+          const rawRole = sa.staff_role || st?.role || 'Staff';
+          const parsedRole = parseQtyAndText(rawRole);
+          const roleClean = (parsedRole.text || rawRole).trim();
+
+          staffDetailsList.push({
+            staff_name: sa.staff_name,
+            staff_role: roleClean,
+            assigned_task: roleClean,
+            staff_type: sa.staff_type || st?.staff_type || 'In-House',
+            mobile: sa.mobile || st?.mobile || '',
+            event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
+            event_id: evId,
+            assignment_id: sa.assignment_id,
+            task_id: sa.task_id,
+            staff_id: sa.staff_id,
+            slot_number: sa.slot_number,
+            event_date: ev.event_date || ord.event_date || '',
+            reporting_date: ev.reporting_date || lead?.Reporting_date || ev.event_date || ord.event_date || '',
+            reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
+            status: isStaffBusyOnDate(sa.staff_name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+            staff_status: staffTaskStatus,
+            google_maps_link: ev.google_maps_link || lead?.google_maps_link || '',
+            assigned_equipment: saEq,
+            event_time: ev.event_start_time || ord.event_time || ''
+          });
+        });
+      } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
+        const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
+        
+        const cleanMobilesRaw = (ev.assigned_staff_mobiles || '').split(' || EQUIPMENT:')[0] || '';
+        const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim()).filter(Boolean);
+
+        const taskSlotRoles: string[] = [];
         includedRoles.forEach((roleStr: string) => {
           const { qty, text } = parseQtyAndText(roleStr);
           const roleName = (text || roleStr).trim();
-          if (!roleName) return;
-          const key = roleName.toLowerCase();
           const targetQty = qty || 1;
-          if (roleTargetQtyMap.has(key)) {
-            roleTargetQtyMap.get(key)!.targetQty += targetQty;
-          } else {
-            roleTargetQtyMap.set(key, { roleName, targetQty });
+          for (let q = 0; q < targetQty; q++) {
+            taskSlotRoles.push(roleName);
           }
         });
 
-        if (evOrderAssignments.length > 0) {
-          evOrderAssignments.forEach((sa, saIdx) => {
-            const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
-            const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id || evId, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
-            const saEq = resolveStaffEquipment(sa.staff_name, ord, sa, ev, saIdx);
+        names.forEach((name, nameIdx) => {
+          const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
+          const assignedTask = taskSlotRoles[nameIdx] || st?.role || 'Staff';
 
-            const rawRole = sa.staff_role || st?.role || 'Staff';
-            const parsedRole = parseQtyAndText(rawRole);
-            const roleClean = (parsedRole.text || rawRole).trim();
+          // Strictly match assignment belonging to this event
+          const saMatch = orderAssignments.find(sa => 
+            sa.staff_name?.toLowerCase() === name.toLowerCase() && 
+            (sa.event_id === evId || (ev.id && sa.event_id === String(ev.id)) || sa.event_id === `ev_${evIdx}`)
+          );
 
-            staffDetailsList.push({
-              staff_name: sa.staff_name,
-              staff_role: roleClean,
-              assigned_task: roleClean,
-              staff_type: sa.staff_type || st?.staff_type || 'In-House',
-              mobile: sa.mobile || st?.mobile || '',
-              event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
-              event_id: ev.id || evId,
-              assignment_id: sa.assignment_id,
-              event_date: ev.event_date || ord.event_date || '',
-              reporting_date: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
-              reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
-              status: isStaffBusyOnDate(sa.staff_name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
-              staff_status: staffTaskStatus,
-              google_maps_link: ev.google_maps_link || lead.google_maps_link || '',
-              assigned_equipment: saEq,
-              event_time: ev.event_start_time || ord.event_time || ''
-            });
+          const rawTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || st?.role || 'Staff';
+          const parsedRole = parseQtyAndText(rawTask);
+          const roleClean = (parsedRole.text || rawTask).trim();
+
+          const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
+          const staffTaskStatus = getStaffTaskStatus(ord.order_id, evId, evIdx, name, ord, saMatch?.assignment_id, roleClean);
+          const memberEquipment = resolveStaffEquipment(name, ord, saMatch, ev, nameIdx);
+
+          staffDetailsList.push({
+            staff_name: name,
+            staff_role: roleClean,
+            assigned_task: roleClean,
+            staff_type: st?.staff_type || 'In-House',
+            mobile: mobileNum,
+            event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
+            event_id: evId,
+            assignment_id: saMatch?.assignment_id,
+            task_id: saMatch?.task_id,
+            staff_id: saMatch?.staff_id,
+            slot_number: saMatch?.slot_number,
+            event_date: ev.event_date || ord.event_date || '',
+            reporting_date: ev.reporting_date || lead?.Reporting_date || ev.event_date || ord.event_date || '',
+            reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
+            status: isStaffBusyOnDate(name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+            staff_status: staffTaskStatus,
+            google_maps_link: ev.google_maps_link || lead?.google_maps_link || '',
+            assigned_equipment: memberEquipment,
+            event_time: ev.event_start_time || ord.event_time || ''
           });
-        } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
-          const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
-          
-          const cleanMobilesRaw = (ev.assigned_staff_mobiles || '').split(' || EQUIPMENT:')[0] || '';
-          const mobilesList = cleanMobilesRaw.split(',').map((m: string) => m.trim()).filter(Boolean);
-
-          const taskSlotRoles: string[] = [];
-          includedRoles.forEach((roleStr: string) => {
-            const { qty, text } = parseQtyAndText(roleStr);
-            const roleName = (text || roleStr).trim();
-            const targetQty = qty || 1;
-            for (let q = 0; q < targetQty; q++) {
-              taskSlotRoles.push(roleName);
-            }
-          });
-
-          names.forEach((name, nameIdx) => {
-            const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase());
-            const assignedTask = taskSlotRoles[nameIdx] || st?.role || 'Staff';
-            const saMatch = staffAssignments?.find(sa => 
-              (sa.order_id === ord.order_id || sa.order_id === ord.lead_id) && 
-              sa.staff_name?.toLowerCase() === name.toLowerCase() && 
-              (sa.event_id === evId || sa.event_id === ev.id || (!sa.event_id && !ev.id) || (sa.staff_role && assignedTask && sa.staff_role.toLowerCase() === assignedTask.toLowerCase()))
-            ) || staffAssignments?.find(sa => (sa.order_id === ord.order_id || sa.order_id === ord.lead_id) && sa.staff_name?.toLowerCase() === name.toLowerCase());
-            const historyMatch = leadStaffAssignmentHistory?.find(h => (h.order_id === ord.order_id || h.lead_id === ord.lead_id) && h.assigned_staff?.toLowerCase().includes(name.toLowerCase()));
-
-            const rawTask = taskSlotRoles[nameIdx] || saMatch?.staff_role || historyMatch?.assigned_role || st?.role || 'Staff';
-            const parsedRole = parseQtyAndText(rawTask);
-            const roleClean = (parsedRole.text || rawTask).trim();
-
-            const mobileNum = mobilesList[nameIdx] || st?.mobile || '';
-            const staffTaskStatus = getStaffTaskStatus(ord.order_id, ev.id || evId, evIdx, name, ord, saMatch?.assignment_id, roleClean);
-            const memberEquipment = resolveStaffEquipment(name, ord, saMatch, ev, nameIdx);
-
-            staffDetailsList.push({
-              staff_name: name,
-              staff_role: roleClean,
-              assigned_task: roleClean,
-              staff_type: st?.staff_type || 'In-House',
-              mobile: mobileNum,
-              event_name: ev.event_name || ord.event_type || 'Event',
-              event_id: ev.id || evId,
-              assignment_id: saMatch?.assignment_id,
-              event_date: ev.event_date || ord.event_date || '',
-              reporting_date: ev.reporting_date || lead.Reporting_date || ev.event_date || '',
-              reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
-              status: isStaffBusyOnDate(name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
-              staff_status: staffTaskStatus,
-              google_maps_link: ev.google_maps_link || lead.google_maps_link || '',
-              assigned_equipment: memberEquipment,
-              event_time: ev.event_start_time || ord.event_time || ''
-            });
-          });
-        }
-      });
-    }
+        });
+      }
+    });
 
     // Collect any leftover orderAssignments that were not included in staffDetailsList
     if (orderAssignments.length > 0) {
@@ -1448,10 +1505,13 @@ export const OperationsLeads: React.FC = () => {
           (sd.assignment_id && sa.assignment_id && sd.assignment_id === sa.assignment_id) || 
           (sd.staff_name.toLowerCase() === sa.staff_name.toLowerCase() && sd.event_id === sa.event_id)
         );
-        if (!alreadyAdded && sa.staff_name) {
+        if (!alreadyAdded && sa.staff_name && sa.staff_name.toLowerCase() !== 'unassigned' && sa.staff_name.toLowerCase() !== 'none') {
           const name = sa.staff_name;
           const st = staff?.find(s => s.name?.toLowerCase() === name.toLowerCase() || s.staff_id === sa.staff_id);
-          const assignedEquipment = resolveStaffEquipment(name, ord, sa, undefined, saIdx);
+          const matchedEv = resolvedEvents.find((e: any, eIdx: number) => 
+            String(e.id || e.event_id || `ev_${eIdx}`) === sa.event_id || (e.id && String(e.id) === sa.event_id)
+          );
+          const assignedEquipment = resolveStaffEquipment(name, ord, sa, matchedEv, saIdx);
           const assignedTask = sa.staff_role || st?.role || 'Staff';
           const staffTaskStatus = getStaffTaskStatus(ord.order_id, sa.event_id, saIdx, name, ord, sa.assignment_id, assignedTask);
 
@@ -1461,17 +1521,20 @@ export const OperationsLeads: React.FC = () => {
             assigned_task: assignedTask,
             staff_type: sa.staff_type || st?.staff_type || 'In-House',
             mobile: sa.mobile || st?.mobile || '',
-            event_name: sa.event_name || ord.event_type || 'Main Event',
-            event_id: sa.event_id,
+            event_name: sa.event_name || matchedEv?.event_name || ord.event_type || 'Main Event',
+            event_id: sa.event_id || matchedEv?.id || 'ev_0',
             assignment_id: sa.assignment_id,
-            event_date: ord.event_date || '',
-            reporting_date: ord.Reporting_date || lead?.Reporting_date || ord.event_date || '',
-            reporting_time: ord.reporting_time || op?.reporting_time || '',
-            status: isStaffBusyOnDate(name, ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+            task_id: sa.task_id,
+            staff_id: sa.staff_id,
+            slot_number: sa.slot_number,
+            event_date: matchedEv?.event_date || ord.event_date || '',
+            reporting_date: matchedEv?.reporting_date || ord.Reporting_date || lead?.Reporting_date || ord.event_date || '',
+            reporting_time: matchedEv?.reporting_time || ord.reporting_time || op?.reporting_time || '',
+            status: isStaffBusyOnDate(name, matchedEv?.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
             staff_status: staffTaskStatus,
-            google_maps_link: lead?.google_maps_link || '',
+            google_maps_link: matchedEv?.google_maps_link || lead?.google_maps_link || '',
             assigned_equipment: assignedEquipment,
-            event_time: ord.event_time || ''
+            event_time: matchedEv?.event_start_time || ord.event_time || ''
           });
         }
       });
@@ -2013,11 +2076,15 @@ export const OperationsLeads: React.FC = () => {
         if (alloc.staff && alloc.staff.length > 0) {
           alloc.staff.forEach((st: any, stIdx: number) => {
             if (st.staff_name && st.staff_name.trim() !== '') {
+               const stSlotNum = Number(st.slot_number || (stIdx + 1));
+               const stRole = st.staff_role || 'Staff';
+               const stAssignId = st.assignment_id || (st.id && !st.id.startsWith('slot_') ? st.id : generateDeterministicAssignmentId(assigningOrderId, evId, stRole, stSlotNum));
+               const stTaskId = st.task_id || generateDeterministicTaskId(assigningOrderId, evId, stRole, stSlotNum);
                allAssignedStaff.push({
-                 assignment_id: st.assignment_id || (st.id && !st.id.startsWith('slot_') ? st.id : undefined),
-                 task_id: st.task_id,
-                 slot_number: st.slot_number || (stIdx + 1),
-                 staff_role: st.staff_role,
+                 assignment_id: stAssignId,
+                 task_id: stTaskId,
+                 slot_number: stSlotNum,
+                 staff_role: stRole,
                  staff_id: st.staff_id,
                  staff_name: st.staff_name,
                  mobile: st.mobile || '',
@@ -3033,8 +3100,8 @@ export const OperationsLeads: React.FC = () => {
                     });
 
                   return sortedEventsWithMeta.map(({ ev, originalIndex }, displayIndex) => {
-                    const evId = ev.id || `ev-${originalIndex + 1}`;
-                    const allocation = eventAllocations[evId] || { staff: [] };
+                    const evId = String(ev.id || ev.event_id || `ev_${originalIndex}`);
+                    const allocation = eventAllocations[evId] || eventAllocations[ev.id || ''] || eventAllocations[`ev-${originalIndex + 1}`] || Object.values(eventAllocations)[originalIndex] || { staff: [] };
                     const allocStaff = allocation.staff || [];
                     
                     const evName = ev.event_name || ev.event_type || 'Unnamed Event';
@@ -3228,21 +3295,64 @@ export const OperationsLeads: React.FC = () => {
                             }
 
                             return taskGroups.map((task, groupIdx) => {
+                              const targetQty = task.targetQty || 1;
                               const taskSlots = allocStaff.filter((s: any) => s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
-                              const slotsToRender = [
-                                ...taskSlots.slice(0, task.targetQty),
-                                ...Array.from({ length: Math.max(0, (task.targetQty || 1) - taskSlots.length) }, () => ({
-                                  id: 'slot_' + Math.random().toString(36).substr(2, 6),
-                                  staff_role: task.roleName,
-                                  staff_id: '',
-                                  staff_name: '',
-                                  mobile: '',
-                                  staff_type: 'In-House' as const,
-                                  equipment: []
-                                }))
-                              ];
+                              
+                              const slotsToRender: any[] = [];
+                              for (let sNum = 1; sNum <= targetQty; sNum++) {
+                                const canonicalSlotAssignId = generateDeterministicAssignmentId(assigningOrderId, evId, task.roleName, sNum);
+                                const canonicalSlotTaskId = generateDeterministicTaskId(assigningOrderId, evId, task.roleName, sNum);
 
-                              const assignedCount = taskSlots.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
+                                // 1. Match by exact slot_number
+                                let matchedSlot = taskSlots.find((s: any) => Number(s.slot_number || 1) === sNum);
+
+                                // 2. Match by exact assignment_id or task_id
+                                if (!matchedSlot) {
+                                  matchedSlot = taskSlots.find((s: any) => 
+                                    s.assignment_id === canonicalSlotAssignId ||
+                                    s.id === canonicalSlotAssignId ||
+                                    s.task_id === canonicalSlotTaskId
+                                  );
+                                }
+
+                                // 3. Positional fallback if available and not already used
+                                if (!matchedSlot) {
+                                  const unusedSlot = taskSlots.find((s: any) => !slotsToRender.some(sr => sr.id === s.id || sr.assignment_id === s.assignment_id));
+                                  if (unusedSlot && sNum <= taskSlots.length) {
+                                    matchedSlot = unusedSlot;
+                                  }
+                                }
+
+                                if (matchedSlot) {
+                                  slotsToRender.push({
+                                    ...matchedSlot,
+                                    id: matchedSlot.assignment_id || matchedSlot.id || canonicalSlotAssignId,
+                                    assignment_id: matchedSlot.assignment_id || canonicalSlotAssignId,
+                                    task_id: matchedSlot.task_id || canonicalSlotTaskId,
+                                    order_id: assigningOrderId,
+                                    event_id: evId,
+                                    staff_role: task.roleName,
+                                    slot_number: sNum
+                                  });
+                                } else {
+                                  slotsToRender.push({
+                                    id: canonicalSlotAssignId,
+                                    assignment_id: canonicalSlotAssignId,
+                                    task_id: canonicalSlotTaskId,
+                                    order_id: assigningOrderId,
+                                    event_id: evId,
+                                    staff_role: task.roleName,
+                                    slot_number: sNum,
+                                    staff_id: '',
+                                    staff_name: '',
+                                    mobile: '',
+                                    staff_type: 'In-House' as const,
+                                    equipment: []
+                                  });
+                                }
+                              }
+
+                              const assignedCount = slotsToRender.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
 
                               return (
                                 <div key={`task_${groupIdx}_${task.roleName}`} className="border border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-950/80 shadow-md">
@@ -3273,10 +3383,22 @@ export const OperationsLeads: React.FC = () => {
                                     {slotsToRender.map((slot: any, slotIdx: number) => {
                                       const isEmpty = !slot.staff_name || slot.staff_name.trim() === '';
                                       const currentStaffType = slot.staff_type || 'In-House';
-                                      const slotKey = slot.id || `slot_${groupIdx}_${slotIdx}`;
+                                      const slotKey = slot.assignment_id || slot.id || `slot_${groupIdx}_${slotIdx}`;
 
                                       return (
                                         <div key={slotKey} className={`pt-2.5 first:pt-0 space-y-2.5 ${validationAttempted && isEmpty ? 'bg-rose-950/10 p-2 rounded-lg' : ''}`}>
+                                          {targetQty > 1 && (
+                                            <div className="flex items-center gap-2 pb-0.5">
+                                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-sky-400 font-bold border border-zinc-700/60 shrink-0">
+                                                Task/Slot {slot.slot_number || (slotIdx + 1)}
+                                              </span>
+                                              {slot.staff_name && (
+                                                <span className="text-[10px] font-sans text-zinc-400">
+                                                  Assigned: <span className="text-emerald-400 font-semibold">{slot.staff_name}</span>
+                                                </span>
+                                              )}
+                                            </div>
+                                          )}
                                           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                             {/* Staff Type Select */}
                                             <div className="w-full sm:w-32 shrink-0">
@@ -3287,10 +3409,16 @@ export const OperationsLeads: React.FC = () => {
                                                   setEventAllocations((prev: any) => {
                                                     const existingAlloc = prev[evId] || { staff: [] };
                                                     let found = false;
-                                                    const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                      if (s.id === slot.id || s === slot) {
+                                                    const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
+                                                      const isTarget = (
+                                                        (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
+                                                        (s.id && slot.id && s.id === slot.id) ||
+                                                        (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
+                                                        (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
+                                                      );
+                                                      if (isTarget) {
                                                         found = true;
-                                                        return { ...s, staff_type: newType, staff_name: '', staff_id: '', mobile: '' };
+                                                        return { ...s, ...slot, staff_type: newType, staff_name: '', staff_id: '', mobile: '' };
                                                       }
                                                       return s;
                                                     });
@@ -3319,11 +3447,18 @@ export const OperationsLeads: React.FC = () => {
                                                   setEventAllocations((prev: any) => {
                                                     const existingAlloc = prev[evId] || { staff: [] };
                                                     let found = false;
-                                                    const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                      if (s.id === slot.id || s === slot) {
+                                                    const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
+                                                      const isTarget = (
+                                                        (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
+                                                        (s.id && slot.id && s.id === slot.id) ||
+                                                        (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
+                                                        (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
+                                                      );
+                                                      if (isTarget) {
                                                         found = true;
                                                         return {
                                                           ...s,
+                                                          ...slot,
                                                           staff_name: selectedName,
                                                           staff_id: staffId,
                                                           mobile: memberInfo?.mobile || ''
@@ -3360,7 +3495,13 @@ export const OperationsLeads: React.FC = () => {
                                                   });
 
                                                   const assignedInOtherSlots = (eventAllocations[evId]?.staff || []).filter((s: any) => {
-                                                    return (s.id !== slot.id) && s.staff_name && s.staff_name.trim() !== '';
+                                                    const isSameSlot = (
+                                                      (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
+                                                      (s.id && slot.id && s.id === slot.id) ||
+                                                      (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
+                                                      (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
+                                                    );
+                                                    return !isSameSlot && s.staff_name && s.staff_name.trim() !== '';
                                                   }).map((s: any) => s.staff_name.trim().toLowerCase());
 
                                                   const currentAssignedNameLower = (slot.staff_name || '').trim().toLowerCase();
@@ -3427,7 +3568,15 @@ export const OperationsLeads: React.FC = () => {
                                                   onClick={() => {
                                                     setEventAllocations((prev: any) => {
                                                       const existingAlloc = prev[evId] || { staff: [] };
-                                                      const updatedStaff = existingAlloc.staff.filter((s: any) => s.id !== slot.id && s !== slot);
+                                                      const updatedStaff = (existingAlloc.staff || []).filter((s: any) => {
+                                                        const isTarget = (
+                                                          (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
+                                                          (s.id && slot.id && s.id === slot.id) ||
+                                                          (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
+                                                          (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
+                                                        );
+                                                        return !isTarget;
+                                                      });
                                                       return {
                                                         ...prev,
                                                         [evId]: {
@@ -3457,7 +3606,15 @@ export const OperationsLeads: React.FC = () => {
                                                  equipment={equipment}
                                                  selectedEquipmentNames={slot.equipment || []}
                                                  otherStaffEquipments={allocStaff
-                                                   .filter((s: any) => s.id !== slot.id && s !== slot)
+                                                   .filter((s: any) => {
+                                                     const isTarget = (
+                                                       (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
+                                                       (s.id && slot.id && s.id === slot.id) ||
+                                                       (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
+                                                       (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
+                                                     );
+                                                     return !isTarget;
+                                                   })
                                                    .map((s: any) => ({
                                                      staffName: s.name || s.staff_name,
                                                      equipmentNames: s.equipment || []
@@ -3466,13 +3623,20 @@ export const OperationsLeads: React.FC = () => {
                                                    setEventAllocations((prev: any) => {
                                                      const existingAlloc = prev[evId] || { staff: [] };
                                                      let found = false;
-                                                     const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                       if (s.id === slot.id || s === slot) {
+                                                     const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
+                                                       const isTarget = (
+                                                         (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
+                                                         (s.id && slot.id && s.id === slot.id) ||
+                                                         (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
+                                                         (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
+                                                       );
+                                                       if (isTarget) {
                                                          found = true;
                                                          const currentEq = s.equipment || [];
                                                          const isSelected = currentEq.includes(eqName);
                                                          return {
                                                            ...s,
+                                                           ...slot,
                                                            equipment: isSelected
                                                              ? currentEq.filter((name: string) => name !== eqName)
                                                              : [...currentEq, eqName]
@@ -3492,10 +3656,17 @@ export const OperationsLeads: React.FC = () => {
                                                  onRemoveEquipment={(eqName) => {
                                                    setEventAllocations((prev: any) => {
                                                      const existingAlloc = prev[evId] || { staff: [] };
-                                                     const updatedStaff = existingAlloc.staff.map((s: any) => {
-                                                       if (s.id === slot.id || s === slot) {
+                                                     const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
+                                                       const isTarget = (
+                                                         (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
+                                                         (s.id && slot.id && s.id === slot.id) ||
+                                                         (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
+                                                         (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
+                                                       );
+                                                       if (isTarget) {
                                                          return {
                                                            ...s,
+                                                           ...slot,
                                                            equipment: (s.equipment || []).filter((name: string) => name !== eqName)
                                                          };
                                                        }
@@ -3525,14 +3696,21 @@ export const OperationsLeads: React.FC = () => {
                                           setEventAllocations((prev: any) => {
                                             const existingAlloc = prev[evId] || { staff: [] };
                                             const roleStaff = (existingAlloc.staff || []).filter((s: any) => s.staff_role === task.roleName);
+                                            const nextSlotNum = roleStaff.length + 1;
+                                            const newAssignId = generateDeterministicAssignmentId(assigningOrderId, evId, task.roleName, nextSlotNum);
+                                            const newTaskId = generateDeterministicTaskId(assigningOrderId, evId, task.roleName, nextSlotNum);
                                             const newSlot = {
-                                              slot_number: roleStaff.length + 1,
-                                              id: 'slot_' + Math.random().toString(36).substr(2, 6),
+                                              id: newAssignId,
+                                              assignment_id: newAssignId,
+                                              task_id: newTaskId,
+                                              order_id: assigningOrderId,
+                                              event_id: evId,
+                                              slot_number: nextSlotNum,
                                               staff_role: task.roleName,
                                               staff_id: '',
                                               staff_name: '',
                                               mobile: '',
-                                              staff_type: 'In-House',
+                                              staff_type: 'In-House' as const,
                                               equipment: []
                                             };
                                             return {
@@ -4901,21 +5079,53 @@ export const OperationsLeads: React.FC = () => {
           const ordLead = leads?.find(l => (ord.lead_id && l.lead_id === ord.lead_id) || l.order_id === ord.order_id);
           const staffDetails = getAssignedStaffDetailsForOrder(ord);
 
-        // Group by unique event key
-        const groupedByEvent: Record<string, { eventName: string; eventDate: string; members: typeof staffDetails }> = {};
-        staffDetails.forEach(sd => {
-          const evKey = sd.event_id || sd.event_name || ord.event_type || 'Main Event';
-          if (!groupedByEvent[evKey]) {
-            groupedByEvent[evKey] = {
-              eventName: sd.event_name || ord.event_type || 'Main Event',
-              eventDate: sd.event_date || '',
-              members: []
-            };
-          }
-          groupedByEvent[evKey].members.push(sd);
-        });
+        // Resolve events strictly per order/lead
+        const rawEvents = (ordLead?.events && Array.isArray(ordLead.events) && ordLead.events.length > 0)
+          ? ordLead.events
+          : ((ord as any)?.events && Array.isArray((ord as any).events) && (ord as any).events.length > 0
+            ? (ord as any).events
+            : (ordLead?.notes_special_customizations ? deserializeLeadEvents(ordLead.notes_special_customizations).events :
+               (ord?.notes_special_customizations ? deserializeLeadEvents(ord.notes_special_customizations).events : [])));
 
-        const eventGroups = Object.values(groupedByEvent);
+        const resolvedEvents = rawEvents.length > 0 ? rawEvents : [{
+          id: 'ev_0',
+          event_name: ord.event_name || ord.event_type || ordLead?.event_name || ordLead?.event_type || 'Main Event',
+          event_type: ord.event_type || ordLead?.event_type || 'Main Event',
+          event_date: ord.event_date || ordLead?.event_date || '',
+          event_start_time: ord.event_time || ordLead?.event_time || '',
+          reporting_date: ord.Reporting_date || ord.event_date || '',
+          reporting_time: ord.reporting_time || ''
+        }];
+
+        // Strictly build event groups mapped by event ID
+        const eventGroups = resolvedEvents.map((ev: any, evIdx: number) => {
+          const evId = String(ev.id || ev.event_id || `ev_${evIdx}`);
+          const eventName = ev.event_name || ev.event_type || ord.event_type || `Event ${evIdx + 1}`;
+          const eventDate = ev.event_date || ord.event_date || '';
+
+          // Filter assigned staff strictly matching this specific event ID
+          const members = staffDetails.filter(sd => {
+            if (sd.event_id) {
+              return (
+                sd.event_id === evId ||
+                (ev.id && sd.event_id === String(ev.id)) ||
+                (ev.event_id && sd.event_id === String(ev.event_id)) ||
+                sd.event_id === `ev_${evIdx}` ||
+                (resolvedEvents.length === 1)
+              );
+            }
+            if (resolvedEvents.length === 1) return true;
+            return false;
+          });
+
+          return {
+            eventId: evId,
+            eventName,
+            eventDate,
+            rawEvent: ev,
+            members
+          };
+        });
 
         return createPortal(
           <div 
@@ -4969,114 +5179,115 @@ export const OperationsLeads: React.FC = () => {
                           )}
                         </div>
 
-                        <div className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-900/60 mt-2">
-                          <table className="w-full text-left border-collapse min-w-max">
-                            <thead>
-                              <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
-                                <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>
-                                <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Assigned Task</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Task Status</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment Status</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Event Images</th>
-                                <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Raw Footage</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-zinc-800/60 text-xs">
-                              {members.map((member, mIdx) => {
-                                const saRecord = staffAssignments?.find(sa => sa.assignment_id === member.assignment_id);
-                                const normStaffName = (member.staff_name || '').trim().toLowerCase();
-                                const normEvName = (group.eventName || '').trim().toLowerCase();
-                                const memberEvId = member.event_id;
+                        {members.length === 0 ? (
+                          <div className="text-center py-6 text-zinc-500 italic text-xs font-mono">
+                            No staff assigned for this event yet.
+                          </div>
+                        ) : (
+                          <div className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-900/60 mt-2">
+                            <table className="w-full text-left border-collapse min-w-max">
+                              <thead>
+                                <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+                                  <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Staff Name</th>
+                                  <th className="py-2.5 px-3.5 font-bold whitespace-nowrap">Assigned Task</th>
+                                  <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Task Status</th>
+                                  <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment</th>
+                                  <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Equipment Status</th>
+                                  <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Event Images</th>
+                                  <th className="py-2.5 px-3.5 font-bold text-center whitespace-nowrap">Raw Footage</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-zinc-800/60 text-xs">
+                                {members.map((member, mIdx) => {
+                                  const saRecord = staffAssignments?.find(sa => sa.assignment_id === member.assignment_id);
+                                  const normStaffName = (member.staff_name || '').trim().toLowerCase();
+                                  const normEvName = (group.eventName || '').trim().toLowerCase();
+                                  const memberEvId = group.eventId;
 
-                                const rowEqKey = `${ord.order_id}-${memberEvId || 'gen'}-${member.staff_name}-${mIdx}`;
-                                const isEqOpen = openEquipmentDropdownKey === rowEqKey;
+                                  const rowEqKey = `${ord.order_id}-${memberEvId}-${member.staff_name}-${mIdx}`;
+                                  const isEqOpen = openEquipmentDropdownKey === rowEqKey;
 
-                                const getRecordForStage = (stages: string[], equipName?: string) => {
-                                  if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
-                                  const matches = leadEquipmentHistory.filter(h => {
-                                    if (h.order_id && h.order_id !== ord.order_id && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
-                                    if (!h.order_id && h.lead_id && ord.lead_id && h.lead_id !== ord.lead_id) return false;
-                                    
-                                    let parsed: any = {};
-                                    if (h.remarks) {
-                                      try { parsed = JSON.parse(h.remarks); } catch(e) {}
-                                    }
+                                  const getRecordForStage = (stages: string[], equipName?: string) => {
+                                    if (!leadEquipmentHistory || leadEquipmentHistory.length === 0) return null;
+                                    const matches = leadEquipmentHistory.filter(h => {
+                                      if (h.order_id && h.order_id !== ord.order_id && (!ord.lead_id || h.lead_id !== ord.lead_id)) return false;
+                                      if (!h.order_id && h.lead_id && ord.lead_id && h.lead_id !== ord.lead_id) return false;
+                                      
+                                      let parsed: any = {};
+                                      if (h.remarks) {
+                                        try { parsed = JSON.parse(h.remarks); } catch(e) {}
+                                      }
 
-                                    const hAssignmentId = h.assignment_id || parsed.assignment_id;
-                                    if (member.assignment_id) {
-                                      if (hAssignmentId && member.assignment_id !== hAssignmentId) return false;
-                                      if (!hAssignmentId) {
+                                      const hAssignmentId = h.assignment_id || parsed.assignment_id;
+                                      if (member.assignment_id && hAssignmentId) {
+                                        if (member.assignment_id !== hAssignmentId) return false;
+                                      } else {
                                         const hEventId = parsed.event_id || h.event_id;
-                                        if (memberEvId && memberEvId !== 'gen' && hEventId && hEventId !== 'gen' && hEventId !== memberEvId) return false;
-                                        if (!hEventId && memberEvId) return false; // Must have matching event if strict
+                                        if (memberEvId && memberEvId !== 'gen' && hEventId && hEventId !== 'gen' && hEventId !== memberEvId && hEventId !== `ev_${evIdx}`) return false;
                                         const hRole = parsed.staff_role || h.staff_role;
                                         if (hRole && member.staff_role && hRole.trim().toLowerCase() !== member.staff_role.trim().toLowerCase()) return false;
                                       }
-                                    }
 
-                                    const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
-                                    if (!retBy || !normStaffName || (retBy !== normStaffName && !normStaffName.includes(retBy) && !retBy.includes(normStaffName))) {
-                                      return false;
-                                    }
-
-                                    const hEventId = parsed.event_id || h.event_id;
-                                    const hEventName = parsed.event_name || h.event_name;
-                                    const hProofType = (parsed.proof_type || h.proof_type || '').toLowerCase().trim();
-                                    const eqName = (h.equipment_name || '').toLowerCase().trim();
-                                    const eqStatus = (h.equipment_status || '').toLowerCase().trim();
-                                    
-                                    const isSearchingReceived = stages.some(s => s.toLowerCase().includes('received') || s.toLowerCase().includes('asset collection'));
-                                    const isSearchingHandover = stages.some(s => s.toLowerCase().includes('handover') || s.toLowerCase().includes('return'));
-                                    const isSearchingStart = stages.some(s => s.toLowerCase().includes('start'));
-                                    const isSearchingEnd = stages.some(s => s.toLowerCase().includes('complete') || s.toLowerCase().includes('end'));
-
-                                    const isRecordHandover = eqName.includes('handover') || eqName.includes('asset return') || eqStatus.includes('handover') || eqStatus.includes('return') || hProofType.includes('handover') || hProofType.includes('return');
-                                    const isRecordReceived = eqName.includes('asset collection') || eqName.includes('equipment received') || eqStatus.includes('asset collected') || eqStatus.includes('received') || hProofType.includes('asset collection') || hProofType.includes('received');
-                                    const isRecordStart = eqName.includes('event start') || eqStatus.includes('event start') || hProofType.includes('event start');
-                                    const isRecordEnd = eqName.includes('event completion') || eqName.includes('event end') || eqStatus.includes('event complete') || eqStatus.includes('event ended') || hProofType.includes('event end') || hProofType.includes('event complete');
-
-                                    if (isSearchingReceived && (isRecordHandover || isRecordEnd || isRecordStart)) return false;
-                                    if (isSearchingHandover && (isRecordReceived || isRecordStart || isRecordEnd)) return false;
-                                    if (isSearchingStart && (isRecordHandover || isRecordEnd || isRecordReceived)) return false;
-                                    if (isSearchingEnd && (isRecordReceived || isRecordStart || isRecordHandover)) return false;
-                                    
-                                    // Match event Id strictly if both exist and neither is 'gen'
-                                    if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId) {
-                                      if (!normEvName || !hEventName || (hEventName.trim().toLowerCase() !== normEvName && normEvName !== 'general event' && hEventName.trim().toLowerCase() !== 'general event')) {
+                                      const retBy = (h.returned_by || parsed.staff_name || parsed.uploaded_by || '').trim().toLowerCase();
+                                      if (!retBy || !normStaffName || (retBy !== normStaffName && !normStaffName.includes(retBy) && !retBy.includes(normStaffName))) {
                                         return false;
                                       }
-                                    }
 
-                                    if (equipName && eqName.includes(equipName.toLowerCase())) {
-                                      return true; 
-                                    }
+                                      const hEventId = parsed.event_id || h.event_id;
+                                      const hEventName = parsed.event_name || h.event_name;
+                                      const hProofType = (parsed.proof_type || h.proof_type || '').toLowerCase().trim();
+                                      const eqName = (h.equipment_name || '').toLowerCase().trim();
+                                      const eqStatus = (h.equipment_status || '').toLowerCase().trim();
+                                      
+                                      const isSearchingReceived = stages.some(s => s.toLowerCase().includes('received') || s.toLowerCase().includes('asset collection'));
+                                      const isSearchingHandover = stages.some(s => s.toLowerCase().includes('handover') || s.toLowerCase().includes('return'));
+                                      const isSearchingStart = stages.some(s => s.toLowerCase().includes('start'));
+                                      const isSearchingEnd = stages.some(s => s.toLowerCase().includes('complete') || s.toLowerCase().includes('end'));
 
-                                    const stageMatch = stages.some(s => {
-                                      const sNorm = s.toLowerCase();
-                                      return eqStatus === sNorm || eqStatus.includes(sNorm) || eqName.includes(sNorm) || hProofType.includes(sNorm);
+                                      const isRecordHandover = eqName.includes('handover') || eqName.includes('asset return') || eqStatus.includes('handover') || eqStatus.includes('return') || hProofType.includes('handover') || hProofType.includes('return');
+                                      const isRecordReceived = eqName.includes('asset collection') || eqName.includes('equipment received') || eqStatus.includes('asset collected') || eqStatus.includes('received') || hProofType.includes('asset collection') || hProofType.includes('received');
+                                      const isRecordStart = eqName.includes('event start') || eqStatus.includes('event start') || hProofType.includes('event start');
+                                      const isRecordEnd = eqName.includes('event completion') || eqName.includes('event end') || eqStatus.includes('event complete') || eqStatus.includes('event ended') || hProofType.includes('event end') || hProofType.includes('event complete');
+
+                                      if (isSearchingReceived && (isRecordHandover || isRecordEnd || isRecordStart)) return false;
+                                      if (isSearchingHandover && (isRecordReceived || isRecordStart || isRecordEnd)) return false;
+                                      if (isSearchingStart && (isRecordHandover || isRecordEnd || isRecordReceived)) return false;
+                                      if (isSearchingEnd && (isRecordReceived || isRecordStart || isRecordHandover)) return false;
+                                      
+                                      // Match event Id strictly if both exist and neither is 'gen'
+                                      if (memberEvId && hEventId && memberEvId !== 'gen' && hEventId !== 'gen' && hEventId !== memberEvId && hEventId !== `ev_${evIdx}`) {
+                                        return false;
+                                      }
+
+                                      if (equipName && eqName.includes(equipName.toLowerCase())) {
+                                        return true; 
+                                      }
+
+                                      const stageMatch = stages.some(s => {
+                                        const sNorm = s.toLowerCase();
+                                        return eqStatus === sNorm || eqStatus.includes(sNorm) || eqName.includes(sNorm) || hProofType.includes(sNorm);
+                                      });
+
+                                      return stageMatch;
                                     });
 
-                                    return stageMatch;
-                                  });
+                                    if (matches.length === 0) return null;
+                                    // Prioritize record with uploaded photo
+                                    const withPhoto = matches.find(m => {
+                                      const meta = getRecordMeta(m);
+                                      return !!meta.url;
+                                    });
+                                    return withPhoto || matches[0];
+                                  };
 
-                                  if (matches.length === 0) return null;
-                                  // Prioritize record with uploaded photo
-                                  const withPhoto = matches.find(m => {
-                                    const meta = getRecordMeta(m);
-                                    return !!meta.url;
-                                  });
-                                  return withPhoto || matches[0];
-                                };
+                                  const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof', 'Asset Collection', 'Received', 'Equipment Received / Asset Picture'], 'Asset Collection');
+                                  const evStart = getRecordForStage(['Event Start', 'Event Started', 'Event Start Photo Proof'], 'Event Start');
+                                  const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof', 'Event End Photo Proof'], 'Event End');
+                                  const eqHandover = getRecordForStage(['Equipment Handover', 'Equipment Handover Photo Proof', 'Equipment Handover Completed', 'Footage Handover', 'Asset Return Photo Proof', 'Handover', 'Returned'], 'Equipment Handover');
 
-                                const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof', 'Asset Collection', 'Received', 'Equipment Received / Asset Picture'], 'Asset Collection');
-                                const evStart = getRecordForStage(['Event Start', 'Event Started', 'Event Start Photo Proof'], 'Event Start');
-                                const evEnd = getRecordForStage(['Event Complete', 'Event Completed', 'Event End', 'Event Ended', 'Event Completion Photo Proof', 'Event End Photo Proof'], 'Event End');
-                                const eqHandover = getRecordForStage(['Equipment Handover', 'Equipment Handover Photo Proof', 'Equipment Handover Completed', 'Footage Handover', 'Asset Return Photo Proof', 'Handover', 'Returned'], 'Equipment Handover');
-
-                                // 1. Real-time individual staff status for this event (Event Workflow)
-                                const rawTaskStatus = getStaffTaskStatus(ord.order_id, memberEvId, evIdx, member.staff_name, ord);
-                                const staffStatusText = rawTaskStatus && rawTaskStatus !== 'Pending' ? rawTaskStatus : 'Assigned Crew';
+                                  // 1. Real-time individual staff status for this event (Event Workflow)
+                                  const rawTaskStatus = getStaffTaskStatus(ord.order_id, memberEvId, evIdx, member.staff_name, ord, member.assignment_id, member.staff_role);
+                                  const staffStatusText = rawTaskStatus && rawTaskStatus !== 'Pending' ? rawTaskStatus : 'Assigned Crew';
 
                                 let statusBadge = (
                                   <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold text-[11px]">
@@ -5114,8 +5325,7 @@ export const OperationsLeads: React.FC = () => {
                                 effectiveAssignedEq = effectiveAssignedEq.filter(item => item && item.trim() && item.trim().toLowerCase() !== 'none' && item.trim().toLowerCase() !== 'not assigned' && item.trim().toLowerCase() !== 'null' && item.trim().toLowerCase() !== 'undefined');
 
                                 if (effectiveAssignedEq.length === 0 && member.staff_name && ord) {
-                                  const evMatch = ordLead?.events?.find((e: any) => e.id === member.event_id || (e.event_name || e.event_type) === member.event_name);
-                                  effectiveAssignedEq = resolveStaffEquipment(member.staff_name, ord, member, evMatch, mIdx);
+                                  effectiveAssignedEq = resolveStaffEquipment(member.staff_name, ord, member, group.rawEvent, mIdx);
                                 }
 
                                 const hasEqAssigned = effectiveAssignedEq.length > 0;
@@ -5229,7 +5439,7 @@ export const OperationsLeads: React.FC = () => {
                                 const verificationStatus = rfVerification?.equipment_status || 'Pending Verification';
 
                                 return (
-                                  <tr key={mIdx} className="hover:bg-zinc-800/30 transition-colors">
+                                  <tr key={member.assignment_id || `${group.eventId}_${member.staff_name}_${mIdx}`} className="hover:bg-zinc-800/30 transition-colors">
                                     {/* 1. Staff Name */}
                                     <td className="py-3 px-3.5 font-bold text-white font-sans whitespace-nowrap">
                                       {member.staff_name}
@@ -5325,6 +5535,7 @@ export const OperationsLeads: React.FC = () => {
                             </tbody>
                           </table>
                         </div>
+                        )}
                       </div>
                     );
                   })

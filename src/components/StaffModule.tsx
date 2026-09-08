@@ -1222,9 +1222,7 @@ export const StaffModule: React.FC = () => {
           coordinator: op?.operations_coordinator || 'Unassigned',
           createdAt: lead?.created_at || order?.created_at || (ev as any)?.created_at || sa.created_at || '',
           equipmentReceivedTime: sa.equipment_received_time || (sa as any).equipment_received_time || null,
-          equipmentHandoverTime: sa.equipment_handover_time || (sa as any).equipment_handover_time || null,
-          eventStartTime: sa.event_start_time || (sa as any).event_start_time || null,
-          eventEndTime: sa.event_end_time || (sa as any).event_end_time || null
+          equipmentHandoverTime: sa.equipment_handover_time || (sa as any).equipment_handover_time || null
         });
         processedAssignmentIds.add(assignmentId);
         processedUniqueKeys.add(uniqueKey);
@@ -1335,9 +1333,7 @@ export const StaffModule: React.FC = () => {
                 coordinator: op?.operations_coordinator || 'Unassigned',
                 createdAt: lead.created_at || order?.created_at || (ev as any)?.created_at || '',
                 equipmentReceivedTime: sa ? (sa.equipment_received_time || (sa as any).equipment_received_time || null) : null,
-                equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null,
-                eventStartTime: sa ? (sa.event_start_time || (sa as any).event_start_time || null) : null,
-                eventEndTime: sa ? (sa.event_end_time || (sa as any).event_end_time || null) : null
+                equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null
               });
               processedUniqueKeys.add(uniqueKey);
               if (assignmentId) processedAssignmentIds.add(assignmentId);
@@ -1435,9 +1431,7 @@ export const StaffModule: React.FC = () => {
               coordinator: op?.operations_coordinator || 'Unassigned',
               createdAt: lead.created_at || order?.created_at || '',
               equipmentReceivedTime: sa ? (sa.equipment_received_time || (sa as any).equipment_received_time || null) : null,
-              equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null,
-              eventStartTime: sa ? (sa.event_start_time || (sa as any).event_start_time || null) : null,
-              eventEndTime: sa ? (sa.event_end_time || (sa as any).event_end_time || null) : null
+              equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null
             });
             processedUniqueKeys.add(uniqueKey);
             if (assignmentId) processedAssignmentIds.add(assignmentId);
