@@ -231,7 +231,16 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
 
     const prodAll = unifiedPipeline.filter(i => i.hasEnteredProd);
     const prodNew = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('raw') || (i.prod_status || '').toLowerCase().includes('new') || i.prod_status === 'Not Started');
-    const prodInProgress = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('progress') || (i.prod_status || '').toLowerCase().includes('started') || (i.prod_status || '').toLowerCase().includes('editing'));
+    const prodInProgress = prodAll.filter(i => {
+      const editingStatus = (i.editing_status || '').toLowerCase().trim();
+      const prodStatus = (i.prod_status || '').toLowerCase().trim();
+      return (
+        editingStatus === 'editing started' ||
+        editingStatus === 'customer review' ||
+        prodStatus === 'editing started' ||
+        prodStatus === 'customer review'
+      );
+    });
     const prodEditingCompleted = prodAll.filter(i => (i.prod_status || '').toLowerCase().includes('complete') || (i.prod_status || '').toLowerCase().includes('proof'));
     const prodClientAcceptance = unifiedPipeline.filter(i => i.hasEnteredAcceptance);
 

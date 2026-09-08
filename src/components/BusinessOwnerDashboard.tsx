@@ -884,7 +884,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     today.setHours(0, 0, 0, 0);
 
     const isCompletedProject = (item: any) => {
-      const st = (item.prod_status || '').toLowerCase().trim();
+      const st = (item.production_status || item.prod_status || '').toLowerCase().trim();
       return (
         st.includes('completed') ||
         st.includes('delivered') ||
@@ -909,14 +909,17 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
     const isInProgressProject = (item: any) => {
       if (isCompletedProject(item)) return false;
-      const st = (item.prod_status || '').toLowerCase().trim();
+      const editingStatus = (item.editing_status || '').toLowerCase().trim();
+      const prodStatus = (item.production_status || item.prod_status || '').toLowerCase().trim();
+      
+      // The user specified:
+      // - Editing Started
+      // - Customer Review
       return (
-        st.includes('progress') ||
-        st.includes('started') ||
-        st.includes('editing') ||
-        st.includes('review') ||
-        st.includes('revision') ||
-        st.includes('qc')
+        editingStatus === 'editing started' ||
+        editingStatus === 'customer review' ||
+        prodStatus === 'editing started' ||
+        prodStatus === 'customer review'
       );
     };
 

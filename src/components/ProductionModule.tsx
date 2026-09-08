@@ -11767,7 +11767,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             />
                             <div className="space-y-0.5">
                               <span className="text-xs font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors block">
-                                5. Validate Edited Files Uploaded to Server
+                                Validate Edited Files Uploaded to Server
                               </span>
                               <span className="text-[11px] text-zinc-400 leading-normal block">
                                 Validate and verify that the Editor has uploaded all edited files/folders to the server for each event.
@@ -11933,9 +11933,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         setClientAcceptanceProd(null);
                         setCaUploadConfirmations({});
                       }}
-                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer"
+                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer border border-zinc-800"
                     >
-                      Cancel
+                      CANCEL
                     </button>
                     <button
                       type="button"
@@ -11967,14 +11967,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       }}
                       className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 border border-zinc-700"
                     >
-                      {isSavingProgress ? 'Saving...' : 'Save'}
+                      {isSavingProgress ? 'SAVING...' : 'SAVE'}
                     </button>
                     <button
                       type="submit"
                       disabled={isSaving || isSavingProgress || caUploadingProof}
-                      className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                     >
-                      <span>✓</span> {isSaving ? 'Submitting...' : 'CLIENT APPROVED'}
+                      {isSaving ? 'SUBMITTING...' : '✓ CLIENT APPROVED'}
                     </button>
                   </div>
                 </form>

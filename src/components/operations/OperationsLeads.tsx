@@ -1408,36 +1408,109 @@ export const OperationsLeads: React.FC = () => {
       const includedRoles = getEventRolesForEvent(ev, evIdx, teamMembersConfig, totalEvents);
 
       if (evOrderAssignments.length > 0) {
-        evOrderAssignments.forEach((sa, saIdx) => {
-          const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
-          const staffTaskStatus = getStaffTaskStatus(ord.order_id, evId, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
-          const saEq = resolveStaffEquipment(sa.staff_name, ord, sa, ev, saIdx);
+        const taskSlotRoles: { roleName: string; slotNumber: number; taskId: string; assignId: string }[] = [];
+        includedRoles.forEach((roleStr: string) => {
+          const { qty, text } = parseQtyAndText(roleStr);
+          const roleName = (text || roleStr).trim();
+          const targetQty = qty || 1;
+          for (let q = 1; q <= targetQty; q++) {
+            taskSlotRoles.push({
+              roleName,
+              slotNumber: q,
+              taskId: generateDeterministicTaskId(ord.order_id, evId, roleName, q),
+              assignId: generateDeterministicAssignmentId(ord.order_id, evId, roleName, q)
+            });
+          }
+        });
 
-          const rawRole = sa.staff_role || st?.role || 'Staff';
-          const parsedRole = parseQtyAndText(rawRole);
-          const roleClean = (parsedRole.text || rawRole).trim();
+        const usedSaIds = new Set<string>();
 
-          staffDetailsList.push({
-            staff_name: sa.staff_name,
-            staff_role: roleClean,
-            assigned_task: roleClean,
-            staff_type: sa.staff_type || st?.staff_type || 'In-House',
-            mobile: sa.mobile || st?.mobile || '',
-            event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
-            event_id: evId,
-            assignment_id: sa.assignment_id,
-            task_id: sa.task_id,
-            staff_id: sa.staff_id,
-            slot_number: sa.slot_number,
-            event_date: ev.event_date || ord.event_date || '',
-            reporting_date: ev.reporting_date || lead?.Reporting_date || ev.event_date || ord.event_date || '',
-            reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
-            status: isStaffBusyOnDate(sa.staff_name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
-            staff_status: staffTaskStatus,
-            google_maps_link: ev.google_maps_link || lead?.google_maps_link || '',
-            assigned_equipment: saEq,
-            event_time: ev.event_start_time || ord.event_time || ''
+        // 1. Match each sales slot to an assignment
+        taskSlotRoles.forEach(slot => {
+          let matchedSa = evOrderAssignments.find(sa => {
+            const saId = sa.assignment_id || sa.id;
+            if (usedSaIds.has(saId)) return false;
+            return (
+              sa.task_id === slot.taskId ||
+              sa.assignment_id === slot.assignId ||
+              ((sa.staff_role || '').trim().toLowerCase() === slot.roleName.toLowerCase() && Number(sa.slot_number || 1) === slot.slotNumber)
+            );
           });
+
+          if (!matchedSa && slot.slotNumber === 1) {
+            matchedSa = evOrderAssignments.find(sa => {
+              const saId = sa.assignment_id || sa.id;
+              if (usedSaIds.has(saId)) return false;
+              return (
+                (sa.staff_role || '').trim().toLowerCase() === slot.roleName.toLowerCase() &&
+                (sa.slot_number === undefined || sa.slot_number === null || Number(sa.slot_number) === 1)
+              );
+            });
+          }
+
+          if (matchedSa) {
+            usedSaIds.add(matchedSa.assignment_id || matchedSa.id);
+            const st = staff?.find(s => s.name?.toLowerCase() === matchedSa!.staff_name?.toLowerCase() || s.staff_id === matchedSa!.staff_id);
+            const staffTaskStatus = getStaffTaskStatus(ord.order_id, evId, evIdx, matchedSa.staff_name, ord, matchedSa.assignment_id, slot.roleName);
+            const saEq = resolveStaffEquipment(matchedSa.staff_name, ord, matchedSa, ev, 0);
+
+            staffDetailsList.push({
+              staff_name: matchedSa.staff_name,
+              staff_role: slot.roleName,
+              assigned_task: slot.roleName,
+              staff_type: matchedSa.staff_type || st?.staff_type || 'In-House',
+              mobile: matchedSa.mobile || st?.mobile || '',
+              event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
+              event_id: evId,
+              assignment_id: matchedSa.assignment_id,
+              task_id: matchedSa.task_id,
+              staff_id: matchedSa.staff_id,
+              slot_number: matchedSa.slot_number,
+              event_date: ev.event_date || ord.event_date || '',
+              reporting_date: ev.reporting_date || lead?.Reporting_date || ev.event_date || ord.event_date || '',
+              reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
+              status: isStaffBusyOnDate(matchedSa.staff_name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+              staff_status: staffTaskStatus,
+              google_maps_link: ev.google_maps_link || lead?.google_maps_link || '',
+              assigned_equipment: saEq,
+              event_time: ev.event_start_time || ord.event_time || ''
+            });
+          }
+        });
+
+        // 2. Add any remaining UNMAPPED assignments
+        evOrderAssignments.forEach((sa, saIdx) => {
+          const saId = sa.assignment_id || sa.id;
+          if (!usedSaIds.has(saId)) {
+            const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
+            const rawRole = sa.staff_role || st?.role || 'Staff';
+            const parsedRole = parseQtyAndText(rawRole);
+            const roleClean = (parsedRole.text || rawRole).trim();
+            const staffTaskStatus = getStaffTaskStatus(ord.order_id, evId, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
+            const saEq = resolveStaffEquipment(sa.staff_name, ord, sa, ev, saIdx);
+
+            staffDetailsList.push({
+              staff_name: sa.staff_name,
+              staff_role: roleClean,
+              assigned_task: roleClean,
+              staff_type: sa.staff_type || st?.staff_type || 'In-House',
+              mobile: sa.mobile || st?.mobile || '',
+              event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
+              event_id: evId,
+              assignment_id: sa.assignment_id,
+              task_id: sa.task_id,
+              staff_id: sa.staff_id,
+              slot_number: sa.slot_number,
+              event_date: ev.event_date || ord.event_date || '',
+              reporting_date: ev.reporting_date || lead?.Reporting_date || ev.event_date || ord.event_date || '',
+              reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
+              status: isStaffBusyOnDate(sa.staff_name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
+              staff_status: staffTaskStatus,
+              google_maps_link: ev.google_maps_link || lead?.google_maps_link || '',
+              assigned_equipment: saEq,
+              event_time: ev.event_start_time || ord.event_time || ''
+            });
+          }
         });
       } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
         const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);

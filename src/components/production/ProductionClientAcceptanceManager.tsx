@@ -233,7 +233,15 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ project_id: activeProd.production_id })
         });
-        const data = await res.json();
+        
+        let data: any;
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          data = await res.json();
+        } else {
+          const text = await res.text();
+          throw new Error(`Server returned unexpected response (${res.status}): ${text.substring(0, 50).replace(/<[^>]*>?/gm, '')}`);
+        }
 
         if (!res.ok || !data.isValid) {
           setChecklist(prev => ({ ...prev, [key]: false }));
@@ -353,7 +361,15 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_id: activeProd.production_id })
       });
-      const valData = await valRes.json();
+      
+      let valData: any;
+      const contentType = valRes.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        valData = await valRes.json();
+      } else {
+        const text = await valRes.text();
+        throw new Error(`Server returned unexpected response (${valRes.status}): ${text.substring(0, 50).replace(/<[^>]*>?/gm, '')}`);
+      }
 
       if (!valRes.ok || !valData.isValid) {
         setIsSaving(false);
@@ -535,7 +551,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
              onClick={() => setActiveProdId(null)}
              className="py-3 px-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-colors cursor-pointer border border-zinc-800"
            >
-             Cancel
+             CANCEL
            </button>
 
            <button
@@ -550,7 +566,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
              ) : saveProgressSuccess ? (
                <><span>✓</span> SAVED</>
              ) : (
-               <><span>💾</span> SAVE</>
+               <>SAVE</>
              )}
            </button>
 

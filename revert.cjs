@@ -1,8 +1,10 @@
 const fs = require('fs');
-let code = fs.readFileSync('src/components/SalesModule.tsx', 'utf8');
+let content = fs.readFileSync('src/components/sales/useSalesDashboardState.tsx', 'utf8');
 
-code = code.replace(/if \(insErr\) throw insErr;\s*\}\s*\}\)\);/g, `if (insErr) throw insErr;
-                 }
-               }`);
+content = content.replace(/const \[Number\(finalPackageAmount\) \|\| 0,/g, "const [finalPackageAmount,");
+content = content.replace(/const \[Number\(advanceReceived\) \|\| 0,/g, "const [advanceReceived,");
 
-fs.writeFileSync('src/components/SalesModule.tsx', code);
+// Wait, I replaced `finalPackageAmount,` globally!
+// Let's just fix the specific syntax errors.
+
+fs.writeFileSync('src/components/sales/useSalesDashboardState.tsx', content);
