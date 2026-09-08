@@ -138,6 +138,13 @@ export function sanitizeSlug(str: string): string {
     .replace(/^_+|_+$/g, '') || 'role';
 }
 
+
+export function getEventRolePadding(eventIndex: number, slotNumber: number): string {
+  // Use ZERO WIDTH NO-BREAK SPACE (\uFEFF) which is completely invisible
+  // and is natively stripped by String.prototype.trim()
+  return '\uFEFF'.repeat((Math.max(0, eventIndex) * 5) + (slotNumber || 1));
+}
+
 export function generateDeterministicTaskId(orderId: string, eventId: string, roleName: string, slotNumber: number): string {
   const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 15);
   const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 10);
@@ -502,7 +509,7 @@ export function buildInitialEventAllocations(params: {
         event_date: eventDate,
         reporting_date: reportingDate,
         reporting_time: reportingTime,
-      staff_role: req.slotNumber > 1 ? req.roleName + '\u00A0'.repeat(req.slotNumber - 1) : req.roleName,
+      staff_role: req.roleName.trim() + getEventRolePadding(evIdx, req.slotNumber),
         slot_number: req.slotNumber,
         staff_id: matchedSa?.staff_id || st?.staff_id || (assignedStaffName ? 'STF-0000' : ''),
         staff_name: assignedStaffName,
@@ -1324,6 +1331,7 @@ export interface ExecuteSaveAssignmentsParams {
   targetStage?: string;
   metaPayload?: {
     updatedEvents?: any[];
+    allOrderEvents?: any[];
     equipmentKit?: string;
     reportingTime?: string;
     eventDate?: string;
@@ -1393,6 +1401,14 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
   const finalAssignmentsForState: any[] = [];
   const matchedDbAssignmentIds = new Set<string>();
 
+  // Extract a deterministic array of all unique event IDs in this order to generate safe paddings
+  const allKnownEvents = Array.from(new Set([
+    ...assignments.map(a => a.event_id),
+    ...existingDbAssignments.map(ed => ed.event_id),
+    ...(metaPayload?.allOrderEvents?.map((e: any) => e.id) || []),
+    ...(metaPayload?.updatedEvents?.map((e: any) => e.id) || [])
+  ].filter(Boolean))).sort();
+
   // 2. Process each submitted assignment slot
   for (const a of assignments) {
     const aStaffNameTrimmed = (a.staff_name || '').trim();
@@ -1460,7 +1476,7 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
       lead_id: safeLeadId,
       event_id: safeEventId,
       event_name: a.event_name || null,
-      staff_role: slotNumber > 1 ? roleName + '\u00A0'.repeat(slotNumber - 1) : roleName,
+      staff_role: roleName.trim() + getEventRolePadding(Math.max(0, allKnownEvents.indexOf(safeEventId || '')), slotNumber),
       slot_number: slotNumber,
       staff_id: safeStaffId,
       staff_name: aStaffNameTrimmed,

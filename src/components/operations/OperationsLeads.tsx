@@ -39,7 +39,7 @@ import { supabaseClient } from '../../supabaseClient';
 import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
 import { 
   buildInitialEventAllocations, 
-  generateDeterministicAssignmentId,
+  generateDeterministicAssignmentId, getEventRolePadding,
   generateDeterministicTaskId,
   getEquipmentVerificationData, 
   getEventImagesData, 
@@ -2150,7 +2150,8 @@ export const OperationsLeads: React.FC = () => {
           alloc.staff.forEach((st: any, stIdx: number) => {
             if (st.staff_name && st.staff_name.trim() !== '') {
                const stSlotNum = Number(st.slot_number || (stIdx + 1));
-               const stRole = st.staff_role || 'Staff';
+               const evIdx = parentLeadInstance?.events?.findIndex((e: any) => e.id === evId) || 0;
+               const stRole = (st.staff_role || 'Staff').trim() + getEventRolePadding(evIdx, stSlotNum);
                const stAssignId = st.assignment_id || (st.id && !st.id.startsWith('slot_') ? st.id : generateDeterministicAssignmentId(assigningOrderId, evId, stRole, stSlotNum));
                const stTaskId = st.task_id || generateDeterministicTaskId(assigningOrderId, evId, stRole, stSlotNum);
                allAssignedStaff.push({

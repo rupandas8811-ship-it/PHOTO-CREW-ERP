@@ -1986,7 +1986,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                   budget: Number(cleanCost),
                   notes: data?.notes_special_customizations ?? prev.notes,
                   selected_package_id: finalPkg,
-                  selected_package_id: finalPkg,
                 };
               });
             }
@@ -2066,8 +2065,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           status: dbLead.status || dbLead.current_status || prev.status,
           budget: dbLead.budget ?? prev.budget ?? 0,
           package_price: dbLead.package_price ?? prev.package_price ?? 0,
-          selected_package_id: prev.Select_Package_Option || prev.selected_package_id || dbLead.Select_Package_Option || '',
-          selected_package_id: prev.selected_package_id || prev.Select_Package_Option || dbLead.Select_Package_Option || '',
+          selected_package_id: prev.selected_package_id || dbLead.Select_Package_Option || '',
         }));
 
         // Keep selectedLead object in sync with fresh database values
@@ -3942,7 +3940,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       event_shoot_type: evShootType,
       // Step 3
       selected_package_id: matchedPkgId || 'Custom Package',
-      selected_package_id: matchedPkgId || 'Custom Package',
       package_cost: cleanPkgPrice || '',
       package_price: cleanPkgPrice || '',
       deliverables: typeof rawDelData === 'string' ? rawDelData : JSON.stringify(rawDelData || ''),
@@ -4015,7 +4012,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: customPkgVal,
-        selected_package_id: customPkgVal,
         package_name: 'Custom Package',
         package_cost: 0,
         package_price: 0,
@@ -4058,7 +4054,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       const pkgPrice = Number(pkg.price) || 0;
       setWizardLeadData((prev) => ({
         ...prev,
-        selected_package_id: pkgIdStr,
         selected_package_id: pkgIdStr,
         package_name: pkg.package_name,
         package_cost: pkgPrice,
@@ -4108,7 +4103,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
-        selected_package_id: targetPkgId,
         selected_package_id: targetPkgId,
       }));
       if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
@@ -4451,7 +4445,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         deliverables_description: deliverablesText,
         package_price: cleanPkgCost ?? prev.package_price,
         selected_package_id: pkgId,
-        selected_package_id: pkgId
       }));
 
       // Update the local selectedLead state so that the UI reflects it
@@ -4771,7 +4764,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           team_members: safeTeamMembersText,
           package_price: cleanPkgCost ?? prev.package_price,
           selected_package_id: pkgId,
-          selected_package_id: pkgId,
           final_amount: cleanFinalAmt
         }));
 
@@ -5048,7 +5040,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
         if (selectedPkgIds.length === 0) {
           setSelectedPkgIds(['Custom Package']);
-          setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', selected_package_id: 'Custom Package' }));
+          setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package' }));
         }
         setWizardStep(3);
       } else {
@@ -5288,7 +5280,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       if (isCreateFlow) {
         setSalesStatus(targetStatus as CurrentStage);
         setSelectedPkgIds(['Custom Package']);
-        setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package', selected_package_id: 'Custom Package' }));
+        setWizardLeadData(prev => ({ ...prev, selected_package_id: 'Custom Package' }));
         setWizardStep(3);
       } else {
         const newCompleted = Math.max(crmHighestStep, 2);
