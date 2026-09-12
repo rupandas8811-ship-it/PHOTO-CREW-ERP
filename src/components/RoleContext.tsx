@@ -6989,6 +6989,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           let nextEditingStatus: EditingStatus | undefined = undefined;
           
           const terminalStatuses = ['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'];
+          const tgtOrder = augmentedOrders.find(o => o.order_id === (prodObj as any)?.order_id || o.order_id === prodObj?.tracking_id || o.lead_id === prodObj?.tracking_id);
+          const tgtLead = leads.find(l => l.lead_id === (prodObj as any)?.lead_id || l.lead_id === prodObj?.tracking_id);
+          if (tgtOrder && terminalStatuses.includes(tgtOrder.current_stage)) baseStatus = 'Order Closed';
+          if (tgtLead && terminalStatuses.includes(tgtLead.status)) baseStatus = 'Order Closed';
           const isTerminal = (prodObj as any)?.current_status === 'Client Acceptance' ||
                              (prodObj as any)?.production_status === 'Client Acceptance' ||
                              prodObj?.editing_status === 'Client Acceptance' ||

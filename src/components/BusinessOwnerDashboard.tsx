@@ -1437,25 +1437,29 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         const { error: errOrd } = await supabaseClient
           .from('orders')
           .update({ current_stage: 'Order Closed', updated_by: userName, updated_at: timestamp })
-          .or(`order_id.eq.${order.order_id},lead_id.eq.${order.lead_id || order.order_id}`);
+          .eq('order_id', order.order_id);
         if (errOrd) throw new Error("Orders update error: " + errOrd.message);
 
-        const { error: errLead } = await supabaseClient
-          .from('leads')
-          .update({ status: 'Order Closed', current_status: 'Order Closed', updated_by: userName, updated_at: timestamp })
-          .or(`lead_id.eq.${order.lead_id || order.order_id},lead_id.eq.${order.order_id}`);
-        if (errLead) throw new Error("Leads update error: " + errLead.message);
+        const targetLeadId = order.lead_id || order.order_id;
+        if (targetLeadId) {
+          const { error: errLead } = await supabaseClient
+            .from('leads')
+            .update({ status: 'Order Closed', current_status: 'Order Closed', updated_by: userName, updated_at: timestamp })
+            .eq('lead_id', targetLeadId);
+          if (errLead) throw new Error("Leads update error: " + errLead.message);
+        }
 
         const { error: errProd } = await supabaseClient
           .from('production')
           .update({ editing_status: 'Order Closed', production_status: 'Order Closed', current_status: 'Order Closed' })
-          .or(`production_id.eq.${targetProdId},order_id.eq.${order.order_id},lead_id.eq.${order.lead_id || order.order_id},tracking_id.eq.${order.lead_id || order.order_id}`);
+          .eq('production_id', targetProdId);
         if (errProd) console.warn("[handleApproveAndCloseOrder] production update warning:", errProd);
 
-        await supabaseClient
+        const { error: errEa } = await supabaseClient
           .from('editor_assignments')
-          .update({ status: 'Order Closed' })
-          .or(`production_id.eq.${targetProdId},order_id.eq.${order.order_id}`);
+          .update({ status: 'Completed' })
+          .eq('production_id', targetProdId);
+        if (errEa) console.warn("[handleApproveAndCloseOrder] editor_assignments update warning:", errEa);
       }
 
       if (logActivity) {
@@ -3139,7 +3143,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         outstanding,
         paymentStatus,
         hasPendingApproval,
-        currentStage: prod?.editing_status || o.current_stage || 'Confirmed',
+        currentStage: isClosed ? 'Order Closed' : (prod?.editing_status || o.current_stage || 'Confirmed'),
         isCompleted,
         isClosed
       };
