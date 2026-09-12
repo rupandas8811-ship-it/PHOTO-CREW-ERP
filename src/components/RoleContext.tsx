@@ -1012,8 +1012,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       'New Order Received', 'Confirm Order', 'Order Confirmed', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled',
       'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
       'Footage Handover', 'Equipment Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
-      'Editor Assigned', 'Assigned Editor', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Editing Completed', 'Editing Complete', 'Final Approval', 'Project Delivered', 'Project Closed',
-      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed', 'Business Owner Review', 'Order Closed', 'Client Acceptance', 'Client Accepted'
+      'Editor Assigned', 'Assigned Editor', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval', 'Project Delivered', 'Project Closed',
+      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed', 'Business Owner Review', 'Order Closed', 'Client Acceptance'
     ];
     
     // Start with existing booked/restored orders from DB
@@ -1025,7 +1025,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const orderExists = list.some(o => o.lead_id === ld.lead_id || o.order_id === ld.lead_id);
         if (!orderExists) {
           const isNewFormat = ld.lead_id.match(/^(?:LD|LD-)?(\d+)$/i);
-          const ordId = ld.order_id || (ld as any).orders || (isNewFormat ? `OR${isNewFormat[1].padStart(3, '0')}` : `ORD-${ld.lead_id.replace(/\D/g, '') || ld.lead_id}`);
+          const ordId = isNewFormat ? `OR${isNewFormat[1].padStart(3, '0')}` : `ORD-${ld.lead_id.replace(/\D/g, '') || ld.lead_id}`;
           list.push({
             order_id: ordId,
             lead_id: ld.lead_id,
@@ -1068,14 +1068,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return o;
     }).filter(o => {
-      // Always keep authentic database orders
-      const isRealDbOrder = orders.some(realO => realO.order_id === o.order_id || (realO.lead_id && realO.lead_id === o.lead_id));
-      if (isRealDbOrder) return true;
-
+      // STOLID FIX: Ensure ONLY confirmed bookings with valid post-sales stages stay in the orders list
       const parentLead = leads.find(l => l.lead_id === o.lead_id);
       if (!parentLead) return true; // Keep orphaned orders just in case
       const isBookingConfirmed = parentLead.booking_status === 'Confirmed' || o.order_status === 'Confirmed' || o.order_status === 'Completed' || o.order_status === 'Delivered' || o.order_status === 'Closed';
-      return (postSalesStages.includes(parentLead.status) || postSalesStages.includes(o.current_stage || '')) && isBookingConfirmed;
+      return postSalesStages.includes(parentLead.status) && isBookingConfirmed;
     });
   }, [orders, leads]);
 
@@ -1217,12 +1214,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Priority Status Determination Rule:
-      // Order Closed > Client Accepted > Client Acceptance > Other production workflow statuses / fallback
+      // Order Closed > Client Acceptance > Other production workflow statuses / fallback
       const isClosedStatus = (s?: string) => 
         ['order closed', 'closed', 'project closed', 'completed', 'project completed'].includes(String(s || '').trim().toLowerCase());
-
-      const isClientAcceptedStatus = (s?: string) => 
-        String(s || '').trim().toLowerCase() === 'client accepted';
 
       const isClientAcceptanceStatus = (s?: string) => 
         String(s || '').trim().toLowerCase() === 'client acceptance';
@@ -1231,13 +1225,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         isClosedStatus(p.production_status) || 
                         isClosedStatus(p.editing_status) || 
                         isClosedStatus((p as any).status);
-
-      const hasClientAccepted = isClientAcceptedStatus(p.current_status) || 
-                                isClientAcceptedStatus(p.production_status) || 
-                                isClientAcceptedStatus(p.editing_status) || 
-                                isClientAcceptedStatus((p as any).status) ||
-                                isClientAcceptedStatus(leadStatus) ||
-                                isClientAcceptedStatus(ord?.current_stage);
 
       const hasClientAcceptance = isClientAcceptanceStatus(p.current_status) || 
                                   isClientAcceptanceStatus(p.production_status) || 
@@ -1248,10 +1235,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatedP.editing_status = 'Order Closed' as any;
         updatedP.current_status = 'Order Closed';
         updatedP.production_status = 'Order Closed';
-      } else if (hasClientAccepted) {
-        updatedP.editing_status = 'Client Accepted' as any;
-        updatedP.current_status = 'Client Accepted';
-        updatedP.production_status = 'Client Accepted';
       } else if (hasClientAcceptance) {
         updatedP.editing_status = 'Client Acceptance' as any;
         updatedP.current_status = 'Client Acceptance';
@@ -2093,23 +2076,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                 return updated;
               });
             }
-            if (table === 'production') {
-              setProduction(prev => {
-                const updated = prev.map(p => {
-                  const isMatch = matchColumn === 'production_id' 
-                    ? p.production_id === finalMatchValue 
-                    : (matchColumn === 'tracking_id' ? p.tracking_id === finalMatchValue : false);
-                  if (isMatch) {
-                    return { ...p, ...updates, ...sanitized };
-                  }
-                  return p;
-                });
-                try {
-                  localStorage.setItem('erp_production', JSON.stringify(updated));
-                } catch (_) {}
-                return updated;
-              });
-            }
             if (table === 'leads') {
               const leadId = finalMatchValue;
               const prevLead = leads.find(l => l.lead_id === leadId);
@@ -2282,24 +2248,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               } : a);
               try {
                 localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
-              } catch (_) {}
-              return updated;
-            });
-          }
-
-          if (table === 'production') {
-            setProduction(prev => {
-              const updated = prev.map(p => {
-                const isMatch = matchColumn === 'production_id' 
-                  ? p.production_id === matchValue 
-                  : (matchColumn === 'tracking_id' ? p.tracking_id === matchValue : false);
-                if (isMatch) {
-                  return { ...p, ...updates, ...sanitized };
-                }
-                return p;
-              });
-              try {
-                localStorage.setItem('erp_production', JSON.stringify(updated));
               } catch (_) {}
               return updated;
             });
@@ -2652,17 +2600,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             const finalPkgAmt = l.Final_Package_Amount ?? l.final_package_amount ?? finalQuoteAmt;
             const cleanLostReason = l.Lost_Reason || l.lost_reason || l.LostReason || l.lostReason || '';
             const cleanLostNotes = l.Lost_Notes || l.lost_notes || l.LostNotes || l.lostNotes || '';
-            const matchingDbOrder = (dbOrders || []).find((o: any) => o.lead_id === l.lead_id || o.order_id === l.lead_id);
-            let cachedOrderId = undefined;
-            try {
-              cachedOrderId = localStorage.getItem(`lead_order_${l.lead_id}`) || undefined;
-            } catch (e) {}
-            const resolvedOrderId = matchingDbOrder ? matchingDbOrder.order_id : (l.order_id || l.orders || cachedOrderId || undefined);
-
             return { 
               ...l, 
-              order_id: resolvedOrderId,
-              orders: resolvedOrderId,
               Lost_Reason: cleanLostReason,
               lost_reason: cleanLostReason,
               Lost_Notes: cleanLostNotes,
@@ -4388,10 +4327,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         additional_services_cost: targetLead.additional_services_cost || 0,
       });
       if (!rOrd?.success) throw new Error("Failed to update existing order: " + rOrd?.error);
-      setOrders(prev => prev.map(o => o.order_id === masterOrderId ? { ...o, ...rOrd?.data, current_stage: 'Order Confirmed', order_status: 'Confirmed' } : o));
-      try {
-        localStorage.setItem(`lead_order_${leadId}`, masterOrderId);
-      } catch (e) {}
     } else {
       const newOrder: Order = {
         order_id: masterOrderId,
@@ -4440,19 +4375,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         rOrd = await pushInsert('orders', newOrder);
       }
       if (!rOrd?.success) throw new Error("Failed to insert Order: " + rOrd?.error);
-
-      setOrders(prev => {
-        const existingIdx = prev.findIndex(o => o.order_id === masterOrderId || o.lead_id === leadId);
-        if (existingIdx >= 0) {
-          const next = [...prev];
-          next[existingIdx] = { ...next[existingIdx], ...newOrder };
-          return next;
-        }
-        return [newOrder, ...prev];
-      });
-      try {
-        localStorage.setItem(`lead_order_${leadId}`, masterOrderId);
-      } catch (e) {}
     }
 
     // Payments
@@ -4618,9 +4540,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (ld.lead_id === leadId) {
           return {
             ...ld,
-            order_id: masterOrderId,
-            orders: masterOrderId,
-            booking_status: 'Confirmed',
             status: 'Order Confirmed',
             current_status: 'Order Confirmed',
             quotation_locked: true,
@@ -5258,29 +5177,24 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    // Prevent downgrading from Client Acceptance / Client Accepted
+    // Prevent downgrading from Client Acceptance
     if (targetProd) {
       const currentIsClientAcceptance = 
         String(targetProd.current_status || '').trim().toLowerCase() === 'client acceptance' || 
-        String(targetProd.production_status || '').trim().toLowerCase() === 'client acceptance' ||
-        String(targetProd.editing_status || '').trim().toLowerCase() === 'client acceptance' ||
-        String(targetProd.current_status || '').trim().toLowerCase() === 'client accepted' || 
-        String(targetProd.production_status || '').trim().toLowerCase() === 'client accepted' ||
-        String(targetProd.editing_status || '').trim().toLowerCase() === 'client accepted';
+        String(targetProd.production_status || '').trim().toLowerCase() === 'client acceptance';
 
       if (currentIsClientAcceptance) {
-        const allowedStatuses = ['Client Acceptance', 'Client Accepted', 'Order Closed', 'Closed', 'Completed', 'Project Closed'];
-        // If they are not actively trying to set Client Acceptance/Accepted or close the order, strip any lower status
-        if (updates.editing_status && !allowedStatuses.includes(updates.editing_status)) {
+        // If they are not actively trying to close the order, strip any lower status
+        if (updates.editing_status && updates.editing_status !== 'Client Acceptance' && updates.editing_status !== 'Order Closed') {
           delete updates.editing_status;
         }
-        if (updates.production_status && !allowedStatuses.includes(updates.production_status)) {
+        if (updates.production_status && updates.production_status !== 'Client Acceptance' && updates.production_status !== 'Order Closed') {
           delete updates.production_status;
         }
-        if (updates.current_status && !allowedStatuses.includes(updates.current_status)) {
+        if (updates.current_status && updates.current_status !== 'Client Acceptance' && updates.current_status !== 'Order Closed') {
           delete updates.current_status;
         }
-        if ((updates as any).status && !allowedStatuses.includes((updates as any).status)) {
+        if ((updates as any).status && (updates as any).status !== 'Client Acceptance' && (updates as any).status !== 'Order Closed') {
           delete (updates as any).status;
         }
       }
@@ -5289,12 +5203,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Set production state in Supabase
     try {
       if (updates.editing_status) {
-        const isClientAcceptedProd = targetProd?.production_status === 'Client Acceptance' || targetProd?.production_status === 'Client Accepted';
-        if (!updates.production_status && !isClientAcceptedProd) {
+        if (!updates.production_status && targetProd?.production_status !== 'Client Acceptance') {
           updates.production_status = updates.editing_status;
         }
-        const isClientAcceptedCurr = targetProd?.current_status === 'Client Acceptance' || targetProd?.current_status === 'Client Accepted';
-        if (!updates.current_status && !isClientAcceptedCurr) {
+        if (!updates.current_status && targetProd?.current_status !== 'Client Acceptance') {
           updates.current_status = updates.editing_status;
         }
       }
@@ -5827,34 +5739,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       setOrders(prev => prev.map(o => o.order_id === resolvedOrderId ? { ...o, current_stage: targetStageToSave } : o));
     }
 
-    const targetLeadId = targetOrder ? targetOrder.lead_id : (orderId.startsWith('LD') ? orderId : null);
-    if (targetLeadId) {
-      const rLead = await pushUpdate('leads', 'lead_id', targetLeadId, { 
+    if (targetOrder) {
+      const rLead = await pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
         status: targetStageToSave,
         current_status: targetStageToSave,
         updated_by: currentUserName,
         updated_at: timestamp
       });
       if (!rLead?.success) {
-        console.warn("Failed to update lead status: " + rLead?.error);
+        throw new Error("Failed to update lead status: " + rLead?.error);
       }
-      setLeads(prev => prev.map(l => l.lead_id === targetLeadId ? { ...l, status: targetStageToSave, current_status: targetStageToSave } : l));
-    }
-
-    if (stage === 'Client Accepted' || stage === 'Client Acceptance' || stage === 'Order Closed' || stage === 'Closed') {
-      setProduction(prev => prev.map(p => {
-        const matches = p.order_id === resolvedOrderId || p.tracking_id === resolvedOrderId || p.production_id === resolvedOrderId || (targetLeadId && (p.lead_id === targetLeadId || p.tracking_id === targetLeadId));
-        if (matches) {
-          return {
-            ...p,
-            editing_status: targetStageToSave as any,
-            production_status: targetStageToSave,
-            current_status: targetStageToSave,
-            status: targetStageToSave
-          };
-        }
-        return p;
-      }));
     }
 
     logActivity(`Updated stage for Order ${orderId}`, 'Operations', orderId, previousStage, targetStageToSave);
