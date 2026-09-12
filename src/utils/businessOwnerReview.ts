@@ -22,8 +22,11 @@ export function performBusinessOwnerReview(
 
   // 1. Customer Acceptance
   const customerAcceptanceVerified = !!(
+    prod?.editing_status === 'Client Accepted' ||
     prod?.editing_status === 'Client Acceptance' ||
+    prod?.production_status === 'Client Accepted' ||
     prod?.production_status === 'Client Acceptance' ||
+    (prod as any)?.current_status === 'Client Accepted' ||
     (prod as any)?.current_status === 'Client Acceptance' ||
     prod?.editing_status === 'Project Completed' ||
     prod?.editing_status === 'Completed' ||
@@ -37,6 +40,7 @@ export function performBusinessOwnerReview(
     order?.order_status === 'Project Completed' ||
     order?.order_status === 'Delivered' ||
     order?.current_stage === 'Delivered' ||
+    order?.current_stage === 'Client Accepted' ||
     order?.current_stage === 'Client Acceptance' ||
     order?.current_stage === 'Final Approval'
   );
@@ -86,6 +90,7 @@ export function performBusinessOwnerReview(
     prod?.editing_status === 'Closed' ||
     prod?.editing_status === 'Order Closed' ||
     prod?.editing_status === 'Final Approval' ||
+    prod?.editing_status === 'Client Accepted' ||
     prod?.editing_status === 'Client Acceptance'
   );
 

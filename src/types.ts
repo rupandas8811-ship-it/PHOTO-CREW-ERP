@@ -40,6 +40,7 @@ export const ACTIVE_STAGE_GROUPS = [
       { value: "Customer Review", label: "Customer Review" },
       { value: "Editing Completed", label: "Editing Completed" },
       { value: "Client Acceptance", label: "Client Acceptance" },
+      { value: "Client Accepted", label: "Client Accepted" },
       { value: "Order Closed", label: "Order Closed" }
     ]
   }
@@ -145,7 +146,10 @@ export type CurrentStage =
   | 'Client Review Sent'
   | 'Revision Required'
   | 'Revision In Progress'
+  | 'Editing Completed'
+  | 'Editing Complete'
   | 'Client Acceptance'
+  | 'Client Accepted'
   | 'Final Approval'
   | 'Project Delivered'
   | 'Project Closed'
@@ -158,7 +162,7 @@ export type CurrentStage =
   | 'Order Closed'
   | 'Closed';
 
-export type EditingStatus = 'Footage Handover Verified' | 'Raw Footage Received' | 'Assigned Editor' | 'Editor Assigned' | 'Editing Started' | 'Editing In Progress' | 'Internal QC Review' | 'Customer Review' | 'Client Review Sent' | 'Revision Required' | 'Revision In Progress' | 'Client Acceptance' | 'Final Approval' | 'Project Delivered' | 'Editing Complete' | 'Client Review' | 'Project Completed' | 'Completed' | 'Business Owner Review' | 'Order Closed' | 'Closed';
+export type EditingStatus = 'Footage Handover Verified' | 'Raw Footage Received' | 'Assigned Editor' | 'Editor Assigned' | 'Editing Started' | 'Editing In Progress' | 'Internal QC Review' | 'Customer Review' | 'Client Review Sent' | 'Revision Required' | 'Revision In Progress' | 'Editing Completed' | 'Editing Complete' | 'Client Acceptance' | 'Client Accepted' | 'Final Approval' | 'Project Delivered' | 'Client Review' | 'Project Completed' | 'Completed' | 'Business Owner Review' | 'Order Closed' | 'Closed';
 
 export type PaymentStatus = 'Pending' | 'Partially Paid' | 'Fully Paid' | 'Waiting for Approval';
 

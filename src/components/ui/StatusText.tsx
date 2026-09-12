@@ -27,7 +27,7 @@ export const getStatusColorClass = (status: string) => {
   if (s === 'editing in progress') return 'text-blue-400 font-semibold';
   if (s === 'customer review' || s === 'client review' || s === 'client review sent') return 'text-pink-400 font-semibold';
   if (s === 'editing completed') return 'text-teal-400 font-bold';
-  if (s === 'client acceptance') return 'text-violet-400 font-bold';
+  if (s === 'client acceptance' || s === 'client accepted') return 'text-violet-400 font-bold';
   if (s === 'ready for delivery') return 'text-teal-500';
   if (s === 'delivered') return 'text-green-500';
   if (s === 'completed' || s === 'closed' || s === 'order closed') return 'text-green-400 font-bold';

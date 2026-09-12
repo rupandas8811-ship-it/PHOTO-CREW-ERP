@@ -490,7 +490,19 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                       const leadStatus = getLeadCurrentStatus ? getLeadCurrentStatus(lead) : lead.status;
                       const currentStage = getLeadCurrentStage ? getLeadCurrentStage(lead) : 'Sales';
                       const isActiveInSales = currentStage === 'Sales';
-                      const linkedOrder = safeOrders.find((o) => o.lead_id === lead.lead_id);
+                      let cachedOrderId: string | undefined = undefined;
+                      try {
+                        cachedOrderId = localStorage.getItem(`lead_order_${lead.lead_id}`) || undefined;
+                      } catch (e) {}
+
+                      const linkedOrder = safeOrders.find((o) => 
+                        o.lead_id === lead.lead_id || 
+                        o.order_id === lead.lead_id || 
+                        (lead.order_id && (o.order_id === lead.order_id || o.lead_id === lead.order_id)) ||
+                        ((lead as any).orders && (o.order_id === (lead as any).orders || o.lead_id === (lead as any).orders))
+                      );
+                      const displayOrderId = linkedOrder?.order_id || lead.order_id || (lead as any).orders || cachedOrderId || 'N/A';
+
                       return (
                         <tr 
                           key={lead.lead_id} 
@@ -500,7 +512,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                             {lead.lead_id}
                           </td>
                           <td className="p-3.5 font-mono text-[11px] text-violet-400 font-bold">
-                            {linkedOrder ? linkedOrder.order_id : 'N/A'}
+                            {displayOrderId}
                           </td>
                           <td className="p-3.5 font-bold text-white">
                             {lead.customer_name === 'Inbound Prospect' ? '' : lead.customer_name}
@@ -562,7 +574,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                             e.stopPropagation();
                                             setOpenDropdownLeadId(null);
                                             setNoteModalLeadId(lead.lead_id);
-                                            setNoteModalOrderId(linkedOrder ? linkedOrder.order_id : '');
+                                            setNoteModalOrderId(displayOrderId !== 'N/A' ? displayOrderId : '');
                                             setNoteModalCustomerName(lead.customer_name);
                                             setNoteModalOpen(true);
                                           }}

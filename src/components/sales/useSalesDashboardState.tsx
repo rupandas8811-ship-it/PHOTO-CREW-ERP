@@ -192,11 +192,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const handleDownloadCSV = () => {
     const headers = ["Lead ID", "Order ID", "Customer Name", "Mobile Number", "Event Type", "Event Date", "Current Stage", "Current Status", "Payment Status", "Created Date"];
     const rows = filteredLeads.map(l => {
-      const ord = orders.find(o => o.lead_id === l.lead_id);
+      const ord = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id || (l.order_id && o.order_id === l.order_id));
       const pay = ord ? payments?.find(p => p.order_id === ord.order_id) : null;
+      const resolvedOrdId = ord?.order_id || l.order_id || (l as any).orders || 'N/A';
       return [
         l.lead_id,
-        ord?.order_id || 'N/A',
+        resolvedOrdId,
         l.customer_name === 'Inbound Prospect' ? '' : l.customer_name,
         l.mobile,
         l.event_type,
@@ -223,11 +224,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const handleDownloadExcel = () => {
     const headers = ["Lead ID", "Order ID", "Customer Name", "Mobile Number", "Event Type", "Event Date", "Current Stage", "Current Status", "Payment Status", "Created Date"];
     const rows = filteredLeads.map(l => {
-      const ord = orders.find(o => o.lead_id === l.lead_id);
+      const ord = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id || (l.order_id && o.order_id === l.order_id));
       const pay = ord ? payments?.find(p => p.order_id === ord.order_id) : null;
+      const resolvedOrdId = ord?.order_id || l.order_id || (l as any).orders || 'N/A';
       return [
         l.lead_id,
-        ord?.order_id || 'N/A',
+        resolvedOrdId,
         l.customer_name === 'Inbound Prospect' ? '' : l.customer_name,
         l.mobile,
         l.event_type,
@@ -256,12 +258,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     if (!printWindow) return;
     
     const rowsHtml = filteredLeads.map(l => {
-      const ord = orders.find(o => o.lead_id === l.lead_id);
+      const ord = orders.find(o => o.lead_id === l.lead_id || o.order_id === l.lead_id || (l.order_id && o.order_id === l.order_id));
       const pay = ord ? payments?.find(p => p.order_id === ord.order_id) : null;
+      const resolvedOrdId = ord?.order_id || l.order_id || (l as any).orders || 'N/A';
       return `
         <tr>
           <td>${l.lead_id}</td>
-          <td>${ord?.order_id || 'N/A'}</td>
+          <td>${resolvedOrdId}</td>
           <td>${l.customer_name === 'Inbound Prospect' ? '' : l.customer_name}</td>
           <td>${l.mobile}</td>
           <td>${l.event_type}</td>

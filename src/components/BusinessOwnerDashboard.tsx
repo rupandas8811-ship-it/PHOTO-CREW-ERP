@@ -247,7 +247,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     const isApprovalStage = (st?: string) => {
       if (!st) return false;
       const lower = st.trim().toLowerCase();
-      return validApprovalStages.some(s => lower === s || lower.includes('client acceptance'));
+      return validApprovalStages.some(s => lower === s || lower.includes('client acceptance') || lower.includes('client accepted'));
     };
 
     const isClosedStage = (st?: string) => {
@@ -301,7 +301,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           custom_event_name: baseOrder.custom_event_name || baseOrder.event_type || lAny?.event_name || lAny?.event_type || 'Event',
           event_type: baseOrder.event_type || lAny?.event_type || 'Photography & Videography',
           event_date: baseOrder.event_date || pAny?.event_date || lAny?.event_date || '',
-          current_stage: isApprovalStage(relatedProd?.editing_status) ? 'Client Acceptance' : (baseOrder.current_stage || 'Client Acceptance'),
+          current_stage: isApprovalStage(relatedProd?.editing_status) ? (relatedProd?.editing_status || 'Client Accepted') : (baseOrder.current_stage || 'Client Accepted'),
           quotation_amount: totalQuotation,
           advance_received: advanceRec,
           balance_amount: balDue,
@@ -2347,6 +2347,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
 
       const isWaitingApproval = [
         'Client Acceptance',
+        'Client Accepted',
         'Business Owner Review',
         'Customer Review',
         'Editing Complete',
@@ -2355,6 +2356,7 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
 
       const isClientAcceptance = [
         'Client Acceptance',
+        'Client Accepted',
         'Final Approval',
         'Approved'
       ].some(st => st.toLowerCase() === currentStage.toLowerCase());
@@ -3116,7 +3118,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         : (pay && pay.payment_status !== 'Waiting for Approval' ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : 0);
       const outstanding = Math.max(0, totalRevenue - paymentReceived);
 
-      const isCompleted = ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed'].includes(o.current_stage) || prod?.editing_status === 'Client Acceptance';
+      const isCompleted = ['Event Completed', 'Client Acceptance', 'Client Accepted', 'Delivered', 'Project Delivered', 'Completed'].includes(o.current_stage) || prod?.editing_status === 'Client Acceptance' || prod?.editing_status === 'Client Accepted';
       const isClosed = o.current_stage === 'Order Closed' || o.current_stage === 'Closed' || prod?.editing_status === 'Order Closed';
 
       const paymentDate = pay?.payment_date || o.created_at || o.event_date;

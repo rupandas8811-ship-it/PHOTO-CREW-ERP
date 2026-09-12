@@ -90,7 +90,7 @@ const performClientSideValidation = async (activeProd: any) => {
 };
 
 export const ProductionClientAcceptanceManager: React.FC = () => {
-  const { production, pushUpdate, refreshData } = useRole();
+  const { production, pushUpdate, refreshData, updateProduction } = useRole();
   const productionRef = React.useRef(production);
   useEffect(() => {
     productionRef.current = production;
@@ -126,7 +126,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
 
     const projectId = activeProd.production_id;
     const statusNorm = (activeProd.current_status || activeProd.production_status || activeProd.editing_status || '').trim().toLowerCase();
-    const completedStatuses = ['client acceptance', 'business owner review', 'project completed', 'completed', 'order closed', 'closed', 'final approval', 'approved', 'ready for delivery', 'delivered'];
+    const completedStatuses = ['client accepted', 'client acceptance', 'business owner review', 'project completed', 'completed', 'order closed', 'closed', 'final approval', 'approved', 'ready for delivery', 'delivered'];
     const isCompleted = completedStatuses.includes(statusNorm);
 
     // 1. Initial baseline from activeProd
@@ -442,16 +442,21 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
         return;
       }
 
-      // 3. Update checklist values and status to Client Acceptance
-      await pushUpdate('production', 'production_id', activeProd.production_id, {
+      // 3. Update checklist values and status to Client Accepted
+      const statusUpdates = {
         ...checklist,
-        current_status: 'Client Acceptance',
-        production_status: 'Client Acceptance',
-        editing_status: 'Client Acceptance',
-        status: 'Client Acceptance'
-      });
+        current_status: 'Client Accepted',
+        production_status: 'Client Accepted',
+        editing_status: 'Client Accepted',
+        status: 'Client Accepted'
+      };
 
-      // 4. Save completed progress to server storage
+      if (updateProduction) {
+        await updateProduction(activeProd.production_id, statusUpdates);
+      }
+      await pushUpdate('production', 'production_id', activeProd.production_id, statusUpdates);
+
+      // 4. Save completed progress to server storage and local cache
       await fetch('/api/client-approval/progress', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -461,9 +466,22 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
           content_usage_confirmation: true,
           footage_deleted_7_days: true,
           verify_payment_from_sales: true,
-          validate_edited_files_uploaded: true
+          validate_edited_files_uploaded: true,
+          status: 'Client Accepted'
         })
       }).catch(() => {});
+
+      try {
+        localStorage.setItem(`client_approval_progress_${activeProd.production_id}`, JSON.stringify({
+          project_id: activeProd.production_id,
+          client_approval: true,
+          content_usage_confirmation: true,
+          footage_deleted_7_days: true,
+          verify_payment_from_sales: true,
+          validate_edited_files_uploaded: true,
+          status: 'Client Accepted'
+        }));
+      } catch (_) {}
       
       // 5. Verify Database
       const { data: dbData, error: dbError } = await supabaseClient
@@ -476,9 +494,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       }
       
       const dbRow = dbData[0];
-      if (String(dbRow.current_status || '').trim().toLowerCase() !== 'client acceptance' && 
-          String(dbRow.production_status || '').trim().toLowerCase() !== 'client acceptance') {
-        throw new Error(`The Production status was not saved as Client Acceptance.`);
+      const savedStatus = String(dbRow.editing_status || dbRow.production_status || dbRow.current_status || '').trim().toLowerCase();
+      if (savedStatus !== 'client accepted' && savedStatus !== 'client acceptance') {
+        throw new Error(`The Production status was not saved as Client Accepted.`);
       }
       
       // 6. Refresh Data
@@ -497,7 +515,7 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       console.error('Client Approval Save Failed:', err);
       setErrorMsg([
         'CLIENT APPROVAL SAVE FAILED',
-        'The database did not confirm the Client Acceptance update.',
+        'The database did not confirm the Client Accepted update.',
         err?.message || String(err)
       ]);
       setIsSaving(false);

@@ -766,7 +766,7 @@ ${coordinatorName}`;
       'Editing Started', 'Editing In Progress', 'Editing', 'Internal QC Review',
       'Customer Review', 'Client Review Sent', 'Ready For Review', 'Revision Required', 'Revision In Progress',
       'Editing Completed', 'Editing Complete', 'Final Approval',
-      'Client Acceptance', 'Order Closed', 'Closed', 'Completed', 'Project Closed', 'Approved', 'Payment Pending'
+      'Client Accepted', 'Client Acceptance', 'Order Closed', 'Closed', 'Completed', 'Project Closed', 'Approved', 'Payment Pending'
     ];
 
     const preProductionStages = [
@@ -910,7 +910,7 @@ ${coordinatorName}`;
 
       // Filter for Production Staff role
       if (currentRole === 'Production Staff') {
-        if (orderStage === 'Client Acceptance' || prodStatus === 'Client Acceptance' || orderStage === 'Order Closed' || prodStatus === 'Order Closed' || orderStage === 'Closed' || prodStatus === 'Closed') {
+        if (orderStage === 'Client Accepted' || prodStatus === 'Client Accepted' || orderStage === 'Client Acceptance' || prodStatus === 'Client Acceptance' || orderStage === 'Order Closed' || prodStatus === 'Order Closed' || orderStage === 'Closed' || prodStatus === 'Closed') {
           continue;
         }
 
@@ -1415,7 +1415,7 @@ ${coordinatorName}`;
     if (['Internal QC Review'].includes(status)) return 'Internal QC Review';
     if (['Ready For Review', 'Client Review Sent', 'Customer Review'].includes(status)) return 'Customer Review';
     if (['Editing Completed', 'Editing Complete'].includes(status)) return 'Editing Completed';
-    if (['Client Acceptance'].includes(status)) return 'Client Acceptance';
+    if (['Client Accepted', 'Client Acceptance'].includes(status)) return 'Client Accepted';
     if (['Revision Required'].includes(status)) return 'Revision Required';
     if (['Revision In Progress'].includes(status)) return 'Revision In Progress';
     if (['Approved', 'Final Approval'].includes(status)) return 'Final Approval';
@@ -1903,9 +1903,18 @@ ${coordinatorName}`;
       return 'Order Closed';
     }
     
-    // 2. Client Acceptance (After Client Acceptance popup submitted)
-    if (baseStatus === 'Client Acceptance' || (prod as any).production_status === 'Client Acceptance' || (prod as any).current_status === 'Client Acceptance') {
-      return 'Client Acceptance';
+    // 2. Client Accepted (After Client Acceptance popup submitted)
+    if (
+      baseStatus === 'Client Accepted' || 
+      (prod as any).production_status === 'Client Accepted' || 
+      (prod as any).current_status === 'Client Accepted' ||
+      (prod as any).status === 'Client Accepted' ||
+      baseStatus === 'Client Acceptance' || 
+      (prod as any).production_status === 'Client Acceptance' || 
+      (prod as any).current_status === 'Client Acceptance' ||
+      (prod as any).status === 'Client Acceptance'
+    ) {
+      return 'Client Accepted';
     }
 
     const assignments = (editorAssignments || []).filter(a => 
@@ -1919,7 +1928,7 @@ ${coordinatorName}`;
     if (assignments.length > 0) {
       const getTaskStageRank = (st: string, driveLink?: string) => {
         const status = st || '';
-        if (['Client Acceptance'].includes(status)) return 5;
+        if (['Client Accepted', 'Client Acceptance'].includes(status)) return 5;
         if (['Completed', 'Editing Completed', 'Editing Complete'].includes(status)) return 4;
         if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(status) || (driveLink && driveLink.trim() !== '')) return 3;
         if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
@@ -1930,7 +1939,7 @@ ${coordinatorName}`;
       const ranks = assignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
       const minRank = Math.min(...ranks);
 
-      if (minRank >= 5) return 'Client Acceptance';
+      if (minRank >= 5) return 'Client Accepted';
       if (minRank >= 4) return 'Editing Completed';
       if (minRank >= 3) return 'Customer Review';
       if (minRank >= 2) return 'Editing Started';
@@ -1982,81 +1991,98 @@ Production Team`;
     setCustomerReviewPhone(phone);
   };
 
-  const handleOpenClientAcceptance = (prod: Production) => {
-    if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
-    setClientAcceptanceProd(prod);
-
-    const orderId = prod.tracking_id || (prod as any).order_id || prod.production_id;
-    const cleanOrd = String(orderId || '').trim().toLowerCase();
-    const matchingVerifs = (clientAcceptanceVerifications || []).filter(
-      v => String(v.order_id || '').trim().toLowerCase() === cleanOrd
-    );
-    const primaryVerif = matchingVerifs[0];
-
-    const existingProof = prod.client_communication_proof || 
-      (prod as any).customer_communication_proof || 
-      (prod as any).proof_url || 
-      primaryVerif?.client_communication_consent_proof || 
-      '';
-    setCaCommunicationProof(existingProof);
+  const handleOpenClientAcceptance = (prod: Production | any) => {
+    if (!prod) return;
+    const activeProd = (production || []).find(p => p.production_id === prod?.production_id) || prod;
     
-    const existingUploadName = prod.upload_name || 
-      prod.proof_name || 
-      (prod as any).client_communication_proof_name || 
-      primaryVerif?.proof_file_name || 
-      (existingProof && !existingProof.startsWith('data:') ? existingProof.split('/').pop()?.split('?')[0] : '') || 
-      '';
-    setCaUploadName(existingUploadName);
+    // Set the modal state immediately so the modal reliably opens for Editing Completed projects
+    setClientAcceptanceProd(activeProd);
 
-    setCaConsentProofChecked(Boolean((prod as any).checklist_client_communication_proof ?? (existingProof ? true : false)));
-    setCaUploadConfirmations({});
-    setCaChecklistCompleted(Boolean(prod.checklist_customer_acceptance ?? true));
-    setCaInternalValidation(Boolean(prod.server_upload_validated || prod.checklist_edited_files_uploaded));
+    try {
+      const orderId = activeProd.tracking_id || (activeProd as any).order_id || activeProd.production_id;
+      const cleanOrd = String(orderId || '').trim().toLowerCase();
+      const matchingVerifs = (clientAcceptanceVerifications || []).filter(
+        v => String(v.order_id || '').trim().toLowerCase() === cleanOrd
+      );
+      const primaryVerif = matchingVerifs[0];
 
-    // Load persisted 5-item checklist states
-    setCaVerifyCustomerAcceptance(prod.checklist_customer_acceptance ?? true);
-    setCaContentUsageConfirmation(prod.checklist_content_usage ?? false);
-    setCaFootageDeleted7Days(prod.checklist_footage_deleted_7_days ?? false);
-    setCaVerifyPaymentSales(prod.checklist_payment_from_sales ?? false);
+      const existingProof = activeProd.client_communication_proof || 
+        (activeProd as any).customer_communication_proof || 
+        (activeProd as any).proof_url || 
+        primaryVerif?.client_communication_consent_proof || 
+        '';
+      setCaCommunicationProof(existingProof);
+      
+      const existingUploadName = activeProd.upload_name || 
+        activeProd.proof_name || 
+        (activeProd as any).client_communication_proof_name || 
+        primaryVerif?.proof_file_name || 
+        (existingProof && !existingProof.startsWith('data:') ? existingProof.split('/').pop()?.split('?')[0] : '') || 
+        '';
+      setCaUploadName(existingUploadName);
 
-    const eventGroups = getClientAcceptanceDeliverables(prod);
-    const initialChecklist: Record<string, boolean> = {};
-    const initialValidationMap: Record<string, boolean> = {};
-    const savedValidations = prod.validated_server_uploads || {};
+      setCaConsentProofChecked(Boolean((activeProd as any).checklist_client_communication_proof ?? (existingProof ? true : false)));
+      setCaUploadConfirmations({});
+      setCaChecklistCompleted(Boolean(activeProd.checklist_customer_acceptance ?? true));
+      setCaInternalValidation(Boolean(activeProd.server_upload_validated || activeProd.checklist_edited_files_uploaded));
 
-    eventGroups.forEach(g => {
-      let groupValidated = false;
-      if (savedValidations[g.eventId] !== undefined) {
-        groupValidated = Boolean(savedValidations[g.eventId]);
-      } else if (prod.checklist_edited_files_uploaded) {
-        groupValidated = true;
+      // Load persisted 5-item checklist states
+      setCaVerifyCustomerAcceptance(activeProd.checklist_customer_acceptance ?? true);
+      setCaContentUsageConfirmation(activeProd.checklist_content_usage ?? false);
+      setCaFootageDeleted7Days(activeProd.checklist_footage_deleted_7_days ?? false);
+      setCaVerifyPaymentSales(activeProd.checklist_payment_from_sales ?? false);
+
+      const eventGroups = getClientAcceptanceDeliverables(activeProd);
+      const initialChecklist: Record<string, boolean> = {};
+      const initialValidationMap: Record<string, boolean> = {};
+      
+      let savedValidations: Record<string, any> = {};
+      if (activeProd.validated_server_uploads && typeof activeProd.validated_server_uploads === 'object') {
+        savedValidations = activeProd.validated_server_uploads;
+      } else if (typeof activeProd.validated_server_uploads === 'string') {
+        try {
+          savedValidations = JSON.parse(activeProd.validated_server_uploads);
+        } catch (e) {
+          savedValidations = {};
+        }
       }
 
-      g.items.forEach(item => {
-        initialChecklist[item.key] = item.isUploaded;
-        const itemVal = Boolean(
-          savedValidations[item.key] ||
-          (item.assignmentId && savedValidations[item.assignmentId]) ||
-          item.isValidated ||
-          groupValidated
-        );
-        initialValidationMap[item.key] = itemVal;
-        if (item.assignmentId) {
-          initialValidationMap[item.assignmentId] = itemVal;
+      eventGroups.forEach(g => {
+        let groupValidated = false;
+        if (savedValidations[g.eventId] !== undefined) {
+          groupValidated = Boolean(savedValidations[g.eventId]);
+        } else if (activeProd.checklist_edited_files_uploaded) {
+          groupValidated = true;
         }
+
+        g.items.forEach(item => {
+          initialChecklist[item.key] = item.isUploaded;
+          const itemVal = Boolean(
+            savedValidations[item.key] ||
+            (item.assignmentId && savedValidations[item.assignmentId]) ||
+            item.isValidated ||
+            groupValidated
+          );
+          initialValidationMap[item.key] = itemVal;
+          if (item.assignmentId) {
+            initialValidationMap[item.assignmentId] = itemVal;
+          }
+        });
+        initialValidationMap[g.eventId] = groupValidated || g.items.every(i => initialValidationMap[i.key]);
       });
-      initialValidationMap[g.eventId] = groupValidated || g.items.every(i => initialValidationMap[i.key]);
-    });
 
-    setCaChecklist(initialChecklist);
-    setCaValidatedServerUploads(initialValidationMap);
+      setCaChecklist(initialChecklist);
+      setCaValidatedServerUploads(initialValidationMap);
 
-    const overallValidated = Boolean(
-      prod.checklist_edited_files_uploaded ||
-      prod.server_upload_validated ||
-      (eventGroups.length > 0 && eventGroups.every(g => initialValidationMap[g.eventId]))
-    );
-    setCaValidateEditedFiles(overallValidated);
+      const overallValidated = Boolean(
+        activeProd.checklist_edited_files_uploaded ||
+        activeProd.server_upload_validated ||
+        (eventGroups.length > 0 && eventGroups.every(g => initialValidationMap[g.eventId]))
+      );
+      setCaValidateEditedFiles(overallValidated);
+    } catch (err) {
+      console.error('[ProductionModule] Error initializing Client Acceptance form data:', err);
+    }
   };
 
   const getAssignedEditorsText = (prod: Production): string => {
@@ -2149,7 +2175,7 @@ Production Team`;
   const isClientApproved = (prod: Production) => {
     const s = getProductionStatus(prod);
     const raw = prod.editing_status as string;
-    return s === 'Final Approval' || s === 'Project Delivered' || s === 'Completed' || raw === 'Approved' || raw === 'Final Approval' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Payment Pending' || raw === 'Client Acceptance' || raw === 'Order Closed' || s === 'Order Closed';
+    return s === 'Client Accepted' || raw === 'Client Accepted' || s === 'Final Approval' || s === 'Project Delivered' || s === 'Completed' || raw === 'Approved' || raw === 'Final Approval' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Payment Pending' || raw === 'Client Acceptance' || raw === 'Order Closed' || s === 'Order Closed';
   };
 
   const isClientNotApproved = (prod: Production) => {
@@ -3603,7 +3629,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <option value="Editing Started">Editing Started</option>
                   <option value="Customer Review">Customer Review</option>
                   <option value="Editing Completed">Editing Completed</option>
-                  <option value="Client Acceptance">Client Acceptance</option>
+                  <option value="Client Accepted">Client Accepted</option>
                   <option value="Order Closed">Order Closed</option>
                 </select>
               </div>
@@ -3911,7 +3937,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       
                       // For Production Staff, exclude Client Acceptance and Order Closed
                       const displayStatus = getAutomatedProductionStatus(prod);
-                      if (currentRole === 'Production Staff' && (displayStatus === 'Client Acceptance' || displayStatus === 'Order Closed' || displayStatus === 'Completed' || displayStatus === 'Closed')) {
+                      if (currentRole === 'Production Staff' && (displayStatus === 'Client Accepted' || displayStatus === 'Client Acceptance' || displayStatus === 'Order Closed' || displayStatus === 'Completed' || displayStatus === 'Closed')) {
                         return false;
                       }
                       
@@ -3934,7 +3960,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           (statusFilter === 'Editing Started' && (sVal === 'Editing Started' || displayStatus === 'Editing Started' || prod.editing_status === 'Editing In Progress' || prod.editing_status === 'Editing')) ||
                           (statusFilter === 'Customer Review' && (sVal === 'Customer Review' || displayStatus === 'Customer Review' || prod.editing_status === 'Client Review Sent' || prod.editing_status === 'Ready For Review')) ||
                           (statusFilter === 'Editing Completed' && (sVal === 'Editing Completed' || displayStatus === 'Editing Completed' || prod.editing_status === 'Editing Complete')) ||
-                          (statusFilter === 'Client Acceptance' && (sVal === 'Client Acceptance' || displayStatus === 'Client Acceptance' || prod.editing_status === 'Client Acceptance')) ||
+                          ((statusFilter === 'Client Accepted' || statusFilter === 'Client Acceptance') && (sVal === 'Client Accepted' || sVal === 'Client Acceptance' || displayStatus === 'Client Accepted' || displayStatus === 'Client Acceptance' || prod.editing_status === 'Client Accepted' || prod.editing_status === 'Client Acceptance')) ||
                           (statusFilter === 'Order Closed' && (sVal === 'Order Closed' || displayStatus === 'Order Closed' || prod.editing_status === 'Order Closed' || prod.editing_status === 'Closed' || prod.editing_status === 'Completed' || prod.editing_status === 'Project Closed'));
                         if (!matchStatus) return false;
                       }
@@ -4038,6 +4064,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       else if (displayStatus === 'Revision Required') displayStatusColor = 'bg-red-500/15 text-red-400 border border-red-500/20';
                       else if (displayStatus === 'Revision In Progress') displayStatusColor = 'bg-orange-500/15 text-orange-400 border border-orange-500/20';
                       else if (displayStatus === 'Final Approval') displayStatusColor = 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20';
+                      else if (displayStatus === 'Client Accepted' || displayStatus === 'Client Acceptance') displayStatusColor = 'bg-violet-500/15 text-violet-400 border border-violet-500/20 font-bold';
                       else if (displayStatus === 'Project Delivered') displayStatusColor = 'bg-violet-500/15 text-violet-400 border border-violet-500/20';
                       else if (displayStatus === 'Completed') displayStatusColor = 'bg-zinc-800 text-zinc-400 border border-zinc-700';
 
@@ -4404,10 +4431,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       )}
 
                       {/* Client Acceptance */}
-                      {displayStatus === "Editing Completed" && currentRole !== "Production Staff" && (
+                      {(String(displayStatus || '').trim().toLowerCase() === 'editing completed' || 
+                        String(displayStatus || '').trim().toLowerCase() === 'editing complete' ||
+                        String(prod?.editing_status || '').trim().toLowerCase() === 'editing completed' ||
+                        String(prod?.editing_status || '').trim().toLowerCase() === 'editing complete') && currentRole !== "Production Staff" && (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setOpenActionDropdown(null);
                             handleOpenClientAcceptance(prod);
                           }}
@@ -8597,7 +8628,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         if (newAssignments.length > 0) {
                           const getTaskStageRank = (st: string, driveLink?: string) => {
                             const status = st || '';
-                            if (['Client Acceptance'].includes(status)) return 5;
+                            if (['Client Accepted', 'Client Acceptance'].includes(status)) return 5;
                             if (['Completed', 'Editing Completed', 'Editing Complete'].includes(status)) return 4;
                             if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(status) || (driveLink && driveLink.trim() !== '')) return 3;
                             if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
@@ -8608,7 +8639,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           const ranks = newAssignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
                           const minRank = Math.min(...ranks);
 
-                          if (minRank >= 5) newEditingStatus = 'Client Acceptance';
+                          if (minRank >= 5) newEditingStatus = 'Client Accepted';
                           else if (minRank >= 4) newEditingStatus = 'Editing Completed';
                           else if (minRank >= 3) newEditingStatus = 'Customer Review';
                           else if (minRank >= 2) newEditingStatus = 'Editing Started';
@@ -11375,8 +11406,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           };
 
           return (
-            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div key="client_acceptance_modal_overlay" className="fixed inset-0 bg-black/95 backdrop-blur-md z-[99999] flex items-center justify-center p-4">
               <motion.div
+                key="client_acceptance_modal_content"
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
@@ -11439,7 +11471,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       }
 
                       const updates: any = {
-                        editing_status: 'Client Acceptance',
+                        editing_status: 'Client Accepted',
+                        production_status: 'Client Accepted',
+                        current_status: 'Client Accepted',
+                        status: 'Client Accepted',
                         client_communication_proof: uploadedProofUrl,
                         customer_communication_proof: uploadedProofUrl,
                         proof_url: uploadedProofUrl,
@@ -11460,7 +11495,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       
                       const targetId = order?.order_id || trackingId || clientAcceptanceProd.production_id;
                       if (targetId) {
-                        await updateOrderStage(targetId, 'Client Acceptance' as any);
+                        await updateOrderStage(targetId, 'Client Accepted' as any);
                       }
 
                       // Persist unified Client Acceptance Verification records per event

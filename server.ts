@@ -1347,16 +1347,25 @@ async function startServer() {
       }
       writeClientApprovalProgressToFile(records);
 
-      // Persist to Supabase: Update production table checklist fields for this project
+      // Persist to Supabase: Update production table checklist fields and status for this project
       try {
         const db = getServerSupabase();
-        await db.from('production').update({
+        const updatePayload: any = {
           checklist_customer_acceptance: savedRecord.client_approval,
           checklist_content_usage: savedRecord.content_usage_confirmation,
           checklist_footage_deleted_7_days: savedRecord.footage_deleted_7_days,
           checklist_payment_from_sales: savedRecord.verify_payment_from_sales,
           checklist_edited_files_uploaded: savedRecord.validate_edited_files_uploaded
-        }).eq('production_id', cleanId);
+        };
+
+        if (savedRecord.client_approval) {
+          updatePayload.editing_status = 'Client Accepted';
+          updatePayload.production_status = 'Client Accepted';
+          updatePayload.current_status = 'Client Accepted';
+          updatePayload.status = 'Client Accepted';
+        }
+
+        await db.from('production').update(updatePayload).eq('production_id', cleanId);
 
         // Also try to upsert to client_approval_progress table if table exists
         try {
