@@ -1067,7 +1067,9 @@ ${coordinatorName}`;
       prod.editing_status === 'Project Closed' ||
       prod.editing_status === 'Completed' ||
       prod.editing_status === 'Approved' ||
-      prod.production_status === 'Closed'
+      prod.editing_status === 'Order Closed' ||
+      prod.production_status === 'Closed' ||
+      prod.production_status === 'Order Closed'
     );
     const completedCount = completedList.length;
 
@@ -1078,7 +1080,9 @@ ${coordinatorName}`;
       prod.editing_status !== 'Project Closed' &&
       prod.editing_status !== 'Completed' &&
       prod.editing_status !== 'Approved' &&
-      prod.production_status !== 'Closed'
+      prod.editing_status !== 'Order Closed' &&
+      prod.production_status !== 'Closed' &&
+      prod.production_status !== 'Order Closed'
     );
     const pendingCount = pendingList.length;
 
@@ -1903,9 +1907,9 @@ ${coordinatorName}`;
       return 'Order Closed';
     }
     
-    // 2. Client Acceptance (After Client Acceptance popup submitted)
-    if (baseStatus === 'Client Acceptance' || (prod as any).production_status === 'Client Acceptance' || (prod as any).current_status === 'Client Acceptance') {
-      return 'Client Acceptance';
+    // 2. Client Accepted (After Client Acceptance popup submitted)
+    if (baseStatus === 'Client Accepted' || (prod as any).production_status === 'Client Accepted' || (prod as any).current_status === 'Client Accepted' || baseStatus === 'Client Acceptance') {
+      return 'Client Accepted';
     }
 
     const assignments = (editorAssignments || []).filter(a => 
@@ -1919,7 +1923,7 @@ ${coordinatorName}`;
     if (assignments.length > 0) {
       const getTaskStageRank = (st: string, driveLink?: string) => {
         const status = st || '';
-        if (['Client Acceptance'].includes(status)) return 5;
+        if (['Client Accepted', 'Client Acceptance'].includes(status)) return 5;
         if (['Completed', 'Editing Completed', 'Editing Complete'].includes(status)) return 4;
         if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(status) || (driveLink && driveLink.trim() !== '')) return 3;
         if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
@@ -1930,7 +1934,7 @@ ${coordinatorName}`;
       const ranks = assignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
       const minRank = Math.min(...ranks);
 
-      if (minRank >= 5) return 'Client Acceptance';
+      if (minRank >= 5) return 'Client Accepted';
       if (minRank >= 4) return 'Editing Completed';
       if (minRank >= 3) return 'Customer Review';
       if (minRank >= 2) return 'Editing Started';
@@ -1983,7 +1987,6 @@ Production Team`;
   };
 
   const handleOpenClientAcceptance = (prod: Production) => {
-    if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
     setClientAcceptanceProd(prod);
 
     const orderId = prod.tracking_id || (prod as any).order_id || prod.production_id;
@@ -3336,10 +3339,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
   // Filter/Derived definitions
   const newProjects = (leads || []).filter(p => !p.editor_assigned || p.editor_assigned === 'Unassigned');
-  const assignedProjects = (leads || []).filter(p => p.editor_assigned && p.editor_assigned !== 'Unassigned' && p.editing_status !== 'Project Delivered' && p.editing_status !== 'Delivered' && p.editing_status !== 'Completed');
-  const pendingProjects = (leads || []).filter(p => !['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed', 'Completed'].includes(p.editing_status));
+  const assignedProjects = (leads || []).filter(p => p.editor_assigned && p.editor_assigned !== 'Unassigned' && !['Project Delivered', 'Delivered', 'Completed', 'Order Closed', 'Project Closed', 'Closed'].includes(p.editing_status));
+  const pendingProjects = (leads || []).filter(p => !['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed', 'Completed', 'Order Closed'].includes(p.editing_status));
   const delayedProjects = (leads || []).filter(p => {
-    if (['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed', 'Completed'].includes(p.editing_status)) return false;
+    if (['Final Approval', 'Approved', 'Project Delivered', 'Delivered', 'Project Closed', 'Closed', 'Completed', 'Order Closed'].includes(p.editing_status)) return false;
     if (!p.expected_delivery_date) return false;
     return new Date(p.expected_delivery_date) < today;
   });
@@ -4407,7 +4410,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       {displayStatus === "Editing Completed" && currentRole !== "Production Staff" && (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
                             setOpenActionDropdown(null);
                             handleOpenClientAcceptance(prod);
                           }}
@@ -11111,14 +11116,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
               >
                 {/* Header */}
-                <div className="p-4 sm:p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
                   <div>
                     <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-                      <span>📋</span> Assigned Tasks
+                      <span>📋</span> Assigned Tasks: {selectedStaffForTasks}
                     </h3>
-                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
-                      STAFF: <span className="text-amber-400 font-bold">{selectedStaffForTasks}</span>
-                    </p>
                   </div>
                   <button
                     type="button"
@@ -11128,82 +11130,22 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     ✕ Close
                   </button>
                 </div>
-
-                {/* Body Table */}
-                <div className="p-0 overflow-y-auto flex-1">
+                <div className="p-5 overflow-y-auto max-h-[60vh]">
                   {staffTasks.length === 0 ? (
-                    <div className="p-8 text-center text-zinc-500 font-mono text-xs">
-                      No assigned tasks found.
-                    </div>
+                    <p className="text-zinc-500 text-center py-4 text-xs font-mono">No active tasks found for this staff member.</p>
                   ) : (
-                    <div className="overflow-x-auto w-full max-w-full">
-<table className="w-full text-left border-collapse min-w-max">
-                      <thead className="bg-zinc-900/40 sticky top-0 border-b border-zinc-900">
-                        <tr className="font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
-                          <th className="px-4 py-3 font-bold">Order ID</th>
-                          <th className="px-4 py-3 font-bold">Customer Name</th>
-                          <th className="px-4 py-3 font-bold">Event Name</th>
-                          <th className="px-4 py-3 font-bold">Assigned Task</th>
-                          <th className="px-4 py-3 font-bold">Target Delivery Date</th>
-                          <th className="px-4 py-3 font-bold">Raw Footage Received</th>
-                          <th className="px-4 py-3 font-bold">Current Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
-                        {staffTasks.map(task => {
-                          const correlatedProj = (production || []).find(p => p.production_id === task.production_id);
-                          const { order, lead } = resolveOrderAndLead(correlatedProj);
-                          const trackingId = correlatedProj?.tracking_id;
-                          const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' ? order?.order_id : (trackingId || 'N/A');
-                          const customerName = lead?.customer_name || order?.customer_name || correlatedProj?.customer_name || 'Client';
-                          const eventName = order?.event_type || order?.custom_event_name || 'Project';
-                          const rawFootageLink = getRawFootageDriveLink(correlatedProj);
-
-                          return (
-                            <tr key={task.assignment_id} className="hover:bg-zinc-900/30 transition-colors">
-                              <td className="px-4 py-3 font-mono font-bold text-violet-400">{orderId}</td>
-                              <td className="px-4 py-3 font-semibold text-white">{customerName}</td>
-                              <td className="px-4 py-3 font-medium text-purple-300">{eventName}</td>
-                              <td className="px-4 py-3 font-medium text-amber-100">{task.speciality || 'Editor'}</td>
-                              <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">{task.target_finish_date || correlatedProj?.target_delivery_date || '—'}</td>
-                              <td className="px-4 py-3">
-                                {rawFootageLink && (rawFootageLink.startsWith('http://') || rawFootageLink.startsWith('https://')) ? (
-                                  <a
-                                    href={rawFootageLink.startsWith('http') ? rawFootageLink : `https://${rawFootageLink}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    referrerPolicy="no-referrer"
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-md text-[11px] font-bold transition-all cursor-pointer"
-                                    title={rawFootageLink}
-                                  >
-                                    <FileVideo className="w-3.5 h-3.5 shrink-0" />
-                                    <span>View Raw Footage</span>
-                                    <ExternalLink className="w-3 h-3 shrink-0 opacity-70" />
-                                  </a>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 text-zinc-500 text-[11px] font-mono">
-                                    <Clock className="w-3 h-3 text-zinc-600" />
-                                    <span>Pending</span>
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                                  task.status === 'Completed'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
-                                    : task.status === 'Revision'
-                                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
-                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
-                                }`}>
-                                  {task.status}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-</div>
+                    <div className="space-y-3">
+                      {staffTasks.map(task => (
+                         <div key={task.id} className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-2">
+                           <div className="flex justify-between items-center">
+                             <span className="font-bold text-white text-xs">Project: {task.production_id}</span>
+                             <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded">{task.status}</span>
+                           </div>
+                           <div className="text-[11px] text-zinc-400 font-mono">Deliverable: {task.deliverables}</div>
+                           <div className="text-[11px] text-zinc-400 font-mono">Event: {task.event_id}</div>
+                         </div>
+                      ))}
+                    </div>
                   )}
                 </div>
               </motion.div>
@@ -11212,29 +11154,23 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         })()}
       </AnimatePresence>
 
-      {/* RE-SEND REVIEW MODAL */}
+      {/* CUSTOMER REVIEW RESEND POPUP */}
       <AnimatePresence>
         {customerReviewResendProd && (() => {
-          const { order, lead } = resolveOrderAndLead(customerReviewResendProd);
-          const customerName = order?.customer_name || lead?.customer_name || 'Customer';
-          const trackingId = customerReviewResendProd.tracking_id || 'N/A';
           return (
-            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-2xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
               >
                 {/* Header */}
                 <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
                   <div>
                     <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-                      <span>📤</span> Send Customer Review Links
+                      <span>💬</span> Send Review Link
                     </h3>
-                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
-                      PROJECT ID: <span className="text-violet-400 font-bold">{customerReviewResendProd.production_id}</span> • TRACKING ID: <span className="text-amber-400 font-bold">{trackingId}</span>
-                    </p>
                   </div>
                   <button
                     type="button"
@@ -11244,84 +11180,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     ✕ Close
                   </button>
                 </div>
-
-                {/* Body Form */}
-                <form
-                  onSubmit={async (e) => {
-                    e.preventDefault();
-                    try {
-                      setIsSaving(true);
-                      await updateProduction(customerReviewResendProd.production_id, {
-                        editing_status: 'Customer Review'
-                      });
-                      if (order?.order_id) {
-                        await updateOrderStage(order?.order_id, 'Customer Review');
-                      }
-                      
-                      // Trigger WhatsApp Web with encoded text
-                      const formattedPhone = customerReviewPhone.replace(/\D/g, '');
-                      const encodedMsg = encodeURIComponent(customerReviewMessage);
-                      const whatsappUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedMsg}`;
-                      window.open(whatsappUrl, '_blank');
-                      
-                      setCustomerReviewResendProd(null);
-                    } catch (err: any) {
-                      alert("Error updating status: " + (err.message || err));
-                    } finally {
-                      setIsSaving(false);
-                    }
-                  }}
-                  className="p-6 space-y-4 overflow-y-auto flex-1 text-left"
-                >
-                  <div className="space-y-1">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                      Customer Name
-                    </label>
-                    <div className="text-sm font-semibold text-zinc-200 bg-zinc-900/40 px-3 py-2 rounded-xl border border-zinc-900">
-                      {customerName}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                        WhatsApp Number / Mobile
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={customerReviewPhone}
-                        onChange={(e) => setCustomerReviewPhone(e.target.value)}
-                        className="w-full bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono"
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                        Set Stage Automatically to
-                      </label>
-                      <div className="text-xs font-semibold text-emerald-400 bg-emerald-950/10 border border-emerald-900/30 px-3 py-2 rounded-xl">
-                        💬 Customer Review
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                      Draft Message Content
-                    </label>
-                    <p className="text-[10px] text-zinc-500 font-mono mb-1">
-                      Customize review link messages including all assigned deliverables below:
-                    </p>
-                    <textarea
-                      required
-                      rows={10}
-                      value={customerReviewMessage}
-                      onChange={(e) => setCustomerReviewMessage(e.target.value)}
-                      className="w-full bg-zinc-900 text-zinc-100 border border-zinc-800 focus:border-purple-500 rounded-xl px-3 py-2 text-xs font-mono whitespace-pre-wrap leading-relaxed"
-                    />
-                  </div>
-
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  setIsSaving(true);
+                  setTimeout(() => { setIsSaving(false); setCustomerReviewResendProd(null); }, 500);
+                }} className="p-5 space-y-4">
+                  <p className="text-xs text-zinc-400 font-mono">Send the review link to the customer via WhatsApp.</p>
                   {/* Buttons */}
                   <div className="flex gap-3 pt-2">
                     <button
@@ -11350,46 +11214,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       <AnimatePresence>
         {clientAcceptanceProd && (() => {
           const { order, lead } = resolveOrderAndLead(clientAcceptanceProd);
-          const customerName = order?.customer_name || lead?.customer_name || 'Customer';
           const trackingId = clientAcceptanceProd.tracking_id || 'N/A';
-          const eventGroups = getClientAcceptanceDeliverables(clientAcceptanceProd);
-          const allChecklistKeys = eventGroups.flatMap(g => g.items.map(i => i.key));
-
-          // Convert a file to Base64
-          const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            setCaUploadingProof(true);
-            setCaUploadName(file.name);
-            setCaConsentProofChecked(true);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              setCaCommunicationProof(reader.result as string);
-              setCaUploadingProof(false);
-            };
-            reader.onerror = () => {
-              alert("Failed to read file");
-              setCaUploadingProof(false);
-            };
-            reader.readAsDataURL(file);
-          };
-
+          
           return (
-            <div className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh]"
+                className="bg-[#0a0a0a] border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
               >
                 {/* Header */}
-                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                <div className="p-5 flex justify-between items-start">
                   <div>
-                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-                      <span>✓</span> Client Acceptance Verification Deck
+                    <h3 className="text-[13px] font-black text-white flex items-center gap-1.5 uppercase tracking-widest font-mono">
+                      <span className="text-emerald-400">✓</span> CLIENT APPROVAL
                     </h3>
-                    <p className="text-[10px] text-zinc-500 mt-1 font-mono">
-                      PROJECT ID: <span className="text-violet-400 font-bold">{clientAcceptanceProd.production_id}</span> • TRACKING ID: <span className="text-amber-400 font-bold">{trackingId}</span>
+                    <p className="text-[10px] text-zinc-500 mt-2 font-mono uppercase tracking-wider">
+                      PROJECT ID: <span className="text-violet-400 font-bold">{clientAcceptanceProd.production_id}</span>
                     </p>
                   </div>
                   <button
@@ -11398,9 +11240,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       setClientAcceptanceProd(null);
                       setCaUploadConfirmations({});
                     }}
-                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                    className="p-1.5 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer flex items-center justify-center"
                   >
-                    ✕ Close
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                   </button>
                 </div>
 
@@ -11408,45 +11250,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <form
                   onSubmit={async (e) => {
                     e.preventDefault();
-
-                    if (!caConsentProofChecked) {
-                      alert("Please check and confirm 'Client Communication & Consent Proof'.");
-                      return;
-                    }
-
-                    if (!caCommunicationProof || !caCommunicationProof.trim()) {
-                      alert("Client Communication & Consent Proof is required. Please upload or select a proof file.");
-                      return;
-                    }
-
-                    if (!caUploadName || !caUploadName.trim()) {
-                      alert("Upload Name is required. Please provide a valid file name.");
-                      return;
-                    }
-
+                    
                     try {
                       setIsSaving(true);
                       
-                      let uploadedProofUrl = caCommunicationProof;
-                      if (caCommunicationProof && caCommunicationProof.trim()) {
-                        try {
-                          uploadedProofUrl = await uploadProofToStorage(caCommunicationProof, 'client_acceptance');
-                        } catch (uErr: any) {
-                          alert(`Proof upload failed: ${uErr.message}`);
-                          setIsSaving(false);
-                          return;
-                        }
-                      }
-
                       const updates: any = {
                         editing_status: 'Client Accepted',
-                        client_communication_proof: uploadedProofUrl,
-                        customer_communication_proof: uploadedProofUrl,
-                        proof_url: uploadedProofUrl,
-                        upload_name: caUploadName.trim(),
-                        proof_name: caUploadName.trim(),
-                        client_communication_proof_name: caUploadName.trim(),
-                        checklist_client_communication_proof: caConsentProofChecked,
                         checklist_customer_acceptance: caVerifyCustomerAcceptance,
                         checklist_content_usage: caContentUsageConfirmation,
                         checklist_footage_deleted_7_days: caFootageDeleted7Days,
@@ -11462,484 +11271,96 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       if (targetId) {
                         await updateOrderStage(targetId, 'Client Accepted' as any);
                       }
-
-                      // Persist unified Client Acceptance Verification records per event
-                      if (saveClientAcceptanceVerification) {
-                        if (eventGroups.length > 0) {
-                          for (const group of eventGroups) {
-                            const conf = caUploadConfirmations[group.eventId];
-                            const matchedFolder = (conf?.folderName || group.items.find(i => i.folderName)?.folderName || clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '').trim();
-                            const matchedLink = (group.items.find(i => i.uploadLink)?.uploadLink || clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '').trim();
-                            
-                            await saveClientAcceptanceVerification({
-                              order_id: targetId,
-                              event_id: group.eventId || 'default',
-                              folder_name: matchedFolder,
-                              upload_link_path: matchedLink,
-                              client_communication_consent_proof: uploadedProofUrl,
-                              proof_file_name: caUploadName.trim(),
-                              consent_proof_verified: true
-                            });
-                          }
-                        } else {
-                          await saveClientAcceptanceVerification({
-                            order_id: targetId,
-                            event_id: 'default',
-                            folder_name: (clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '').trim(),
-                            upload_link_path: (clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '').trim(),
-                            client_communication_consent_proof: uploadedProofUrl,
-                            proof_file_name: caUploadName.trim(),
-                            consent_proof_verified: true
-                          });
-                        }
-                      }
-
-                      // Update assignments with manual upload confirmations and server upload validation
-                      for (const group of eventGroups) {
-                        const conf = caUploadConfirmations[group.eventId];
-                        const isGroupValidated = Boolean(caValidatedServerUploads[group.eventId] || caValidateEditedFiles);
-
-                        for (const item of group.items) {
-                          if (item.assignmentId) {
-                            const isItemValidated = Boolean(caValidatedServerUploads[item.key] || caValidatedServerUploads[item.assignmentId] || isGroupValidated);
-                            const assignmentUpdate: any = {};
-
-                            if (conf?.confirmed) {
-                              assignmentUpdate.server_upload_confirmed = true;
-                              assignmentUpdate.server_upload_event_date = conf.eventDate;
-                              assignmentUpdate.server_upload_folder_name = conf.folderName;
-                              assignmentUpdate.server_upload_confirmed_at = new Date().toISOString();
-                              assignmentUpdate.server_upload_confirmed_by = currentUserName || 'Production Staff';
-                              assignmentUpdate.edited_folder_uploaded_to_server = true;
-                            }
-
-                            if (isItemValidated) {
-                              assignmentUpdate.server_upload_validated = true;
-                              assignmentUpdate.server_upload_validated_at = new Date().toISOString();
-                              assignmentUpdate.server_upload_validated_by = currentUserName || 'Production Staff';
-                            }
-
-                            if (Object.keys(assignmentUpdate).length > 0) {
-                              await updateEditorAssignmentStatus(item.assignmentId, item.status as any, assignmentUpdate);
-                            }
-                          }
-                        }
-                      }
-
+                      
                       if (refreshData) {
                         await refreshData();
                       }
                       setClientAcceptanceProd(null);
-                      setCaUploadConfirmations({});
                     } catch (err: any) {
-                      alert("Error finalizing Client Acceptance: " + (err.message || err));
+                      alert(`Error finalizing Client Acceptance: ${err.message || err}`);
                     } finally {
                       setIsSaving(false);
                     }
                   }}
-                  className="p-6 space-y-5 overflow-y-auto flex-1 text-left"
+                  className="px-5 pb-5 space-y-4 flex flex-col"
                 >
-                  {/* Customer Block */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-zinc-900/30 border border-zinc-900 p-4 rounded-2xl">
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Customer Name</span>
-                      <div className="text-xs font-semibold text-zinc-200">{customerName}</div>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-[9px] text-zinc-500 uppercase tracking-wider block font-mono">Production Status</span>
-                      <span className="inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-400 border border-indigo-500/15">
-                        {clientAcceptanceProd.editing_status || 'In Progress'}
+                  <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[60vh] pr-2">
+                    <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={caVerifyCustomerAcceptance}
+                        onChange={(e) => setCaVerifyCustomerAcceptance(e.target.checked)}
+                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-white focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer appearance-none checked:bg-white checked:border-white relative before:content-[''] checked:before:absolute checked:before:w-1.5 checked:before:h-2.5 checked:before:border-r-2 checked:before:border-b-2 checked:before:border-black checked:before:rotate-45 checked:before:top-[1px] checked:before:left-[5px]"
+                      />
+                      <span className="text-[13px] font-bold text-zinc-100">
+                        Client Approval
                       </span>
-                    </div>
-                  </div>
+                    </label>
 
-                  {/* Production Verification Checklist */}
-                  <div className="space-y-3">
-                    <div className="border-b border-zinc-900 pb-1.5 flex items-center justify-between">
-                      <h4 className="text-[10px] text-indigo-400 uppercase font-black tracking-widest font-mono flex items-center gap-1.5">
-                        <span>☑</span> Production Verification Checklist
-                      </h4>
-                      <span className="text-[10px] font-mono text-zinc-400 font-bold">
-                        Verification Steps
+                    <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={caContentUsageConfirmation}
+                        onChange={(e) => setCaContentUsageConfirmation(e.target.checked)}
+                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-white focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer appearance-none checked:bg-white checked:border-white relative before:content-[''] checked:before:absolute checked:before:w-1.5 checked:before:h-2.5 checked:before:border-r-2 checked:before:border-b-2 checked:before:border-black checked:before:rotate-45 checked:before:top-[1px] checked:before:left-[5px]"
+                      />
+                      <span className="text-[13px] font-bold text-zinc-100">
+                        Content Usage Confirmation
                       </span>
-                    </div>
+                    </label>
 
-                    <div className="space-y-3">
-                      {/* MANDATORY: Client Communication & Consent Proof */}
-                      <div className="p-4 bg-zinc-900/60 border border-pink-500/30 rounded-xl space-y-3 shadow-inner">
-                        <label className="flex items-start gap-3 cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            checked={caConsentProofChecked}
-                            onChange={(e) => setCaConsentProofChecked(e.target.checked)}
-                            className="w-4 h-4 mt-0.5 accent-pink-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                          />
-                          <div className="space-y-0.5 flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold text-zinc-100 group-hover:text-pink-300 transition-colors flex items-center gap-1.5">
-                                <span>💬</span> Client Communication & Consent Proof <span className="text-rose-400 font-black text-sm">*</span>
-                              </span>
-                              <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                                caConsentProofChecked && caCommunicationProof ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
-                              }`}>
-                                {caConsentProofChecked && caCommunicationProof ? 'Confirmed' : 'Mandatory'}
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-zinc-400 leading-normal block">
-                              Confirm client communication and consent proof has been acquired and uploaded.
-                            </span>
-                          </div>
-                        </label>
+                    <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={caFootageDeleted7Days}
+                        onChange={(e) => setCaFootageDeleted7Days(e.target.checked)}
+                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-white focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer appearance-none checked:bg-white checked:border-white relative before:content-[''] checked:before:absolute checked:before:w-1.5 checked:before:h-2.5 checked:before:border-r-2 checked:before:border-b-2 checked:before:border-black checked:before:rotate-45 checked:before:top-[1px] checked:before:left-[5px]"
+                      />
+                      <span className="text-[13px] font-bold text-zinc-100">
+                        Footage Deleted in 7 Days
+                      </span>
+                    </label>
 
-                        {/* Upload Name Field */}
-                        <div className="space-y-1.5 pt-1">
-                          <label className="block text-[10px] font-mono font-bold text-zinc-300 uppercase">
-                            Upload Name <span className="text-rose-400">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            placeholder="e.g. Client_Consent_Proof_24Aug2026.jpg"
-                            value={caUploadName}
-                            onChange={(e) => setCaUploadName(e.target.value)}
-                            className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-pink-500 rounded-lg px-3 py-2 text-xs font-mono focus:outline-none transition-colors"
-                          />
-                        </div>
+                    <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={caVerifyPaymentSales}
+                        onChange={(e) => setCaVerifyPaymentSales(e.target.checked)}
+                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-white focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer appearance-none checked:bg-white checked:border-white relative before:content-[''] checked:before:absolute checked:before:w-1.5 checked:before:h-2.5 checked:before:border-r-2 checked:before:border-b-2 checked:before:border-black checked:before:rotate-45 checked:before:top-[1px] checked:before:left-[5px]"
+                      />
+                      <span className="text-[13px] font-bold text-zinc-100">
+                        Verify Payment from Sales
+                      </span>
+                    </label>
 
-                        {/* Upload / Select Proof Button */}
-                        <div className="space-y-2">
-                          <label className="flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 hover:border-pink-500/50 bg-zinc-950/80 hover:bg-zinc-900/60 rounded-xl py-3 px-4 cursor-pointer transition-all">
-                            <span className="text-xs text-zinc-300 font-bold mb-0.5 flex items-center gap-1.5">
-                              <Upload className="w-4 h-4 text-pink-400" />
-                              {caUploadingProof ? 'Processing proof...' : caCommunicationProof ? 'Change / Select Different Proof' : 'Upload / Select Proof'}
-                            </span>
-                            <span className="text-[10px] text-zinc-500 font-mono">PNG, JPG, JPEG, WEBP, PDF formats supported</span>
-                            <input
-                              type="file"
-                              accept="image/*,application/pdf"
-                              onChange={handleFileChange}
-                              disabled={caUploadingProof}
-                              className="hidden"
-                            />
-                          </label>
-
-                          {/* Attached proof preview */}
-                          {caCommunicationProof && (
-                            <div className="p-3 bg-zinc-950 border border-pink-500/20 rounded-xl space-y-2 animate-in fade-in duration-200">
-                              <div className="flex items-center justify-between text-xs text-pink-400 font-mono font-bold">
-                                <span className="flex items-center gap-1.5">
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Proof Attached: {caUploadName || 'File'}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setCaCommunicationProof('');
-                                    setCaUploadName('');
-                                    setCaConsentProofChecked(false);
-                                  }}
-                                  className="text-zinc-500 hover:text-rose-400 text-[11px] font-normal cursor-pointer"
-                                >
-                                  Remove Proof
-                                </button>
-                              </div>
-
-                              {caCommunicationProof.startsWith('data:') || caCommunicationProof.match(/\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i) ? (
-                                <div className="relative rounded-lg overflow-hidden border border-zinc-850 max-h-40 bg-zinc-900 flex items-center justify-center">
-                                  <img
-                                    src={resolveStorageUrl(caCommunicationProof) || caCommunicationProof}
-                                    alt="Client Communication Proof"
-                                    referrerPolicy="no-referrer"
-                                    className="max-h-40 max-w-full object-contain rounded-lg"
-                                  />
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2 p-2 bg-zinc-900 border border-zinc-800 rounded-lg text-xs font-mono text-zinc-300">
-                                  <span className="text-pink-400">📄</span>
-                                  <span className="truncate flex-1">{caUploadName || 'Uploaded Proof Document'}</span>
-                                  <a
-                                    href={resolveStorageUrl(caCommunicationProof) || caCommunicationProof}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-pink-400 hover:underline text-[11px] font-bold"
-                                  >
-                                    View Proof ↗
-                                  </a>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 1. Verify Customer Acceptance */}
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={caVerifyCustomerAcceptance}
-                          onChange={(e) => setCaVerifyCustomerAcceptance(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-zinc-200 block">
-                            1. Verify Customer Acceptance
-                          </span>
-                          <span className="text-[11px] text-zinc-400 leading-normal block">
-                            Confirm that the customer has reviewed and approved the delivered output.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* 2. Content Usage Confirmation */}
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={caContentUsageConfirmation}
-                          onChange={(e) => setCaContentUsageConfirmation(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-zinc-200 block">
-                            2. Content Usage Confirmation
-                          </span>
-                          <span className="text-[11px] text-zinc-400 leading-normal block">
-                            Confirm client permission for social media, marketing, or portfolio showcase.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* 3. Footage Deleted in 7 Days */}
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={caFootageDeleted7Days}
-                          onChange={(e) => setCaFootageDeleted7Days(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-zinc-200 block">
-                            3. Footage Deleted in 7 Days
-                          </span>
-                          <span className="text-[11px] text-zinc-400 leading-normal block">
-                            Acknowledge standard 7-day raw footage retention window before local clean-up.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* 4. Verify Payment from Sales */}
-                      <label className="flex items-start gap-3 p-3 bg-zinc-900/40 border border-zinc-900 rounded-xl cursor-pointer hover:bg-zinc-900/70 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={caVerifyPaymentSales}
-                          onChange={(e) => setCaVerifyPaymentSales(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 accent-purple-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                        />
-                        <div className="space-y-0.5">
-                          <span className="text-xs font-bold text-zinc-200 block">
-                            4. Verify Payment from Sales
-                          </span>
-                          <span className="text-[11px] text-zinc-400 leading-normal block">
-                            Cross-check billing records and verify complete payment collection with Sales.
-                          </span>
-                        </div>
-                      </label>
-
-                      {/* 5. Validate Edited Files Uploaded */}
-                      <div className="p-3.5 bg-zinc-900/50 border border-zinc-850 rounded-xl space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <label className="flex items-start gap-3 cursor-pointer group">
-                            <input
-                              type="checkbox"
-                              checked={caValidateEditedFiles}
-                              onChange={(e) => {
-                                const newVal = e.target.checked;
-                                setCaValidateEditedFiles(newVal);
-                                const nextMap = { ...caValidatedServerUploads };
-                                eventGroups.forEach(g => {
-                                  nextMap[g.eventId] = newVal;
-                                  g.items.forEach(i => {
-                                    nextMap[i.key] = newVal;
-                                    if (i.assignmentId) nextMap[i.assignmentId] = newVal;
-                                  });
-                                });
-                                setCaValidatedServerUploads(nextMap);
-                              }}
-                              className="w-4 h-4 mt-0.5 accent-emerald-500 bg-zinc-950 border-zinc-800 rounded cursor-pointer focus:ring-0"
-                            />
-                            <div className="space-y-0.5">
-                              <span className="text-xs font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors block">
-                                Validate Edited Files Uploaded to Server
-                              </span>
-                              <span className="text-[11px] text-zinc-400 leading-normal block">
-                                Validate and verify that the Editor has uploaded all edited files/folders to the server for each event.
-                              </span>
-                            </div>
-                          </label>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold shrink-0 ${
-                            caValidateEditedFiles ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'
-                          }`}>
-                            {caValidateEditedFiles ? 'Validated' : 'Pending Validation'}
-                          </span>
-                        </div>
-
-                        {/* Upload Details per Event */}
-                        {eventGroups.length > 0 ? (
-                          <div className="space-y-2.5 pt-2 border-t border-zinc-800/80">
-                            {eventGroups.map((group) => {
-                              const groupKey = group.eventId;
-                              const groupUploadItems = group.items;
-                              const hasUploadedItem = groupUploadItems.some(i => i.isUploaded);
-                              const matchedDate = groupUploadItems.find(i => i.eventDate)?.eventDate || clientAcceptanceProd.event_date || 'N/A';
-                              const matchedFolder = groupUploadItems.find(i => i.folderName)?.folderName || clientAcceptanceProd.server_upload_folder_name || clientAcceptanceProd.server_path || '';
-                              const matchedLink = groupUploadItems.find(i => i.uploadLink)?.uploadLink || clientAcceptanceProd.edited_drive_link || clientAcceptanceProd.delivery_link || '';
-
-                              return (
-                                <div key={`event_val_${groupKey}`} className="p-3 bg-zinc-950/60 border border-zinc-850/80 rounded-lg space-y-2.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-bold text-purple-300 font-mono flex items-center gap-1.5">
-                                      <span>📅</span> {group.eventName}
-                                    </span>
-                                  </div>
-
-                                  {/* Upload Info Box */}
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono bg-zinc-900/40 p-2.5 rounded-md border border-zinc-850">
-                                    <div>
-                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Event Date:</span>
-                                      <span className="text-zinc-300 font-semibold">{matchedDate}</span>
-                                    </div>
-                                    <div>
-                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Folder Name:</span>
-                                      <span className={matchedFolder ? 'text-emerald-300 font-semibold truncate block' : 'text-zinc-500 italic block'}>
-                                        {matchedFolder || 'Not provided yet'}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Server Upload Status:</span>
-                                      <span className={hasUploadedItem ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
-                                        {hasUploadedItem ? '✓ Uploaded by Editor' : '⏳ Pending Editor Upload'}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="text-zinc-500 block text-[9px] uppercase font-bold">Upload Link / Path:</span>
-                                      {matchedLink ? (
-                                        <a
-                                          href={matchedLink.startsWith('http') ? matchedLink : `https://${matchedLink}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="text-indigo-400 hover:text-indigo-300 underline font-bold truncate block"
-                                        >
-                                          🔗 {matchedLink}
-                                        </a>
-                                      ) : (
-                                        <span className="text-zinc-500 italic">No direct link stored</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-[11px] font-mono text-zinc-400 bg-zinc-950 p-2.5 rounded-lg border border-zinc-850">
-                            Single Event / Production Server Path: <span className="text-emerald-400 font-semibold">{clientAcceptanceProd.server_path || clientAcceptanceProd.server_upload_folder_name || 'Ready for Validation'}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={caValidateEditedFiles}
+                        onChange={(e) => setCaValidateEditedFiles(e.target.checked)}
+                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-white focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer appearance-none checked:bg-white checked:border-white relative before:content-[''] checked:before:absolute checked:before:w-1.5 checked:before:h-2.5 checked:before:border-r-2 checked:before:border-b-2 checked:before:border-black checked:before:rotate-45 checked:before:top-[1px] checked:before:left-[5px]"
+                      />
+                      <span className="text-[13px] font-bold text-zinc-100">
+                        Validate Edited Files Uploaded to Server
+                      </span>
+                    </label>
                   </div>
-
-                  {/* Edited Folder Upload Confirmations */}
-                  {caCommunicationProof && eventGroups.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="text-[10px] text-emerald-400 uppercase font-black tracking-widest font-mono border-b border-zinc-900 pb-1.5">
-                        📤 Edited Folder Upload Confirmation
-                      </h4>
-                      <div className="space-y-3">
-                        {eventGroups.map((group) => {
-                          const conf = caUploadConfirmations[group.eventId] || { confirmed: false, eventDate: '', folderName: '' };
-                          return (
-                            <div key={`manual_conf_${group.eventId}`} className="p-3 bg-zinc-900/30 border border-zinc-850 rounded-xl space-y-3">
-                              <label className="flex items-start gap-3 cursor-pointer group">
-                                <input
-                                  type="checkbox"
-                                  checked={conf.confirmed}
-                                  onChange={(e) => {
-                                    setCaUploadConfirmations(prev => ({
-                                      ...prev,
-                                      [group.eventId]: {
-                                        ...conf,
-                                        confirmed: e.target.checked
-                                      }
-                                    }));
-                                  }}
-                                  className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900 transition-colors cursor-pointer"
-                                />
-                                <div>
-                                  <span className="text-xs font-semibold text-zinc-200 group-hover:text-emerald-300 transition-colors block">
-                                    Edited Folder Uploaded to Server
-                                  </span>
-                                  <span className="text-[10px] text-zinc-500 font-mono block mt-0.5">
-                                    Confirm upload for: <span className="font-bold text-zinc-400">{group.eventName}</span>
-                                  </span>
-                                </div>
-                              </label>
-
-                              {conf.confirmed && (
-                                <div className="pl-7 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in slide-in-from-top-2 duration-200">
-                                  <div className="space-y-1">
-                                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                                      Event Date <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
-                                      type="date"
-                                      required={conf.confirmed}
-                                      value={conf.eventDate}
-                                      onChange={(e) => setCaUploadConfirmations(prev => ({
-                                        ...prev,
-                                        [group.eventId]: { ...conf, eventDate: e.target.value }
-                                      }))}
-                                      className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono"
-                                    />
-                                  </div>
-                                  <div className="space-y-1">
-                                    <label className="block text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-                                      Folder Name <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
-                                      type="text"
-                                      required={conf.confirmed}
-                                      placeholder="e.g. 2024-05-12_Wedding_Videos"
-                                      value={conf.folderName}
-                                      onChange={(e) => setCaUploadConfirmations(prev => ({
-                                        ...prev,
-                                        [group.eventId]: { ...conf, folderName: e.target.value }
-                                      }))}
-                                      className="w-full bg-zinc-950 text-zinc-100 border border-zinc-800 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
 
                   {/* Buttons */}
-                  <div className="flex gap-3 pt-2">
+                  <div className="flex gap-3 pt-4">
                     <button
                       type="button"
                       onClick={() => {
                         setClientAcceptanceProd(null);
                         setCaUploadConfirmations({});
                       }}
-                      className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-850 text-zinc-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer border border-zinc-800"
+                      className="py-3.5 px-6 bg-[#1f1f22] hover:bg-[#2a2a2d] text-zinc-100 font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
                     >
                       CANCEL
                     </button>
                     <button
                       type="button"
-                      disabled={isSaving || isSavingProgress || caUploadingProof}
+                      disabled={isSaving || isSavingProgress}
                       onClick={async () => {
                         try {
                           setIsSavingProgress(true);
@@ -11953,26 +11374,22 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             validated_server_uploads: caValidatedServerUploads
                           };
                           
-                          if (caConsentProofChecked) {
-                            updates.checklist_client_communication_proof = caConsentProofChecked;
-                          }
-                          
                           await updateProduction(clientAcceptanceProd.production_id, updates);
-                          alert('Progress saved successfully.');
+                          // Do NOT change project status. Do NOT send project to Business Owner. Just save state.
                         } catch (err: any) {
                           alert(`Failed to save progress: ${err.message}`);
                         } finally {
                           setIsSavingProgress(false);
                         }
                       }}
-                      className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-amber-300 font-bold text-xs uppercase tracking-wider rounded-xl transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 border border-zinc-700"
+                      className="py-3.5 px-6 bg-[#2a2a2d] hover:bg-[#353538] text-[#e0b04a] font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
                     >
                       {isSavingProgress ? 'SAVING...' : 'SAVE'}
                     </button>
                     <button
                       type="submit"
-                      disabled={isSaving || isSavingProgress || caUploadingProof}
-                      className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      disabled={isSaving || isSavingProgress}
+                      className="flex-1 py-3.5 px-6 bg-[#00A36C] hover:bg-[#008F5D] text-white font-black text-[11px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-md"
                     >
                       {isSaving ? 'SUBMITTING...' : '✓ CLIENT APPROVED'}
                     </button>
