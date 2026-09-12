@@ -1394,13 +1394,15 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           </span>
                         </td>
                         <td className="p-3 text-right whitespace-nowrap min-w-[100px]">
-                          <button
-                            onClick={() => handleEventAction(ev)}
-                            className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
-                            style={{ whiteSpace: 'nowrap' }}
-                          >
-                            Details
-                          </button>
+                          {role !== 'operations' && (
+                            <button
+                              onClick={() => handleEventAction(ev)}
+                              className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
+                              style={{ whiteSpace: 'nowrap' }}
+                            >
+                              Details
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -2179,15 +2181,17 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                             </>
                           )}
                           <td className="p-3.5 text-right pr-5 whitespace-nowrap min-w-[100px]">
-                            <button 
-                              onClick={() => {
-                                handleEventAction({ raw: lead, lead_id: lead.lead_id, orderId: orderIdDisplay });
-                              }}
-                              className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
-                              style={{ whiteSpace: 'nowrap' }}
-                            >
-                              Details
-                            </button>
+                            {role !== 'operations' && (
+                              <button 
+                                onClick={() => {
+                                  handleEventAction({ raw: lead, lead_id: lead.lead_id, orderId: orderIdDisplay });
+                                }}
+                                className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
+                                style={{ whiteSpace: 'nowrap' }}
+                              >
+                                Details
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -2360,15 +2364,17 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                               )}
                               {role !== 'production' && (
                                 <td className="p-3.5 pr-4 text-right whitespace-nowrap">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleEventAction(ev);
-                                    }}
-                                    className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
-                                  >
-                                    Details
-                                  </button>
+                                  {role !== 'operations' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleEventAction(ev);
+                                      }}
+                                      className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
+                                    >
+                                      Details
+                                    </button>
+                                  )}
                                 </td>
                               )}
                             </tr>

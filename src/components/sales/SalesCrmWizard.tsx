@@ -210,7 +210,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
       <>
         <div 
           id="create_lead_form"
-          className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative h-[calc(100vh-220px)] min-h-[500px]"
+          className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative max-h-[85vh] lg:max-h-[90vh]"
         >
             <button 
               type="button"
@@ -270,7 +270,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
             </div>
 
             {/* Scrollable Body: Content Fields */}
-            <div className="p-3 sm:p-4 overflow-y-auto flex-1 space-y-3.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+            <div className="p-3 sm:p-4 overflow-y-auto shrink min-h-0 space-y-3.5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
               
               {/* STEP 1: CUSTOMER DETAILS */}
               {wizardStep === 1 && (
@@ -588,7 +588,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
       <>
         <div 
           id="lead_details_mobile_modal" 
-          className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative animate-fade-in text-left font-sans text-slate-100"
+          className="bg-[#030303] border border-slate-800 rounded-2xl w-full shadow-2xl flex flex-col overflow-hidden relative animate-fade-in text-left font-sans text-slate-100 max-h-[85vh] lg:max-h-[90vh]"
         >
             {/* Header: Sticky */}
             {!['Create Quote', 'Created Quotation', 'New Lead'].includes(getLeadCurrentStatus(selectedLead)) && (
@@ -689,7 +689,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
             </div>
 
             {/* Content container with horizontal padding */}
-            <div id="crm-wizard-scroll-container" className="flex-1 overflow-y-auto p-2.5 sm:p-3">
+            <div id="crm-wizard-scroll-container" className="shrink min-h-0 overflow-y-auto p-2.5 sm:p-3">
               <div className="max-w-5xl mx-auto">
                 <form onSubmit={(e) => e.preventDefault()} className="space-y-3">
                   <fieldset disabled={isCrmLocked} className="space-y-3 border-0 p-0 m-0 min-w-0">

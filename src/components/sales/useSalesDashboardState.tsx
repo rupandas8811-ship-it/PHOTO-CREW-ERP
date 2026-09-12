@@ -429,7 +429,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     pincode: '',
     Specify_Custom_Lead_Source_Name: '',
     client_residence_address: '',
-    desired_event_event_shoot_type: '',
+    desired_event_shoot_type: '',
     // Step 2
     event_type: '',
     custom_event_name: '',
@@ -879,7 +879,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     state: string;
     pincode: string;
     client_residence_address: string;
-    desired_event_event_shoot_type: string;
+    desired_event_shoot_type: string;
     selected_package_id: string;
     total_pax: number | '';
     reference_source: string;
@@ -912,7 +912,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     pincode: '',
     Specify_Custom_Lead_Source_Name: '',
     client_residence_address: '',
-    desired_event_event_shoot_type: '',
+    desired_event_shoot_type: '',
     selected_package_id: '',
     total_pax: '',
     reference_source: '',
@@ -997,7 +997,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       pincode: '',
     Specify_Custom_Lead_Source_Name: '',
       client_residence_address: '',
-      desired_event_event_shoot_type: '',
+      desired_event_shoot_type: '',
       selected_package_id: '',
       total_pax: '',
       reference_source: '',
@@ -1017,7 +1017,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       pincode: '',
     Specify_Custom_Lead_Source_Name: '',
       client_residence_address: '',
-      desired_event_event_shoot_type: '',
+      desired_event_shoot_type: '',
       event_type: '',
       custom_event_name: '',
       event_name: '',
@@ -2061,7 +2061,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           state: dbLead.state || prev.state || '',
           pincode: dbLead.pincode || prev.pincode || '',
           client_residence_address: dbLead.client_residence_address || prev.client_residence_address || '',
-          desired_event_event_shoot_type: dbLead.desired_event_shoot_type || prev.desired_event_shoot_type || '',
+          desired_event_shoot_type: dbLead.desired_event_shoot_type || prev.desired_event_shoot_type || '',
           status: dbLead.status || dbLead.current_status || prev.status,
           budget: dbLead.budget ?? prev.budget ?? 0,
           package_price: dbLead.package_price ?? prev.package_price ?? 0,
@@ -2121,7 +2121,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           state: leadData.state || prev.state || selectedLead.state || '',
           pincode: leadData.pincode || prev.pincode || selectedLead.pincode || '',
           client_residence_address: leadData.client_residence_address || prev.client_residence_address || selectedLead.client_residence_address || '',
-          desired_event_event_shoot_type: leadData.desired_event_shoot_type || prev.desired_event_shoot_type || selectedLead.desired_event_shoot_type || '',
+          desired_event_shoot_type: leadData.desired_event_shoot_type || prev.desired_event_shoot_type || selectedLead.desired_event_shoot_type || '',
           selected_package_id: prev.Select_Package_Option || prev.selected_package_id || leadData.Select_Package_Option || selectedLead.Select_Package_Option || '',
           status: leadData.status || leadData.current_status || prev.status || selectedLead.status || '',
         }));
@@ -2392,7 +2392,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         state: wizardLeadData.state,
         pincode: wizardLeadData.pincode,
         client_residence_address: wizardLeadData.client_residence_address,
-        desired_event_event_shoot_type: wizardLeadData.desired_event_shoot_type,
+        desired_event_shoot_type: wizardLeadData.desired_event_shoot_type,
         deliverables_description: wizardLeadData.deliverables,
         notes_special_customizations: wizardLeadData.notes,
         selected_package_id: wizardLeadData.selected_package_id || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option || '',
@@ -2410,7 +2410,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         lead_id: createdLeadId || 'DRAFT-LEAD',
         deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
-        selected_package_id: createForm.selected_package_id || selectedPkgIds[0] || '',
+
         sales_staff_name: effectiveSalesName,
         sales_staff_mobile: effectiveSalesMobile,
         events: sortEventsAscending(createEvents || []),
@@ -2542,7 +2542,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         city: leadObj.city,
         state: leadObj.state,
         pincode: leadObj.pincode,
-        desired_event_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
+        desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
 
         editableInclusions: editableInclusions,
         editableDeliverables: editableDeliverables
@@ -2636,7 +2636,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           city: leadObj.city,
           state: leadObj.state,
           pincode: leadObj.pincode,
-          desired_event_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
+          desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
           remarks: updatedRemarks,
           selected_package_id: leadObj.Select_Package_Option || ''
         });
@@ -2673,10 +2673,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           city: leadObj.city,
           state: leadObj.state,
           pincode: leadObj.pincode,
-          desired_event_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
+          desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city),
             next_follow_up_date: followUpDate || undefined,
-            follow_up_notes: internalNotes || undefined,
+          follow_up_notes: internalNotes || undefined,
           selected_package_id: leadObj.Select_Package_Option || ''
         });
       }
@@ -3921,7 +3921,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       state: latestQuote?.state || fullLead.state || '',
       pincode: latestQuote?.pincode || fullLead.pincode || '',
       client_residence_address: latestQuote?.client_residence_address || fullLead.client_residence_address || '',
-      desired_event_event_shoot_type: latestQuote?.desired_event_shoot_type || fullLead.desired_event_shoot_type || '',
+      desired_event_shoot_type: latestQuote?.desired_event_shoot_type || fullLead.desired_event_shoot_type || '',
       // Step 2
       event_type: fullLead.event_type || '',
       custom_event_name: fullLead.custom_event_name || '',
@@ -6752,8 +6752,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             state: createForm.state,
             pincode: createForm.pincode,
             client_residence_address: createForm.client_residence_address,
-            event_shoot_type: createForm.event_shoot_type,
-            desired_event_event_shoot_type: createForm.desired_event_shoot_type,
+            
+            desired_event_shoot_type: createForm.desired_event_shoot_type,
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
@@ -6764,8 +6764,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             budget: Number(createForm.budget) || 0,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || undefined,
-            follow_up_notes: internalNotes || undefined,
-            selected_package_id: createForm.selected_package_id || selectedPkgIds[0] || ''
+          follow_up_notes: internalNotes || undefined,
+            
           });
           setCreatedLeadId(newId);
           finalId = newId;
@@ -6784,20 +6784,20 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             state: createForm.state,
             pincode: createForm.pincode,
             client_residence_address: createForm.client_residence_address,
-            desired_event_event_shoot_type: createForm.desired_event_shoot_type,
+            desired_event_shoot_type: createForm.desired_event_shoot_type,
             total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
             reference_source: createForm.reference_source,
             booking_status: createForm.booking_status || undefined,
             remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || undefined,
-            follow_up_notes: internalNotes || undefined,
-            selected_package_id: createForm.selected_package_id || selectedPkgIds[0] || ''
+          follow_up_notes: internalNotes || undefined,
+            
           });
         }
         const isEdit = !!createdLeadId;
 
         const newLeadObj: Lead = {
-          lead_id: finalId,
+          lead_id: finalId || '',
           customer_name: createForm.customer_name || '',
           mobile: createForm.mobile,
           alternate_mobile: (createForm.alternate_mobile && String(createForm.alternate_mobile).trim() !== '' && String(createForm.alternate_mobile).trim() !== '+91') ? String(createForm.alternate_mobile) : undefined,
@@ -6810,8 +6810,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           state: createForm.state,
           pincode: createForm.pincode,
           client_residence_address: createForm.client_residence_address,
-          event_shoot_type: createForm.event_shoot_type,
-          desired_event_event_shoot_type: createForm.desired_event_shoot_type,
+          
+          desired_event_shoot_type: createForm.desired_event_shoot_type,
           total_pax: createForm.total_pax !== '' ? Number(createForm.total_pax) : undefined,
           reference_source: createForm.reference_source,
           booking_status: createForm.booking_status || 'Pending',
@@ -6822,8 +6822,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           budget: Number(createForm.budget) || 0,
           remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
           next_follow_up_date: followUpDate || undefined,
-            follow_up_notes: internalNotes || undefined,
-          selected_package_id: createForm.selected_package_id || selectedPkgIds[0] || '',
+          follow_up_notes: internalNotes || undefined,
+
           status: 'Create Quote',
           created_date: new Date().toISOString().split('T')[0],
           sales_person: finalUser?.name || currentUser?.name || 'Sales Team',
@@ -7061,11 +7061,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         city: createForm.city,
         state: createForm.state,
         pincode: createForm.pincode,
-        desired_event_event_shoot_type: createForm.desired_event_shoot_type,
+        desired_event_shoot_type: createForm.desired_event_shoot_type,
         remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
             next_follow_up_date: followUpDate || undefined,
-            follow_up_notes: internalNotes || undefined,
-        selected_package_id: createForm.selected_package_id || selectedPkgIds[0] || ''
+          follow_up_notes: internalNotes || undefined,
+        
       });
       showToastMsg("✅ Quotation created successfully.", "success");
       setStep3FollowUpDate(followUpDate || '');
@@ -7093,7 +7093,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
           Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
           Final_Quotation_Amount: finalTotal,
-          selected_package_id: createForm.selected_package_id || selectedPkgIds[0] || ''
+          
         },
         insertPayload: null,
         dbResponse: null,
