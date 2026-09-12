@@ -4,6 +4,91 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabaseClient } from '../../supabaseClient';
 
+const performClientSideValidation = async (activeProd: any) => {
+  const cleanId = String(activeProd.production_id).trim();
+  const orderId = activeProd.order_id ? String(activeProd.order_id).trim() : '';
+
+  let assignments: any[] = [];
+  const { data: eaData } = await supabaseClient
+    .from('editor_assignments')
+    .select('*')
+    .eq('production_id', cleanId);
+  if (Array.isArray(eaData) && eaData.length > 0) {
+    assignments = eaData;
+  } else if (orderId) {
+    const { data: eaOrderData } = await supabaseClient
+      .from('editor_assignments')
+      .select('*')
+      .eq('order_id', orderId);
+    if (Array.isArray(eaOrderData) && eaOrderData.length > 0) {
+      assignments = eaOrderData;
+    }
+  }
+
+  let caVerifs: any[] = [];
+  if (orderId) {
+    const { data: cavData } = await supabaseClient
+      .from('client_acceptance_verifications')
+      .select('*')
+      .eq('order_id', orderId);
+    if (Array.isArray(cavData)) {
+      caVerifs = cavData;
+    }
+  }
+
+  const prodHasConfirmedServerUpload = activeProd.server_upload_confirmed === true;
+  const prodHasEditedFolderUploaded = activeProd.edited_folder_uploaded_to_server === true;
+  const prodFolderName = (activeProd.server_upload_folder_name || activeProd.server_path || activeProd.folder_name || '').trim();
+  const prodDriveLink = (activeProd.edited_drive_link || activeProd.delivery_link || activeProd.final_edited_footage_link || activeProd.upload_link_path || '').trim();
+
+  let assignmentsWithUploadedFiles = 0;
+  let matchedFolderName = prodFolderName;
+  let matchedDriveLink = prodDriveLink;
+
+  assignments.forEach((a: any) => {
+    const aFolder = (a.server_upload_folder_name || a.server_path || a.folder_name || '').trim();
+    const aLink = (a.edited_drive_link || a.Edited_Drive_Link || a.server_file_link || a.upload_link || a.final_edited_footage_link || a.upload_link_path || '').trim();
+    const aProof = (a.proof_url || a.proof_image || a.uploaded_proof || a.customer_review_image || a.confirmation_proof || a.client_communication_proof || '').trim();
+    const aConfirmed = a.server_upload_confirmed === true || a.edited_folder_uploaded_to_server === true;
+
+    const hasUploaded = aConfirmed || Boolean(aFolder) || Boolean(aLink) || Boolean(aProof);
+    if (hasUploaded) {
+      assignmentsWithUploadedFiles++;
+      if (!matchedFolderName && aFolder) matchedFolderName = aFolder;
+      if (!matchedDriveLink && aLink) matchedDriveLink = aLink;
+    }
+  });
+
+  const cavMatch = caVerifs.find((cav: any) =>
+    cav.consent_proof_verified === true ||
+    cav.edited_folder_uploaded_to_server === true ||
+    Boolean((cav.folder_name || '').trim()) ||
+    Boolean((cav.upload_link_path || cav.final_edited_footage_link || '').trim()) ||
+    Boolean((cav.proof_storage_path || '').trim())
+  );
+  if (cavMatch && !matchedFolderName && cavMatch.folder_name) {
+    matchedFolderName = cavMatch.folder_name.trim();
+  }
+
+  const hasUploaded =
+    prodHasConfirmedServerUpload ||
+    prodHasEditedFolderUploaded ||
+    Boolean(prodFolderName) ||
+    Boolean(prodDriveLink) ||
+    Boolean(cavMatch) ||
+    (assignments.length > 0 && assignmentsWithUploadedFiles > 0);
+
+  const isValid = hasUploaded;
+  
+  return {
+    isValid,
+    message: isValid ? 'Verified' : `Edited files must be uploaded to the server first for Project ID ${cleanId}. No server upload or edited folder found.`,
+    details: {
+      folderName: matchedFolderName || 'Server Storage Verified'
+    }
+  };
+};
+
 export const ProductionClientAcceptanceManager: React.FC = () => {
   const { production, pushUpdate, refreshData } = useRole();
   const productionRef = React.useRef(production);
@@ -228,22 +313,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
       setIsValidatingFiles(true);
       setErrorMsg([]);
       try {
-        const res = await fetch('/api/production/validate-edited-files', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_id: activeProd.production_id })
-        });
-        
-        let data: any;
-        const contentType = res.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          data = await res.json();
-        } else {
-          const text = await res.text();
-          throw new Error(`Server returned unexpected response (${res.status}): ${text.substring(0, 50).replace(/<[^>]*>?/gm, '')}`);
-        }
+        const data = await performClientSideValidation(activeProd);
 
-        if (!res.ok || !data.isValid) {
+        if (!data.isValid) {
           setChecklist(prev => ({ ...prev, [key]: false }));
           setServerFilesVerified(false);
           setServerFolderInfo(null);
@@ -356,22 +428,9 @@ export const ProductionClientAcceptanceManager: React.FC = () => {
     
     try {
       // 2. Server-side check: Verify edited files actually exist on the server for this Project ID
-      const valRes = await fetch('/api/production/validate-edited-files', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ project_id: activeProd.production_id })
-      });
-      
-      let valData: any;
-      const contentType = valRes.headers.get('content-type');
-      if (contentType && contentType.includes('application/json')) {
-        valData = await valRes.json();
-      } else {
-        const text = await valRes.text();
-        throw new Error(`Server returned unexpected response (${valRes.status}): ${text.substring(0, 50).replace(/<[^>]*>?/gm, '')}`);
-      }
+      const valData = await performClientSideValidation(activeProd);
 
-      if (!valRes.ok || !valData.isValid) {
+      if (!valData.isValid) {
         setIsSaving(false);
         setChecklist(prev => ({ ...prev, checklist_edited_files_uploaded: false }));
         setServerFilesVerified(false);
