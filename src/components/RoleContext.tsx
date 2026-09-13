@@ -1006,6 +1006,154 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log("[CACHE SYNC EVENT] Stored current role and username");
   }, [currentRole, currentUserName]);
 
+  // Helper to extract the latest status history record for a specific project
+  const getLatestHistoryStatus = (orderId?: string | null, leadId?: string | null, trackingId?: string | null): { newStatus: string; oldStatus: string; createdAt: string } | null => {
+    if (!statusHistory || !Array.isArray(statusHistory) || statusHistory.length === 0) return null;
+
+    const ordStr = orderId ? String(orderId).trim() : '';
+    const leadStr = leadId ? String(leadId).trim() : '';
+    const trkStr = trackingId ? String(trackingId).trim() : '';
+
+    const matching = statusHistory.filter(h => {
+      if (!h || !h.new_status || h.old_status === 'NOTE') return false;
+      const hNew = String(h.new_status).trim();
+      if (!hNew) return false;
+
+      const hOrd = h.order_id ? String(h.order_id).trim() : '';
+      const hLead = h.lead_id ? String(h.lead_id).trim() : '';
+
+      if (ordStr && hOrd && hOrd === ordStr) return true;
+      if (leadStr && hLead && hLead === leadStr) return true;
+      if (trkStr && ((hOrd && hOrd === trkStr) || (hLead && hLead === trkStr))) return true;
+
+      return false;
+    });
+
+    if (matching.length === 0) return null;
+
+    matching.sort((a, b) => {
+      const tA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (tA !== tB) return tA - tB;
+      return String(a.id || '').localeCompare(String(b.id || ''));
+    });
+
+    const latest = matching[matching.length - 1];
+    return {
+      newStatus: String(latest.new_status).trim(),
+      oldStatus: String(latest.old_status || '').trim(),
+      createdAt: latest.created_at || ''
+    };
+  };
+
+  // Authoritative status normalizer for production table workflow
+  const normalizeProductionStatus = (
+    editingStatus?: string, 
+    currentStatus?: string, 
+    productionStatus?: string,
+    historyNewStatus?: string | null
+  ) => {
+    const norm = (s?: string | null) => String(s || '').trim();
+    const lower = (s?: string | null) => norm(s).toLowerCase();
+
+    const isClosed = (s?: string | null) => {
+      const l = lower(s);
+      return l === 'order closed' || l === 'order close' || l === 'closed' || l === 'close' || l === 'project closed' || l === 'completed' || l === 'project completed';
+    };
+
+    const isClientAcceptance = (s?: string | null) => {
+      const l = lower(s);
+      return l === 'client acceptance' || l === 'client accepted';
+    };
+
+    const isEditingCompleted = (s?: string | null) => {
+      const l = lower(s);
+      return l === 'editing completed' || l === 'editing complete';
+    };
+
+    // 1. Order Closed has highest priority
+    if (isClosed(historyNewStatus) || isClosed(currentStatus) || isClosed(editingStatus) || isClosed(productionStatus)) {
+      const closeLabel = (historyNewStatus && lower(historyNewStatus) === 'order close') || (currentStatus && lower(currentStatus) === 'order close') ? 'Order Close' : 'Order Closed';
+      return {
+        editing_status: 'Order Closed' as EditingStatus,
+        current_status: closeLabel,
+        production_status: 'Order Closed',
+        is_closed: true
+      };
+    }
+
+    // 2. Client Acceptance (NEVER allow Editing Completed to override Client Acceptance)
+    if (isClientAcceptance(historyNewStatus) || isClientAcceptance(currentStatus) || isClientAcceptance(editingStatus) || isClientAcceptance(productionStatus)) {
+      return {
+        editing_status: 'Client Acceptance' as EditingStatus,
+        current_status: 'Client Acceptance',
+        production_status: 'Client Acceptance',
+        is_closed: false
+      };
+    }
+
+    // 3. Editing Completed
+    if (isEditingCompleted(historyNewStatus) || isEditingCompleted(currentStatus) || isEditingCompleted(editingStatus) || isEditingCompleted(productionStatus)) {
+      return {
+        editing_status: 'Editing Completed' as EditingStatus,
+        current_status: 'Editing Completed',
+        production_status: 'Editing Completed',
+        is_closed: false
+      };
+    }
+
+    // 4. Follow latest history status if present and not Pending
+    if (historyNewStatus && norm(historyNewStatus) !== '' && norm(historyNewStatus) !== 'Pending') {
+      const s = norm(historyNewStatus);
+      return {
+        editing_status: s as EditingStatus,
+        current_status: s,
+        production_status: s,
+        is_closed: false
+      };
+    }
+
+    // 5. Follow current_status if present and not Pending
+    if (currentStatus && norm(currentStatus) !== '' && norm(currentStatus) !== 'Pending') {
+      const s = norm(currentStatus);
+      return {
+        editing_status: s as EditingStatus,
+        current_status: s,
+        production_status: s,
+        is_closed: false
+      };
+    }
+
+    // 6. Follow editing_status if present and not Pending
+    if (editingStatus && norm(editingStatus) !== '' && norm(editingStatus) !== 'Pending') {
+      const s = norm(editingStatus);
+      return {
+        editing_status: s as EditingStatus,
+        current_status: s,
+        production_status: s,
+        is_closed: false
+      };
+    }
+
+    // 7. Follow production_status if present and not Pending
+    if (productionStatus && norm(productionStatus) !== '' && norm(productionStatus) !== 'Pending') {
+      const s = norm(productionStatus);
+      return {
+        editing_status: s as EditingStatus,
+        current_status: s,
+        production_status: s,
+        is_closed: false
+      };
+    }
+
+    return {
+      editing_status: 'Verified Footage' as EditingStatus,
+      current_status: 'Verified Footage',
+      production_status: 'Verified Footage',
+      is_closed: false
+    };
+  };
+
   const augmentedOrders = useMemo(() => {
     // Post-sales stages that should produce active orders
     const postSalesStages = [
@@ -1013,7 +1161,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
       'Footage Handover', 'Equipment Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
       'Editor Assigned', 'Assigned Editor', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval', 'Project Delivered', 'Project Closed',
-      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed', 'Business Owner Review', 'Order Closed', 'Client Acceptance'
+      'Customer Review', 'Approved', 'Delivered', 'Payment Pending', 'Closed', 'Business Owner Review', 'Order Closed', 'Client Acceptance', 'Editing Completed'
     ];
     
     // Start with existing booked/restored orders from DB
@@ -1049,13 +1197,49 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     });
 
-    // Make sure we override fields so that the leads table remains the single source of truth for status, dates, etc.
+    // Make sure we override fields so that the leads table remains the single source of truth for status, dates, etc.,
+    // while honoring the authoritative production table status if present
     return list.map(o => {
       const parentLead = leads.find(l => l.lead_id === o.lead_id);
+      let effectiveStage = parentLead?.status || o.current_stage;
+
+      const matchingProds = production.filter(p => p.order_id === o.order_id || p.tracking_id === o.order_id || (p as any).lead_id === o.lead_id || p.tracking_id === o.lead_id);
+      const latestHist = getLatestHistoryStatus(o.order_id, o.lead_id);
+
+      if (matchingProds.length > 0 || latestHist) {
+        let bestNorm = normalizeProductionStatus(
+          matchingProds[0]?.editing_status,
+          matchingProds[0]?.current_status,
+          matchingProds[0]?.production_status,
+          latestHist?.newStatus
+        );
+
+        for (const mp of matchingProds) {
+          const candidateNorm = normalizeProductionStatus(
+            mp.editing_status,
+            mp.current_status,
+            mp.production_status,
+            latestHist?.newStatus
+          );
+          if (candidateNorm.editing_status === 'Order Closed') {
+            bestNorm = candidateNorm;
+            break;
+          } else if (candidateNorm.editing_status === 'Client Acceptance' && bestNorm.editing_status !== 'Order Closed') {
+            bestNorm = candidateNorm;
+          } else if (candidateNorm.editing_status === 'Editing Completed' && bestNorm.editing_status !== 'Order Closed' && bestNorm.editing_status !== 'Client Acceptance') {
+            bestNorm = candidateNorm;
+          }
+        }
+
+        if (bestNorm.editing_status) {
+          effectiveStage = bestNorm.editing_status as any;
+        }
+      }
+
       if (parentLead) {
         return {
           ...o,
-          current_stage: parentLead.status,
+          current_stage: effectiveStage,
           customer_name: parentLead.customer_name,
           mobile: parentLead.mobile,
           event_type: parentLead.event_type,
@@ -1066,7 +1250,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           quotation_amount: o.quotation_amount || parentLead.budget || 0
         };
       }
-      return o;
+      return {
+        ...o,
+        current_stage: effectiveStage
+      };
     }).filter(o => {
       // STOLID FIX: Ensure ONLY confirmed bookings with valid post-sales stages stay in the orders list
       const parentLead = leads.find(l => l.lead_id === o.lead_id);
@@ -1074,7 +1261,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isBookingConfirmed = parentLead.booking_status === 'Confirmed' || o.order_status === 'Confirmed' || o.order_status === 'Completed' || o.order_status === 'Delivered' || o.order_status === 'Closed';
       return postSalesStages.includes(parentLead.status) && isBookingConfirmed;
     });
-  }, [orders, leads]);
+  }, [orders, leads, production, statusHistory]);
 
   const augmentedOperations = useMemo(() => {
     const list = [...operations];
@@ -1121,9 +1308,35 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [operations, augmentedOrders, rawFootage]);
 
   const augmentedProduction = useMemo(() => {
-    const list = [...production];
+    // 1. Map existing production records to ensure order_id and lead_id are resolved
+    const rawList: Production[] = production.map(p => {
+      let order_id = (p as any).order_id;
+      let lead_id = (p as any).lead_id;
+
+      if (!order_id) {
+        const matchingOrd = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id);
+        if (matchingOrd) {
+          order_id = matchingOrd.order_id;
+          lead_id = lead_id || matchingOrd.lead_id;
+        }
+      }
+      if (!lead_id && order_id) {
+        const matchingOrd = augmentedOrders.find(o => o.order_id === order_id);
+        if (matchingOrd) {
+          lead_id = matchingOrd.lead_id;
+        }
+      }
+
+      return {
+        ...p,
+        order_id: order_id || (p as any).order_id,
+        lead_id: lead_id || (p as any).lead_id
+      };
+    });
+
+    // 2. Synthesize missing production records for confirmed orders
     augmentedOrders.forEach(o => {
-      const prodExists = list.some(p => 
+      const prodExists = rawList.some(p => 
         p.tracking_id === o.order_id || 
         p.tracking_id === o.lead_id ||
         (p as any).order_id === o.order_id ||
@@ -1135,7 +1348,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const opForO = operations.find(op => op.order_id === o.order_id);
         const rfForO = rawFootage.find(rf => rf.order_id === o.order_id || rf.tracking_id === o.order_id);
         
-        // Helper to extract verified link from notes
         const extractVerifiedFromText = (text?: string | null): string => {
           if (!text || typeof text !== 'string') return '';
           const m = text.match(/Verified\s+Footage\s+with\s+Consolidated\s+Link:\s*(https?:\/\/[^\s\n\r"']+)/i) ||
@@ -1153,7 +1365,7 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
                      rfForO?.server_path || 
                      o.raw_footage_link || '';
 
-        list.push({
+        rawList.push({
           production_id: `PRD-${o.lead_id}`,
           tracking_id: o.order_id,
           order_id: o.order_id,
@@ -1162,7 +1374,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           raw_footage_location: link,
           final_consolidated_drive_link: link,
           consolidated_drive_link: link,
-          editing_status: (parentLeadForO?.current_status || parentLeadForO?.status || o.current_stage) as any,
+          editing_status: (parentLeadForO?.current_status || parentLeadForO?.status || o.current_stage || 'Verified Footage') as any,
+          current_status: (parentLeadForO?.current_status || parentLeadForO?.status || o.current_stage || 'Verified Footage') as any,
+          production_status: (parentLeadForO?.current_status || parentLeadForO?.status || o.current_stage || 'Verified Footage') as any,
           remarks: '',
           project_priority: 'Medium',
           target_delivery_date: defaultTargetDate,
@@ -1170,18 +1384,91 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } as any);
       }
     });
-    return list.map(p => {
+
+    // 3. For any project that has multiple production records (e.g. PRD-LD002 and PRD-123232),
+    // find the authoritative status from the production table and lead_status_history,
+    // and synchronize all records of that project.
+    const projectStatusMap = new Map<string, { editing_status: EditingStatus; current_status: string; production_status: string; is_closed: boolean }>();
+
+    rawList.forEach(p => {
+      const orderId = (p as any).order_id || (p.tracking_id?.startsWith('OR') ? p.tracking_id : undefined);
+      const leadId = (p as any).lead_id || (p.tracking_id?.startsWith('LD') ? p.tracking_id : undefined);
+      const trackingId = p.tracking_id;
+
+      const matchingProds = rawList.filter(other => 
+        (orderId && ((other as any).order_id === orderId || other.tracking_id === orderId)) ||
+        (leadId && ((other as any).lead_id === leadId || other.tracking_id === leadId)) ||
+        (trackingId && (other.tracking_id === trackingId || (other as any).order_id === trackingId || (other as any).lead_id === trackingId))
+      );
+
+      const latestHist = getLatestHistoryStatus(orderId, leadId, trackingId);
+
+      let bestNorm = normalizeProductionStatus(
+        p.editing_status,
+        p.current_status,
+        p.production_status,
+        latestHist?.newStatus
+      );
+
+      for (const mp of matchingProds) {
+        const candidateNorm = normalizeProductionStatus(
+          mp.editing_status,
+          mp.current_status,
+          mp.production_status,
+          latestHist?.newStatus
+        );
+        if (candidateNorm.editing_status === 'Order Closed') {
+          bestNorm = candidateNorm;
+          break;
+        } else if (candidateNorm.editing_status === 'Client Acceptance' && bestNorm.editing_status !== 'Order Closed') {
+          bestNorm = candidateNorm;
+        } else if (candidateNorm.editing_status === 'Editing Completed' && bestNorm.editing_status !== 'Order Closed' && bestNorm.editing_status !== 'Client Acceptance') {
+          bestNorm = candidateNorm;
+        }
+      }
+
+      if (orderId) projectStatusMap.set(orderId, bestNorm);
+      if (leadId) projectStatusMap.set(leadId, bestNorm);
+      if (trackingId) projectStatusMap.set(trackingId, bestNorm);
+      if (p.production_id) projectStatusMap.set(p.production_id, bestNorm);
+    });
+
+    return rawList.map(p => {
+      const orderId = (p as any).order_id || (p.tracking_id?.startsWith('OR') ? p.tracking_id : undefined);
+      const leadId = (p as any).lead_id || (p.tracking_id?.startsWith('LD') ? p.tracking_id : undefined);
+      const trackingId = p.tracking_id;
+
+      const syncedStatus = 
+        (orderId && projectStatusMap.get(orderId)) ||
+        (leadId && projectStatusMap.get(leadId)) ||
+        (trackingId && projectStatusMap.get(trackingId)) ||
+        (p.production_id && projectStatusMap.get(p.production_id));
+
+      const finalStatus = syncedStatus || normalizeProductionStatus(
+        p.editing_status, 
+        p.current_status, 
+        p.production_status, 
+        getLatestHistoryStatus(orderId, leadId, trackingId)?.newStatus
+      );
+
       const ord = augmentedOrders.find(o => o.order_id === p.tracking_id || o.lead_id === p.tracking_id || o.order_id === (p as any).order_id || o.lead_id === (p as any).lead_id);
       const parentLead = leads.find(l => l.lead_id === p.tracking_id || (ord && l.lead_id === ord.lead_id) || l.lead_id === (p as any).lead_id);
       const op = operations.find(o => (ord && o.order_id === ord.order_id) || o.order_id === p.tracking_id || (p as any).order_id === o.order_id);
       const rf = rawFootage.find(f => (ord && f.order_id === ord.order_id) || f.order_id === p.tracking_id || f.tracking_id === p.tracking_id);
       
-      const leadStatus = parentLead?.current_status || parentLead?.status;
       const leadEditor = parentLead?.assigned_editor;
       const leadEditors = parentLead?.assigned_editors;
       const leadTargetDate = parentLead?.delivery_target_date;
 
-      let updatedP = { ...p };
+      let updatedP = { 
+        ...p,
+        order_id: (p as any).order_id || ord?.order_id,
+        lead_id: (p as any).lead_id || ord?.lead_id || parentLead?.lead_id,
+        editing_status: finalStatus.editing_status,
+        current_status: finalStatus.current_status,
+        production_status: finalStatus.production_status,
+        status: finalStatus.editing_status as any
+      };
 
       const extractVerifiedFromText = (text?: string | null): string => {
         if (!text || typeof text !== 'string') return '';
@@ -1213,42 +1500,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updatedP.raw_footage_location = resolvedLink;
       }
 
-      // Priority Status Determination Rule:
-      // Order Closed > Client Acceptance > Other production workflow statuses / fallback
-      const isClosedStatus = (s?: string) => 
-        ['order closed', 'closed', 'project closed', 'completed', 'project completed'].includes(String(s || '').trim().toLowerCase());
-
-      const isClientAcceptanceStatus = (s?: string) => 
-        String(s || '').trim().toLowerCase() === 'client acceptance';
-
-      const hasClosed = isClosedStatus(p.current_status) || 
-                        isClosedStatus(p.production_status) || 
-                        isClosedStatus(p.editing_status) || 
-                        isClosedStatus((p as any).status) ||
-                        isClosedStatus(ord?.current_stage) ||
-                        isClosedStatus(leadStatus);
-
-      const hasClientAcceptance = isClientAcceptanceStatus(p.current_status) || 
-                                  isClientAcceptanceStatus(p.production_status) || 
-                                  isClientAcceptanceStatus(p.editing_status) || 
-                                  isClientAcceptanceStatus((p as any).status);
-
-      if (hasClosed) {
-        updatedP.editing_status = 'Order Closed' as any;
-        updatedP.current_status = 'Order Closed';
-        updatedP.production_status = 'Order Closed';
-      } else if (hasClientAcceptance) {
-        updatedP.editing_status = 'Client Acceptance' as any;
-        updatedP.current_status = 'Client Acceptance';
-        updatedP.production_status = 'Client Acceptance';
-      } else if (!p.editing_status || p.editing_status === 'Pending') {
-        if (leadStatus) {
-          updatedP.editing_status = leadStatus as any;
-        } else if (ord) {
-          updatedP.editing_status = ord.current_stage as any;
-        }
-      }
-
       if (leadEditor && leadEditor !== 'Unassigned') {
         updatedP.editor_assigned = leadEditor;
       }
@@ -1262,7 +1513,42 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return updatedP;
     });
-  }, [production, augmentedOrders, leads, operations, rawFootage]);
+  }, [production, augmentedOrders, leads, operations, rawFootage, statusHistory]);
+
+  const augmentedEditorAssignments = useMemo(() => {
+    return (editorAssignments || []).map(a => {
+      const matchedProd = augmentedProduction.find(p => 
+        p.production_id === a.production_id ||
+        (a.order_id && (p.order_id === a.order_id || p.tracking_id === a.order_id)) ||
+        (a.production_id && (p.order_id === a.production_id || p.tracking_id === a.production_id))
+      );
+
+      if (!matchedProd) return a;
+
+      const pStatus = String(matchedProd.editing_status || matchedProd.current_status || '').trim();
+      const pLower = pStatus.toLowerCase();
+
+      let synchronizedStatus = a.status;
+      if (pLower === 'order closed' || pLower === 'order close' || pLower === 'closed' || pLower === 'close' || pLower === 'project closed') {
+        synchronizedStatus = 'Client Acceptance' as any;
+      } else if (pLower === 'client acceptance' || pLower === 'client accepted') {
+        synchronizedStatus = 'Client Acceptance' as any;
+      } else if (pLower === 'editing completed' || pLower === 'editing complete') {
+        synchronizedStatus = 'Editing Completed' as any;
+      } else if (pLower === 'customer review' || pLower === 'client review') {
+        synchronizedStatus = 'Customer Review' as any;
+      } else if (pLower === 'editing started' || pLower === 'editing in progress') {
+        synchronizedStatus = 'Editing Started' as any;
+      } else if (pLower === 'assigned editor' || pLower === 'editor assigned') {
+        synchronizedStatus = 'Assigned Editor' as any;
+      }
+
+      return {
+        ...a,
+        status: synchronizedStatus
+      };
+    });
+  }, [editorAssignments, augmentedProduction]);
 
   const augmentedPayments = useMemo(() => {
     const list = [...payments];
@@ -3202,8 +3488,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // Handle window focus and document visibility to fetch fresh data when user returns to app
     const handleFocusOrVisible = () => {
       const now = Date.now();
-      if (now - lastFetchTimeRef.current < 15000) {
-        console.log("[SYNC] App focused/visible, but last fetch was less than 15s ago. Skipping redundant pull.");
+      if (now - lastFetchTimeRef.current < 2000) {
         return;
       }
       console.log("[SYNC] App focused/visible, pulling fresh database records...");
@@ -3219,18 +3504,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Background polling fallback every 30 seconds to guarantee absolute synchronization
+    // Background polling fallback every 4 seconds to guarantee immediate synchronization with external DB updates
     const pollingInterval = setInterval(() => {
       if (document.visibilityState !== 'visible') {
         return; // Skip polling if tab is hidden
       }
       const now = Date.now();
-      if (now - lastFetchTimeRef.current < 30000) {
+      if (now - lastFetchTimeRef.current < 4000) {
         return; // Skip polling if we fetched recently
       }
-      console.log("[SYNC] Background polling triggering database update...");
       fetchFromDb(false).catch(e => console.warn('fetchFromDb polling failed:', e?.message || e));
-    }, 30000);
+    }, 4000);
 
     // Realtime subscriptions handle granular updates. No global sync needed.
     return () => {
@@ -3243,7 +3527,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   }, []);
 
   const broadcastSyncPing = async () => {
-    // No-op: realtime postgres_changes handles granular syncing
+    fetchFromDb(false).catch(e => console.warn('fetchFromDb failed:', e?.message || e));
   };
 
 
@@ -5261,8 +5545,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     let targetProd = augmentedProduction.find((p) => p.production_id === productionId || p.tracking_id === inferredTrackingId);
 
     // Map Client Accepted to Client Acceptance to ensure proper status history synchronization
-    if (updates.editing_status === 'Client Accepted') {
+    if (updates.editing_status === 'Client Accepted' || updates.editing_status === 'Client Acceptance') {
       updates.editing_status = 'Client Acceptance' as any;
+      updates.current_status = 'Client Acceptance' as any;
+      updates.production_status = 'Client Acceptance' as any;
     }
     if (updates.production_status === 'Client Accepted') {
       updates.production_status = 'Client Acceptance' as any;
@@ -5395,39 +5681,17 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    // Prevent downgrading from Client Acceptance
-    if (targetProd) {
-      const currentIsClientAcceptance = 
-        String(targetProd.current_status || '').trim().toLowerCase() === 'client acceptance' || 
-        String(targetProd.production_status || '').trim().toLowerCase() === 'client acceptance';
-
-      if (currentIsClientAcceptance) {
-        // If they are not actively trying to close the order, strip any lower status
-        if (updates.editing_status && updates.editing_status !== 'Client Acceptance' && updates.editing_status !== 'Order Closed') {
-          delete updates.editing_status;
-        }
-        if (updates.production_status && updates.production_status !== 'Client Acceptance' && updates.production_status !== 'Order Closed') {
-          delete updates.production_status;
-        }
-        if (updates.current_status && updates.current_status !== 'Client Acceptance' && updates.current_status !== 'Order Closed') {
-          delete updates.current_status;
-        }
-        if ((updates as any).status && (updates as any).status !== 'Client Acceptance' && (updates as any).status !== 'Order Closed') {
-          delete (updates as any).status;
-        }
-      }
+    // Normalize status updates according to workflow rules
+    const incomingStatus = updates.current_status || updates.editing_status || updates.production_status;
+    if (incomingStatus) {
+      const norm = normalizeProductionStatus(updates.editing_status, updates.current_status, updates.production_status);
+      updates.editing_status = norm.editing_status;
+      updates.current_status = norm.current_status;
+      updates.production_status = norm.production_status;
     }
 
     // Set production state in Supabase
     try {
-      if (updates.editing_status) {
-        if (!updates.production_status && targetProd?.production_status !== 'Client Acceptance') {
-          updates.production_status = updates.editing_status;
-        }
-        if (!updates.current_status && targetProd?.current_status !== 'Client Acceptance') {
-          updates.current_status = updates.editing_status;
-        }
-      }
 
       if (targetProd) {
         const rProd = await pushUpdate('production', 'production_id', targetProd.production_id, updates);
@@ -5436,6 +5700,22 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           throw new Error(rProd?.error || "DB operation failed for production table update");
         } else {
           setProduction(prev => prev.map(p => p.production_id === targetProd.production_id ? { ...p, ...updates } : p));
+        }
+
+        // Also update any secondary production records linked to this project
+        const secondaryProds = augmentedProduction.filter(p => 
+          p.production_id !== targetProd?.production_id && (
+            p.tracking_id === targetProd?.tracking_id ||
+            p.order_id === targetProd?.tracking_id ||
+            p.tracking_id === inferredTrackingId ||
+            p.order_id === inferredTrackingId ||
+            (targetProd?.order_id && p.order_id === targetProd.order_id) ||
+            (targetProd?.lead_id && p.lead_id === targetProd.lead_id)
+          )
+        );
+        for (const sp of secondaryProds) {
+          pushUpdate('production', 'production_id', sp.production_id, updates).catch(e => console.warn("[updateProduction] secondary update:", e));
+          setProduction(prev => prev.map(p => p.production_id === sp.production_id ? { ...p, ...updates } : p));
         }
       } else {
         const newPId = productionId.startsWith('PRD-') ? `PRD-${Math.floor(100000 + Math.random() * 899999)}` : productionId;
@@ -5458,6 +5738,30 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         } else {
           setProduction(prev => [newProd, ...prev]);
         }
+      }
+
+      // If updating to Client Acceptance, synchronize editor assignments as well
+      if (updates.editing_status === 'Client Acceptance' || updates.current_status === 'Client Acceptance') {
+        const linkedAssigns = (editorAssignments || []).filter(a =>
+          a.production_id === productionId ||
+          a.production_id === targetProd?.production_id ||
+          a.order_id === inferredTrackingId ||
+          a.production_id === inferredTrackingId ||
+          (targetProd && (a.order_id === targetProd.order_id || a.order_id === targetProd.tracking_id || a.production_id === targetProd.tracking_id))
+        );
+        for (const la of linkedAssigns) {
+          pushUpdate('editor_assignments', 'assignment_id', la.assignment_id, {
+            status: 'Client Acceptance'
+          }).catch(e => console.warn("[updateProduction] Editor assignment status sync error:", e));
+        }
+        setEditorAssignments(prev => prev.map(a => {
+          const isLinked = a.production_id === productionId ||
+            a.production_id === targetProd?.production_id ||
+            a.order_id === inferredTrackingId ||
+            a.production_id === inferredTrackingId ||
+            (targetProd && (a.order_id === targetProd.order_id || a.order_id === targetProd.tracking_id || a.production_id === targetProd.tracking_id));
+          return isLinked ? { ...a, status: 'Client Acceptance' as any } : a;
+        }));
       }
     } catch (prodErr: any) {
       console.warn("[updateProduction] Production DB write exception:", prodErr?.message || prodErr);
@@ -5625,7 +5929,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       await Promise.all(relatedPromises);
     }
 
-    //  // Disabled to prevent full reload
+    // Trigger fresh database fetch to ensure complete synchronization
+    fetchFromDb(false).catch(e => console.warn('fetchFromDb sync warning:', e?.message || e));
 
     logActivity(
       `Updated Production ${productionId}: status=${updates.editing_status || 'unchanged'}`, 
@@ -5971,7 +6276,94 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if (!rLead?.success) {
         throw new Error("Failed to update lead status: " + rLead?.error);
       }
+      setLeads(prev => prev.map(l => l.lead_id === targetOrder.lead_id ? { ...l, status: targetStageToSave, current_status: targetStageToSave } : l));
     }
+
+    const isClientAcc = targetStageToSave === 'Client Acceptance' || targetStageToSave === 'Client Accepted' as any;
+    const isClosedStage = ['Closed', 'Order Closed', 'Order Close', 'Project Closed', 'Completed'].includes(targetStageToSave as string);
+
+    const linkedProds = augmentedProduction.filter(p => 
+      p.tracking_id === resolvedOrderId || 
+      p.order_id === resolvedOrderId || 
+      p.production_id === resolvedOrderId ||
+      (targetOrder && (p.lead_id === targetOrder.lead_id || p.tracking_id === targetOrder.lead_id))
+    );
+
+    let prodUpdatePayload: any = null;
+    if (isClosedStage) {
+      prodUpdatePayload = {
+        editing_status: 'Order Closed',
+        current_status: targetStageToSave === 'Order Close' ? 'Order Close' : 'Order Closed',
+        production_status: 'Order Closed'
+      };
+    } else if (isClientAcc) {
+      prodUpdatePayload = {
+        editing_status: 'Client Acceptance',
+        current_status: 'Client Acceptance',
+        production_status: 'Client Acceptance'
+      };
+    } else {
+      prodUpdatePayload = {
+        editing_status: targetStageToSave,
+        current_status: targetStageToSave,
+        production_status: targetStageToSave
+      };
+    }
+
+    if (prodUpdatePayload) {
+      for (const lp of linkedProds) {
+        pushUpdate('production', 'production_id', lp.production_id, prodUpdatePayload).catch(err => console.warn("[updateOrderStage] Production update warning:", err));
+      }
+      setProduction(prev => prev.map(p => {
+        const isLinked = p.tracking_id === resolvedOrderId || p.order_id === resolvedOrderId || p.production_id === resolvedOrderId || (targetOrder && (p.lead_id === targetOrder.lead_id || p.tracking_id === targetOrder.lead_id));
+        return isLinked ? { ...p, ...prodUpdatePayload } : p;
+      }));
+
+      // Also update linked editor assignments if Client Acceptance or Closed
+      if (isClientAcc || isClosedStage) {
+        const matchingAssignments = (editorAssignments || []).filter(a => 
+          a.order_id === resolvedOrderId || 
+          linkedProds.some(lp => lp.production_id === a.production_id)
+        );
+        for (const ma of matchingAssignments) {
+          pushUpdate('editor_assignments', 'assignment_id', ma.assignment_id, {
+            status: isClientAcc ? 'Client Acceptance' : 'Completed'
+          }).catch(err => console.warn("[updateOrderStage] Editor assignment update warning:", err));
+        }
+        setEditorAssignments(prev => prev.map(a => 
+          (a.order_id === resolvedOrderId || linkedProds.some(lp => lp.production_id === a.production_id))
+            ? { ...a, status: (isClientAcc ? 'Client Acceptance' : 'Completed') as any }
+            : a
+        ));
+      }
+    }
+
+    // Insert into lead_status_history if stage changed
+    if (previousStage !== targetStageToSave) {
+      const roleParts = (currentUserName && currentUserName.includes('|')) 
+        ? currentUserName.split('|') 
+        : [currentUserName || 'System', currentRole || 'System'];
+      const changedBy = roleParts[0];
+      const changedByRole = roleParts[1] || currentRole || 'System';
+
+      const targetLeadId = targetOrder?.lead_id || (linkedProds[0] as any)?.lead_id || (resolvedOrderId.startsWith('LD') ? resolvedOrderId : null);
+
+      const newHist = {
+        lead_id: targetLeadId || resolvedOrderId,
+        order_id: resolvedOrderId,
+        old_status: previousStage,
+        new_status: targetStageToSave,
+        changed_by: changedBy,
+        changed_by_role: changedByRole,
+        remarks: `Order stage updated to ${targetStageToSave}`,
+        created_at: timestamp
+      };
+
+      setStatusHistory(prev => [...prev, newHist as any]);
+      pushInsert('lead_status_history', newHist).catch(err => console.warn("Failed to insert lead_status_history in updateOrderStage:", err));
+    }
+
+    fetchFromDb(false).catch(err => console.warn("[updateOrderStage] fetchFromDb sync notice:", err));
 
     logActivity(`Updated stage for Order ${orderId}`, 'Operations', orderId, previousStage, targetStageToSave);
   };
@@ -8782,7 +9174,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   const isTerminalStatusValue = (s?: string) => {
     const val = String(s || '').trim().toLowerCase();
-    return val === 'client acceptance' || val === 'order closed';
+    return val === 'order closed' || val === 'order close' || val === 'closed' || val === 'close' || val === 'project closed' || val === 'completed' || val === 'project completed';
   };
 
   const isTerminalRecord = (item: any, trackingId: string) => {
@@ -8819,11 +9211,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         l.sales_staff_id === currentUser.id
       );
     }
-    if (isProductionDashboardActive) {
-      baseLeads = baseLeads.filter(l => !isTerminalRecord(l, l.lead_id));
-    }
     return baseLeads;
-  }, [leads, currentRole, currentUser, currentUserName, isProductionDashboardActive, augmentedProduction]);
+  }, [leads, currentRole, currentUser, currentUserName]);
 
   const visibleOrders = useMemo(() => {
     let baseOrders = augmentedOrders;
@@ -8831,11 +9220,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       const allowedLeadIds = new Set(visibleLeads.map(l => l.lead_id));
       baseOrders = augmentedOrders.filter(o => allowedLeadIds.has(o.lead_id));
     }
-    if (isProductionDashboardActive) {
-      baseOrders = baseOrders.filter(o => !isTerminalRecord(o, o.order_id) && !isTerminalRecord(o, o.lead_id));
-    }
     return baseOrders;
-  }, [augmentedOrders, currentRole, visibleLeads, currentUser, isProductionDashboardActive, augmentedProduction]);
+  }, [augmentedOrders, currentRole, visibleLeads, currentUser]);
 
   const visiblePayments = useMemo(() => {
     if (currentRole === 'Sales Team' && currentUser) {
@@ -8860,12 +9246,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         leads: visibleLeads,
         orders: visibleOrders,
         operations: augmentedOperations,
-        rawFootage: isProductionDashboardActive
-          ? rawFootage.filter(rf => !isTerminalRecord(rf, rf.order_id || rf.tracking_id))
-          : rawFootage,
-        production: isProductionDashboardActive
-          ? augmentedProduction.filter(p => !isTerminalRecord(p, p.tracking_id || p.production_id || p.lead_id || p.order_id))
-          : augmentedProduction,
+        rawFootage,
+        production: augmentedProduction,
         payments: visiblePayments,
         logs,
         staff,
@@ -8936,7 +9318,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         updateSpeciality,
         deactivateSpeciality,
         deleteSpeciality,
-        editorAssignments,
+        editorAssignments: augmentedEditorAssignments,
         assignEditorToProject,
         updateEditorAssignmentStatus,
         updateEditorAssignment,

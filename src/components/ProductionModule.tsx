@@ -1436,7 +1436,7 @@ ${coordinatorName}`;
     if (['Internal QC Review'].includes(status)) return 'Internal QC Review';
     if (['Ready For Review', 'Client Review Sent', 'Customer Review'].includes(status)) return 'Customer Review';
     if (['Editing Completed', 'Editing Complete'].includes(status)) return 'Editing Completed';
-    if (['Client Acceptance'].includes(status)) return 'Client Acceptance';
+    if (['Client Acceptance', 'Client Accepted'].includes(status)) return 'Client Acceptance';
     if (['Revision Required'].includes(status)) return 'Revision Required';
     if (['Revision In Progress'].includes(status)) return 'Revision In Progress';
     if (['Approved', 'Final Approval'].includes(status)) return 'Final Approval';
@@ -1934,8 +1934,8 @@ ${coordinatorName}`;
     }
     
     // 2. Client Accepted (After Client Acceptance popup submitted)
-    if (baseStatus === 'Client Accepted' || (prod as any).production_status === 'Client Accepted' || (prod as any).current_status === 'Client Accepted' || baseStatus === 'Client Acceptance') {
-      return 'Client Accepted';
+    if (baseStatus === 'Client Accepted' || (prod as any).production_status === 'Client Accepted' || (prod as any).current_status === 'Client Accepted' || baseStatus === 'Client Acceptance' || (prod as any).production_status === 'Client Acceptance' || (prod as any).current_status === 'Client Acceptance') {
+      return 'Client Acceptance';
     }
 
     const assignments = (editorAssignments || []).filter(a => 
@@ -1960,7 +1960,7 @@ ${coordinatorName}`;
       const ranks = assignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
       const minRank = Math.min(...ranks);
 
-      if (minRank >= 5) return 'Client Accepted';
+      if (minRank >= 5) return 'Client Acceptance';
       if (minRank >= 4) return 'Editing Completed';
       if (minRank >= 3) return 'Customer Review';
       if (minRank >= 2) return 'Editing Started';
@@ -8835,11 +8835,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       try {
                         setIsSaving(true);
                         await updateProduction(activeWorkflowProd.production_id, {
-                          editing_status: 'Client Accepted'
+                          editing_status: 'Client Acceptance'
                         });
                         const targetOrderId = order?.order_id || activeWorkflowProd.order_id || activeWorkflowProd.tracking_id || activeWorkflowProd.lead_id || lead?.lead_id;
                         if (targetOrderId && updateOrderStage) {
-                          await updateOrderStage(targetOrderId, 'Client Accepted');
+                          await updateOrderStage(targetOrderId, 'Client Acceptance');
                         }
                         setActiveWorkflowProd(null);
                         setWorkflowActionType(null);
