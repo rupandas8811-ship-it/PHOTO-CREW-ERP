@@ -1,21 +1,59 @@
-import React, { useState } from 'react';
-import { useRole } from './RoleContext';
+import React, { useState, useEffect } from 'react';
+import { useRole, mapToDbUserId } from './RoleContext';
 import { Shield, Key, Lock, CheckCircle2, User, Eye, EyeOff } from 'lucide-react';
 
 export const OwnerPasswordResetModule: React.FC = () => {
-  const { users, resetUserPassword } = useRole();
+  const { users, resetUserPassword, currentUser } = useRole();
 
   // Filter strictly for dashboard-level login accounts only (NO STAFF)
-  const businessOwnerAccount = users.find(u => u.role === 'Business Owner') || users[0];
+  const businessOwnerAccount =
+    (currentUser?.role === 'Business Owner'
+      ? (users.find(u => u.id === currentUser.id || u.email?.toLowerCase() === currentUser.email?.toLowerCase()) || currentUser)
+      : null) ||
+    users.find(u => u.role === 'Business Owner') ||
+    users[0];
   const operationsDashboardAccount = users.find(u => u.role === 'Operations Team') || users.find(u => u.role === 'Operation Staff');
   const productionDashboardAccount = users.find(u => u.role === 'Production Team') || users.find(u => u.role === 'Production Staff');
 
   // Business Owner reset state
-  const [ownerPassword, setOwnerPassword] = useState<string>('');
+  const [ownerPassword, setOwnerPassword] = useState<string>(() => businessOwnerAccount?.password || '');
   const [showOwnerPassword, setShowOwnerPassword] = useState<boolean>(false);
+  const [hasUserEdited, setHasUserEdited] = useState<boolean>(false);
   const [confirmOwnerReset, setConfirmOwnerReset] = useState<boolean>(false);
   const [ownerLoading, setOwnerLoading] = useState<boolean>(false);
   const [ownerSuccess, setOwnerSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (businessOwnerAccount?.password && !hasUserEdited) {
+      setOwnerPassword(businessOwnerAccount.password);
+    }
+    const fetchFreshPassword = async () => {
+      if (!businessOwnerAccount?.id) return;
+      try {
+        const dbTargetId = mapToDbUserId(businessOwnerAccount.id);
+        const res = await fetch('/api/db/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table: 'users',
+            matchColumn: 'id',
+            matchValue: dbTargetId
+          })
+        });
+        const resData = await res.json();
+        if (isMounted && !hasUserEdited && resData.success && resData.data?.[0]?.password) {
+          setOwnerPassword(resData.data[0].password);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch fresh owner password:", err);
+      }
+    };
+    fetchFreshPassword();
+    return () => {
+      isMounted = false;
+    };
+  }, [businessOwnerAccount?.id, businessOwnerAccount?.password, hasUserEdited]);
 
   // Operations Dashboard reset state
   const [opsPassword, setOpsPassword] = useState<string>('');
@@ -49,9 +87,11 @@ export const OwnerPasswordResetModule: React.FC = () => {
     try {
       setOwnerLoading(true);
       setOwnerSuccess(null);
-      await resetUserPassword(businessOwnerAccount.id, ownerPassword.trim());
+      const newPasswordValue = ownerPassword.trim();
+      await resetUserPassword(businessOwnerAccount.id, newPasswordValue);
       setOwnerSuccess(`Password for Business Owner Dashboard (${businessOwnerAccount.name}) successfully reset!`);
-      setOwnerPassword('');
+      setOwnerPassword(newPasswordValue);
+      setHasUserEdited(false);
       setConfirmOwnerReset(false);
     } catch (err: any) {
       alert(`Failed to reset password: ${err.message || err}`);
@@ -178,15 +218,21 @@ export const OwnerPasswordResetModule: React.FC = () => {
               )}
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-mono uppercase tracking-wider text-zinc-300 font-bold block">
-                  New Password <span className="text-rose-500">*</span>
+                <label htmlFor="owner_current_password" className="text-[11px] font-mono uppercase tracking-wider text-zinc-300 font-bold block">
+                  Current Password <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <input
+                    id="owner_current_password"
+                    name="current_password"
+                    aria-label="Current Password"
                     type={showOwnerPassword ? "text" : "password"}
                     value={ownerPassword}
-                    onChange={(e) => setOwnerPassword(e.target.value)}
-                    placeholder="Min 6 characters"
+                    onChange={(e) => {
+                      setHasUserEdited(true);
+                      setOwnerPassword(e.target.value);
+                    }}
+                    placeholder="Current Password"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 pl-3.5 pr-10 text-zinc-100 font-mono text-xs focus:outline-none focus:border-amber-500"
                     required
                     minLength={6}
@@ -195,6 +241,7 @@ export const OwnerPasswordResetModule: React.FC = () => {
                     type="button"
                     onClick={() => setShowOwnerPassword(!showOwnerPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white cursor-pointer"
+                    title={showOwnerPassword ? "Hide password" : "Show password"}
                   >
                     {showOwnerPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>

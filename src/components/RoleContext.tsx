@@ -3291,8 +3291,58 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       if (found) {
         if (!isActive) {
-          logout();
-          alert('Your account is no longer active. You have been logged out.');
+          // Double-check directly with the database before logging out to prevent stale in-memory state from falsely kicking out an active user
+          const verifyAndHandleLogout = async () => {
+            const dbTargetId = mapToDbUserId(currentUser.id);
+            let liveStatus: boolean | null = null;
+            try {
+              const res = await fetch('/api/db/select', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ table: 'users', matchColumn: 'id', matchValue: dbTargetId })
+              });
+              const resData = await res.json();
+              if (resData.success && resData.data?.[0]) {
+                const row = resData.data[0];
+                liveStatus = row.active !== false && row.active !== 'false';
+              }
+            } catch (e) {
+              console.warn("[syncSession] Live DB status check error:", e);
+            }
+
+            // Also check by email if not resolved by ID
+            if (liveStatus === null && currentUser.email) {
+              try {
+                const res = await fetch('/api/db/select', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ table: 'users', matchColumn: 'email', matchValue: currentUser.email.trim().toLowerCase() })
+                });
+                const resData = await res.json();
+                if (resData.success && resData.data?.[0]) {
+                  const row = resData.data[0];
+                  liveStatus = row.active !== false && row.active !== 'false';
+                }
+              } catch (e) {}
+            }
+
+            if (liveStatus === true) {
+              // The database confirms user is ACTIVE! Stale in-memory state was outdated. Update users state and DO NOT log out.
+              setUsers(prev => prev.map(u => {
+                const match = u.id === currentUser.id || 
+                              mapToDbUserId(u.id) === dbTargetId || 
+                              (currentUser.email && u.email && u.email.toLowerCase() === currentUser.email.toLowerCase());
+                return match ? { ...u, active: true } : u;
+              }));
+              return;
+            }
+
+            // User is indeed deactivated in the database
+            logout();
+            alert('Your account is no longer active. You have been logged out.');
+          };
+
+          verifyAndHandleLogout();
         } else if (roleToSync !== currentUser.role || nameToSync !== currentUser.name) {
           setCurrentUser({ ...currentUser, role: roleToSync, name: nameToSync });
           setCurrentRoleState(roleToSync);
@@ -3356,9 +3406,31 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       let candidateUsers: any[] = [];
 
       try {
-        const { data: allUsers, error: usersError } = await supabaseClient.from('users').select('*');
-        if (allUsers && allUsers.length > 0) {
-          candidateUsers = allUsers.filter(u => {
+        // Query live server proxy first for fresh, non-cached users list
+        let dbList: any[] = [];
+        try {
+          const srvRes = await fetch('/api/db/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ table: 'users' })
+          });
+          const srvData = await srvRes.json();
+          if (srvData.success && Array.isArray(srvData.data) && srvData.data.length > 0) {
+            dbList = srvData.data;
+          }
+        } catch (srvErr) {
+          console.warn('[LOGIN] Server select proxy fallback:', srvErr);
+        }
+
+        if (dbList.length === 0 && supabaseClient) {
+          const { data: allUsers } = await supabaseClient.from('users').select('*');
+          if (allUsers && allUsers.length > 0) {
+            dbList = allUsers;
+          }
+        }
+
+        if (dbList.length > 0) {
+          candidateUsers = dbList.filter(u => {
             const uEmail = (u.email || '').trim().toLowerCase();
             const uUser = (u.username || '').trim().toLowerCase();
             const uPhone = (u.mobile || '').replace(/\D/g, '');
@@ -3525,51 +3597,132 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const dbTargetId = mapToDbUserId(dbUser.id);
         let freshStatusRecord: any = null;
 
-        // 1. Direct Supabase query with fresh single select
+        // 1. Direct Supabase query with fresh single select by ID
         if (supabaseClient) {
-          const { data: directFresh } = await supabaseClient
-            .from('users')
-            .select('*')
-            .eq('id', dbTargetId)
-            .maybeSingle();
-          if (directFresh) {
-            freshStatusRecord = directFresh;
-          }
+          try {
+            const { data: directFresh } = await supabaseClient
+              .from('users')
+              .select('*')
+              .eq('id', dbTargetId)
+              .maybeSingle();
+            if (directFresh) {
+              freshStatusRecord = directFresh;
+            }
+          } catch (e) {}
         }
 
-        // 2. Server proxy query with service role key (guarantees fresh non-cached live database read)
+        // 2. Direct Supabase query by Email if not found
+        if (!freshStatusRecord && dbUser.email && supabaseClient) {
+          try {
+            const { data: directByEmail } = await supabaseClient
+              .from('users')
+              .select('*')
+              .ilike('email', dbUser.email.trim())
+              .maybeSingle();
+            if (directByEmail) {
+              freshStatusRecord = directByEmail;
+            }
+          } catch (e) {}
+        }
+
+        // 3. Direct Supabase query by Mobile if not found
+        if (!freshStatusRecord && dbUser.mobile && supabaseClient) {
+          try {
+            const { data: directByMobile } = await supabaseClient
+              .from('users')
+              .select('*')
+              .eq('mobile', dbUser.mobile.trim())
+              .maybeSingle();
+            if (directByMobile) {
+              freshStatusRecord = directByMobile;
+            }
+          } catch (e) {}
+        }
+
+        // 4. Server proxy query with service role key by ID (guarantees non-cached live read)
         if (!freshStatusRecord) {
-          const srvRes = await fetch('/api/db/select', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              table: 'users',
-              matchColumn: 'id',
-              matchValue: dbTargetId
-            })
-          });
-          const srvData = await srvRes.json();
-          if (srvData.success && srvData.data?.[0]) {
-            freshStatusRecord = srvData.data[0];
-          }
+          try {
+            const srvRes = await fetch('/api/db/select', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                table: 'users',
+                matchColumn: 'id',
+                matchValue: dbTargetId
+              })
+            });
+            const srvData = await srvRes.json();
+            if (srvData.success && srvData.data?.[0]) {
+              freshStatusRecord = srvData.data[0];
+            }
+          } catch (e) {}
+        }
+
+        // 5. Server proxy query by Email if not found
+        if (!freshStatusRecord && dbUser.email) {
+          try {
+            const srvRes = await fetch('/api/db/select', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                table: 'users',
+                matchColumn: 'email',
+                matchValue: dbUser.email.trim().toLowerCase()
+              })
+            });
+            const srvData = await srvRes.json();
+            if (srvData.success && srvData.data?.[0]) {
+              freshStatusRecord = srvData.data[0];
+            }
+          } catch (e) {}
+        }
+
+        // 6. Server proxy query by Mobile if not found
+        if (!freshStatusRecord && dbUser.mobile) {
+          try {
+            const srvRes = await fetch('/api/db/select', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                table: 'users',
+                matchColumn: 'mobile',
+                matchValue: dbUser.mobile.trim()
+              })
+            });
+            const srvData = await srvRes.json();
+            if (srvData.success && srvData.data?.[0]) {
+              freshStatusRecord = srvData.data[0];
+            }
+          } catch (e) {}
         }
 
         if (freshStatusRecord) {
           console.log(`[LOGIN STATUS CHECK] Fresh database status for ${dbUser.name}: active=${freshStatusRecord.active}`);
           dbUser = { ...dbUser, ...freshStatusRecord };
-          // Keep in-memory users state updated with fresh database record
-          setUsers(prev => prev.map(u => (u.id === dbUser.id || mapToDbUserId(u.id) === dbTargetId) ? { ...u, ...freshStatusRecord } : u));
+          // Keep in-memory users state updated with fresh database record across all matching references
+          setUsers(prev => prev.map(u => {
+            const match = u.id === dbUser.id || 
+                          mapToDbUserId(u.id) === dbTargetId || 
+                          u.id === dbTargetId ||
+                          (dbUser.email && u.email && u.email.toLowerCase() === dbUser.email.toLowerCase()) ||
+                          (dbUser.mobile && u.mobile && u.mobile === dbUser.mobile);
+            return match ? { ...u, ...freshStatusRecord } : u;
+          }));
         }
       } catch (statusErr) {
         console.warn("[LOGIN] Error verifying latest status from database:", statusErr);
       }
 
-      // Validate active status from the database
-      if (dbUser.active === false || dbUser.active === 'false') {
+      // Validate active status strictly against the latest database state
+      const isCurrentlyActive = dbUser.active !== false && dbUser.active !== 'false' && dbUser.active !== 0 && dbUser.active !== '0';
+      if (!isCurrentlyActive) {
         const msg = 'Your account has been deactivated. Please contact the administrator.';
         logAttempt('Failed', msg, dbUser.id);
         return { success: false, error: msg };
       }
+
+      // If active, ensure dbUser.active is true
+      dbUser.active = true;
 
       // Validate role with case-insensitive normalization
       if (!dbUser.role) {
@@ -6184,15 +6337,15 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const safeEmail = (updates.email && updates.email.trim() !== '') ? updates.email.trim() : (targetUser?.email || `${(updates.mobile || targetUser?.mobile || 'user').replace(/[^a-zA-Z0-9]/g, '')}_${id.substring(0,6)}@photocrew.com`);
     const safeMobile = updates.mobile !== undefined ? updates.mobile : (targetUser?.mobile || '');
     const safeRole = updates.role || targetUser?.role || 'Sales Team';
-    const safeActive = updates.active !== undefined ? updates.active : (targetUser?.active ?? true);
+    const safeActive = updates.active !== undefined ? (updates.active !== false && updates.active !== 'false') : (targetUser?.active ?? true);
     const safeEmployeeId = updates.employee_id !== undefined ? updates.employee_id : (targetUser?.employee_id || '');
     const cleanPassword = updates.password ? updates.password.trim() : (targetUser?.password || '');
 
+    // Note: public.users has columns: id, name, email, mobile, role, password, active. (employee_id is not a column on public.users)
     const dbPayload: any = {
       name: safeName,
       active: safeActive,
-      role: safeRole,
-      employee_id: safeEmployeeId
+      role: safeRole
     };
     if (safeEmail) dbPayload.email = safeEmail;
     if (safeMobile) dbPayload.mobile = safeMobile;
@@ -6204,6 +6357,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         await supabaseClient.from('users').update(dbPayload).eq('id', dbUserId);
         if (targetUser?.email && targetUser.email !== safeEmail) {
           await supabaseClient.from('users').update(dbPayload).ilike('email', targetUser.email.trim());
+        }
+        if (targetUser?.mobile && targetUser.mobile !== safeMobile) {
+          await supabaseClient.from('users').update(dbPayload).eq('mobile', targetUser.mobile.trim());
         }
       } catch (sbErr) {
         console.warn("Direct Supabase update warning in editUser:", sbErr);
@@ -6229,7 +6385,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       console.warn("Auth update user error in editUser:", authErr);
     }
 
-    // 3. Update via pushUpdate
+    // 3. Update via pushUpdate / server proxy
     const dbRes = await pushUpdate('users', 'id', dbUserId, dbPayload);
     if (!dbRes.success) {
       if (dbRes.error && dbRes.error.includes('users_email_key')) {
@@ -6241,11 +6397,24 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const updatedUserObj = {
       ...targetUser,
       ...dbPayload,
+      employee_id: safeEmployeeId,
       id: targetUser?.id || id
     };
 
-    setUsers((prev) => prev.map((u) => (u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId) ? { ...u, ...updatedUserObj } : u));
+    setUsers((prev) => prev.map((u) => {
+      const match = u.id === id || 
+                    mapToDbUserId(u.id) === dbUserId || 
+                    u.id === dbUserId ||
+                    (targetUser?.email && u.email && u.email.toLowerCase() === targetUser.email.toLowerCase()) ||
+                    (targetUser?.mobile && u.mobile && u.mobile === targetUser.mobile);
+      return match ? { ...u, ...updatedUserObj } : u;
+    }));
+
     logActivity(`Updated User Account Profile: ${safeName}`, 'UserManagement', id);
+    try {
+      broadcastSyncPing();
+      fetchFromDb(false);
+    } catch (e) {}
   };
 
   const deleteUser = async (id: string) => {
@@ -6268,6 +6437,25 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const dbUserId = mapToDbUserId(id);
     let targetUser = users.find(u => u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId);
     
+    // Always fetch fresh state from the live database first to ensure toggle direction is accurate
+    let currentActive = targetUser ? (targetUser.active !== false && targetUser.active !== 'false') : false;
+    try {
+      const srvRes = await fetch('/api/db/select', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'users', matchColumn: 'id', matchValue: dbUserId })
+      });
+      const srvData = await srvRes.json();
+      if (srvData.success && srvData.data?.[0]) {
+        currentActive = srvData.data[0].active !== false && srvData.data[0].active !== 'false';
+        if (!targetUser) {
+          targetUser = mapUserFieldsFromDb(srvData.data[0]);
+        }
+      }
+    } catch (fetchErr) {
+      console.warn("Live DB select error in toggleUserStatus:", fetchErr);
+    }
+
     if (!targetUser && supabaseClient) {
       try {
         const { data: fetchedUser } = await supabaseClient
@@ -6277,6 +6465,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           .maybeSingle();
         if (fetchedUser) {
           targetUser = mapUserFieldsFromDb(fetchedUser);
+          currentActive = fetchedUser.active !== false && fetchedUser.active !== 'false';
         }
       } catch (fetchErr) {
         console.warn("Error fetching user in toggleUserStatus:", fetchErr);
@@ -6284,7 +6473,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
     
     if (!targetUser) return;
-    const nextActive = !targetUser.active;
+    const nextActive = !currentActive;
     
     // 1. Direct update in public.users table for immediate persistence
     if (supabaseClient) {
@@ -6301,11 +6490,29 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    // 2. Also update in users table via server proxy
+    // 2. Also update in users table via server proxy with service role
     try {
-      await pushUpdate('users', 'id', dbUserId, { active: nextActive });
+      await fetch('/api/db/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table: 'users', matchColumn: 'id', matchValue: dbUserId, updates: { active: nextActive } })
+      });
+      if (targetUser.email) {
+        await fetch('/api/db/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'users', matchColumn: 'email', matchValue: targetUser.email.trim().toLowerCase(), updates: { active: nextActive } })
+        });
+      }
+      if (targetUser.mobile) {
+        await fetch('/api/db/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'users', matchColumn: 'mobile', matchValue: targetUser.mobile.trim(), updates: { active: nextActive } })
+        });
+      }
     } catch (pushErr) {
-      console.warn("pushUpdate users active warning in toggleUserStatus:", pushErr);
+      console.warn("Server db/update active warning in toggleUserStatus:", pushErr);
     }
 
     // 3. Also update via server auth admin endpoint
@@ -6326,8 +6533,22 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       console.warn("Server auth active status sync warning in toggleUserStatus:", authErr);
     }
     
-    setUsers((prev) => prev.map((u) => (u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId) ? { ...u, active: nextActive } : u));
+    // 4. Update in-memory users state across all matching keys immediately
+    setUsers((prev) => prev.map((u) => {
+      const match = u.id === id || 
+                    mapToDbUserId(u.id) === dbUserId || 
+                    u.id === dbUserId ||
+                    (targetUser?.email && u.email && u.email.toLowerCase() === targetUser.email.toLowerCase()) ||
+                    (targetUser?.mobile && u.mobile && u.mobile === targetUser.mobile);
+      return match ? { ...u, active: nextActive } : u;
+    }));
+
     logActivity(`${nextActive ? 'Activated' : 'Deactivated'} User Account: ${targetUser.name}`, 'UserManagement', id);
+
+    try {
+      broadcastSyncPing();
+      fetchFromDb(false);
+    } catch (e) {}
   };
 
   const resetUserPassword = async (id: string, newPassword: string) => {

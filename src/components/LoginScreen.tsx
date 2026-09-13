@@ -9,7 +9,7 @@ import { createClient } from '@supabase/supabase-js';
 import { AppLogo } from './AppLogo';
 
 export const LoginScreen: React.FC = () => {
-  const { login, users, resetAllData, signUpUser } = useRole();
+  const { login, users, resetAllData, signUpUser, refreshData } = useRole();
 
   const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -208,6 +208,9 @@ export const LoginScreen: React.FC = () => {
 
   useEffect(() => {
     testSupabaseConnection();
+    if (refreshData) {
+      refreshData();
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

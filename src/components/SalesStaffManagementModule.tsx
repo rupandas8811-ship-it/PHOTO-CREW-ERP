@@ -52,8 +52,10 @@ export const SalesStaffManagementModule: React.FC = () => {
   const [showResetPwd, setShowResetPwd] = useState(false);
 
   // Helper to fetch the latest saved account data from database (bypassing stale state)
-  const fetchFreshAccountData = async (userId: string): Promise<any | null> => {
+  const fetchFreshAccountData = async (userId: string, userObj?: User): Promise<any | null> => {
     const dbUserId = mapToDbUserId(userId);
+
+    // 1. Check direct Supabase query by ID
     try {
       if (supabaseClient) {
         const { data, error } = await supabaseClient
@@ -67,6 +69,31 @@ export const SalesStaffManagementModule: React.FC = () => {
       console.warn("Direct supabase fresh account read error:", e);
     }
 
+    // 2. Direct Supabase query by Email if available
+    if (userObj?.email && supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('users')
+          .select('*')
+          .ilike('email', userObj.email.trim())
+          .maybeSingle();
+        if (data && !error) return data;
+      } catch (e) {}
+    }
+
+    // 3. Direct Supabase query by Mobile if available
+    if (userObj?.mobile && supabaseClient) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('users')
+          .select('*')
+          .eq('mobile', userObj.mobile.trim())
+          .maybeSingle();
+        if (data && !error) return data;
+      } catch (e) {}
+    }
+
+    // 4. Server proxy query by ID
     try {
       const res = await fetch('/api/db/select', {
         method: 'POST',
@@ -84,6 +111,45 @@ export const SalesStaffManagementModule: React.FC = () => {
     } catch (e) {
       console.warn("Server proxy fresh account read error:", e);
     }
+
+    // 5. Server proxy query by Email
+    if (userObj?.email) {
+      try {
+        const res = await fetch('/api/db/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table: 'users',
+            matchColumn: 'email',
+            matchValue: userObj.email.trim().toLowerCase()
+          })
+        });
+        const resData = await res.json();
+        if (resData.success && resData.data?.[0]) {
+          return resData.data[0];
+        }
+      } catch (e) {}
+    }
+
+    // 6. Server proxy query by Mobile
+    if (userObj?.mobile) {
+      try {
+        const res = await fetch('/api/db/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            table: 'users',
+            matchColumn: 'mobile',
+            matchValue: userObj.mobile.trim()
+          })
+        });
+        const resData = await res.json();
+        if (resData.success && resData.data?.[0]) {
+          return resData.data[0];
+        }
+      } catch (e) {}
+    }
+
     return null;
   };
 
@@ -124,7 +190,7 @@ export const SalesStaffManagementModule: React.FC = () => {
 
     // Fetch the latest saved account data directly from the database to guarantee fresh values
     try {
-      const fresh = await fetchFreshAccountData(usr.id);
+      const fresh = await fetchFreshAccountData(usr.id, usr);
       if (fresh) {
         if (fresh.name) setEditName(fresh.name);
         if (fresh.email !== undefined) setEditEmail(fresh.email || '');
@@ -150,11 +216,12 @@ export const SalesStaffManagementModule: React.FC = () => {
     setIsFetchingFresh(true);
 
     try {
-      const fresh = await fetchFreshAccountData(usr.id);
+      const fresh = await fetchFreshAccountData(usr.id, usr);
       if (fresh) {
         setViewUser({
           ...usr,
           ...fresh,
+          password: fresh.password || usr.password || '',
           active: fresh.active !== false && fresh.active !== 'false'
         });
       }
@@ -204,7 +271,7 @@ export const SalesStaffManagementModule: React.FC = () => {
     setIsFetchingFresh(true);
 
     try {
-      const fresh = await fetchFreshAccountData(usr.id);
+      const fresh = await fetchFreshAccountData(usr.id, usr);
       if (fresh && fresh.password) {
         setResetPwd(fresh.password);
       }
