@@ -3053,7 +3053,7 @@ export const OperationsLeads: React.FC = () => {
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
       {assigningOrderId && (
         <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-md z-[150] flex flex-col w-full h-full h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden overscroll-none animate-in fade-in duration-150"
+          className="fixed inset-0 bg-zinc-950 z-[150] flex flex-col w-full h-[100dvh] overflow-hidden overscroll-none animate-in slide-in-from-bottom-4 fade-in duration-200"
           onClick={(e) => {
             if (e.target === e.currentTarget) setAssigningOrderId(null);
           }}
@@ -3077,7 +3077,7 @@ export const OperationsLeads: React.FC = () => {
             </div>
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 max-h-full overflow-hidden max-w-full min-w-0">
               <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
-                <div className="w-full max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] mx-auto space-y-6 pb-20">
+                <div className="w-full space-y-6 pb-20">
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">
@@ -4351,7 +4351,7 @@ export const OperationsLeads: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-max">
                 <thead>
                   <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
                     <th className="py-2.5 px-3 font-bold">Verification Stage</th>
@@ -4451,7 +4451,7 @@ export const OperationsLeads: React.FC = () => {
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950/60 mb-4">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-xs min-w-max">
                 <thead>
                   <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-400 font-mono uppercase tracking-wider text-[10px]">
                     <th className="py-2.5 px-3 font-bold">Event Stage</th>
@@ -4672,7 +4672,7 @@ export const OperationsLeads: React.FC = () => {
                   <div className="text-xs text-zinc-500 italic py-2">No assigned crew members found for this order.</div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
+                    <table className="w-full text-left text-xs border-collapse min-w-max">
                       <thead>
                         <tr className="bg-zinc-900 border-b border-zinc-800 text-[10px] font-mono uppercase text-zinc-400">
                           <th className="py-2.5 px-3">Staff Name</th>

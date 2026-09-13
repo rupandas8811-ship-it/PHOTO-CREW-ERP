@@ -6479,12 +6479,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     if (supabaseClient) {
       try {
         await supabaseClient.from('users').update({ active: nextActive }).eq('id', dbUserId);
-        if (targetUser.email) {
-          await supabaseClient.from('users').update({ active: nextActive }).ilike('email', targetUser.email.trim());
-        }
-        if (targetUser.mobile) {
-          await supabaseClient.from('users').update({ active: nextActive }).eq('mobile', targetUser.mobile.trim());
-        }
       } catch (sbErr) {
         console.warn("Direct Supabase update warning in toggleUserStatus:", sbErr);
       }
@@ -6497,20 +6491,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ table: 'users', matchColumn: 'id', matchValue: dbUserId, updates: { active: nextActive } })
       });
-      if (targetUser.email) {
-        await fetch('/api/db/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ table: 'users', matchColumn: 'email', matchValue: targetUser.email.trim().toLowerCase(), updates: { active: nextActive } })
-        });
-      }
-      if (targetUser.mobile) {
-        await fetch('/api/db/update', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ table: 'users', matchColumn: 'mobile', matchValue: targetUser.mobile.trim(), updates: { active: nextActive } })
-        });
-      }
     } catch (pushErr) {
       console.warn("Server db/update active warning in toggleUserStatus:", pushErr);
     }
@@ -6522,10 +6502,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           auth_id: dbUserId,
-          email: targetUser.email,
-          mobile: targetUser.mobile,
-          name: targetUser.name,
-          role: targetUser.role,
           active: nextActive
         })
       });
