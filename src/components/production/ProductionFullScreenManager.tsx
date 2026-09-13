@@ -150,11 +150,17 @@ export const ProductionFullScreenManager: React.FC = () => {
           }
 
           // 1. Mark overlay as full screen page view
-          if (!overlay.classList.contains('prod-fullscreen-overlay')) {
-            overlay.classList.add('prod-fullscreen-overlay');
-          }
-          if (isClientAcceptanceModal && !overlay.classList.contains('prod-client-acceptance-overlay')) {
-            overlay.classList.add('prod-client-acceptance-overlay');
+          if (isClientAcceptanceModal) {
+            overlay.classList.remove('prod-fullscreen-overlay');
+            overlay.classList.remove('prod-client-acceptance-overlay');
+            overlay.style.setProperty('z-index', '9999999', 'important');
+            overlay.style.setProperty('padding-top', 'calc(var(--prod-nav-header-height, 64px) + 16px)', 'important');
+            overlay.style.setProperty('align-items', 'center', 'important');
+            overlay.style.setProperty('justify-content', 'center', 'important');
+          } else {
+            if (!overlay.classList.contains('prod-fullscreen-overlay')) {
+              overlay.classList.add('prod-fullscreen-overlay');
+            }
           }
           const isAssignedTeamModal = overlayText.includes('production lead • assigned team') || 
                                       (overlayText.includes('assigned team') && (overlayText.includes('prd-') || overlayText.includes('ord-')));
@@ -173,11 +179,17 @@ export const ProductionFullScreenManager: React.FC = () => {
             (overlay.firstElementChild as HTMLElement);
 
           if (modalCard) {
-            if (!modalCard.classList.contains('prod-fullscreen-card')) {
-              modalCard.classList.add('prod-fullscreen-card');
-            }
-            if (isClientAcceptanceModal && !modalCard.classList.contains('prod-client-acceptance-card')) {
-              modalCard.classList.add('prod-client-acceptance-card');
+            if (isClientAcceptanceModal) {
+              modalCard.classList.remove('prod-fullscreen-card');
+              modalCard.classList.remove('prod-client-acceptance-card');
+              modalCard.style.setProperty('max-height', 'calc(100vh - var(--prod-nav-header-height, 64px) - 32px)', 'important');
+              modalCard.style.setProperty('margin-top', '0', 'important');
+              modalCard.style.setProperty('display', 'flex', 'important');
+              modalCard.style.setProperty('flex-direction', 'column', 'important');
+            } else {
+              if (!modalCard.classList.contains('prod-fullscreen-card')) {
+                modalCard.classList.add('prod-fullscreen-card');
+              }
             }
           }
 
@@ -188,11 +200,13 @@ export const ProductionFullScreenManager: React.FC = () => {
               (modalCard.firstElementChild as HTMLElement);
 
             if (header) {
-              if (!header.classList.contains('prod-fullscreen-header')) {
-                header.classList.add('prod-fullscreen-header');
-              }
-              if (isClientAcceptanceModal && !header.classList.contains('prod-client-acceptance-header')) {
-                header.classList.add('prod-client-acceptance-header');
+              if (isClientAcceptanceModal) {
+                header.classList.remove('prod-fullscreen-header');
+                header.classList.remove('prod-client-acceptance-header');
+              } else {
+                if (!header.classList.contains('prod-fullscreen-header')) {
+                  header.classList.add('prod-fullscreen-header');
+                }
               }
             }
 
@@ -206,11 +220,13 @@ export const ProductionFullScreenManager: React.FC = () => {
               modalCard.querySelector<HTMLElement>('div.p-3\\.5');
 
             if (body) {
-              if (!body.classList.contains('prod-fullscreen-body')) {
-                body.classList.add('prod-fullscreen-body');
-              }
-              if (isClientAcceptanceModal && !body.classList.contains('prod-client-acceptance-body')) {
-                body.classList.add('prod-client-acceptance-body');
+              if (isClientAcceptanceModal) {
+                body.classList.remove('prod-fullscreen-body');
+                body.classList.remove('prod-client-acceptance-body');
+              } else {
+                if (!body.classList.contains('prod-fullscreen-body')) {
+                  body.classList.add('prod-fullscreen-body');
+                }
               }
               if (isAssignedTeamModal && !body.classList.contains('prod-assigned-team-body')) {
                 body.classList.add('prod-assigned-team-body');
@@ -228,11 +244,47 @@ export const ProductionFullScreenManager: React.FC = () => {
               actionContainers.forEach((container) => {
                 const buttons = container.querySelectorAll('button');
                 if (buttons.length > 0) {
-                  if (!container.classList.contains('prod-fullscreen-footer')) {
-                    container.classList.add('prod-fullscreen-footer');
-                  }
-                  if (isClientAcceptanceModal && !container.classList.contains('prod-client-acceptance-footer')) {
-                    container.classList.add('prod-client-acceptance-footer');
+                  if (isClientAcceptanceModal) {
+                    container.classList.remove('prod-fullscreen-footer');
+                    container.classList.remove('prod-client-acceptance-footer');
+                    
+                    // SAVE button logic modification
+                    let cancelBtn: HTMLButtonElement | null = null;
+                    let saveBtn: HTMLButtonElement | null = null;
+                    buttons.forEach(btn => {
+                      const txt = (btn.textContent || '').trim().toLowerCase();
+                      if (txt === 'cancel') cancelBtn = btn as HTMLButtonElement;
+                      if (txt === 'save' || txt === 'saving...') saveBtn = btn as HTMLButtonElement;
+                    });
+                    
+                    if (saveBtn && cancelBtn && !saveBtn.dataset.saveFixAttached) {
+                      saveBtn.dataset.saveFixAttached = 'true';
+                      saveBtn.addEventListener('click', () => {
+                        let alertShown = false;
+                        const originalAlert = window.alert;
+                        window.alert = function(msg) {
+                          alertShown = true;
+                          originalAlert(msg);
+                        };
+                        
+                        const obs = new MutationObserver((mutations) => {
+                          for (const m of mutations) {
+                            if (m.attributeName === 'disabled' && !saveBtn!.disabled) {
+                              window.alert = originalAlert; // restore alert
+                              if (!alertShown) {
+                                cancelBtn!.click();
+                              }
+                              obs.disconnect();
+                            }
+                          }
+                        });
+                        obs.observe(saveBtn!, { attributes: true });
+                      });
+                    }
+                  } else {
+                    if (!container.classList.contains('prod-fullscreen-footer')) {
+                      container.classList.add('prod-fullscreen-footer');
+                    }
                   }
                 }
               });
