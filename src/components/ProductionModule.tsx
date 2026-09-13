@@ -1402,6 +1402,15 @@ ${coordinatorName}`;
   }, [openActionDropdown?.id, openActionDropdown?.buttonEl]);
 
   const getProductionStatus = (prod: Production): string => {
+    // 0. Force terminal check against actual order/lead to prevent fallback to Customer Review
+    const { order, lead } = resolveOrderAndLead(prod);
+    if (order && ['Order Closed', 'Closed', 'Completed', 'Project Closed'].includes(order.current_stage)) {
+      return 'Order Closed';
+    }
+    if (lead && ['Order Closed', 'Closed', 'Completed', 'Project Closed'].includes(lead.status)) {
+      return 'Order Closed';
+    }
+
     const status = (prod.editing_status || 'Verified Footage') as string;
     if (['Pending', 'Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Raw Footage Uploaded', 'Footage Handover', 'Assigned Crew', 'Staff Assigned', 'Crew Assigned', 'Operations Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Ended', 'New Project', 'New Project Arrived', 'Order Created', 'New Order', 'Confirm Order', 'Order Confirmed', 'Quotation Sent', 'Booking Requested', 'Follow Up', 'Follow-Up', 'New Lead'].includes(status)) {
       const assignments = (editorAssignments || []).filter(a => 

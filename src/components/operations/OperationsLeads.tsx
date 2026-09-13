@@ -147,9 +147,9 @@ const EquipmentAssignedCell = ({ equipmentList, equipmentStatusText }: { equipme
       
       {isOpen && createPortal(
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)}></div>
+          <div className="fixed inset-0 z-[1000000]" onClick={() => setIsOpen(false)}></div>
           <div 
-            className="fixed z-50 w-64 bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-xl shadow-black/50 overflow-hidden"
+            className="fixed z-[1000001] w-64 bg-zinc-900 border border-zinc-700/60 rounded-xl shadow-xl shadow-black/50 overflow-hidden"
             style={{ 
               left: coords.left, 
               ...(coords.openUpward ? { bottom: window.innerHeight - coords.top } : { top: coords.top }) 
@@ -639,7 +639,7 @@ export const OperationsLeads: React.FC = () => {
 
       const handleTouchMove = (e: TouchEvent) => {
         const target = e.target as HTMLElement | null;
-        if (target && target.closest('.overflow-y-auto')) {
+        if (target && target.closest('.overflow-y-auto, .overflow-x-auto')) {
           return;
         }
         if (e.cancelable) {
@@ -5203,27 +5203,29 @@ export const OperationsLeads: React.FC = () => {
 
         return createPortal(
           <div 
-            className="fixed inset-0 bg-black/85 backdrop-blur-md z-[999999] flex flex-col w-full h-full h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden overscroll-none animate-in fade-in duration-150"
+            className="fixed inset-0 z-[999999] w-screen h-screen h-[100dvh] max-h-[100dvh] max-w-[100vw] bg-black/90 backdrop-blur-md flex flex-col overflow-hidden animate-in fade-in duration-150 overscroll-none"
+            style={{ width: '100vw', height: '100vh', maxHeight: '100dvh' }}
             onClick={(e) => {
               if (e.target === e.currentTarget) setViewingStaffOrderId(null);
             }}
           >
-            <div className="bg-zinc-900 w-full h-full flex-1 flex flex-col min-h-0 max-h-full shadow-2xl relative overflow-hidden text-left max-w-full min-w-0">
-              <div className="p-4 sm:px-6 sm:py-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 max-w-full min-w-0">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="text-xl shrink-0">👥</span>
-                  <div className="text-left min-w-0">
-                    <h3 className="text-base sm:text-lg font-bold text-white font-sans truncate">
+            <div className="bg-zinc-900 w-full h-full flex-1 flex flex-col min-h-0 min-w-0 max-h-full max-w-full relative overflow-hidden text-left shadow-2xl">
+              {/* Pinned Responsive Header */}
+              <div className="px-3.5 py-2.5 sm:px-6 sm:py-3.5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 w-full min-w-0">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 mr-3">
+                  <span className="text-lg sm:text-xl shrink-0">👥</span>
+                  <div className="text-left min-w-0 flex-1">
+                    <h3 className="text-sm sm:text-base md:text-lg font-bold text-white font-sans truncate">
                       Assigned Team Members
                     </h3>
-                    <p className="text-[11px] sm:text-xs text-zinc-400 truncate">
+                    <p className="text-[10px] sm:text-xs text-zinc-400 truncate">
                       Order <span className="font-mono text-indigo-400 font-bold">{ord.order_id}</span> • {ord.customer_name}
                     </p>
                   </div>
                 </div>
                 <button 
                   onClick={() => setViewingStaffOrderId(null)}
-                  className="text-zinc-400 hover:text-white font-bold cursor-pointer transition-colors p-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-sm ml-2 shrink-0 flex items-center justify-center w-8 h-8"
+                  className="text-zinc-400 hover:text-white font-bold cursor-pointer transition-colors p-1.5 sm:p-2 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-sm shrink-0 flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 active:scale-95"
                   type="button"
                   title="Close Modal"
                 >
@@ -5231,8 +5233,12 @@ export const OperationsLeads: React.FC = () => {
                 </button>
               </div>
 
-              <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 text-left scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
-                <div className="w-full max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] mx-auto space-y-6 pb-16">
+              {/* Full-Screen Scrollable Content Area */}
+              <div 
+                className="w-full flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-6 lg:p-8 text-left scrollbar-thin overscroll-contain touch-pan-y" 
+                style={{ touchAction: 'pan-y', WebkitOverflowScrolling: 'touch' }}
+              >
+                <div className="w-full space-y-4 sm:space-y-6 pb-6">
                 {eventGroups.length === 0 ? (
                   <div className="text-center py-8 text-zinc-500 italic text-xs font-mono">
                     No staff assigned yet.
@@ -5241,13 +5247,13 @@ export const OperationsLeads: React.FC = () => {
                   eventGroups.map((group, evIdx) => {
                     const members = group.members;
                     return (
-                      <div key={evIdx} className="bg-zinc-950/40 border border-zinc-850/60 rounded-2xl p-4 space-y-3">
+                      <div key={evIdx} className="bg-zinc-950/40 border border-zinc-850/60 rounded-2xl p-3 sm:p-4 md:p-5 space-y-3 w-full min-w-0">
                         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-                          <h4 className="text-xs font-bold text-indigo-400 font-sans flex items-center gap-1.5">
+                          <h4 className="text-xs sm:text-sm font-bold text-indigo-400 font-sans flex items-center gap-1.5 truncate">
                             🎬 {group.eventName}
                           </h4>
                           {group.eventDate && (
-                            <span className="text-[10px] font-mono text-zinc-500">
+                            <span className="text-[10px] sm:text-xs font-mono text-zinc-500 shrink-0 ml-2">
                               {formatDateDDMMYY(group.eventDate)}
                             </span>
                           )}
@@ -5258,7 +5264,10 @@ export const OperationsLeads: React.FC = () => {
                             No staff assigned for this event yet.
                           </div>
                         ) : (
-                          <div className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-900/60 mt-2">
+                          <div 
+                            className="overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-900/60 mt-2 scrollbar-thin w-full max-w-full"
+                            style={{ WebkitOverflowScrolling: 'touch' }}
+                          >
                             <table className="w-full text-left border-collapse min-w-max">
                               <thead>
                                 <tr className="bg-zinc-950/80 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
@@ -5617,11 +5626,12 @@ export const OperationsLeads: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-4 sm:px-6 sm:py-4 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 flex justify-end max-w-full min-w-0">
+              {/* Pinned Responsive Footer */}
+              <div className="px-3.5 py-2.5 sm:px-6 sm:py-3.5 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md shrink-0 z-30 flex items-center justify-end w-full min-w-0">
                 <button
                   type="button"
                   onClick={() => setViewingStaffOrderId(null)}
-                  className="w-full sm:w-auto px-6 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-200 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
+                  className="w-full sm:w-auto px-6 py-2 bg-zinc-800 hover:bg-zinc-700 active:scale-98 text-zinc-200 text-xs font-mono font-bold rounded-xl transition-all cursor-pointer"
                 >
                   Close
                 </button>

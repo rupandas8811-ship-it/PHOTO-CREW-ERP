@@ -1224,7 +1224,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const hasClosed = isClosedStatus(p.current_status) || 
                         isClosedStatus(p.production_status) || 
                         isClosedStatus(p.editing_status) || 
-                        isClosedStatus((p as any).status);
+                        isClosedStatus((p as any).status) ||
+                        isClosedStatus(ord?.current_stage) ||
+                        isClosedStatus(leadStatus);
 
       const hasClientAcceptance = isClientAcceptanceStatus(p.current_status) || 
                                   isClientAcceptanceStatus(p.production_status) || 
