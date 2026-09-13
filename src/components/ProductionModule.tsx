@@ -11235,15 +11235,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           const trackingId = clientAcceptanceProd.tracking_id || 'N/A';
           
           return (
-            <div className="fixed top-[73px] left-0 right-0 bottom-0 bg-black/90 backdrop-blur-md z-[9999] flex flex-col items-center justify-center p-4 sm:p-6 overflow-y-auto">
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-[#0a0a0a] border border-zinc-800 rounded-2xl w-full max-w-lg shadow-2xl relative flex flex-col max-h-full shrink-0 overflow-hidden"
+                className="bg-[#0a0a0a] border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
               >
                 {/* Header */}
-                <div className="p-5 flex justify-between items-start shrink-0">
+                <div className="p-5 flex justify-between items-start">
                   <div>
                     <h3 className="text-[13px] font-black text-white flex items-center gap-1.5 uppercase tracking-widest font-mono">
                       <span className="text-emerald-400">✓</span> CLIENT APPROVAL
@@ -11300,9 +11300,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       setIsSaving(false);
                     }
                   }}
-                  className="px-5 pb-5 space-y-4 flex flex-col overflow-hidden min-h-0 flex-1"
+                  className="px-5 pb-5 space-y-4 flex flex-col"
                 >
-                  <div className="space-y-2 overflow-y-auto custom-scrollbar flex-1 min-h-0 pr-2">
+                  <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[60vh] pr-2">
                     <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
                       <input
                         type="checkbox"
@@ -11365,7 +11365,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </div>
 
                   {/* Buttons */}
-                  <div className="flex gap-3 pt-4 shrink-0">
+                  <div className="flex gap-3 pt-4">
                     <button
                       type="button"
                       onClick={() => {
