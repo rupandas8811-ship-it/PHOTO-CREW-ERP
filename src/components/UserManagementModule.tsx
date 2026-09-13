@@ -142,6 +142,8 @@ export const UserManagementModule: React.FC = () => {
   const [editMobile, setEditMobile] = useState('');
   const [editRole, setEditRole] = useState<UserRole>('Sales Team');
   const [editActive, setEditActive] = useState(true);
+  const [editPassword, setEditPassword] = useState('');
+  const [showEditPassword, setShowEditPassword] = useState(false);
 
   // Password reset state
   const [newResetPasswordValue, setNewResetPasswordValue] = useState('');
@@ -180,7 +182,6 @@ export const UserManagementModule: React.FC = () => {
   const handleEditClick = (usr: User) => {
     if (usr.id === currentUser?.id) {
        alert('To prevent lock-outs, edit your personal email from the profile panel.');
-       // We can let them edit, but let's remind them. Actually, let's allow it but warn them.
     }
     setEditingUser(usr);
     setEditName(usr.name);
@@ -188,6 +189,8 @@ export const UserManagementModule: React.FC = () => {
     setEditMobile(usr.mobile);
     setEditRole(usr.role);
     setEditActive(usr.active);
+    setEditPassword(usr.password || '');
+    setShowEditPassword(false);
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -205,7 +208,8 @@ export const UserManagementModule: React.FC = () => {
         email: editEmail,
         mobile: editMobile,
         role: editRole,
-        active: editActive
+        active: editActive,
+        password: editPassword.trim() || undefined
       });
 
       setEditingUser(null);
@@ -680,6 +684,30 @@ export const UserManagementModule: React.FC = () => {
                   />
                 </div>
 
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-400">Current Login Password</label>
+                    <span className="text-[10px] text-indigo-400 font-mono">From Database</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type={showEditPassword ? "text" : "password"}
+                      value={editPassword}
+                      onChange={(e) => setEditPassword(e.target.value)}
+                      placeholder="Account password"
+                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 pl-3 pr-10 text-slate-101 font-mono focus:ring-1 focus:ring-indigo-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEditPassword(!showEditPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer p-0.5"
+                    >
+                      {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1">Displays the current saved password. Modify to update.</p>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block font-semibold text-slate-400 mb-1">Assign User Role *</label>
@@ -1007,6 +1035,30 @@ export const UserManagementModule: React.FC = () => {
                       onChange={(e) => setEditMobile(e.target.value)}
                       className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 px-3 text-slate-101 font-mono focus:outline-none font-medium"
                     />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-semibold text-slate-400">Current Login Password</label>
+                      <span className="text-[10px] text-indigo-400 font-mono">From Database</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showEditPassword ? "text" : "password"}
+                        value={editPassword}
+                        onChange={(e) => setEditPassword(e.target.value)}
+                        placeholder="Account password"
+                        className="w-full bg-slate-955 border border-slate-800 rounded-lg py-2 pl-3 pr-10 text-slate-101 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-505"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowEditPassword(!showEditPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer p-0.5"
+                      >
+                        {showEditPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">Displays current saved password from the database.</p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

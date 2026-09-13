@@ -229,7 +229,7 @@ interface RoleContextType {
   // User Management Admin features
   addUser: (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string, employee_id?: string) => Promise<void>;
   signUpUser: (name: string, username: string, email: string, mobile: string, role: UserRole, password: string) => Promise<any>;
-  editUser: (id: string, updates: { name: string, email: string, mobile: string, role?: UserRole, active: boolean, employee_id?: string }) => Promise<void>;
+  editUser: (id: string, updates: { name: string, email?: string, mobile?: string, role?: UserRole, active: boolean, employee_id?: string, password?: string }) => Promise<void>;
   deleteUser: (id: string) => Promise<void>;
   toggleUserStatus: (id: string) => Promise<void>;
   resetUserPassword: (id: string, newPassword: string) => Promise<void>;
@@ -313,7 +313,7 @@ interface RoleContextType {
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
 
 // Stable UUID translator mapping helpers because Supabase 'public.users' id is UUID
-const mapToDbUserId = (id: string): string => {
+export const mapToDbUserId = (id: string): string => {
   if (!id) return `00000000-0000-0000-0000-000000000000`;
   if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     return id;
@@ -3520,7 +3520,51 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         return { success: false, error: msg };
       }
 
-      // Validate active status
+      // CRITICAL: Always check the latest account status from the database rather than using an old/cached status
+      try {
+        const dbTargetId = mapToDbUserId(dbUser.id);
+        let freshStatusRecord: any = null;
+
+        // 1. Direct Supabase query with fresh single select
+        if (supabaseClient) {
+          const { data: directFresh } = await supabaseClient
+            .from('users')
+            .select('*')
+            .eq('id', dbTargetId)
+            .maybeSingle();
+          if (directFresh) {
+            freshStatusRecord = directFresh;
+          }
+        }
+
+        // 2. Server proxy query with service role key (guarantees fresh non-cached live database read)
+        if (!freshStatusRecord) {
+          const srvRes = await fetch('/api/db/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              table: 'users',
+              matchColumn: 'id',
+              matchValue: dbTargetId
+            })
+          });
+          const srvData = await srvRes.json();
+          if (srvData.success && srvData.data?.[0]) {
+            freshStatusRecord = srvData.data[0];
+          }
+        }
+
+        if (freshStatusRecord) {
+          console.log(`[LOGIN STATUS CHECK] Fresh database status for ${dbUser.name}: active=${freshStatusRecord.active}`);
+          dbUser = { ...dbUser, ...freshStatusRecord };
+          // Keep in-memory users state updated with fresh database record
+          setUsers(prev => prev.map(u => (u.id === dbUser.id || mapToDbUserId(u.id) === dbTargetId) ? { ...u, ...freshStatusRecord } : u));
+        }
+      } catch (statusErr) {
+        console.warn("[LOGIN] Error verifying latest status from database:", statusErr);
+      }
+
+      // Validate active status from the database
       if (dbUser.active === false || dbUser.active === 'false') {
         const msg = 'Your account has been deactivated. Please contact the administrator.';
         logAttempt('Failed', msg, dbUser.id);
@@ -6117,38 +6161,91 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     throw new Error('User registration is disabled. Only pre-configured system accounts are permitted.');
   };
 
-  const editUser = async (id: string, updates: { name: string, email: string, mobile: string, role?: UserRole, active: boolean, employee_id?: string, password?: string }) => {
-    const safeEmail = (updates.email && updates.email.trim() !== '') ? updates.email.trim() : `${updates.mobile ? updates.mobile.replace(/[^a-zA-Z0-9]/g, '') : 'user'}_${id.substring(0,6)}@photocrew.com`;
-    const safeUpdates = { ...updates, email: safeEmail };
+  const editUser = async (id: string, updates: { name: string, email?: string, mobile?: string, role?: UserRole, active: boolean, employee_id?: string, password?: string }) => {
+    const dbUserId = mapToDbUserId(id);
+    let targetUser = users.find(u => u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId);
     
-    // Sync with auth server if password or mobile/role updated
+    if (!targetUser && supabaseClient) {
+      try {
+        const { data: fetchedUser } = await supabaseClient
+          .from('users')
+          .select('*')
+          .eq('id', dbUserId)
+          .maybeSingle();
+        if (fetchedUser) {
+          targetUser = mapUserFieldsFromDb(fetchedUser);
+        }
+      } catch (fetchErr) {
+        console.warn("Error fetching user in editUser:", fetchErr);
+      }
+    }
+
+    const safeName = updates.name !== undefined ? updates.name : (targetUser?.name || '');
+    const safeEmail = (updates.email && updates.email.trim() !== '') ? updates.email.trim() : (targetUser?.email || `${(updates.mobile || targetUser?.mobile || 'user').replace(/[^a-zA-Z0-9]/g, '')}_${id.substring(0,6)}@photocrew.com`);
+    const safeMobile = updates.mobile !== undefined ? updates.mobile : (targetUser?.mobile || '');
+    const safeRole = updates.role || targetUser?.role || 'Sales Team';
+    const safeActive = updates.active !== undefined ? updates.active : (targetUser?.active ?? true);
+    const safeEmployeeId = updates.employee_id !== undefined ? updates.employee_id : (targetUser?.employee_id || '');
+    const cleanPassword = updates.password ? updates.password.trim() : (targetUser?.password || '');
+
+    const dbPayload: any = {
+      name: safeName,
+      active: safeActive,
+      role: safeRole,
+      employee_id: safeEmployeeId
+    };
+    if (safeEmail) dbPayload.email = safeEmail;
+    if (safeMobile) dbPayload.mobile = safeMobile;
+    if (cleanPassword) dbPayload.password = cleanPassword;
+
+    // 1. Direct Supabase update
+    if (supabaseClient) {
+      try {
+        await supabaseClient.from('users').update(dbPayload).eq('id', dbUserId);
+        if (targetUser?.email && targetUser.email !== safeEmail) {
+          await supabaseClient.from('users').update(dbPayload).ilike('email', targetUser.email.trim());
+        }
+      } catch (sbErr) {
+        console.warn("Direct Supabase update warning in editUser:", sbErr);
+      }
+    }
+
+    // 2. Sync with auth server
     try {
       await fetch('/api/auth/update-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          auth_id: mapToDbUserId(id),
+          auth_id: dbUserId,
           email: safeEmail,
-          mobile: updates.mobile,
-          name: updates.name,
-          role: updates.role,
-          active: updates.active,
-          ...(updates.password ? { password: updates.password } : {})
+          mobile: safeMobile,
+          name: safeName,
+          role: safeRole,
+          active: safeActive,
+          ...(cleanPassword ? { password: cleanPassword } : {})
         })
       });
     } catch (authErr) {
-      console.warn("Auth update user error:", authErr);
+      console.warn("Auth update user error in editUser:", authErr);
     }
 
-    const dbRes = await pushUpdate('users', 'id', mapToDbUserId(id), safeUpdates);
+    // 3. Update via pushUpdate
+    const dbRes = await pushUpdate('users', 'id', dbUserId, dbPayload);
     if (!dbRes.success) {
       if (dbRes.error && dbRes.error.includes('users_email_key')) {
         throw new Error("This email address is already in use by another user.");
       }
-      throw new Error(dbRes.error || "Failed to update user in database");
+      console.warn("pushUpdate users warning in editUser:", dbRes.error);
     }
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, ...safeUpdates } : u));
-    logActivity(`Updated User Account Profile: ${safeUpdates.name}`, 'UserManagement', id);
+
+    const updatedUserObj = {
+      ...targetUser,
+      ...dbPayload,
+      id: targetUser?.id || id
+    };
+
+    setUsers((prev) => prev.map((u) => (u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId) ? { ...u, ...updatedUserObj } : u));
+    logActivity(`Updated User Account Profile: ${safeName}`, 'UserManagement', id);
   };
 
   const deleteUser = async (id: string) => {
@@ -6168,16 +6265,68 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const toggleUserStatus = async (id: string) => {
-    let targetUser = users.find(u => u.id === id);
+    const dbUserId = mapToDbUserId(id);
+    let targetUser = users.find(u => u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId);
+    
+    if (!targetUser && supabaseClient) {
+      try {
+        const { data: fetchedUser } = await supabaseClient
+          .from('users')
+          .select('*')
+          .eq('id', dbUserId)
+          .maybeSingle();
+        if (fetchedUser) {
+          targetUser = mapUserFieldsFromDb(fetchedUser);
+        }
+      } catch (fetchErr) {
+        console.warn("Error fetching user in toggleUserStatus:", fetchErr);
+      }
+    }
+    
     if (!targetUser) return;
     const nextActive = !targetUser.active;
     
-    const dbRes = await pushUpdate('users', 'id', mapToDbUserId(id), { active: nextActive });
-    if (!dbRes.success) {
-      throw new Error(dbRes.error || "Failed to update user status in database");
+    // 1. Direct update in public.users table for immediate persistence
+    if (supabaseClient) {
+      try {
+        await supabaseClient.from('users').update({ active: nextActive }).eq('id', dbUserId);
+        if (targetUser.email) {
+          await supabaseClient.from('users').update({ active: nextActive }).ilike('email', targetUser.email.trim());
+        }
+        if (targetUser.mobile) {
+          await supabaseClient.from('users').update({ active: nextActive }).eq('mobile', targetUser.mobile.trim());
+        }
+      } catch (sbErr) {
+        console.warn("Direct Supabase update warning in toggleUserStatus:", sbErr);
+      }
+    }
+
+    // 2. Also update in users table via server proxy
+    try {
+      await pushUpdate('users', 'id', dbUserId, { active: nextActive });
+    } catch (pushErr) {
+      console.warn("pushUpdate users active warning in toggleUserStatus:", pushErr);
+    }
+
+    // 3. Also update via server auth admin endpoint
+    try {
+      await fetch('/api/auth/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          auth_id: dbUserId,
+          email: targetUser.email,
+          mobile: targetUser.mobile,
+          name: targetUser.name,
+          role: targetUser.role,
+          active: nextActive
+        })
+      });
+    } catch (authErr) {
+      console.warn("Server auth active status sync warning in toggleUserStatus:", authErr);
     }
     
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, active: nextActive } : u));
+    setUsers((prev) => prev.map((u) => (u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId) ? { ...u, active: nextActive } : u));
     logActivity(`${nextActive ? 'Activated' : 'Deactivated'} User Account: ${targetUser.name}`, 'UserManagement', id);
   };
 
@@ -6986,7 +7135,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
           
           const prodObj = (production || []).find(p => p.production_id === prodId);
-          const baseStatus = prodObj?.editing_status || (prodObj as any)?.production_status || (prodObj as any)?.current_status || 'Raw Footage Received';
+          let baseStatus = prodObj?.editing_status || (prodObj as any)?.production_status || (prodObj as any)?.current_status || 'Raw Footage Received';
 
           let nextEditingStatus: EditingStatus | undefined = undefined;
           
