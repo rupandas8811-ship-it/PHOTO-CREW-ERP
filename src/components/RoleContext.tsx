@@ -1636,7 +1636,15 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const timeFields = ['event_time', 'reporting_time', 'confirmed_event_time'];
-    const dateFields = ['event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date'];
+    const dateFields = [
+      'event_date', 'booking_date', 'event_start_date', 'event_end_date', 'delivery_target_date',
+      'editing_start_date', 'target_delivery_date', 'expected_delivery_date', 'actual_delivery_date', 
+      'delivery_date', 'event_completed_date', 'uploaded_date', 'return_date', 'payment_date', 
+      'follow_up_date', 'next_follow_up_date', 'client_approval_date', 'assigned_date', 
+      'assignment_date', 'created_date', 'generated_date', 'p_generated_date', 'purchase_date', 
+      'reporting_date', 'target_finish_date', 'server_upload_event_date', 
+      'server_upload_confirmed_at', 'server_upload_validated_at'
+    ];
 
     // Comprehensive numeric sanitization to ensure empty strings are NEVER sent to NUMERIC/DECIMAL/INT columns
     for (const key of Object.keys(clone)) {
