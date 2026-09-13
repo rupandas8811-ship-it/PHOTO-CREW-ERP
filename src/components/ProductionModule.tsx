@@ -908,9 +908,17 @@ ${coordinatorName}`;
         continue;
       }
 
+      // Hide closed orders from all Production roles
+      if (currentRole === 'Production Team' || currentRole === 'Production Staff') {
+        const isClosed = orderStage === 'Order Closed' || prodStatus === 'Order Closed' || orderStage === 'Closed' || prodStatus === 'Closed' || orderStage === 'Project Closed' || prodStatus === 'Project Closed' || orderStage === 'Completed';
+        if (isClosed) {
+          continue;
+        }
+      }
+
       // Filter for Production Staff role
       if (currentRole === 'Production Staff') {
-        if (orderStage === 'Client Acceptance' || prodStatus === 'Client Acceptance' || orderStage === 'Order Closed' || prodStatus === 'Order Closed' || orderStage === 'Closed' || prodStatus === 'Closed') {
+        if (orderStage === 'Client Acceptance' || prodStatus === 'Client Acceptance') {
           continue;
         }
 
@@ -11273,7 +11281,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       setIsSaving(true);
                       
                       const updates: any = {
-                        editing_status: 'Client Accepted',
+                        editing_status: 'Client Acceptance',
                         checklist_customer_acceptance: caVerifyCustomerAcceptance,
                         checklist_content_usage: caContentUsageConfirmation,
                         checklist_footage_deleted_7_days: caFootageDeleted7Days,
@@ -11287,7 +11295,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       
                       const targetId = order?.order_id || trackingId || clientAcceptanceProd.production_id;
                       if (targetId) {
-                        await updateOrderStage(targetId, 'Client Accepted' as any);
+                        await updateOrderStage(targetId, 'Client Acceptance' as any);
                       }
                       
                       if (refreshData) {
