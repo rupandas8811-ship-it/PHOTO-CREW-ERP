@@ -5251,7 +5251,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     // De-mock production ID if it is PRD-lead_id
     const inferredTrackingId = productionId.startsWith('PRD-') ? productionId.replace('PRD-', '') : productionId;
     let targetProd = augmentedProduction.find((p) => p.production_id === productionId || p.tracking_id === inferredTrackingId);
-    
+
+    // Map Client Accepted to Client Acceptance to ensure proper status history synchronization
+    if (updates.editing_status === 'Client Accepted') {
+      updates.editing_status = 'Client Acceptance' as any;
+    }
+    if (updates.production_status === 'Client Accepted') {
+      updates.production_status = 'Client Acceptance' as any;
+    }
+    if (updates.current_status === 'Client Accepted') {
+      updates.current_status = 'Client Acceptance' as any;
+    }
+
     let previousStage: CurrentStage = 'Raw Footage Received';
     if (targetProd) {
       const rf = rawFootage.find((f) => f.tracking_id === targetProd.tracking_id);
@@ -5914,9 +5925,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const resolvedOrderId = targetOrder ? targetOrder.order_id : orderId;
     const previousStage = targetOrder ? targetOrder.current_stage : 'Order Confirmed';
     const timestamp = new Date().toISOString();
-
+    
     let targetStageToSave = stage;
-    if (['Closed', 'Order Closed', 'Project Closed', 'Completed'].includes(stage as string)) {
+    if (stage === 'Client Accepted' as any) {
+      targetStageToSave = 'Client Acceptance' as any;
+    }
+
+    if (['Closed', 'Order Closed', 'Project Closed', 'Completed'].includes(targetStageToSave as string)) {
       targetStageToSave = 'Order Closed';
       logActivity(
         `Business Owner Review Completed & Order Closed. Reviewed By: ${currentUserName || 'Business Owner'}, Review Date & Time: ${timestamp}, Final Status: Order Closed.`,
