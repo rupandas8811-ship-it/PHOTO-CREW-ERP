@@ -59,7 +59,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
     <>
       {showConfirmModal && selectedLead && (
         <div 
-          className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-2 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto transition-opacity duration-200"
+          className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden transition-opacity duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm_booking_modal_title"
@@ -67,7 +67,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
           <div 
             ref={confirmBookingModalRef}
             id="confirm_booking_modal" 
-            className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg md:max-w-xl w-full shadow-2xl flex flex-col max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] md:max-h-[90vh] my-auto animate-in fade-in zoom-in-95 duration-150 relative min-h-0"
+            className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg md:max-w-xl w-full shadow-2xl flex flex-col h-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] md:max-h-[min(90vh,840px)] my-auto animate-in fade-in zoom-in-95 duration-150 relative"
           >
             {/* Header - Fixed at Top */}
             <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-5 py-3 sm:py-3.5 shrink-0 bg-slate-850">
