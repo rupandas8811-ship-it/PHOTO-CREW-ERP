@@ -609,6 +609,72 @@ async function startServer() {
       }
     }
 
+    if (table === 'users') {
+      const uItem = Array.isArray(payload) ? payload[0] : payload;
+      if (uItem) {
+        let normalizedRole = 'Operation Staff';
+        if (uItem.role) {
+          const r = String(uItem.role).trim().toLowerCase();
+          if (r.includes('owner') || r.includes('business')) normalizedRole = 'Business Owner';
+          else if (r.includes('sales')) normalizedRole = 'Sales Team';
+          else if (r.includes('prod')) normalizedRole = 'Production Team';
+          else if (r.includes('op') && r.includes('team')) normalizedRole = 'Operations Team';
+          else normalizedRole = 'Operation Staff';
+        }
+
+        const cleanE = uItem.email ? String(uItem.email).trim().toLowerCase() : '';
+        const cleanM = uItem.mobile ? String(uItem.mobile).trim() : '0000000000';
+        const targetId = uItem.id;
+
+        const orConds = [];
+        if (targetId) orConds.push(`id.eq.${targetId}`);
+        if (cleanE) orConds.push(`email.eq.${cleanE}`);
+        if (cleanM && cleanM !== '0000000000') orConds.push(`mobile.eq.${cleanM}`);
+
+        if (orConds.length > 0) {
+          const { data: existingRows } = await db.from('users').select('*').or(orConds.join(',')).limit(1);
+          if (existingRows && existingRows.length > 0) {
+            const existing = existingRows[0];
+            const updates: any = {
+              name: uItem.name || existing.name,
+              mobile: cleanM || existing.mobile || '0000000000',
+              username: uItem.username || cleanE || existing.username,
+              role: normalizedRole,
+              active: uItem.active !== undefined ? uItem.active : existing.active
+            };
+            if (uItem.password) {
+              updates.password = uItem.password;
+            }
+            const { data: upd, error: updErr } = await db.from('users').update(updates).eq('id', existing.id).select();
+            if (!updErr && upd && upd.length > 0) {
+              return { success: true, data: upd };
+            }
+          }
+        }
+
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        const validId = targetId && uuidRegex.test(targetId) ? targetId : crypto.randomUUID();
+        const insertRecord = {
+          id: validId,
+          name: uItem.name || 'Staff',
+          email: cleanE || `${cleanM}@photocrew.com`,
+          mobile: cleanM,
+          username: uItem.username || cleanE || `${cleanM}@photocrew.com`,
+          role: normalizedRole,
+          active: uItem.active !== undefined ? uItem.active : true,
+          password: uItem.password || null,
+          created_at: uItem.created_at || new Date().toISOString()
+        };
+        const { data: ins, error: insErr } = await db.from('users').insert(insertRecord).select();
+        if (!insErr && ins && ins.length > 0) {
+          return { success: true, data: ins };
+        } else if (insErr) {
+          console.error('[Server DB users insert error]:', insErr);
+          return { success: false, error: insErr.message };
+        }
+      }
+    }
+
     let currentPayload = sanitizeRecordForDbServer(payload, table);
     let retriesLeft = 15;
     let lastError: any = null;
@@ -1554,12 +1620,22 @@ async function startServer() {
       if (error) {
         if (error.message && error.message.toLowerCase().includes('already')) {
           console.log(`[Server Auth] User ${cleanEmail} already exists in auth. Updating password and metadata...`);
-          // Find user by email from listUsers or users table
-          const { data: listData } = await db.auth.admin.listUsers();
-          const existingAuth = listData?.users?.find((u: any) => u.email?.toLowerCase() === cleanEmail);
-          if (existingAuth) {
-            authUser = existingAuth;
-            await db.auth.admin.updateUserById(existingAuth.id, {
+          // Find user by email or mobile from users table first (since listUsers may fail with 500)
+          let targetAuthId: string | null = null;
+          const { data: matchedDbUser } = await db.from('users').select('id').or(`email.eq.${cleanEmail}${mobile ? `,mobile.eq.${mobile}` : ''}`).limit(1);
+          if (matchedDbUser && matchedDbUser.length > 0) {
+            targetAuthId = matchedDbUser[0].id;
+          }
+          if (!targetAuthId) {
+            try {
+              const { data: listData } = await db.auth.admin.listUsers();
+              const existingAuth = listData?.users?.find((u: any) => u.email?.toLowerCase() === cleanEmail);
+              if (existingAuth) targetAuthId = existingAuth.id;
+            } catch (e) {}
+          }
+          if (targetAuthId) {
+            authUser = { id: targetAuthId, email: cleanEmail };
+            await db.auth.admin.updateUserById(targetAuthId, {
               password,
               user_metadata: { name, role, mobile: mobile || '' }
             });
@@ -1574,22 +1650,54 @@ async function startServer() {
         authUser = data.user;
       }
 
+      let normalizedRole = 'Operation Staff';
+      if (role) {
+        const r = String(role).trim().toLowerCase();
+        if (r.includes('owner') || r.includes('business')) normalizedRole = 'Business Owner';
+        else if (r.includes('sales')) normalizedRole = 'Sales Team';
+        else if (r.includes('prod')) normalizedRole = 'Production Team';
+        else if (r.includes('op') && r.includes('team')) normalizedRole = 'Operations Team';
+        else normalizedRole = 'Operation Staff';
+      }
+
       const userRecord: any = {
         id: authUser.id, // Primary key matching auth ID
         name,
         email: cleanEmail,
-        mobile: mobile || '',
+        mobile: mobile || '0000000000',
         username: cleanEmail,
-        role,
+        role: normalizedRole,
         active,
         password,
         created_at: new Date().toISOString()
       };
       
-      const { data: dbData, error: dbError } = await db.from('users').upsert(userRecord, { onConflict: 'email' }).select();
-      
-      if (dbError) {
-        console.warn(`[Server Auth DB Upsert Warning]`, dbError);
+      const orConds = [`id.eq.${authUser.id}`];
+      if (cleanEmail) orConds.push(`email.eq.${cleanEmail}`);
+      if (mobile) orConds.push(`mobile.eq.${mobile}`);
+
+      const { data: existingUser } = await db.from('users').select('*').or(orConds.join(',')).limit(1);
+
+      let dbData: any = null;
+      if (existingUser && existingUser.length > 0) {
+        const { data: updData, error: updErr } = await db.from('users').update({
+          name: name || existingUser[0].name,
+          mobile: mobile || existingUser[0].mobile || '0000000000',
+          username: cleanEmail || existingUser[0].username,
+          role: normalizedRole,
+          active,
+          password
+        }).eq('id', existingUser[0].id).select();
+        dbData = updData;
+        if (updErr) {
+          console.warn(`[Server Auth DB Update Warning]`, updErr);
+        }
+      } else {
+        const { data: insData, error: insErr } = await db.from('users').insert(userRecord).select();
+        dbData = insData;
+        if (insErr) {
+          console.warn(`[Server Auth DB Insert Warning]`, insErr);
+        }
       }
 
       res.json({ success: true, data: { user: authUser, record: dbData?.[0] || userRecord } });

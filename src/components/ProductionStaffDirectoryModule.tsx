@@ -241,7 +241,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       } else {
         // New Staff Mode
         // 1. Create auth user
-        if (formPassword.trim()) {
+        const cleanPwd = formPassword.trim();
+        if (cleanPwd) {
             const computedEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
             const authRes = await fetch('/api/auth/create-user', {
               method: 'POST',
@@ -249,9 +250,9 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
               body: JSON.stringify({
                 email: computedEmail,
                 mobile: formMobile.trim(),
-                password: formPassword.trim(),
+                password: cleanPwd,
                 name: formName.trim(),
-                role: 'production staff',
+                role: 'Production Team',
                 active: formStatus === 'Active'
               })
             });
@@ -270,6 +271,42 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
             if (authData.data?.user?.id) {
                (payload as any).auth_user_id = authData.data.user.id;
             }
+
+            // Also guarantee the password is saved in the users table
+            try {
+              const authUid = authData?.data?.user?.id || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`);
+              const { data: existingUser } = await supabaseClient
+                .from('users')
+                .select('id')
+                .or(`email.eq.${computedEmail},mobile.eq.${formMobile.trim()}`)
+                .limit(1);
+
+              if (existingUser && existingUser.length > 0) {
+                await supabaseClient.from('users').update({
+                  name: formName.trim(),
+                  mobile: formMobile.trim(),
+                  email: computedEmail,
+                  username: computedEmail,
+                  role: 'Production Team',
+                  active: formStatus === 'Active',
+                  password: cleanPwd
+                }).eq('id', existingUser[0].id);
+              } else {
+                await supabaseClient.from('users').insert({
+                  id: authUid,
+                  name: formName.trim(),
+                  mobile: formMobile.trim(),
+                  email: computedEmail,
+                  username: computedEmail,
+                  role: 'Production Team',
+                  active: formStatus === 'Active',
+                  created_at: new Date().toISOString(),
+                  password: cleanPwd
+                });
+              }
+            } catch (syncErr) {
+              console.warn("Direct users sync warning for production staff:", syncErr);
+            }
         } else {
             alert('Password is required for new staff to enable login.');
             setIsSaving(false);
@@ -278,6 +315,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
         const res = await addStaff({
           ...payload,
+          password: cleanPwd,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
         showToast('success', '✅ Production staff saved successfully.');

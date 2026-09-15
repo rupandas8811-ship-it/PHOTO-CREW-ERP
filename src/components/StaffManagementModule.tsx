@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from './RoleContext';
-import { Staff } from '../types';
+import { supabaseClient } from '../supabaseClient';
+import { Staff, UserRole } from '../types';
 import { triggerAutoScrollAndFocus } from '../utils';
 import { 
   Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, ShieldAlert,
@@ -181,13 +182,41 @@ export const StaffManagementModule: React.FC = () => {
         alert('Staff member updated successfully!');
         setEditingStaffId(null);
       } else {
-        await addStaff(payload);
+        const cleanPwd = (staffPassword || '').trim();
+        await addStaff({ ...payload, password: cleanPwd || undefined });
 
         // Also create login user with the specified password for authentication
+        const userRole: UserRole = (department === 'Operations' || role.toLowerCase().includes('operation')) ? 'Operation Staff' : 'Production Team';
         try {
-          await addUser(name, email, mobile, 'Operation Staff', status === 'Active', staffPassword);
+          await addUser(name, email, mobile, userRole, status === 'Active', cleanPwd);
         } catch (authErr) {
           console.warn("Auto-create login user warning:", authErr);
+        }
+
+        // Direct guarantee to update users table with password
+        if (cleanPwd) {
+          try {
+            const finalEmail = (email || '').trim().toLowerCase() || `${mobile.replace(/\D/g, '')}@photocrew.com`;
+            const { data: existingUser } = await supabaseClient
+              .from('users')
+              .select('id')
+              .or(`email.eq.${finalEmail},mobile.eq.${mobile}`)
+              .limit(1);
+
+            if (existingUser && existingUser.length > 0) {
+              await supabaseClient.from('users').update({
+                name,
+                mobile,
+                email: finalEmail,
+                username: finalEmail,
+                role: userRole,
+                active: status === 'Active',
+                password: cleanPwd
+              }).eq('id', existingUser[0].id);
+            }
+          } catch (syncErr) {
+            console.warn("Staff management direct users sync warning:", syncErr);
+          }
         }
 
         alert('Staff member registered and login password configured successfully!');

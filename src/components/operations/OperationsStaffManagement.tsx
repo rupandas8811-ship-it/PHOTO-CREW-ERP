@@ -310,46 +310,68 @@ export const OperationsStaffManagement: React.FC = () => {
       } else {
         // Create auth user & public.users record
         const authEmail = finalEmail;
+        const cleanPassword = (password || '').trim();
         let authUserId: string | null = null;
 
-        if (password) {
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-          
-          if (supabaseUrl && supabaseAnonKey) {
-            try {
-              const tempClient = createClient(supabaseUrl, supabaseAnonKey, {
-                auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
-              });
-              
-              const { data: authData } = await tempClient.auth.signUp({
+        if (cleanPassword) {
+          try {
+            const authRes = await fetch('/api/auth/create-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
                 email: authEmail,
-                password: password
-              });
-              
-              if (authData?.user) {
-                authUserId = authData.user.id;
-              }
-            } catch (authErr: any) {
-              console.warn("Supabase Auth signUp skipped or warning:", authErr?.message || authErr);
+                password: cleanPassword,
+                name: form.name,
+                role: 'Operation Staff',
+                mobile: form.mobile,
+                active: form.status === 'Active'
+              })
+            });
+            const authData = await authRes.json();
+            if (authData.success && authData.data?.user?.id) {
+              authUserId = authData.data.user.id;
             }
+          } catch (authErr) {
+            console.warn("Server create-user call warning:", authErr);
           }
         }
 
         const finalUserId = authUserId || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`);
 
-        // Upsert user record in users table with email as username
-        await supabaseClient.from('users').upsert({
-          id: finalUserId,
-          name: form.name,
-          mobile: form.mobile,
-          email: authEmail,
-          username: authEmail,
-          role: 'Operation Staff',
-          active: true,
-          created_at: new Date().toISOString(),
-          password: password || '123456'
-        }, { onConflict: 'email' });
+        // Synchronize directly into users table with the exact password
+        try {
+          const { data: existingUsers } = await supabaseClient
+            .from('users')
+            .select('id')
+            .or(`email.eq.${authEmail},mobile.eq.${form.mobile}`)
+            .limit(1);
+
+          if (existingUsers && existingUsers.length > 0) {
+            await supabaseClient.from('users').update({
+              name: form.name,
+              mobile: form.mobile,
+              email: authEmail,
+              username: authEmail,
+              role: 'Operation Staff',
+              active: form.status === 'Active',
+              password: cleanPassword
+            }).eq('id', existingUsers[0].id);
+          } else {
+            await supabaseClient.from('users').insert({
+              id: finalUserId,
+              name: form.name,
+              mobile: form.mobile,
+              email: authEmail,
+              username: authEmail,
+              role: 'Operation Staff',
+              active: form.status === 'Active',
+              created_at: new Date().toISOString(),
+              password: cleanPassword
+            });
+          }
+        } catch (dbErr) {
+          console.warn("Direct users table sync warning:", dbErr);
+        }
 
         await addStaff(submissionPayload);
         const toast = document.createElement('div');

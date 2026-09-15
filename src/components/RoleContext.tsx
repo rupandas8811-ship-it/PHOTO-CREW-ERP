@@ -7182,6 +7182,41 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const res = await pushInsert('operations_staff', newStaff);
     if (res.success) {
       logActivity(`Added Staff Member: ${newStaff.name}`, 'StaffManagement', staffId);
+      if ((member as any).password && typeof (member as any).password === 'string' && (member as any).password.trim()) {
+        const pwd = (member as any).password.trim();
+        const emailVal = (member.email || '').trim().toLowerCase() || `${member.mobile ? member.mobile.replace(/\D/g, '') : 'staff'}@photocrew.com`;
+        try {
+          const { data: existingUser } = await supabaseClient
+            .from('users')
+            .select('id')
+            .or(`email.eq.${emailVal},mobile.eq.${member.mobile}`)
+            .limit(1);
+
+          if (existingUser && existingUser.length > 0) {
+            await supabaseClient.from('users').update({
+              name: member.name,
+              mobile: member.mobile,
+              password: pwd,
+              active: member.status !== 'Inactive'
+            }).eq('id', existingUser[0].id);
+          } else {
+            const authId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`;
+            await supabaseClient.from('users').insert({
+              id: authId,
+              name: member.name,
+              mobile: member.mobile || '0000000000',
+              email: emailVal,
+              username: emailVal,
+              role: 'Operation Staff',
+              active: member.status !== 'Inactive',
+              password: pwd,
+              created_at: new Date().toISOString()
+            });
+          }
+        } catch (err) {
+          console.warn("addStaff password sync to users table warning:", err);
+        }
+      }
     } else {
       // Revert optimistic update if failed
       setStaff((prev) => prev.filter(s => s.staff_id !== staffId));
@@ -7254,6 +7289,41 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const res = await pushInsert('production_staff', dbPayload);
     if (res.success) {
       logActivity(`Added Production Staff Member: ${newStaff.name}`, 'StaffManagement', staffId);
+      if ((member as any).password && typeof (member as any).password === 'string' && (member as any).password.trim()) {
+        const pwd = (member as any).password.trim();
+        const emailVal = (member.email || '').trim().toLowerCase() || `${member.mobile ? member.mobile.replace(/\D/g, '') : 'staff'}@photocrew.com`;
+        try {
+          const { data: existingUser } = await supabaseClient
+            .from('users')
+            .select('id')
+            .or(`email.eq.${emailVal},mobile.eq.${member.mobile}`)
+            .limit(1);
+
+          if (existingUser && existingUser.length > 0) {
+            await supabaseClient.from('users').update({
+              name: member.name,
+              mobile: member.mobile,
+              password: pwd,
+              active: member.status !== 'Inactive'
+            }).eq('id', existingUser[0].id);
+          } else {
+            const authId = window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`;
+            await supabaseClient.from('users').insert({
+              id: authId,
+              name: member.name,
+              mobile: member.mobile || '0000000000',
+              email: emailVal,
+              username: emailVal,
+              role: 'Production Team',
+              active: member.status !== 'Inactive',
+              password: pwd,
+              created_at: new Date().toISOString()
+            });
+          }
+        } catch (err) {
+          console.warn("addProductionStaff password sync to users table warning:", err);
+        }
+      }
     } else {
       setProductionStaff((prev) => prev.filter(s => s.staff_id !== staffId));
       throw new Error(res.error || 'Failed to add production staff');
