@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { useRole } from './RoleContext';
+import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { Staff, Production } from '../types';
 import { 
   Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, ShieldAlert,
   Search, Filter, Calendar, FolderOpen, Heart, CheckCircle2, ChevronRight, X, Sparkles, Image,
-  Eye, Edit3, MessageSquare, MapPin, BarChart3, Download, RefreshCw, Star, ArrowUpRight, TrendingUp
+  Eye, EyeOff, Lock, Edit3, MessageSquare, MapPin, BarChart3, Download, RefreshCw, Star, ArrowUpRight, TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
@@ -39,6 +39,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   const [formName, setFormName] = useState('');
   const [formMobile, setFormMobile] = useState('');
   const [formPassword, setFormPassword] = useState('');
+  const [showFormPassword, setShowFormPassword] = useState(true);
   const [formWhatsapp, setFormWhatsapp] = useState('');
   const [formEmail, setFormEmail] = useState('');
   const [formEmployeeId, setFormEmployeeId] = useState('');
@@ -90,6 +91,14 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormMobile(member.mobile);
     setFormWhatsapp(member.whatsapp_number || member.mobile);
     setFormEmail(member.email);
+    const currentPwd = getStaffCurrentPassword(member, users);
+    setFormPassword(currentPwd);
+    setShowFormPassword(true);
+    if (!currentPwd) {
+      fetchStaffCurrentPassword(member, users).then(livePwd => {
+        if (livePwd) setFormPassword(livePwd);
+      });
+    }
     // Use notes or a direct attribute for employee_id / city
     setFormEmployeeId((member as any).employee_id || member.staff_id);
     setFormCity((member as any).city || 'N/A');
@@ -912,6 +921,30 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                     />
                   </div>
 
+                  {/* Password */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
+                      Password {editingStaff ? '' : '*'}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showFormPassword ? "text" : "password"}
+                        placeholder={editingStaff ? "Current password" : "Enter password"}
+                        value={formPassword}
+                        onChange={(e) => setFormPassword(e.target.value)}
+                        className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 pr-10 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
+                        required={!editingStaff}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowFormPassword(!showFormPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white cursor-pointer"
+                      >
+                        {showFormPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
                   {/* City */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
@@ -1115,6 +1148,13 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       <div className="font-mono">
                         <div className="text-[9px] text-zinc-500 uppercase">Email Address</div>
                         <div className="text-white font-bold mt-0.5 select-all">{viewingStaff.email}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2.5 font-sans">
+                      <Lock className="w-4 h-4 text-purple-400" />
+                      <div className="font-mono">
+                        <div className="text-[9px] text-zinc-500 uppercase">Password</div>
+                        <div className="text-white font-bold mt-0.5 select-all">{getStaffCurrentPassword(viewingStaff, users) || '••••••••'}</div>
                       </div>
                     </div>
                   </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { useRole } from './RoleContext';
+import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from './RoleContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabaseClient } from '../supabaseClient';
 import { 
@@ -506,6 +506,7 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     rawFootage, 
     staff,
     productionStaff,
+    users = [],
     payments,
     operations,
     staffAssignments,
@@ -6278,7 +6279,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Password {editingStaffId ? '(Leave blank to keep existing)' : <span className="text-rose-500">*</span>}
+                        Password {editingStaffId ? '' : <span className="text-rose-500">*</span>}
                       </label>
                       <div className="relative">
                         <input
@@ -6286,7 +6287,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           required={!editingStaffId}
                           value={newStaffPassword}
                           onChange={(e) => setNewStaffPassword(e.target.value)}
-                          placeholder={editingStaffId ? "Enter new password" : "••••••••"}
+                          placeholder="••••••••"
                           className="w-full bg-zinc-900 border border-zinc-850 pl-4 pr-10 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
                         />
                         <button
@@ -6594,9 +6595,19 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       setNewStaffMobile(member.mobile);
                                       setNewStaffWhatsapp(member.whatsapp_number || '');
                                       setNewStaffEmail(member.email || '');
-                                      setNewStaffPassword('');
+                                      const currentPwd = getStaffCurrentPassword(member, users);
+                                      setNewStaffPassword(currentPwd);
+                                      setShowPassword(true);
                                       setNewStaffSkills(Array.isArray(member.Skill) ? member.Skill : member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                                       setShowStaffModal(true);
+
+                                      if (!currentPwd) {
+                                        fetchStaffCurrentPassword(member, users).then(livePwd => {
+                                          if (livePwd) {
+                                            setNewStaffPassword(livePwd);
+                                          }
+                                        });
+                                      }
                                     }}
                                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
                                   >

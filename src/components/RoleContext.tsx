@@ -308,6 +308,8 @@ interface RoleContextType {
   saveClientAcceptanceVerification: (verification: ClientAcceptanceVerification) => Promise<ClientAcceptanceVerification>;
   isProductionDashboardActive?: boolean;
   setIsProductionDashboardActive?: (val: boolean) => void;
+  getStaffCurrentPassword: (member: any) => string;
+  fetchStaffCurrentPassword: (member: any) => Promise<string>;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -402,6 +404,136 @@ export const mapUserFieldsFromDb = (u: any): any => {
     mobile: u.mobile || u.phone || '',
     phone: u.phone || u.mobile || ''
   };
+};
+
+export const getStaffCurrentPassword = (
+  member: any,
+  usersList: any[] = []
+): string => {
+  if (!member) return '';
+  if (member.password && typeof member.password === 'string' && member.password.trim()) {
+    return member.password.trim();
+  }
+
+  let staffAuthId = member.auth_user_id;
+  if (!staffAuthId && typeof member.notes === 'string' && member.notes.includes('auth_user_id')) {
+    try {
+      const parsed = JSON.parse(member.notes);
+      if (parsed.auth_user_id) staffAuthId = parsed.auth_user_id;
+    } catch (e) {}
+  }
+
+  const staffId = member.staff_id;
+  const staffEmail = (member.email || '').trim().toLowerCase();
+  const rawMobile = member.mobile || '';
+  const mobileDigits = rawMobile.replace(/\D/g, '');
+  const mobileLast10 = mobileDigits.length >= 10 ? mobileDigits.slice(-10) : mobileDigits;
+  const staffName = (member.name || '').trim().toLowerCase();
+
+  const checkUser = (u: any): string | null => {
+    if (!u) return null;
+    const pwd = u.password;
+    if (pwd !== undefined && pwd !== null && String(pwd).trim() !== '') {
+      return String(pwd).trim();
+    }
+    return null;
+  };
+
+  // 1. Check auth_user_id match
+  if (staffAuthId) {
+    const u = usersList.find(x => x && (x.id === staffAuthId || mapToDbUserId(x.id) === staffAuthId || (x as any).auth_user_id === staffAuthId));
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  // 2. Check email or username match
+  if (staffEmail) {
+    const u = usersList.find(x => {
+      if (!x) return false;
+      const uEmail = (x.email || '').trim().toLowerCase();
+      const uUsername = (x.username || '').trim().toLowerCase();
+      return uEmail === staffEmail || uUsername === staffEmail;
+    });
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  // 3. Check mobile match (exact digits or 10-digit suffix)
+  if (mobileLast10 && mobileLast10.length >= 7) {
+    const u = usersList.find(x => {
+      if (!x) return false;
+      const uMobileDigits = (x.mobile || x.phone || '').replace(/\D/g, '');
+      const uMobileLast10 = uMobileDigits.length >= 10 ? uMobileDigits.slice(-10) : uMobileDigits;
+      return uMobileDigits === mobileDigits || (uMobileLast10 && uMobileLast10 === mobileLast10);
+    });
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  // 4. Check staff_id match
+  if (staffId) {
+    const u = usersList.find(x => x && (x.id === staffId || mapToDbUserId(x.id) === mapToDbUserId(staffId) || x.id === mapToDbStaffId(staffId)));
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  // 5. Check exact trimmed name match
+  if (staffName) {
+    const u = usersList.find(x => x && (x.name || x.full_name || '').trim().toLowerCase() === staffName);
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  return '';
+};
+
+export const fetchStaffCurrentPassword = async (
+  member: any,
+  usersList: any[] = []
+): Promise<string> => {
+  const syncPwd = getStaffCurrentPassword(member, usersList);
+  if (syncPwd) return syncPwd;
+  if (!member) return '';
+
+  let staffAuthId = member.auth_user_id;
+  if (!staffAuthId && typeof member.notes === 'string' && member.notes.includes('auth_user_id')) {
+    try {
+      const parsed = JSON.parse(member.notes);
+      if (parsed.auth_user_id) staffAuthId = parsed.auth_user_id;
+    } catch (e) {}
+  }
+
+  const staffEmail = (member.email || '').trim().toLowerCase();
+  const rawMobile = (member.mobile || '').trim();
+  const staffName = (member.name || '').trim();
+
+  try {
+    const orClauses: string[] = [];
+    if (staffAuthId) orClauses.push(`id.eq.${staffAuthId}`);
+    if (staffEmail) {
+      orClauses.push(`email.ilike.${staffEmail}`);
+      orClauses.push(`username.ilike.${staffEmail}`);
+    }
+    if (rawMobile) orClauses.push(`mobile.eq.${rawMobile}`);
+    if (staffName) orClauses.push(`name.ilike.${staffName}`);
+
+    if (orClauses.length > 0 && supabaseClient) {
+      const { data } = await supabaseClient
+        .from('users')
+        .select('password')
+        .or(orClauses.join(','))
+        .not('password', 'is', null)
+        .limit(1);
+
+      if (data && data.length > 0 && data[0]?.password) {
+        return String(data[0].password).trim();
+      }
+    }
+  } catch (err) {
+    console.warn("Live password retrieval warning:", err);
+  }
+
+  return '';
 };
 
 const mapNotificationFromDb = (notif: any): Notification => {
@@ -3005,22 +3137,34 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         }
         
         if (dbStaff) {
+           const usersForStaff = dbUsers ? dbUsers.map(mapUserFieldsFromDb) : users;
            setStaff(dbStaff.map((item: any) => {
               let extra: any = {};
               if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
                 try { extra = JSON.parse(item.notes); } catch (e) {}
               }
-              return {
+              const mappedItem: any = {
                 ...item,
                 ...extra,
                 staff_id: mapFromDbStaffId(item.staff_id),
-                notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes, Skill: Array.isArray(item.Skill) ? item.Skill : (typeof item.Skill === 'string' ? item.Skill.split(',').map(s=>s.trim()).filter(Boolean) : (Array.isArray(extra.Skill) ? extra.Skill : [])), Staff_Type: item.Staff_Type || extra.Staff_Type || 'In-House'
+                notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes,
+                Skill: Array.isArray(item.Skill) ? item.Skill : (typeof item.Skill === 'string' ? item.Skill.split(',').map(s=>s.trim()).filter(Boolean) : (Array.isArray(extra.Skill) ? extra.Skill : [])),
+                Staff_Type: item.Staff_Type || extra.Staff_Type || 'In-House'
               };
+              const pwd = getStaffCurrentPassword(mappedItem, usersForStaff);
+              if (pwd) mappedItem.password = pwd;
+              return mappedItem;
            }));
         }
 
         if (dbProdStaff) {
-           setProductionStaff(dbProdStaff.map(mapProductionStaffFromDb));
+           const usersForStaff = dbUsers ? dbUsers.map(mapUserFieldsFromDb) : users;
+           setProductionStaff(dbProdStaff.map(item => {
+             const mappedItem: any = mapProductionStaffFromDb(item);
+             const pwd = getStaffCurrentPassword(mappedItem, usersForStaff);
+             if (pwd) mappedItem.password = pwd;
+             return mappedItem;
+           }));
         }
         
         if (dbNotifications) {
@@ -9348,6 +9492,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         saveClientAcceptanceVerification,
         isProductionDashboardActive,
         setIsProductionDashboardActive,
+        getStaffCurrentPassword: (member: any) => getStaffCurrentPassword(member, users),
+        fetchStaffCurrentPassword: (member: any) => fetchStaffCurrentPassword(member, users),
         paymentHistory,
         approvePayment,
       }}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useRole } from '../RoleContext';
+import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from '../RoleContext';
 import { 
   Users, UserCheck, ShieldAlert, PlusCircle, Edit, Mail, Phone, Calendar, Briefcase, Search, X,
   ChevronDown, Sparkles
@@ -99,6 +99,7 @@ export const OperationsStaffManagement: React.FC = () => {
   const handleSelectEdit = (st: any) => {
     setEditingId(st.staff_id);
     setShowStaffModal(true);
+    const existingPassword = getStaffCurrentPassword(st, users);
     setForm({
       name: st.name,
       role: st.role,
@@ -111,8 +112,17 @@ export const OperationsStaffManagement: React.FC = () => {
       joining_date: st.joining_date || new Date().toISOString().split('T')[0],
       profile_photo: st.profile_photo || '',
       notes: st.notes || '',
-      password: ''
+      password: existingPassword
     });
+
+    if (!existingPassword) {
+      fetchStaffCurrentPassword(st, users).then(livePwd => {
+        if (livePwd) {
+          setForm(prev => ({ ...prev, password: livePwd }));
+        }
+      });
+    }
+
     const loadedSkills = typeof st.Skill === 'string'
       ? st.Skill.split(',').map((s: string) => s.trim()).filter(Boolean)
       : (Array.isArray(st.Skill) ? st.Skill : []);
@@ -605,7 +615,7 @@ export const OperationsStaffManagement: React.FC = () => {
 
             <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Password {editingId ? '(Leave blank to keep current)' : '*'}
+                Password {editingId ? '' : '*'}
               </label>
               <input
                 type="text"

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useRole } from './RoleContext';
+import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from './RoleContext';
 import { Staff } from '../types';
 import { triggerAutoScrollAndFocus } from '../utils';
 import { 
@@ -292,6 +292,14 @@ export const StaffManagementModule: React.FC = () => {
     setMobile(member.mobile);
     setWhatsappNumber(member.whatsapp_number || '');
     setEmail(member.email);
+    const currentPwd = getStaffCurrentPassword(member, users);
+    setStaffPassword(currentPwd);
+    setShowStaffPassword(true);
+    if (!currentPwd) {
+      fetchStaffCurrentPassword(member, users).then(livePwd => {
+        if (livePwd) setStaffPassword(livePwd);
+      });
+    }
     setRole(member.role);
     setDepartment(member.department);
     setStatus(member.status);
@@ -627,7 +635,7 @@ export const StaffManagementModule: React.FC = () => {
                   )}
 
                   {/* Contact details */}
-                  <div className="grid grid-cols-3 gap-2 mt-4 py-3 border-t border-b border-zinc-900 text-[10px]">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 py-3 border-t border-b border-zinc-900 text-[10px]">
                     <div className="space-y-1">
                       <div className="text-[9px] font-mono text-zinc-500 uppercase">Mobile</div>
                       <a href={`tel:${member.mobile}`} className="font-mono font-bold text-zinc-300 hover:text-white flex items-center gap-1 break-words" title={member.mobile}>
@@ -654,6 +662,13 @@ export const StaffManagementModule: React.FC = () => {
                         <Mail className="w-3 h-3 text-zinc-500 shrink-0" />
                         <span className="break-words">{member.email}</span>
                       </a>
+                    </div>
+                    <div className="space-y-1">
+                      <div className="text-[9px] font-mono text-zinc-500 uppercase">Password</div>
+                      <div className="font-mono font-bold text-zinc-300 flex items-center gap-1 select-all" title="Current Password">
+                        <Lock className="w-3 h-3 text-violet-400 shrink-0" />
+                        <span>{getStaffCurrentPassword(member, users) || '••••••••'}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -799,19 +814,16 @@ export const StaffManagementModule: React.FC = () => {
               <div className="flex items-center justify-between">
                 <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center gap-1">
                   <Key className="w-3 h-3 text-violet-400" />
-                  <span>{editingStaffId ? 'Change Login Password (Optional)' : 'Account Login Password'}</span>
+                  <span>Account Login Password</span>
                   {!editingStaffId && <span className="text-rose-500">*</span>}
                 </label>
-                {editingStaffId && (
-                  <span className="text-[9px] text-zinc-500 font-mono">Leave blank to keep existing</span>
-                )}
               </div>
               <div className="relative">
                 <input
                   type={showStaffPassword ? "text" : "password"}
                   required={!editingStaffId}
                   minLength={6}
-                  placeholder={editingStaffId ? "Enter new password (optional)" : "Set initial password (min 6 chars)"}
+                  placeholder="Password"
                   value={staffPassword}
                   onChange={(e) => setStaffPassword(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 pr-10 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono"
