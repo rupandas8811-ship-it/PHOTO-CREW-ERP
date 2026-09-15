@@ -12,8 +12,14 @@ export const OwnerPasswordResetModule: React.FC = () => {
       : null) ||
     users.find(u => u.role === 'Business Owner') ||
     users[0];
-  const operationsDashboardAccount = users.find(u => u.role === 'Operations Team') || users.find(u => u.role === 'Operation Staff');
-  const productionDashboardAccount = users.find(u => u.role === 'Production Team') || users.find(u => u.role === 'Production Staff');
+  const operationsDashboardAccount =
+    users.find(u => u.email?.toLowerCase() === 'operation@photocrew.com') ||
+    users.find(u => u.role === 'Operations Team') ||
+    users.find(u => u.role === 'Operation Staff');
+  const productionDashboardAccount =
+    users.find(u => u.email?.toLowerCase() === 'production@photocrew.com') ||
+    users.find(u => u.role === 'Production Team') ||
+    users.find(u => u.role === 'Production Staff');
 
   // Business Owner reset state
   const [ownerPassword, setOwnerPassword] = useState<string>(() => businessOwnerAccount?.password || '');
@@ -56,18 +62,126 @@ export const OwnerPasswordResetModule: React.FC = () => {
   }, [businessOwnerAccount?.id, businessOwnerAccount?.password, hasUserEdited]);
 
   // Operations Dashboard reset state
-  const [opsPassword, setOpsPassword] = useState<string>('');
+  const [opsPassword, setOpsPassword] = useState<string>(() => operationsDashboardAccount?.password || '');
   const [showOpsPassword, setShowOpsPassword] = useState<boolean>(false);
+  const [hasOpsUserEdited, setHasOpsUserEdited] = useState<boolean>(false);
   const [confirmOpsReset, setConfirmOpsReset] = useState<boolean>(false);
   const [opsLoading, setOpsLoading] = useState<boolean>(false);
   const [opsSuccess, setOpsSuccess] = useState<string | null>(null);
 
+  useEffect(() => {
+    let isMounted = true;
+    if (operationsDashboardAccount?.password && !hasOpsUserEdited) {
+      setOpsPassword(operationsDashboardAccount.password);
+    }
+    const fetchFreshOpsPassword = async () => {
+      if (!operationsDashboardAccount?.id && !operationsDashboardAccount?.email) return;
+      try {
+        let fetchedPwd = '';
+        if (operationsDashboardAccount?.id) {
+          const dbTargetId = mapToDbUserId(operationsDashboardAccount.id);
+          const res = await fetch('/api/db/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              table: 'users',
+              matchColumn: 'id',
+              matchValue: dbTargetId
+            })
+          });
+          const resData = await res.json();
+          if (resData.success && resData.data?.[0]?.password) {
+            fetchedPwd = resData.data[0].password;
+          }
+        }
+        if (!fetchedPwd && operationsDashboardAccount?.email) {
+          const res = await fetch('/api/db/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              table: 'users',
+              matchColumn: 'email',
+              matchValue: operationsDashboardAccount.email
+            })
+          });
+          const resData = await res.json();
+          if (resData.success && resData.data?.[0]?.password) {
+            fetchedPwd = resData.data[0].password;
+          }
+        }
+        if (isMounted && !hasOpsUserEdited && fetchedPwd) {
+          setOpsPassword(fetchedPwd);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch fresh operations password:", err);
+      }
+    };
+    fetchFreshOpsPassword();
+    return () => {
+      isMounted = false;
+    };
+  }, [operationsDashboardAccount?.id, operationsDashboardAccount?.password, operationsDashboardAccount?.email, hasOpsUserEdited]);
+
   // Production Dashboard reset state
-  const [prodPassword, setProdPassword] = useState<string>('');
+  const [prodPassword, setProdPassword] = useState<string>(() => productionDashboardAccount?.password || '');
   const [showProdPassword, setShowProdPassword] = useState<boolean>(false);
+  const [hasProdUserEdited, setHasProdUserEdited] = useState<boolean>(false);
   const [confirmProdReset, setConfirmProdReset] = useState<boolean>(false);
   const [prodLoading, setProdLoading] = useState<boolean>(false);
   const [prodSuccess, setProdSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (productionDashboardAccount?.password && !hasProdUserEdited) {
+      setProdPassword(productionDashboardAccount.password);
+    }
+    const fetchFreshProdPassword = async () => {
+      if (!productionDashboardAccount?.id && !productionDashboardAccount?.email) return;
+      try {
+        let fetchedPwd = '';
+        if (productionDashboardAccount?.id) {
+          const dbTargetId = mapToDbUserId(productionDashboardAccount.id);
+          const res = await fetch('/api/db/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              table: 'users',
+              matchColumn: 'id',
+              matchValue: dbTargetId
+            })
+          });
+          const resData = await res.json();
+          if (resData.success && resData.data?.[0]?.password) {
+            fetchedPwd = resData.data[0].password;
+          }
+        }
+        if (!fetchedPwd && productionDashboardAccount?.email) {
+          const res = await fetch('/api/db/select', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              table: 'users',
+              matchColumn: 'email',
+              matchValue: productionDashboardAccount.email
+            })
+          });
+          const resData = await res.json();
+          if (resData.success && resData.data?.[0]?.password) {
+            fetchedPwd = resData.data[0].password;
+          }
+        }
+        if (isMounted && !hasProdUserEdited && fetchedPwd) {
+          setProdPassword(fetchedPwd);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch fresh production password:", err);
+      }
+    };
+    fetchFreshProdPassword();
+    return () => {
+      isMounted = false;
+    };
+  }, [productionDashboardAccount?.id, productionDashboardAccount?.password, productionDashboardAccount?.email, hasProdUserEdited]);
 
   const handleOwnerReset = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,9 +232,11 @@ export const OwnerPasswordResetModule: React.FC = () => {
     try {
       setOpsLoading(true);
       setOpsSuccess(null);
-      await resetUserPassword(operationsDashboardAccount.id, opsPassword.trim());
+      const newPasswordValue = opsPassword.trim();
+      await resetUserPassword(operationsDashboardAccount.id, newPasswordValue);
       setOpsSuccess(`Password for Operations Dashboard (${operationsDashboardAccount.name}) successfully reset!`);
-      setOpsPassword('');
+      setOpsPassword(newPasswordValue);
+      setHasOpsUserEdited(false);
       setConfirmOpsReset(false);
     } catch (err: any) {
       alert(`Failed to reset password: ${err.message || err}`);
@@ -147,9 +263,11 @@ export const OwnerPasswordResetModule: React.FC = () => {
     try {
       setProdLoading(true);
       setProdSuccess(null);
-      await resetUserPassword(productionDashboardAccount.id, prodPassword.trim());
+      const newPasswordValue = prodPassword.trim();
+      await resetUserPassword(productionDashboardAccount.id, newPasswordValue);
       setProdSuccess(`Password for Production Dashboard (${productionDashboardAccount.name}) successfully reset!`);
-      setProdPassword('');
+      setProdPassword(newPasswordValue);
+      setHasProdUserEdited(false);
       setConfirmProdReset(false);
     } catch (err: any) {
       alert(`Failed to reset password: ${err.message || err}`);
@@ -312,15 +430,21 @@ export const OwnerPasswordResetModule: React.FC = () => {
               )}
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-mono uppercase tracking-wider text-zinc-300 font-bold block">
-                  New Password <span className="text-rose-500">*</span>
+                <label htmlFor="ops_current_password" className="text-[11px] font-mono uppercase tracking-wider text-zinc-300 font-bold block">
+                  Current Password <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <input
+                    id="ops_current_password"
+                    name="current_password"
+                    aria-label="Current Password"
                     type={showOpsPassword ? "text" : "password"}
                     value={opsPassword}
-                    onChange={(e) => setOpsPassword(e.target.value)}
-                    placeholder="Min 6 characters"
+                    onChange={(e) => {
+                      setHasOpsUserEdited(true);
+                      setOpsPassword(e.target.value);
+                    }}
+                    placeholder="Current Password"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 pl-3.5 pr-10 text-zinc-100 font-mono text-xs focus:outline-none focus:border-sky-500"
                     required
                     minLength={6}
@@ -329,6 +453,7 @@ export const OwnerPasswordResetModule: React.FC = () => {
                     type="button"
                     onClick={() => setShowOpsPassword(!showOpsPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white cursor-pointer"
+                    title={showOpsPassword ? "Hide password" : "Show password"}
                   >
                     {showOpsPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -399,15 +524,21 @@ export const OwnerPasswordResetModule: React.FC = () => {
               )}
 
               <div className="space-y-1.5">
-                <label className="text-[11px] font-mono uppercase tracking-wider text-zinc-300 font-bold block">
-                  New Password <span className="text-rose-500">*</span>
+                <label htmlFor="prod_current_password" className="text-[11px] font-mono uppercase tracking-wider text-zinc-300 font-bold block">
+                  Current Password <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <input
+                    id="prod_current_password"
+                    name="current_password"
+                    aria-label="Current Password"
                     type={showProdPassword ? "text" : "password"}
                     value={prodPassword}
-                    onChange={(e) => setProdPassword(e.target.value)}
-                    placeholder="Min 6 characters"
+                    onChange={(e) => {
+                      setHasProdUserEdited(true);
+                      setProdPassword(e.target.value);
+                    }}
+                    placeholder="Current Password"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-xl py-2.5 pl-3.5 pr-10 text-zinc-100 font-mono text-xs focus:outline-none focus:border-purple-500"
                     required
                     minLength={6}
@@ -416,6 +547,7 @@ export const OwnerPasswordResetModule: React.FC = () => {
                     type="button"
                     onClick={() => setShowProdPassword(!showProdPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white cursor-pointer"
+                    title={showProdPassword ? "Hide password" : "Show password"}
                   >
                     {showProdPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
