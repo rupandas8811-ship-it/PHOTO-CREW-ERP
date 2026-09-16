@@ -1651,7 +1651,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
               </div>
 
               <div className="order-1 sm:order-2 grid grid-cols-1 min-[420px]:grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
-                {crmWizardStep === 3 && !isLeadConfirmed && !['Order Confirmed', 'Event Scheduled', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') && (
+                {crmWizardStep === 3 && !isLeadConfirmed && wizardLeadData.status !== 'Order Confirmed' && selectedLead?.status !== 'Order Confirmed' && (
                   <button
                     type="button"
                     id="btn_step3_order_confirmed"

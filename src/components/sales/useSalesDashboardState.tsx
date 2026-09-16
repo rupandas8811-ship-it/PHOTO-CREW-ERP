@@ -3827,7 +3827,9 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     const localSavedStep = localStorage.getItem(`crm_last_step_${lead.lead_id}`);
     const remarksMatch = fullLead.remarks?.match(/\[CRM_COMPLETED_STEP:\s*(\d+)\]/);
-    const explicitStep = localSavedStep ? parseInt(localSavedStep, 10) : (remarksMatch ? parseInt(remarksMatch[1], 10) : null);
+    const localStepVal = localSavedStep && !isNaN(parseInt(localSavedStep, 10)) ? parseInt(localSavedStep, 10) : 0;
+    const remarksStepVal = remarksMatch && !isNaN(parseInt(remarksMatch[1], 10)) ? parseInt(remarksMatch[1], 10) : 0;
+    const explicitStep = Math.max(localStepVal, remarksStepVal) || null;
 
     const isConfirmedLead = ['Confirm Order', 'Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(fullLead.status || '') || (fullLead as any).current_status === 'Order Confirmed' || (fullLead as any).booking_status === 'Confirmed' || orders.some(o => o.lead_id === fullLead.lead_id && o.status !== 'Cancelled');
     const isUnlockedLead = unlockRequests.some(r => (r.lead_id === fullLead.lead_id || r.order_id === fullLead.lead_id || r.project_id === fullLead.lead_id) && (r.status === 'Approved' || r.request_status === 'Approved')) || unlockedRecords.some(r => r.recordId === fullLead.lead_id && r.module === 'Sales');
@@ -4436,6 +4438,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         } catch (lpErr) {
           console.warn("Could not upsert lead_packages record:", lpErr);
         }
+      }
+
+      // Persist step 3 completion so reopening opens at step 3
+      const newCompleted = Math.max(crmHighestStep, 3);
+      setCrmHighestStep(newCompleted);
+      if (targetLeadId && targetLeadId !== 'DRAFT-LEAD') {
+        localStorage.setItem(`crm_last_step_${targetLeadId}`, String(newCompleted));
       }
 
       setWizardLeadData(prev => ({
