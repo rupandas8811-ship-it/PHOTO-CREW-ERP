@@ -57,7 +57,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
 
   const modalContent = showConfirmModal && selectedLead ? (
     <div 
-      className="fixed inset-0 bg-black/85 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto overflow-x-hidden overscroll-contain transition-opacity duration-200"
+      className="fixed inset-0 bg-black/85 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden transition-opacity duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="confirm_booking_modal_title"
@@ -65,7 +65,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
       <div 
         ref={confirmBookingModalRef}
         id="confirm_booking_modal" 
-        className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg sm:max-w-xl md:max-w-2xl w-full shadow-2xl flex flex-col my-auto max-h-[calc(100vh-1.25rem)] sm:max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2rem)] md:max-h-[calc(100dvh-3rem)] animate-in fade-in zoom-in-95 duration-150 relative"
+        className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg sm:max-w-xl md:max-w-2xl w-full shadow-2xl flex flex-col h-[calc(100dvh-1.25rem)] max-h-[calc(100vh-1.25rem)] sm:h-auto sm:max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] sm:max-h-[calc(100dvh-2rem)] md:max-h-[calc(100dvh-3rem)] animate-in fade-in zoom-in-95 duration-150 relative"
       >
         {/* Header - Fixed at Top */}
         <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-5 py-3 sm:py-3.5 shrink-0 bg-slate-850">
@@ -86,7 +86,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
 
             <form onSubmit={handleConfirmOrderSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* ONE SINGLE SCROLLABLE CONTAINER FOR THE ENTIRE POPUP CONTENT */}
-              <div className="overflow-y-auto overflow-x-hidden px-3.5 sm:px-5 md:px-6 py-4 custom-scrollbar flex-1 min-h-0 space-y-4 text-xs overscroll-contain">
+              <div className="overflow-y-auto overflow-x-hidden px-3.5 sm:px-5 md:px-6 pt-4 pb-6 sm:pb-5 custom-scrollbar flex-1 min-h-0 space-y-4 text-xs overscroll-contain">
                 
                 {/* Collapsible Customer Information Card - Expands naturally with NO inner scrollbar */}
                 {(() => {
@@ -405,11 +405,11 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
               </div>
 
               {/* Bottom Action Buttons - Fixed & Accessible at Modal Footer */}
-              <div className="shrink-0 flex flex-wrap sm:flex-nowrap items-center justify-end gap-2.5 border-t border-slate-800 px-4 sm:px-6 py-3 bg-slate-850/95 backdrop-blur-sm">
+              <div className="shrink-0 flex items-center justify-end gap-2.5 border-t border-slate-800 px-4 sm:px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-3 bg-slate-850/95 backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={() => setShowConfirmModal(false)}
-                  className="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-medium transition-colors text-center"
+                  className="w-auto px-4 py-2 bg-slate-800 hover:bg-slate-750 text-slate-300 rounded-xl cursor-pointer text-xs font-medium transition-colors text-center"
                 >
                   Cancel
                 </button>
@@ -417,7 +417,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                   type="submit"
                   id="btn_confirm_submit"
                   disabled={isSaving}
-                  className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/20 text-xs transition-all text-center"
+                  className="flex-1 sm:flex-initial px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-50 text-white font-bold rounded-xl inline-flex items-center justify-center gap-1.5 cursor-pointer shadow-lg shadow-emerald-950/20 text-xs transition-all text-center"
                 >
                   <span>{isSaving ? 'Processing...' : 'Approve & Book Contract'}</span>
                   {!isSaving && <ArrowRight className="w-3.5 h-3.5" />}
