@@ -1725,6 +1725,14 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (table === 'leads') {
       delete cloned.Specify_Custom_Lead_Source_Name;
+      if (cloned.lost_reason !== undefined && cloned.Lost_Reason === undefined) {
+        cloned.Lost_Reason = cloned.lost_reason;
+      }
+      delete cloned.lost_reason;
+      if (cloned.lost_notes !== undefined && cloned.Lost_Notes === undefined) {
+        cloned.Lost_Notes = cloned.lost_notes;
+      }
+      delete cloned.lost_notes;
     }
 
     if (table === 'raw_footage') {
@@ -1819,7 +1827,8 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'total_pax', 'reference_source', 
         'lead_value', 'lead_score', 'booking_status', 'reporting_time', 'Reporting_date', 'package_price', 'deliverables_description', 
         'Team_member', 'Team_Members', 'team_members', 'Team_members', 'team_member',
-        'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount', 'Final_Package_Amount', 'final_package_amount', 'advance_collected', 'booking_date', 'booking_time', 'payment_mode', 'transaction_id', 'contract_notes', 'quotation_locked', 'package_name', 'sales_staff_name', 'sales_staff_mobile'
+        'notes_special_customizations', 'quotation_discount', 'additional_services_cost', 'Quotation_Discount', 'Additional_Services_Cost', 'Specify_Custom_Lead_Source_Name', 'Final_Quotation_Amount', 'Final_Package_Amount', 'final_package_amount', 'advance_collected', 'booking_date', 'booking_time', 'payment_mode', 'transaction_id', 'contract_notes', 'quotation_locked', 'package_name', 'sales_staff_name', 'sales_staff_mobile',
+        'Lost_Reason', 'Lost_Notes'
       ],
       orders: [
         'order_id', 'lead_id', 'customer_name', 'mobile', 'event_type', 'custom_event_type', 'custom_event_name', 'shoot_type', 'event_date', 
@@ -8671,9 +8680,15 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (ld.lead_id === leadId) {
           const teamVal = (finalUpdates as any).Team_member ?? (finalUpdates as any).Team_Members ?? (finalUpdates as any).team_members ?? ld.Team_member ?? ld.Team_Members;
           const finalPkgVal = (finalUpdates as any).Final_Package_Amount ?? (finalUpdates as any).final_package_amount ?? (finalUpdates as any).Final_Quotation_Amount ?? ld.Final_Package_Amount ?? ld.final_package_amount ?? ld.Final_Quotation_Amount;
+          const lostReasonVal = (finalUpdates as any).Lost_Reason ?? (finalUpdates as any).lost_reason ?? ld.Lost_Reason ?? ld.lost_reason;
+          const lostNotesVal = (finalUpdates as any).Lost_Notes ?? (finalUpdates as any).lost_notes ?? ld.Lost_Notes ?? ld.lost_notes;
           const updated = {
             ...ld,
             ...finalUpdates,
+            Lost_Reason: lostReasonVal,
+            lost_reason: lostReasonVal,
+            Lost_Notes: lostNotesVal,
+            lost_notes: lostNotesVal,
             Final_Package_Amount: finalPkgVal !== undefined && finalPkgVal !== null && !isNaN(Number(finalPkgVal)) ? Number(finalPkgVal) : null,
             final_package_amount: finalPkgVal !== undefined && finalPkgVal !== null && !isNaN(Number(finalPkgVal)) ? Number(finalPkgVal) : undefined,
             Final_Quotation_Amount: finalPkgVal !== undefined && finalPkgVal !== null && !isNaN(Number(finalPkgVal)) ? Number(finalPkgVal) : null,

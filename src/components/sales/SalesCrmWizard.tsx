@@ -1327,7 +1327,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                         </div>
                         <div className="space-y-4 text-left">
                           {['Lost Lead', 'Lead Lost', 'Lost'].includes(wizardLeadData.status || selectedLead?.status || (selectedLead as any)?.current_status || '') ? (() => {
-                            const { reason: lostReasonText, notes: lostNotesText } = getStrictLostReasonAndNotes(selectedLead);
+                            const { reason: lostReasonText, notes: lostNotesText } = getStrictLostReasonAndNotes(selectedLead || (wizardLeadData as any));
                             return (
                               <div id="lost_lead_status_update_section" className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
                                 <div className="border-b border-rose-500/20 pb-1.5 flex items-center justify-between">
@@ -1350,7 +1350,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   <div>
                                     <span className="block text-[10px] text-zinc-400 uppercase font-mono font-bold mb-1">Lost Note</span>
                                     <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 text-xs whitespace-pre-wrap font-sans">
-                                      {lostNotesText || 'No additional notes provided.'}
+                                      {lostNotesText}
                                     </div>
                                   </div>
                                 </div>

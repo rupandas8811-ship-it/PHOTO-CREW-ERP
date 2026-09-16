@@ -649,90 +649,71 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     let rawReason = (lead.Lost_Reason || (lead as any).lost_reason || (lead as any).LostReason || (lead as any).lostReason || '').trim();
     let rawNotes = (lead.Lost_Notes || (lead as any).lost_notes || (lead as any).LostNotes || (lead as any).lostNotes || '').trim();
 
-    // Check if string contains internal generated activity/update text or metadata
-    const isDirty = (str: string) => {
-      if (!str) return false;
-      return /\[Update|\bNeg Notes:|\bNext follow-up:|\bWhatsApp:|^Lost Reason:/i.test(str);
-    };
+    // Clean any prefix like "Lost Reason:" or "Notes:" if user/system stored with label
+    if (rawReason.toLowerCase().startsWith('lost reason:')) {
+      rawReason = rawReason.replace(/^lost reason:\s*/i, '').trim();
+    }
+    if (rawNotes.toLowerCase().startsWith('lost notes:')) {
+      rawNotes = rawNotes.replace(/^lost notes:\s*/i, '').trim();
+    } else if (rawNotes.toLowerCase().startsWith('notes:')) {
+      rawNotes = rawNotes.replace(/^notes:\s*/i, '').trim();
+    }
 
     let cleanReason = rawReason;
     let cleanNotes = rawNotes;
 
-    const parseComposite = (text: string) => {
-      let r = '';
-      let n = '';
-      if (!text) return { r, n };
+    // Only if reason or notes is missing, parse from remarks
+    if ((!cleanReason || !cleanNotes) && lead.remarks) {
+      const text = lead.remarks;
 
       // Pattern 1: "Lost Reason: <reason>. Notes: <notes>"
       const explicitMatch = text.match(/Lost Reason:\s*([^.\n]+?)(?:\.\s*Notes:\s*([\s\S]*?))?(?=\n\[Update|\n\[Time|\[CRM_COMPLETED_STEP|$)/i);
       if (explicitMatch) {
-        if (explicitMatch[1]) r = explicitMatch[1].trim();
-        if (explicitMatch[2]) n = explicitMatch[2].trim();
+        if (!cleanReason && explicitMatch[1]) cleanReason = explicitMatch[1].trim();
+        if (!cleanNotes && explicitMatch[2]) cleanNotes = explicitMatch[2].trim();
       }
 
-      // Pattern 2: "[Update YYYY-MM-DD]: <reason>. Neg Notes: <notes>. Next follow-up:"
-      if (!r) {
-        const updateMatch = text.match(/\[Update[^\]]*\]:\s*([^.]+?)(?:\.\s*(?:Neg Notes|Notes):\s*([\s\S]*?))?(?:\.\s*Next follow-up:|$|\n)/i);
-        if (updateMatch) {
-          if (updateMatch[1]) r = updateMatch[1].trim();
-          if (updateMatch[2]) n = updateMatch[2].trim();
+      // Pattern 2: Inspect [Update ...] entries in reverse order (most recent update first)
+      if (!cleanReason || !cleanNotes) {
+        const updateRegex = /\[Update[^\]]*\]:\s*([^\n]+)/gi;
+        const matches = Array.from(text.matchAll(updateRegex));
+        for (let i = matches.length - 1; i >= 0; i--) {
+          const updateLine = matches[i][1];
+          // Skip automated status updates or time tags that aren't lost lead details
+          if (/^\[Time:|^Auto updated:/i.test(updateLine.trim())) continue;
+
+          // Parse "<reason>. Neg Notes: <notes>. Next follow-up:"
+          const parts = updateLine.match(/^([^.]+?)(?:\.\s*(?:Neg Notes|Notes):\s*([\s\S]*?))?(?:\.\s*Next follow-up:.*|$)/i);
+          if (parts) {
+            if (!cleanReason && parts[1]) cleanReason = parts[1].trim();
+            if (!cleanNotes && parts[2]) cleanNotes = parts[2].trim();
+            if (cleanReason) break;
+          }
         }
       }
-
-      // Standalone notes match
-      if (!n) {
-        const negMatch = text.match(/(?:Neg Notes|Notes):\s*([^.\n]+?)(?:\.\s*Next follow-up:|$|\n)/i);
-        if (negMatch && negMatch[1]) {
-          n = negMatch[1].trim();
-        }
-      }
-      return { r, n };
-    };
-
-    if (isDirty(cleanReason)) {
-      const parsed = parseComposite(cleanReason);
-      if (parsed.r) cleanReason = parsed.r;
-      if (parsed.n && !cleanNotes) cleanNotes = parsed.n;
     }
 
-    if (isDirty(cleanNotes)) {
-      const parsed = parseComposite(cleanNotes);
-      if (parsed.n) cleanNotes = parsed.n;
-      else {
-        cleanNotes = cleanNotes
-          .replace(/^Neg Notes:\s*/i, '')
-          .replace(/\.?\s*Next follow-up:.*$/i, '')
-          .replace(/^Notes:\s*/i, '')
-          .trim();
-      }
+    // Clean up trailing artifacts without destroying custom user notes
+    if (cleanReason) {
+      cleanReason = cleanReason
+        .replace(/^WhatsApp:\s*\d+\s*/i, '')
+        .replace(/^\[Update[^\]]*\]:\s*/i, '')
+        .replace(/\.?\s*Neg Notes:.*$/i, '')
+        .replace(/\.?\s*Next follow-up:.*$/i, '')
+        .replace(/[,;]+$/, '')
+        .trim();
     }
 
-    // If reason is still empty or dirty, check remarks field
-    if ((!cleanReason || cleanReason === 'N/A' || cleanReason === 'NULL' || isDirty(cleanReason)) && lead.remarks) {
-      const parsed = parseComposite(lead.remarks);
-      if (parsed.r) cleanReason = parsed.r;
-      if (parsed.n && !cleanNotes) cleanNotes = parsed.n;
+    if (cleanNotes) {
+      cleanNotes = cleanNotes
+        .replace(/\.?\s*Next follow-up:.*$/i, '')
+        .replace(/[,;]+$/, '')
+        .trim();
     }
-
-    // Final clean-up of any stray prefix/suffix
-    cleanReason = cleanReason
-      .replace(/^WhatsApp:\s*\d+\s*/i, '')
-      .replace(/^\[Update[^\]]*\]:\s*/i, '')
-      .replace(/\.?\s*Neg Notes:.*$/i, '')
-      .replace(/\.?\s*Next follow-up:.*$/i, '')
-      .replace(/[,;]+$/, '')
-      .trim();
-
-    cleanNotes = cleanNotes
-      .replace(/\.?\s*Next follow-up:.*$/i, '')
-      .replace(/^Neg Notes:\s*/i, '')
-      .replace(/^Notes:\s*/i, '')
-      .replace(/[,;]+$/, '')
-      .trim();
 
     return {
-      reason: cleanReason || 'No reason provided.',
-      notes: cleanNotes || ''
+      reason: cleanReason,
+      notes: cleanNotes
     };
   };
 
@@ -3954,6 +3935,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       next_follow_up_date: '',
       // Step 5
       status: fullLead.status || 'New Lead',
+      Lost_Reason: fullLead.Lost_Reason || (fullLead as any).lost_reason || '',
+      lost_reason: fullLead.lost_reason || fullLead.Lost_Reason || '',
+      Lost_Notes: fullLead.Lost_Notes || (fullLead as any).lost_notes || '',
+      lost_notes: fullLead.lost_notes || fullLead.Lost_Notes || '',
       // Order Confirmed Rule fields
       confirmed_event_date: fullLead.booking_date || fullLead.event_date || '',
       confirmed_event_time: fullLead.booking_time || fullLead.event_time || '',
