@@ -1410,7 +1410,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   </div>
                                   <div>
                                     <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Advance Payment</span>
-                                    <strong className="text-emerald-400 font-mono">₹{Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0).toLocaleString('en-IN')}</strong>
+                                    <strong className="text-emerald-400 font-mono">₹{Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
                                   </div>
                                   <div>
                                     <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Payment Mode</span>
@@ -1461,10 +1461,10 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   <div>
                                     <span className="text-[10px] text-zinc-555 uppercase font-bold font-mono">Calculated Pending Amount</span>
                                     <strong className="block text-red-500 text-sm font-mono mt-0.5">
-                                      ₹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}
+                                      ₹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0))).toLocaleString('en-IN')}
                                     </strong>
                                   </div>
-                                  {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)) > 0 ? (
+                                  {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0))) > 0 ? (
                                     <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
                                   ) : (
                                     <span className="text-[9px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Fully Paid</span>
@@ -1664,7 +1664,15 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                       const today = new Date().toISOString().split('T')[0];
                       const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
                       const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
-                      const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(selectedLead.advance_collected) || Number(wizardLeadData.advance_received) || 0));
+                      const calcAdvance = linkedPayment 
+                        ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+                        : (linkedOrder 
+                            ? (linkedOrder.advance_received ?? 0) 
+                            : (selectedLead.advance_collected !== undefined && selectedLead.advance_collected !== null && selectedLead.advance_collected !== ''
+                                ? Number(selectedLead.advance_collected) 
+                                : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
+                                    ? Number(wizardLeadData.advance_received) 
+                                    : 0)));
                       
                       setConfirmForm({
                         ...confirmForm,

@@ -1251,31 +1251,28 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isCustomerInfoExpanded, setIsCustomerInfoExpanded] = useState(true);
 
-  // Auto-scroll to Booking Confirmation modal & manage scroll locking smoothly
+  // Manage scroll locking when Booking Confirmation modal is active
   useEffect(() => {
     if (showConfirmModal) {
-      // 1. Prevent background dashboard scrolling while modal is active
+      // Prevent background dashboard scrolling while modal is active
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
 
-      // 2. Smoothly scroll the viewport to ensure the modal is immediately visible and centered
-      const timer = setTimeout(() => {
-        if (confirmBookingModalRef.current) {
-          confirmBookingModalRef.current.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-            inline: 'nearest'
-          });
-        }
-      }, 50);
-
       return () => {
-        clearTimeout(timer);
         document.body.style.overflow = originalOverflow;
       };
     }
   }, [showConfirmModal]);
-  const [confirmForm, setConfirmForm] = useState({
+  const [confirmForm, setConfirmForm] = useState<{
+    package_name: string;
+    quotation_amount: number;
+    advance_received: number | string;
+    event_date: string;
+    event_time: string;
+    payment_mode: string;
+    notes: string;
+    transaction_id: string;
+  }>({
     package_name: '',
     quotation_amount: 0,
     advance_received: 0,
@@ -2276,7 +2273,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
   React.useEffect(() => {
     if (showConfirmModal) {
-      triggerAutoScrollAndFocus('#confirm_booking_modal', 150);
       if (selectedLead) {
          initEventsReporting(selectedLead);
          setConfirmForm(prev => ({
@@ -3660,7 +3656,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 confirmed_event_date: first.confirmed_event_date || prev.confirmed_event_date,
                 confirmed_event_time: first.confirmed_event_time || prev.confirmed_event_time,
                 final_amount: first.contract_final_amount || prev.final_amount,
-                advance_received: first.advance_payment_received || prev.advance_received,
+                advance_received: (first.advance_payment_received !== undefined && first.advance_payment_received !== null && first.advance_payment_received !== '') ? Number(first.advance_payment_received) : prev.advance_received,
              }));
 
              setCrmEvents(prev => prev.map(ev => {
@@ -3962,7 +3958,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       final_amount: (fullLead.Final_Package_Amount !== null && fullLead.Final_Package_Amount !== undefined && !isNaN(Number(fullLead.Final_Package_Amount)) && Number(fullLead.Final_Package_Amount) > 0)
         ? Number(fullLead.Final_Package_Amount)
         : (Number(fullLead.final_package_amount) || Number(fullLead.Final_Quotation_Amount) || (Number((fullLead as any).final_amount) > 0 ? Number((fullLead as any).final_amount) : 0)),
-      advance_received: fullLead.advance_collected || 0,
+      advance_received: (fullLead.advance_collected !== undefined && fullLead.advance_collected !== null && fullLead.advance_collected !== '') ? Number(fullLead.advance_collected) : 0,
       total_pax: fullLead.total_pax || 0,
       reference_source: fullLead.reference_source || '',
       lead_value: fullLead.lead_value || 0,
@@ -7427,13 +7423,19 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       const today = new Date().toISOString().split('T')[0];
       const linkedOrder = orders?.find(o => o.lead_id === updatedLead.lead_id);
       const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
-      const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(updatedLead.advance_collected) || 0));
+      const calcAdvance = linkedPayment 
+        ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+        : (linkedOrder 
+            ? (linkedOrder.advance_received ?? 0) 
+            : (updatedLead.advance_collected !== undefined && updatedLead.advance_collected !== null && updatedLead.advance_collected !== ''
+                ? Number(updatedLead.advance_collected) 
+                : 0));
 
       setConfirmForm(prev => ({
         ...prev,
         package_name: packages?.find((p) => String(p.package_id) === String(updatedLead.Select_Package_Option))?.package_name || updatedLead.Select_Package_Option || prev.package_name || '',
         quotation_amount: Number(updatedLead.Final_Quotation_Amount) || Number(updatedLead.Final_Package_Amount) || Number((updatedLead as any).final_package_amount) || Number((updatedLead as any).final_amount) || Number(updatedLead.budget) || (updatedLead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || prev.quotation_amount || 0,
-        advance_received: calcAdvance || prev.advance_received || 0,
+        advance_received: typeof calcAdvance === 'number' && !isNaN(calcAdvance) ? calcAdvance : ((prev.advance_received !== '' && prev.advance_received !== undefined && prev.advance_received !== null && !isNaN(Number(prev.advance_received))) ? Number(prev.advance_received) : 0),
         event_date: updatedLead.event_date || prev.event_date || today,
         event_time: updatedLead.event_time || prev.event_time || ''
       }));
@@ -7461,8 +7463,9 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       showToastMsg("Please enter Final Amount.", "error");
       return;
     }
-    if (confirmForm.advance_received === undefined || isNaN(confirmForm.advance_received) || Number(confirmForm.advance_received) <= 0) {
-      showToastMsg("Please enter Advance Paid Amount.", "error");
+    const numAdvance = (confirmForm.advance_received !== '' && confirmForm.advance_received !== undefined && confirmForm.advance_received !== null) ? Number(confirmForm.advance_received) : 0;
+    if (isNaN(numAdvance) || numAdvance < 0) {
+      showToastMsg("Please enter a valid Advance Paid Amount.", "error");
       return;
     }
     if (!confirmForm.transaction_id || !confirmForm.transaction_id.trim()) {
@@ -7541,7 +7544,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         selectedLead.lead_id,
         confirmForm.package_name,
         effectiveFinalAmt,
-        Number(confirmForm.advance_received),
+        numAdvance,
         confirmForm.event_date,
         confirmForm.event_time,
         confirmForm.payment_mode,
@@ -7554,7 +7557,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       showToastMsg("Booking Confirmation saved successfully. Order transferred to Operations.", "success");
       setWizardLeadData(prev => ({
         ...prev,
-        advance_received: Number(confirmForm.advance_received)
+        advance_received: numAdvance
       }));
       setSelectedLead(null);
     } catch (err: any) {

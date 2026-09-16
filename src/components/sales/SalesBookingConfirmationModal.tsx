@@ -55,40 +55,38 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
     : (selectedLead?.events && Array.isArray(selectedLead.events) && selectedLead.events.length > 0 ? selectedLead.events : (crmEvents || []));
   const sortedModalEvents = sortEventsAscending(rawModalEvents);
 
-  return (
-    <>
-      {showConfirmModal && selectedLead && (
-        <div 
-          className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden transition-opacity duration-200"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="confirm_booking_modal_title"
-        >
-          <div 
-            ref={confirmBookingModalRef}
-            id="confirm_booking_modal" 
-            className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg md:max-w-xl w-full shadow-2xl flex flex-col h-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] md:max-h-[min(90vh,840px)] my-auto animate-in fade-in zoom-in-95 duration-150 relative"
+  const modalContent = showConfirmModal && selectedLead ? (
+    <div 
+      className="fixed inset-0 bg-black/85 z-[99999] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-y-auto overflow-x-hidden overscroll-contain transition-opacity duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm_booking_modal_title"
+    >
+      <div 
+        ref={confirmBookingModalRef}
+        id="confirm_booking_modal" 
+        className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg sm:max-w-xl md:max-w-2xl w-full shadow-2xl flex flex-col my-auto max-h-[calc(100vh-1.25rem)] sm:max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-3rem)] max-h-[calc(100dvh-1.25rem)] sm:max-h-[calc(100dvh-2rem)] md:max-h-[calc(100dvh-3rem)] animate-in fade-in zoom-in-95 duration-150 relative"
+      >
+        {/* Header - Fixed at Top */}
+        <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-5 py-3 sm:py-3.5 shrink-0 bg-slate-850">
+          <h4 id="confirm_booking_modal_title" className="font-bold text-slate-100 text-sm sm:text-base flex items-center gap-2 font-sans min-w-0">
+            <span className="text-base sm:text-lg shrink-0">💍</span>
+            <span className="truncate">Booking Confirmation & Contract Form</span>
+          </h4>
+          <button 
+            type="button"
+            onClick={() => setShowConfirmModal(false)}
+            className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0 ml-2"
+            title="Close"
+            aria-label="Close Booking Confirmation Modal"
           >
-            {/* Header - Fixed at Top */}
-            <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-5 py-3 sm:py-3.5 shrink-0 bg-slate-850">
-              <h4 id="confirm_booking_modal_title" className="font-bold text-slate-100 text-sm sm:text-base flex items-center gap-2 font-sans min-w-0">
-                <span className="text-base sm:text-lg shrink-0">💍</span>
-                <span className="truncate">Booking Confirmation & Contract Form</span>
-              </h4>
-              <button 
-                type="button"
-                onClick={() => setShowConfirmModal(false)}
-                className="text-slate-400 hover:text-slate-200 p-1.5 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer shrink-0 ml-2"
-                title="Close"
-                aria-label="Close Booking Confirmation Modal"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
             <form onSubmit={handleConfirmOrderSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
               {/* ONE SINGLE SCROLLABLE CONTAINER FOR THE ENTIRE POPUP CONTENT */}
-              <div className="overflow-y-auto overflow-x-hidden px-3.5 sm:px-5 md:px-6 py-4 custom-scrollbar flex-1 min-h-0 space-y-4 text-xs">
+              <div className="overflow-y-auto overflow-x-hidden px-3.5 sm:px-5 md:px-6 py-4 custom-scrollbar flex-1 min-h-0 space-y-4 text-xs overscroll-contain">
                 
                 {/* Collapsible Customer Information Card - Expands naturally with NO inner scrollbar */}
                 {(() => {
@@ -347,8 +345,17 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                     </label>
                     <input
                       type="number"
-                      value={confirmForm.advance_received}
-                      onChange={(e) => setConfirmForm({ ...confirmForm, advance_received: Number(e.target.value) })}
+                      min="0"
+                      value={confirmForm.advance_received !== undefined && confirmForm.advance_received !== null ? confirmForm.advance_received : 0}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setConfirmForm({ ...confirmForm, advance_received: '' as any });
+                        } else {
+                          const num = Number(val);
+                          setConfirmForm({ ...confirmForm, advance_received: isNaN(num) ? 0 : num });
+                        }
+                      }}
                       className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
                     />
                   </div>
@@ -392,7 +399,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
                   <span className="text-xs text-slate-300">Remaining Balance Due:</span>
                   <strong className="text-emerald-400 font-mono font-bold text-sm sm:text-base">
-                    {formatINR(Math.max(0, confirmForm.quotation_amount - confirmForm.advance_received))}
+                    {formatINR(Math.max(0, (confirmForm.quotation_amount || 0) - ((confirmForm.advance_received !== '' && !isNaN(Number(confirmForm.advance_received))) ? Number(confirmForm.advance_received) : 0)))}
                   </strong>
                 </div>
               </div>
@@ -419,8 +426,9 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
             </form>
           </div>
         </div>
-      )}
+  ) : null;
 
-    </>
-  );
+  return typeof document !== 'undefined' && modalContent
+    ? createPortal(modalContent, document.body)
+    : modalContent;
 };

@@ -611,7 +611,13 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                               const today = new Date().toISOString().split('T')[0];
                                               const linkedOrder = orders?.find((o: any) => o.lead_id === lead.lead_id);
                                               const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : null;
-                                              const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(lead.advance_collected) || 0));
+                                              const calcAdvance = linkedPayment 
+                                                ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+                                                : (linkedOrder 
+                                                    ? (linkedOrder.advance_received ?? 0) 
+                                                    : (lead.advance_collected !== undefined && lead.advance_collected !== null && lead.advance_collected !== ''
+                                                        ? Number(lead.advance_collected) 
+                                                        : 0));
                                               setConfirmForm({
                                                 ...confirmForm,
                                                 package_name: packages?.find((p: any) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',

@@ -3160,31 +3160,28 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isCustomerInfoExpanded, setIsCustomerInfoExpanded] = useState(true);
 
-  // Auto-scroll to Booking Confirmation modal & manage scroll locking smoothly
+  // Manage scroll locking when Booking Confirmation modal is active
   useEffect(() => {
     if (showConfirmModal) {
-      // 1. Prevent background dashboard scrolling while modal is active
+      // Prevent background dashboard scrolling while modal is active
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
 
-      // 2. Smoothly scroll the viewport to ensure the modal is immediately visible and centered
-      const timer = setTimeout(() => {
-        if (confirmBookingModalRef.current) {
-          confirmBookingModalRef.current.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center',
-            inline: 'nearest'
-          });
-        }
-      }, 50);
-
       return () => {
-        clearTimeout(timer);
         document.body.style.overflow = originalOverflow;
       };
     }
   }, [showConfirmModal]);
-  const [confirmForm, setConfirmForm] = useState({
+  const [confirmForm, setConfirmForm] = useState<{
+    package_name: string;
+    quotation_amount: number;
+    advance_received: number | string;
+    event_date: string;
+    event_time: string;
+    payment_mode: string;
+    notes: string;
+    transaction_id: string;
+  }>({
     package_name: '',
     quotation_amount: 0,
     advance_received: 0,
@@ -4163,7 +4160,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
   React.useEffect(() => {
     if (showConfirmModal) {
-      triggerAutoScrollAndFocus('#confirm_booking_modal', 150);
       if (selectedLead) {
          initEventsReporting(selectedLead);
          setConfirmForm(prev => ({
@@ -5567,7 +5563,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 confirmed_event_date: first.confirmed_event_date || prev.confirmed_event_date,
                 confirmed_event_time: first.confirmed_event_time || prev.confirmed_event_time,
                 final_amount: first.contract_final_amount || prev.final_amount,
-                advance_received: first.advance_payment_received || prev.advance_received,
+                advance_received: (first.advance_payment_received !== undefined && first.advance_payment_received !== null && first.advance_payment_received !== '') ? Number(first.advance_payment_received) : prev.advance_received,
              }));
 
              setCrmEvents(prev => prev.map(ev => {
@@ -5869,7 +5865,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       final_amount: (fullLead.Final_Package_Amount !== null && fullLead.Final_Package_Amount !== undefined && !isNaN(Number(fullLead.Final_Package_Amount)) && Number(fullLead.Final_Package_Amount) > 0)
         ? Number(fullLead.Final_Package_Amount)
         : (Number(fullLead.final_package_amount) || Number(fullLead.Final_Quotation_Amount) || (Number((fullLead as any).final_amount) > 0 ? Number((fullLead as any).final_amount) : 0)),
-      advance_received: fullLead.advance_collected || 0,
+      advance_received: (fullLead.advance_collected !== undefined && fullLead.advance_collected !== null && fullLead.advance_collected !== '') ? Number(fullLead.advance_collected) : 0,
       total_pax: fullLead.total_pax || 0,
       reference_source: fullLead.reference_source || '',
       lead_value: fullLead.lead_value || 0,
@@ -9327,13 +9323,19 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       const today = new Date().toISOString().split('T')[0];
       const linkedOrder = orders?.find(o => o.lead_id === updatedLead.lead_id);
       const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
-      const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(updatedLead.advance_collected) || 0));
+      const calcAdvance = linkedPayment 
+        ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+        : (linkedOrder 
+            ? (linkedOrder.advance_received ?? 0) 
+            : (updatedLead.advance_collected !== undefined && updatedLead.advance_collected !== null && updatedLead.advance_collected !== ''
+                ? Number(updatedLead.advance_collected) 
+                : 0));
 
       setConfirmForm(prev => ({
         ...prev,
         package_name: packages?.find((p) => String(p.package_id) === String(updatedLead.Select_Package_Option))?.package_name || updatedLead.Select_Package_Option || prev.package_name || '',
         quotation_amount: Number(updatedLead.Final_Package_Amount) || Number((updatedLead as any).final_package_amount) || Number(updatedLead.Final_Quotation_Amount) || Number((updatedLead as any).final_amount) || Number(updatedLead.budget) || (updatedLead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || prev.quotation_amount || 0,
-        advance_received: calcAdvance || prev.advance_received || 0,
+        advance_received: typeof calcAdvance === 'number' && !isNaN(calcAdvance) ? calcAdvance : ((prev.advance_received !== '' && prev.advance_received !== undefined && prev.advance_received !== null && !isNaN(Number(prev.advance_received))) ? Number(prev.advance_received) : 0),
         event_date: updatedLead.event_date || prev.event_date || today,
         event_time: updatedLead.event_time || prev.event_time || ''
       }));
@@ -9361,8 +9363,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Please enter Final Amount.", "error");
       return;
     }
-    if (confirmForm.advance_received === undefined || isNaN(confirmForm.advance_received) || Number(confirmForm.advance_received) <= 0) {
-      showToastMsg("Please enter Advance Paid Amount.", "error");
+    const numAdvance = (confirmForm.advance_received !== '' && confirmForm.advance_received !== undefined && confirmForm.advance_received !== null) ? Number(confirmForm.advance_received) : 0;
+    if (isNaN(numAdvance) || numAdvance < 0) {
+      showToastMsg("Please enter a valid Advance Paid Amount.", "error");
       return;
     }
     if (!confirmForm.transaction_id || !confirmForm.transaction_id.trim()) {
@@ -9435,7 +9438,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         selectedLead.lead_id,
         confirmForm.package_name,
         effectiveFinalAmt,
-        Number(confirmForm.advance_received),
+        numAdvance,
         confirmForm.event_date,
         confirmForm.event_time,
         confirmForm.payment_mode,
@@ -9448,7 +9451,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Booking Confirmation saved successfully. Order transferred to Operations.", "success");
       setWizardLeadData(prev => ({
         ...prev,
-        advance_received: Number(confirmForm.advance_received)
+        advance_received: numAdvance
       }));
       setSelectedLead(null);
     } catch (err: any) {
@@ -9821,7 +9824,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     const today = new Date().toISOString().split('T')[0];
                     const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
                     const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
-                    const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(selectedLead.advance_collected) || Number(wizardLeadData.advance_received) || 0));
+                    const calcAdvance = linkedPayment 
+                      ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+                      : (linkedOrder 
+                          ? (linkedOrder.advance_received ?? 0) 
+                          : (selectedLead.advance_collected !== undefined && selectedLead.advance_collected !== null && selectedLead.advance_collected !== ''
+                              ? Number(selectedLead.advance_collected) 
+                              : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
+                                  ? Number(wizardLeadData.advance_received) 
+                                  : 0)));
                     
                     setConfirmForm({
                       ...confirmForm,
@@ -12105,7 +12116,13 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             const today = new Date().toISOString().split('T')[0];
                                             const linkedOrder = orders?.find(o => o.lead_id === lead.lead_id);
                                             const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
-                                            const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(lead.advance_collected) || 0));
+                                            const calcAdvance = linkedPayment 
+                                              ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+                                              : (linkedOrder 
+                                                  ? (linkedOrder.advance_received ?? 0) 
+                                                  : (lead.advance_collected !== undefined && lead.advance_collected !== null && lead.advance_collected !== ''
+                                                      ? Number(lead.advance_collected) 
+                                                      : 0));
 
                                             setConfirmForm({
                                               ...confirmForm,
@@ -12231,7 +12248,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
       {showConfirmModal && selectedLead && (
         <div 
-          className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-2.5 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden transition-opacity duration-200"
+          className="fixed inset-0 bg-black/85 z-[95] flex items-center justify-center p-3 sm:p-4 md:p-6 backdrop-blur-md overflow-hidden transition-opacity duration-200"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm_booking_modal_title"
@@ -12239,7 +12256,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <div 
             ref={confirmBookingModalRef}
             id="confirm_booking_modal" 
-            className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg md:max-w-xl w-full shadow-2xl flex flex-col h-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2.5rem)] md:max-h-[min(90vh,840px)] my-auto animate-in fade-in zoom-in-95 duration-150 relative"
+            className="bg-slate-850 border border-slate-750 rounded-2xl overflow-hidden max-w-lg sm:max-w-xl md:max-w-2xl w-full shadow-2xl flex flex-col h-[calc(100dvh-2rem)] sm:h-[min(88dvh,780px)] animate-in fade-in zoom-in-95 duration-150 relative"
           >
             {/* Header - Fixed at Top */}
             <div className="flex items-center justify-between border-b border-slate-800 px-4 sm:px-5 py-3 sm:py-3.5 shrink-0 bg-slate-850">
@@ -12519,8 +12536,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     </label>
                     <input
                       type="number"
-                      value={confirmForm.advance_received}
-                      onChange={(e) => setConfirmForm({ ...confirmForm, advance_received: Number(e.target.value) })}
+                      min="0"
+                      value={confirmForm.advance_received !== undefined && confirmForm.advance_received !== null ? confirmForm.advance_received : ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '') {
+                          setConfirmForm({ ...confirmForm, advance_received: '' });
+                        } else {
+                          const num = Number(val);
+                          setConfirmForm({ ...confirmForm, advance_received: isNaN(num) ? 0 : num });
+                        }
+                      }}
                       className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
                     />
                   </div>
@@ -12564,7 +12590,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
                   <span className="text-xs text-slate-300">Remaining Balance Due:</span>
                   <strong className="text-emerald-400 font-mono font-bold text-sm sm:text-base">
-                    {formatINR(Math.max(0, confirmForm.quotation_amount - confirmForm.advance_received))}
+                    {formatINR(Math.max(0, (confirmForm.quotation_amount || 0) - ((confirmForm.advance_received !== '' && confirmForm.advance_received !== undefined && confirmForm.advance_received !== null) ? Number(confirmForm.advance_received) : 0)))}
                   </strong>
                 </div>
               </div>
@@ -13993,7 +14019,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   </div>
                                   <div>
                                     <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Advance Payment</span>
-                                    <strong className="text-emerald-400 font-mono">₹{Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0).toLocaleString('en-IN')}</strong>
+                                    <strong className="text-emerald-400 font-mono">₹{Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
                                   </div>
                                   <div>
                                     <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Payment Mode</span>
@@ -14044,10 +14070,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <div>
                                     <span className="text-[10px] text-zinc-555 uppercase font-bold font-mono">Calculated Pending Amount</span>
                                     <strong className="block text-red-500 text-sm font-mono mt-0.5">
-                                      ₹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}
+                                      ₹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0))).toLocaleString('en-IN')}
                                     </strong>
                                   </div>
-                                  {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number(selectedLead?.advance_collected || wizardLeadData.advance_received || 0)) > 0 ? (
+                                  {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0))) > 0 ? (
                                     <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
                                   ) : (
                                     <span className="text-[9px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Fully Paid</span>
@@ -14247,7 +14273,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       const today = new Date().toISOString().split('T')[0];
                       const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
                       const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
-                      const calcAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : (Number(selectedLead.advance_collected) || Number(wizardLeadData.advance_received) || 0));
+                      const calcAdvance = linkedPayment 
+                        ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+                        : (linkedOrder 
+                            ? (linkedOrder.advance_received ?? 0) 
+                            : (selectedLead.advance_collected !== undefined && selectedLead.advance_collected !== null && selectedLead.advance_collected !== ''
+                                ? Number(selectedLead.advance_collected) 
+                                : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
+                                    ? Number(wizardLeadData.advance_received) 
+                                    : 0)));
                       
                       setConfirmForm({
                         ...confirmForm,
