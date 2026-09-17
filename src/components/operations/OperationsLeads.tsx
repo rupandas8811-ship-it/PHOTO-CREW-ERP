@@ -227,7 +227,8 @@ export const OperationsLeads: React.FC = () => {
     getLeadCurrentStatus,
     packages,
     quotations,
-    pushUpdate
+    pushUpdate,
+    users
   } = useRole();
 
   useEffect(() => {
@@ -424,6 +425,84 @@ export const OperationsLeads: React.FC = () => {
   const parentLeadInstance = useMemo(() => {
     return activeOrderInstance ? (leads || []).find((l) => l.lead_id === activeOrderInstance.lead_id) : null;
   }, [activeOrderInstance, leads]);
+
+  const dossierSalesStaff = useMemo(() => {
+    if (!activeOrderInstance && !parentLeadInstance) return { name: 'N/A', mobile: 'N/A' };
+
+    const targetQuote = (quotations || []).find((q: any) => 
+      (parentLeadInstance?.lead_id && q.lead_id === parentLeadInstance.lead_id) || 
+      (activeOrderInstance?.lead_id && q.lead_id === activeOrderInstance.lead_id) ||
+      (activeOrderInstance?.order_id && (q.order_id === activeOrderInstance.order_id || q.lead_id === activeOrderInstance.order_id))
+    );
+
+    const rawName = 
+      parentLeadInstance?.sales_staff_name ||
+      activeOrderInstance?.sales_staff_name ||
+      (parentLeadInstance as any)?.Sales_Staff_Name ||
+      (activeOrderInstance as any)?.Sales_Staff_Name ||
+      targetQuote?.sales_staff_name ||
+      parentLeadInstance?.sales_person ||
+      activeOrderInstance?.sales_person ||
+      (parentLeadInstance as any)?.Sales_Person_Name;
+
+    const rawMobile = 
+      parentLeadInstance?.sales_staff_mobile ||
+      activeOrderInstance?.sales_staff_mobile ||
+      (parentLeadInstance as any)?.Sales_Staff_Mobile ||
+      (activeOrderInstance as any)?.Sales_Staff_Mobile ||
+      targetQuote?.sales_staff_mobile;
+
+    const staffId = 
+      parentLeadInstance?.sales_staff_id ||
+      activeOrderInstance?.sales_staff_id ||
+      (parentLeadInstance as any)?.Sales_Staff_Id ||
+      targetQuote?.sales_staff_id;
+
+    let finalName = (rawName && String(rawName).trim() && String(rawName).trim() !== 'N/A' && String(rawName).trim() !== '-')
+      ? String(rawName).trim()
+      : '';
+
+    let finalMobile = (rawMobile && String(rawMobile).trim() && String(rawMobile).trim() !== 'N/A' && String(rawMobile).trim() !== '-')
+      ? String(rawMobile).trim()
+      : '';
+
+    // If mobile is missing or 'N/A', look up the specific sales staff record by ID or Name
+    if ((!finalMobile || finalMobile === 'N/A' || finalMobile === '-') && (staffId || finalName)) {
+      // 1. Check users list
+      const matchedUser = (users || []).find((u: any) => 
+        (staffId && (u.id === staffId || String(u.id) === String(staffId))) ||
+        (finalName && (
+          u.name?.trim().toLowerCase() === finalName.toLowerCase() ||
+          u.full_name?.trim().toLowerCase() === finalName.toLowerCase()
+        ))
+      );
+      if (matchedUser?.mobile && String(matchedUser.mobile).trim()) {
+        finalMobile = String(matchedUser.mobile).trim();
+        if (!finalName && matchedUser.name) {
+          finalName = matchedUser.name;
+        }
+      }
+
+      // 2. Check staff directory
+      if (!finalMobile || finalMobile === 'N/A' || finalMobile === '-') {
+        const matchedStaff = (staff || []).find((s: any) => 
+          (staffId && (s.staff_id === staffId || String(s.staff_id) === String(staffId))) ||
+          (finalName && s.name?.trim().toLowerCase() === finalName.toLowerCase())
+        );
+        if (matchedStaff?.mobile && String(matchedStaff.mobile).trim()) {
+          finalMobile = String(matchedStaff.mobile).trim();
+          if (!finalName && matchedStaff.name) {
+            finalName = matchedStaff.name;
+          }
+        }
+      }
+    }
+
+    return {
+      name: finalName || 'N/A',
+      mobile: finalMobile || 'N/A'
+    };
+  }, [activeOrderInstance, parentLeadInstance, quotations, users, staff]);
 
   const googleMapsLocationLink = useMemo(() => {
     if (parentLeadInstance?.google_maps_link) {
@@ -3078,6 +3157,24 @@ export const OperationsLeads: React.FC = () => {
             <form onSubmit={handleAssignSubmit} className="flex-1 flex flex-col min-h-0 max-h-full overflow-hidden max-w-full min-w-0">
               <div className="w-full flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 scrollbar-thin overscroll-contain touch-pan-y" style={{ touchAction: 'pan-y' }}>
                 <div className="w-full space-y-6 pb-20">
+
+                {/* Sales Staff Details */}
+                <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Sales Staff Name</span>
+                      <span id="dossier_sales_staff_name" className="font-bold text-white font-sans text-xs block">
+                        {dossierSalesStaff.name}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-zinc-500 block uppercase font-mono">Sales Staff Mobile Number</span>
+                      <span id="dossier_sales_staff_mobile" className="font-mono text-zinc-200 font-medium block">
+                        {dossierSalesStaff.mobile}
+                      </span>
+                    </div>
+                  </div>
+                </div>
                 
                 {/* 1. Customer Information */}
                 <div className="bg-zinc-950/45 border border-zinc-850 rounded-2xl overflow-hidden transition-all duration-300">

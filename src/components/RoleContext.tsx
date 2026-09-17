@@ -7884,7 +7884,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const assignEditorToProject = async (assignment: Omit<EditorAssignment, 'assignment_id' | 'status' | 'assigned_date'>) => {
-    const id = `EDR-${Math.floor(1000 + Math.random() * 9000)}`;
+    const id = `EDR-${crypto.randomUUID()}`;
     const newAssign: EditorAssignment = {
       ...assignment,
       assignment_id: id,

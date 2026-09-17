@@ -570,6 +570,13 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     return { order, lead };
   };
 
+  const getProductionProgress = (prodId: string) => {
+    const allTasks = (editorAssignments || []).filter(t => t.production_id === prodId);
+    if (allTasks.length === 0) return undefined;
+    const completedTasks = allTasks.filter(t => t.status === 'Completed' || t.status === 'Editing Complete' || t.status === 'Editing Completed' || t.status === 'Client Acceptance' || t.status === 'Order Closed' || t.status === 'Project Closed').length;
+    return `${completedTasks}/${allTasks.length} deliverables complete`;
+  };
+
   // Robustly extract Raw Footage Drive Link matching the exact Final Consolidated link from Assign Editor notes / Operations verification
   const getRawFootageDriveLink = (prodItem: any): string => {
     if (!prodItem) return '';
@@ -2550,6 +2557,7 @@ Production Team`;
     const orderId = order?.order_id || (prod as any).order_id || prod.tracking_id;
     const listToProcess = eventsList.length > 0 ? eventsList : [null];
     const sections: EventSection[] = [];
+    const usedAssignments = new Set<string>();
 
     for (let idx = 0; idx < listToProcess.length; idx++) {
       const currentEvent = listToProcess[idx];
@@ -2571,11 +2579,10 @@ Production Team`;
 
       const assignedForThis = (editorAssignments || []).filter(a => 
         (a.production_id === prod.production_id || a.order_id === orderId) && 
-        (!currentEventId || !a.event_id || a.event_id === currentEventId)
+        (a.event_id === currentEventId || (!a.event_id && !currentEventId) || (!a.event_id && idx === 0))
       );
 
       const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
-      const usedAssignments = new Set<string>();
 
       for (const d of parsedDeliverablesList) {
         const qty = d.qty || 1;
@@ -2989,7 +2996,7 @@ _Please acknowledge receipt of this task assignment._`;
           
           const staffMem = activeStaffList.find(s => s.staff_id === row.staffId);
           if (staffMem) {
-            const id = `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
+            const id = `EDR-${crypto.randomUUID()}`;
             newAssignments.push({
               assignment_id: id,
               production_id: activeWorkflowProd.production_id,
@@ -3838,7 +3845,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               })()}
                             </td>
                             <td className="p-3">
-                              <StatusText status={prodStatus} />
+                              <StatusText status={prodStatus} progress={getProductionProgress(prod.production_id || prod.tracking_id)} />
                             </td>
                             <td className="p-3 text-right pr-4">
                               <div className="inline-flex flex-col gap-1 items-end">
@@ -4192,7 +4199,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           {/* Current Status */}
                           <td className="px-3 py-2 align-middle">
-                            <StatusText status={displayStatus} />
+                            <StatusText status={displayStatus} progress={getProductionProgress(prod.production_id || prod.tracking_id)} />
                           </td>
 
                           {/* Target Delivery Date */}
@@ -8594,7 +8601,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               const hasChanged = originalAssignment ? originalAssignment.staff_name !== item.editor : true;
                               const finalStatus = hasChanged ? 'Assigned' : (originalAssignment?.status || 'Assigned');
                               
-                              const id = item.assignment_id || `EDR-${Math.floor(100000 + Math.random() * 900000)}`;
+                              const id = item.assignment_id || `EDR-${crypto.randomUUID()}`;
                               const preservedFields = !hasChanged && originalAssignment ? { ...originalAssignment } : {};
                               
                               newAssignments.push({
@@ -10942,7 +10949,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 {clientName}
                               </td>
                               <td className="py-3 px-3 text-[11px]">
-                                <StatusText status={proj.editing_status || 'Raw Footage Received'} />
+                                <StatusText status={proj.editing_status || 'Raw Footage Received'} progress={getProductionProgress(proj.production_id || proj.tracking_id)} />
                               </td>
                               <td className="py-3 px-3">
                                 <span className={`px-2 py-0.5 rounded text-[10px] ${
@@ -11111,7 +11118,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     ID: {proj.production_id || proj.tracking_id} | Deadline: {proj.expected_delivery_date || proj.target_delivery_date || 'TBD'}
                                   </div>
                                 </div>
-                                <StatusText status={proj.editing_status} />
+                                <StatusText status={proj.editing_status} progress={getProductionProgress(proj.production_id || proj.tracking_id)} />
                               </div>
                             );
                           })

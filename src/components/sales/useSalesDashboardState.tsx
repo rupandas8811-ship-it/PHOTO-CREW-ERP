@@ -4757,6 +4757,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           team_members: safeTeamMembersText,
           package_price: cleanPkgCost ?? prev.package_price,
           selected_package_id: pkgId,
+          Select_Package_Option: pkgId,
           final_amount: cleanFinalAmt
         }));
 
@@ -4777,6 +4778,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             notes_special_customizations: wizardLeadData.notes,
             remarks: updatedRemarks,
             selected_package_id: pkgId,
+            Select_Package_Option: pkgId,
             client_residence_address: wizardLeadData.client_residence_address,
             city: wizardLeadData.city,
             state: wizardLeadData.state,
@@ -4854,7 +4856,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           budget: Number(wizardLeadData?.package_cost || wizardLeadData?.budget || 0),
           package_price: Number(wizardLeadData?.package_cost || 0),
           remarks: wizardLeadData?.remarks || wizardLeadData?.notes || '',
-          selected_package_id: wizardLeadData?.selected_package_id || wizardLeadData?.Select_Package_Option || ''
+          selected_package_id: wizardLeadData?.selected_package_id || (wizardLeadData as any)?.Select_Package_Option || ''
         },
         insertPayload: null,
         dbResponse: null,
@@ -7042,10 +7044,14 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       await updateLead(createdLeadId!, {
         status: finalStatus as CurrentStage,
         budget: finalTotal,
-          package_price: finalTotal,
-          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
-          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
-          Final_Quotation_Amount: finalTotal,
+        package_price: finalTotal,
+        Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+        Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+        Final_Quotation_Amount: finalTotal,
+        Final_Package_Amount: finalTotal,
+        final_package_amount: finalTotal,
+        selected_package_id: activePkgId as any,
+        Select_Package_Option: activePkgId,
         deliverables_description: deliverablesText || selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: teamMembersText || selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
         sales_staff_name: salesStaffName,
@@ -7056,10 +7062,46 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         pincode: createForm.pincode,
         desired_event_shoot_type: createForm.desired_event_shoot_type,
         remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-            next_follow_up_date: followUpDate || undefined,
-          follow_up_notes: internalNotes || undefined,
-        
+        next_follow_up_date: followUpDate || undefined,
+        follow_up_notes: internalNotes || undefined,
+        events: activeEventsList
       });
+
+      setWizardLeadData(prev => ({
+        ...prev,
+        selected_package_id: activePkgId,
+        Select_Package_Option: activePkgId,
+        package_cost: finalTotal,
+        package_price: finalTotal,
+        final_amount: finalTotal,
+        budget: finalTotal,
+        final_quoted_amount: finalTotal,
+        deliverables: deliverablesText,
+        deliverables_description: deliverablesText
+      }));
+
+      const currentCreatedLead = leads.find(l => l.lead_id === createdLeadId);
+      const syncedLeadObj: Lead = {
+        ...(currentCreatedLead || {}),
+        lead_id: createdLeadId!,
+        customer_name: createForm.customer_name,
+        mobile: createForm.mobile,
+        whatsapp_number: createForm.whatsapp_number,
+        status: finalStatus as CurrentStage,
+        budget: finalTotal,
+        package_price: finalTotal,
+        Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+        Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+        Final_Quotation_Amount: finalTotal,
+        Final_Package_Amount: finalTotal,
+        final_package_amount: finalTotal,
+        selected_package_id: activePkgId,
+        Select_Package_Option: activePkgId,
+        deliverables_description: deliverablesText,
+        events: activeEventsList
+      } as Lead;
+      setSelectedLead(syncedLeadObj);
+
       showToastMsg("✅ Quotation created successfully.", "success");
       setStep3FollowUpDate(followUpDate || '');
       setStep3FollowUpTime('');
@@ -7551,9 +7593,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       showToastMsg("Booking Confirmation saved successfully. Order transferred to Operations.", "success");
       setWizardLeadData(prev => ({
         ...prev,
-        advance_received: numAdvance
+        advance_received: numAdvance,
+        status: 'Order Confirmed'
       }));
+      setSalesStatus('Order Confirmed' as CurrentStage);
       setSelectedLead(null);
+      if (activeTab === 'create') {
+        resetForm();
+        setActiveTab('list');
+      }
     } catch (err: any) {
       console.error("Failed to convert order:", err);
       const errMsg = err?.message || String(err);

@@ -1173,16 +1173,7 @@ export const StaffModule: React.FC = () => {
       const evIdentifier = ev?.id || sa.event_id || 'ev';
       const uniqueKey = `${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`;
 
-      const fallbackStatus = op?.event_status || 'Assigned Crew';
-      const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
-      let currentStaffStatus = staffStatuses[uniqueKey] 
-        || staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] 
-        || staffStatuses[`${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`] 
-        || staffStatuses[`${orderId}_${evIdentifier}_${staffName.toLowerCase()}`]
-        || sa.task_status;
-      if (!currentStaffStatus) {
-        currentStaffStatus = isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus;
-      }
+      const currentStaffStatus = sa.task_status || 'Assigned Crew';
 
       const resolvedRawLink = resolveRawFootageLink(
         orderId,
@@ -1283,17 +1274,8 @@ export const StaffModule: React.FC = () => {
               return; 
             }
 
-            const fallbackStatus = op?.event_status || 'Assigned Crew';
-            const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
-            let currentStaffStatus = staffStatuses[uniqueKey] 
-              || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] : undefined) 
-              || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`] : undefined) 
-              || staffStatuses[`${orderId}_${ev.id || 'ev'}_${staffName.toLowerCase()}`]
-              || staffStatuses[`${orderId}_${evIdentifier}_${staffName.toLowerCase()}`];
-            if (!currentStaffStatus) {
-                const saStatus = (sa as any)?.task_status;
-                currentStaffStatus = saStatus || (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
-            }
+            const saStatus = (sa as any)?.task_status;
+            const currentStaffStatus = saStatus || 'Assigned Crew';
 
             const resolvedRawLink = resolveRawFootageLink(
               orderId,
@@ -1383,15 +1365,8 @@ export const StaffModule: React.FC = () => {
             return;
           }
 
-          const fallbackStatus = op?.event_status || 'Assigned Crew';
-          const isGlobalAdvanced = ['event started', 'event start', 'event ended', 'event complete', 'footage handover', 'verified footage'].includes(fallbackStatus.toLowerCase());
-          let currentStaffStatus = staffStatuses[uniqueKey] 
-            || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_${staffName.toLowerCase()}`] : undefined)
-            || (assignmentId ? staffStatuses[`${orderId}_${assignmentId}_gen_${staffName.toLowerCase()}`] : undefined);
-          if (!currentStaffStatus) {
-              const saStatus = (sa as any)?.task_status;
-              currentStaffStatus = saStatus || (isGlobalAdvanced ? 'Assigned Crew' : fallbackStatus);
-          }
+          const saStatus = (sa as any)?.task_status;
+          const currentStaffStatus = saStatus || 'Assigned Crew';
 
           const resolvedRawLink = resolveRawFootageLink(
             orderId,

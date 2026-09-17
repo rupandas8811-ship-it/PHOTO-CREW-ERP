@@ -8957,10 +8957,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       await updateLead(createdLeadId!, {
         status: finalStatus as CurrentStage,
         budget: finalTotal,
-          package_price: finalTotal,
-          Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
-          Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
-          Final_Quotation_Amount: finalTotal,
+        package_price: finalTotal,
+        Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+        Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+        Final_Quotation_Amount: finalTotal,
+        Final_Package_Amount: finalTotal,
+        final_package_amount: finalTotal,
+        selected_package_id: activePkgId,
+        Select_Package_Option: activePkgId,
         deliverables_description: deliverablesText || selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: teamMembersText || selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
         sales_staff_name: salesStaffName,
@@ -8971,10 +8975,46 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         pincode: createForm.pincode,
         desired_event_shoot_type: createForm.desired_event_shoot_type,
         remarks: getRemarksPayload(createForm.remarks, internalNotes, followUpDate, createForm.whatsapp_number, createForm.address, createForm.city, createForm.client_residence_address),
-            next_follow_up_date: followUpDate || null,
-            follow_up_notes: internalNotes || null,
-        Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || ''
+        next_follow_up_date: followUpDate || null,
+        follow_up_notes: internalNotes || null,
+        events: activeEventsList
       });
+
+      setWizardLeadData(prev => ({
+        ...prev,
+        selected_package_id: activePkgId,
+        Select_Package_Option: activePkgId,
+        package_cost: finalTotal,
+        package_price: finalTotal,
+        final_amount: finalTotal,
+        budget: finalTotal,
+        final_quoted_amount: finalTotal,
+        deliverables: deliverablesText,
+        deliverables_description: deliverablesText
+      }));
+
+      const currentCreatedLead = leads.find(l => l.lead_id === createdLeadId);
+      const syncedLeadObj: Lead = {
+        ...(currentCreatedLead || {}),
+        lead_id: createdLeadId!,
+        customer_name: createForm.customer_name,
+        mobile: createForm.mobile,
+        whatsapp_number: createForm.whatsapp_number,
+        status: finalStatus as CurrentStage,
+        budget: finalTotal,
+        package_price: finalTotal,
+        Quotation_Discount: quoteDiscount === "" ? null : Number(quoteDiscount),
+        Additional_Services_Cost: quoteAdditional === "" ? null : Number(quoteAdditional),
+        Final_Quotation_Amount: finalTotal,
+        Final_Package_Amount: finalTotal,
+        final_package_amount: finalTotal,
+        selected_package_id: activePkgId,
+        Select_Package_Option: activePkgId,
+        deliverables_description: deliverablesText,
+        events: activeEventsList
+      } as Lead;
+      setSelectedLead(syncedLeadObj);
+
       showToastMsg("✅ Quotation created successfully.", "success");
       setStep3FollowUpDate(followUpDate || '');
       setStep3FollowUpTime('');
@@ -9445,9 +9485,15 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       showToastMsg("Booking Confirmation saved successfully. Order transferred to Operations.", "success");
       setWizardLeadData(prev => ({
         ...prev,
-        advance_received: numAdvance
+        advance_received: numAdvance,
+        status: 'Order Confirmed'
       }));
+      setSalesStatus('Order Confirmed' as CurrentStage);
       setSelectedLead(null);
+      if (activeTab === 'create') {
+        resetForm();
+        setActiveTab('list');
+      }
     } catch (err: any) {
       console.error("Failed to convert order:", err);
       const errMsg = err?.message || String(err);
@@ -9486,6 +9532,88 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const createdLeadRecord = createdLeadId ? leads?.find((l: Lead) => l.lead_id === createdLeadId) : null;
+  const isCreatedLeadConfirmed = createdLeadRecord
+    ? (['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(createdLeadRecord.status || '') ||
+       (createdLeadRecord as any).current_status === 'Order Confirmed' ||
+       (createdLeadRecord as any).booking_status === 'Confirmed' ||
+       (getLeadCurrentStatus && getLeadCurrentStatus(createdLeadRecord) === 'Order Confirmed') ||
+       (getLeadCurrentStage && ['Operations', 'Production', 'Post-Production', 'Completed'].includes(getLeadCurrentStage(createdLeadRecord))) ||
+       (orders && orders.some((o: any) => o.lead_id === createdLeadRecord.lead_id && o.status !== 'Cancelled')) ||
+       salesStatus === 'Order Confirmed' ||
+       wizardLeadData.status === 'Order Confirmed')
+    : (salesStatus === 'Order Confirmed' || wizardLeadData.status === 'Order Confirmed');
+
+  const handleCreateFlowOrderConfirm = () => {
+    const targetLead = createdLeadRecord || {
+      lead_id: createdLeadId || 'NEW-LEAD',
+      customer_name: createForm.customer_name,
+      mobile: createForm.mobile,
+      whatsapp_number: createForm.whatsapp_number,
+      status: 'Create Quote',
+      budget: finalTotal,
+      package_price: finalTotal,
+      Final_Quotation_Amount: finalTotal,
+      Final_Package_Amount: finalTotal,
+      final_package_amount: finalTotal,
+      Select_Package_Option: selectedPkgIds[0] || createForm.selected_package_id || createForm.Select_Package_Option || 'Custom Package',
+      events: createEvents && createEvents.length > 0 ? createEvents : []
+    } as Lead;
+
+    const activeEventsList = (createEvents && createEvents.length > 0) ? createEvents : (targetLead.events || []);
+    const activePkgId = selectedPkgIds[0] || createForm.selected_package_id || createForm.Select_Package_Option || targetLead.Select_Package_Option || 'Custom Package';
+    const activePkgName = packages?.find((p: any) => String(p.package_id) === String(activePkgId))?.package_name || activePkgId;
+
+    const leadForConfirmation: Lead = {
+      ...targetLead,
+      lead_id: createdLeadId || targetLead.lead_id || 'NEW-LEAD',
+      customer_name: targetLead.customer_name || createForm.customer_name,
+      mobile: targetLead.mobile || createForm.mobile,
+      whatsapp_number: targetLead.whatsapp_number || createForm.whatsapp_number,
+      status: targetLead.status || 'Create Quote',
+      budget: finalTotal || targetLead.budget,
+      package_price: finalTotal || targetLead.package_price,
+      Final_Quotation_Amount: finalTotal || targetLead.Final_Quotation_Amount,
+      Final_Package_Amount: finalTotal || targetLead.Final_Package_Amount,
+      final_package_amount: finalTotal || targetLead.final_package_amount,
+      Select_Package_Option: activePkgId,
+      selected_package_id: activePkgId,
+      events: activeEventsList
+    };
+
+    if (areReportingDetailsComplete && !areReportingDetailsComplete(leadForConfirmation)) {
+      if (openReportingDetailsModal) {
+        openReportingDetailsModal(leadForConfirmation, "Please complete and save the Reporting Details before confirming the order.");
+      }
+      return;
+    }
+
+    setSelectedLead(leadForConfirmation);
+
+    const today = new Date().toISOString().split('T')[0];
+    const linkedOrder = orders?.find((o: any) => o.lead_id === leadForConfirmation.lead_id);
+    const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : null;
+    const calcAdvance = linkedPayment 
+      ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+      : (linkedOrder 
+          ? (linkedOrder.advance_received ?? 0) 
+          : (leadForConfirmation.advance_collected !== undefined && leadForConfirmation.advance_collected !== null && leadForConfirmation.advance_collected !== ''
+              ? Number(leadForConfirmation.advance_collected) 
+              : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
+                  ? Number(wizardLeadData.advance_received)
+                  : 0)));
+
+    setConfirmForm({
+      ...confirmForm,
+      package_name: activePkgName,
+      quotation_amount: finalTotal || Number(leadForConfirmation.Final_Quotation_Amount) || Number(leadForConfirmation.budget) || 0,
+      advance_received: calcAdvance,
+      event_date: (activeEventsList[0]?.event_date) || leadForConfirmation.event_date || today,
+      event_time: (activeEventsList[0]?.event_time) || leadForConfirmation.event_time || ''
+    });
+    setShowConfirmModal(true);
   };
 
   // Companion lead metadata parse
@@ -11526,20 +11654,38 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                   {isSaving ? 'Processing...' : 'Save & Continue →'}
                 </button>
               ) : (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    if (salesStatus === 'Order Confirmed') {
-                      handleOrderConfirmedSubmit(e);
-                    } else {
-                      handleStatusSave();
-                    }
-                  }}
-                  disabled={isSaving}
-                  className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
-                >
-                  {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Quotation'}
-                </button>
+                <div className="flex items-center gap-2">
+                  {!isCreatedLeadConfirmed && (
+                    <button
+                      type="button"
+                      id="btn_step3_order_confirmed"
+                      onClick={handleCreateFlowOrderConfirm}
+                      disabled={isSaving || (selectedPkgIds.length === 0 && !createForm.selected_package_id && !createForm.Select_Package_Option)}
+                      className={`px-4 py-2 text-xs font-mono font-bold uppercase rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5 border-0 ${
+                        (selectedPkgIds.length === 0 && !createForm.selected_package_id && !createForm.Select_Package_Option)
+                          ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                          : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-950/20'
+                      }`}
+                    >
+                      <CheckSquare className="w-3.5 h-3.5" />
+                      <span>ORDER CONFIRMED</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      if (salesStatus === 'Order Confirmed') {
+                        handleOrderConfirmedSubmit(e);
+                      } else {
+                        handleStatusSave();
+                      }
+                    }}
+                    disabled={isSaving}
+                    className="px-5.5 py-2 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl shadow-lg shadow-emerald-500/10 cursor-pointer border border-transparent transition-colors flex items-center gap-1.5"
+                  >
+                    {isSaving ? 'Saving...' : salesStatus === 'Order Confirmed' ? '🎉 Confirm Order & Transition' : '✍️ Create Quotation'}
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -14254,70 +14400,83 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                {crmWizardStep === 3 && !isLeadConfirmed && wizardLeadData.status !== 'Order Confirmed' && selectedLead?.status !== 'Order Confirmed' && (
-                  <button
-                    type="button"
-                    id="btn_step3_order_confirmed"
-                    onClick={() => {
-                      if (!selectedLead) return;
-                      if (!areReportingDetailsComplete(selectedLead)) {
-                        openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
-                        return;
-                      }
-                      const today = new Date().toISOString().split('T')[0];
-                      const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
-                      const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
-                      const calcAdvance = linkedPayment 
-                        ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
-                        : (linkedOrder 
-                            ? (linkedOrder.advance_received ?? 0) 
-                            : (selectedLead.advance_collected !== undefined && selectedLead.advance_collected !== null && selectedLead.advance_collected !== ''
-                                ? Number(selectedLead.advance_collected) 
-                                : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
-                                    ? Number(wizardLeadData.advance_received) 
-                                    : 0)));
-                      
-                      setConfirmForm({
-                        ...confirmForm,
-                        package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
-                        quotation_amount: Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
-                        advance_received: calcAdvance,
-                        event_date: selectedLead.event_date || today,
-                        event_time: selectedLead.event_time || ''
-                      });
-                      setShowConfirmModal(true);
-                    }}
-                    disabled={isSaving || isCrmLocked || (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')}
-                    className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
-                      isCrmLocked
-                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
-                      (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
-                        ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
-                        : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-950/20'
-                    }`}
-                  >
-                    <CheckSquare className="w-3.5 h-3.5" />
-                    <span>ORDER CONFIRMED</span>
-                  </button>
-                )}
-                <button
-                  type="button"
-                  id="btn_crm_save_step"
-                  onClick={() => handleSaveStep(crmWizardStep)}
-                  disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === ''))}
-                  className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
-                    isCrmLocked
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
-                    crmWizardStep === 3 && (!wizardLeadData.selected_package_id || wizardLeadData.selected_package_id.trim() === '')
-                      ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
-                      : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
-                  }`}
-                >
-                  {isSaving ? (
-                    <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
-                  ) : null}
-                  <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? 'SAVE & FOLLOW-UP' : 'Save & Next'}</span>
-                </button>
+                {(() => {
+                  const hasCrmPackage = Boolean(
+                    (wizardLeadData.selected_package_id && wizardLeadData.selected_package_id.trim() !== '') ||
+                    ((wizardLeadData as any).Select_Package_Option && (wizardLeadData as any).Select_Package_Option.trim() !== '') ||
+                    (selectedLead?.Select_Package_Option && selectedLead.Select_Package_Option.trim() !== '') ||
+                    (selectedLead?.selected_package_id && selectedLead.selected_package_id.trim() !== '')
+                  );
+
+                  return (
+                    <>
+                      {crmWizardStep === 3 && !isLeadConfirmed && wizardLeadData.status !== 'Order Confirmed' && selectedLead?.status !== 'Order Confirmed' && (
+                        <button
+                          type="button"
+                          id="btn_step3_order_confirmed"
+                          onClick={() => {
+                            if (!selectedLead) return;
+                            if (!areReportingDetailsComplete(selectedLead)) {
+                              openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
+                              return;
+                            }
+                            const today = new Date().toISOString().split('T')[0];
+                            const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+                            const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                            const calcAdvance = linkedPayment 
+                              ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+                              : (linkedOrder 
+                                  ? (linkedOrder.advance_received ?? 0) 
+                                  : (selectedLead.advance_collected !== undefined && selectedLead.advance_collected !== null && selectedLead.advance_collected !== ''
+                                      ? Number(selectedLead.advance_collected) 
+                                      : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
+                                          ? Number(wizardLeadData.advance_received) 
+                                          : 0)));
+                            
+                            setConfirmForm({
+                              ...confirmForm,
+                              package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
+                              quotation_amount: Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_amount) || 0,
+                              advance_received: calcAdvance,
+                              event_date: selectedLead.event_date || today,
+                              event_time: selectedLead.event_time || ''
+                            });
+                            setShowConfirmModal(true);
+                          }}
+                          disabled={isSaving || isCrmLocked || !hasCrmPackage}
+                          className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                            isCrmLocked
+                              ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
+                            !hasCrmPackage
+                              ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer shadow-emerald-950/20'
+                          }`}
+                        >
+                          <CheckSquare className="w-3.5 h-3.5" />
+                          <span>ORDER CONFIRMED</span>
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        id="btn_crm_save_step"
+                        onClick={() => handleSaveStep(crmWizardStep)}
+                        disabled={isSaving || isCrmLocked || (crmWizardStep === 3 && !hasCrmPackage)}
+                        className={`px-4 py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center gap-1.5 border-0 ${
+                          isCrmLocked
+                            ? 'bg-slate-800 text-slate-500 cursor-not-allowed opacity-50 shadow-none' :
+                          crmWizardStep === 3 && !hasCrmPackage
+                            ? 'bg-slate-800 text-slate-500 border border-slate-850 cursor-not-allowed opacity-50 shadow-none'
+                            : 'bg-indigo-650 hover:bg-indigo-600 text-white cursor-pointer'
+                        }`}
+                      >
+                        {isSaving ? (
+                          <span className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin"></span>
+                        ) : null}
+                        <span>{isSaving ? 'Saving...' : crmWizardStep === 3 ? ((isLeadConfirmed || ['Order Confirmed', 'Event Scheduled', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '')) ? 'Save' : 'SAVE & FOLLOW-UP') : 'Save & Next'}</span>
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>

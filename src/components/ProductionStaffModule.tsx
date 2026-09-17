@@ -1109,6 +1109,11 @@ export const ProductionStaffModule: React.FC = () => {
         // Edited Drive Link resolution
         const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || '').trim();
 
+        // Visually upgrade currentStatus to Customer Review if a link was uploaded, keeping it consistent with overall order status rank logic
+        if (editedDriveLink && !['Client Acceptance'].includes(currentStatus) && !excludedStatuses.includes(currentStatus)) {
+            currentStatus = 'Customer Review';
+        }
+
         // Customer Confirmation Image / Proof resolution
         const confirmationProof = (
           assignment.confirmation_proof ||
@@ -1225,8 +1230,10 @@ export const ProductionStaffModule: React.FC = () => {
 
     // Overall status per grouped task
     return Array.from(groupsMap.values()).map(grp => {
-      const ranks = grp.deliverables.map((d: any) => getTaskStageRank(d.status, d.editedDriveLink));
-      const minRank = Math.min(...ranks);
+      // ORDER STATUS MUST REFLECT ALL DELIVERABLES FOR THE ORDER assigned to this staff member
+      const allOrderDeliverables = individualDeliverables.filter(d => d.orderId === grp.orderId);
+      const ranks = allOrderDeliverables.map((d: any) => getTaskStageRank(d.status, d.editedDriveLink));
+      const minRank = ranks.length > 0 ? Math.min(...ranks) : 1;
 
       let overallStatus = 'Assigned Editor';
       if (minRank >= 5) overallStatus = 'Client Acceptance';
@@ -1242,12 +1249,15 @@ export const ProductionStaffModule: React.FC = () => {
       const uniqueEventDates = Array.from(new Set(grp.deliverables.map((d: any) => d.eventDate).filter(Boolean)));
       const displayDate = uniqueEventDates.join(', ') || grp.eventDate;
 
+      const completedCount = allOrderDeliverables.filter((d: any) => ['Completed', 'Editing Complete', 'Editing Completed', 'Client Acceptance', 'Order Closed'].includes(d.status)).length;
+      const progressText = `${completedCount}/${allOrderDeliverables.length} DELIVERABLES COMPLETE`;
+
       return {
         ...grp,
         eventName: displayName,
         eventCount,
         eventDate: displayDate,
-        overallStatus
+        overallStatus: `${overallStatus} · ${progressText}`
       };
     });
   }, [staffName, resolvedStaffId, currentUser, editorAssignments, orders, leads, production, operations, quotations, rawFootage]);
@@ -1314,31 +1324,6 @@ export const ProductionStaffModule: React.FC = () => {
         await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
           target_finish_date: editingStartedForm.estimated_completion_date,
           status: 'Editing Started'
-        });
-      }
-
-      const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
-      for (const prodId of uniqueProdIds as string[]) {
-        await updateProduction(prodId, {
-          editing_status: 'Editing Started',
-          production_status: 'Editing Started',
-          expected_delivery_date: editingStartedForm.expected_delivery_date || editingStartedForm.estimated_completion_date,
-          remarks: `Editing Started by ${staffName} on ${new Date().toLocaleDateString()} at ${editingStartedForm.estimated_completion_time}`
-        });
-      }
-
-      const uniqueOrderIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.orderId).filter(Boolean)));
-      for (const orderId of uniqueOrderIds as string[]) {
-        if (orderId !== 'ORD-ASSIGNED') {
-          await updateOrderStage(orderId, 'Editing Started' as any);
-        }
-      }
-
-      const uniqueLeadIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.leadId).filter(Boolean)));
-      for (const leadId of uniqueLeadIds as string[]) {
-        await updateLead(leadId, {
-          status: 'Editing Started' as any,
-          current_status: 'Editing Started' as any
         });
       }
 
@@ -1432,15 +1417,6 @@ export const ProductionStaffModule: React.FC = () => {
 
         await updateEditorAssignment(deliv.assignmentId, assignPayload);
         await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, assignPayload);
-      }
-
-      const uniqueProdIds: string[] = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean))) as string[];
-      for (const prodId of uniqueProdIds) {
-        const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
-        const prodUpdate: any = {
-          remarks: `Server Upload updated for ${matchingDeliv?.deliverableName || 'deliverable'} by ${staffName || 'Staff'} on ${new Date().toLocaleDateString()}`
-        };
-        await updateProduction(prodId, prodUpdate);
       }
 
       // Update local state to mark as saved
@@ -1540,38 +1516,6 @@ export const ProductionStaffModule: React.FC = () => {
         }
       }
 
-      const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
-      for (const prodId of uniqueProdIds as string[]) {
-        const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
-        const evtKey = matchingDeliv?.assignmentId || 'default';
-        const cfg = customerReviewForm.event_configs[evtKey] || {
-          confirmed: customerReviewForm.server_upload_confirmed,
-          eventDate: customerReviewForm.server_upload_event_date,
-          folderName: customerReviewForm.server_upload_folder_name
-        };
-
-        const prodPayload: any = {
-          editing_status: 'Customer Review',
-          production_status: 'Customer Review',
-          edited_drive_link: editedLink,
-          remarks: `Customer Review updated by ${staffName} on ${new Date().toLocaleDateString()}`
-        };
-
-        if (imgUrl) {
-          prodPayload.client_communication_proof = imgUrl;
-          prodPayload.customer_communication_proof = imgUrl;
-        }
-
-        await updateProduction(prodId, prodPayload);
-      }
-
-      const uniqueOrderIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.orderId).filter(Boolean)));
-      for (const orderId of uniqueOrderIds as string[]) {
-        if (orderId !== 'ORD-ASSIGNED') {
-          await updateOrderStage(orderId, 'Customer Review' as any);
-        }
-      }
-
       // Persist unified Client Acceptance Verification records
       if (saveClientAcceptanceVerification) {
         for (const deliv of deliverablesToUpdate) {
@@ -1599,14 +1543,6 @@ export const ProductionStaffModule: React.FC = () => {
             });
           }
         }
-      }
-
-      const uniqueLeadIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.leadId).filter(Boolean)));
-      for (const leadId of uniqueLeadIds as string[]) {
-        await updateLead(leadId, {
-          status: 'Customer Review' as any,
-          current_status: 'Customer Review' as any
-        });
       }
 
       // Prepare WhatsApp popup payload
@@ -1750,33 +1686,6 @@ Thank you.`;
         }
       }
 
-      // 3. Save status and proof URL in remarks to production table
-      const uniqueProdIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.prodObj?.production_id).filter(Boolean)));
-      for (const prodId of uniqueProdIds as string[]) {
-        const matchingDeliv = deliverablesToUpdate.find((d: any) => d.prodObj?.production_id === prodId);
-        const evtKey = matchingDeliv?.assignmentId || 'default';
-        const cfg = editingCompletedForm.event_configs[evtKey] || {
-          eventDate: editingCompletedForm.server_upload_event_date,
-          folderName: editingCompletedForm.server_upload_folder_name
-        };
-        const serverEventDate = (cfg.eventDate || matchingDeliv?.eventDate || '').trim();
-        const serverFolderName = (cfg.folderName || '').trim();
-
-        await updateProduction(prodId, {
-          editing_status: 'Editing Completed' as any,
-          production_status: 'Editing Completed' as any,
-          remarks: `Editing Completed & Customer Review Proof (${mainProofUrl || proofInput}) uploaded for ${matchingDeliv?.deliverableName || 'deliverable'} by ${staffName} on ${new Date().toLocaleDateString()}`
-        });
-      }
-
-      // 4. Save proof URL to orders table
-      const uniqueOrderIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.orderId).filter(Boolean)));
-      for (const orderId of uniqueOrderIds as string[]) {
-        if (orderId !== 'ORD-ASSIGNED') {
-          await updateOrderStage(orderId, 'Editing Completed' as any);
-        }
-      }
-
       // Persist unified Client Acceptance Verification records
       if (saveClientAcceptanceVerification) {
         for (const deliv of deliverablesToUpdate) {
@@ -1804,14 +1713,6 @@ Thank you.`;
             } as any);
           }
         }
-      }
-
-      const uniqueLeadIds = Array.from(new Set(deliverablesToUpdate.map((d: any) => d.leadId).filter(Boolean)));
-      for (const leadId of uniqueLeadIds as string[]) {
-        await updateLead(leadId, {
-          status: 'Editing Completed' as any,
-          current_status: 'Editing Completed' as any
-        });
       }
 
       setEditingCompletedModal(null);
@@ -2064,8 +1965,16 @@ Thank you.`;
                           <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-violet-300 font-mono text-[10px] font-bold">
                             Order ID: {grp.orderId}
                           </span>
+                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-amber-400 font-mono text-[10px] font-bold" title="Order status reflects the least-advanced deliverable">
+                            Order Status: {grp.overallStatus}
+                          </span>
                         </span>
-                        <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
+                          {grp.deliverables.length > 1 && (
+                            <span className="text-[9px] text-zinc-500 italic hidden sm:block">*Order status reflects the least-advanced deliverable</span>
+                          )}
+                        </div>
                       </div>
 
                       {/* DESKTOP LAYOUT (Table view, visible on all screens) */}

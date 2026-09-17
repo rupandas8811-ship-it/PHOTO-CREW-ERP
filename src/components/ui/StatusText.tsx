@@ -35,10 +35,10 @@ export const getStatusColorClass = (status: string) => {
   return 'text-zinc-400';
 };
 
-export const StatusText = ({ status }: { status: string }) => {
+export const StatusText = ({ status, progress }: { status: string; progress?: string }) => {
   return (
     <span className={`font-medium ${getStatusColorClass(status)}`}>
-      {status}
+      {status}{progress ? ` · ${progress}` : ''}
     </span>
   );
 };
