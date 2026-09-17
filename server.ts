@@ -1620,12 +1620,53 @@ async function startServer() {
       if (error) {
         if (error.message && error.message.toLowerCase().includes('already')) {
           console.log(`[Server Auth] User ${cleanEmail} already exists in auth. Updating password and metadata...`);
-          // Find user by email or mobile from users table first (since listUsers may fail with 500)
           let targetAuthId: string | null = null;
-          const { data: matchedDbUser } = await db.from('users').select('id').or(`email.eq.${cleanEmail}${mobile ? `,mobile.eq.${mobile}` : ''}`).limit(1);
-          if (matchedDbUser && matchedDbUser.length > 0) {
-            targetAuthId = matchedDbUser[0].id;
+
+          // 1. Recover auth ID directly from Supabase Auth via generateLink recovery
+          if (cleanEmail) {
+            try {
+              const linkRes = await db.auth.admin.generateLink({ type: 'recovery', email: cleanEmail });
+              if (linkRes.data?.user?.id) {
+                targetAuthId = linkRes.data.user.id;
+              }
+            } catch (e: any) {
+              console.warn('[Server Auth] generateLink lookup error:', e?.message || e);
+            }
           }
+
+          // 2. Find user in public.users table (case-insensitive email)
+          if (!targetAuthId && cleanEmail) {
+            try {
+              const { data: matchedDbUsers } = await db.from('users').select('id, email').ilike('email', cleanEmail);
+              for (const cand of matchedDbUsers || []) {
+                if (cand.id && !cand.id.startsWith('00000000-')) {
+                  const { data: authCheck } = await db.auth.admin.getUserById(cand.id);
+                  if (authCheck?.user?.id) {
+                    targetAuthId = authCheck.user.id;
+                    break;
+                  }
+                }
+              }
+            } catch (e) {}
+          }
+
+          // 3. Find user in public.users by mobile
+          if (!targetAuthId && mobile) {
+            try {
+              const { data: matchedMobileUsers } = await db.from('users').select('id, mobile').eq('mobile', mobile);
+              for (const cand of matchedMobileUsers || []) {
+                if (cand.id && !cand.id.startsWith('00000000-')) {
+                  const { data: authCheck } = await db.auth.admin.getUserById(cand.id);
+                  if (authCheck?.user?.id) {
+                    targetAuthId = authCheck.user.id;
+                    break;
+                  }
+                }
+              }
+            } catch (e) {}
+          }
+
+          // 4. Fallback to listUsers if available
           if (!targetAuthId) {
             try {
               const { data: listData } = await db.auth.admin.listUsers();
@@ -1633,12 +1674,17 @@ async function startServer() {
               if (existingAuth) targetAuthId = existingAuth.id;
             } catch (e) {}
           }
+
           if (targetAuthId) {
             authUser = { id: targetAuthId, email: cleanEmail };
-            await db.auth.admin.updateUserById(targetAuthId, {
-              password,
-              user_metadata: { name, role, mobile: mobile || '' }
-            });
+            try {
+              await db.auth.admin.updateUserById(targetAuthId, {
+                password,
+                user_metadata: { name, role, mobile: mobile || '' }
+              });
+            } catch (updErr: any) {
+              console.warn('[Server Auth] updateUserById warning:', updErr?.message || updErr);
+            }
           }
         }
         
@@ -1672,8 +1718,15 @@ async function startServer() {
         created_at: new Date().toISOString()
       };
       
+      // Clean up any stale dummy/mock records that have 00000000-... IDs for this email
+      if (cleanEmail) {
+        try {
+          await db.from('users').delete().like('id', '00000000-%').ilike('email', cleanEmail);
+        } catch (delErr) {}
+      }
+
       const orConds = [`id.eq.${authUser.id}`];
-      if (cleanEmail) orConds.push(`email.eq.${cleanEmail}`);
+      if (cleanEmail) orConds.push(`email.ilike.${cleanEmail}`);
       if (mobile) orConds.push(`mobile.eq.${mobile}`);
 
       const { data: existingUser } = await db.from('users').select('*').or(orConds.join(',')).limit(1);
@@ -1681,6 +1734,7 @@ async function startServer() {
       let dbData: any = null;
       if (existingUser && existingUser.length > 0) {
         const { data: updData, error: updErr } = await db.from('users').update({
+          id: authUser.id,
           name: name || existingUser[0].name,
           mobile: mobile || existingUser[0].mobile || '0000000000',
           username: cleanEmail || existingUser[0].username,
@@ -1722,9 +1776,19 @@ async function startServer() {
       if (email && !isStaffRole) updates.email = email.trim().toLowerCase();
       if (name || role || mobile) updates.user_metadata = { name, role, mobile };
       
-      if (Object.keys(updates).length > 0 && auth_id) {
+      let resolvedAuthId = auth_id;
+      if ((!resolvedAuthId || String(resolvedAuthId).startsWith('00000000-')) && email) {
         try {
-          const { error } = await db.auth.admin.updateUserById(auth_id, updates);
+          const linkRes = await db.auth.admin.generateLink({ type: 'recovery', email: email.trim().toLowerCase() });
+          if (linkRes.data?.user?.id) {
+            resolvedAuthId = linkRes.data.user.id;
+          }
+        } catch (e: any) {}
+      }
+
+      if (Object.keys(updates).length > 0 && resolvedAuthId && !String(resolvedAuthId).startsWith('00000000-')) {
+        try {
+          const { error } = await db.auth.admin.updateUserById(resolvedAuthId, updates);
           if (error) {
             console.warn(`[Server Auth Update Warning]`, error.message);
           }

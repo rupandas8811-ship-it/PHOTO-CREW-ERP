@@ -101,24 +101,24 @@ export const OperationsStaffManagement: React.FC = () => {
     setShowStaffModal(true);
     const existingPassword = getStaffCurrentPassword(st, users);
     setForm({
-      name: st.name,
-      role: st.role,
+      name: st.name || '',
+      role: st.role || 'Lead Photographer',
       email: st.email || '',
       mobile: st.mobile || '',
       whatsapp_number: st.whatsapp_number || '',
       department: st.department || 'Operations',
-      status: st.status,
+      status: st.status || 'Active',
       staff_type: st.Staff_Type || st.staff_type || 'In-House',
       joining_date: st.joining_date || new Date().toISOString().split('T')[0],
       profile_photo: st.profile_photo || '',
       notes: st.notes || '',
-      password: existingPassword
+      password: existingPassword || ''
     });
 
     if (!existingPassword) {
       fetchStaffCurrentPassword(st, users).then(livePwd => {
         if (livePwd) {
-          setForm(prev => ({ ...prev, password: livePwd }));
+          setForm(prev => ({ ...prev, password: livePwd || '' }));
         }
       });
     }
@@ -143,7 +143,8 @@ export const OperationsStaffManagement: React.FC = () => {
       staff_type: 'In-House',
       joining_date: new Date().toISOString().split('T')[0],
       profile_photo: '',
-      notes: ''
+      notes: '',
+      password: ''
     });
     setSkills([]);
     setNewSkill('');
@@ -596,7 +597,7 @@ export const OperationsStaffManagement: React.FC = () => {
                 type="text"
                 required
                 placeholder="e.g. Jack Richards"
-                value={form.name}
+                value={form.name || ''}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
@@ -613,7 +614,7 @@ export const OperationsStaffManagement: React.FC = () => {
                 disabled={Boolean(editingId)}
                 readOnly={Boolean(editingId)}
                 placeholder="e.g. +91 9876543210"
-                value={form.mobile}
+                value={form.mobile || ''}
                 onChange={(e) => setForm({ ...form, mobile: e.target.value })}
                 className={`w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
               />
@@ -629,7 +630,7 @@ export const OperationsStaffManagement: React.FC = () => {
                 disabled={Boolean(editingId)}
                 readOnly={Boolean(editingId)}
                 placeholder="e.g. staff@photocrew.pro"
-                value={form.email}
+                value={form.email || ''}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 className={`w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 ${editingId ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''}`}
               />
@@ -643,7 +644,7 @@ export const OperationsStaffManagement: React.FC = () => {
                 type="text"
                 required={!editingId}
                 placeholder="e.g. Staff@123"
-                value={form.password}
+                value={form.password || ''}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
@@ -655,7 +656,7 @@ export const OperationsStaffManagement: React.FC = () => {
               <input
                 type="text"
                 placeholder="e.g. +91 9876543210"
-                value={form.whatsapp_number}
+                value={form.whatsapp_number || ''}
                 onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
                 className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               />
@@ -667,7 +668,7 @@ export const OperationsStaffManagement: React.FC = () => {
               </label>
               <select
                 required
-                value={form.staff_type}
+                value={form.staff_type || 'In-House'}
                 onChange={(e) => setForm({ ...form, staff_type: e.target.value as 'In-House' | 'Freelancer' })}
                 className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"
               >
