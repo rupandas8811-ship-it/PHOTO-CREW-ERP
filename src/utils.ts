@@ -1697,7 +1697,7 @@ export function calculateOrderAssignmentStats(params: {
       // Required slots exist
       for (const task of Array.from(tasksMap.values())) {
         totalRequired += task.targetQty;
-        const matchingStaff = validStaffForEvent.filter(s => !s.staff_role || s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
+        const matchingStaff = validStaffForEvent.filter(s => !s.staff_role || (s.staff_role || '').trim().toLowerCase() === (task.roleName || '').trim().toLowerCase());
         const assignedCount = matchingStaff.length;
         const validCount = Math.min(assignedCount, task.targetQty);
         totalAssigned += validCount;

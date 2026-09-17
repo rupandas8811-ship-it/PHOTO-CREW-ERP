@@ -41,6 +41,7 @@ import {
   buildInitialEventAllocations, 
   generateDeterministicAssignmentId, getEventRolePadding,
   generateDeterministicTaskId,
+  isSameAssignmentSlot,
   getEquipmentVerificationData, 
   getEventImagesData, 
   getRawFootageData 
@@ -1556,41 +1557,6 @@ export const OperationsLeads: React.FC = () => {
             });
           }
         });
-
-        // 2. Add any remaining UNMAPPED assignments
-        evOrderAssignments.forEach((sa, saIdx) => {
-          const saId = sa.assignment_id || sa.id;
-          if (!usedSaIds.has(saId)) {
-            const st = staff?.find(s => s.name?.toLowerCase() === sa.staff_name?.toLowerCase() || s.staff_id === sa.staff_id);
-            const rawRole = sa.staff_role || st?.role || 'Staff';
-            const parsedRole = parseQtyAndText(rawRole);
-            const roleClean = (parsedRole.text || rawRole).trim();
-            const staffTaskStatus = getStaffTaskStatus(ord.order_id, evId, evIdx, sa.staff_name, ord, sa.assignment_id, sa.staff_role);
-            const saEq = resolveStaffEquipment(sa.staff_name, ord, sa, ev, saIdx);
-
-            staffDetailsList.push({
-              staff_name: sa.staff_name,
-              staff_role: roleClean,
-              assigned_task: roleClean,
-              staff_type: sa.staff_type || st?.staff_type || 'In-House',
-              mobile: sa.mobile || st?.mobile || '',
-              event_name: ev.event_name || ev.event_type || ord.event_type || 'Event',
-              event_id: evId,
-              assignment_id: sa.assignment_id,
-              task_id: sa.task_id,
-              staff_id: sa.staff_id,
-              slot_number: sa.slot_number,
-              event_date: ev.event_date || ord.event_date || '',
-              reporting_date: ev.reporting_date || lead?.Reporting_date || ev.event_date || ord.event_date || '',
-              reporting_time: ev.reporting_time || ord.reporting_time || op?.reporting_time || '',
-              status: isStaffBusyOnDate(sa.staff_name, ev.event_date || ord.event_date || '', ord.order_id) ? 'Busy' : 'Available',
-              staff_status: staffTaskStatus,
-              google_maps_link: ev.google_maps_link || lead?.google_maps_link || '',
-              assigned_equipment: saEq,
-              event_time: ev.event_start_time || ord.event_time || ''
-            });
-          }
-        });
       } else if (ev.assigned_staff_names && ev.assigned_staff_names.trim()) {
         const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim()).filter(Boolean);
         
@@ -2145,12 +2111,12 @@ export const OperationsLeads: React.FC = () => {
           const evId = ev.id || '';
           if (!evId) continue;
           
+          const allocStaff = eventAllocations[evId]?.staff || [];
+          const validAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
+
           const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
           
           if (includedRoles.length > 0) {
-            const allocStaff = eventAllocations[evId]?.staff || [];
-            const validAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
-            
             const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
             includedRoles.forEach((roleStr: string) => {
               const { qty, text } = parseQtyAndText(roleStr);
@@ -2165,7 +2131,9 @@ export const OperationsLeads: React.FC = () => {
 
             let isMissingStaff = false;
             for (const task of Array.from(tasksMap.values())) {
-              const assignedCount = validAllocStaff.filter((s: any) => s.staff_role === task.roleName).length;
+              const assignedCount = validAllocStaff.filter((s: any) => 
+                (s.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase() === task.roleName.trim().toLowerCase()
+              ).length;
               if (assignedCount < task.targetQty) {
                 isMissingStaff = true;
                 break;
@@ -2177,10 +2145,28 @@ export const OperationsLeads: React.FC = () => {
             }
           }
 
+          // Validate staff uniqueness within this event: The same staff member can be assigned ONLY ONCE per event
+          const staffNamesInEvent = validAllocStaff.map((s: any) => (s.staff_name || '').trim().toLowerCase()).filter(Boolean);
+          const duplicateStaffInEvent = staffNamesInEvent.filter((name, idx) => staffNamesInEvent.indexOf(name) !== idx);
+          if (duplicateStaffInEvent.length > 0) {
+            setValidationAttempted(true);
+            const dupName = validAllocStaff.find((s: any) => (s.staff_name || '').trim().toLowerCase() === duplicateStaffInEvent[0])?.staff_name || duplicateStaffInEvent[0];
+            setAssignValidationError(`Staff member "${dupName}" is assigned more than once for this event. Within one event, a staff member can be assigned only once.`);
+            setCollapsedAssignEvents(prev => ({ ...prev, [evId]: false }));
+            setTimeout(() => {
+              const el = document.getElementById(`assign-event-${evId}`);
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.classList.add('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950');
+                setTimeout(() => el.classList.remove('ring-2', 'ring-red-500', 'ring-offset-2', 'ring-offset-zinc-950'), 3000);
+              }
+            }, 100);
+            return;
+          }
+
           // NEW: Validate duplicate equipment per event
-          const allocStaffForEq = eventAllocations[evId]?.staff || [];
           const equipmentCounts: Record<string, number> = {};
-          allocStaffForEq.forEach((s: any) => {
+          allocStaff.forEach((s: any) => {
              (s.equipment || []).forEach((eq: string) => {
                 equipmentCounts[eq] = (equipmentCounts[eq] || 0) + 1;
              });
@@ -2230,9 +2216,10 @@ export const OperationsLeads: React.FC = () => {
             if (st.staff_name && st.staff_name.trim() !== '') {
                const stSlotNum = Number(st.slot_number || (stIdx + 1));
                const evIdx = parentLeadInstance?.events?.findIndex((e: any) => e.id === evId) || 0;
-               const stRole = (st.staff_role || 'Staff').trim() + getEventRolePadding(evIdx, stSlotNum);
-               const stAssignId = st.assignment_id || (st.id && !st.id.startsWith('slot_') ? st.id : generateDeterministicAssignmentId(assigningOrderId, evId, stRole, stSlotNum));
-               const stTaskId = st.task_id || generateDeterministicTaskId(assigningOrderId, evId, stRole, stSlotNum);
+               const cleanRole = (st.staff_role || 'Staff').replace(/[\uFEFF]+/g, '').trim();
+               const stRole = cleanRole + getEventRolePadding(evIdx, stSlotNum);
+               const stAssignId = st.assignment_id || (st.id && !st.id.startsWith('slot_') ? st.id : generateDeterministicAssignmentId(assigningOrderId, evId, cleanRole, stSlotNum));
+               const stTaskId = st.task_id || generateDeterministicTaskId(assigningOrderId, evId, cleanRole, stSlotNum);
                allAssignedStaff.push({
                  assignment_id: stAssignId,
                  task_id: stTaskId,
@@ -3301,7 +3288,9 @@ export const OperationsLeads: React.FC = () => {
                       const validEvAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
                       for (const task of Array.from(tasksMap.values())) {
                         evTotalRequired += task.targetQty;
-                        const assignedCount = validEvAllocStaff.filter((s: any) => s.staff_role === task.roleName).length;
+                        const assignedCount = validEvAllocStaff.filter((s: any) => 
+                          (s.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase() === task.roleName.trim().toLowerCase()
+                        ).length;
                         evTotalAssigned += Math.min(assignedCount, task.targetQty);
                         if (assignedCount < task.targetQty) {
                           isEvFullyAssigned = false;
@@ -3467,17 +3456,28 @@ export const OperationsLeads: React.FC = () => {
 
                             return taskGroups.map((task, groupIdx) => {
                               const targetQty = task.targetQty || 1;
-                              const taskSlots = allocStaff.filter((s: any) => s.staff_role === task.roleName || isRoleMatch(s.staff_role, task.roleName));
+                              const taskSlots = allocStaff.filter((s: any) => {
+                                const sr = (s.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase();
+                                const tr = (task.roleName || '').trim().toLowerCase();
+                                return sr === tr;
+                              });
                               
                               const slotsToRender: any[] = [];
                               for (let sNum = 1; sNum <= targetQty; sNum++) {
                                 const canonicalSlotAssignId = generateDeterministicAssignmentId(assigningOrderId, evId, task.roleName, sNum);
                                 const canonicalSlotTaskId = generateDeterministicTaskId(assigningOrderId, evId, task.roleName, sNum);
+                                const cleanRole = (task.roleName || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase();
+                                const canonicalSlotKey = `${evId}__${cleanRole}__s${sNum}`;
 
-                                // 1. Match by exact slot_number
-                                let matchedSlot = taskSlots.find((s: any) => Number(s.slot_number || 1) === sNum);
+                                // 1. Match by exact slot_key
+                                let matchedSlot = taskSlots.find((s: any) => s.slot_key === canonicalSlotKey);
 
-                                // 2. Match by exact assignment_id or task_id
+                                // 2. Match by exact slot_number
+                                if (!matchedSlot) {
+                                  matchedSlot = taskSlots.find((s: any) => Number(s.slot_number || 1) === sNum);
+                                }
+
+                                // 3. Match by exact assignment_id or task_id
                                 if (!matchedSlot) {
                                   matchedSlot = taskSlots.find((s: any) => 
                                     s.assignment_id === canonicalSlotAssignId ||
@@ -3486,9 +3486,9 @@ export const OperationsLeads: React.FC = () => {
                                   );
                                 }
 
-                                // 3. Positional fallback if available and not already used
+                                // 4. Positional fallback if available and not already used
                                 if (!matchedSlot) {
-                                  const unusedSlot = taskSlots.find((s: any) => !slotsToRender.some(sr => sr.id === s.id || sr.assignment_id === s.assignment_id));
+                                  const unusedSlot = taskSlots.find((s: any) => !slotsToRender.some(sr => isSameAssignmentSlot(sr, s)));
                                   if (unusedSlot && sNum <= taskSlots.length) {
                                     matchedSlot = unusedSlot;
                                   }
@@ -3497,13 +3497,15 @@ export const OperationsLeads: React.FC = () => {
                                 if (matchedSlot) {
                                   slotsToRender.push({
                                     ...matchedSlot,
+                                    _original_ref: matchedSlot._original_ref || matchedSlot,
                                     id: matchedSlot.assignment_id || matchedSlot.id || canonicalSlotAssignId,
                                     assignment_id: matchedSlot.assignment_id || canonicalSlotAssignId,
                                     task_id: matchedSlot.task_id || canonicalSlotTaskId,
                                     order_id: assigningOrderId,
                                     event_id: evId,
                                     staff_role: task.roleName,
-                                    slot_number: sNum
+                                    slot_number: sNum,
+                                    slot_key: matchedSlot.slot_key || canonicalSlotKey
                                   });
                                 } else {
                                   slotsToRender.push({
@@ -3514,6 +3516,7 @@ export const OperationsLeads: React.FC = () => {
                                     event_id: evId,
                                     staff_role: task.roleName,
                                     slot_number: sNum,
+                                    slot_key: canonicalSlotKey,
                                     staff_id: '',
                                     staff_name: '',
                                     mobile: '',
@@ -3522,6 +3525,19 @@ export const OperationsLeads: React.FC = () => {
                                   });
                                 }
                               }
+
+                              // Check if any extra slots were manually added beyond targetQty
+                              taskSlots.forEach((s: any) => {
+                                if (Number(s.slot_number || 0) > targetQty && !slotsToRender.some(sr => isSameAssignmentSlot(sr, s))) {
+                                  slotsToRender.push({
+                                    ...s,
+                                    _original_ref: s._original_ref || s,
+                                    order_id: assigningOrderId,
+                                    event_id: evId,
+                                    staff_role: task.roleName
+                                  });
+                                }
+                              });
 
                               const assignedCount = slotsToRender.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
 
@@ -3554,7 +3570,7 @@ export const OperationsLeads: React.FC = () => {
                                     {slotsToRender.map((slot: any, slotIdx: number) => {
                                       const isEmpty = !slot.staff_name || slot.staff_name.trim() === '';
                                       const currentStaffType = slot.staff_type || 'In-House';
-                                      const slotKey = slot.assignment_id || slot.id || `slot_${groupIdx}_${slotIdx}`;
+                                      const slotKey = slot.slot_key || slot.assignment_id || slot.id || `slot_${evId}_${task.roleName}_${slot.slot_number || (slotIdx + 1)}`;
 
                                       return (
                                         <div key={slotKey} className={`pt-2.5 first:pt-0 space-y-2.5 ${validationAttempted && isEmpty ? 'bg-rose-950/10 p-2 rounded-lg' : ''}`}>
@@ -3581,13 +3597,7 @@ export const OperationsLeads: React.FC = () => {
                                                     const existingAlloc = prev[evId] || { staff: [] };
                                                     let found = false;
                                                     const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
-                                                      const isTarget = (
-                                                        (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
-                                                        (s.id && slot.id && s.id === slot.id) ||
-                                                        (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
-                                                        (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
-                                                      );
-                                                      if (isTarget) {
+                                                      if (isSameAssignmentSlot(s, slot) && !found) {
                                                         found = true;
                                                         return { ...s, ...slot, staff_type: newType, staff_name: '', staff_id: '', mobile: '' };
                                                       }
@@ -3619,13 +3629,7 @@ export const OperationsLeads: React.FC = () => {
                                                     const existingAlloc = prev[evId] || { staff: [] };
                                                     let found = false;
                                                     const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
-                                                      const isTarget = (
-                                                        (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
-                                                        (s.id && slot.id && s.id === slot.id) ||
-                                                        (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
-                                                        (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
-                                                      );
-                                                      if (isTarget) {
+                                                      if (isSameAssignmentSlot(s, slot) && !found) {
                                                         found = true;
                                                         return {
                                                           ...s,
@@ -3666,13 +3670,7 @@ export const OperationsLeads: React.FC = () => {
                                                   });
 
                                                   const assignedInOtherSlots = (eventAllocations[evId]?.staff || []).filter((s: any) => {
-                                                    const isSameSlot = (
-                                                      (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
-                                                      (s.id && slot.id && s.id === slot.id) ||
-                                                      (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
-                                                      (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
-                                                    );
-                                                    return !isSameSlot && s.staff_name && s.staff_name.trim() !== '';
+                                                    return !isSameAssignmentSlot(s, slot) && s.staff_name && s.staff_name.trim() !== '';
                                                   }).map((s: any) => s.staff_name.trim().toLowerCase());
 
                                                   const currentAssignedNameLower = (slot.staff_name || '').trim().toLowerCase();
@@ -3739,14 +3737,22 @@ export const OperationsLeads: React.FC = () => {
                                                   onClick={() => {
                                                     setEventAllocations((prev: any) => {
                                                       const existingAlloc = prev[evId] || { staff: [] };
-                                                      const updatedStaff = (existingAlloc.staff || []).filter((s: any) => {
-                                                        const isTarget = (
-                                                          (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
-                                                          (s.id && slot.id && s.id === slot.id) ||
-                                                          (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
-                                                          (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
-                                                        );
-                                                        return !isTarget;
+                                                      const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
+                                                        if (isSameAssignmentSlot(s, slot)) {
+                                                          return {
+                                                            ...s,
+                                                            staff_name: '',
+                                                            staff_id: '',
+                                                            mobile: '',
+                                                            equipment: []
+                                                          };
+                                                        }
+                                                        return s;
+                                                      }).filter((s: any) => {
+                                                        if (isSameAssignmentSlot(s, slot) && Number(s.slot_number || 1) > targetQty) {
+                                                          return false;
+                                                        }
+                                                        return true;
                                                       });
                                                       return {
                                                         ...prev,
@@ -3777,15 +3783,7 @@ export const OperationsLeads: React.FC = () => {
                                                  equipment={equipment}
                                                  selectedEquipmentNames={slot.equipment || []}
                                                  otherStaffEquipments={allocStaff
-                                                   .filter((s: any) => {
-                                                     const isTarget = (
-                                                       (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
-                                                       (s.id && slot.id && s.id === slot.id) ||
-                                                       (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
-                                                       (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
-                                                     );
-                                                     return !isTarget;
-                                                   })
+                                                   .filter((s: any) => !isSameAssignmentSlot(s, slot))
                                                    .map((s: any) => ({
                                                      staffName: s.name || s.staff_name,
                                                      equipmentNames: s.equipment || []
@@ -3795,13 +3793,7 @@ export const OperationsLeads: React.FC = () => {
                                                      const existingAlloc = prev[evId] || { staff: [] };
                                                      let found = false;
                                                      const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
-                                                       const isTarget = (
-                                                         (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
-                                                         (s.id && slot.id && s.id === slot.id) ||
-                                                         (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
-                                                         (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
-                                                       );
-                                                       if (isTarget) {
+                                                       if (isSameAssignmentSlot(s, slot) && !found) {
                                                          found = true;
                                                          const currentEq = s.equipment || [];
                                                          const isSelected = currentEq.includes(eqName);
@@ -3828,13 +3820,7 @@ export const OperationsLeads: React.FC = () => {
                                                    setEventAllocations((prev: any) => {
                                                      const existingAlloc = prev[evId] || { staff: [] };
                                                      const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
-                                                       const isTarget = (
-                                                         (s.assignment_id && slot.assignment_id && s.assignment_id === slot.assignment_id) ||
-                                                         (s.id && slot.id && s.id === slot.id) ||
-                                                         (s.task_id && slot.task_id && s.task_id === slot.task_id) ||
-                                                         (s.staff_role === slot.staff_role && Number(s.slot_number || 1) === Number(slot.slot_number || 1))
-                                                       );
-                                                       if (isTarget) {
+                                                       if (isSameAssignmentSlot(s, slot)) {
                                                          return {
                                                            ...s,
                                                            ...slot,
@@ -3866,8 +3852,12 @@ export const OperationsLeads: React.FC = () => {
                                         onClick={() => {
                                           setEventAllocations((prev: any) => {
                                             const existingAlloc = prev[evId] || { staff: [] };
-                                            const roleStaff = (existingAlloc.staff || []).filter((s: any) => s.staff_role === task.roleName);
-                                            const nextSlotNum = roleStaff.length + 1;
+                                            const roleStaff = (existingAlloc.staff || []).filter((s: any) => 
+                                              (s.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase() === task.roleName.trim().toLowerCase()
+                                            );
+                                            const nextSlotNum = Math.max(targetQty, ...roleStaff.map((s: any) => Number(s.slot_number || 0))) + 1;
+                                            const cleanRole = (task.roleName || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase();
+                                            const newSlotKey = `${evId}__${cleanRole}__s${nextSlotNum}`;
                                             const newAssignId = generateDeterministicAssignmentId(assigningOrderId, evId, task.roleName, nextSlotNum);
                                             const newTaskId = generateDeterministicTaskId(assigningOrderId, evId, task.roleName, nextSlotNum);
                                             const newSlot = {
@@ -3877,6 +3867,7 @@ export const OperationsLeads: React.FC = () => {
                                               order_id: assigningOrderId,
                                               event_id: evId,
                                               slot_number: nextSlotNum,
+                                              slot_key: newSlotKey,
                                               staff_role: task.roleName,
                                               staff_id: '',
                                               staff_name: '',

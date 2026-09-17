@@ -1568,42 +1568,8 @@ ${coordinatorName}`;
   const getAssignedDeliverablesForProd = (prod: Production, targetEventOnly: boolean = false): { name: string; qty: number }[] => {
     if (!prod) return [];
     const { order, lead } = resolveOrderAndLead(prod);
-    const orderId = order?.order_id || (prod as any).order_id || prod.tracking_id;
-    const prodId = prod.production_id;
 
-    // First priority: check editorAssignments for assigned deliverables
-    const assignedForThis = (editorAssignments || []).filter(a =>
-      (prodId && (a.production_id === prodId || a.order_id === prodId)) ||
-      (orderId && (a.order_id === orderId || a.production_id === orderId)) ||
-      (prod.tracking_id && (a.order_id === prod.tracking_id || a.production_id === prod.tracking_id))
-    );
-
-    if (assignedForThis.length > 0) {
-      const filteredByEvent = targetEventOnly && prod.event_id 
-        ? assignedForThis.filter(a => !a.event_id || a.event_id === prod.event_id)
-        : assignedForThis;
-
-      const map = new Map<string, number>();
-      filteredByEvent.forEach(a => {
-        const spec = a.speciality || a.deliverable_id;
-        if (spec) {
-          const { qty: parsedQty, text: parsedText } = parseQtyAndText(spec);
-          const name = parsedText || spec;
-          const assignedQty = (a as any).qty || (a as any).quantity || parsedQty || 1;
-          map.set(name, Math.max(map.get(name) || 0, assignedQty));
-        }
-      });
-
-      if (map.size > 0) {
-        const list: { name: string; qty: number }[] = [];
-        map.forEach((qty, name) => {
-          list.push({ name, qty });
-        });
-        return list;
-      }
-    }
-
-    // Fallback to order deliverables description if no editorAssignments
+    // Use order deliverables description (the truth from Sales)
     let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
     if (!deliverablesText && lead) {
       const targetLeadQuotations = quotations?.filter((q: any) => q.lead_id === lead.lead_id) || [];
@@ -1615,7 +1581,26 @@ ${coordinatorName}`;
     }
 
     const targetEvent = targetEventOnly ? ((prod as any).custom_event_name || (prod as any).event_type || order?.custom_event_name || order?.event_type) : undefined;
-    return parseDeliverablesWithQty(deliverablesText, targetEvent);
+    const targetEventId = targetEventOnly ? prod.event_id : undefined;
+
+    // Use parseExactDeliverables to accurately pull event-specific deliverables
+    const rawDeliverables = parseExactDeliverables(deliverablesText, targetEvent, targetEventId);
+
+    const map = new Map<string, number>();
+    rawDeliverables.forEach(spec => {
+       if (spec) {
+         const { qty: parsedQty, text: parsedText } = parseQtyAndText(spec);
+         const name = parsedText || spec;
+         const assignedQty = parsedQty || 1;
+         map.set(name, (map.get(name) || 0) + assignedQty);
+       }
+    });
+
+    const list: { name: string; qty: number }[] = [];
+    map.forEach((qty, name) => {
+      list.push({ name, qty });
+    });
+    return list;
   };
 
   const getAssignedEditorsTableData = (prod: Production): { staff_name: string; deliverable: string; qty: number; status: string }[] => {
@@ -1647,19 +1632,6 @@ ${coordinatorName}`;
           deliverable: item.name,
           qty: item.qty,
           status: 'Pending Assignment'
-        });
-      }
-    });
-    
-    // Add remaining unmatched assignments
-    assignedForThis.forEach(a => {
-      if (!usedAssignments.has(a.assignment_id)) {
-        const { qty, text } = parseQtyAndText(a.speciality || a.deliverable_id || '');
-        results.push({
-          staff_name: a.staff_name || 'Unassigned',
-          deliverable: text || a.speciality || a.deliverable_id || 'Deliverable',
-          qty: (a as any).qty || (a as any).quantity || qty || 1,
-          status: a.status || 'Assigned Editor'
         });
       }
     });
@@ -3142,8 +3114,7 @@ _Please acknowledge receipt of this task assignment._`;
 
               parsedDeliverables = parseExactDeliverables(deliverablesText, activeWorkflowProd.custom_event_name, activeWorkflowProd.event_id);
 
-              const assignedDeliverables = Array.from(new Set(loadedAssignments.map(a => a.speciality))) as string[];
-              const allDeliverables: string[] = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
+              const allDeliverables: string[] = Array.from(new Set([...parsedDeliverables]));
 
               setCustomDeliverables(allDeliverables);
 
@@ -7675,9 +7646,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
         parsedDeliverables = parseExactDeliverables(deliverablesText, selectedLeadProd.custom_event_name, selectedLeadProd.event_id);
 
-        const linkedAssignments = (editorAssignments || []).filter(a => a.production_id === selectedLeadProd.production_id && (!a.event_id || !selectedLeadProd.event_id || a.event_id === selectedLeadProd.event_id));
-        const assignedDeliverables = Array.from(new Set(linkedAssignments.map(a => a.speciality).filter(Boolean))) as string[];
-        const allLeadDeliverables = Array.from(new Set([...parsedDeliverables, ...assignedDeliverables]));
+        const allLeadDeliverables = Array.from(new Set([...parsedDeliverables]));
 
         return (
           <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 z-50 animate-fade-in text-zinc-105 select-none md:select-text">

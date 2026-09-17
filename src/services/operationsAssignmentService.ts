@@ -47,6 +47,7 @@ export interface OperationsSlotAllocation {
   reporting_time?: string;
   staff_role: string;
   slot_number: number;
+  slot_key?: string;
   staff_id: string;
   staff_name: string;
   staff_type: 'In-House' | 'Freelancer';
@@ -138,6 +139,21 @@ export function sanitizeSlug(str: string): string {
     .replace(/^_+|_+$/g, '') || 'role';
 }
 
+export function getDeterministicRoleSlug(roleName: string, maxLen: number = 12): string {
+  const cleanRole = (roleName || 'role').replace(/[\uFEFF]+/g, '').trim();
+  const slug = sanitizeSlug(cleanRole);
+  if (slug.length <= maxLen) return slug;
+
+  // Compute a deterministic 4-character hash of the full slug to guarantee uniqueness
+  let hash = 5381;
+  for (let i = 0; i < slug.length; i++) {
+    hash = ((hash << 5) + hash) + slug.charCodeAt(i);
+    hash = hash & hash;
+  }
+  const hashStr = Math.abs(hash).toString(36).slice(0, 4);
+  const prefixLen = Math.max(1, maxLen - 5);
+  return `${slug.slice(0, prefixLen)}_${hashStr}`;
+}
 
 export function getEventRolePadding(eventIndex: number, slotNumber: number): string {
   // Use ZERO WIDTH NO-BREAK SPACE (\uFEFF) which is completely invisible
@@ -146,19 +162,81 @@ export function getEventRolePadding(eventIndex: number, slotNumber: number): str
 }
 
 export function generateDeterministicTaskId(orderId: string, eventId: string, roleName: string, slotNumber: number): string {
-  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 15);
+  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12);
   const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 10);
-  const roleSlug = sanitizeSlug(roleName).slice(0, 12);
-  const rawId = `TASK_${cleanOrder}_${cleanEvent}_${roleSlug}_s${slotNumber}`;
+  const roleSlug = getDeterministicRoleSlug(roleName, 12);
+  const sNum = Math.max(1, Number(slotNumber || 1));
+  const rawId = `TASK_${cleanOrder}_${cleanEvent}_${roleSlug}_s${sNum}`;
   return rawId.length > 50 ? rawId.slice(0, 50) : rawId;
 }
 
 export function generateDeterministicAssignmentId(orderId: string, eventId: string, roleName: string, slotNumber: number): string {
-  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 15);
+  const cleanOrder = (orderId || 'ORD').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12);
   const cleanEvent = (eventId || 'ev').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 10);
-  const roleSlug = sanitizeSlug(roleName).slice(0, 12);
-  const rawId = `ASST-${cleanOrder}-${cleanEvent}-${roleSlug}-${slotNumber}`;
+  const roleSlug = getDeterministicRoleSlug(roleName, 12);
+  const sNum = Math.max(1, Number(slotNumber || 1));
+  const rawId = `ASST-${cleanOrder}-${cleanEvent}-${roleSlug}-${sNum}`;
   return rawId.length > 50 ? rawId.slice(0, 50) : rawId;
+}
+
+/**
+ * Determines whether two assignment slots represent the exact same slot.
+ * Enforces strict independence so changing one slot NEVER alters another slot.
+ * Strictly guarantees:
+ * - Different roles within the same event NEVER match.
+ * - Different slot numbers of the same role NEVER match.
+ * - Different events NEVER match.
+ */
+export function isSameAssignmentSlot(s: any, targetSlot: any): boolean {
+  if (!s || !targetSlot) return false;
+  if (s === targetSlot) return true;
+  if (targetSlot._original_ref && s === targetSlot._original_ref) return true;
+  if (s._original_ref && targetSlot._original_ref && s._original_ref === targetSlot._original_ref) return true;
+
+  // Strict Event Guard: If both specify event_id and they differ, they can NEVER be the same slot!
+  if (s.event_id && targetSlot.event_id && String(s.event_id) !== String(targetSlot.event_id)) {
+    return false;
+  }
+
+  const sRole = (s.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase();
+  const tRole = (targetSlot.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase();
+  const sNum = Number(s.slot_number || 1);
+  const tNum = Number(targetSlot.slot_number || 1);
+
+  // Strict Role Guard: If both have explicit roles and they differ, they can NEVER be the same slot!
+  if (sRole && tRole && sRole !== tRole) {
+    return false;
+  }
+
+  // Strict Slot Number Guard: If they share the same role, but have different slot numbers, NEVER match!
+  if (sRole && tRole && sRole === tRole && sNum !== tNum) {
+    return false;
+  }
+
+  // Exact slot_key check
+  if (s.slot_key && targetSlot.slot_key && s.slot_key === targetSlot.slot_key) {
+    return true;
+  }
+
+  // If same role and same slot number, it is the exact same slot!
+  if (sRole && tRole && sRole === tRole && sNum === tNum) {
+    return true;
+  }
+
+  // Check exact canonical assignment_id
+  if (s.assignment_id && targetSlot.assignment_id && s.assignment_id === targetSlot.assignment_id) {
+    return true;
+  }
+  // Check exact ID if not temporary
+  if (s.id && targetSlot.id && s.id === targetSlot.id && !s.id.startsWith('slot_')) {
+    return true;
+  }
+  // Check exact task_id
+  if (s.task_id && targetSlot.task_id && s.task_id === targetSlot.task_id) {
+    return true;
+  }
+
+  return false;
 }
 
 // ============================================================================
@@ -444,7 +522,7 @@ export function buildInitialEventAllocations(params: {
       if (!matchedSa) {
         matchedSa = eventDbAssignments.find(sa => 
           !usedDbAssignmentIds.has(sa.assignment_id) &&
-          (sa.staff_role || '').trim().toLowerCase() === req.roleName.trim().toLowerCase() &&
+          (sa.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase() === req.roleName.trim().toLowerCase() &&
           Number(sa.slot_number || 1) === req.slotNumber
         );
       }
@@ -455,7 +533,7 @@ export function buildInitialEventAllocations(params: {
       if (!matchedSa && req.slotNumber === 1) {
         matchedSa = eventDbAssignments.find(sa => 
           !usedDbAssignmentIds.has(sa.assignment_id) &&
-          (sa.staff_role || '').trim().toLowerCase() === req.roleName.trim().toLowerCase() &&
+          (sa.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase() === req.roleName.trim().toLowerCase() &&
           (sa.slot_number === undefined || sa.slot_number === null || Number(sa.slot_number) === 1)
         );
       }
@@ -509,8 +587,9 @@ export function buildInitialEventAllocations(params: {
         event_date: eventDate,
         reporting_date: reportingDate,
         reporting_time: reportingTime,
-      staff_role: req.roleName.trim() + getEventRolePadding(evIdx, req.slotNumber),
+        staff_role: req.roleName.trim() + getEventRolePadding(evIdx, req.slotNumber),
         slot_number: req.slotNumber,
+        slot_key: `${evId}__${(req.roleName || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase()}__s${req.slotNumber}`,
         staff_id: matchedSa?.staff_id || st?.staff_id || (assignedStaffName ? 'STF-0000' : ''),
         staff_name: assignedStaffName,
         staff_type: cleanType,
@@ -530,70 +609,6 @@ export function buildInitialEventAllocations(params: {
         updated_at: matchedSa?.updated_at,
         updated_by: matchedSa?.updated_by
       });
-    });
-
-    // If there were any extra legacy assignments for this event not in Sales requirements, retain them as extra slots
-    eventDbAssignments.forEach(extraSa => {
-      if (!usedDbAssignmentIds.has(extraSa.assignment_id) && extraSa.staff_name) {
-        usedDbAssignmentIds.add(extraSa.assignment_id);
-        const st = staffList?.find(s => s.name?.toLowerCase() === extraSa.staff_name.toLowerCase());
-        let extraEq: string[] = [];
-        if (Array.isArray(extraSa.equipment) && extraSa.equipment.length > 0) {
-          extraEq = extraSa.equipment;
-        } else if (typeof extraSa.equipment === 'string' && extraSa.equipment.trim()) {
-          try {
-            const parsed = JSON.parse(extraSa.equipment);
-            extraEq = Array.isArray(parsed) ? parsed : [extraSa.equipment];
-          } catch (e) {
-            extraEq = extraSa.equipment.split(',').map((s: string) => s.trim()).filter(Boolean);
-          }
-        } else if (typeof extraSa.assigned_equipment === 'string' && extraSa.assigned_equipment.trim()) {
-          extraEq = extraSa.assigned_equipment.split(',').map((s: string) => s.trim()).filter(Boolean);
-        }
-
-        if (extraEq.length === 0 && parsedKitMapping.length > 0) {
-          const kitMatch = parsedKitMapping.find((km: any) => 
-            (km.assignment_id && km.assignment_id === extraSa.assignment_id) ||
-            (km.event_id === evId && km.staff_name && km.staff_name.trim().toLowerCase() === extraSa.staff_name.trim().toLowerCase())
-          );
-          if (kitMatch && Array.isArray(kitMatch.equipment)) {
-            extraEq = kitMatch.equipment;
-          }
-        }
-
-        slotAllocations.push({
-          id: extraSa.assignment_id,
-          assignment_id: extraSa.assignment_id,
-          task_id: extraSa.task_id || `TASK_EXTRA_${extraSa.assignment_id}`,
-          order_id: orderId,
-          lead_id: extraSa.lead_id || lead?.lead_id,
-          event_id: evId,
-          event_name: eventName,
-          event_date: eventDate,
-          reporting_date: reportingDate,
-          reporting_time: reportingTime,
-          staff_role: extraSa.staff_role || 'General Staff',
-          slot_number: extraSa.slot_number || 1,
-          staff_id: extraSa.staff_id || st?.staff_id || 'STF-0000',
-          staff_name: extraSa.staff_name,
-          staff_type: extraSa.staff_type || 'In-House',
-          mobile: extraSa.mobile || st?.mobile || '',
-          equipment: extraEq,
-          equipment_received_photo: extraSa.equipment_received_photo || null,
-          equipment_handover_photo: extraSa.equipment_handover_photo || null,
-          equipment_handover_to: extraSa.equipment_handover_to || null,
-          equipment_handover_notes: extraSa.equipment_handover_notes || null,
-          event_start_photo: extraSa.event_start_photo || null,
-          event_start_time: extraSa.event_start_time || null,
-          event_end_photo: extraSa.event_end_photo || null,
-          event_end_time: extraSa.event_end_time || null,
-          raw_footage_link: extraSa.raw_footage_link || null,
-          task_status: extraSa.task_status || 'Pending',
-          assignment_status: extraSa.assignment_status || 'Assigned',
-          updated_at: extraSa.updated_at,
-          updated_by: extraSa.updated_by
-        });
-      }
     });
 
     allocations[evId] = {
@@ -1418,28 +1433,36 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
     const roleName = a.staff_role ? a.staff_role.trim() : 'Staff';
     const slotNumber = a.slot_number || 1;
 
+    const cleanRoleName = (roleName || 'Staff').replace(/[\uFEFF]+/g, '').trim();
+
     // Resolve or retain canonical assignment_id and task_id
-    const deterministicAssignId = a.assignment_id || generateDeterministicAssignmentId(orderId, eventId, roleName, slotNumber);
-    const deterministicTaskId = a.task_id || generateDeterministicTaskId(orderId, eventId, roleName, slotNumber);
+    const deterministicAssignId = a.assignment_id || generateDeterministicAssignmentId(orderId, eventId, cleanRoleName, slotNumber);
+    const deterministicTaskId = a.task_id || generateDeterministicTaskId(orderId, eventId, cleanRoleName, slotNumber);
 
     const st = staffList.find(s => s.name?.trim().toLowerCase() === aStaffNameTrimmed.toLowerCase());
     const resolvedStaffId = a.staff_id || (st as any)?.staff_id || (st as any)?.id || 'STF-0000';
     const staffType = a.staff_type || (st as any)?.staff_type || (st as any)?.Staff_Type || 'In-House';
 
     // Find if this assignment slot already exists in DB
-    const matched = existingDbAssignments.find(ed => 
-      !matchedDbAssignmentIds.has(ed.assignment_id) && (
-        (a.assignment_id && ed.assignment_id === a.assignment_id) ||
-        (deterministicAssignId && ed.assignment_id === deterministicAssignId) ||
-        (a.task_id && ed.task_id === a.task_id) ||
-        (deterministicTaskId && ed.task_id === deterministicTaskId) ||
-        (
-          (ed.event_id === eventId || !ed.event_id) &&
-          (ed.staff_role || '').trim().toLowerCase() === roleName.toLowerCase() &&
-          Number(ed.slot_number || 1) === slotNumber
-        )
-      )
-    );
+    const matched = existingDbAssignments.find(ed => {
+      if (matchedDbAssignmentIds.has(ed.assignment_id)) return false;
+      // Strict Event Guard: If both have an event_id and they differ, NEVER match!
+      if (ed.event_id && eventId && String(ed.event_id) !== String(eventId)) return false;
+
+      // Exact assignment_id or task_id match
+      if (a.assignment_id && ed.assignment_id === a.assignment_id) return true;
+      if (deterministicAssignId && ed.assignment_id === deterministicAssignId) return true;
+      if (a.task_id && ed.task_id === a.task_id) return true;
+      if (deterministicTaskId && ed.task_id === deterministicTaskId) return true;
+
+      // Role + Slot number match
+      const edRole = (ed.staff_role || '').replace(/[\uFEFF]+/g, '').trim().toLowerCase();
+      const thisRole = cleanRoleName.toLowerCase();
+      const edSlot = Number(ed.slot_number || 1);
+      if (edRole === thisRole && edSlot === slotNumber) return true;
+
+      return false;
+    });
 
     const canonicalAssignId = matched?.assignment_id || deterministicAssignId;
 
