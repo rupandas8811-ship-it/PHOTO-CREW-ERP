@@ -1086,7 +1086,7 @@ export const ProductionStaffModule: React.FC = () => {
         // Determine unified status
         let currentStatus = assignment.status || 'Assigned Editor';
 
-        const excludedStatuses = ['Editing Completed', 'Editing Complete', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'];
+        const excludedStatuses = ['Editing Completed', 'Editing Complete', 'Client Acceptance', 'Client Accepted', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed', 'Closed'];
         const operationsOnlyStages = ['Order Confirmed', 'Confirm Order', 'New Order', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Event Started', 'Event Completed', 'Event Ended', 'Footage Handover'];
 
         // Exclude deliverables that are complete on an individual assignment basis,
@@ -1119,9 +1119,11 @@ export const ProductionStaffModule: React.FC = () => {
         // Edited Drive Link resolution
         const editedDriveLink = (assignment.Edited_Drive_Link || assignment.edited_drive_link || '').trim();
 
-        // Visually upgrade currentStatus to Customer Review if a link was uploaded, keeping it consistent with overall order status rank logic
-        if (editedDriveLink && !['Client Acceptance'].includes(currentStatus) && !excludedStatuses.includes(currentStatus)) {
+        // Visually upgrade currentStatus to Customer Review only if prior to Customer Review and a link was uploaded
+        if (editedDriveLink && !['Client Acceptance', 'Editing Completed', 'Editing Complete', 'Completed'].includes(currentStatus) && !excludedStatuses.includes(currentStatus)) {
+          if (['Assigned Editor', 'Editor Assigned', 'Assigned', 'Raw Footage Received', 'Editing Started', 'Editing Start', 'In Progress', 'Editing In Progress'].includes(currentStatus)) {
             currentStatus = 'Customer Review';
+          }
         }
 
         // Customer Confirmation Image / Proof resolution

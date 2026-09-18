@@ -1341,8 +1341,12 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const matchingProds = production.filter(p => p.order_id === o.order_id || p.tracking_id === o.order_id || (p as any).lead_id === o.lead_id || p.tracking_id === o.lead_id);
       const latestHist = getLatestHistoryStatus(o.order_id, o.lead_id);
+      const matchingAssigns = (editorAssignments || []).filter(a => 
+        (o.order_id && (a.order_id === o.order_id || a.production_id === o.order_id)) ||
+        (o.lead_id && (a.order_id === o.lead_id || a.production_id === o.lead_id))
+      );
 
-      if (matchingProds.length > 0 || latestHist) {
+      if (matchingProds.length > 0 || latestHist || matchingAssigns.length > 0) {
         let bestNorm = normalizeProductionStatus(
           matchingProds[0]?.editing_status,
           matchingProds[0]?.current_status,
@@ -1364,6 +1368,35 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             bestNorm = candidateNorm;
           } else if (candidateNorm.editing_status === 'Editing Completed' && bestNorm.editing_status !== 'Order Closed' && bestNorm.editing_status !== 'Client Acceptance') {
             bestNorm = candidateNorm;
+          }
+        }
+
+        if (matchingAssigns.length > 0 && bestNorm.editing_status !== 'Order Closed' && bestNorm.editing_status !== 'Client Acceptance') {
+          const getTaskStageRank = (st: string, driveLink?: string) => {
+            const s = st || '';
+            if (['Client Accepted', 'Client Acceptance'].includes(s)) return 5;
+            if (['Completed', 'Editing Completed', 'Editing Complete'].includes(s)) return 4;
+            if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(s) || (driveLink && driveLink.trim() !== '')) return 3;
+            if (['Editing Started', 'Editing Start', 'In Progress', 'Editing In Progress'].includes(s)) return 2;
+            if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(s)) return 1;
+            return 0;
+          };
+          const ranks = matchingAssigns.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
+          const minRank = Math.min(...ranks);
+          if (minRank >= 5) {
+            bestNorm = {
+              editing_status: 'Client Acceptance' as EditingStatus,
+              current_status: 'Client Acceptance',
+              production_status: 'Client Acceptance',
+              is_closed: false
+            };
+          } else if (minRank >= 4) {
+            bestNorm = {
+              editing_status: 'Editing Completed' as EditingStatus,
+              current_status: 'Editing Completed',
+              production_status: 'Editing Completed',
+              is_closed: false
+            };
           }
         }
 
@@ -1567,6 +1600,52 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      // Also check editor assignments for this project/order
+      const matchingAssigns = (editorAssignments || []).filter(a => 
+        a.production_id === p.production_id ||
+        (orderId && (a.order_id === orderId || a.production_id === orderId)) ||
+        (leadId && (a.order_id === leadId || a.production_id === leadId)) ||
+        (trackingId && (a.order_id === trackingId || a.production_id === trackingId))
+      );
+
+      if (matchingAssigns.length > 0 && bestNorm.editing_status !== 'Order Closed' && bestNorm.editing_status !== 'Client Acceptance') {
+        const getTaskStageRank = (st: string, driveLink?: string) => {
+          const s = st || '';
+          if (['Client Accepted', 'Client Acceptance'].includes(s)) return 5;
+          if (['Completed', 'Editing Completed', 'Editing Complete'].includes(s)) return 4;
+          if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(s) || (driveLink && driveLink.trim() !== '')) return 3;
+          if (['Editing Started', 'Editing Start', 'In Progress', 'Editing In Progress'].includes(s)) return 2;
+          if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(s)) return 1;
+          return 0;
+        };
+
+        const ranks = matchingAssigns.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
+        const minRank = Math.min(...ranks);
+
+        if (minRank >= 5) {
+          bestNorm = {
+            editing_status: 'Client Acceptance' as EditingStatus,
+            current_status: 'Client Acceptance',
+            production_status: 'Client Acceptance',
+            is_closed: false
+          };
+        } else if (minRank >= 4) {
+          bestNorm = {
+            editing_status: 'Editing Completed' as EditingStatus,
+            current_status: 'Editing Completed',
+            production_status: 'Editing Completed',
+            is_closed: false
+          };
+        } else if (minRank >= 3 && (bestNorm.editing_status === 'Assigned Editor' || bestNorm.editing_status === 'Editing Started' || bestNorm.editing_status === 'Verified Footage')) {
+          bestNorm = {
+            editing_status: 'Customer Review' as EditingStatus,
+            current_status: 'Customer Review',
+            production_status: 'Customer Review',
+            is_closed: false
+          };
+        }
+      }
+
       if (orderId) projectStatusMap.set(orderId, bestNorm);
       if (leadId) projectStatusMap.set(leadId, bestNorm);
       if (trackingId) projectStatusMap.set(trackingId, bestNorm);
@@ -1657,42 +1736,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return updatedP;
     });
-  }, [production, augmentedOrders, leads, operations, rawFootage, statusHistory]);
+  }, [production, augmentedOrders, leads, operations, rawFootage, statusHistory, editorAssignments]);
 
   const augmentedEditorAssignments = useMemo(() => {
     return (editorAssignments || []).map(a => {
-      const matchedProd = augmentedProduction.find(p => 
-        p.production_id === a.production_id ||
-        (a.order_id && (p.order_id === a.order_id || p.tracking_id === a.order_id)) ||
-        (a.production_id && (p.order_id === a.production_id || p.tracking_id === a.production_id))
-      );
-
-      if (!matchedProd) return a;
-
-      const pStatus = String(matchedProd.editing_status || matchedProd.current_status || '').trim();
-      const pLower = pStatus.toLowerCase();
-
-      let synchronizedStatus = a.status;
-      if (pLower === 'order closed' || pLower === 'order close' || pLower === 'closed' || pLower === 'close' || pLower === 'project closed') {
-        synchronizedStatus = 'Client Acceptance' as any;
-      } else if (pLower === 'client acceptance' || pLower === 'client accepted') {
-        synchronizedStatus = 'Client Acceptance' as any;
-      } else if (pLower === 'editing completed' || pLower === 'editing complete') {
-        synchronizedStatus = 'Editing Completed' as any;
-      } else if (pLower === 'customer review' || pLower === 'client review') {
-        synchronizedStatus = 'Customer Review' as any;
-      } else if (pLower === 'editing started' || pLower === 'editing in progress') {
-        synchronizedStatus = 'Editing Started' as any;
-      } else if (pLower === 'assigned editor' || pLower === 'editor assigned') {
-        synchronizedStatus = 'Assigned Editor' as any;
-      }
-
+      let rawStatus = a.status || 'Assigned Editor';
+      if (rawStatus === 'Editing Complete') rawStatus = 'Editing Completed';
       return {
         ...a,
-        status: synchronizedStatus
+        status: rawStatus
       };
     });
-  }, [editorAssignments, augmentedProduction]);
+  }, [editorAssignments]);
 
   const augmentedPayments = useMemo(() => {
     const list = [...payments];
@@ -8038,26 +8093,53 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     });
 
     const pushRes = await pushUpdate('editor_assignments', 'assignment_id', assignmentId, { status, ...(extraUpdates || {}) });
+    
+    // Re-fetch exact record to guarantee database verified state
+    try {
+      if (supabaseClient) {
+        const { data } = await supabaseClient.from('editor_assignments').select('*').eq('assignment_id', assignmentId).single();
+        if (data) {
+          setEditorAssignments(prev => prev.map(a => a.assignment_id === assignmentId ? { ...a, ...data } : a));
+        }
+      }
+    } catch (_) {}
+
     logActivity(`Updated Editor Task ${assignmentId} status to: ${status}`, 'Production', assignmentId);
     
     // Immediately calculate and synchronize production status without detached timeout race conditions
     const assignment = updatedList.find(a => a.assignment_id === assignmentId) || targetAssignment;
-    if (assignment && assignment.production_id) {
+    if (assignment) {
       const prodId = assignment.production_id;
-      const allTasks = updatedList.filter(t => t.production_id === prodId);
+      const orderId = assignment.order_id;
+      const allTasks = updatedList.filter(t => 
+        (prodId && t.production_id === prodId) ||
+        (orderId && (t.order_id === orderId || t.production_id === orderId))
+      );
       
       const completedTasks = allTasks.filter(t => t.status === 'Completed' || t.status === 'Editing Complete' || t.status === 'Editing Completed').length;
       const totalTasks = allTasks.length;
       const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
       
-      const prodObj = (production || []).find(p => p.production_id === prodId);
+      const prodObj = (production || []).find(p => 
+        (prodId && p.production_id === prodId) ||
+        (orderId && (p.order_id === orderId || p.tracking_id === orderId)) ||
+        (prodId && (p.order_id === prodId || p.tracking_id === prodId))
+      );
       let baseStatus = prodObj?.editing_status || (prodObj as any)?.production_status || (prodObj as any)?.current_status || 'Raw Footage Received';
 
       let nextEditingStatus: EditingStatus | undefined = undefined;
       
       const terminalStatuses = ['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'];
-      const tgtOrder = augmentedOrders.find(o => o.order_id === (prodObj as any)?.order_id || o.order_id === prodObj?.tracking_id || o.lead_id === prodObj?.tracking_id);
-      const tgtLead = leads.find(l => l.lead_id === (prodObj as any)?.lead_id || l.lead_id === prodObj?.tracking_id);
+      const tgtOrder = augmentedOrders.find(o => 
+        (orderId && o.order_id === orderId) || 
+        (prodId && o.order_id === prodId) || 
+        (prodObj && (o.order_id === (prodObj as any)?.order_id || o.order_id === prodObj?.tracking_id || o.lead_id === prodObj?.tracking_id))
+      );
+      const tgtLead = leads.find(l => 
+        (orderId && l.lead_id === orderId) || 
+        (prodId && l.lead_id === prodId) || 
+        (prodObj && (l.lead_id === (prodObj as any)?.lead_id || l.lead_id === prodObj?.tracking_id))
+      );
       if (tgtOrder && terminalStatuses.includes(tgtOrder.current_stage)) baseStatus = 'Order Closed';
       if (tgtLead && terminalStatuses.includes(tgtLead.status)) baseStatus = 'Order Closed';
       const isTerminal = (prodObj as any)?.current_status === 'Client Acceptance' ||
@@ -8107,7 +8189,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         updates.editing_status = nextEditingStatus;
       }
       
-      await updateProduction(prodId, updates);
+      const targetProdIdToUpdate = prodObj?.production_id || prodId || orderId;
+      if (targetProdIdToUpdate) {
+        await updateProduction(targetProdIdToUpdate, updates);
+      }
     }
     return pushRes;
   };
