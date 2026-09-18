@@ -829,37 +829,6 @@ div.fixed.inset-0:has(h4 span.text-purple-300),
 }
 
 /* ==========================================================================
-   Assigned Team Mobile Scroll & Viewport Constraint Fixes
-   ========================================================================== */
-.prod-assigned-team-overlay {
-  z-index: 100000 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: flex-start !important;
-  align-items: stretch !important;
-  overflow: hidden !important;
-}
-
-.prod-assigned-team-body {
-  display: block !important; /* override flex column to ensure proper browser scrolling of tables */
-  overflow-y: auto !important;
-  overflow-x: auto !important; /* enable both directions scrolling on touch devices */
-  -webkit-overflow-scrolling: touch !important;
-  max-height: calc(100vh - var(--prod-nav-header-height, 64px)) !important;
-  max-height: calc(100dvh - var(--prod-nav-header-height, 64px)) !important;
-  flex: 1 1 auto !important;
-  box-sizing: border-box !important;
-}
-
-@media (max-width: 640px) {
-  .prod-assigned-team-body {
-    padding: 1rem !important;
-    max-height: calc(100vh - 68px) !important;
-    max-height: calc(100dvh - 68px) !important;
-  }
-}
-
-/* ==========================================================================
    Assign Editor Popup Responsive & Scrolling Fixes
    ========================================================================== */
 .prod-assign-editor-overlay {

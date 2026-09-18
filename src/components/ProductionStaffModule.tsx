@@ -395,8 +395,8 @@ const getRawFootageDriveLink = (assignment: any, prod: any, order: any, lead: an
   return '';
 };
 
-// Helper to extract events array from lead (either directly on lead.events or deserialized from notes_special_customizations)
-const getLeadEvents = (lead: any) => {
+// Helper to extract events array from lead/order/prod (either directly on events or deserialized from notes_special_customizations)
+const getLeadEvents = (lead: any, order?: any, prod?: any): any[] => {
   if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
     return lead.events;
   }
@@ -406,30 +406,38 @@ const getLeadEvents = (lead: any) => {
       return deserialized.events;
     }
   }
+  if (order?.events && Array.isArray(order.events) && order.events.length > 0) {
+    return order.events;
+  }
+  if (order?.notes_special_customizations) {
+    const deserialized = deserializeLeadEvents(order.notes_special_customizations);
+    if (deserialized.events && Array.isArray(deserialized.events) && deserialized.events.length > 0) {
+      return deserialized.events;
+    }
+  }
+  if (prod?.events && Array.isArray(prod.events) && prod.events.length > 0) {
+    return prod.events;
+  }
   return [];
 };
 
 // Helper to identify the exact event record in lead.events for an assignment / prod / order
 const getTargetEventForAssignment = (lead: any, order: any, prod: any, assignment?: any) => {
   const targetEventId = assignment?.event_id || prod?.event_id;
-  const rawEvents = getLeadEvents(lead);
+  const rawEvents = getLeadEvents(lead, order, prod);
 
   if (rawEvents.length > 0) {
-    // 1. Try matching by exact event_id / id or index
+    // 1. Try matching by exact event_id / id
     if (targetEventId !== undefined && targetEventId !== null && String(targetEventId).trim() !== '') {
       const searchStr = String(targetEventId).trim().toLowerCase();
-      const matchById = rawEvents.find((ev: any, idx: number) => 
+      const matchById = rawEvents.find((ev: any) => 
         (ev.id && String(ev.id).trim().toLowerCase() === searchStr) ||
-        (ev.event_id && String(ev.event_id).trim().toLowerCase() === searchStr) ||
-        `ev_${idx}` === searchStr ||
-        String(idx) === searchStr ||
-        (ev.event_name && String(ev.event_name).trim().toLowerCase() === searchStr) ||
-        (ev.event_type && String(ev.event_type).trim().toLowerCase() === searchStr)
+        (ev.event_id && String(ev.event_id).trim().toLowerCase() === searchStr)
       );
       if (matchById) return matchById;
     }
 
-    // 2. Try matching by event_name or custom_event_name or speciality on assignment / prod / order
+    // 2. Try matching by event_name or custom_event_name on assignment / prod / order
     const searchName = assignment?.event_name || prod?.custom_event_name || prod?.event_name || order?.custom_event_name || order?.event_name;
     if (searchName && searchName.trim() !== '') {
       const searchLower = searchName.trim().toLowerCase();
@@ -441,8 +449,10 @@ const getTargetEventForAssignment = (lead: any, order: any, prod: any, assignmen
       if (matchByName) return matchByName;
     }
 
-    // 3. Fallback: return the first event from THIS lead's EVENTS_JSON
-    return rawEvents[0];
+    // ONLY return single event if there is exactly 1 event in total
+    if (rawEvents.length === 1) {
+      return rawEvents[0];
+    }
   }
 
   return null;
@@ -577,7 +587,7 @@ const getAssignedDeliverableQty = (
   if (eventDeliverablesList.length === 0) {
     const fallbackText = lead?.deliverables || order?.deliverables || '';
     if (fallbackText) {
-      eventDeliverablesList = parseDeliverablesWithQty(fallbackText);
+      eventDeliverablesList = parseDeliverablesWithQty(fallbackText, targetEventName, targetEventId);
     }
   }
 
@@ -1174,13 +1184,13 @@ export const ProductionStaffModule: React.FC = () => {
         });
     });
 
-    // Group deliverables by Order ID + Event ID for this staff member
+    // Group deliverables strictly by Order ID for this staff member (ONE ORDER ID = ONE CARD)
     const groupsMap = new Map<string, any>();
     individualDeliverables.forEach(item => {
-      const groupKey = `${item.orderId}_${item.eventId || 'default'}`;
+      const groupKey = item.orderId;
       if (!groupsMap.has(groupKey)) {
         groupsMap.set(groupKey, {
-          groupId: groupKey,
+          groupId: item.orderId,
           orderId: item.orderId,
           eventId: item.eventId,
           leadId: item.leadId,
@@ -1223,8 +1233,8 @@ export const ProductionStaffModule: React.FC = () => {
       if (['Client Acceptance', 'Business Owner Review', 'Project Completed', 'Completed', 'Order Closed'].includes(status)) return 5;
       if (['Editing Completed', 'Editing Complete'].includes(status)) return 4;
       if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(status) || (driveLink && driveLink.trim() !== '')) return 3;
-      if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
-      if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(status)) return 1;
+      if (['Editing Started', 'Editing Start', 'In Progress', 'Editing In Progress'].includes(status)) return 2;
+      if (['Assigned Editor', 'Editor Assigned', 'Assigned', 'Raw Footage Received'].includes(status)) return 1;
       return 0;
     };
 
@@ -1269,6 +1279,7 @@ export const ProductionStaffModule: React.FC = () => {
       case 'Assigned': 
         return { label: 'Assigned Editor', color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30' };
       case 'Editing Started': 
+      case 'Editing Start':
         return { label: 'Editing Started', color: 'text-sky-400 bg-sky-500/10 border-sky-500/30' };
       case 'Customer Review': 
         return { label: 'Customer Review', color: 'text-amber-400 bg-amber-500/10 border-amber-500/30' };
@@ -1312,19 +1323,23 @@ export const ProductionStaffModule: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const timestamp = new Date().toISOString();
       const b = editingStartedModal.group;
       const deliverablesToUpdate = b.deliverables.filter((d: any) => editingStartedForm.selectedIds.includes(d.assignmentId));
 
       for (const deliv of deliverablesToUpdate) {
-        // Update Editor Assignment
-        await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Started' as any);
-
-        // Save estimated completion info & expected delivery date
-        await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, {
+        const startPayload = {
           target_finish_date: editingStartedForm.estimated_completion_date,
           status: 'Editing Started'
-        });
+        };
+
+        // Update Editor Assignment locally and calculate production status
+        await updateEditorAssignmentStatus(deliv.assignmentId, 'Editing Started' as any, startPayload);
+
+        // Ensure update is persisted directly to Supabase editor_assignments table
+        const saveRes = await pushUpdate('editor_assignments', 'assignment_id', deliv.assignmentId, startPayload);
+        if (saveRes && saveRes.success === false) {
+          throw new Error(saveRes.error || 'Failed to save Editing Started status to database');
+        }
       }
 
       setEditingStartedModal(null);
@@ -2303,7 +2318,7 @@ Thank you.`;
                                           )}
 
                                           {/* Workflow Step 2: Customer Review */}
-                                          {delivItem.status === 'Editing Started' && (
+                                          {(delivItem.status === 'Editing Started' || delivItem.status === 'Editing Start') && (
                                             <button
                                               type="button"
                                               onClick={() => {
@@ -2720,7 +2735,7 @@ Thank you.`;
                                       )}
 
                                       {/* Workflow Step 2: Customer Review */}
-                                      {delivItem.status === 'Editing Started' && (
+                                      {(delivItem.status === 'Editing Started' || delivItem.status === 'Editing Start') && (
                                         <button
                                           type="button"
                                           onClick={() => {

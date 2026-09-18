@@ -2112,12 +2112,12 @@ export const OperationsLeads: React.FC = () => {
           const evId = ev.id || '';
           if (!evId) continue;
           
+          const allocStaff = eventAllocations[evId]?.staff || [];
+          const validAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
+          
           const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
           
           if (includedRoles.length > 0) {
-            const allocStaff = eventAllocations[evId]?.staff || [];
-            const validAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
-            
             const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
             includedRoles.forEach((roleStr: string) => {
               const { qty, text } = parseQtyAndText(roleStr);

@@ -774,44 +774,65 @@ export function deserializeLeadEvents(textNotes: string | undefined): { events: 
 /**
  * Parses team members field from JSON string array or falls back to older text formats
  */
-export function parseTeamMembers(teamMembersStr: string | undefined | null, targetEventName?: string): string[] {
+export function parseTeamMembers(
+  teamMembersStr: string | undefined | null,
+  targetEventName?: string,
+  targetEventId?: string
+): string[] {
   if (!teamMembersStr) return [];
   const trimmed = teamMembersStr.trim();
   if (trimmed === '' || trimmed === 'null' || trimmed === 'undefined') return [];
   
+  const cleanTargetId = (targetEventId || '').trim().toLowerCase();
+  const cleanTargetName = (targetEventName || '').trim().toLowerCase();
+
   if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
     try {
       const parsed = JSON.parse(trimmed);
       if (Array.isArray(parsed)) {
         const result: string[] = [];
-        if (parsed[0] && typeof parsed[0] === 'object' && ('team_members' in parsed[0] || 'event_name' in parsed[0] || 'event_id' in parsed[0])) {
+        if (parsed[0] && typeof parsed[0] === 'object' && ('team_members' in parsed[0] || 'event_name' in parsed[0] || 'event_id' in parsed[0] || 'id' in parsed[0])) {
           let eventsToUse = parsed;
-          if (targetEventName) {
+          let isFilteredButNoMatch = false;
+
+          if (cleanTargetId || cleanTargetName) {
             const matched = parsed.filter((ev: any) => {
-              const evName = (ev.event_name || ev.event_type || '').toLowerCase();
-              return evName === targetEventName.toLowerCase() || evName.includes(targetEventName.toLowerCase()) || targetEventName.toLowerCase().includes(evName);
+              const evId = String(ev.event_id || ev.id || '').trim().toLowerCase();
+              const evName = String(ev.event_name || ev.custom_event_name || ev.event_type || '').trim().toLowerCase();
+              const idMatch = cleanTargetId !== '' && evId === cleanTargetId;
+              const nameMatch = cleanTargetName !== '' && evName === cleanTargetName;
+              return idMatch || nameMatch;
             });
-            if (matched.length > 0) eventsToUse = matched;
+
+            if (matched.length > 0) {
+              eventsToUse = matched;
+            } else {
+              eventsToUse = [];
+              isFilteredButNoMatch = true;
+            }
           }
-          eventsToUse.forEach((ev: any) => {
-            const members = Array.isArray(ev.team_members) ? ev.team_members : (Array.isArray(ev.members) ? ev.members : []);
-            members.forEach((m: any) => {
-              if (typeof m === 'object' && m !== null) {
-                const qty = Number(m.qty || m.quantity || 1);
-                const name = m.name || m.role || m.member_name || '';
-                if (name) result.push(qty > 1 ? `${qty} ${name}`.trim() : name);
-              } else if (m) {
-                result.push(String(m).trim());
-              }
+
+          if (!isFilteredButNoMatch) {
+            eventsToUse.forEach((ev: any) => {
+              const members = Array.isArray(ev.team_members) ? ev.team_members : (Array.isArray(ev.members) ? ev.members : []);
+              members.forEach((m: any) => {
+                if (typeof m === 'object' && m !== null) {
+                  const qty = Number(m.qty || m.quantity || 1);
+                  const name = m.name || m.role || m.member_name || '';
+                  if (name) result.push(qty > 1 ? `${name} — Qty ${qty}`.trim() : name);
+                } else if (m) {
+                  result.push(String(m).trim());
+                }
+              });
             });
-          });
+          }
           return result;
         } else {
           return parsed.map(item => {
             if (typeof item === 'object' && item !== null) {
               const qty = Number(item.qty || item.quantity || 1);
               const name = item.name || item.role || item.member_name || '';
-              return qty > 1 ? `${qty} ${name}`.trim() : name;
+              return qty > 1 ? `${name} — Qty ${qty}`.trim() : name;
             }
             return String(item).trim();
           }).filter(Boolean);
@@ -821,6 +842,12 @@ export function parseTeamMembers(teamMembersStr: string | undefined | null, targ
       // Fallback
     }
   }
+
+  // If a specific event was requested and it wasn't a JSON array of events, don't leak global text
+  if (cleanTargetId || cleanTargetName) {
+    return [];
+  }
+
   // Fallback for older formats (split by newline or comma)
   if (trimmed.includes('\n')) {
     return trimmed.split('\n').map(item => item.trim()).filter(Boolean);
@@ -925,7 +952,7 @@ export function combineQtyAndText(qty: number | string, text: string): string {
 }
 
 export function parseDeliverablesWithQty(
-  description: string | undefined | null,
+  description: string | any | undefined | null,
   targetEventName?: string,
   targetEventId?: string
 ): { name: string; qty: number }[] {
@@ -935,58 +962,151 @@ export function parseDeliverablesWithQty(
   let isFilteredButNoMatch = false;
   let isJson = false;
 
-  const trimmed = description.trim();
-  // 1. Try parsing JSON
-  if (typeof description === 'string' && (trimmed.startsWith('[') || trimmed.startsWith('{'))) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      isJson = true;
+  const cleanTargetId = (targetEventId || '').trim().toLowerCase();
+  const cleanTargetName = (targetEventName || '').trim().toLowerCase();
 
-      if (Array.isArray(parsed)) {
-        // Case A: Array of event objects: [{ event_name: "...", deliverables: [...] }]
-        if (parsed[0] && typeof parsed[0] === 'object' && ('event_name' in parsed[0] || 'event_type' in parsed[0] || 'deliverables' in parsed[0] || 'event_id' in parsed[0])) {
-          let targetEvents = parsed;
-          if (targetEventId || targetEventName) {
-            const matched = parsed.filter((ev: any) => {
-              const evIdMatch = targetEventId && ev.event_id && String(ev.event_id) === String(targetEventId);
-              const evName = (ev.event_name || ev.event_type || ev.name || '').toLowerCase();
-              const nameMatch = targetEventName && (evName === targetEventName.toLowerCase() || evName.includes(targetEventName.toLowerCase()) || targetEventName.toLowerCase().includes(evName));
-              return evIdMatch || nameMatch;
-            });
-            if (matched.length > 0) {
-              targetEvents = matched;
-            } else {
-              targetEvents = [];
-              isFilteredButNoMatch = true;
-            }
+  const isEventMatch = (ev: any, idx: number): boolean => {
+    const evId = String(ev.event_id || ev.id || '').trim().toLowerCase();
+    const evName = String(ev.event_name || ev.custom_event_name || ev.event_type || ev.name || '').trim().toLowerCase();
+    
+    if (cleanTargetId) {
+      if (evId === cleanTargetId) return true;
+      const normEvId = evId.replace(/[^a-z0-9]/g, '');
+      const normTargetId = cleanTargetId.replace(/[^a-z0-9]/g, '');
+      if (normEvId && normTargetId && (normEvId === normTargetId || normEvId.replace(/^0+/, '') === normTargetId.replace(/^0+/, ''))) return true;
+      
+      const targetIdxMatch = cleanTargetId.match(/(?:evt|ev|event)?-?0*(\d+)/i);
+      const evIdxMatch = evId.match(/(?:evt|ev|event)?-?0*(\d+)/i);
+      if (targetIdxMatch && evIdxMatch && targetIdxMatch[1] === evIdxMatch[1]) return true;
+      if (targetIdxMatch && parseInt(targetIdxMatch[1], 10) === idx + 1) return true;
+    }
+    
+    if (cleanTargetName) {
+      if (evName === cleanTargetName) return true;
+      const normEvName = evName.replace(/[^a-z0-9]/g, '');
+      const normTargetName = cleanTargetName.replace(/[^a-z0-9]/g, '');
+      if (normEvName && normTargetName && normEvName === normTargetName) return true;
+      
+      const targetNameIdx = cleanTargetName.match(/event\s*0*(\d+)/i);
+      const evNameIdx = evName.match(/event\s*0*(\d+)/i);
+      if (targetNameIdx && evNameIdx && targetNameIdx[1] === evNameIdx[1]) return true;
+      if (targetNameIdx && parseInt(targetNameIdx[1], 10) === idx + 1) return true;
+    }
+    
+    return false;
+  };
+
+  // If description is already an array
+  if (Array.isArray(description)) {
+    isJson = true;
+    if (description[0] && typeof description[0] === 'object' && ('event_name' in description[0] || 'event_type' in description[0] || 'deliverables' in description[0] || 'event_id' in description[0] || 'id' in description[0])) {
+      let targetEvents = description;
+      if (cleanTargetId || cleanTargetName) {
+        const matched = description.filter((ev: any, idx: number) => isEventMatch(ev, idx));
+        if (matched.length > 0) {
+          targetEvents = matched;
+        } else {
+          targetEvents = [];
+          isFilteredButNoMatch = true;
+        }
+      }
+      if (!isFilteredButNoMatch) {
+        targetEvents.forEach((ev: any) => {
+          if (Array.isArray(ev.deliverables)) {
+            itemsRaw.push(...ev.deliverables);
+          } else if (Array.isArray(ev.deliverables_list)) {
+            itemsRaw.push(...ev.deliverables_list);
+          } else if (typeof ev.deliverables === 'string') {
+            itemsRaw.push(ev.deliverables);
           }
+        });
+      }
+    } else {
+      itemsRaw = description;
+    }
+  } else if (typeof description === 'object' && description !== null) {
+    isJson = true;
+    if (Array.isArray(description.deliverables)) {
+      itemsRaw = description.deliverables;
+    } else if (Array.isArray(description.deliverables_list)) {
+      itemsRaw = description.deliverables_list;
+    }
+  } else if (typeof description === 'string') {
+    const trimmed = description.trim();
+    
+    // Check if string contains serialized lead events with marker
+    if (trimmed.includes('---EVENTS_JSON---')) {
+      const deserialized = deserializeLeadEvents(trimmed);
+      if (deserialized.events && deserialized.events.length > 0) {
+        isJson = true;
+        let targetEvents = deserialized.events;
+        if (cleanTargetId || cleanTargetName) {
+          const matched = deserialized.events.filter((ev: any, idx: number) => isEventMatch(ev, idx));
+          if (matched.length > 0) {
+            targetEvents = matched;
+          } else {
+            targetEvents = [];
+            isFilteredButNoMatch = true;
+          }
+        }
+        if (!isFilteredButNoMatch) {
           targetEvents.forEach((ev: any) => {
             if (Array.isArray(ev.deliverables)) {
               itemsRaw.push(...ev.deliverables);
-            } else if (Array.isArray(ev.deliverables_list)) {
-              itemsRaw.push(...ev.deliverables_list);
             } else if (typeof ev.deliverables === 'string') {
               itemsRaw.push(ev.deliverables);
             }
           });
-        } 
-        // Case B: Array of items directly: [{ qty: 2, name: "..." }] or ["2 x Photo"]
-        else {
-          itemsRaw = parsed;
-        }
-      } else if (parsed && typeof parsed === 'object') {
-        if (Array.isArray(parsed.deliverables)) {
-          itemsRaw = parsed.deliverables;
-        } else if (Array.isArray(parsed.deliverables_list)) {
-          itemsRaw = parsed.deliverables_list;
         }
       }
-    } catch (e) {
-      isJson = false;
+    } else if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        isJson = true;
+
+        if (Array.isArray(parsed)) {
+          // Case A: Array of event objects: [{ event_name: "...", deliverables: [...] }]
+          if (parsed[0] && typeof parsed[0] === 'object' && ('event_name' in parsed[0] || 'event_type' in parsed[0] || 'deliverables' in parsed[0] || 'event_id' in parsed[0] || 'id' in parsed[0])) {
+            let targetEvents = parsed;
+            if (cleanTargetId || cleanTargetName) {
+              const matched = parsed.filter((ev: any, idx: number) => isEventMatch(ev, idx));
+              if (matched.length > 0) {
+                targetEvents = matched;
+              } else {
+                targetEvents = [];
+                isFilteredButNoMatch = true;
+              }
+            }
+            if (!isFilteredButNoMatch) {
+              targetEvents.forEach((ev: any) => {
+                if (Array.isArray(ev.deliverables)) {
+                  itemsRaw.push(...ev.deliverables);
+                } else if (Array.isArray(ev.deliverables_list)) {
+                  itemsRaw.push(...ev.deliverables_list);
+                } else if (typeof ev.deliverables === 'string') {
+                  itemsRaw.push(ev.deliverables);
+                }
+              });
+            }
+          } 
+          // Case B: Array of items directly: [{ qty: 2, name: "..." }] or ["2 x Photo"]
+          else {
+            itemsRaw = parsed;
+          }
+        } else if (parsed && typeof parsed === 'object') {
+          if (Array.isArray(parsed.deliverables)) {
+            itemsRaw = parsed.deliverables;
+          } else if (Array.isArray(parsed.deliverables_list)) {
+            itemsRaw = parsed.deliverables_list;
+          }
+        }
+      } catch (e) {
+        isJson = false;
+      }
     }
   }
 
-  // 2. If no JSON items extracted, treat description as plain text ONLY if description was NOT valid JSON
+  // 2. If no JSON items extracted, treat description as plain text ONLY if description was NOT valid JSON and target event wasn't filtered out
   if (itemsRaw.length === 0 && typeof description === 'string' && !isJson && !isFilteredButNoMatch) {
     itemsRaw = description.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
   }

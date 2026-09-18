@@ -990,35 +990,11 @@ export const StaffModule: React.FC = () => {
     };
   }, [selectedBookingDetails, photoModalData, calendarModalDate]);
 
-  // Auto-scroll popup into view for the three target workflows when opened
+  // Ensure modal scroll position is reset to top when opened
   useEffect(() => {
-    let timer: any = null;
-    let lockTimer: any = null;
-    if (photoModalData) {
-      const { stage } = photoModalData;
-      if (stage === 'Event Start' || stage === 'Equipment Handover' || stage === 'Event Complete') {
-        // Temporarily allow page scrolling so scrollIntoView can shift the viewport
-        document.body.style.overflow = '';
-        timer = setTimeout(() => {
-          if (photoModalRef.current) {
-            photoModalRef.current.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center'
-            });
-            // Re-lock body overflow after smooth scroll finishes
-            lockTimer = setTimeout(() => {
-              if (photoModalData) {
-                document.body.style.overflow = 'hidden';
-              }
-            }, 850);
-          }
-        }, 80);
-      }
+    if (photoModalData && photoModalScrollRef.current) {
+      photoModalScrollRef.current.scrollTop = 0;
     }
-    return () => {
-      if (timer) clearTimeout(timer);
-      if (lockTimer) clearTimeout(lockTimer);
-    };
   }, [photoModalData]);
 
   // Photos attached in modal & raw footage link
@@ -1515,8 +1491,23 @@ export const StaffModule: React.FC = () => {
 
     } catch (err: any) {
       console.error("[UploadProof] Upload exception:", err);
+      // Fallback: If network storage upload fails, return base64 data URI so user submission does not fail
+      if (base64Url) {
+        console.warn("[UploadProof] Network storage upload failed, falling back to data URI proof URL.");
+        return base64Url;
+      }
       throw new Error(err.message || String(err));
     }
+  };
+
+  // Close Photo Verification Modal and cleanly reset state & body scroll
+  const closePhotoModal = () => {
+    setPhotoModalData(null);
+    setModalPhotos({});
+    setModalRawFootageLink('');
+    setSubmitError(null);
+    setIsSubmitting(false);
+    document.body.style.overflow = '';
   };
 
   // Open Equipment Photo Verification Modal
@@ -1863,15 +1854,16 @@ export const StaffModule: React.FC = () => {
           // B. Save Event Start Image (strictly to event_start_photo)
           const rawStartUrl = modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image'];
           if (!rawStartUrl) {
-            throw new Error("Event Start Image is missing.");
+            setSubmitError({
+              title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
+              message: 'Event Start Image is missing. Please capture or upload a photo to start the event.'
+            });
+            setIsSubmitting(false);
+            return;
           }
 
           const startFileName = `proofs/${booking.orderId || booking.leadId}_EventStart_${Date.now()}.jpg`;
-          const finalStartUrl = await safeUploadImage(rawStartUrl, startFileName);
-
-          if (!finalStartUrl) {
-            throw new Error("Failed to upload Event Start Image.");
-          }
+          const finalStartUrl = (await safeUploadImage(rawStartUrl, startFileName)) || rawStartUrl;
 
           allProofsToSave.push({
             equipmentName: 'Event Start Photo Proof',
@@ -1911,7 +1903,11 @@ export const StaffModule: React.FC = () => {
             })
           };
 
-          await pushInsert('lead_equipment_history', startHistoryRecord);
+          try {
+            await pushInsert('lead_equipment_history', startHistoryRecord);
+          } catch (startHistErr) {
+            console.warn('[StaffModule] Error inserting start history record:', startHistErr);
+          }
 
           // Update local statuses & localStorage
           const nextStatuses = {
@@ -2062,10 +2058,7 @@ export const StaffModule: React.FC = () => {
           }
 
           // Close modal immediately and restore scrolling
-          setPhotoModalData(null);
-          setModalPhotos({});
-          setSubmitError(null);
-          document.body.style.overflow = '';
+          closePhotoModal();
           showToast("✅ Event Started confirmed and saved successfully!");
 
           try {
@@ -2081,6 +2074,9 @@ export const StaffModule: React.FC = () => {
           message: error?.message || 'An error occurred while uploading images or updating status. Please try again.'
         });
         showToast(`❌ ${error?.message || 'Failed to update status.'}`);
+        if (photoModalScrollRef.current) {
+          photoModalScrollRef.current.scrollTop = 0;
+        }
       } finally {
         setIsSubmitting(false);
         document.body.style.overflow = '';
@@ -2609,11 +2605,7 @@ export const StaffModule: React.FC = () => {
       }
 
       // Close modal immediately and restore scrolling
-      setPhotoModalData(null);
-      setModalPhotos({});
-      setModalRawFootageLink('');
-      setSubmitError(null);
-      document.body.style.overflow = '';
+      closePhotoModal();
       const stageLabel = stage === 'Event Complete' ? 'Event End' : stage;
       showToast(`✅ ${stageLabel} submitted & saved successfully!`);
 
@@ -3090,8 +3082,19 @@ export const StaffModule: React.FC = () => {
 
       {/* EQUIPMENT PHOTO PROOF VERIFICATION MODAL (EVENT START / EVENT COMPLETE) */}
       {photoModalData && createPortal(
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-          <div ref={photoModalRef} className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmitting) {
+              closePhotoModal();
+            }
+          }}
+        >
+          <div 
+            ref={photoModalRef} 
+            className="bg-zinc-900 border border-zinc-800 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
               <div>
                 <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
@@ -3101,8 +3104,10 @@ export const StaffModule: React.FC = () => {
                 <p className="text-zinc-400 text-xs mt-0.5">Order ID: {photoModalData.booking.orderId} | Staff: <strong className="text-white">{staffName}</strong></p>
               </div>
               <button
-                onClick={() => setPhotoModalData(null)}
-                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors"
+                type="button"
+                onClick={closePhotoModal}
+                disabled={isSubmitting}
+                className="p-2 text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-700 rounded-full transition-colors disabled:opacity-50"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -3323,7 +3328,8 @@ export const StaffModule: React.FC = () => {
 
             <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-between items-center">
               <button
-                onClick={() => setPhotoModalData(null)}
+                type="button"
+                onClick={closePhotoModal}
                 disabled={isSubmitting}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors"
               >

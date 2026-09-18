@@ -73,9 +73,15 @@ export const ProductionFullScreenManager: React.FC = () => {
         return false;
       }
 
+      // Never match Assigned Team modal popup - let it open normally as a dialog modal with backdrop
+      if (
+        text.includes('production lead • assigned team') ||
+        (text.includes('assigned team') && (text.includes('server upload') || text.includes('assigned deliverable') || text.includes('staff name') || text.includes('prd-') || text.includes('ord-')))
+      ) {
+        return false;
+      }
+
       const hasWorkflowModalCard = overlay.querySelector('#production_workflow_modal') !== null;
-      const isAssignedTeamModal = text.includes('production lead • assigned team') || 
-                                  (text.includes('assigned team') && text.includes('prd-'));
       const isWorkflowWizardModal = text.includes('step workflow wizard') || hasWorkflowModalCard;
       
       const isAssignOpsModal = (text.includes('assign operations staff') || text.includes('assign operations')) && 
@@ -87,7 +93,7 @@ export const ProductionFullScreenManager: React.FC = () => {
       const isClientAcceptanceModal = text.includes('client acceptance verification deck') ||
                                       (text.includes('client acceptance') && (text.includes('project id') || text.includes('tracking id') || text.includes('approve client acceptance')));
 
-      return hasWorkflowModalCard || isAssignedTeamModal || isWorkflowWizardModal || isAssignOpsModal || isClientAcceptanceModal || isAssignEditorModal;
+      return hasWorkflowModalCard || isWorkflowWizardModal || isAssignOpsModal || isClientAcceptanceModal || isAssignEditorModal;
     };
 
     const lockBackground = () => {
@@ -162,11 +168,6 @@ export const ProductionFullScreenManager: React.FC = () => {
               overlay.classList.add('prod-fullscreen-overlay');
             }
           }
-          const isAssignedTeamModal = overlayText.includes('production lead • assigned team') || 
-                                      (overlayText.includes('assigned team') && (overlayText.includes('prd-') || overlayText.includes('ord-')));
-          if (isAssignedTeamModal && !overlay.classList.contains('prod-assigned-team-overlay')) {
-            overlay.classList.add('prod-assigned-team-overlay');
-          }
           const isAssignEditorModal = overlayText.includes('assign editor') || 
                                       (overlay.querySelector('#production_workflow_modal') !== null && overlayText.includes('assign editor'));
           if (isAssignEditorModal && !overlay.classList.contains('prod-assign-editor-overlay')) {
@@ -227,9 +228,6 @@ export const ProductionFullScreenManager: React.FC = () => {
                 if (!body.classList.contains('prod-fullscreen-body')) {
                   body.classList.add('prod-fullscreen-body');
                 }
-              }
-              if (isAssignedTeamModal && !body.classList.contains('prod-assigned-team-body')) {
-                body.classList.add('prod-assigned-team-body');
               }
               const isAssignEditorModal = overlayText.includes('assign editor') || 
                                           (modalCard.querySelector('#production_workflow_modal') !== null && overlayText.includes('assign editor'));

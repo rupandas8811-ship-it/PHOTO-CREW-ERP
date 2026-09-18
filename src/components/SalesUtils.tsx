@@ -362,13 +362,25 @@ export function buildStep3EventPayloads(
 
   const teamMembersJson = eventsList.map((event, idx) => {
     const evId = event ? (event.id || event.event_id || `EV-${idx + 1}`) : 'default';
-    const evName = event?.event_name || event?.event_type || 'Unnamed Event';
+    const evAltId = event ? (event.event_id || event.id || `EVT-0${idx + 1}`) : 'default';
+    const evName = event?.event_name || event?.custom_event_name || event?.event_type || `Event ${idx + 1}`;
 
     const keysToTry = [
       `${effectivePkgId}_${evId}`,
+      `${effectivePkgId}_${evAltId}`,
       `Custom Package_${evId}`,
+      `Custom Package_${evAltId}`,
       `custom_package_${evId}`,
-      `${evId}`
+      `custom_package_${evAltId}`,
+      `${evId}`,
+      `${evAltId}`,
+      `EV-${idx + 1}`,
+      `EVT-0${idx + 1}`,
+      `EVT-${idx + 1}`,
+      `${effectivePkgId}_${evName}`,
+      `Custom Package_${evName}`,
+      `custom_package_${evName}`,
+      `${evName}`
     ];
 
     if (!isMultiEvent && (!event || !hasEvents)) {
@@ -383,6 +395,16 @@ export function buildStep3EventPayloads(
       }
     }
 
+    // Direct event fallback only for this exact event
+    if (list.length === 0 && event) {
+      const directTm = event.team_members || event.Team_Members || event.inclusions;
+      if (Array.isArray(directTm)) {
+        list = directTm;
+      } else if (typeof directTm === 'string' && directTm.trim()) {
+        list = parseTeamMembers(directTm, evName, evId);
+      }
+    }
+
     return {
       event_id: evId,
       event_name: evName,
@@ -392,13 +414,25 @@ export function buildStep3EventPayloads(
 
   const deliverablesJson = eventsList.map((event, idx) => {
     const evId = event ? (event.id || event.event_id || `EV-${idx + 1}`) : 'default';
-    const evName = event?.event_name || event?.event_type || 'Unnamed Event';
+    const evAltId = event ? (event.event_id || event.id || `EVT-0${idx + 1}`) : 'default';
+    const evName = event?.event_name || event?.custom_event_name || event?.event_type || `Event ${idx + 1}`;
 
     const keysToTry = [
       `${effectivePkgId}_${evId}`,
+      `${effectivePkgId}_${evAltId}`,
       `Custom Package_${evId}`,
+      `Custom Package_${evAltId}`,
       `custom_package_${evId}`,
-      `${evId}`
+      `custom_package_${evAltId}`,
+      `${evId}`,
+      `${evAltId}`,
+      `EV-${idx + 1}`,
+      `EVT-0${idx + 1}`,
+      `EVT-${idx + 1}`,
+      `${effectivePkgId}_${evName}`,
+      `Custom Package_${evName}`,
+      `custom_package_${evName}`,
+      `${evName}`
     ];
 
     if (!isMultiEvent && (!event || !hasEvents)) {
@@ -410,6 +444,16 @@ export function buildStep3EventPayloads(
       if (editableDeliverables && editableDeliverables[k] !== undefined && Array.isArray(editableDeliverables[k])) {
         list = editableDeliverables[k];
         break;
+      }
+    }
+
+    // Direct event fallback only for this exact event
+    if (list.length === 0 && event) {
+      const directDel = event.deliverables || event.Add_Deliverable || event.deliverables_list || event.deliverables_description;
+      if (Array.isArray(directDel)) {
+        list = directDel;
+      } else if (typeof directDel === 'string' && directDel.trim()) {
+        list = parseDeliverablesWithQty(directDel, evName, evId);
       }
     }
 

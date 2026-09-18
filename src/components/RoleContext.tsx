@@ -5,7 +5,7 @@ import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
-import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail } from '../utils';
+import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { executeSaveStaffAssignments } from '../services/operationsAssignmentService';
 
@@ -1323,6 +1323,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
             order_status: 'Confirmed',
             current_stage: ld.status,
             sales_person: ld.sales_person || ld.created_by || 'Sales Team',
+            events: ld.events,
+            notes_special_customizations: ld.notes_special_customizations,
+            deliverables_description: ld.deliverables_description,
+            custom_event_name: ld.custom_event_name,
             created_at: ld.updated_at || new Date().toISOString()
           });
         }
@@ -1379,7 +1383,11 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event_time: parentLead.event_time,
           reporting_time: parentLead.reporting_time || o.reporting_time,
           event_location: parentLead.event_location,
-          quotation_amount: o.quotation_amount || parentLead.budget || 0
+          quotation_amount: o.quotation_amount || parentLead.budget || 0,
+          events: parentLead.events || o.events,
+          notes_special_customizations: parentLead.notes_special_customizations || o.notes_special_customizations,
+          deliverables_description: parentLead.deliverables_description || o.deliverables_description,
+          custom_event_name: parentLead.custom_event_name || o.custom_event_name
         };
       }
       return {
@@ -1596,6 +1604,10 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...p,
         order_id: (p as any).order_id || ord?.order_id,
         lead_id: (p as any).lead_id || ord?.lead_id || parentLead?.lead_id,
+        events: (p as any).events || ord?.events || parentLead?.events,
+        notes_special_customizations: (p as any).notes_special_customizations || ord?.notes_special_customizations || parentLead?.notes_special_customizations,
+        deliverables_description: (p as any).deliverables_description || ord?.deliverables_description || parentLead?.deliverables_description,
+        custom_event_name: (p as any).custom_event_name || ord?.custom_event_name || parentLead?.custom_event_name,
         editing_status: finalStatus.editing_status,
         current_status: finalStatus.current_status,
         production_status: finalStatus.production_status,
@@ -3025,9 +3037,43 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             if (evts.length === 0 && l.events && Array.isArray(l.events) && l.events.length > 0) {
               evts = l.events;
             }
-            if (evts.length === 0 && l.notes_special_customizations) {
-              evts = deserializeLeadEvents(l.notes_special_customizations).events || [];
+            const deserializedFromNotes = l.notes_special_customizations ? deserializeLeadEvents(l.notes_special_customizations).events : [];
+            if (evts.length === 0 && deserializedFromNotes && deserializedFromNotes.length > 0) {
+              evts = deserializedFromNotes;
             }
+
+            // Ensure each event in evts has its event-specific deliverables and team members
+            evts = evts.map((e: any, idx: number) => {
+              const eId = e.id || e.event_id || `EVT-0${idx + 1}`;
+              const eName = e.event_name || e.custom_event_name || e.event_type || `Event ${idx + 1}`;
+
+              let eventDeliverables = e.deliverables;
+              if ((!eventDeliverables || (Array.isArray(eventDeliverables) && eventDeliverables.length === 0)) && l.deliverables_description) {
+                const parsed = parseDeliverablesWithQty(l.deliverables_description, eName, eId);
+                if (parsed.length > 0) {
+                  eventDeliverables = parsed;
+                }
+              }
+
+              let eventTeamMembers = e.team_members || e.Team_Members;
+              if ((!eventTeamMembers || (Array.isArray(eventTeamMembers) && eventTeamMembers.length === 0)) && (l.team_members || l.Team_member || l.Team_Members)) {
+                const rawTm = l.team_members || l.Team_member || l.Team_Members;
+                const parsedTm = parseTeamMembers(rawTm, eName, eId);
+                if (parsedTm.length > 0) {
+                  eventTeamMembers = parsedTm;
+                }
+              }
+
+              return {
+                ...e,
+                id: eId,
+                event_id: eId,
+                event_name: eName,
+                deliverables: eventDeliverables || [],
+                team_members: eventTeamMembers || []
+              };
+            });
+
             let finalStatus = l.current_status || l.status || 'New Lead';
             if (finalStatus === 'Follow-up' || finalStatus === 'Follow-Up') {
               finalStatus = 'Follow Up';
@@ -3575,6 +3621,39 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                   if (finalEvents.length === 0) {
                     finalEvents = deserializeLeadEvents(mappedItem.notes_special_customizations).events || [];
                   }
+
+                  finalEvents = finalEvents.map((e: any, idx: number) => {
+                    const eId = e.id || e.event_id || `EVT-0${idx + 1}`;
+                    const eName = e.event_name || e.custom_event_name || e.event_type || `Event ${idx + 1}`;
+
+                    let eventDeliverables = e.deliverables;
+                    if ((!eventDeliverables || (Array.isArray(eventDeliverables) && eventDeliverables.length === 0)) && (mappedItem.deliverables_description || existingLead?.deliverables_description)) {
+                      const delText = mappedItem.deliverables_description || existingLead?.deliverables_description;
+                      const parsed = parseDeliverablesWithQty(delText, eName, eId);
+                      if (parsed.length > 0) {
+                        eventDeliverables = parsed;
+                      }
+                    }
+
+                    let eventTeamMembers = e.team_members || e.Team_Members;
+                    if ((!eventTeamMembers || (Array.isArray(eventTeamMembers) && eventTeamMembers.length === 0)) && (mappedItem.team_members || mappedItem.Team_member || mappedItem.Team_Members || existingLead?.team_members)) {
+                      const rawTm = mappedItem.team_members || mappedItem.Team_member || mappedItem.Team_Members || existingLead?.team_members;
+                      const parsedTm = parseTeamMembers(rawTm, eName, eId);
+                      if (parsedTm.length > 0) {
+                        eventTeamMembers = parsedTm;
+                      }
+                    }
+
+                    return {
+                      ...e,
+                      id: eId,
+                      event_id: eId,
+                      event_name: eName,
+                      deliverables: eventDeliverables || [],
+                      team_members: eventTeamMembers || []
+                    };
+                  });
+
                   mappedItem = { 
                     ...mappedItem, 
                     status: mappedItem.current_status || mappedItem.status || 'New Lead', 
@@ -7941,6 +8020,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     extraUpdates?: Partial<Omit<EditorAssignment, 'assignment_id'>>
   ) => {
     let targetAssignment: EditorAssignment | undefined;
+    let updatedList: EditorAssignment[] = [];
     
     setEditorAssignments(prev => {
       const updated = prev.map(a => {
@@ -7950,87 +8030,86 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         }
         return a;
       });
-      localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+      updatedList = updated;
+      try {
+        localStorage.setItem('erp_editor_assignments', JSON.stringify(updated));
+      } catch (_) {}
       return updated;
     });
 
-    await pushUpdate('editor_assignments', 'assignment_id', assignmentId, { status, ...(extraUpdates || {}) });
+    const pushRes = await pushUpdate('editor_assignments', 'assignment_id', assignmentId, { status, ...(extraUpdates || {}) });
     logActivity(`Updated Editor Task ${assignmentId} status to: ${status}`, 'Production', assignmentId);
     
-    // Defer reading the up-to-date assignment list to correctly calculate and push production updates
-    setTimeout(() => {
-      setEditorAssignments(currentAssignments => {
-        const assignment = currentAssignments.find(a => a.assignment_id === assignmentId);
-        if (assignment) {
-          const prodId = assignment.production_id;
-          const allTasks = currentAssignments.filter(t => t.production_id === prodId);
-          
-          const completedTasks = allTasks.filter(t => t.status === 'Completed' || t.status === 'Editing Complete' || t.status === 'Editing Completed').length;
-          const totalTasks = allTasks.length;
-          const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-          
-          const prodObj = (production || []).find(p => p.production_id === prodId);
-          let baseStatus = prodObj?.editing_status || (prodObj as any)?.production_status || (prodObj as any)?.current_status || 'Raw Footage Received';
+    // Immediately calculate and synchronize production status without detached timeout race conditions
+    const assignment = updatedList.find(a => a.assignment_id === assignmentId) || targetAssignment;
+    if (assignment && assignment.production_id) {
+      const prodId = assignment.production_id;
+      const allTasks = updatedList.filter(t => t.production_id === prodId);
+      
+      const completedTasks = allTasks.filter(t => t.status === 'Completed' || t.status === 'Editing Complete' || t.status === 'Editing Completed').length;
+      const totalTasks = allTasks.length;
+      const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+      
+      const prodObj = (production || []).find(p => p.production_id === prodId);
+      let baseStatus = prodObj?.editing_status || (prodObj as any)?.production_status || (prodObj as any)?.current_status || 'Raw Footage Received';
 
-          let nextEditingStatus: EditingStatus | undefined = undefined;
-          
-          const terminalStatuses = ['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'];
-          const tgtOrder = augmentedOrders.find(o => o.order_id === (prodObj as any)?.order_id || o.order_id === prodObj?.tracking_id || o.lead_id === prodObj?.tracking_id);
-          const tgtLead = leads.find(l => l.lead_id === (prodObj as any)?.lead_id || l.lead_id === prodObj?.tracking_id);
-          if (tgtOrder && terminalStatuses.includes(tgtOrder.current_stage)) baseStatus = 'Order Closed';
-          if (tgtLead && terminalStatuses.includes(tgtLead.status)) baseStatus = 'Order Closed';
-          const isTerminal = (prodObj as any)?.current_status === 'Client Acceptance' ||
-                             (prodObj as any)?.production_status === 'Client Acceptance' ||
-                             prodObj?.editing_status === 'Client Acceptance' ||
-                             terminalStatuses.includes(baseStatus) || 
-                             terminalStatuses.includes(prodObj?.editing_status || '') ||
-                             terminalStatuses.includes((prodObj as any)?.production_status || '') ||
-                             terminalStatuses.includes((prodObj as any)?.current_status || '');
+      let nextEditingStatus: EditingStatus | undefined = undefined;
+      
+      const terminalStatuses = ['Completed', 'Closed', 'Client Acceptance', 'Project Closed', 'Order Closed', 'Final Approval'];
+      const tgtOrder = augmentedOrders.find(o => o.order_id === (prodObj as any)?.order_id || o.order_id === prodObj?.tracking_id || o.lead_id === prodObj?.tracking_id);
+      const tgtLead = leads.find(l => l.lead_id === (prodObj as any)?.lead_id || l.lead_id === prodObj?.tracking_id);
+      if (tgtOrder && terminalStatuses.includes(tgtOrder.current_stage)) baseStatus = 'Order Closed';
+      if (tgtLead && terminalStatuses.includes(tgtLead.status)) baseStatus = 'Order Closed';
+      const isTerminal = (prodObj as any)?.current_status === 'Client Acceptance' ||
+                         (prodObj as any)?.production_status === 'Client Acceptance' ||
+                         prodObj?.editing_status === 'Client Acceptance' ||
+                         terminalStatuses.includes(baseStatus) || 
+                         terminalStatuses.includes(prodObj?.editing_status || '') ||
+                         terminalStatuses.includes((prodObj as any)?.production_status || '') ||
+                         terminalStatuses.includes((prodObj as any)?.current_status || '');
 
-          // Do not override terminal or Client Acceptance statuses
-          if (!isTerminal) {
-            if (totalTasks > 0) {
-              const getTaskStageRank = (st: string, driveLink?: string) => {
-                const s = st || '';
-                if (['Client Acceptance'].includes(s)) return 5;
-                if (['Completed', 'Editing Completed', 'Editing Complete'].includes(s)) return 4;
-                if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(s) || (driveLink && driveLink.trim() !== '')) return 3;
-                if (['Editing Started', 'In Progress', 'Editing In Progress'].includes(s)) return 2;
-                if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(s)) return 1;
-                return 0;
-              };
-
-              const ranks = allTasks.map(t => getTaskStageRank(t.status, t.edited_drive_link));
-              const minRank = Math.min(...ranks);
-
-              if (minRank >= 5) {
-                nextEditingStatus = 'Client Acceptance' as any;
-              } else if (minRank >= 4) {
-                nextEditingStatus = 'Editing Completed' as any;
-              } else if (minRank >= 3) {
-                nextEditingStatus = 'Customer Review' as any;
-              } else if (minRank >= 2) {
-                nextEditingStatus = 'Editing Started' as any;
-              } else if (minRank >= 1) {
-                nextEditingStatus = 'Assigned Editor' as any;
-              }
-            }
-          }
-          
-          const updates: Partial<Omit<Production, 'production_id' | 'tracking_id'>> = {
-            editing_progress: `${progressPercent}%`,
-            remarks: `Task updated: ${assignment.staff_name} (${assignment.speciality}) marked status to ${status}. Total Project Tasks Progress: ${progressPercent}%.`
+      // Do not override terminal or Client Acceptance statuses
+      if (!isTerminal) {
+        if (totalTasks > 0) {
+          const getTaskStageRank = (st: string, driveLink?: string) => {
+            const s = st || '';
+            if (['Client Acceptance'].includes(s)) return 5;
+            if (['Completed', 'Editing Completed', 'Editing Complete'].includes(s)) return 4;
+            if (['Customer Review', 'Client Review', 'Client Review Sent'].includes(s) || (driveLink && driveLink.trim() !== '')) return 3;
+            if (['Editing Started', 'Editing Start', 'In Progress', 'Editing In Progress'].includes(s)) return 2;
+            if (['Assigned Editor', 'Editor Assigned', 'Assigned'].includes(s)) return 1;
+            return 0;
           };
-          
-          if (nextEditingStatus) {
-            updates.editing_status = nextEditingStatus;
+
+          const ranks = allTasks.map(t => getTaskStageRank(t.status, t.edited_drive_link));
+          const minRank = Math.min(...ranks);
+
+          if (minRank >= 5) {
+            nextEditingStatus = 'Client Acceptance' as any;
+          } else if (minRank >= 4) {
+            nextEditingStatus = 'Editing Completed' as any;
+          } else if (minRank >= 3) {
+            nextEditingStatus = 'Customer Review' as any;
+          } else if (minRank >= 2) {
+            nextEditingStatus = 'Editing Started' as any;
+          } else if (minRank >= 1) {
+            nextEditingStatus = 'Assigned Editor' as any;
           }
-          
-          updateProduction(prodId, updates);
         }
-        return currentAssignments;
-      });
-    }, 50);
+      }
+      
+      const updates: Partial<Omit<Production, 'production_id' | 'tracking_id'>> = {
+        editing_progress: `${progressPercent}%`,
+        remarks: `Task updated: ${assignment.staff_name} (${assignment.speciality}) marked status to ${status}. Total Project Tasks Progress: ${progressPercent}%.`
+      };
+      
+      if (nextEditingStatus) {
+        updates.editing_status = nextEditingStatus;
+      }
+      
+      await updateProduction(prodId, updates);
+    }
+    return pushRes;
   };
 
   const deleteEditorAssignment = async (assignmentId: string) => {
