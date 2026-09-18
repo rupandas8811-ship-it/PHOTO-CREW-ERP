@@ -33,7 +33,8 @@ import {
   calculateOrderAssignmentStats,
   isRoleMatch,
   parseEventDateTimeToTimestamp,
-  EventTeamMemberConfig
+  EventTeamMemberConfig,
+  deserializeLeadEvents
 } from '../../utils';
 import { supabaseClient } from '../../supabaseClient';
 import { getCalculatedOrderStage, getStageRank } from '../../utils/orderStageCalculator';
@@ -2111,12 +2112,12 @@ export const OperationsLeads: React.FC = () => {
           const evId = ev.id || '';
           if (!evId) continue;
           
-          const allocStaff = eventAllocations[evId]?.staff || [];
-          const validAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
-
           const includedRoles = getEventRolesForEvent(ev, index, teamMembersConfig, totalEvents);
           
           if (includedRoles.length > 0) {
+            const allocStaff = eventAllocations[evId]?.staff || [];
+            const validAllocStaff = allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim() !== '');
+            
             const tasksMap = new Map<string, { roleName: string; targetQty: number }>();
             includedRoles.forEach((roleStr: string) => {
               const { qty, text } = parseQtyAndText(roleStr);
@@ -2165,8 +2166,9 @@ export const OperationsLeads: React.FC = () => {
           }
 
           // NEW: Validate duplicate equipment per event
+          const allocStaffForEq = eventAllocations[evId]?.staff || [];
           const equipmentCounts: Record<string, number> = {};
-          allocStaff.forEach((s: any) => {
+          allocStaffForEq.forEach((s: any) => {
              (s.equipment || []).forEach((eq: string) => {
                 equipmentCounts[eq] = (equipmentCounts[eq] || 0) + 1;
              });

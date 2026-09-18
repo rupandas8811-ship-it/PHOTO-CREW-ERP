@@ -871,7 +871,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                     <input
                       type="text"
                       placeholder="e.g. Rahul Sharma"
-                      value={formName || ''}
+                      value={formName}
                       onChange={(e) => setFormName(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                       required
@@ -886,7 +886,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                     <input
                       type="text"
                       placeholder="e.g. EMP-1092"
-                      value={formEmployeeId || ''}
+                      value={formEmployeeId}
                       onChange={(e) => setFormEmployeeId(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                       required
@@ -910,7 +910,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       disabled={Boolean(editingStaff)}
                       readOnly={Boolean(editingStaff)}
                       placeholder="e.g. +91 98765 43210"
-                      value={formMobile || ''}
+                      value={formMobile}
                       onChange={(e) => setFormMobile(e.target.value)}
                       className={`w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
                         editingStaff ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
@@ -927,7 +927,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                     <input
                       type="tel"
                       placeholder="Leaving blank auto-copies Mobile"
-                      value={formWhatsapp || ''}
+                      value={formWhatsapp}
                       onChange={(e) => setFormWhatsapp(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                     />
@@ -950,7 +950,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       disabled={Boolean(editingStaff)}
                       readOnly={Boolean(editingStaff)}
                       placeholder="e.g. editor@crew.com"
-                      value={formEmail || ''}
+                      value={formEmail}
                       onChange={(e) => setFormEmail(e.target.value)}
                       className={`w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 ${
                         editingStaff ? 'opacity-60 cursor-not-allowed bg-zinc-900/60 border-zinc-800' : ''
@@ -968,7 +968,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       <input
                         type={showFormPassword ? "text" : "password"}
                         placeholder={editingStaff ? "Current password" : "Enter password"}
-                        value={formPassword || ''}
+                        value={formPassword}
                         onChange={(e) => setFormPassword(e.target.value)}
                         className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 pr-10 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
                         required={!editingStaff}
@@ -991,7 +991,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                     <input
                       type="text"
                       placeholder="e.g. Delhi, Mumbai, Udaipur"
-                      value={formCity || ''}
+                      value={formCity}
                       onChange={(e) => setFormCity(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-amber-500"
                     />
@@ -1003,7 +1003,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       Department *
                     </label>
                     <select
-                      value={formDepartment || 'Post-Production'}
+                      value={formDepartment}
                       onChange={(e) => setFormDepartment(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-zinc-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
                       required
@@ -1022,7 +1022,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       Production Role Speciality *
                     </label>
                     <select
-                      value={formSpeciality || ''}
+                      value={formSpeciality}
                       onChange={(e) => setFormSpeciality(e.target.value)}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-zinc-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
                       required
@@ -1040,7 +1040,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       Employee Status
                     </label>
                     <select
-                      value={formStatus || 'Active'}
+                      value={formStatus}
                       onChange={(e) => setFormStatus(e.target.value as any)}
                       className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 text-zinc-200 cursor-pointer focus:outline-none focus:ring-1 focus:ring-amber-500"
                     >
@@ -1055,7 +1055,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       Staff Type *
                     </label>
                     <select
-                      value={formStaffType || ''}
+                      value={formStaffType}
                       onChange={(e) => {
                         setFormStaffType(e.target.value as any);
                         if (e.target.value) setStaffTypeError(false);
