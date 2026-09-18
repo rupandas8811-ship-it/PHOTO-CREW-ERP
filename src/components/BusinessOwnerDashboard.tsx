@@ -3976,7 +3976,7 @@ interface ReviewAndCloseModalProps {
   leads: Lead[];
   production: Production[];
   payments: Payment[];
-  currentRole?: string;
+  currentRole?: UserRole;
   onClose: () => void;
   onApprove: () => Promise<void> | void;
   onReject?: () => void;
@@ -3984,15 +3984,15 @@ interface ReviewAndCloseModalProps {
 
 const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   order,
-  leads,
-  production,
-  payments,
+  leads = [],
+  production = [],
+  payments = [],
   currentRole = 'Business Owner',
   onClose,
   onApprove,
   onReject
 }) => {
-  const { editorAssignments, quotations } = useRole();
+  const { editorAssignments = [], quotations = [] } = useRole();
   const [isApproving, setIsApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
 
@@ -4027,129 +4027,158 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
     };
   }, []);
 
-  const lead = leads.find(l => l.lead_id === order.lead_id);
-  const prod = production.find(p => p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id);
-  const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
+  if (!order || typeof document === 'undefined') return null;
+
+  const lead = (leads || []).find(l => l && (l.lead_id === order.lead_id || l.lead_id === order.order_id));
+  const prod = (production || []).find(p => p && (p.tracking_id === order.lead_id || p.order_id === order.lead_id || p.tracking_id === order.order_id || p.order_id === order.order_id));
+  const pay = (payments || []).find(p => p && (p.order_id === order.order_id || p.lead_id === order.lead_id || p.order_id === order.lead_id));
 
   const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
   const isBusinessOwner = currentRole === 'Business Owner';
 
   // Extract ALL events separately for this order
   const resolvedEvents = useMemo(() => {
-    const rawLeadEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
-    const deserialized = (!rawLeadEvents || rawLeadEvents.length === 0) && (lead?.notes_special_customizations || order?.notes_special_customizations)
-      ? deserializeLeadEvents(lead?.notes_special_customizations || order?.notes_special_customizations).events
-      : [];
+    try {
+      const rawLeadEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0 ? lead.events : [];
+      const deserialized = (!rawLeadEvents || rawLeadEvents.length === 0) && (lead?.notes_special_customizations || order?.notes_special_customizations)
+        ? deserializeLeadEvents(lead?.notes_special_customizations || order?.notes_special_customizations).events
+        : [];
 
-    const combined = rawLeadEvents.length > 0 ? rawLeadEvents : (deserialized.length > 0 ? deserialized : []);
+      const combined = rawLeadEvents.length > 0 ? rawLeadEvents : (deserialized.length > 0 ? deserialized : []);
 
-    if (combined && combined.length > 0) {
-      return combined.map((ev: any, idx: number) => {
-        const rawEType = ev.event_type || lead?.event_type || order?.event_type || 'N/A';
-        const eType = rawEType === 'Other' ? (ev.custom_event_type || 'Other') : rawEType;
+      if (combined && combined.length > 0) {
+        return combined.map((ev: any, idx: number) => {
+          if (!ev) return {
+            id: `ev_${idx + 1}`,
+            eventName: `Event ${idx + 1}`,
+            eventType: 'Photography & Videography',
+            eventDate: order?.event_date || 'N/A',
+            eventTime: order?.event_time || 'N/A',
+            eventLocation: order?.location || 'N/A',
+            googleMapsLink: null,
+            deliverables: ['Full Coverage'],
+            assignments: []
+          };
 
-        let eName = 'N/A';
-        if (ev.event_name === 'Other') {
-          eName = ev.custom_event_name || 'Other';
-        } else if (ev.custom_event_name && ev.custom_event_name.trim() !== '') {
-          eName = ev.custom_event_name;
-        } else if (ev.event_name && ev.event_name.trim() !== '') {
-          eName = ev.event_name;
-        } else if (eType && eType !== 'N/A') {
-          eName = eType;
-        } else {
-          eName = `Event ${idx + 1}`;
-        }
+          const rawEType = ev.event_type || lead?.event_type || order?.event_type || 'N/A';
+          const eType = rawEType === 'Other' ? (ev.custom_event_type || 'Other') : rawEType;
 
-        const eDate = ev.event_date || order?.event_date || lead?.event_date || 'N/A';
-        const eTime = ev.event_start_time || ev.event_time || order?.event_time || lead?.event_time || 'N/A';
-        const eLocation = ev.venue || ev.location || order?.venue || order?.location || lead?.venue || lead?.location || 'N/A';
-        const eMapsLink = ev.google_maps_link || order?.google_maps_link || lead?.google_maps_link || null;
+          let eName = 'N/A';
+          if (ev.event_name === 'Other') {
+            eName = ev.custom_event_name || 'Other';
+          } else if (ev.custom_event_name && ev.custom_event_name.trim() !== '') {
+            eName = ev.custom_event_name;
+          } else if (ev.event_name && ev.event_name.trim() !== '') {
+            eName = ev.event_name;
+          } else if (eType && eType !== 'N/A') {
+            eName = eType;
+          } else {
+            eName = `Event ${idx + 1}`;
+          }
 
-        // Deliverables assigned for this event
-        const matchedAssignments = (editorAssignments || []).filter((a: any) =>
-          a.event_id === ev.event_id || a.event_id === ev.id || a.event_id === `ev_${idx + 1}`
-        );
+          const eDate = ev.event_date || order?.event_date || lead?.event_date || 'N/A';
+          const eTime = ev.event_start_time || ev.event_time || order?.event_time || lead?.event_time || 'N/A';
+          const eLocation = ev.venue || ev.location || order?.venue || order?.location || lead?.venue || lead?.location || 'N/A';
+          const eMapsLink = ev.google_maps_link || order?.google_maps_link || lead?.google_maps_link || null;
 
-        let deliverablesList: string[] = [];
-        if (ev.deliverables && Array.isArray(ev.deliverables) && ev.deliverables.length > 0) {
-          deliverablesList = ev.deliverables;
-        } else if (ev.assigned_deliverables && Array.isArray(ev.assigned_deliverables) && ev.assigned_deliverables.length > 0) {
-          deliverablesList = ev.assigned_deliverables;
-        } else if (matchedAssignments.length > 0) {
-          deliverablesList = matchedAssignments.map((a: any) => `${a.speciality || 'Deliverable'} (${a.staff_name || 'Editor'})`);
-        } else {
-          deliverablesList = order.deliverables && Array.isArray(order.deliverables) && order.deliverables.length > 0
-            ? order.deliverables
-            : [order.custom_event_name || order.event_type || 'Full Coverage'];
-        }
+          // Deliverables assigned for this event
+          const matchedAssignments = (editorAssignments || []).filter((a: any) =>
+            a && (a.event_id === ev.event_id || a.event_id === ev.id || a.event_id === `ev_${idx + 1}`)
+          );
 
-        return {
-          id: ev.event_id || ev.id || `ev_${idx + 1}`,
-          eventName: eName,
-          eventType: eType,
-          eventDate: eDate,
-          eventTime: eTime,
-          eventLocation: eLocation,
-          googleMapsLink: eMapsLink,
-          deliverables: deliverablesList,
-          assignments: matchedAssignments
-        };
-      });
+          let deliverablesList: string[] = [];
+          if (ev.deliverables && Array.isArray(ev.deliverables) && ev.deliverables.length > 0) {
+            deliverablesList = ev.deliverables;
+          } else if (ev.assigned_deliverables && Array.isArray(ev.assigned_deliverables) && ev.assigned_deliverables.length > 0) {
+            deliverablesList = ev.assigned_deliverables;
+          } else if (matchedAssignments.length > 0) {
+            deliverablesList = matchedAssignments.map((a: any) => `${a.speciality || 'Deliverable'} (${a.staff_name || 'Editor'})`);
+          } else {
+            deliverablesList = order?.deliverables && Array.isArray(order.deliverables) && order.deliverables.length > 0
+              ? order.deliverables
+              : [order?.custom_event_name || order?.event_type || 'Full Coverage'];
+          }
+
+          return {
+            id: ev.event_id || ev.id || `ev_${idx + 1}`,
+            eventName: eName,
+            eventType: eType,
+            eventDate: eDate,
+            eventTime: eTime,
+            eventLocation: eLocation,
+            googleMapsLink: eMapsLink,
+            deliverables: deliverablesList,
+            assignments: matchedAssignments
+          };
+        });
+      }
+
+      // Fallback single event if no event array exists
+      const eName = order?.custom_event_name || order?.event_name || order?.event_type || lead?.custom_event_name || lead?.event_type || 'Photography & Videography';
+      const eType = order?.event_type || lead?.event_type || 'N/A';
+      const eDate = order?.event_date || lead?.event_date || 'N/A';
+      const eTime = order?.event_time || lead?.event_time || 'N/A';
+      const eLocation = order?.venue || order?.location || lead?.venue || lead?.location || 'N/A';
+      const eMapsLink = order?.google_maps_link || lead?.google_maps_link || null;
+
+      const orderAssignments = (editorAssignments || []).filter((a: any) =>
+        a && (
+          a.production_id === prod?.production_id ||
+          a.order_id === order?.order_id ||
+          a.order_id === order?.lead_id ||
+          a.order_id === prod?.tracking_id
+        )
+      );
+
+      let delivs = order?.deliverables && Array.isArray(order.deliverables) && order.deliverables.length > 0
+        ? order.deliverables
+        : prod?.deliverables && Array.isArray(prod.deliverables)
+        ? prod.deliverables
+        : [];
+
+      if (delivs.length === 0 && orderAssignments.length > 0) {
+        delivs = orderAssignments.map((a: any) => `${a.speciality || 'Deliverable'} (${a.staff_name || 'Editor'})`);
+      }
+      if (delivs.length === 0) {
+        delivs = ['Full Coverage'];
+      }
+
+      return [{
+        id: order?.event_id || 'ev_1',
+        eventName: eName,
+        eventType: eType,
+        eventDate: eDate,
+        eventTime: eTime,
+        eventLocation: eLocation,
+        googleMapsLink: eMapsLink,
+        deliverables: delivs,
+        assignments: orderAssignments
+      }];
+    } catch (e) {
+      console.warn("Error resolving events for Review modal:", e);
+      return [{
+        id: 'ev_fallback',
+        eventName: order?.custom_event_name || order?.event_type || 'Photography & Videography',
+        eventType: order?.event_type || 'Standard Event',
+        eventDate: order?.event_date || 'N/A',
+        eventTime: order?.event_time || 'N/A',
+        eventLocation: order?.location || 'N/A',
+        googleMapsLink: null,
+        deliverables: ['Full Coverage'],
+        assignments: []
+      }];
     }
-
-    // Fallback single event if no event array exists
-    const eName = order.custom_event_name || order.event_name || order.event_type || lead?.custom_event_name || lead?.event_type || 'Photography & Videography';
-    const eType = order.event_type || lead?.event_type || 'N/A';
-    const eDate = order.event_date || lead?.event_date || 'N/A';
-    const eTime = order.event_time || lead?.event_time || 'N/A';
-    const eLocation = order.venue || order.location || lead?.venue || lead?.location || 'N/A';
-    const eMapsLink = order?.google_maps_link || lead?.google_maps_link || null;
-
-    const orderAssignments = (editorAssignments || []).filter((a: any) =>
-      a.production_id === prod?.production_id ||
-      a.order_id === order.order_id ||
-      a.order_id === order.lead_id ||
-      a.order_id === prod?.tracking_id
-    );
-
-    let delivs = order.deliverables && Array.isArray(order.deliverables) && order.deliverables.length > 0
-      ? order.deliverables
-      : prod?.deliverables && Array.isArray(prod.deliverables)
-      ? prod.deliverables
-      : [];
-
-    if (delivs.length === 0 && orderAssignments.length > 0) {
-      delivs = orderAssignments.map((a: any) => `${a.speciality || 'Deliverable'} (${a.staff_name || 'Editor'})`);
-    }
-    if (delivs.length === 0) {
-      delivs = ['Full Coverage'];
-    }
-
-    return [{
-      id: order.event_id || 'ev_1',
-      eventName: eName,
-      eventType: eType,
-      eventDate: eDate,
-      eventTime: eTime,
-      eventLocation: eLocation,
-      googleMapsLink: eMapsLink,
-      deliverables: delivs,
-      assignments: orderAssignments
-    }];
   }, [order, lead, prod, editorAssignments]);
-
-  if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div 
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4"
+      className="fixed inset-0 bg-black/85 backdrop-blur-md z-[200] flex items-center justify-center p-4 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div 
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl 2xl:max-w-5xl min-[1920px]:max-w-[1200px] min-[2560px]:max-w-[1600px] min-[3840px]:max-w-[2000px] shadow-2xl relative animate-in fade-in zoom-in duration-200 flex flex-col max-h-[90vh]"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-3xl 2xl:max-w-5xl min-[1920px]:max-w-[1200px] min-[2560px]:max-w-[1600px] min-[3840px]:max-w-[2000px] shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh] my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         
@@ -4160,7 +4189,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[10px] font-mono font-bold uppercase tracking-wider">
                 Business Owner Review
               </span>
-              <span className="text-xs font-mono text-zinc-500 truncate">Order ID: {order.order_id}</span>
+              <span className="text-xs font-mono text-zinc-500 truncate">Order ID: {order?.order_id || 'N/A'}</span>
             </div>
             <h2 className="text-xl font-black text-white">
               Final Approval & Order Review
@@ -4190,7 +4219,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
               <div>
                 <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Customer Name</span>
-                <span className="text-zinc-100 font-bold">{order.customer_name}</span>
+                <span className="text-zinc-100 font-bold">{order?.customer_name || 'N/A'}</span>
               </div>
               <div>
                 <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Mobile Number</span>
@@ -4198,7 +4227,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
               </div>
               <div>
                 <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Order ID</span>
-                <span className="text-amber-400 font-mono font-bold">{order.order_id}</span>
+                <span className="text-amber-400 font-mono font-bold">{order?.order_id || 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -4240,7 +4269,7 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
                     </div>
                     <div>
                       <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold">Event Time</span>
-                      <span className="text-zinc-200 font-mono">{formatTime12Hour(ev.eventTime)}</span>
+                      <span className="text-zinc-200 font-mono">{formatTime12Hour(ev.eventTime) || ev.eventTime || 'N/A'}</span>
                     </div>
                     <div className="sm:col-span-2 md:col-span-3">
                       <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold mb-1">Event Location / Google Maps Link</span>
