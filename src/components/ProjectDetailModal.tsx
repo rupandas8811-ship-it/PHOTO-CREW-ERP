@@ -4,7 +4,7 @@ import {
   X, User, Phone, Mail, MapPin, DollarSign, Calendar, Clock, Film, 
   CheckCircle, CheckCircle2, AlertCircle, RefreshCw, Layers, ArrowRight, Shield, FileText, Landmark, Eye, ExternalLink
 } from 'lucide-react';
-import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl, parseQtyAndText } from '../utils';
+import { formatINR, formatTime12Hour, formatDateDDMMYY, deserializeLeadEvents, resolveStorageUrl, parseQtyAndText } from '../utils';
 import { CurrentStage } from '../types';
 
 interface ProjectDetailModalProps {
@@ -230,7 +230,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                   <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider block">3. Event Date</span>
                   <div className="text-sm font-bold text-zinc-200 font-mono mt-0.5 flex items-center gap-1.5">
                     <Calendar className="w-4 h-4 text-rose-400" />
-                    <span>{currentEv.eventDate || 'N/A'}</span>
+                    <span>{currentEv.eventDate ? formatDateDDMMYY(currentEv.eventDate) : 'N/A'}</span>
                   </div>
                 </div>
                 <div>
@@ -542,7 +542,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                       <div className="grid grid-cols-2 gap-2 text-xs font-mono">
                         <div>
                           <span className="text-[9.5px] text-zinc-500 uppercase block">Event Date</span>
-                          <span className="text-zinc-200 font-bold">{ev.eventDate}</span>
+                          <span className="text-zinc-200 font-bold">{formatDateDDMMYY(ev.eventDate)}</span>
                         </div>
                         <div>
                           <span className="text-[9.5px] text-zinc-500 uppercase block">Start Time</span>
@@ -551,7 +551,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                         {ev.eventEndDate && ev.eventEndDate !== 'N/A' && (
                           <div>
                             <span className="text-[9.5px] text-zinc-500 uppercase block">End Date</span>
-                            <span className="text-zinc-300 font-medium">{ev.eventEndDate}</span>
+                            <span className="text-zinc-300 font-medium">{formatDateDDMMYY(ev.eventEndDate)}</span>
                           </div>
                         )}
                         {ev.eventEndTime && ev.eventEndTime !== 'N/A' && (
@@ -608,7 +608,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                           {log.action}
                         </div>
                         <div className="sm:col-span-2 text-zinc-500 text-right font-mono text-[10px]">
-                          {log.date || log.timestamp.split('T')[0]} &nbsp;
+                          {formatDateDDMMYY(log.date || log.timestamp)} &nbsp;
                           <span className="text-zinc-650">{log.time || formatTime12Hour(log.timestamp)}</span>
                         </div>
                       </div>
@@ -746,7 +746,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                               <span className="text-[9px] text-zinc-500 block uppercase">Event Date</span>
                               <span className="text-zinc-100 font-extrabold flex items-center gap-1">
                                 <Calendar className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                                {ev.eventDate}
+                                {formatDateDDMMYY(ev.eventDate)}
                               </span>
                             </div>
                             <div>
@@ -840,7 +840,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                               <div key={eh.id} className="text-[11px] font-mono border-b border-zinc-900 pb-1.5 last:border-0 last:pb-0 flex flex-col justify-between md:flex-row md:items-center">
                                 <div className="space-y-0.5">
                                   <div className="font-sans font-bold text-zinc-250 text-xs">{eh.equipment_name}</div>
-                                  <div className="text-zinc-500 text-[10px]">Returned by: <span className="text-zinc-400">{eh.returned_by}</span> | Date: <span className="text-zinc-400">{eh.return_date}</span></div>
+                                  <div className="text-zinc-500 text-[10px]">Returned by: <span className="text-zinc-400">{eh.returned_by}</span> | Date: <span className="text-zinc-400">{formatDateDDMMYY(eh.return_date)}</span></div>
                                   {eh.notes && <div className="text-zinc-400 italic text-[10.5px]">Notes: "{eh.notes}"</div>}
                                 </div>
                                 <span className={`px-1.5 py-0.5 text-[9px] rounded font-bold uppercase self-start md:self-auto ${
@@ -915,7 +915,7 @@ export const ProjectDetailModal: React.FC<ProjectDetailModalProps> = ({
                         <span className="text-[10px] text-zinc-500 uppercase tracking-widest block">Expected Delivery Target</span>
                         <p className="text-zinc-200 mt-1 flex items-center gap-1 font-mono text-xs">
                           <Calendar className="w-4 h-4 text-rose-500" />
-                          <span>{prod.expected_delivery_date || 'Not setup'}</span>
+                          <span>{prod.expected_delivery_date ? formatDateDDMMYY(prod.expected_delivery_date) : 'Not setup'}</span>
                         </p>
                       </div>
                       <div>

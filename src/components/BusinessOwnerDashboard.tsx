@@ -48,7 +48,7 @@ import { BusinessOwnerCardDetailModal } from './BusinessOwnerCardDetailModal';
 import { PaymentHistoryModal } from './PaymentHistoryModal';
 import { AddNoteModal } from './AddNoteModal';
 import { OrderHistoryModal } from './OrderHistoryModal';
-import { formatINR, formatTime12Hour, deserializeLeadEvents, resolveStorageUrl } from '../utils';
+import { formatINR, formatTime12Hour, formatDateDDMMYY, deserializeLeadEvents, resolveStorageUrl } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
 import { AssignedStaffDropdown } from './AssignedStaffDropdown';
@@ -1051,7 +1051,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
       { key: 'custom_event_name', label: 'Event Name', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name || item.event_type || 'Photography'}</span> },
       { key: 'assigned_staff', label: 'Assigned Staff', render: (item: any) => <AssignedStaffDropdown orderId={item.order_id || item.orderId} leadId={item.lead_id || item.leadId} lead={item.rawLead} order={item.rawOrder} /> },
-      { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> }
+      { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.event_date ? formatDateDDMMYY(item.event_date) : 'N/A'}</span> }
     ];
 
     const baseLeadCols = [
@@ -1064,7 +1064,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         </div>
       )},
       { key: 'custom_event_name', label: 'Event / Type', render: (item: any) => <span className="text-zinc-300">{item.custom_event_name || 'Event'}</span> },
-      { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
+      { key: 'event_date', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? formatDateDDMMYY(item.event_date) : 'N/A'}</span> },
       { key: 'assigned_staff', label: 'Assigned Staff', render: (item: any) => <AssignedStaffDropdown leadId={item.lead_id} orderId={item.order_id} lead={item.rawLead} order={item.rawOrder} /> },
       { key: 'quotation_amount', label: 'Quotation Amount', render: (item: any) => <span className="font-mono text-emerald-400 font-bold text-xs">{formatINR(item.quotation_amount || 0)}</span> },
       { key: 'sales_status', label: 'Sales Status', render: (item: any) => <span className="text-zinc-300 font-mono text-xs">{item.sales_status}</span> },
@@ -1085,7 +1085,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-300 font-bold">{item.order_id || 'N/A'}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
       { key: 'custom_event_name', label: 'Event / Shoot Type', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
-      { key: 'event_date', label: 'Shoot Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? item.event_date.split('T')[0] : 'N/A'}</span> },
+      { key: 'event_date', label: 'Shoot Date', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.event_date ? formatDateDDMMYY(item.event_date) : 'N/A'}</span> },
       { key: 'assigned_staff', label: 'Assigned Staff', render: (item: any) => <AssignedStaffDropdown leadId={item.lead_id} orderId={item.order_id} lead={item.rawLead} order={item.rawOrder} /> },
       { key: 'ops_status', label: 'Ops Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
@@ -1112,7 +1112,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       { key: 'order_id', label: 'Order ID', render: (item: any) => <span className="font-mono text-zinc-300 font-bold">{item.order_id || 'N/A'}</span> },
       { key: 'customer_name', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customer_name}</span> },
       { key: 'custom_event_name', label: 'Event / Deliverable', render: (item: any) => <span className="text-zinc-200">{item.custom_event_name}</span> },
-      { key: 'delivery_date', label: 'Target Delivery', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.delivery_date ? item.delivery_date.split('T')[0] : 'N/A'}</span> },
+      { key: 'delivery_date', label: 'Target Delivery', render: (item: any) => <span className="font-mono text-zinc-400 text-xs">{item.delivery_date ? formatDateDDMMYY(item.delivery_date) : 'N/A'}</span> },
       { key: 'assigned_editor', label: 'Assigned Editor', render: (item: any) => <span className="font-mono text-zinc-300 text-xs font-semibold">{item.editor || item.assigned_editor || 'Unassigned'}</span> },
       { key: 'prod_status', label: 'Production Status', render: (item: any) => (
         <span className={`px-2 py-0.5 rounded-lg border font-bold font-mono text-[10px] ${
@@ -2007,7 +2007,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                             <td className="py-3.5 px-4 text-zinc-300">
                               <div className="font-semibold text-zinc-200">{order.custom_event_name || order.event_type || 'Photography & Videography'}</div>
                               {order.event_date && (
-                                <div className="text-[10px] text-zinc-400 font-mono">{order.event_date}</div>
+                                <div className="text-[10px] text-zinc-400 font-mono">{formatDateDDMMYY(order.event_date)}</div>
                               )}
                             </td>
                             <td className="py-3.5 px-4 font-sans">
@@ -2977,7 +2977,7 @@ const LeadsReportSection: React.FC<LeadsReportSectionProps> = ({ leads }) => {
                         <span className="text-zinc-200 font-medium">{l.event_type || 'General'}</span>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="text-zinc-200 font-mono">{l.event_date || 'TBD'}</div>
+                        <div className="text-zinc-200 font-mono">{l.event_date ? formatDateDDMMYY(l.event_date) : 'TBD'}</div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="text-zinc-200">{l.sales_person || l.sales_staff_name || 'Unassigned'}</div>
@@ -3253,7 +3253,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       { key: 'customerName', label: 'Customer Name', render: (item: any) => <span className="font-bold text-white">{item.customerName}</span> },
       { key: 'eventName', label: 'Event Name', render: (item: any) => <span>{item.eventName}</span> },
       { key: 'assignedStaff', label: 'Assigned Staff', render: (item: any) => <AssignedStaffDropdown orderId={item.orderId} leadId={item.leadId} /> },
-      { key: 'eventDate', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.eventDate ? item.eventDate.split('T')[0] : 'N/A'}</span> }
+      { key: 'eventDate', label: 'Event Date', render: (item: any) => <span className="font-mono text-zinc-400">{item.eventDate ? formatDateDDMMYY(item.eventDate) : 'N/A'}</span> }
     ];
 
     if (selectedCard === 'summary_revenue') {
@@ -3834,7 +3834,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                     <td className="py-3.5 px-4 font-sans font-bold text-zinc-200">{r.customerName}</td>
                     <td className="py-3.5 px-4 font-sans text-zinc-300">
                       <div>{r.eventName}</div>
-                      <div className="text-[10px] font-mono text-zinc-500">{r.eventDate}</div>
+                      <div className="text-[10px] font-mono text-zinc-500">{formatDateDDMMYY(r.eventDate)}</div>
                     </td>
                     <td className="py-3.5 px-4 font-sans">
                       <AssignedStaffDropdown orderId={r.orderId} leadId={r.leadId} />
@@ -3982,6 +3982,21 @@ interface ReviewAndCloseModalProps {
   onReject?: () => void;
 }
 
+function formatDeliverableDisplay(item: any): string {
+  if (item === null || item === undefined) return '';
+  if (typeof item === 'string') return item;
+  if (typeof item === 'number') return String(item);
+  if (typeof item === 'object') {
+    const name = item.name || item.text || item.deliverable || item.title || item.label || '';
+    const qty = item.qty || item.quantity || item.count || 1;
+    if (name) {
+      return Number(qty) > 1 ? `${qty} × ${name}` : String(name);
+    }
+    return '';
+  }
+  return String(item);
+}
+
 const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
   order,
   leads = [],
@@ -4088,14 +4103,14 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
 
           let deliverablesList: string[] = [];
           if (ev.deliverables && Array.isArray(ev.deliverables) && ev.deliverables.length > 0) {
-            deliverablesList = ev.deliverables;
+            deliverablesList = ev.deliverables.map(formatDeliverableDisplay).filter(Boolean);
           } else if (ev.assigned_deliverables && Array.isArray(ev.assigned_deliverables) && ev.assigned_deliverables.length > 0) {
-            deliverablesList = ev.assigned_deliverables;
+            deliverablesList = ev.assigned_deliverables.map(formatDeliverableDisplay).filter(Boolean);
           } else if (matchedAssignments.length > 0) {
             deliverablesList = matchedAssignments.map((a: any) => `${a.speciality || 'Deliverable'} (${a.staff_name || 'Editor'})`);
           } else {
             deliverablesList = order?.deliverables && Array.isArray(order.deliverables) && order.deliverables.length > 0
-              ? order.deliverables
+              ? order.deliverables.map(formatDeliverableDisplay).filter(Boolean)
               : [order?.custom_event_name || order?.event_type || 'Full Coverage'];
           }
 
@@ -4131,9 +4146,9 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
       );
 
       let delivs = order?.deliverables && Array.isArray(order.deliverables) && order.deliverables.length > 0
-        ? order.deliverables
+        ? order.deliverables.map(formatDeliverableDisplay).filter(Boolean)
         : prod?.deliverables && Array.isArray(prod.deliverables)
-        ? prod.deliverables
+        ? prod.deliverables.map(formatDeliverableDisplay).filter(Boolean)
         : [];
 
       if (delivs.length === 0 && orderAssignments.length > 0) {
@@ -4296,9 +4311,9 @@ const ReviewAndCloseModal: React.FC<ReviewAndCloseModalProps> = ({
                     <span className="text-[10px] font-mono uppercase text-zinc-500 block font-bold mb-1">Assigned Deliverables</span>
                     <div className="flex flex-wrap gap-1.5">
                       {Array.isArray(ev.deliverables) && ev.deliverables.length > 0 ? (
-                        ev.deliverables.map((deliv: string, dIdx: number) => (
+                        ev.deliverables.map((deliv: any, dIdx: number) => (
                           <span key={dIdx} className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 text-[11px] font-mono">
-                            {deliv}
+                            {formatDeliverableDisplay(deliv)}
                           </span>
                         ))
                       ) : (
@@ -4443,7 +4458,7 @@ const UnlockRequestReviewModal: React.FC<UnlockRequestReviewModalProps> = ({
             </div>
             <div>
               <div className="text-slate-400 font-medium mb-1">Request Date</div>
-              <div className="text-slate-300 font-mono">{(unlockRequestModal.requested_at || unlockRequestModal.created_at) ? new Date(unlockRequestModal.requested_at || unlockRequestModal.created_at).toLocaleDateString() : '-'}</div>
+              <div className="text-slate-300 font-mono">{(unlockRequestModal.requested_at || unlockRequestModal.created_at) ? formatDateDDMMYY(unlockRequestModal.requested_at || unlockRequestModal.created_at) : '-'}</div>
             </div>
           </div>
           

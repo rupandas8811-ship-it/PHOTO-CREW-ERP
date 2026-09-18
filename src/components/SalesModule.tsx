@@ -12027,7 +12027,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             <StatusText status={leadStatus} />
                           </td>
                           <td className="p-3.5 font-mono text-zinc-400">
-                            {lead.created_date ? lead.created_date.split('T')[0] : 'N/A'}
+                            {lead.created_date ? formatDateDDMMYY(lead.created_date) : 'N/A'}
                           </td>
                           <td className="p-3.5 text-right pr-5 w-[160px] min-w-max overflow-visible relative">
                             {(() => {

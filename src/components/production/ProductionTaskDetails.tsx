@@ -71,9 +71,20 @@ export const ProductionTaskDetails: React.FC<ProductionTaskDetailsProps> = ({
         <div className="text-xs">
           <span className="text-zinc-500 block mb-1">Deliverables:</span>
           <ul className="list-disc list-inside text-zinc-300 space-y-0.5">
-            {safeDeliverables.map((item, idx) => (
-              <li key={idx}>{item}</li>
-            ))}
+            {safeDeliverables.map((item: any, idx) => {
+              let label = '';
+              if (item === null || item === undefined) label = '';
+              else if (typeof item === 'string') label = item;
+              else if (typeof item === 'object') {
+                const name = item.name || item.text || item.deliverable || item.title || '';
+                const qty = item.qty || item.quantity || item.count || 1;
+                label = name ? (Number(qty) > 1 ? `${qty} × ${name}` : String(name)) : '';
+              } else {
+                label = String(item);
+              }
+              if (!label) return null;
+              return <li key={idx}>{label}</li>;
+            })}
           </ul>
         </div>
       )}

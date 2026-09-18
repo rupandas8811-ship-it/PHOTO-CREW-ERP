@@ -4,6 +4,7 @@ import {
   Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle, Activity, Server, Database, Check, AlertCircle, Terminal, HelpCircle as HelpIcon, Eye, EyeOff
 } from 'lucide-react';
 import { User, UserRole } from '../types';
+import { formatDateDDMMYY } from '../utils';
 import { supabaseClient, currentDiagnosticReport, updateDiagnosticMetric } from '../supabaseClient';
 
 export const UserManagementModule: React.FC = () => {
@@ -403,7 +404,7 @@ export const UserManagementModule: React.FC = () => {
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
                           <Calendar className="w-3 h-3" />
-                          <span>Joined: {usr.created_at ? usr.created_at.split('T')[0] : 'N/A'}</span>
+                          <span>Joined: {usr.created_at ? formatDateDDMMYY(usr.created_at) : 'N/A'}</span>
                         </div>
                       </td>
 

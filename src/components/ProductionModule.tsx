@@ -8451,8 +8451,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       <tr key={idx} className="hover:bg-zinc-900/30 transition-colors">
                                         <td className="px-4 py-3 font-medium text-white">{row.staffName}</td>
                                         <td className="px-4 py-3 font-mono text-xs">{row.orderId}</td>
-                                        <td className="px-4 py-3 text-zinc-400">{row.assignedDate}</td>
-                                        <td className="px-4 py-3 text-zinc-400">{row.targetDeliveryDate}</td>
+                                        <td className="px-4 py-3 text-zinc-400">{row.assignedDate && row.assignedDate !== '—' ? formatDateDDMMYY(row.assignedDate) : '—'}</td>
+                                        <td className="px-4 py-3 text-zinc-400">{row.targetDeliveryDate && row.targetDeliveryDate !== '—' ? formatDateDDMMYY(row.targetDeliveryDate) : '—'}</td>
                                       </tr>
                                     ))
                                   )}

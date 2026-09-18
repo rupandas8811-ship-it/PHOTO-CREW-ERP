@@ -249,7 +249,7 @@ export function formatIndianPhoneNumber(phone: string): string {
 }
 
 /**
- * Formats any date into DD-MM-YY (e.g. "20-08-26").
+ * Formats any date into DD:MM:YY (e.g. "18:09:26").
  * Strict display format only. Does not alter underlying values.
  */
 export function formatDateDDMMYY(dateInput?: string | null | Date): string {
@@ -260,27 +260,36 @@ export function formatDateDDMMYY(dateInput?: string | null | Date): string {
       return trimmed;
     }
     
-    // If it's already in DD-MM-YY format (e.g. "20-08-26")
-    if (/^\d{2}-\d{2}-\d{2}$/.test(trimmed)) {
+    // If it's already in DD:MM:YY format (e.g. "18:09:26")
+    if (/^\d{2}:\d{2}:\d{2}$/.test(trimmed)) {
       return trimmed;
     }
 
-    // If it's in DD-MM-YYYY format (e.g. "20-08-2026")
-    const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    // If it's in DD-MM-YY or DD/MM/YY or DD.MM.YY format (e.g. "18-09-26" or "18/09/26")
+    const ddmmyyMatch = trimmed.match(/^(\d{1,2})[-/.:](\d{1,2})[-/.:](\d{2})$/);
+    if (ddmmyyMatch) {
+      const day = ddmmyyMatch[1].padStart(2, '0');
+      const month = ddmmyyMatch[2].padStart(2, '0');
+      const year = ddmmyyMatch[3];
+      return `${day}:${month}:${year}`;
+    }
+
+    // If it's in DD-MM-YYYY format (e.g. "18-09-2026" or "18/09/2026")
+    const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-/.:](\d{1,2})[-/.:](\d{4})$/);
     if (ddmmyyyyMatch) {
       const day = ddmmyyyyMatch[1].padStart(2, '0');
       const month = ddmmyyyyMatch[2].padStart(2, '0');
       const year = ddmmyyyyMatch[3].slice(-2);
-      return `${day}-${month}-${year}`;
+      return `${day}:${month}:${year}`;
     }
 
-    // If it starts with YYYY-MM-DD (e.g. "2026-08-20" or "2026-08-20T14:30:00" or "2026/08/20")
-    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    // If it starts with YYYY-MM-DD (e.g. "2026-09-18" or "2026-09-18T14:30:00" or "2026/09/18")
+    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/.:](\d{1,2})[-/.:](\d{1,2})/);
     if (yyyymmddMatch) {
       const year = yyyymmddMatch[1].slice(-2);
       const month = yyyymmddMatch[2].padStart(2, '0');
       const day = yyyymmddMatch[3].padStart(2, '0');
-      return `${day}-${month}-${year}`;
+      return `${day}:${month}:${year}`;
     }
 
     // Attempt Date object parse for any other string formats
@@ -289,7 +298,7 @@ export function formatDateDDMMYY(dateInput?: string | null | Date): string {
       const day = String(d.getDate()).padStart(2, '0');
       const month = String(d.getMonth() + 1).padStart(2, '0');
       const year = String(d.getFullYear()).slice(-2);
-      return `${day}-${month}-${year}`;
+      return `${day}:${month}:${year}`;
     }
 
     return trimmed;
@@ -300,7 +309,7 @@ export function formatDateDDMMYY(dateInput?: string | null | Date): string {
     const day = String(dateInput.getDate()).padStart(2, '0');
     const month = String(dateInput.getMonth() + 1).padStart(2, '0');
     const year = String(dateInput.getFullYear()).slice(-2);
-    return `${day}-${month}-${year}`;
+    return `${day}:${month}:${year}`;
   }
 
   return '';
@@ -2365,7 +2374,7 @@ export const checkTimeOverlap = (
 };
 
 /**
- * Formats an ISO timestamp or date into IST (Asia/Kolkata) Date string (DD-MM-YYYY)
+ * Formats an ISO timestamp or date into IST (Asia/Kolkata) Date string (DD:MM:YY)
  */
 export function formatISTDate(dateVal?: string | null | Date): string {
   if (!dateVal) return 'N/A';
@@ -2380,8 +2389,8 @@ export function formatISTDate(dateVal?: string | null | Date): string {
     }).formatToParts(d);
     const day = parts.find(p => p.type === 'day')?.value || '01';
     const month = parts.find(p => p.type === 'month')?.value || '01';
-    const year = parts.find(p => p.type === 'year')?.value || '2026';
-    return `${day}-${month}-${year}`;
+    const year = (parts.find(p => p.type === 'year')?.value || '2026').slice(-2);
+    return `${day}:${month}:${year}`;
   } catch (e) {
     return String(dateVal);
   }
