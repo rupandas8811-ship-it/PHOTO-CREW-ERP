@@ -957,19 +957,20 @@ const generateQuotationPDF = (
       const eventKey = `${pkgId}_${event.id}`;
       const nameKey = `${pkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
       
+      const isMulti = lead.events.length > 1;
       const eventInclusions = editableInclusions?.[eventKey] !== undefined
         ? editableInclusions[eventKey]
-        : (editableInclusions?.[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList);
+        : (isMulti ? [] : (editableInclusions?.[nameKey] !== undefined ? editableInclusions[nameKey] : inclusionsList));
 
       const eventName = event.event_name || event.event_type || 'Unnamed Event';
 
       const eventDeliverables = editableDeliverables?.[eventKey] !== undefined
         ? editableDeliverables[eventKey]
-        : (editableDeliverables?.[nameKey] !== undefined ? editableDeliverables[nameKey] : null);
+        : (isMulti ? [] : (editableDeliverables?.[nameKey] !== undefined ? editableDeliverables[nameKey] : null));
 
       const items = eventDeliverables !== null
         ? eventDeliverables.filter(Boolean)
-        : deliverablesList;
+        : (isMulti ? [] : deliverablesList);
 
       unsortedEvents.push({
         eventName,

@@ -3215,8 +3215,9 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
           {/* Event-Wise Configuration or Single Configuration */}
           <div>
-            {currentEvents && currentEvents.length > 0 ? (
-              currentEvents.map((event, eventIdx) => {
+            {currentEvents && currentEvents.length > 0 ? (() => {
+              const isMulti = currentEvents.length > 1;
+              return currentEvents.map((event, eventIdx) => {
                 const evId = String(event.id || event.event_id || `EV-${eventIdx + 1}`);
                 const eventKey = `${selectedPkgId}_${evId}`;
                 const altKey = `Custom Package_${evId}`;
@@ -3230,15 +3231,17 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
                 const eventInclusions = editableInclusions[eventKey] !== undefined
                   ? editableInclusions[eventKey]
-                  : (editableInclusions[evId] !== undefined
-                      ? editableInclusions[evId]
-                      : (editableInclusions[altKey] !== undefined
-                          ? editableInclusions[altKey]
-                          : (editableInclusions[customKey] !== undefined
-                              ? editableInclusions[customKey]
-                              : (parsedDirectTm !== null
-                                  ? parsedDirectTm
-                                  : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))))));
+                  : (isMulti
+                      ? []
+                      : (editableInclusions[evId] !== undefined
+                          ? editableInclusions[evId]
+                          : (editableInclusions[altKey] !== undefined
+                              ? editableInclusions[altKey]
+                              : (editableInclusions[customKey] !== undefined
+                                  ? editableInclusions[customKey]
+                                  : (parsedDirectTm !== null
+                                      ? parsedDirectTm
+                                      : (inclusionsList.length > 0 ? [...inclusionsList] : []))))));
 
                 const directDel = event.deliverables || event.Add_Deliverable || event.deliverables_description;
                 const parsedDirectDel = directDel ? (Array.isArray(directDel) ? directDel.map((d: any) => {
@@ -3248,24 +3251,28 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
                 const eventDeliverables = editableDeliverables[eventKey] !== undefined
                   ? editableDeliverables[eventKey]
-                  : (editableDeliverables[evId] !== undefined
-                      ? editableDeliverables[evId]
-                      : (editableDeliverables[altKey] !== undefined
-                          ? editableDeliverables[altKey]
-                          : (editableDeliverables[customKey] !== undefined
-                              ? editableDeliverables[customKey]
-                              : (parsedDirectDel !== null
-                                  ? parsedDirectDel
-                                  : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))))));
+                  : (isMulti
+                      ? []
+                      : (editableDeliverables[evId] !== undefined
+                          ? editableDeliverables[evId]
+                          : (editableDeliverables[altKey] !== undefined
+                              ? editableDeliverables[altKey]
+                              : (editableDeliverables[customKey] !== undefined
+                                  ? editableDeliverables[customKey]
+                                  : (parsedDirectDel !== null
+                                      ? parsedDirectDel
+                                      : (deliverablesList.length > 0 ? [...deliverablesList] : []))))));
 
                 const updateInclusionsForEvent = (newList: string[]) => {
                   const updated = {
                     ...editableInclusions,
-                    [eventKey]: newList,
-                    [altKey]: newList,
-                    [customKey]: newList,
-                    [evId]: newList
+                    [eventKey]: newList
                   };
+                  if (!isMulti) {
+                    updated[altKey] = newList;
+                    updated[customKey] = newList;
+                    updated[evId] = newList;
+                  }
                   setEditableInclusions(updated);
                   saveStep3DataRealtime(updated, editableDeliverables);
                 };
@@ -3273,11 +3280,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 const updateDeliverablesForEvent = (newList: string[]) => {
                   const updated = {
                     ...editableDeliverables,
-                    [eventKey]: newList,
-                    [altKey]: newList,
-                    [customKey]: newList,
-                    [evId]: newList
+                    [eventKey]: newList
                   };
+                  if (!isMulti) {
+                    updated[altKey] = newList;
+                    updated[customKey] = newList;
+                    updated[evId] = newList;
+                  }
                   setEditableDeliverables(updated);
                   saveStep3DataRealtime(editableInclusions, updated);
                 };
@@ -3435,8 +3444,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                     </div>
                   </div>
                 );
-              })
-            ) : (
+              });
+            })() : (
               <div className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
                 {/* Single Team Members Included */}
                 <div>

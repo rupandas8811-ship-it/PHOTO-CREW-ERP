@@ -376,12 +376,17 @@ export function buildStep3EventPayloads(
       `${evAltId}`,
       `EV-${idx + 1}`,
       `EVT-0${idx + 1}`,
-      `EVT-${idx + 1}`,
-      `${effectivePkgId}_${evName}`,
-      `Custom Package_${evName}`,
-      `custom_package_${evName}`,
-      `${evName}`
+      `EVT-${idx + 1}`
     ];
+
+    if (!isMultiEvent) {
+      keysToTry.push(
+        `${effectivePkgId}_${evName}`,
+        `Custom Package_${evName}`,
+        `custom_package_${evName}`,
+        `${evName}`
+      );
+    }
 
     if (!isMultiEvent && (!event || !hasEvents)) {
       keysToTry.push(effectivePkgId, 'Custom Package', 'custom_package');
@@ -428,12 +433,17 @@ export function buildStep3EventPayloads(
       `${evAltId}`,
       `EV-${idx + 1}`,
       `EVT-0${idx + 1}`,
-      `EVT-${idx + 1}`,
-      `${effectivePkgId}_${evName}`,
-      `Custom Package_${evName}`,
-      `custom_package_${evName}`,
-      `${evName}`
+      `EVT-${idx + 1}`
     ];
+
+    if (!isMultiEvent) {
+      keysToTry.push(
+        `${effectivePkgId}_${evName}`,
+        `Custom Package_${evName}`,
+        `custom_package_${evName}`,
+        `${evName}`
+      );
+    }
 
     if (!isMultiEvent && (!event || !hasEvents)) {
       keysToTry.push(effectivePkgId, 'Custom Package', 'custom_package');
@@ -586,7 +596,7 @@ export function parseTeamMembersJsonToRecord(
           } else {
             const matchedEv = (eventsList || []).find((e, eIdx) =>
               (evId && (e.id && String(e.id) === String(evId) || e.event_id && String(e.event_id) === String(evId))) ||
-              (!evId && (eIdx === idx || (e.event_name && e.event_name === evName) || (e.event_type && e.event_type === evName)))
+              (!evId && eIdx === idx)
             );
             const targetId = matchedEv ? String(matchedEv.id || matchedEv.event_id || evId) : String(evId || `event_${idx + 1}`);
 
@@ -735,7 +745,7 @@ export function parseDeliverablesJsonToRecord(
           } else {
             const matchedEv = (eventsList || []).find((e, eIdx) =>
               (evId && (e.id && String(e.id) === String(evId) || e.event_id && String(e.event_id) === String(evId))) ||
-              (!evId && (eIdx === idx || (e.event_name && e.event_name === evName) || (e.event_type && e.event_type === evName)))
+              (!evId && eIdx === idx)
             );
             const targetId = matchedEv ? String(matchedEv.id || matchedEv.event_id || evId) : String(evId || `event_${idx + 1}`);
 
