@@ -15,7 +15,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, getSyncSavedQuotationAmount, resolveSavedQuotationAmount } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 import { TimePicker12Hour } from '../TimePicker12Hour';
 
@@ -45,8 +45,30 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
     setShowConfirmModal,
     orders,
     wizardLeadData,
-    isSaving
+    isSaving,
+    quotations,
+    leads
   } = props;
+
+  // Ensure exact latest saved Final Quotation Amount is fetched/verified when modal opens
+  useEffect(() => {
+    if (showConfirmModal && selectedLead) {
+      const leadId = selectedLead.lead_id;
+      const orderId = selectedLead.order_id;
+      const syncAmt = getSyncSavedQuotationAmount(selectedLead, leadId, orderId, quotations, leads, orders);
+      if (syncAmt !== null && syncAmt > 0) {
+        if (!confirmForm.quotation_amount || Number(confirmForm.quotation_amount) !== syncAmt) {
+          setConfirmForm((prev: any) => ({ ...prev, quotation_amount: syncAmt }));
+        }
+      } else {
+        resolveSavedQuotationAmount(leadId, orderId, quotations, leads, orders).then((resolvedAmt) => {
+          if (resolvedAmt !== null && resolvedAmt > 0) {
+            setConfirmForm((prev: any) => ({ ...prev, quotation_amount: resolvedAmt }));
+          }
+        });
+      }
+    }
+  }, [showConfirmModal, selectedLead?.lead_id]);
 
   if (!showConfirmModal || !selectedLead) return null;
 
