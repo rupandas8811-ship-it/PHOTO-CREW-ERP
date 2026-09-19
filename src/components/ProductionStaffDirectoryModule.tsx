@@ -712,6 +712,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
           <table className="w-full text-left border-collapse text-xs min-w-max">
             <thead className="bg-[#0c0d10] text-[10px] font-mono text-zinc-500 uppercase tracking-widest border-b border-zinc-900">
               <tr>
+                <th className="py-4.5 px-3 font-black text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
                 <th className="py-4.5 px-5 font-black">Staff Member</th>
                 <th className="py-4.5 px-4 font-black">Production Speciality</th>
                 <th className="py-4.5 px-4 font-black">Contacts</th>
@@ -722,7 +723,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-900">
-              {filteredStaff.map((member) => {
+              {filteredStaff.map((member, idx) => {
                 const metrics = getDynamicStaffMetrics(member.name, member.staff_id);
                 const employeeIdClean = (member as any).employee_id || member.staff_id;
                 const cityClean = (member as any).city || 'Unspecified';
@@ -730,6 +731,11 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                 return (
                   <tr key={member.staff_id} className="hover:bg-zinc-900/10 transition-colors">
                     
+                    {/* Column 0: S.No */}
+                    <td className="py-4 px-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
+                      {idx + 1}
+                    </td>
+
                     {/* Column 1: Staff Member */}
                     <td className="py-4 px-5">
                       <div className="flex items-center gap-3">
@@ -824,7 +830,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
               {filteredStaff.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-zinc-550 font-mono uppercase tracking-widest text-[11px]">
+                  <td colSpan={8} className="py-12 text-center text-zinc-550 font-mono uppercase tracking-widest text-[11px]">
                     No staff members found matching the specified filters.
                   </td>
                 </tr>

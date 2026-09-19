@@ -7520,7 +7520,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       for (let i = 0; i < modalEvents.length; i++) {
         const ev = modalEvents[i];
         const key = ev.id || `ev_${i}`;
-        const rep = eventsReporting[key];
+        const rep = eventsReporting[key] || {
+          reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || '',
+          reporting_time: ev.reporting_time || selectedLead.reporting_time || ''
+        };
         const evTitle = ev.event_name || ev.event_type || `Event ${i + 1}`;
         if (!rep?.reporting_date || !rep.reporting_date.trim()) {
           showToastMsg(`Please enter Reporting Date for ${evTitle}.`, "error");
@@ -7532,7 +7535,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         }
       }
     } else {
-      const rep = eventsReporting['default'];
+      const rep = eventsReporting['default'] || {
+        reporting_date: selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || '',
+        reporting_time: selectedLead.reporting_time || ''
+      };
       if (!rep?.reporting_date || !rep.reporting_date.trim()) {
         showToastMsg("Please enter Reporting Date.", "error");
         return;
@@ -7550,11 +7556,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       if (modalEvents.length > 0) {
         const updatedEvents = modalEvents.map((ev, idx) => {
           const key = ev.id || `ev_${idx}`;
-          const rep = eventsReporting[key] || { reporting_date: '', reporting_time: '' };
+          const rep = eventsReporting[key] || {
+            reporting_date: ev.reporting_date || (ev as any).Reporting_date || ev.event_date || ev.event_start_date || selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || '',
+            reporting_time: ev.reporting_time || selectedLead.reporting_time || ''
+          };
           return {
             ...ev,
             reporting_date: rep.reporting_date || ev.reporting_date || ev.event_date || '',
-            Reporting_date: rep.reporting_date || (ev as any).Reporting_date || ev.event_date || '',
             reporting_time: rep.reporting_time || ev.reporting_time || ''
           };
         });
@@ -7565,7 +7573,10 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           reporting_time: updatedEvents[0]?.reporting_time || ''
         });
       } else {
-        const rep = eventsReporting['default'] || { reporting_date: '', reporting_time: '' };
+        const rep = eventsReporting['default'] || {
+          reporting_date: selectedLead.Reporting_date || (selectedLead as any).reporting_date || selectedLead.event_date || '',
+          reporting_time: selectedLead.reporting_time || ''
+        };
         await updateLead(selectedLead.lead_id, {
           Reporting_date: rep.reporting_date,
           reporting_time: rep.reporting_time
@@ -7573,8 +7584,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       }
 
       const firstRepTime = (modalEvents.length > 0)
-        ? eventsReporting[modalEvents[0].id || 'ev_0']?.reporting_time
-        : eventsReporting['default']?.reporting_time;
+        ? (eventsReporting[modalEvents[0].id || 'ev_0']?.reporting_time || modalEvents[0]?.reporting_time || selectedLead.reporting_time)
+        : (eventsReporting['default']?.reporting_time || selectedLead.reporting_time);
 
       await confirmOrder(
         selectedLead.lead_id,
@@ -7609,34 +7620,38 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
       const oldStatus = selectedLead ? (selectedLead.current_status || selectedLead.status || 'New Lead') : null;
 
-      logStatusUpdateError({
-        leadId: selectedLead?.lead_id || undefined,
-        orderId: null,
-        oldStatus,
-        newStatus: 'Order Confirmed',
-        updatePayload: {
-          status: 'Order Confirmed',
-          event_date: confirmForm.event_date,
-          event_time: confirmForm.event_time,
-          reporting_time: undefined,
-        },
-        insertPayload: {
-          order_status: 'Confirmed',
-          current_stage: 'Order Confirmed',
-          package_name: confirmForm.package_name,
-          quotation_amount: Number(confirmForm.quotation_amount),
-          advance_received: Number(confirmForm.advance_received),
-        },
-        dbResponse: null,
-        fullError: err
-      });
+      try {
+        logStatusUpdateError({
+          leadId: selectedLead?.lead_id || null,
+          orderId: null,
+          oldStatus,
+          newStatus: 'Order Confirmed',
+          updatePayload: {
+            status: 'Order Confirmed',
+            event_date: confirmForm.event_date,
+            event_time: confirmForm.event_time,
+            reporting_time: undefined,
+          },
+          insertPayload: {
+            order_status: 'Confirmed',
+            current_stage: 'Order Confirmed',
+            package_name: confirmForm.package_name,
+            quotation_amount: Number(confirmForm.quotation_amount),
+            advance_received: Number(confirmForm.advance_received),
+          },
+          dbResponse: null,
+          fullError: err
+        });
+      } catch (logErr) {
+        console.warn("Failed to log status update error:", logErr);
+      }
 
       setStatusError({
         title: "Action Button Order Confirmation Failed",
         reason: parsed.reason,
         suggestedFix: parsed.suggestedFix
       });
-      alert(parsed.reason);
+      showToastMsg(parsed.reason || "Failed to confirm order.", "error");
     } finally {
       setIsSaving(false);
     }

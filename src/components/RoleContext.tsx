@@ -2021,10 +2021,18 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'id', 'lead_id', 'event_type', 'event_name', 'event_shoot_type', 'event_date', 
         'event_end_date', 'event_start_time', 'event_end_time', 'event_location', 
         'google_maps_link', 'guest_pax', 'staff_pax', 'assigned_staff_names', 
-        'assigned_staff_mobiles', 'assigned_equipment', 'reporting_date', 'Reporting_date', 'reporting_time',
+        'assigned_staff_mobiles', 'assigned_equipment', 'reporting_date', 'reporting_time',
         'created_at', 'updated_at'
       ]
     };
+
+    if (table === 'lead_events' && cloned) {
+      if (cloned.Reporting_date && !cloned.reporting_date) {
+        cloned.reporting_date = cloned.Reporting_date;
+      }
+      delete cloned.Reporting_date;
+      delete cloned.Event_End_Date;
+    }
 
     if (table === 'payments' && cloned) {
       if (!cloned.payment_type && (cloned.Payment_type || cloned['Payment_type'] || cloned['Payment Type'])) {
@@ -2380,7 +2388,27 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
 
       try {
-        const { data: fallbackInsData, error } = await supabaseClient.from(table).insert(sanitized).select();
+        let { data: fallbackInsData, error } = await supabaseClient.from(table).insert(sanitized).select();
+        if (error && table === 'lead_events' && (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('lead_events_pkey'))) {
+          try {
+            const { data: allEvs } = await supabaseClient.from('lead_events').select('id');
+            let maxId = 0;
+            if (Array.isArray(allEvs)) {
+              for (const row of allEvs) {
+                const num = typeof row.id === 'number' ? row.id : parseInt(String(row.id), 10);
+                if (!isNaN(num) && num > maxId) maxId = num;
+              }
+            }
+            const retryPayload = { ...sanitized, id: maxId + 1 };
+            const retryRes = await supabaseClient.from('lead_events').insert(retryPayload).select();
+            if (!retryRes.error) {
+              fallbackInsData = retryRes.data;
+              error = null;
+            }
+          } catch (retryE) {
+            console.warn("[lead_events fallback retry exception]:", retryE);
+          }
+        }
         if (error) {
           if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
             return { success: true };
@@ -8782,9 +8810,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     if (updatedEvents) {
       // 1. Load existing events from DB
-      const { data: existingEvents, error: fetchErr } = await supabaseClient.from('lead_events').select('id').eq('lead_id', leadId);
-      if (fetchErr) {
-        throw new Error(`Failed to fetch existing events: ${fetchErr.message}`);
+      let existingEvents: any[] = [];
+      try {
+        if (supabaseClient) {
+          const { data: dbEvents, error: fetchErr } = await supabaseClient.from('lead_events').select('id').eq('lead_id', leadId);
+          if (!fetchErr && dbEvents) {
+            existingEvents = dbEvents;
+          }
+        }
+      } catch (e) {
+        console.warn("[updateLead] Error fetching lead_events:", e);
       }
       
       const existingIds = existingEvents?.map(e => String(e.id)) || [];
@@ -8795,8 +8830,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if (idsToDelete.length > 0) {
         await Promise.all(idsToDelete.map(async (idToDelete) => {
           const delRes = await pushDelete('lead_events', 'id', idToDelete);
-          if (!delRes.success) {
-            throw new Error(`Failed to delete removed event: ${delRes.error}`);
+          if (!delRes?.success) {
+            console.warn(`[updateLead] Failed to delete removed event ${idToDelete}:`, delRes?.error);
           }
         }));
       }
@@ -8821,7 +8856,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           assigned_staff_names: ev.assigned_staff_names || '',
           assigned_staff_mobiles: ev.assigned_staff_mobiles || '',
           reporting_date: ev.reporting_date || (ev as any).Reporting_date || null,
-          Reporting_date: ev.reporting_date || (ev as any).Reporting_date || null,
           reporting_time: ev.reporting_time || null
         };
         
@@ -8831,10 +8865,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
         if (isNew) {
           const insRes = await pushInsert('lead_events', eventPayload);
-          if (!insRes.success) throw new Error(`Failed to insert new event: ${insRes.error}`);
+          if (!insRes?.success) {
+            console.warn(`[updateLead] Failed to insert new event:`, insRes?.error);
+          }
         } else {
           const updRes = await pushUpdate('lead_events', 'id', ev.id, eventPayload);
-          if (!updRes.success) throw new Error(`Failed to update existing event: ${updRes.error}`);
+          if (!updRes?.success) {
+            console.warn(`[updateLead] Failed to update existing event:`, updRes?.error);
+          }
         }
       }));
     }

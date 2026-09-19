@@ -363,6 +363,7 @@ export const SalesStaffManagementModule: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-[900px]">
             <thead>
               <tr className="bg-zinc-900/50 border-b border-zinc-800 text-[10px] uppercase font-mono tracking-wider text-zinc-400 whitespace-nowrap">
+                <th className="p-3 font-bold text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
                 <th className="p-4 font-bold">Staff Name</th>
                 <th className="p-4 font-bold">Contact</th>
                 <th className="p-4 font-bold">Employee ID</th>
@@ -375,13 +376,16 @@ export const SalesStaffManagementModule: React.FC = () => {
             <tbody className="divide-y divide-zinc-800/60">
               {salesStaffList.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-zinc-500 font-mono text-xs">
+                  <td colSpan={8} className="p-8 text-center text-zinc-500 font-mono text-xs">
                     No Sales Staff found. Click "Add Sales Staff" to create one.
                   </td>
                 </tr>
               ) : (
-                salesStaffList.map((usr) => (
+                salesStaffList.map((usr, idx) => (
                   <tr key={usr.id} className="hover:bg-zinc-900/30 transition-colors">
+                    <td className="p-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
+                      {idx + 1}
+                    </td>
                     <td className="p-4 whitespace-nowrap">
                       <div className="font-bold text-slate-200">{usr.name}</div>
                       {usr.username && <div className="text-xs text-slate-500">@{usr.username}</div>}

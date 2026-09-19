@@ -784,6 +784,7 @@ export const OperationsStaffManagement: React.FC = () => {
           <table className="w-full text-left border-collapse min-w-max">
             <thead>
               <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/30">
+                <th className="p-3 font-bold font-mono text-[10px] uppercase text-zinc-400 text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
                 <th className="p-3.5">Code / Roster</th>
                 <th className="p-3.5 font-bold">Contact Node</th>
                 <th className="p-3.5 font-bold">Skills</th>
@@ -794,13 +795,14 @@ export const OperationsStaffManagement: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-zinc-850/60 text-zinc-300">
               {operationsCrew.length > 0 ? (
-                operationsCrew.map((st) => {
+                operationsCrew.map((st, idx) => {
                   const activeAssignmentsCount = getStaffActiveAssignmentsCount(st.name);
                   const staffSkills = getStaffSkillsList(st);
                   const isSkillsOpen = openSkillsStaffId === st.staff_id;
 
                   return (
                     <tr key={st.staff_id} className="hover:bg-zinc-900/10 transition-all">
+                      <td className="p-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">{idx + 1}</td>
                       <td className="p-3.5">
                         <div className="font-mono text-zinc-405 bg-zinc-950 px-1.5 py-0.5 rounded text-[10px] w-fit border border-zinc-850">
                           {st.staff_id}
@@ -970,7 +972,7 @@ export const OperationsStaffManagement: React.FC = () => {
                 })
               ) : (
                 <tr>
-                  <td colSpan={6} className="p-10 text-center text-zinc-550 italic font-mono">
+                  <td colSpan={7} className="p-10 text-center text-zinc-550 italic font-mono">
                     No field personnel currently on call.
                   </td>
                 </tr>

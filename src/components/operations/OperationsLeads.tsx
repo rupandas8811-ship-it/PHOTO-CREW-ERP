@@ -813,12 +813,16 @@ export const OperationsLeads: React.FC = () => {
     if (whatsappShareModalData) {
       const initialMsgs: Record<string, string> = {};
       const initialSelected: Record<string, boolean> = {};
+      const currentLeadId = whatsappShareModalData.order?.lead_id || (whatsappShareModalData.lead as any)?.lead_id;
+      const latestLead = leads.find(l => l.lead_id === currentLeadId) || whatsappShareModalData.lead;
+      const latestOrder = orders.find(o => o.order_id === whatsappShareModalData.orderId) || whatsappShareModalData.order;
+
       whatsappShareModalData.staffNames.forEach(name => {
         initialMsgs[name] = generateWhatsAppMessageForStaff(
-          whatsappShareModalData.order, 
-          name,
+          latestOrder, 
+          name, 
           whatsappShareModalData.eventAllocations,
-          whatsappShareModalData.lead,
+          latestLead,
           whatsappShareModalData.finalAssignments
         );
         initialSelected[name] = true;
@@ -839,7 +843,7 @@ export const OperationsLeads: React.FC = () => {
       setEditedMessages({});
       setSelectedStaffForShare({});
     }
-  }, [whatsappShareModalData]);
+  }, [whatsappShareModalData, leads, orders]);
 
   // Helper to get assigned staff names for an order
   const getAssignedStaffNamesForOrder = (ord: Order): string[] => {
@@ -1666,7 +1670,7 @@ export const OperationsLeads: React.FC = () => {
 
   // Helper to generate personalized WhatsApp message for a staff member
   const generateWhatsAppMessageForStaff = (ord: Order, staffName: string, modalEventAllocations?: any, modalLead?: any, finalAssignments?: any[]) => {
-    const lead = modalLead || leads.find(l => l.lead_id === ord.lead_id);
+    const lead = (ord?.lead_id ? leads.find(l => l.lead_id === ord.lead_id) : null) || (modalLead?.lead_id ? leads.find(l => l.lead_id === modalLead.lead_id) : null) || modalLead || leads.find(l => l.lead_id === ord.lead_id);
     const op = operations.find(o => o.order_id === ord.order_id);
     const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === (lead?.lead_id || ord.lead_id)) || [];
 
@@ -3065,10 +3069,12 @@ export const OperationsLeads: React.FC = () => {
                             actionItems.push({
                               label: 'Share via WhatsApp',
                               onClick: () => {
+                                const leadForOrd = leads.find(l => l.lead_id === ord.lead_id);
                                 setWhatsappShareModalData({
                                   orderId: ord.order_id,
                                   order: ord,
-                                  staffNames: assignedStaffNames
+                                  staffNames: assignedStaffNames,
+                                  lead: leadForOrd
                                 });
                                 setActiveMenuOrderId(null);
                               }
@@ -5068,7 +5074,8 @@ export const OperationsLeads: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => {
-                                const msgText = generateWhatsAppMessageForStaff(successModalData.order, name);
+                                const leadForOrd = leads.find(l => l.lead_id === successModalData.order.lead_id);
+                                const msgText = generateWhatsAppMessageForStaff(successModalData.order, name, undefined, leadForOrd);
                                 const url = `https://wa.me/?text=${encodeURIComponent(msgText)}`;
                                 window.open(url, '_blank');
                               }}

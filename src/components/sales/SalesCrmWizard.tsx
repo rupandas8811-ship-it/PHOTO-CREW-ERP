@@ -284,6 +284,9 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
       event_date: (activeEventsList[0]?.event_date) || leadForConfirmation.event_date || today,
       event_time: (activeEventsList[0]?.event_time) || leadForConfirmation.event_time || ''
     });
+    if (initEventsReporting) {
+      initEventsReporting(leadForConfirmation);
+    }
     setShowConfirmModal(true);
   };
 
@@ -1792,6 +1795,9 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                               event_date: selectedLead.event_date || today,
                               event_time: selectedLead.event_time || ''
                             });
+                            if (initEventsReporting) {
+                              initEventsReporting(selectedLead);
+                            }
                             setShowConfirmModal(true);
                           }}
                           disabled={isSaving || isCrmLocked || !hasCrmPackage}

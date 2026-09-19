@@ -1880,10 +1880,27 @@ export function getEventTeamMemberStaffMapping(params: {
     targetStaffName
   } = params;
 
-  // Resolve Events
-  const rawEvents = lead?.events && Array.isArray(lead.events) && lead.events.length > 0
-    ? lead.events
-    : (lead?.notes_special_customizations ? deserializeLeadEvents(lead.notes_special_customizations).events : []);
+  // Resolve Events - strictly prioritize latest Lead event array / serialized notes from Sales, fallback to order
+  let rawEvents: any[] = [];
+  if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
+    rawEvents = lead.events;
+  } else if (lead?.notes_special_customizations) {
+    const deserialized = deserializeLeadEvents(lead.notes_special_customizations);
+    if (deserialized.events && deserialized.events.length > 0) {
+      rawEvents = deserialized.events;
+    }
+  }
+
+  if (rawEvents.length === 0) {
+    if (order?.events && Array.isArray(order.events) && order.events.length > 0) {
+      rawEvents = order.events;
+    } else if (order?.notes_special_customizations) {
+      const deserialized = deserializeLeadEvents(order.notes_special_customizations);
+      if (deserialized.events && deserialized.events.length > 0) {
+        rawEvents = deserialized.events;
+      }
+    }
+  }
 
   const totalEvents = rawEvents.length > 0 ? rawEvents.length : 1;
   const teamConfigs = extractTeamMembersConfig(lead, leadPkgs);
@@ -1901,7 +1918,7 @@ export function getEventTeamMemberStaffMapping(params: {
         event_end_time: order?.event_end_time || lead?.event_end_time || 'N/A',
         reporting_date: order?.Reporting_date || lead?.Reporting_date || order?.event_date || 'N/A',
         reporting_time: order?.reporting_time || lead?.reporting_time || operationsRecord?.reporting_time || 'N/A',
-        event_location: order?.event_location || lead?.event_location || 'N/A',
+        event_location: (lead?.event_location || order?.event_location || '').trim(),
         google_maps_link: order?.google_maps_link || lead?.google_maps_link || null,
         guest_pax: (lead as any)?.guest_pax || order?.guest_pax || 'N/A'
       }];
@@ -1935,7 +1952,16 @@ export function getEventTeamMemberStaffMapping(params: {
     const eventEndTime = ev.event_end_time || order?.event_end_time || 'N/A';
     const reportingDate = ev.reporting_date || ev.Reporting_date || order?.Reporting_date || lead?.Reporting_date || eventDate || 'N/A';
     const reportingTime = ev.reporting_time || order?.reporting_time || lead?.reporting_time || operationsRecord?.reporting_time || 'N/A';
-    const location = ev.event_location || order?.event_location || lead?.event_location || 'N/A';
+    
+    // Strict event-wise location mapping:
+    // When events are defined, strictly use the specific event's event_location from Sales.
+    // If empty in Sales, keep it empty rather than showing another event's location.
+    let location = '';
+    if (rawEvents.length > 0) {
+      location = (ev.event_location || '').trim();
+    } else {
+      location = (lead?.event_location || order?.event_location || '').trim();
+    }
     const googleMapsLink = ev.google_maps_link || (totalEvents === 1 ? (lead?.google_maps_link || order?.google_maps_link || null) : null);
     const guestPax = ev.guest_pax || (lead as any)?.guest_pax || order?.guest_pax || 'N/A';
 
@@ -2252,8 +2278,8 @@ export function generateWhatsAppAssignmentMessage(params: {
     if (group.reportingTime && group.reportingTime !== 'N/A') {
       msg += `Reporting Time: ${group.reportingTime}\n`;
     }
-    if (group.location && group.location !== 'N/A') {
-      msg += `Location: ${group.location}\n`;
+    if (group.location && group.location !== 'N/A' && group.location.trim() !== '') {
+      msg += `Event Location (Venue Address): ${group.location}\n`;
     }
     if (group.googleMapsLink && group.googleMapsLink !== 'N/A') {
       msg += `Google Maps: ${group.googleMapsLink}\n`;

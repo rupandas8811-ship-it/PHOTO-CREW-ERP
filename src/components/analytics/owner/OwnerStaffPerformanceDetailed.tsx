@@ -1223,6 +1223,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <table className="w-full text-left border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-900/40 border-b border-zinc-800">
+                    <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
                     <SortHeader label="Sales Staff" sortKey="salesStaff" />
                     <SortHeader label="Leads" sortKey="leads" align="center" />
                     <SortHeader label="Follow-ups" sortKey="followUps" align="center" />
@@ -1236,7 +1237,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-850">
-                  {paginatedRows.map((staffItem) => (
+                  {paginatedRows.map((staffItem, idx) => (
                     <tr 
                       key={staffItem.staff_id}
                       onClick={() => setSelectedStaffDetail({
@@ -1253,6 +1254,9 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                       })}
                       className="hover:bg-zinc-900/40 transition-colors cursor-pointer group"
                     >
+                      <td className="p-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
+                        {(currentPage - 1) * itemsPerPage + idx + 1}
+                      </td>
                       <td className="p-3.5">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">
@@ -1430,6 +1434,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <table className="w-full text-left border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-900/40 border-b border-zinc-800">
+                    <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
                     <SortHeader label="Operations Staff" sortKey="operationsStaff" />
                     <SortHeader label="Staff Type" sortKey="staffType" />
                     <SortHeader label="Events Assigned" sortKey="eventsAssigned" align="center" />
@@ -1442,7 +1447,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-850">
-                  {paginatedRows.map((staffItem) => (
+                  {paginatedRows.map((staffItem, idx) => (
                     <tr 
                       key={staffItem.staff_id}
                       onClick={() => setSelectedStaffDetail({
@@ -1459,6 +1464,9 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                       })}
                       className="hover:bg-zinc-900/40 transition-colors cursor-pointer group"
                     >
+                      <td className="p-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
+                        {(currentPage - 1) * itemsPerPage + idx + 1}
+                      </td>
                       <td className="p-3.5">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs">
@@ -1695,6 +1703,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
               <table className="w-full text-left border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-900/40 border-b border-zinc-800">
+                    <th className="p-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 font-mono text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
                     <SortHeader label="Production Staff" sortKey="productionStaff" />
                     <SortHeader label="Deliverables Assigned" sortKey="deliverablesAssigned" align="center" />
                     <SortHeader label="Editing Started" sortKey="editingStarted" align="center" />
@@ -1708,7 +1717,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-850">
-                  {paginatedRows.map((staffItem) => (
+                  {paginatedRows.map((staffItem, idx) => (
                     <tr 
                       key={staffItem.staff_id}
                       onClick={() => setSelectedStaffDetail({
@@ -1725,6 +1734,9 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                       })}
                       className="hover:bg-zinc-900/40 transition-colors cursor-pointer group"
                     >
+                      <td className="p-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
+                        {(currentPage - 1) * itemsPerPage + idx + 1}
+                      </td>
                       <td className="p-3.5">
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs">
@@ -1760,7 +1772,7 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
                   ))}
                   {paginatedRows.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="p-8 text-center text-zinc-500 font-mono text-xs">
+                      <td colSpan={11} className="p-8 text-center text-zinc-500 font-mono text-xs">
                         No production staff records found matching filter.
                       </td>
                     </tr>

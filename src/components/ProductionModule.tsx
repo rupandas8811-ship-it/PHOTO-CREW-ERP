@@ -7,7 +7,7 @@ import {
   Play, CheckCircle2, UserCheck, Eye, EyeOff, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
   PlusSquare, ArrowRight, CheckSquare, AlertTriangle, Truck, Users, BarChart3, TrendingUp, Sparkles, UserPlus, ChevronRight,
   Aperture, Camera, Sliders, ShieldCheck, Image, Download, Printer, FileSpreadsheet, FileText, Search,
-  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink, FileVideo, Upload
+  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink, FileVideo, Upload, ChevronDown
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -2880,7 +2880,18 @@ _Please acknowledge receipt of this task assignment._`;
   const [addStaffSuccess, setAddStaffSuccess] = useState('');
   const [isSubmittingStaff, setIsSubmittingStaff] = useState(false);
   const [showSmartFilter, setShowSmartFilter] = useState(false);
-  const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+   const [editingStaffId, setEditingStaffId] = useState<string | null>(null);
+  const [openSkillsStaffId, setOpenSkillsStaffId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (openSkillsStaffId && !(e.target as HTMLElement).closest('.skills-dropdown-container')) {
+        setOpenSkillsStaffId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openSkillsStaffId]);
 
   // Editing timeline dates inside detailed modal
   const [dateFootageReceived, setDateFootageReceived] = useState('');
@@ -4756,6 +4767,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <table className="w-full text-left border-collapse text-xs text-zinc-300 min-w-max">
                 <thead className="bg-[#0b0c10] text-[9px] font-mono text-zinc-500 uppercase tracking-widest border-b border-zinc-900">
                   <tr>
+                    <th className="py-4.5 px-3 font-black text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
                     <th className="py-4.5 px-5 font-black">Staff Member</th>
                     <th className="py-4.5 px-4 font-black">Production Role</th>
                     <th className="py-4.5 px-4 font-black">Contacts</th>
@@ -4771,11 +4783,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 font-mono">
-                  {(filteredStaff || []).map((member) => {
+                  {(filteredStaff || []).map((member, idx) => {
                     const stats = getStaffRosterStats(member.name);
 
                     return (
                       <tr key={member.staff_id} className="hover:bg-zinc-900/10 transition-colors">
+                        {/* 0. S.No */}
+                        <td className="py-4 px-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
+                          {idx + 1}
+                        </td>
                         {/* 1. Staff Name & Employee ID */}
                         <td className="py-4 px-5">
                           <div className="flex items-center gap-3">
@@ -6429,7 +6445,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <table className="w-full text-left border-collapse min-w-max">
                     <thead>
                       <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
-                        <th className="px-4 py-3 font-bold">Staff Name & Role</th>
+                        <th className="px-3 py-3 font-bold text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
+                        <th className="px-4 py-3 font-bold">Staff Name</th>
+                        <th className="px-4 py-3 font-bold w-36 min-w-[140px] max-w-[140px]">Skills</th>
                         <th className="px-4 py-3 font-bold">Contact Details</th>
                         <th className="px-4 py-3 font-bold">Availability</th>
                         <th className="px-4 py-3 font-bold">Status</th>
@@ -6470,14 +6488,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         if (filteredStaff.length === 0) {
                           return (
                             <tr>
-                              <td colSpan={5} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                              <td colSpan={7} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
                                 No matching staff members found.
                               </td>
                             </tr>
                           );
                         }
 
-                        return (filteredStaff || []).map((member) => {
+                        return (filteredStaff || []).map((member, idx) => {
                           const activeAssignments = (editorAssignments || []).filter(a =>
                             a.staff_name.toLowerCase() === member.name.toLowerCase() &&
                             isAssignmentActive(a, production || [])
@@ -6486,19 +6504,91 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                           return (
                             <tr key={`staff-${member.staff_id}`} className="hover:bg-zinc-900/30 transition-colors">
-                              {/* Staff Name & Role */}
+                              {/* S.No */}
+                              <td className="px-3 py-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
+                                {idx + 1}
+                              </td>
+                              {/* Staff Name */}
                               <td className="px-4 py-3 font-medium text-white">
                                 <div className="flex flex-col">
                                   <span className="font-bold text-sm text-zinc-100">{member.name}</span>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {((Array.isArray(member.Skill) ? member.Skill : typeof member.Skill === 'string' ? member.Skill.split(',') : member.production_role_speciality ? member.production_role_speciality.split(',') : ['Editor'])).map((s: string, idx: number) => (
-                                      <span key={idx} className="px-1.5 py-0.5 bg-purple-500/10 border border-purple-500/20 rounded text-[9px] text-purple-400 font-mono">
-                                        {s.trim()}
-                                      </span>
-                                    ))}
-                                  </div>
-                                  <span className="text-[9px] text-zinc-500 font-mono">{member.email}</span>
+                                  <span className="text-[9px] text-zinc-500 font-mono mt-0.5">{member.email}</span>
                                 </div>
+                              </td>
+
+                              {/* Skills Dropdown (Fixed Width) */}
+                              <td className="px-4 py-3 w-36 min-w-[140px] max-w-[140px]">
+                                {(() => {
+                                  const rawSkills = Array.isArray(member.Skill)
+                                    ? member.Skill
+                                    : typeof member.Skill === 'string'
+                                      ? member.Skill.split(',')
+                                      : member.production_role_speciality
+                                        ? member.production_role_speciality.split(',')
+                                        : [];
+                                  const cleanSkills = rawSkills.map((s: any) => String(s).trim()).filter(Boolean);
+                                  const isOpen = openSkillsStaffId === member.staff_id;
+                                  const count = cleanSkills.length;
+                                  const labelText = count === 0 ? '0 Skills' : count === 1 ? '1 Skill' : `${count} Skills`;
+
+                                  return (
+                                    <div className="relative skills-dropdown-container inline-block">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setOpenSkillsStaffId(isOpen ? null : member.staff_id);
+                                        }}
+                                        className={`inline-flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] font-mono font-bold transition-all cursor-pointer whitespace-nowrap min-w-[105px] max-w-[130px] ${
+                                          isOpen
+                                            ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 shadow-sm shadow-purple-500/10'
+                                            : 'bg-zinc-900/80 hover:bg-zinc-850 border-zinc-800 hover:border-purple-500/30 text-purple-300'
+                                        }`}
+                                      >
+                                        <span className="truncate">{labelText}</span>
+                                        <ChevronDown className={`w-3 h-3 text-purple-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                                      </button>
+
+                                      {isOpen && (
+                                        <div
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="absolute left-0 top-full mt-1.5 w-56 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-2.5 z-50 animate-fade-in font-sans"
+                                        >
+                                          <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-850/80">
+                                            <span className="text-[10px] font-mono font-bold text-zinc-400 uppercase tracking-wider">
+                                              Skills ({count})
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => setOpenSkillsStaffId(null)}
+                                              className="text-zinc-500 hover:text-zinc-300 p-0.5 rounded hover:bg-zinc-900 cursor-pointer"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+
+                                          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                                            {cleanSkills.length === 0 ? (
+                                              <span className="text-[10px] text-zinc-500 italic block py-1.5 text-center">
+                                                No skills assigned
+                                              </span>
+                                            ) : (
+                                              cleanSkills.map((s, sIdx) => (
+                                                <div
+                                                  key={sIdx}
+                                                  className="flex items-center gap-1.5 px-2 py-1 bg-purple-500/10 border border-purple-500/20 rounded-md text-[10px] text-purple-300 font-mono"
+                                                >
+                                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+                                                  <span className="break-words">{s}</span>
+                                                </div>
+                                              ))
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </td>
 
                               {/* Contact Details */}
@@ -6691,6 +6781,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <table className="w-full text-left border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                    <th className="px-3 py-3 font-bold text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
                     <th className="px-4 py-3 font-bold">Staff Name</th>
                     <th className="px-4 py-3 font-bold">Order ID</th>
                     <th className="px-4 py-3 font-bold">Assigned Tasks</th>
@@ -6773,16 +6864,20 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     if (sortedRosterRows.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                          <td colSpan={7} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
                             No matching roster entries found.
                           </td>
                         </tr>
                       );
                     }
 
-                    return sortedRosterRows.map((row) => {
+                    return sortedRosterRows.map((row, idx) => {
                       return (
                         <tr key={`assign-${row.assignmentId}`} className="hover:bg-zinc-900/30 transition-colors">
+                          {/* S.No */}
+                          <td className="px-3 py-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
+                            {idx + 1}
+                          </td>
                           {/* Staff Name */}
                           <td className="px-4 py-3 font-medium text-white">
                             <div className="flex flex-col">
@@ -8744,16 +8839,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         />
                       </div>
 
-                      <div>
-                        <label className="block text-[9px] font-mono text-zinc-500 uppercase mb-1 font-bold">Notes (Optional)</label>
-                        <textarea
-                          rows={3}
-                          value={wfProjectNotes}
-                          onChange={(e) => setWfProjectNotes(e.target.value)}
-                          className="w-full bg-zinc-905 border border-zinc-900 text-xs rounded-xl px-3 py-2 text-white font-mono resize-none focus:outline-none focus:border-purple-500"
-                        />
-                      </div>
-
                       <div className="flex gap-3 pt-2">
                         <button
                           type="button"
@@ -9809,45 +9894,45 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* ASSIGNED EDITORS / TEAM POPUP */}
       {assignedEditorsModalProd && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all duration-300">
-            {/* Header */}
-            <div className="p-5 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
-              <div>
-                <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
-                  Production Lead • Assigned Team
-                </span>
-                <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                  <span>{assignedEditorsModalProd.production_id}</span>
-                  {(() => {
-                    const { order, lead } = resolveOrderAndLead(assignedEditorsModalProd);
-                    const name = order?.customer_name || lead?.customer_name;
-                    return name ? <span className="text-zinc-400 font-sans font-normal text-xs">• {name}</span> : null;
-                  })()}
-                </h3>
-              </div>
-              <button
-                onClick={() => setAssignedEditorsModalProd(null)}
-                className="text-zinc-500 hover:text-white transition-colors p-2 cursor-pointer bg-zinc-900/50 hover:bg-zinc-900 rounded-xl"
-              >
-                <X className="w-4 h-4" />
-              </button>
+        <div className="fixed inset-0 z-[110] flex flex-col w-screen h-screen min-h-screen max-h-screen bg-zinc-950 text-white animate-fade-in overflow-hidden">
+          {/* Header */}
+          <div className="px-5 py-4 sm:px-6 lg:px-8 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between shrink-0 sticky top-0 z-20">
+            <div>
+              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
+                Production Lead • Assigned Team
+              </span>
+              <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                <span>{assignedEditorsModalProd.production_id}</span>
+                {(() => {
+                  const { order, lead } = resolveOrderAndLead(assignedEditorsModalProd);
+                  const name = order?.customer_name || lead?.customer_name;
+                  return name ? <span className="text-zinc-400 font-sans font-normal text-xs sm:text-sm">• {name}</span> : null;
+                })()}
+              </h3>
             </div>
-            
-            <div className="p-5 overflow-y-auto font-sans flex-1 overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-max">
-                <thead>
-                  <tr className="border-b border-zinc-900 bg-zinc-950/70 text-zinc-400 font-mono text-[10px] uppercase tracking-wider">
-                    <th className="p-3 font-bold">Staff Name</th>
-                    <th className="p-3 font-bold">Event</th>
-                    <th className="p-3 font-bold">Assigned Deliverable</th>
-                    <th className="p-3 font-bold">Current Status</th>
-                    <th className="p-3 font-bold whitespace-nowrap">Server Upload</th>
-                    <th className="p-3 font-bold">Upload Link</th>
-                    <th className="p-3 font-bold whitespace-nowrap">Customer Proof</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
+            <button
+              onClick={() => setAssignedEditorsModalProd(null)}
+              className="text-zinc-500 hover:text-white transition-colors p-2 cursor-pointer bg-zinc-900/50 hover:bg-zinc-900 rounded-xl"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          
+          <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto font-sans flex-1 overflow-x-auto w-full">
+            <table className="w-full text-left text-xs sm:text-sm border-collapse min-w-max">
+              <thead>
+                <tr className="border-b border-zinc-900 bg-zinc-950 text-zinc-400 font-mono text-[10px] sm:text-xs uppercase tracking-wider sticky top-0 z-10">
+                  <th className="p-3.5 font-bold">Staff Name</th>
+                  <th className="p-3.5 font-bold">Event</th>
+                  <th className="p-3.5 font-bold">Assigned Deliverable</th>
+                  <th className="p-3.5 font-bold">Current Status</th>
+                  <th className="p-3.5 font-bold whitespace-nowrap">Server Upload</th>
+                  <th className="p-3.5 font-bold">Upload Link</th>
+                  <th className="p-3.5 font-bold whitespace-nowrap">Customer Proof</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
                   {(() => {
                     const prod = assignedEditorsModalProd;
                     const orderId = (prod as any).order_id || prod.tracking_id || prod.production_id;
@@ -10111,8 +10196,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* UPLOADED PROOF / IMAGE PREVIEW POPUP */}
       {previewProofModal && (
