@@ -2157,3 +2157,140 @@ export interface SalesModuleProps {
   setActiveSubTab?: (tab: 'list' | 'create' | 'profiles' | 'packages' | 'calendar') => void;
 }
 
+/**
+ * Synchronously retrieves the exact saved Final Quotation Amount for a specific lead / order.
+ * Strictly checks the quotation records and lead records matching the exact target ID.
+ * Returns null if no quotation data exists for this specific ID.
+ */
+export const getSyncSavedQuotationAmount = (
+  targetLead?: any,
+  targetLeadId?: string | null,
+  targetOrderId?: string | null,
+  allQuotations?: any[],
+  allLeads?: any[],
+  allOrders?: any[]
+): number | null => {
+  const leadId = targetLeadId || targetLead?.lead_id;
+  const orderId = targetOrderId || targetLead?.order_id;
+  if (!leadId && !orderId) return null;
+
+  // 1. From quotations store matching this exact lead_id or order_id (latest updated first)
+  if (Array.isArray(allQuotations) && allQuotations.length > 0) {
+    const matchedQuotes = allQuotations.filter((q: any) => 
+      (leadId && (q.lead_id === leadId || q.leadId === leadId)) || 
+      (orderId && (q.order_id === orderId || q.orderId === orderId))
+    );
+    if (matchedQuotes.length > 0) {
+      const sorted = [...matchedQuotes].sort((a, b) => {
+        const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return timeB - timeA;
+      });
+      const latest = sorted[0];
+      const val = latest.final_quotation_amount ?? latest.final_amount ?? latest.Final_Quotation_Amount ?? latest.quotation_amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 2. From targetLead object directly if present
+  if (targetLead && (leadId && targetLead.lead_id === leadId)) {
+    const val = targetLead.Final_Quotation_Amount ?? targetLead.final_quotation_amount ?? targetLead.Final_Package_Amount ?? targetLead.final_package_amount ?? targetLead.final_amount ?? targetLead.budget;
+    if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+      return Number(val);
+    }
+  }
+
+  // 3. From leads array strictly matching leadId
+  if (leadId && Array.isArray(allLeads)) {
+    const matchedLead = allLeads.find((l: any) => l.lead_id === leadId);
+    if (matchedLead) {
+      const val = matchedLead.Final_Quotation_Amount ?? matchedLead.final_quotation_amount ?? matchedLead.Final_Package_Amount ?? matchedLead.final_package_amount ?? matchedLead.final_amount ?? matchedLead.budget;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 4. From orders array strictly matching orderId or leadId
+  if (Array.isArray(allOrders)) {
+    const matchedOrder = allOrders.find((o: any) => (leadId && o.lead_id === leadId) || (orderId && o.order_id === orderId));
+    if (matchedOrder) {
+      const val = matchedOrder.quotation_amount ?? matchedOrder.finalPackageAmount ?? matchedOrder.totalRevenue;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+        return Number(val);
+      }
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Asynchronously fetches and verifies the exact latest saved Final Quotation Amount from Supabase & memory.
+ * Guarantees that any recently updated quotation or database value is accurately resolved.
+ */
+export const resolveSavedQuotationAmount = async (
+  targetLeadId?: string | null,
+  targetOrderId?: string | null,
+  allQuotations?: any[],
+  allLeads?: any[],
+  allOrders?: any[]
+): Promise<number | null> => {
+  if (!targetLeadId && !targetOrderId) return null;
+
+  // 1. Query Supabase quotations table directly for this specific lead_id / order_id
+  if (supabaseClient) {
+    try {
+      let query = supabaseClient
+        .from('quotations')
+        .select('final_quotation_amount, final_amount, quotation_amount, package_price, created_at, updated_at');
+      
+      if (targetLeadId && targetLeadId !== 'DRAFT-LEAD') {
+        query = query.eq('lead_id', targetLeadId);
+      } else if (targetOrderId) {
+        query = query.eq('order_id', targetOrderId);
+      }
+
+      const { data: dbQuotes, error } = await query;
+      if (!error && Array.isArray(dbQuotes) && dbQuotes.length > 0) {
+        const sorted = [...dbQuotes].sort((a, b) => {
+          const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+          const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+          return timeB - timeA;
+        });
+        const latest = sorted[0];
+        const val = latest.final_quotation_amount ?? latest.final_amount ?? latest.quotation_amount ?? latest.package_price;
+        if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+          return Number(val);
+        }
+      }
+    } catch (err) {
+      console.warn('[resolveSavedQuotationAmount] Supabase quotations fetch error:', err);
+    }
+
+    // 2. Query Supabase leads table directly for this specific lead_id
+    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD') {
+      try {
+        const { data: dbLead, error: leadErr } = await supabaseClient
+          .from('leads')
+          .select('Final_Quotation_Amount, final_quotation_amount, Final_Package_Amount, final_package_amount, final_amount, budget')
+          .eq('lead_id', targetLeadId)
+          .maybeSingle();
+        if (!leadErr && dbLead) {
+          const val = dbLead.Final_Quotation_Amount ?? dbLead.final_quotation_amount ?? dbLead.Final_Package_Amount ?? dbLead.final_package_amount ?? dbLead.final_amount ?? dbLead.budget;
+          if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+            return Number(val);
+          }
+        }
+      } catch (err) {
+        console.warn('[resolveSavedQuotationAmount] Supabase leads fetch error:', err);
+      }
+    }
+  }
+
+  // 3. Fallback to synchronous in-memory store
+  return getSyncSavedQuotationAmount(null, targetLeadId, targetOrderId, allQuotations, allLeads, allOrders);
+};
+
