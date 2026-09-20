@@ -300,7 +300,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         </div>
                       </div>
 
-                      <div className="shrink-0 flex items-center justify-end">
+                      <div className="shrink-0 flex items-center justify-end gap-2">
                         <button
                           type="button"
                           disabled={isPendingApproving}
@@ -309,6 +309,15 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                         >
                           <CheckCircle className="w-4 h-4" />
                           <span>{isPendingApproving ? 'Approving...' : 'Approve Payment'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isPendingApproving}
+                          onClick={() => handleReject(histId)}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 active:scale-95 text-white font-black text-xs uppercase tracking-wide cursor-pointer transition-all shadow-lg font-mono disabled:opacity-50"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>{isPendingApproving ? 'Rejecting...' : 'Reject Payment'}</span>
                         </button>
                       </div>
                     </div>
