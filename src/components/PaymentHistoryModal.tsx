@@ -23,7 +23,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   orders = [],
   leads = []
 }) => {
-  const { currentRole, approvePayment, paymentHistory: contextPaymentHistory } = useRole();
+  const { currentRole, approvePayment, rejectPayment, paymentHistory: contextPaymentHistory } = useRole();
   const [historyList, setHistoryList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
@@ -161,18 +161,14 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const handleReject = async (histId: string) => {
     setIsApprovingId(histId);
     try {
-      if (supabaseClient) {
-        await supabaseClient
-          .from('payment_history')
-          .update({ approval_status: 'Rejected' })
-          .eq('id', histId);
-      }
+      await rejectPayment(histId, primaryOrderId);
       setHistoryList(prev => prev.map(p => {
         const idMatch = p.id === histId || p.payment_history_id === histId || String(p.id) === String(histId);
         if (idMatch) {
           return {
             ...p,
-            approval_status: 'Rejected'
+            approval_status: 'Rejected',
+            notes: (p.notes || '').replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, 'Rejected')
           };
         }
         return p;

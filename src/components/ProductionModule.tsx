@@ -3266,6 +3266,33 @@ _Please acknowledge receipt of this task assignment._`;
     }
   }, [workflowActionType, activeWorkflowProd]);
 
+  useEffect(() => {
+    if (assignedEditorsModalProd) {
+      document.body.style.overflow = 'hidden';
+      // Increased delay to 300ms to allow for rendering
+      triggerAutoScrollAndFocus('#production_assigned_team_modal', 300);
+      
+      // Explicitly reset scroll for internal container
+      setTimeout(() => {
+        const scrollElem = document.getElementById('production_assigned_team_scroll_container');
+        if (scrollElem) {
+          scrollElem.scrollTop = 0;
+        }
+      }, 350); // Slightly after the focus trigger
+      
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+  }, [assignedEditorsModalProd]);
+
+  useEffect(() => {
+    if (previewProofModal) {
+      // Increased delay to 300ms
+      triggerAutoScrollAndFocus('#production_proof_preview_card', 300);
+    }
+  }, [previewProofModal]);
+
   const getRawFootageStatus = (prod: Production) => {
     if (prod.raw_footage_status) return prod.raw_footage_status;
     const rf = (rawFootage || []).find(r => r.tracking_id === prod.tracking_id);
@@ -9894,15 +9921,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* ASSIGNED EDITORS / TEAM POPUP */}
       {assignedEditorsModalProd && (
-        (() => {
-          useEffect(() => {
-            document.body.style.overflow = 'hidden';
-            return () => { document.body.style.overflow = ''; };
-          }, []);
-          return (
-            <div className="fixed inset-0 z-[200] flex flex-col w-full h-full bg-zinc-950 text-white animate-fade-in">
+        <div id="production_assigned_team_modal" className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-zinc-950/90 backdrop-blur-sm animate-fade-in">
+          <div className="bg-zinc-950 border border-zinc-800 w-full max-w-5xl rounded-2xl flex flex-col max-h-[90vh] shadow-2xl overflow-hidden">
               {/* Header */}
-              <div className="px-5 py-4 sm:px-6 lg:px-8 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between shrink-0 sticky top-0 z-20">
+              <div className="px-5 py-4 sm:px-6 lg:px-8 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between shrink-0">
                 <div>
                   <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
                     Production Lead • Assigned Team
@@ -9925,10 +9947,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 </button>
               </div>
               
-              <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto font-sans flex-1 overflow-x-auto w-full">
+              <div id="production_assigned_team_scroll_container" className="p-4 sm:p-6 lg:p-8 overflow-y-auto font-sans overflow-x-auto w-full">
                 <table className="w-full text-left text-xs sm:text-sm border-collapse min-w-max">
               <thead>
-                <tr className="border-b border-zinc-900 bg-zinc-950 text-zinc-400 font-mono text-[10px] sm:text-xs uppercase tracking-wider sticky top-0 z-10">
+                <tr className="border-b border-zinc-900 bg-zinc-950 text-zinc-400 font-mono text-[10px] sm:text-xs uppercase tracking-wider z-10">
                   <th className="p-3.5 font-bold">Staff Name</th>
                   <th className="p-3.5 font-bold">Event</th>
                   <th className="p-3.5 font-bold">Assigned Deliverable</th>
@@ -9974,23 +9996,46 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     const rawAssignments = (editorAssignments || []).filter(a => 
                       (a.production_id === prod.production_id ||
                        a.production_id === orderId ||
+                       a.production_id === prod.tracking_id ||
                        a.order_id === orderId ||
                        a.order_id === prod.tracking_id ||
-                       a.order_id === prod.production_id) &&
+                       a.order_id === prod.production_id ||
+                       (a as any).tracking_id === prod.tracking_id ||
+                       (a as any).tracking_id === prod.production_id) &&
                       isProductionStaffAssignment(a)
                     );
 
-                    if (rawAssignments.length === 0) {
+                    let displayItems: any[] = rawAssignments;
+                    if (displayItems.length === 0) {
+                      const staffStr = prod.assigned_staff || prod.editor_assigned;
+                      if (staffStr && staffStr !== 'Unassigned' && staffStr.trim() !== '') {
+                        displayItems = staffStr.split(',').map((s: string, idx: number) => {
+                          const name = s.trim();
+                          const staffRec = (productionStaff || []).find(st => st.name === name || st.staff_id === name);
+                          return {
+                            assignment_id: `synth-${idx}-${name}`,
+                            staff_name: name,
+                            staff_id: staffRec?.staff_id || '',
+                            role: staffRec?.role || staffRec?.production_role_speciality || 'Editor',
+                            speciality: 'Assigned Deliverable',
+                            status: prod.editing_status || 'Assigned',
+                            event_id: ''
+                          };
+                        });
+                      }
+                    }
+
+                    if (displayItems.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={7} className="p-6 text-center text-zinc-500 italic font-mono text-xs">
+                          <td colSpan={7} className="p-8 text-center text-zinc-500 italic font-mono text-xs">
                             No assigned staff or deliverables found for this order.
                           </td>
                         </tr>
                       );
                     }
 
-                    return rawAssignments.map((assignment, idx) => {
+                    return displayItems.map((assignment, idx) => {
                       const staffRec = (productionStaff || []).find(s => s.staff_id === assignment.staff_id || s.name === assignment.staff_name);
                       const staffName = assignment.staff_name || staffRec?.name || 'Unassigned';
                       const staffRole = staffRec?.role || staffRec?.production_role_speciality || 'Editor';
@@ -10202,14 +10247,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </table>
             </div>
           </div>
-        )
-      })()
-    )}
+        </div>
+        )}
 
       {/* UPLOADED PROOF / IMAGE PREVIEW POPUP */}
       {previewProofModal && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all">
+        <div id="production_proof_preview_modal" className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-fade-in">
+          <div id="production_proof_preview_card" className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] transition-all">
             {/* Header */}
             <div className="p-4 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between">
               <div>

@@ -13,7 +13,7 @@ import { ProjectDetailModal } from './ProjectDetailModal';
 import { AddNoteModal } from './AddNoteModal';
 import { TimePicker12Hour } from './TimePicker12Hour';
 import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
-import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY } from '../utils';
+import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY, triggerAutoScrollAndFocus } from '../utils';
 
 // Format ISO string to DD MMM YYYY in IST (Asia/Kolkata)
 const formatISTDate = (isoStr?: string | null): string => {
@@ -891,6 +891,13 @@ export const ProductionStaffModule: React.FC = () => {
   });
   const [previewProofModal, setPreviewProofModal] = useState<{ url: string; title: string; uploadTime?: string | null } | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
+
+  useEffect(() => {
+    if (previewProofModal) {
+      // Increased delay to 300ms
+      triggerAutoScrollAndFocus('#staff_proof_preview_card', 300);
+    }
+  }, [previewProofModal]);
 
   const openEditingCompletedModal = (grp: any, delivItem: any) => {
     const eventConfigs: Record<string, { eventKey: string; eventId: string; eventName: string; eventDate: string; folderName: string; confirmed: boolean; serverFileLink?: string }> = {};
@@ -3447,8 +3454,8 @@ Thank you.`;
       {/* 4. CUSTOMER PROOF IMAGE ZOOM MODAL */}
       {/* ========================================================= */}
       {previewProofModal && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
+        <div id="staff_proof_preview_modal" className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div id="staff_proof_preview_card" className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-950/80">
               <div>
                 <div className="flex items-center gap-2">

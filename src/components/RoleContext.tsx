@@ -116,6 +116,7 @@ interface RoleContextType {
   payments: Payment[];
   paymentHistory: any[];
   approvePayment: (historyId: string, orderId: string) => Promise<void>;
+  rejectPayment: (historyId: string, orderId: string) => Promise<void>;
   logs: ActivityLog[];
   staff: Staff[];
   addStaff: (member: Omit<Staff, 'staff_id'>) => Promise<void>;
@@ -6984,6 +6985,36 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     logActivity(`Approved payment of ₹${amountToApply} for Order ${orderId}. Status: ${newPaymentStatus}`, 'Finance', orderId);
   };
 
+  const rejectPayment = async (historyId: string, orderId: string) => {
+    let targetHistory = paymentHistory.find(h => h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId));
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(historyId);
+    if (!targetHistory && supabaseClient && isUuid) {
+      const { data } = await supabaseClient.from('payment_history').select('*').eq('id', historyId).maybeSingle();
+      if (data) targetHistory = data;
+    }
+
+    const cleanNotes = (targetHistory?.notes || '').replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, 'Rejected');
+
+    await pushUpdate('payment_history', 'id', historyId, { 
+      order_id: orderId || targetHistory?.order_id,
+      approval_status: 'Rejected',
+      notes: cleanNotes || 'Rejected by Business Owner'
+    });
+
+    setPaymentHistory(prev => prev.map(h => (h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId)) ? { ...h, approval_status: 'Rejected', notes: cleanNotes } : h));
+
+    try {
+      const saved = localStorage.getItem('pending_payment_approvals');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const filtered = parsed.filter((p: any) => p.id !== historyId && p.payment_history_id !== historyId);
+        localStorage.setItem('pending_payment_approvals', JSON.stringify(filtered));
+      }
+    } catch (_) {}
+    
+    logActivity(`Rejected payment of ₹${Number(targetHistory?.amount || 0)} for Order ${orderId}`, 'Finance', orderId);
+  };
+
   // User Management Admin features
   const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string, employee_id?: string) => {
     const newId = crypto.randomUUID ? crypto.randomUUID() : `U-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -9784,6 +9815,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         fetchStaffCurrentPassword: (member: any) => fetchStaffCurrentPassword(member, users),
         paymentHistory,
         approvePayment,
+        rejectPayment,
       }}
     >
       {children}
