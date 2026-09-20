@@ -9894,33 +9894,39 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* ASSIGNED EDITORS / TEAM POPUP */}
       {assignedEditorsModalProd && (
-        <div className="fixed inset-0 z-[110] flex flex-col w-screen h-screen min-h-screen max-h-screen bg-zinc-950 text-white animate-fade-in overflow-hidden">
-          {/* Header */}
-          <div className="px-5 py-4 sm:px-6 lg:px-8 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between shrink-0 sticky top-0 z-20">
-            <div>
-              <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
-                Production Lead • Assigned Team
-              </span>
-              <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                <span>{assignedEditorsModalProd.production_id}</span>
-                {(() => {
-                  const { order, lead } = resolveOrderAndLead(assignedEditorsModalProd);
-                  const name = order?.customer_name || lead?.customer_name;
-                  return name ? <span className="text-zinc-400 font-sans font-normal text-xs sm:text-sm">• {name}</span> : null;
-                })()}
-              </h3>
-            </div>
-            <button
-              onClick={() => setAssignedEditorsModalProd(null)}
-              className="text-zinc-500 hover:text-white transition-colors p-2 cursor-pointer bg-zinc-900/50 hover:bg-zinc-900 rounded-xl"
-              title="Close"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-          
-          <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto font-sans flex-1 overflow-x-auto w-full">
-            <table className="w-full text-left text-xs sm:text-sm border-collapse min-w-max">
+        (() => {
+          useEffect(() => {
+            document.body.style.overflow = 'hidden';
+            return () => { document.body.style.overflow = ''; };
+          }, []);
+          return (
+            <div className="absolute top-0 left-0 z-[110] flex flex-col w-full min-h-full bg-zinc-950 text-white animate-fade-in">
+              {/* Header */}
+              <div className="px-5 py-4 sm:px-6 lg:px-8 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between shrink-0 sticky top-0 z-20">
+                <div>
+                  <span className="text-[9px] font-mono font-black uppercase tracking-widest text-indigo-400 block mb-0.5">
+                    Production Lead • Assigned Team
+                  </span>
+                  <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                    <span>{assignedEditorsModalProd.production_id}</span>
+                    {(() => {
+                      const { order, lead } = resolveOrderAndLead(assignedEditorsModalProd);
+                      const name = order?.customer_name || lead?.customer_name;
+                      return name ? <span className="text-zinc-400 font-sans font-normal text-xs sm:text-sm">• {name}</span> : null;
+                    })()}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setAssignedEditorsModalProd(null)}
+                  className="text-zinc-500 hover:text-white transition-colors p-2 cursor-pointer bg-zinc-900/50 hover:bg-zinc-900 rounded-xl"
+                  title="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-4 sm:p-6 lg:p-8 overflow-y-auto font-sans flex-1 overflow-x-auto w-full">
+                <table className="w-full text-left text-xs sm:text-sm border-collapse min-w-max">
               <thead>
                 <tr className="border-b border-zinc-900 bg-zinc-950 text-zinc-400 font-mono text-[10px] sm:text-xs uppercase tracking-wider sticky top-0 z-10">
                   <th className="p-3.5 font-bold">Staff Name</th>
@@ -10196,7 +10202,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               </table>
             </div>
           </div>
-        )}
+        )
+      })()
+    )}
 
       {/* UPLOADED PROOF / IMAGE PREVIEW POPUP */}
       {previewProofModal && (

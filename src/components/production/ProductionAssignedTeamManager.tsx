@@ -419,7 +419,8 @@ export const ProductionAssignedTeamManager: React.FC = () => {
               <img
                 src={activeProofPreview.url}
                 alt="Proof Preview"
-                className="max-h-[65vh] max-w-full rounded-xl object-contain shadow-md border border-zinc-800/80"
+                className="rounded-xl shadow-md border border-zinc-800/80"
+                style={{ maxWidth: 'none', maxHeight: 'none' }}
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   const target = e.currentTarget;
