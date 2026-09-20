@@ -230,7 +230,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         <div className="p-4 sm:p-6 space-y-6 overflow-y-auto max-h-[75vh]">
           
           {/* Waiting for Approval Alert Card */}
-          {pendingItems.length > 0 && (
+          {currentRole === 'Business Owner' && pendingItems.length > 0 && (
             <div className="p-4 sm:p-5 bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl space-y-4 shadow-xl">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-3">
                 <div className="flex items-center gap-2">
