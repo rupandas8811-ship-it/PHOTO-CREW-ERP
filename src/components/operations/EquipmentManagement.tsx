@@ -922,6 +922,7 @@ export const EquipmentManagement: React.FC = () => {
             <table className="w-full text-left border-collapse min-w-max">
               <thead>
                 <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/40">
+                  <th className="p-3.5">S.NO.</th>
                   <th className="p-3.5">Equipment</th>
                   <th className="p-3.5">Brand</th>
                   <th className="p-3.5">Category</th>
@@ -932,13 +933,18 @@ export const EquipmentManagement: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-zinc-850/60 text-xs text-zinc-300">
                 {paginatedEquipment.length > 0 ? (
-                  paginatedEquipment.map((eq) => {
+                  paginatedEquipment.map((eq, idx) => {
                     return (
                       <tr 
                         key={eq.equipment_id} 
                         onClick={() => setSelectedEq(eq)}
                         className="hover:bg-zinc-950/30 transition-all cursor-pointer group"
                       >
+                        {/* S.NO. */}
+                        <td className="p-3.5 text-zinc-500 font-mono text-center">
+                          {(currentPage - 1) * pageSize + idx + 1}
+                        </td>
+
                         {/* Equipment Name & Serial */}
                         <td className="p-3.5">
                           <div className="font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">{eq.equipment_name}</div>

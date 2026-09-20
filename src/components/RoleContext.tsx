@@ -104,6 +104,7 @@ interface RoleContextType {
   setCurrentRole: (role: UserRole) => void;
   setCurrentUserName: (name: string) => void;
   isDataLoading: boolean;
+  editorAssignments: EditorAssignment[];
   login: (emailOrUsername: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   users: User[];

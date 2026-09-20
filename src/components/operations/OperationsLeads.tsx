@@ -6418,11 +6418,6 @@ export const OperationsLeads: React.FC = () => {
                       <span className="text-xs font-bold text-indigo-300 font-sans">
                         {eventLabel}
                       </span>
-                      {ev.id && (
-                        <span className="text-[10px] font-mono text-zinc-500 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
-                          {ev.id}
-                        </span>
-                      )}
                     </div>
                     <div className="text-xs font-sans pt-0.5">
                       {(() => {
