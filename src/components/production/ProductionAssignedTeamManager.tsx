@@ -14,7 +14,19 @@ export const ProductionAssignedTeamManager: React.FC = () => {
   } | null>(null);
 
   const [dbAssignmentsMap, setDbAssignmentsMap] = useState<Record<string, EditorAssignment>>({});
+  const [isAssignedTeamModalOpen, setIsAssignedTeamModalOpen] = useState(false);
   const lastFetchedIdRef = useRef<string>('');
+
+  useEffect(() => {
+    if (activeProofPreview || isAssignedTeamModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [activeProofPreview, isAssignedTeamModalOpen]);
 
   useEffect(() => {
     const isProductionStaffAssignment = (a: any) => {
@@ -46,7 +58,16 @@ export const ProductionAssignedTeamManager: React.FC = () => {
           );
         });
 
+        setIsAssignedTeamModalOpen(!!assignedTeamModal);
+
         if (!assignedTeamModal) return;
+
+        // Apply responsive classes to the modal
+        const modalContainer = assignedTeamModal.querySelector('div[class*="bg-"]'); // Attempt to find the inner container
+        if (modalContainer) {
+          modalContainer.classList.add('max-h-[90vh]', 'overflow-y-auto', 'w-full', 'max-w-2xl', 'mx-auto', 'my-auto', 'rounded-xl');
+          modalContainer.classList.remove('h-full', 'w-full'); // Remove potentially conflicting fixed-size classes
+        }
 
         // Extract production ID / order ID from the header
         const headerTitle = assignedTeamModal.querySelector('h3');

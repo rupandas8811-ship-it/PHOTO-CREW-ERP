@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { CurrentStage } from '../types';
 import { CameraLensGraphic } from './ProductionModule';
-import { formatINR, formatTime12Hour, getCustomers } from '../utils';
+import { formatINR, formatTime12Hour, getCustomers, formatDateTime } from '../utils';
 import { ProjectDetailModal } from './ProjectDetailModal';
 import { AppLogo } from './AppLogo';
 import { BusinessOwnerCalendar } from './BusinessOwnerCalendar';
@@ -60,7 +60,7 @@ export const Dashboard: React.FC = () => {
       await updateProduction(prod.production_id, {
         editing_status: 'Order Closed',
         production_status: 'Completed',
-        remarks: `Final Approval granted by Business Owner (${currentUserName || 'Rupand Das'}) on ${new Date().toLocaleString('en-IN')}`
+        remarks: `Final Approval granted by Business Owner (${currentUserName || 'Rupand Das'}) on ${formatDateTime(new Date())}`
       });
     }
 

@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
+import { formatDateDDMMYY } from '../utils';
 
 export const ProductionStaffDirectoryModule: React.FC = () => {
   const { 
@@ -515,7 +516,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     doc.setFont("Helvetica", "normal");
     doc.setTextColor(113, 113, 122); // Zinc 500
     doc.text("Production Staff Directory & Specialties Assignment Report", 14, 27);
-    doc.text(`Generated on: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}`, 14, 33);
+    doc.text(`Generated on: ${formatDateDDMMYY(new Date())} ${new Date().toLocaleTimeString()}`, 14, 33);
     
     // Draw table headers
     doc.setFillColor(245, 158, 11); // Amber 500
@@ -1155,7 +1156,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                         <span>•</span>
                         <span>Base: <strong className="text-zinc-300">{cityClean}</strong></span>
                         <span>•</span>
-                        <span>Joined: <strong className="text-zinc-300">{viewingStaff.joining_date}</strong></span>
+                        <span>Joined: <strong className="text-zinc-300">{formatDateDDMMYY(viewingStaff.joining_date)}</strong></span>
                       </div>
                     </div>
                   </div>
@@ -1297,7 +1298,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                             <div className="text-[10px] text-zinc-550 mt-1 flex items-center gap-3">
                               <span>Work ID: <strong className="text-zinc-400">{assign.production_id}</strong></span>
                               <span>•</span>
-                              <span>Target Delivery: <strong className="text-zinc-400">{assign.due_date}</strong></span>
+                              <span>Target Delivery: <strong className="text-zinc-400">{formatDateDDMMYY(assign.due_date)}</strong></span>
                             </div>
                           </div>
 

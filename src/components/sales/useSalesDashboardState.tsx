@@ -7,7 +7,7 @@ import { supabaseClient } from '../../supabaseClient';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../../types';
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../../utils';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, normalizeCrmArray } from '../SalesUtils';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
 import { StatusText } from '../ui/StatusText';
 import { EventDropdownCell } from '../EventDropdownCell';
@@ -201,11 +201,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         l.customer_name === 'Inbound Prospect' ? '' : l.customer_name,
         l.mobile,
         l.event_type,
-        l.event_date || 'N/A',
+        l.event_date ? (formatDateDDMMYY(l.event_date) || l.event_date) : 'N/A',
         getLeadCurrentStatus(l),
         l.remarks.slice(0, 50).replace(/["\n\r]/g, ' '),
         pay ? pay.payment_status : 'Pending',
-        l.created_date
+        l.created_date ? (formatDateDDMMYY(l.created_date) || l.created_date) : 'N/A'
       ];
     });
     
@@ -233,11 +233,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         l.customer_name === 'Inbound Prospect' ? '' : l.customer_name,
         l.mobile,
         l.event_type,
-        l.event_date || 'N/A',
+        l.event_date ? (formatDateDDMMYY(l.event_date) || l.event_date) : 'N/A',
         getLeadCurrentStatus(l),
         l.remarks.slice(0, 50).replace(/["\t\n\r]/g, ' '),
         pay ? pay.payment_status : 'Pending',
-        l.created_date
+        l.created_date ? (formatDateDDMMYY(l.created_date) || l.created_date) : 'N/A'
       ];
     });
     
@@ -268,9 +268,9 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           <td>${l.customer_name === 'Inbound Prospect' ? '' : l.customer_name}</td>
           <td>${l.mobile}</td>
           <td>${l.event_type}</td>
-          <td>${l.event_date || 'N/A'}</td>
+          <td>${l.event_date ? (formatDateDDMMYY(l.event_date) || l.event_date) : 'N/A'}</td>
           <td>${getLeadCurrentStatus(l)}</td>
-          <td>${l.created_date}</td>
+          <td>${l.created_date ? (formatDateDDMMYY(l.created_date) || l.created_date) : 'N/A'}</td>
           <td>${pay ? pay.payment_status : 'Pending'}</td>
         </tr>
       `;
@@ -293,7 +293,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         </head>
         <body>
           <h1>LEADS DIRECTORY REPORT</h1>
-          <p>Generated on ${new Date().toLocaleString('en-IN')} | Date Range: ${appliedStartDate || 'All'} to ${appliedEndDate || 'All'} | Records Count: ${filteredLeads.length}</p>
+          <p>Generated on ${formatDateDDMMYY(new Date())} | Date Range: ${appliedStartDate || 'All'} to ${appliedEndDate || 'All'} | Records Count: ${filteredLeads.length}</p>
           <div className="overflow-x-auto w-full max-w-full">
 <table>
             <thead>
@@ -3755,10 +3755,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     }
 
     setSelectedLead(fullLead);
-    setCrmEvents(fullLead.events || []);
+    const initialEvents = normalizeCrmArray<LeadEvent>(fullLead.events);
+    setCrmEvents(initialEvents);
 
     // Always fetch fresh events to ensure no cached EV- IDs are used
-    let eventsForCheck = fullLead.events || [];
+    let eventsForCheck = initialEvents;
     if (supabaseClient && fullLead.lead_id && fullLead.lead_id !== 'DRAFT-LEAD') {
       try {
         const { data: freshEvents, error } = await supabaseClient
@@ -3859,7 +3860,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     const matchedPkgId = fullLead.Select_Package_Option || latestQuote?.package_id || primaryLP?.package_id || 'Custom Package';
     const matchedPkg = (packages || []).find(p => p.package_id === matchedPkgId);
-    const effectiveEvents = eventsForCheck && eventsForCheck.length > 0 ? eventsForCheck : (fullLead.events || crmEvents || []);
+    const effectiveEvents = eventsForCheck && eventsForCheck.length > 0 ? eventsForCheck : normalizeCrmArray<LeadEvent>(fullLead.events || crmEvents);
 
     // 1. Load Deliverables
     const rawDelData = fullLead.Add_Deliverable || primaryLP?.deliverables_descriptionn || primaryLP?.editable_deliverables || fullLead.deliverables_description || latestQuote?.deliverables_description || matchedPkg?.deliverables;
@@ -4343,10 +4344,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               deliverables_description: safeDeliverablesText,
               Team_member: safeTeamMembersText,
               Team_Members: safeTeamMembersText,
-              team_members: safeTeamMembersText,
+              Add_Deliverable: safeDeliverablesText,
+              Add_Member: safeTeamMembersText,
               notes_special_customizations: wizardLeadData.notes,
               remarks: updatedRemarks,
-              selected_package_id: pkgId,
+              Select_Package_Option: pkgId,
               sales_staff_name: effectiveSalesName,
               sales_staff_mobile: effectiveSalesMobile,
               Quotation_Discount: cleanDiscount,
@@ -4357,9 +4359,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             })
             .eq('lead_id', targetLeadId)
             .select('*');
-          console.log('TEAM MEMBERS DB RESULT handleSavePackageOnly', { data: dbResult, error: dbError });
-        } catch (dbErr) {
-          console.warn("Direct Supabase update warning in handleSavePackageOnly:", dbErr);
+
+          if (dbError) {
+            console.warn("Direct Supabase leads update warning in handleSavePackageOnly:", dbError);
+          }
+        } catch (leadUpdateErr) {
+          console.warn("Direct Supabase update exception in handleSavePackageOnly:", leadUpdateErr);
         }
 
         await updateLead(targetLeadId, {
@@ -4368,10 +4373,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           deliverables_description: safeDeliverablesText,
           Team_member: safeTeamMembersText,
           Team_Members: safeTeamMembersText,
-          team_members: safeTeamMembersText,
+          Add_Deliverable: safeDeliverablesText,
+          Add_Member: safeTeamMembersText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
-          selected_package_id: pkgId,
+          Select_Package_Option: pkgId,
           sales_staff_name: effectiveSalesName,
           sales_staff_mobile: effectiveSalesMobile,
           Quotation_Discount: cleanDiscount,
@@ -4385,15 +4391,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
         // Also upsert to lead_packages table so that Step 3 reloads from lead_packages perfectly
         try {
-          // If we safely retained the old lead data, we should also try to retain the old json data
-          // if the new one is empty. We can check if teamMembersText was '[]' but we saved safeTeamMembersText
-          const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
-          const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
-          
           const packagePayload = {
             lead_id: targetLeadId,
             package_id: pkgId,
             package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
+            package_cost: cleanPkgCost || 0,
             quantity: 1,
             total_amount: cleanPkgCost || 0,
             discount: cleanDiscount || 0,
@@ -4401,7 +4403,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             Team_Members_Included: teamMembersJson,
             editable_inclusions: editableInclusions,
             deliverables_descriptionn: deliverablesJson,
-            deliverables_json: deliverablesJson,
             deliverables_description: deliverablesText,
             editable_deliverables: editableDeliverables,
             updated_at: new Date().toISOString()
@@ -4430,7 +4431,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               });
           }
         } catch (lpErr) {
-          console.warn("Could not upsert lead_packages record:", lpErr);
+          console.warn("Could not upsert lead_packages record in handleSavePackageOnly:", lpErr);
         }
       }
 
@@ -4476,7 +4477,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       console.error("Save package only failed:", err);
       setSaveErrorPopup({
         title: "Failed to save package",
-        message: "❌ Failed to save package.\nPlease try again."
+        message: `❌ Failed to save package: ${err?.message || 'Unknown error'}.\nPlease try again.`
       });
     } finally {
       setIsSaving(false);
@@ -4709,10 +4710,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               deliverables_description: safeDeliverablesText,
               Team_member: safeTeamMembersText,
               Team_Members: safeTeamMembersText,
-              team_members: safeTeamMembersText,
+              Add_Deliverable: safeDeliverablesText,
+              Add_Member: safeTeamMembersText,
               notes_special_customizations: wizardLeadData.notes,
               remarks: updatedRemarks,
-              selected_package_id: pkgId,
+              Select_Package_Option: pkgId,
               client_residence_address: wizardLeadData.client_residence_address,
               city: wizardLeadData.city,
               state: wizardLeadData.state,
@@ -4727,9 +4729,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             })
             .eq('lead_id', selectedLead.lead_id)
             .select('*');
-          console.log('TEAM MEMBERS DB RESULT handleStep3Submit', { data: dbResult, error: dbError });
-        } catch (dbErr) {
-          console.warn("Direct Supabase update warning in handleStep3Submit:", dbErr);
+
+          if (dbError) {
+            console.warn("Direct Supabase leads update warning in handleStep3Submit:", dbError);
+          }
+        } catch (leadUpdateErr) {
+          console.warn("Direct Supabase update exception in handleStep3Submit:", leadUpdateErr);
         }
 
         await updateLead(selectedLead.lead_id, {
@@ -4738,10 +4743,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           deliverables_description: safeDeliverablesText,
           Team_member: safeTeamMembersText,
           Team_Members: safeTeamMembersText,
-          team_members: safeTeamMembersText,
+          Add_Deliverable: safeDeliverablesText,
+          Add_Member: safeTeamMembersText,
           notes_special_customizations: wizardLeadData.notes,
           remarks: updatedRemarks,
-          selected_package_id: pkgId,
+          Select_Package_Option: pkgId,
           client_residence_address: wizardLeadData.client_residence_address,
           city: wizardLeadData.city,
           state: wizardLeadData.state,
@@ -4756,6 +4762,51 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           _explicit_step3_save: true,
           events: updatedEvents
         });
+
+        // Also upsert to lead_packages table
+        try {
+          const packagePayloadStep3 = {
+            lead_id: selectedLead.lead_id,
+            package_id: pkgId,
+            package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
+            package_cost: cleanPkgCost || 0,
+            quantity: 1,
+            total_amount: cleanPkgCost || 0,
+            discount: cleanDiscount || 0,
+            final_amount: cleanFinalAmt || 0,
+            Team_Members_Included: teamMembersJson,
+            editable_inclusions: editableInclusions,
+            deliverables_descriptionn: deliverablesJson,
+            deliverables_description: deliverablesText,
+            editable_deliverables: editableDeliverables,
+            updated_at: new Date().toISOString()
+          };
+
+          const { data: existingLpsS3 } = await supabaseClient
+            .from('lead_packages')
+            .select('*')
+            .eq('lead_id', selectedLead.lead_id);
+
+          let targetLpIdS3 = `LP-${selectedLead.lead_id}-${pkgId}`;
+          if (existingLpsS3 && existingLpsS3.length > 0) {
+            const matched = existingLpsS3.find(lp => String(lp.package_id) === String(pkgId)) || existingLpsS3[0];
+            targetLpIdS3 = matched.lead_package_id;
+            await supabaseClient
+              .from('lead_packages')
+              .update(packagePayloadStep3)
+              .eq('lead_package_id', targetLpIdS3);
+          } else {
+            await supabaseClient
+              .from('lead_packages')
+              .insert({
+                ...packagePayloadStep3,
+                lead_package_id: targetLpIdS3,
+                created_at: new Date().toISOString()
+              });
+          }
+        } catch (lpErr) {
+          console.warn("Could not upsert lead_packages record in handleStep3Submit:", lpErr);
+        }
 
         setWizardLeadData(prev => ({
           ...prev,
@@ -5854,13 +5905,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const formatDDMMYYYY = (dateStr: string | undefined | null): string => {
     if (!dateStr) return 'N/A';
     const clean = dateStr.trim();
-    if (!clean) return 'N/A';
-    if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) return clean;
-    const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-      return `${match[3]}-${match[2]}-${match[1]}`;
-    }
-    return clean;
+    if (!clean || clean === '—' || clean === 'N/A') return 'N/A';
+    return formatDateDDMMYY(clean) || 'N/A';
   };
 
   const convertTo24Hour = (timeStr: string | undefined | null): string => {
@@ -7595,6 +7641,86 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       const firstRepTime = (modalEvents.length > 0)
         ? (eventsReporting[modalEvents[0].id || 'ev_0']?.reporting_time || modalEvents[0]?.reporting_time || selectedLead.reporting_time)
         : (eventsReporting['default']?.reporting_time || selectedLead.reporting_time);
+
+      // Save Step 3 team members and deliverables to Supabase before confirming order
+      const pkgId = wizardLeadData.selected_package_id || confirmForm.package_name || selectedLead.Select_Package_Option || 'Custom Package';
+      const eventsForPayload = modalEvents.length > 0 ? modalEvents : (selectedLead.events || []);
+      const { teamMembersJson, deliverablesJson, teamMembersText, deliverablesText } = buildStep3EventPayloads(
+        pkgId,
+        eventsForPayload,
+        editableInclusions,
+        editableDeliverables
+      );
+      const safeTeamMembersText = teamMembersText;
+      const safeDeliverablesText = deliverablesText;
+      const cleanPkgCost = Number(effectiveFinalAmt) || Number(confirmForm.quotation_amount) || Number(selectedLead.Final_Package_Amount) || 0;
+
+      if (supabaseClient) {
+        try {
+          const { error: dbError } = await supabaseClient
+            .from('leads')
+            .update({
+              deliverables_description: safeDeliverablesText,
+              Team_member: safeTeamMembersText,
+              Team_Members: safeTeamMembersText,
+              Add_Deliverable: safeDeliverablesText,
+              Add_Member: safeTeamMembersText,
+              Select_Package_Option: pkgId,
+              Final_Quotation_Amount: cleanPkgCost,
+              Final_Package_Amount: cleanPkgCost
+            })
+            .eq('lead_id', selectedLead.lead_id);
+
+          if (dbError) {
+            console.warn("Direct Supabase leads update warning on order confirmation:", dbError);
+          }
+        } catch (leadUpdateErr) {
+          console.warn("Direct Supabase update exception on order confirmation:", leadUpdateErr);
+        }
+
+        try {
+          const packagePayloadConfirm = {
+            lead_id: selectedLead.lead_id,
+            package_id: pkgId,
+            package_name: confirmForm.package_name || pkgId,
+            package_cost: cleanPkgCost || 0,
+            quantity: 1,
+            total_amount: cleanPkgCost,
+            final_amount: effectiveFinalAmt,
+            Team_Members_Included: teamMembersJson,
+            editable_inclusions: editableInclusions,
+            deliverables_descriptionn: deliverablesJson,
+            deliverables_description: deliverablesText,
+            editable_deliverables: editableDeliverables,
+            updated_at: new Date().toISOString()
+          };
+
+          const { data: existingLpsC } = await supabaseClient
+            .from('lead_packages')
+            .select('*')
+            .eq('lead_id', selectedLead.lead_id);
+
+          let targetLpIdC = `LP-${selectedLead.lead_id}-${pkgId}`;
+          if (existingLpsC && existingLpsC.length > 0) {
+            const matched = existingLpsC.find(lp => String(lp.package_id) === String(pkgId)) || existingLpsC[0];
+            targetLpIdC = matched.lead_package_id;
+            await supabaseClient
+              .from('lead_packages')
+              .update(packagePayloadConfirm)
+              .eq('lead_package_id', targetLpIdC);
+          } else {
+            await supabaseClient
+              .from('lead_packages')
+              .insert({
+                ...packagePayloadConfirm,
+                lead_package_id: targetLpIdC,
+                created_at: new Date().toISOString()
+              });
+          }
+        } catch (lpErr) {
+          console.warn("Could not upsert lead_packages record on order confirmation:", lpErr);
+        }
+      }
 
       await confirmOrder(
         selectedLead.lead_id,

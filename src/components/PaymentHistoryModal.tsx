@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FileText, X, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
-import { formatINR, formatDateDDMMYY, formatTime12Hour, triggerAutoScrollAndFocus } from '../utils';
+import { formatINR, formatDateDDMMYY, formatTime12Hour, formatDateTime, triggerAutoScrollAndFocus } from '../utils';
 import { Order, Payment, Lead } from '../types';
 import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
@@ -229,7 +229,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                   let timePart = 'N/A';
                   try {
                     const d = new Date(itemDate);
-                    datePart = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+                    datePart = formatDateDDMMYY(d) || 'N/A';
                     timePart = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
                   } catch (_) {}
 
@@ -344,7 +344,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                     <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1 border-t border-zinc-800/60">
                       <span>Event Date:</span>
                       <span className="text-zinc-200 font-semibold">
-                        {ev.event_date ? (ev.event_date.includes('T') ? formatDateDDMMYY(ev.event_date) : ev.event_date) : 'N/A'}
+                        {ev.event_date ? formatDateDDMMYY(ev.event_date) : 'N/A'}
                       </span>
                     </div>
                     {ev.event_start_time && (
@@ -401,14 +401,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                       historyList.map((h, index) => {
                         let displayDate = h.payment_date || h.date;
                         try {
-                          displayDate = new Date(h.payment_date || h.date).toLocaleString('en-IN', {
-                            day: '2-digit',
-                            month: 'short',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: true
-                          });
+                          displayDate = formatDateTime(h.payment_date || h.date) || displayDate;
                         } catch (e) {}
 
                         const displayType = h.payment_type || h.paymentType || (paymentObj ? ((paymentObj as any).Payment_type || paymentObj.payment_type) : '') || 'Payment';

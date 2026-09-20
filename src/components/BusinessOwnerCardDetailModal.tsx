@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { X, Search, Calendar, Info, Download, FileSpreadsheet } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
-import { formatINR } from '../utils';
+import { formatINR, formatDateDDMMYY } from '../utils';
 
 interface ColumnDefinition {
   key: string;
@@ -66,7 +66,7 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
     doc.setFontSize(16);
     doc.text(`${title || 'Detail Report'}`, 14, 15);
     doc.setFontSize(10);
-    doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')} | Period: ${subtitle || 'All'} | Displayed Records: ${filteredData.length}`, 14, 22);
+    doc.text(`Generated on: ${formatDateDDMMYY(new Date())} | Period: ${subtitle || 'All'} | Displayed Records: ${filteredData.length}`, 14, 22);
 
     if (totalLabel && totalValue) {
       doc.setFontSize(11);

@@ -2124,11 +2124,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         l.customer_name === 'Inbound Prospect' ? '' : l.customer_name,
         l.mobile,
         l.event_type,
-        l.event_date || 'N/A',
+        l.event_date ? (formatDateDDMMYY(l.event_date) || l.event_date) : 'N/A',
         getLeadCurrentStatus(l),
         l.remarks.slice(0, 50).replace(/["\n\r]/g, ' '),
         pay ? pay.payment_status : 'Pending',
-        l.created_date
+        l.created_date ? (formatDateDDMMYY(l.created_date) || l.created_date) : 'N/A'
       ];
     });
     
@@ -2155,11 +2155,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         l.customer_name === 'Inbound Prospect' ? '' : l.customer_name,
         l.mobile,
         l.event_type,
-        l.event_date || 'N/A',
+        l.event_date ? (formatDateDDMMYY(l.event_date) || l.event_date) : 'N/A',
         getLeadCurrentStatus(l),
         l.remarks.slice(0, 50).replace(/["\t\n\r]/g, ' '),
         pay ? pay.payment_status : 'Pending',
-        l.created_date
+        l.created_date ? (formatDateDDMMYY(l.created_date) || l.created_date) : 'N/A'
       ];
     });
     
@@ -2189,9 +2189,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
           <td>${l.customer_name === 'Inbound Prospect' ? '' : l.customer_name}</td>
           <td>${l.mobile}</td>
           <td>${l.event_type}</td>
-          <td>${l.event_date || 'N/A'}</td>
+          <td>${l.event_date ? (formatDateDDMMYY(l.event_date) || l.event_date) : 'N/A'}</td>
           <td>${getLeadCurrentStatus(l)}</td>
-          <td>${l.created_date}</td>
+          <td>${l.created_date ? (formatDateDDMMYY(l.created_date) || l.created_date) : 'N/A'}</td>
           <td>${pay ? pay.payment_status : 'Pending'}</td>
         </tr>
       `;
@@ -2214,7 +2214,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         </head>
         <body>
           <h1>LEADS DIRECTORY REPORT</h1>
-          <p>Generated on ${new Date().toLocaleString('en-IN')} | Date Range: ${appliedStartDate || 'All'} to ${appliedEndDate || 'All'} | Records Count: ${filteredLeads.length}</p>
+          <p>Generated on ${formatDateDDMMYY(new Date())} | Date Range: ${appliedStartDate || 'All'} to ${appliedEndDate || 'All'} | Records Count: ${filteredLeads.length}</p>
           <div className="overflow-x-auto w-full max-w-full">
 <table>
             <thead>
@@ -7821,13 +7821,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   const formatDDMMYYYY = (dateStr: string | undefined | null): string => {
     if (!dateStr) return 'N/A';
     const clean = dateStr.trim();
-    if (!clean) return 'N/A';
-    if (/^\d{2}-\d{2}-\d{4}$/.test(clean)) return clean;
-    const match = clean.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-      return `${match[3]}-${match[2]}-${match[1]}`;
-    }
-    return clean;
+    if (!clean || clean === '—' || clean === 'N/A') return 'N/A';
+    return formatDateDDMMYY(clean) || 'N/A';
   };
 
   const convertTo24Hour = (timeStr: string | undefined | null): string => {

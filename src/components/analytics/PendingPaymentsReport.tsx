@@ -84,31 +84,7 @@ export const PendingPaymentsReport: React.FC = () => {
   // Format date cleanly and timezone-safely e.g. "2026-08-20" -> "20 Aug 2026"
   const formatEventDate = (dateStr?: string) => {
     if (!dateStr || dateStr === 'N/A' || dateStr === '—' || dateStr === 'null' || dateStr === 'undefined') return 'N/A';
-    const clean = dateStr.split('T')[0].trim();
-    const parts = clean.split('-');
-    if (parts.length === 3 && parts[0].length === 4) {
-      const yyyy = parts[0];
-      const mm = parseInt(parts[1], 10);
-      const dd = parseInt(parts[2], 10);
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      if (mm >= 1 && mm <= 12 && !isNaN(dd)) {
-        return `${dd} ${months[mm - 1]} ${yyyy}`;
-      }
-    }
-    if (clean.includes('/') || (clean.includes('-') && clean.split('-')[0].length <= 2)) {
-      const sep = clean.includes('/') ? '/' : '-';
-      const subParts = clean.split(sep);
-      if (subParts.length === 3) {
-        const dd = parseInt(subParts[0], 10);
-        const mm = parseInt(subParts[1], 10);
-        const yyyy = subParts[2];
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        if (mm >= 1 && mm <= 12 && !isNaN(dd)) {
-          return `${dd} ${months[mm - 1]} ${yyyy}`;
-        }
-      }
-    }
-    return clean;
+    return formatDateDDMMYY(dateStr) || dateStr;
   };
   
   // Start date default: 3 months ago to 1 year ahead

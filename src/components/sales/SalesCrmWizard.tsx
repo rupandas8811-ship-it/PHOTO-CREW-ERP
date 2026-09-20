@@ -15,7 +15,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, INITIAL_PACKAGES, SalesModuleProps, sortEventsAscending } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, INITIAL_PACKAGES, SalesModuleProps, sortEventsAscending, normalizeCrmArray } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 import { TimePicker12Hour } from '../TimePicker12Hour';
 
@@ -203,7 +203,9 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
   const leadSourcesList = props.LEAD_SOURCES || LEAD_SOURCES || [];
   const eventTypesList = props.EVENT_TYPES || EVENT_TYPES || [];
   const shootTypesList = props.SHOOT_TYPES || SHOOT_TYPES || [];
-  const sortedCrmEvents = sortEventsAscending(crmEvents || []);
+  const normalizedCrmEvents = normalizeCrmArray<LeadEvent>(crmEvents);
+  const normalizedCreateEvents = normalizeCrmArray<LeadEvent>(createEvents);
+  const sortedCrmEvents = sortEventsAscending(normalizedCrmEvents);
 
   const createdLeadRecord = createdLeadId ? leads?.find((l: Lead) => l.lead_id === createdLeadId) : null;
   const isCreatedLeadConfirmed = createdLeadRecord
@@ -966,8 +968,8 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                              selectedPkg = { package_id: currentPkgId, package_name: (currentPkgId === 'custom_package' || currentPkgId === 'Custom Package') ? 'Custom Package' : `Package ${currentPkgId} (Legacy)`, price: wizardLeadData.package_cost || 0, deliverables: wizardLeadData.deliverables || "", status: "Active" } as any; 
                            }
                            const selectedPkgId = selectedPkg?.package_id || '';
-                          const inclusionsList = editableInclusions[selectedPkgId] || [];
-                          const deliverablesList = editableDeliverables[selectedPkgId] || [];
+                          const inclusionsList = normalizeCrmArray<string>(editableInclusions[selectedPkgId]);
+                          const deliverablesList = normalizeCrmArray<string>(editableDeliverables[selectedPkgId]);
 
                           return (
                             <div className="space-y-4 animate-fade-in">
@@ -1036,29 +1038,32 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
 
                               {/* Event-Wise Configuration or Single Configuration */}
                               <div>
-                                {((crmEvents && crmEvents.length > 0) || (createEvents && createEvents.length > 0)) ? (
-                                  ((crmEvents && crmEvents.length > 0) ? crmEvents : createEvents).map((event, eventIdx) => {
-                                    const activeEventsList = (crmEvents && crmEvents.length > 0) ? crmEvents : createEvents;
-                                    const isMulti = activeEventsList.length > 1;
-                                    const evId = event.id || event.event_id || `EV-${eventIdx + 1}`;
-                                    const eventKey = `${selectedPkgId}_${evId}`;
-                                    const altKey = `Custom Package_${evId}`;
+                                {(() => {
+                                  const activeEventsList = (normalizedCrmEvents.length > 0) ? normalizedCrmEvents : normalizedCreateEvents;
+                                  return (activeEventsList.length > 0) ? (
+                                    activeEventsList.map((event, eventIdx) => {
+                                      const isMulti = activeEventsList.length > 1;
+                                      const evId = event.id || event.event_id || `EV-${eventIdx + 1}`;
+                                      const eventKey = `${selectedPkgId}_${evId}`;
+                                      const altKey = `Custom Package_${evId}`;
 
-                                    const eventInclusions = editableInclusions[eventKey] !== undefined
-                                      ? editableInclusions[eventKey]
-                                      : (editableInclusions[evId] !== undefined
-                                          ? editableInclusions[evId]
-                                          : (editableInclusions[altKey] !== undefined
-                                              ? editableInclusions[altKey]
-                                              : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))));
+                                      const rawEventInclusions = editableInclusions[eventKey] !== undefined
+                                        ? editableInclusions[eventKey]
+                                        : (editableInclusions[evId] !== undefined
+                                            ? editableInclusions[evId]
+                                            : (editableInclusions[altKey] !== undefined
+                                                ? editableInclusions[altKey]
+                                                : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))));
+                                      const eventInclusions = normalizeCrmArray<string>(rawEventInclusions);
 
-                                    const eventDeliverables = editableDeliverables[eventKey] !== undefined
-                                      ? editableDeliverables[eventKey]
-                                      : (editableDeliverables[evId] !== undefined
-                                          ? editableDeliverables[evId]
-                                          : (editableDeliverables[altKey] !== undefined
-                                              ? editableDeliverables[altKey]
-                                              : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))));
+                                      const rawEventDeliverables = editableDeliverables[eventKey] !== undefined
+                                        ? editableDeliverables[eventKey]
+                                        : (editableDeliverables[evId] !== undefined
+                                            ? editableDeliverables[evId]
+                                            : (editableDeliverables[altKey] !== undefined
+                                                ? editableDeliverables[altKey]
+                                                : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))));
+                                      const eventDeliverables = normalizeCrmArray<string>(rawEventDeliverables);
 
                                     const updateInclusionsForEvent = (newList: string[]) => {
                                       const updated = {
@@ -1399,7 +1404,8 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                        )}
                                      </div>
                                     </div>
-                                )}
+                                  );
+                                })()}
                               </div>
 
                               <div className="mt-4 flex justify-end pb-2">
@@ -1480,7 +1486,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   </div>
                                   
                                   <div className="col-span-1 sm:col-span-2 space-y-2 mb-2">
-                                    {crmEvents && crmEvents.length > 0 ? (
+                                    {normalizedCrmEvents.length > 0 ? (
                                       sortedCrmEvents.map((ev: any, idx: number) => (
                                         <div key={ev.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
                                           <div className="flex flex-col min-w-max">
@@ -1531,7 +1537,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   </div>
                                 </div>
 
-                                {crmEvents && crmEvents.length > 0 && (
+                                {normalizedCrmEvents.length > 0 && (
                                   <div className="mt-4 space-y-3">
                                     <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Details</h5>
                                     {sortedCrmEvents.map((ev: any) => (
@@ -1583,7 +1589,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                               </div>
 
                               {/* Display each event separately */}
-                              {crmEvents && crmEvents.length > 0 && (
+                              {normalizedCrmEvents.length > 0 && (
                                 <div className="space-y-2 mb-4">
                                   <label className="block text-[10px] text-zinc-400 mb-2 uppercase font-mono font-bold border-b border-zinc-800 pb-1">Confirmed Event Dates</label>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1615,7 +1621,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   <input
                                     id="input_confirmed_event_date"
                                     type="date"
-                                    value={wizardLeadData.confirmed_event_date || (crmEvents && crmEvents.length > 0 ? crmEvents[0].event_date : '') || ''}
+                                    value={wizardLeadData.confirmed_event_date || (normalizedCrmEvents.length > 0 ? normalizedCrmEvents[0].event_date : '') || ''}
                                     onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
                                     className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
                                   />
@@ -1644,11 +1650,11 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   />
                                 </div>
                                 
-                                {crmEvents && crmEvents.length > 0 && (
+                                {normalizedCrmEvents.length > 0 && (
                                   <div className="col-span-1 sm:col-span-2 mt-4 space-y-3">
                                     <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Reporting Details</h5>
                                     {sortedCrmEvents.map(ev => {
-                                      const repEndDate = ev.event_end_date || ev.Event_End_Date || (crmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : '');
+                                      const repEndDate = ev.event_end_date || ev.Event_End_Date || (normalizedCrmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : '');
                                       return (
                                         <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
                                           <div className="col-span-1 sm:col-span-3"><span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span></div>
@@ -1659,7 +1665,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                type="date" 
                                                value={ev.reporting_date || ev.event_date || ''} 
                                                onChange={(e) => {
-                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
+                                                 const updated = normalizedCrmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
                                                  setCrmEvents(updated);
                                                }} 
                                                className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
@@ -1672,7 +1678,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                id={`reporting_end_date_${ev.id}`}
                                                type="date" 
                                                value={repEndDate} 
-                                               readOnly
+                                               readOnly 
                                                placeholder="N/A"
                                                className="w-full bg-slate-950/60 border border-slate-850/80 rounded-lg py-1.5 px-3 text-xs text-slate-300 font-mono cursor-not-allowed"
                                              />
@@ -1684,7 +1690,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                required
                                                value={ev.reporting_time || ''} 
                                                onChange={(val24) => {
-                                                 const updated = crmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: val24 } : eItem);
+                                                 const updated = normalizedCrmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: val24 } : eItem);
                                                  setCrmEvents(updated);
                                                }} 
                                              />
@@ -1969,13 +1975,13 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                     <td className="p-2 border border-slate-800 font-bold">{detectedCustomer.customer_name}</td>
                     <td className="p-2 border border-slate-800 font-mono">{detectedCustomer.mobile}</td>
                     <td className="p-2 border border-slate-800 font-mono">
-                      {detectedCustomer.leads && detectedCustomer.leads.length > 0 
+                      {Array.isArray(detectedCustomer.leads) && detectedCustomer.leads.length > 0 
                         ? new Date(Math.max(...detectedCustomer.leads.map((l: any) => new Date(l.created_date || 0).getTime()))).toISOString().split('T')[0]
                         : 'N/A'}
                     </td>
                     <td className="p-2 border border-slate-800">
-                      {detectedCustomer.leads && detectedCustomer.leads.length > 0
-                        ? getLeadCurrentStatus(detectedCustomer.leads.sort((a: any, b: any) => new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime())[0])
+                      {Array.isArray(detectedCustomer.leads) && detectedCustomer.leads.length > 0
+                        ? getLeadCurrentStatus(detectedCustomer.leads.slice().sort((a: any, b: any) => new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime())[0])
                         : 'N/A'}
                     </td>
                   </tr>

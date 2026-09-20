@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useRole } from '../../RoleContext';
 import { supabaseClient } from '../../../supabaseClient';
-import { formatINR } from '../../../utils';
+import { formatINR, formatDateTime } from '../../../utils';
 import { 
   Landmark, DollarSign, FileText, CheckCircle, Clock, AlertCircle, TrendingUp, BarChart3, 
   PieChart as PieChartIcon, Calendar, ArrowUpRight, ArrowDownRight, Package, User
@@ -377,14 +377,7 @@ export const OwnerRevenueDetailed: React.FC = () => {
               {recentTransactions.slice(0, 10).map((txn, idx) => {
                 let displayDate = txn.date;
                 try {
-                  displayDate = new Date(txn.date).toLocaleString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true
-                  });
+                  displayDate = formatDateTime(txn.date) || displayDate;
                 } catch(e) {}
                 
                 return (

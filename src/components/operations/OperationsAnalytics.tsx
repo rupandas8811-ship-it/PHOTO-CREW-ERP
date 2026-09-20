@@ -242,11 +242,11 @@ export const OperationsAnalytics: React.FC = () => {
       o.order_id,
       o.customer_name,
       o.event_type,
-      o.event_date,
+      formatDate(o.event_date),
       getAssignedCrewString(o.order_id).replace(/,/g, ';'),
       o.current_stage,
       getReportingTimeOfEvent(o.order_id),
-      o.created_at ? o.created_at.split('T')[0] : 'N/A'
+      o.created_at ? formatDate(o.created_at) : 'N/A'
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," 
@@ -267,11 +267,11 @@ export const OperationsAnalytics: React.FC = () => {
       o.order_id,
       o.customer_name,
       o.event_type,
-      o.event_date,
+      formatDate(o.event_date),
       getAssignedCrewString(o.order_id),
       o.current_stage,
       getReportingTimeOfEvent(o.order_id),
-      o.created_at ? o.created_at.split('T')[0] : 'N/A'
+      o.created_at ? formatDate(o.created_at) : 'N/A'
     ]);
     
     const content = [headers.join("\t"), ...rows.map(e => e.join("\t"))].join("\n");
@@ -320,8 +320,8 @@ export const OperationsAnalytics: React.FC = () => {
         <body>
           <h1>STUDIO OPERATIONS REGISTRY REPORT</h1>
           <div class="meta">
-            Generator Time: ${new Date().toLocaleString()} | 
-            Scope Range: ${appliedStartDate || 'All Starts'} to ${appliedEndDate || 'All Ends'} | 
+            Generator Time: ${formatDateDDMMYY(new Date())} | 
+            Scope Range: ${appliedStartDate ? formatDate(appliedStartDate) : 'All Starts'} to ${appliedEndDate ? formatDate(appliedEndDate) : 'All Ends'} | 
             Active Matches Count: ${filteredOrders.length}
           </div>
           <div className="overflow-x-auto w-full max-w-full">

@@ -254,6 +254,7 @@ export interface Lead {
   client_residence_address?: string;
   desired_event_shoot_type?: string;
   Select_Package_Option?: string;
+  selected_package_id?: string;
   Specify_Custom_Lead_Source_Name?: string | null;
   package_price?: number;
   Add_Deliverable?: string;

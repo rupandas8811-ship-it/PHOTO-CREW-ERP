@@ -9,7 +9,7 @@ import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } fr
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
 import { AddNoteModal } from './AddNoteModal';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
-import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp } from '../utils';
+import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp, formatISTDate, formatISTTime12Hour } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
   if (!dateStr || dateStr === '—') return '—';
@@ -999,6 +999,7 @@ export const StaffModule: React.FC = () => {
 
   // Photos attached in modal & raw footage link
   const [modalPhotos, setModalPhotos] = useState<Record<string, string>>({});
+  const [modalPhotoTimestamps, setModalPhotoTimestamps] = useState<Record<string, string>>({});
   const [modalRawFootageLink, setModalRawFootageLink] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1189,7 +1190,9 @@ export const StaffModule: React.FC = () => {
           coordinator: op?.operations_coordinator || 'Unassigned',
           createdAt: lead?.created_at || order?.created_at || (ev as any)?.created_at || sa.created_at || '',
           equipmentReceivedTime: sa.equipment_received_time || (sa as any).equipment_received_time || null,
-          equipmentHandoverTime: sa.equipment_handover_time || (sa as any).equipment_handover_time || null
+          equipmentHandoverTime: sa.equipment_handover_time || (sa as any).equipment_handover_time || null,
+          eventStartPhotoTime: sa.event_start_time || (sa as any).event_start_time || null,
+          eventEndPhotoTime: sa.event_end_time || (sa as any).event_end_time || null
         });
         processedAssignmentIds.add(assignmentId);
         processedUniqueKeys.add(uniqueKey);
@@ -1291,7 +1294,9 @@ export const StaffModule: React.FC = () => {
                 coordinator: op?.operations_coordinator || 'Unassigned',
                 createdAt: lead.created_at || order?.created_at || (ev as any)?.created_at || '',
                 equipmentReceivedTime: sa ? (sa.equipment_received_time || (sa as any).equipment_received_time || null) : null,
-                equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null
+                equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null,
+                eventStartPhotoTime: sa ? (sa.event_start_time || (sa as any).event_start_time || null) : null,
+                eventEndPhotoTime: sa ? (sa.event_end_time || (sa as any).event_end_time || null) : null
               });
               processedUniqueKeys.add(uniqueKey);
               if (assignmentId) processedAssignmentIds.add(assignmentId);
@@ -1382,7 +1387,9 @@ export const StaffModule: React.FC = () => {
               coordinator: op?.operations_coordinator || 'Unassigned',
               createdAt: lead.created_at || order?.created_at || '',
               equipmentReceivedTime: sa ? (sa.equipment_received_time || (sa as any).equipment_received_time || null) : null,
-              equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null
+              equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null,
+              eventStartPhotoTime: sa ? (sa.event_start_time || (sa as any).event_start_time || null) : null,
+              eventEndPhotoTime: sa ? (sa.event_end_time || (sa as any).event_end_time || null) : null
             });
             processedUniqueKeys.add(uniqueKey);
             if (assignmentId) processedAssignmentIds.add(assignmentId);
@@ -1514,6 +1521,7 @@ export const StaffModule: React.FC = () => {
   const openPhotoModal = (booking: any, stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete') => {
     setSubmitError(null);
     const existingPhotos: Record<string, string> = {};
+    const existingTimestamps: Record<string, string> = {};
 
     const relevantHistory = (leadEquipmentHistory || []).filter(h => {
       // 1. Order ID / Lead ID match
@@ -1579,6 +1587,7 @@ export const StaffModule: React.FC = () => {
 
       if (!photoUrl) continue;
 
+      const hTime = (parsedRemarks.uploaded_at || h.returned_at || h.created_at) as string;
       const eqName = (h.equipment_name || '').toLowerCase();
       const eqStatus = (h.equipment_status || '').toLowerCase();
       const proofType = (parsedRemarks.proof_type || '').toLowerCase();
@@ -1588,11 +1597,16 @@ export const StaffModule: React.FC = () => {
         if (isHandover) {
           existingPhotos['Equipment Handover Photo Proof'] = photoUrl;
           existingPhotos['Asset Return Photo Proof'] = photoUrl;
+          if (hTime) {
+            existingTimestamps['Equipment Handover Photo Proof'] = hTime;
+            existingTimestamps['Asset Return Photo Proof'] = hTime;
+          }
         }
       } else if (stage === 'Event Complete') {
         const isComplete = eqName.includes('completion') || eqName.includes('complete') || eqName.includes('event end') || eqStatus.includes('complete') || eqStatus.includes('ended') || proofType.includes('complete') || proofType.includes('end');
         if (isComplete) {
           existingPhotos['Event Completion Photo Proof'] = photoUrl;
+          if (hTime) existingTimestamps['Event Completion Photo Proof'] = hTime;
         }
       } else if (stage === 'Event Start' || stage === 'Equipment Received') {
         const isReceived = eqName.includes('asset collection') || eqName.includes('equipment received') || eqStatus.includes('asset collected') || eqStatus.includes('received') || proofType.includes('received') || proofType.includes('asset collection');
@@ -1600,10 +1614,20 @@ export const StaffModule: React.FC = () => {
         if (isReceived) {
           existingPhotos['Asset Collection Photo Proof'] = photoUrl;
           existingPhotos['Equipment Received / Asset Picture'] = photoUrl;
+          if (h.equipment_name) existingPhotos[h.equipment_name] = photoUrl;
+          if (hTime) {
+            existingTimestamps['Asset Collection Photo Proof'] = hTime;
+            existingTimestamps['Equipment Received / Asset Picture'] = hTime;
+            if (h.equipment_name) existingTimestamps[h.equipment_name] = hTime;
+          }
         }
         if (isStart) {
           existingPhotos['Event Start Photo Proof'] = photoUrl;
           existingPhotos['Event Start Image'] = photoUrl;
+          if (hTime) {
+            existingTimestamps['Event Start Photo Proof'] = hTime;
+            existingTimestamps['Event Start Image'] = hTime;
+          }
         }
       }
     }
@@ -1646,19 +1670,34 @@ export const StaffModule: React.FC = () => {
         if (saRecord.equipment_handover_photo && saRecord.equipment_handover_photo !== saRecord.equipment_received_photo) {
           existingPhotos['Equipment Handover Photo Proof'] = saRecord.equipment_handover_photo;
           existingPhotos['Asset Return Photo Proof'] = saRecord.equipment_handover_photo;
+          if (saRecord.equipment_handover_time) {
+            existingTimestamps['Equipment Handover Photo Proof'] = saRecord.equipment_handover_time;
+            existingTimestamps['Asset Return Photo Proof'] = saRecord.equipment_handover_time;
+          }
         }
       } else if (stage === 'Event Complete') {
         if (saRecord.event_end_photo) {
           existingPhotos['Event Completion Photo Proof'] = saRecord.event_end_photo;
+          if (saRecord.event_end_time) {
+            existingTimestamps['Event Completion Photo Proof'] = saRecord.event_end_time;
+          }
         }
       } else if (stage === 'Event Start' || stage === 'Equipment Received') {
         if (saRecord.equipment_received_photo) {
           existingPhotos['Asset Collection Photo Proof'] = saRecord.equipment_received_photo;
           existingPhotos['Equipment Received / Asset Picture'] = saRecord.equipment_received_photo;
+          if (saRecord.equipment_received_time) {
+            existingTimestamps['Asset Collection Photo Proof'] = saRecord.equipment_received_time;
+            existingTimestamps['Equipment Received / Asset Picture'] = saRecord.equipment_received_time;
+          }
         }
         if (saRecord.event_start_photo) {
           existingPhotos['Event Start Photo Proof'] = saRecord.event_start_photo;
           existingPhotos['Event Start Image'] = saRecord.event_start_photo;
+          if (saRecord.event_start_time) {
+            existingTimestamps['Event Start Photo Proof'] = saRecord.event_start_time;
+            existingTimestamps['Event Start Image'] = saRecord.event_start_time;
+          }
         }
       }
     }
@@ -1673,12 +1712,21 @@ export const StaffModule: React.FC = () => {
           if (p.photoUrl) {
             existingPhotos['Equipment Handover Photo Proof'] = p.photoUrl;
             existingPhotos['Asset Return Photo Proof'] = p.photoUrl;
+            if (p.capturedAt) {
+              existingTimestamps['Equipment Handover Photo Proof'] = p.capturedAt;
+              existingTimestamps['Asset Return Photo Proof'] = p.capturedAt;
+            }
           }
         }
       }
       if (stage === 'Event Complete' && localProofObj.completeProofs) {
         for (const p of localProofObj.completeProofs) {
-          if (p.photoUrl) existingPhotos['Event Completion Photo Proof'] = p.photoUrl;
+          if (p.photoUrl) {
+            existingPhotos['Event Completion Photo Proof'] = p.photoUrl;
+            if (p.capturedAt) {
+              existingTimestamps['Event Completion Photo Proof'] = p.capturedAt;
+            }
+          }
         }
       }
       if (stage === 'Event Start' || stage === 'Equipment Received') {
@@ -1687,6 +1735,10 @@ export const StaffModule: React.FC = () => {
             if (p.photoUrl) {
               existingPhotos['Asset Collection Photo Proof'] = existingPhotos['Asset Collection Photo Proof'] || p.photoUrl;
               existingPhotos['Equipment Received / Asset Picture'] = existingPhotos['Equipment Received / Asset Picture'] || p.photoUrl;
+              if (p.capturedAt) {
+                existingTimestamps['Asset Collection Photo Proof'] = existingTimestamps['Asset Collection Photo Proof'] || p.capturedAt;
+                existingTimestamps['Equipment Received / Asset Picture'] = existingTimestamps['Equipment Received / Asset Picture'] || p.capturedAt;
+              }
             }
           }
         }
@@ -1696,14 +1748,39 @@ export const StaffModule: React.FC = () => {
               if ((p.equipmentName || '').toLowerCase().includes('asset collection') || (p.equipmentName || '').toLowerCase().includes('equipment received')) {
                 existingPhotos['Asset Collection Photo Proof'] = existingPhotos['Asset Collection Photo Proof'] || p.photoUrl;
                 existingPhotos['Equipment Received / Asset Picture'] = existingPhotos['Equipment Received / Asset Picture'] || p.photoUrl;
+                if (p.capturedAt) {
+                  existingTimestamps['Asset Collection Photo Proof'] = existingTimestamps['Asset Collection Photo Proof'] || p.capturedAt;
+                  existingTimestamps['Equipment Received / Asset Picture'] = existingTimestamps['Equipment Received / Asset Picture'] || p.capturedAt;
+                }
               } else if ((p.equipmentName || '').toLowerCase().includes('event start')) {
                 existingPhotos['Event Start Photo Proof'] = existingPhotos['Event Start Photo Proof'] || p.photoUrl;
                 existingPhotos['Event Start Image'] = existingPhotos['Event Start Image'] || p.photoUrl;
+                if (p.capturedAt) {
+                  existingTimestamps['Event Start Photo Proof'] = existingTimestamps['Event Start Photo Proof'] || p.capturedAt;
+                  existingTimestamps['Event Start Image'] = existingTimestamps['Event Start Image'] || p.capturedAt;
+                }
               }
             }
           }
         }
       }
+    }
+
+    // Booking fallback
+    if (booking.equipmentReceivedTime) {
+      existingTimestamps['Asset Collection Photo Proof'] = existingTimestamps['Asset Collection Photo Proof'] || booking.equipmentReceivedTime;
+      existingTimestamps['Equipment Received / Asset Picture'] = existingTimestamps['Equipment Received / Asset Picture'] || booking.equipmentReceivedTime;
+    }
+    if (booking.eventStartPhotoTime) {
+      existingTimestamps['Event Start Photo Proof'] = existingTimestamps['Event Start Photo Proof'] || booking.eventStartPhotoTime;
+      existingTimestamps['Event Start Image'] = existingTimestamps['Event Start Image'] || booking.eventStartPhotoTime;
+    }
+    if (booking.eventEndPhotoTime) {
+      existingTimestamps['Event Completion Photo Proof'] = existingTimestamps['Event Completion Photo Proof'] || booking.eventEndPhotoTime;
+    }
+    if (booking.equipmentHandoverTime) {
+      existingTimestamps['Equipment Handover Photo Proof'] = existingTimestamps['Equipment Handover Photo Proof'] || booking.equipmentHandoverTime;
+      existingTimestamps['Asset Return Photo Proof'] = existingTimestamps['Asset Return Photo Proof'] || booking.equipmentHandoverTime;
     }
 
     const existingRawLink = resolveRawFootageLink(
@@ -1715,6 +1792,7 @@ export const StaffModule: React.FC = () => {
     );
 
     setModalPhotos(existingPhotos);
+    setModalPhotoTimestamps(existingTimestamps);
     setModalRawFootageLink(existingRawLink || '');
     setPhotoModalData({ booking, stage });
   };
@@ -1739,6 +1817,7 @@ export const StaffModule: React.FC = () => {
     }
 
     try {
+      const captureTime = new Date().toISOString();
       const compressedBase64 = await compressImage(file);
       setModalPhotos(prev => {
         const next = { ...prev, [eqName]: compressedBase64 };
@@ -1749,6 +1828,18 @@ export const StaffModule: React.FC = () => {
         if (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image') {
           next['Event Start Photo Proof'] = compressedBase64;
           next['Event Start Image'] = compressedBase64;
+        }
+        return next;
+      });
+      setModalPhotoTimestamps(prev => {
+        const next = { ...prev, [eqName]: captureTime };
+        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:')) {
+          next['Equipment Received / Asset Picture'] = captureTime;
+          next['Asset Collection Photo Proof'] = captureTime;
+        }
+        if (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image') {
+          next['Event Start Photo Proof'] = captureTime;
+          next['Event Start Image'] = captureTime;
         }
         return next;
       });
@@ -1805,12 +1896,18 @@ export const StaffModule: React.FC = () => {
             const rawUrl = modalPhotos[itemKey] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'];
             if (!rawUrl) continue;
 
+            const isNewAsset = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://');
             const fileName = `proofs/${booking.orderId || booking.leadId}_AssetCollection_${Date.now()}.jpg`;
             const finalUrl = await safeUploadImage(rawUrl, fileName);
 
             if (!finalUrl) {
               throw new Error("Failed to upload Equipment Received / Asset Picture.");
             }
+
+            // Capture exact system timestamp at the moment upload completes
+            const assetUploadTime = isNewAsset
+              ? new Date().toISOString()
+              : (modalPhotoTimestamps[itemKey] || modalPhotoTimestamps['Asset Collection Photo Proof'] || modalPhotoTimestamps['Equipment Received / Asset Picture'] || booking.equipmentReceivedTime || new Date().toISOString());
 
             const eqName = itemKey;
             const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
@@ -1819,7 +1916,7 @@ export const StaffModule: React.FC = () => {
               equipmentName: eqName,
               assetId: assetId,
               photoUrl: finalUrl,
-              capturedAt: timestamp
+              capturedAt: assetUploadTime
             });
 
             const historyRecord = {
@@ -1829,7 +1926,7 @@ export const StaffModule: React.FC = () => {
               equipment_name: eqName,
               equipment_status: 'Equipment Received',
               returned_by: staffName,
-              returned_at: timestamp,
+              returned_at: assetUploadTime,
               remarks: JSON.stringify({
                 assignment_id: booking.assignmentId || '',
                 asset_id: assetId,
@@ -1842,7 +1939,7 @@ export const StaffModule: React.FC = () => {
                 event_name: booking.eventName,
                 order_id: booking.orderId,
                 lead_id: booking.leadId,
-                uploaded_at: timestamp,
+                uploaded_at: assetUploadTime,
                 uploaded_by: staffName,
                 current_status: 'Event Started'
               })
@@ -1862,14 +1959,20 @@ export const StaffModule: React.FC = () => {
             return;
           }
 
+          const isNewStart = !rawStartUrl.startsWith('http://') && !rawStartUrl.startsWith('https://');
           const startFileName = `proofs/${booking.orderId || booking.leadId}_EventStart_${Date.now()}.jpg`;
           const finalStartUrl = (await safeUploadImage(rawStartUrl, startFileName)) || rawStartUrl;
+
+          // Capture exact system timestamp at the moment upload completes
+          const startUploadTime = isNewStart
+            ? new Date().toISOString()
+            : (modalPhotoTimestamps['Event Start Photo Proof'] || modalPhotoTimestamps['Event Start Image'] || booking.eventStartPhotoTime || new Date().toISOString());
 
           allProofsToSave.push({
             equipmentName: 'Event Start Photo Proof',
             assetId: 'Event Start',
             photoUrl: finalStartUrl,
-            capturedAt: timestamp
+            capturedAt: startUploadTime
           });
 
           const startHistoryRecord = {
@@ -1879,7 +1982,7 @@ export const StaffModule: React.FC = () => {
             equipment_name: 'Event Start',
             equipment_status: 'Event Started',
             returned_by: staffName,
-            returned_at: timestamp,
+            returned_at: startUploadTime,
             photo_url: finalStartUrl,
             asset_id: 'Event Start',
             proof_type: 'Event Start',
@@ -1897,7 +2000,7 @@ export const StaffModule: React.FC = () => {
               event_name: booking.eventName,
               order_id: booking.orderId,
               lead_id: booking.leadId,
-              uploaded_at: timestamp,
+              uploaded_at: startUploadTime,
               uploaded_by: staffName,
               current_status: 'Event Started'
             })
@@ -1961,6 +2064,11 @@ export const StaffModule: React.FC = () => {
 
             const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
 
+            const startProofItem = allProofsToSave.find(p => p.equipmentName === 'Event Start Photo Proof');
+            const eqProofItem = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof');
+            const actualStartTime = startProofItem?.capturedAt || new Date().toISOString();
+            const actualEqTime = eqProofItem?.capturedAt || booking.equipmentReceivedTime || new Date().toISOString();
+
             if (existingSA) {
               targetAssignmentId = existingSA.assignment_id;
               await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
@@ -1968,8 +2076,8 @@ export const StaffModule: React.FC = () => {
                 assignment_status: 'Assigned',
                 updated_at: timestamp,
                 updated_by: staffName,
-                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto } : {}),
-                ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: timestamp } : {})
+                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: existingSA.equipment_received_time || actualEqTime } : {}),
+                ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: actualStartTime } : {})
               });
             } else {
               const newAssignmentId = targetAssignmentId || `SA-${booking.orderId}-${booking.eventId || 'ev'}-${Date.now()}`;
@@ -1987,8 +2095,8 @@ export const StaffModule: React.FC = () => {
                 assignment_status: 'Assigned',
                 updated_at: timestamp,
                 updated_by: staffName,
-                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto } : {}),
-                ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: timestamp } : {})
+                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: actualEqTime } : {}),
+                ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: actualStartTime } : {})
               });
             }
 
@@ -2150,14 +2258,20 @@ export const StaffModule: React.FC = () => {
         }
         
         if (rawUrl) {
+          const isNewUpload = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://');
           const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
           const finalUrl = await safeUploadImage(rawUrl, fileName);
+
+          // Capture exact system timestamp at the moment upload completes
+          const itemUploadTime = isNewUpload
+            ? new Date().toISOString()
+            : (modalPhotoTimestamps[item.name] || modalPhotoTimestamps['Asset Collection Photo Proof'] || modalPhotoTimestamps['Equipment Handover Photo Proof'] || modalPhotoTimestamps['Event Completion Photo Proof'] || (stage === 'Event Complete' ? booking.eventEndPhotoTime : stage === 'Equipment Handover' ? booking.equipmentHandoverTime : booking.equipmentReceivedTime) || new Date().toISOString());
 
           uploadedProofs.push({
             equipmentName: item.name,
             assetId: item.assetId,
             photoUrl: finalUrl,
-            capturedAt: timestamp
+            capturedAt: itemUploadTime
           });
         }
       }
@@ -2170,13 +2284,18 @@ export const StaffModule: React.FC = () => {
           fallbackPhoto = modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover'];
         }
         if (fallbackPhoto) {
+          const isNewFallback = !fallbackPhoto.startsWith('http://') && !fallbackPhoto.startsWith('https://');
           const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
           const finalUrl = await safeUploadImage(fallbackPhoto, fileName);
+          const fallbackUploadTime = isNewFallback
+            ? new Date().toISOString()
+            : (modalPhotoTimestamps[stage === 'Equipment Handover' ? 'Equipment Handover Photo Proof' : 'Asset Collection Photo Proof'] || (stage === 'Equipment Handover' ? booking.equipmentHandoverTime : booking.equipmentReceivedTime) || new Date().toISOString());
+
           uploadedProofs.push({
             equipmentName: stage === 'Equipment Handover' ? 'Equipment Handover' : 'Equipment Received',
             assetId: booking.assignmentId || stage,
             photoUrl: finalUrl,
-            capturedAt: timestamp
+            capturedAt: fallbackUploadTime
           });
         }
       }
@@ -2225,7 +2344,7 @@ export const StaffModule: React.FC = () => {
             equipment_name: p.equipmentName,
             equipment_status: effectiveEquipmentStatus,
             returned_by: staffName,
-            returned_at: timestamp,
+            returned_at: p.capturedAt || timestamp,
             photo_url: p.photoUrl || null,
             asset_id: p.assetId || null,
             event_id: booking.eventId || null,
@@ -2244,7 +2363,7 @@ export const StaffModule: React.FC = () => {
               order_id: booking.orderId,
               lead_id: booking.leadId,
               raw_footage_link: modalRawFootageLink || null,
-              uploaded_at: timestamp,
+              uploaded_at: p.capturedAt || timestamp,
               uploaded_by: staffName,
               current_status: nextStatus
             })
@@ -2491,22 +2610,25 @@ export const StaffModule: React.FC = () => {
           updated_at: timestamp,
           updated_by: staffName
         };
-        const targetPhotoUrl = uploadedProofs.find(p => p.photoUrl)?.photoUrl || uploadedProofs[0]?.photoUrl;
+        const targetProofItem = uploadedProofs.find(p => p.photoUrl) || uploadedProofs[0];
+        const targetPhotoUrl = targetProofItem?.photoUrl;
+        const targetPhotoTime = targetProofItem?.capturedAt || timestamp;
+
         if (stage === 'Equipment Received' && targetPhotoUrl) {
           updateAssignmentPayload.equipment_received_photo = targetPhotoUrl;
-          updateAssignmentPayload.equipment_received_time = timestamp;
+          updateAssignmentPayload.equipment_received_time = targetPhotoTime;
         } else if (stage === 'Equipment Handover') {
           if (targetPhotoUrl) {
             updateAssignmentPayload.equipment_handover_photo = targetPhotoUrl;
           }
           updateAssignmentPayload.equipment_handover_to = staffName;
-          updateAssignmentPayload.equipment_handover_time = timestamp;
-          updateAssignmentPayload.equipment_handover_date = timestamp.split('T')[0];
+          updateAssignmentPayload.equipment_handover_time = targetPhotoTime;
+          updateAssignmentPayload.equipment_handover_date = targetPhotoTime.split('T')[0];
         } else if (stage === 'Event Complete') {
           if (targetPhotoUrl) {
             updateAssignmentPayload.event_end_photo = targetPhotoUrl;
           }
-          updateAssignmentPayload.event_end_time = timestamp;
+          updateAssignmentPayload.event_end_time = targetPhotoTime;
         }
 
         const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
@@ -3218,12 +3340,12 @@ export const StaffModule: React.FC = () => {
                   const isEventEnd = item.name && ((item.name || '').toLowerCase().includes('event completion') || (item.name || '').toLowerCase().includes('event end'));
                   const isHandover = item.name && ((item.name || '').toLowerCase().includes('handover') || (item.name || '').toLowerCase().includes('return'));
 
-                  let uploadTime = null;
-                  if (photoModalData?.booking) {
-                    if (isAsset) uploadTime = photoModalData.booking.equipmentReceivedTime;
-                    else if (isEventStart) uploadTime = photoModalData.booking.eventStartTime;
-                    else if (isEventEnd) uploadTime = photoModalData.booking.eventEndTime;
-                    else if (isHandover) uploadTime = photoModalData.booking.equipmentHandoverTime;
+                  let uploadTime = modalPhotoTimestamps[item.name] || (item.displayName ? modalPhotoTimestamps[item.displayName] : null);
+                  if (!uploadTime && photoModalData?.booking) {
+                    if (isAsset) uploadTime = modalPhotoTimestamps['Asset Collection Photo Proof'] || modalPhotoTimestamps['Equipment Received / Asset Picture'] || photoModalData.booking.equipmentReceivedTime;
+                    else if (isEventStart) uploadTime = modalPhotoTimestamps['Event Start Photo Proof'] || modalPhotoTimestamps['Event Start Image'] || photoModalData.booking.eventStartPhotoTime;
+                    else if (isEventEnd) uploadTime = modalPhotoTimestamps['Event Completion Photo Proof'] || photoModalData.booking.eventEndPhotoTime;
+                    else if (isHandover) uploadTime = modalPhotoTimestamps['Equipment Handover Photo Proof'] || modalPhotoTimestamps['Asset Return Photo Proof'] || photoModalData.booking.equipmentHandoverTime;
                   }
 
                   return (
@@ -3235,10 +3357,16 @@ export const StaffModule: React.FC = () => {
                             {item.displayName || item.name} {item.optional ? <span className="text-zinc-500 text-xs font-normal">(Optional)</span> : <span className="text-rose-400 text-xs font-normal">(Required)</span>}
                           </div>
                           <div className="text-[10px] font-mono text-zinc-400">Asset ID: {item.assetId}</div>
-                          {uploadTime && (
-                            <div className="text-[10px] text-amber-400/80 mt-1 flex items-center gap-1 font-semibold">
-                              <Clock className="w-3 h-3" />
-                              Uploaded: {formatISTTimestamp(uploadTime)}
+                          {uploadTime && currentPhoto && (
+                            <div className="text-[10px] text-amber-400 mt-1.5 space-y-0.5 font-semibold bg-amber-500/10 p-2 rounded-lg border border-amber-500/20">
+                              <div className="flex items-center gap-1.5">
+                                <Calendar className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>Upload Date: {formatISTDate(uploadTime)}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="w-3 h-3 text-amber-400 shrink-0" />
+                                <span>Upload Time: {formatISTTime12Hour(uploadTime)} IST</span>
+                              </div>
                             </div>
                           )}
                         </div>

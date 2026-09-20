@@ -1425,7 +1425,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
           editing_status: 'Order Closed',
           production_status: 'Order Closed',
           current_status: 'Order Closed',
-          remarks: `Final Approval granted & Order Closed by Business Owner (${currentUserName || 'Business Owner'}) on ${new Date().toLocaleString('en-IN')}`
+          remarks: `Final Approval granted & Order Closed by Business Owner (${currentUserName || 'Business Owner'}) on ${formatDateDDMMYY(new Date())}`
         } as any);
       }
 
@@ -1498,7 +1498,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       await updateProduction(prod.production_id, {
         editing_status: 'Assigned Editor' as any,
         production_status: 'In Progress' as any,
-        remarks: `Rejected back to Production by Business Owner (${currentUserName || 'Business Owner'}) on ${new Date().toLocaleString('en-IN')}`
+        remarks: `Rejected back to Production by Business Owner (${currentUserName || 'Business Owner'}) on ${formatDateDDMMYY(new Date())}`
       });
       
       if (supabaseClient) {
@@ -1896,7 +1896,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
                         const reqReason = request.reason || request.request_reason || request.title || 'Quotation unlock requested';
                         const reqStatus = request.status || request.request_status || 'Pending';
-                        const reqDate = (request.requested_at || request.created_at) ? new Date(request.requested_at || request.created_at).toLocaleDateString() : '-';
+                        const reqDate = (request.requested_at || request.created_at) ? formatDateDDMMYY(request.requested_at || request.created_at) : '-';
 
                         return (
                           <tr key={request.request_id || request.order_id} className="hover:bg-zinc-900/50 transition-colors">
@@ -3468,7 +3468,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
     doc.setFontSize(16);
     doc.text(`${cardLabel} Report`, 14, 15);
     doc.setFontSize(10);
-    doc.text(`Generated on: ${new Date().toLocaleDateString('en-IN')} | Date Range: ${startDate || 'All'} to ${endDate || 'All'} | Total Records: ${dataToExport.length}`, 14, 22);
+    doc.text(`Generated on: ${formatDateDDMMYY(new Date())} | Date Range: ${startDate ? formatDateDDMMYY(startDate) : 'All'} to ${endDate ? formatDateDDMMYY(endDate) : 'All'} | Total Records: ${dataToExport.length}`, 14, 22);
 
     const subTotalRev = dataToExport.reduce((s, r) => s + (r.totalRevenue || 0), 0);
     const subTotalRec = dataToExport.reduce((s, r) => s + (r.paymentReceived || 0), 0);

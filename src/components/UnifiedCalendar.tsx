@@ -1812,7 +1812,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                           <div className="flex items-start gap-3 w-full sm:w-auto">
                             <div className="flex flex-col items-center bg-zinc-950 px-3 py-2 rounded-xl text-center min-w-max border border-zinc-900">
                               <span className="text-[10px] font-mono text-zinc-400 font-bold uppercase">
-                                {parseLocalDate(ev.date).toLocaleDateString('en-US', { month: 'short' })}
+                                {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseLocalDate(ev.date).getMonth()]}
                               </span>
                               <span className="text-base font-black text-yellow-500 font-mono">
                                 {ev.date.split('-')[2]}
@@ -1832,6 +1832,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                 {ev.customerName}
                               </h4>
                               <div className="flex items-center gap-1.5 text-[10px] text-zinc-450 font-mono">
+                                <span>{formatDateDDMMYY(ev.date)}</span>
+                                <span className="text-zinc-700">•</span>
                                 <Clock className="w-3 h-3 text-zinc-650" />
                                 <span>{formatTime12Hour(ev.eventTime)}</span>
                                 <span className="text-zinc-700">•</span>
@@ -2258,12 +2260,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                 </span>
                 <h3 className="text-sm sm:text-base font-extrabold text-zinc-200 font-mono mt-0.5 flex items-center gap-2">
                   <CalendarIcon className="w-5 h-5 text-yellow-500" />
-                  {parseLocalDate(selectedDate).toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  })}
+                  {formatDateDDMMYY(selectedDate)}
                 </h3>
               </div>
               <div className="flex items-center gap-3">

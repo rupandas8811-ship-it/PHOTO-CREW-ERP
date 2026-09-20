@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useRole } from './RoleContext';
 import { Notification } from '../types';
+import { formatDateTime } from '../utils';
 import { 
   Bell, AlertCircle, AlertTriangle, CheckCircle2, Info, Eye, Clock,
   Layers, User, Calendar, Trash2, ShieldAlert, Sparkles, X, Send, Play, CheckSquare, Search, Archive
@@ -296,7 +297,7 @@ export const NotificationsModule: React.FC = () => {
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono flex items-center gap-1">
                       <Clock className="w-3 h-3 text-zinc-650" />
-                      {new Date(notif.created_at).toLocaleString()}
+                      {formatDateTime(notif.created_at)}
                     </span>
                   </div>
                   <p className="text-[11.5px] text-zinc-400 leading-relaxed max-w-4xl font-sans">
@@ -519,7 +520,7 @@ export const NotificationsModule: React.FC = () => {
                           
                           <div className="flex items-center justify-between text-[10px]">
                             <span className="font-bold text-zinc-300">{item.action}</span>
-                            <span className="text-zinc-550 font-mono">{new Date(item.timestamp).toLocaleString()}</span>
+                            <span className="text-zinc-550 font-mono">{formatDateTime(item.timestamp)}</span>
                           </div>
                           <p className="text-[10.5px] text-zinc-500 leading-relaxed max-w-xl font-mono">
                             {item.details} 

@@ -8,6 +8,7 @@ import {
   Trash2, Briefcase, Eye, EyeOff, Save, Lock, Copy, CheckCheck, Loader2
 } from 'lucide-react';
 import { User, UserRole, Lead } from '../types';
+import { formatDateDDMMYY } from '../utils';
 
 export const SalesStaffManagementModule: React.FC = () => {
   const { users, currentUser, addUser, editUser, deleteUser, toggleUserStatus, resetUserPassword, leads, currentRole } = useRole();
@@ -416,7 +417,7 @@ export const SalesStaffManagementModule: React.FC = () => {
                       <span className="text-indigo-400">{getActiveAssignedLeadsCount(usr.id, usr.name)} Active</span>
                     </td>
                     <td className="p-4 text-xs text-slate-400 font-mono whitespace-nowrap">
-                      {new Date(usr.created_at).toLocaleDateString()}
+                      {formatDateDDMMYY(usr.created_at)}
                     </td>
                     <td className="p-4 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">

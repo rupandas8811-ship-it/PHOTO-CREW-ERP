@@ -15,6 +15,7 @@ import {
 import { jsPDF } from 'jspdf';
 import { StaffAssignment } from '../../types';
 import { CameraLensStatsCard } from '../CameraLensStatsCard';
+import { formatDateDDMMYY } from '../../utils';
 
 export const OperationsAnalytics: React.FC = () => {
   const { leads, orders, operations, rawFootage, payments, production, staff, globalDateRange, staffAssignments } = useRole();
@@ -470,8 +471,8 @@ export const OperationsAnalytics: React.FC = () => {
             const xlsHeader = `sep=,\r\n`;
             const xlsRows = [
               ['Operations Crew Performance Audit Report'],
-              [`Export Bounds: ${activeRange.start} through ${activeRange.end}`],
-              [`Generated: ${new Date().toLocaleString()}`],
+              [`Export Bounds: ${formatDateDDMMYY(activeRange.start)} through ${formatDateDDMMYY(activeRange.end)}`],
+              [`Generated: ${formatDateDDMMYY(new Date())}`],
               [],
               ['Staff Name', 'Staff Role', 'Roster Status', 'Assigned Events', 'Scheduled Events', 'Completed Events', 'Pending Events', 'Ongoing Events', 'Completion Rate %', 'Last Booked Date'],
               ...filteredStaffPerformance.map(s => [

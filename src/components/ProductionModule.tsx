@@ -1237,7 +1237,7 @@ ${coordinatorName}`;
     doc.text("Editor Performance & Staff Directory Report", 14, 28);
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(8);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 34);
+    doc.text(`Generated on: ${formatDateDDMMYY(new Date())}`, 14, 34);
 
     let y = 44;
     doc.setFillColor(30, 30, 36);
@@ -2296,8 +2296,8 @@ Production Team`;
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(9);
     doc.text("PRODUCTION LEADS MODULE REPORT", 14, 25);
-    doc.text(`FILTER DATE RANGE: ${appliedStartDate || 'ALL'} TO ${appliedEndDate || 'ALL'}`, 14, 30);
-    doc.text(`GENERATED: ${new Date().toLocaleDateString()}`, 14, 35);
+    doc.text(`FILTER DATE RANGE: ${appliedStartDate ? formatDateDDMMYY(appliedStartDate) : 'ALL'} TO ${appliedEndDate ? formatDateDDMMYY(appliedEndDate) : 'ALL'}`, 14, 30);
+    doc.text(`GENERATED: ${formatDateDDMMYY(new Date())}`, 14, 35);
     
     doc.setFillColor(245, 158, 11);
     doc.rect(0, 42, 210, 2, 'F');
@@ -2407,8 +2407,8 @@ Production Team`;
             <h2>PHOTOCREW PICTURES</h2>
             <div style="font-size: 12px; font-weight: bold; text-transform: uppercase; color: #555;">Production Leads Module Report</div>
             <div style="font-size: 10px; color: #777; margin-top: 5px;">
-              Filter Date Range: ${appliedStartDate || 'ALL'} To ${appliedEndDate || 'ALL'}<br/>
-              Report Generated On: ${new Date().toLocaleString()}
+              Filter Date Range: ${appliedStartDate ? formatDateDDMMYY(appliedStartDate) : 'ALL'} To ${appliedEndDate ? formatDateDDMMYY(appliedEndDate) : 'ALL'}<br/>
+              Report Generated On: ${formatDateDDMMYY(new Date())}
             </div>
           </div>
           <div className="overflow-x-auto w-full max-w-full">
@@ -2673,6 +2673,17 @@ Production Team`;
   const [newDeliverableInput, setNewDeliverableInput] = useState('');
   const [openDropdownDeliverable, setOpenDropdownDeliverable] = useState<string | null>(null);
   const [assignedEditorsModalProd, setAssignedEditorsModalProd] = useState<Production | null>(null);
+
+  useEffect(() => {
+    if (assignedEditorsModalProd) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'auto';
+    }
+    return () => {
+      document.body.style.overflow = 'auto';
+    };
+  }, [assignedEditorsModalProd]);
   const [previewProofModal, setPreviewProofModal] = useState<{
     imageUrl: string;
     staffName: string;
@@ -3792,7 +3803,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <td className="p-3 font-sans text-center">
                               {editorsList.length > 0 ? (
                                 <span 
-                                  onClick={() => setAssignedEditorsModalProd(prod)}
+                                  onClick={(e) => { e.stopPropagation(); setAssignedEditorsModalProd(prod); }}
                                   className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
                                   title="View Assigned Team"
                                 >
@@ -4168,7 +4179,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 }
                                 return (
                                   <span 
-                                    onClick={() => setAssignedEditorsModalProd(prod)}
+                                    onClick={(e) => { e.stopPropagation(); setAssignedEditorsModalProd(prod); }}
                                     className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
                                     title="View Assigned Team"
                                   >
@@ -9894,7 +9905,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* ASSIGNED EDITORS / TEAM POPUP */}
       {assignedEditorsModalProd && (
-        <div className="fixed inset-0 z-[110] flex flex-col w-screen h-screen min-h-screen max-h-screen bg-zinc-950 text-white animate-fade-in overflow-hidden">
+        <div className="fixed inset-0 z-[99999] flex flex-col w-full h-full bg-zinc-950 text-white animate-fade-in">
           {/* Header */}
           <div className="px-5 py-4 sm:px-6 lg:px-8 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between shrink-0 sticky top-0 z-20">
             <div>

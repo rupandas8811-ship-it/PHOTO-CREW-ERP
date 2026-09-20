@@ -248,8 +248,25 @@ export function formatIndianPhoneNumber(phone: string): string {
   return phone;
 }
 
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
+
+const MONTH_NAMES_MAP: Record<string, string> = {
+  jan: 'Jan', january: 'Jan',
+  feb: 'Feb', february: 'Feb',
+  mar: 'Mar', march: 'Mar',
+  apr: 'Apr', april: 'Apr',
+  may: 'May',
+  jun: 'Jun', june: 'Jun',
+  jul: 'Jul', july: 'Jul',
+  aug: 'Aug', august: 'Aug',
+  sep: 'Sep', sept: 'Sep', september: 'Sep',
+  oct: 'Oct', october: 'Oct',
+  nov: 'Nov', november: 'Nov',
+  dec: 'Dec', december: 'Dec'
+};
+
 /**
- * Formats any date into DD:MM:YY (e.g. "18:09:26").
+ * Formats any date into DD MMM YYYY (e.g. "20 Sep 2026", "05 Oct 2026", "01 Jan 2027").
  * Strict display format only. Does not alter underlying values.
  */
 export function formatDateDDMMYY(dateInput?: string | null | Date): string {
@@ -259,46 +276,76 @@ export function formatDateDDMMYY(dateInput?: string | null | Date): string {
     if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'N/A' || trimmed === 'null' || trimmed === 'undefined') {
       return trimmed;
     }
-    
-    // If it's already in DD:MM:YY format (e.g. "18:09:26")
-    if (/^\d{2}:\d{2}:\d{2}$/.test(trimmed)) {
-      return trimmed;
+
+    // 1. If it's already in "DD MMM YYYY" format (e.g. "20 Sep 2026" or "05 Oct 2026")
+    const alreadyDDMMMYYYY = trimmed.match(/^(\d{1,2})\s+([a-zA-Z]{3,9})\s+(\d{4})$/);
+    if (alreadyDDMMMYYYY) {
+      const day = alreadyDDMMMYYYY[1].padStart(2, '0');
+      const mStr = alreadyDDMMMYYYY[2].toLowerCase();
+      const month = MONTH_NAMES_MAP[mStr] || (alreadyDDMMMYYYY[2].slice(0, 1).toUpperCase() + alreadyDDMMMYYYY[2].slice(1, 3).toLowerCase());
+      const year = alreadyDDMMMYYYY[3];
+      return `${day} ${month} ${year}`;
     }
 
-    // If it's in DD-MM-YY or DD/MM/YY or DD.MM.YY format (e.g. "18-09-26" or "18/09/26")
+    // 2. If it's like "20 September 2026" or "20-Sep-2026" or "20/Sep/2026"
+    const textMonthDayFirst = trimmed.match(/^(\d{1,2})[-/.:\s]+([a-zA-Z]{3,9})[-/.:\s,]+(\d{2,4})$/);
+    if (textMonthDayFirst) {
+      const day = textMonthDayFirst[1].padStart(2, '0');
+      const mStr = textMonthDayFirst[2].toLowerCase();
+      const month = MONTH_NAMES_MAP[mStr] || (textMonthDayFirst[2].slice(0, 1).toUpperCase() + textMonthDayFirst[2].slice(1, 3).toLowerCase());
+      let year = textMonthDayFirst[3];
+      if (year.length === 2) year = '20' + year;
+      return `${day} ${month} ${year}`;
+    }
+
+    // 3. If it's like "September 20, 2026" or "Sep 20, 2026"
+    const textMonthFirst = trimmed.match(/^([a-zA-Z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{2,4})$/);
+    if (textMonthFirst) {
+      const mStr = textMonthFirst[1].toLowerCase();
+      const month = MONTH_NAMES_MAP[mStr] || (textMonthFirst[1].slice(0, 1).toUpperCase() + textMonthFirst[1].slice(1, 3).toLowerCase());
+      const day = textMonthFirst[2].padStart(2, '0');
+      let year = textMonthFirst[3];
+      if (year.length === 2) year = '20' + year;
+      return `${day} ${month} ${year}`;
+    }
+
+    // 4. If it starts with YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD (e.g. "2026-09-20" or "2026-09-20T14:30:00" or "2026/09/20")
+    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/.:](\d{1,2})[-/.:](\d{1,2})/);
+    if (yyyymmddMatch) {
+      const year = yyyymmddMatch[1];
+      const mNum = parseInt(yyyymmddMatch[2], 10);
+      const month = mNum >= 1 && mNum <= 12 ? SHORT_MONTHS[mNum - 1] : 'Jan';
+      const day = yyyymmddMatch[3].padStart(2, '0');
+      return `${day} ${month} ${year}`;
+    }
+
+    // 5. If it's in DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY or DD:MM:YYYY format (e.g. "20/09/2026" or "20-09-2026")
+    const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-/.:](\d{1,2})[-/.:](\d{4})/);
+    if (ddmmyyyyMatch) {
+      const day = ddmmyyyyMatch[1].padStart(2, '0');
+      const mNum = parseInt(ddmmyyyyMatch[2], 10);
+      const month = mNum >= 1 && mNum <= 12 ? SHORT_MONTHS[mNum - 1] : 'Jan';
+      const year = ddmmyyyyMatch[3];
+      return `${day} ${month} ${year}`;
+    }
+
+    // 6. If it's in DD-MM-YY or DD/MM/YY or DD.MM.YY or DD:MM:YY format (e.g. "20/09/26" or "20-09-26" or "20:09:26")
     const ddmmyyMatch = trimmed.match(/^(\d{1,2})[-/.:](\d{1,2})[-/.:](\d{2})$/);
     if (ddmmyyMatch) {
       const day = ddmmyyMatch[1].padStart(2, '0');
-      const month = ddmmyyMatch[2].padStart(2, '0');
-      const year = ddmmyyMatch[3];
-      return `${day}:${month}:${year}`;
+      const mNum = parseInt(ddmmyyMatch[2], 10);
+      const month = mNum >= 1 && mNum <= 12 ? SHORT_MONTHS[mNum - 1] : 'Jan';
+      const year = '20' + ddmmyyMatch[3];
+      return `${day} ${month} ${year}`;
     }
 
-    // If it's in DD-MM-YYYY format (e.g. "18-09-2026" or "18/09/2026")
-    const ddmmyyyyMatch = trimmed.match(/^(\d{1,2})[-/.:](\d{1,2})[-/.:](\d{4})$/);
-    if (ddmmyyyyMatch) {
-      const day = ddmmyyyyMatch[1].padStart(2, '0');
-      const month = ddmmyyyyMatch[2].padStart(2, '0');
-      const year = ddmmyyyyMatch[3].slice(-2);
-      return `${day}:${month}:${year}`;
-    }
-
-    // If it starts with YYYY-MM-DD (e.g. "2026-09-18" or "2026-09-18T14:30:00" or "2026/09/18")
-    const yyyymmddMatch = trimmed.match(/^(\d{4})[-/.:](\d{1,2})[-/.:](\d{1,2})/);
-    if (yyyymmddMatch) {
-      const year = yyyymmddMatch[1].slice(-2);
-      const month = yyyymmddMatch[2].padStart(2, '0');
-      const day = yyyymmddMatch[3].padStart(2, '0');
-      return `${day}:${month}:${year}`;
-    }
-
-    // Attempt Date object parse for any other string formats
+    // 7. Attempt Date object parse for any other string formats
     const d = new Date(trimmed);
     if (!isNaN(d.getTime())) {
       const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = String(d.getFullYear()).slice(-2);
-      return `${day}:${month}:${year}`;
+      const month = SHORT_MONTHS[d.getMonth()];
+      const year = String(d.getFullYear());
+      return `${day} ${month} ${year}`;
     }
 
     return trimmed;
@@ -307,9 +354,9 @@ export function formatDateDDMMYY(dateInput?: string | null | Date): string {
   if (dateInput instanceof Date) {
     if (isNaN(dateInput.getTime())) return '';
     const day = String(dateInput.getDate()).padStart(2, '0');
-    const month = String(dateInput.getMonth() + 1).padStart(2, '0');
-    const year = String(dateInput.getFullYear()).slice(-2);
-    return `${day}:${month}:${year}`;
+    const month = SHORT_MONTHS[dateInput.getMonth()];
+    const year = String(dateInput.getFullYear());
+    return `${day} ${month} ${year}`;
   }
 
   return '';
@@ -417,7 +464,7 @@ export const formatDateDDMMYYYY = formatDateDDMMYY;
  * Universal Chronological Event Timestamp Parser
  * Accurately parses Event Start Date and Event Start Time into epoch milliseconds for chronological sorting.
  * Correctly parses:
- * - Dates: DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, YYYY/MM/DD, Date objects, ISO strings
+ * - Dates: DD MMM YYYY, DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, YYYY/MM/DD, Date objects, ISO strings
  * - Times: 12-hour AM/PM ("09:30 AM", "7:00 PM", "9am", "11:15pm"), 24-hour ("14:30", "09:15:00")
  * - If time is absent, defaults to beginning of the day (00:00:00).
  * - If date is absent, falls back to MAX_SAFE_INTEGER so it sorts at the end.
@@ -438,25 +485,36 @@ export function parseEventDateTimeToTimestamp(
     day = dateVal.getDate();
   } else if (typeof dateVal === 'string' && dateVal.trim() !== '') {
     const trimmedDate = dateVal.trim();
-    // 1. Check DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
-    const dmyMatch = trimmedDate.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
-    if (dmyMatch) {
-      day = parseInt(dmyMatch[1], 10);
-      month = parseInt(dmyMatch[2], 10) - 1;
-      year = parseInt(dmyMatch[3], 10);
+    // 1. Check DD MMM YYYY or DD-MMM-YYYY or DD/MMM/YYYY
+    const dMmmYMatch = trimmedDate.match(/^(\d{1,2})[\/\-\.\s]+([a-zA-Z]{3,9})[\/\-\.\s]+(\d{2,4})/);
+    if (dMmmYMatch) {
+      day = parseInt(dMmmYMatch[1], 10);
+      const mStr = dMmmYMatch[2].toLowerCase();
+      const mIdx = SHORT_MONTHS.findIndex(m => m.toLowerCase() === mStr.slice(0, 3));
+      month = mIdx >= 0 ? mIdx : 0;
+      year = parseInt(dMmmYMatch[3], 10);
+      if (year < 100) year += 2000;
     } else {
-      // 2. Check YYYY-MM-DD or YYYY/MM/DD
-      const ymdMatch = trimmedDate.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
-      if (ymdMatch) {
-        year = parseInt(ymdMatch[1], 10);
-        month = parseInt(ymdMatch[2], 10) - 1;
-        day = parseInt(ymdMatch[3], 10);
+      // 2. Check DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+      const dmyMatch = trimmedDate.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+      if (dmyMatch) {
+        day = parseInt(dmyMatch[1], 10);
+        month = parseInt(dmyMatch[2], 10) - 1;
+        year = parseInt(dmyMatch[3], 10);
       } else {
-        const fallback = new Date(trimmedDate);
-        if (!isNaN(fallback.getTime())) {
-          year = fallback.getFullYear();
-          month = fallback.getMonth();
-          day = fallback.getDate();
+        // 3. Check YYYY-MM-DD or YYYY/MM/DD
+        const ymdMatch = trimmedDate.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+        if (ymdMatch) {
+          year = parseInt(ymdMatch[1], 10);
+          month = parseInt(ymdMatch[2], 10) - 1;
+          day = parseInt(ymdMatch[3], 10);
+        } else {
+          const fallback = new Date(trimmedDate);
+          if (!isNaN(fallback.getTime())) {
+            year = fallback.getFullYear();
+            month = fallback.getMonth();
+            day = fallback.getDate();
+          }
         }
       }
     }
@@ -1207,6 +1265,7 @@ export interface ParsedCustomerProof {
   imageUrl: string | null;
   linkUrl: string | null;
   proofType: 'image' | 'link' | 'both' | 'button' | 'none';
+  uploadTime?: string | null;
 }
 
 /**
@@ -1426,13 +1485,23 @@ export function parseCustomerProof(
     resolvedLinkUrl = rawLinkUrl.startsWith('http') ? rawLinkUrl : `https://${rawLinkUrl}`;
   }
 
+  // Extract upload timestamp if available
+  const uploadTime = assignment?.proof_uploaded_at ||
+                     assignment?.customer_review_image_time ||
+                     assignment?.customer_confirmation_time ||
+                     assignment?.server_upload_confirmed_at ||
+                     prodRec?.proof_uploaded_at ||
+                     prodRec?.server_upload_confirmed_at ||
+                     null;
+
   // Determine proofType according to user specification
   if (resolvedImageUrl && resolvedLinkUrl && resolvedImageUrl !== resolvedLinkUrl) {
     return {
       hasProof: true,
       imageUrl: resolvedImageUrl,
       linkUrl: resolvedLinkUrl,
-      proofType: 'both'
+      proofType: 'both',
+      uploadTime
     };
   }
 
@@ -1441,7 +1510,8 @@ export function parseCustomerProof(
       hasProof: true,
       imageUrl: resolvedImageUrl,
       linkUrl: null,
-      proofType: 'image'
+      proofType: 'image',
+      uploadTime
     };
   }
 
@@ -1450,7 +1520,8 @@ export function parseCustomerProof(
       hasProof: true,
       imageUrl: null,
       linkUrl: resolvedLinkUrl,
-      proofType: 'link'
+      proofType: 'link',
+      uploadTime
     };
   }
 
@@ -1458,7 +1529,8 @@ export function parseCustomerProof(
     hasProof: false,
     imageUrl: null,
     linkUrl: null,
-    proofType: 'none'
+    proofType: 'none',
+    uploadTime: null
   };
 }
 
@@ -2400,25 +2472,25 @@ export const checkTimeOverlap = (
 };
 
 /**
- * Formats an ISO timestamp or date into IST (Asia/Kolkata) Date string (DD:MM:YY)
+ * Formats an ISO timestamp or date into IST (Asia/Kolkata) Date string (DD MMM YYYY)
  */
 export function formatISTDate(dateVal?: string | null | Date): string {
   if (!dateVal) return 'N/A';
   try {
     const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return String(dateVal);
+    if (isNaN(d.getTime())) return formatDateDDMMYY(String(dateVal));
     const parts = new Intl.DateTimeFormat('en-GB', {
       timeZone: 'Asia/Kolkata',
       day: '2-digit',
-      month: '2-digit',
+      month: 'short',
       year: 'numeric'
     }).formatToParts(d);
     const day = parts.find(p => p.type === 'day')?.value || '01';
-    const month = parts.find(p => p.type === 'month')?.value || '01';
-    const year = (parts.find(p => p.type === 'year')?.value || '2026').slice(-2);
-    return `${day}:${month}:${year}`;
+    const month = parts.find(p => p.type === 'month')?.value || 'Jan';
+    const year = parts.find(p => p.type === 'year')?.value || '2026';
+    return `${day} ${month} ${year}`;
   } catch (e) {
-    return String(dateVal);
+    return formatDateDDMMYY(String(dateVal));
   }
 }
 
@@ -2446,25 +2518,24 @@ export function formatISTTime12Hour(dateVal?: string | null | Date): string {
 }
 
 /**
- * Formats an ISO timestamp into IST (Asia/Kolkata) full timestamp string for image uploads
+ * Formats an ISO timestamp into IST (Asia/Kolkata) full timestamp string for image uploads (DD MMM YYYY hh:mm:ss AM/PM)
  */
 export function formatISTTimestamp(dateVal?: string | null | Date): string {
   if (!dateVal) return 'N/A';
   try {
     const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return String(dateVal);
-    return new Intl.DateTimeFormat('en-IN', {
+    if (isNaN(d.getTime())) return formatDateDDMMYY(String(dateVal));
+    const datePart = formatISTDate(d);
+    const timePart = new Intl.DateTimeFormat('en-IN', {
       timeZone: 'Asia/Kolkata',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
       hour12: true
     }).format(d);
+    return `${datePart} ${timePart}`;
   } catch (e) {
-    return String(dateVal);
+    return formatDateDDMMYY(String(dateVal));
   }
 }
 

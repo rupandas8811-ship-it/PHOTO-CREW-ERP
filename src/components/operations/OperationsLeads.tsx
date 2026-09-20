@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
-  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin
+  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment, TaskAssignmentDetail } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';
@@ -47,6 +47,308 @@ import {
   getEventImagesData, 
   getRawFootageData 
 } from '../../services/operationsAssignmentService';
+
+const isPureUrlOrLocationLink = (str: any): boolean => {
+  if (!str || typeof str !== 'string') return false;
+  const s = str.trim().toLowerCase();
+  return (
+    s.startsWith('http://') ||
+    s.startsWith('https://') ||
+    s.startsWith('www.') ||
+    s.startsWith('maps.google.') ||
+    s.startsWith('goo.gl/') ||
+    s.startsWith('maps.app.goo.gl')
+  );
+};
+
+const getCleanVenueAddress = (val: any): string => {
+  if (!val || typeof val !== 'string') return '';
+  let text = val.trim();
+  if (!text) return '';
+
+  // If the entire value is just a URL or location link, return empty string (do not display link)
+  if (isPureUrlOrLocationLink(text)) return '';
+
+  // If an address has an appended URL/link, strip the URL portion to keep the plain venue address
+  text = text
+    .replace(/https?:\/\/[^\s]+/gi, '')
+    .replace(/www\.[^\s]+/gi, '')
+    .replace(/goo\.gl\/maps[^\s]*/gi, '')
+    .replace(/maps\.app\.goo\.gl[^\s]*/gi, '')
+    .replace(/maps\.google\.[^\s]*/gi, '')
+    .trim();
+
+  // Strip dangling punctuation left over from URL removal
+  text = text.replace(/^[-–—,\s|]+|[-–—,\s|]+$/g, '').trim();
+
+  return text;
+};
+
+const toCalendarDateString = (dateVal?: string | null | Date): string | null => {
+  if (!dateVal && (dateVal as any) !== 0) return null;
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return null;
+    const y = dateVal.getFullYear();
+    const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+    const d = String(dateVal.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  let str = String(dateVal).trim();
+  if (!str || str === '—' || str === '-' || str === 'N/A' || str === 'null' || str === 'undefined') return null;
+
+  // Strip day of week prefix like "Sun, " or "Sunday, "
+  str = str.replace(/^(?:sun|mon|tue|wed|thu|fri|sat)[a-z]*[\s,]+/i, '');
+
+  // 1. YYYY-MM-DD or YYYY/MM/DD (e.g. "2026-09-20" or "2026-09-20T...")
+  const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (ymdMatch) {
+    return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
+  }
+
+  // 2. DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY or MM/DD/YYYY etc.
+  const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (dmyMatch) {
+    const n1 = parseInt(dmyMatch[1], 10);
+    const n2 = parseInt(dmyMatch[2], 10);
+    const y = dmyMatch[3];
+    // If MM is clearly > 12, then it must be MM/DD
+    if (n2 > 12 && n1 <= 12) {
+      return `${y}-${String(n1).padStart(2, '0')}-${String(n2).padStart(2, '0')}`;
+    }
+    // Assume DD/MM (default)
+    return `${y}-${String(n2).padStart(2, '0')}-${String(n1).padStart(2, '0')}`;
+  }
+
+  // 3. DD/MM/YY or DD-MM-YY
+  const dmyShortMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$/);
+  if (dmyShortMatch) {
+    let y = parseInt(dmyShortMatch[3], 10);
+    y = y < 100 ? 2000 + y : y;
+    return `${y}-${dmyShortMatch[2].padStart(2, '0')}-${dmyShortMatch[1].padStart(2, '0')}`;
+  }
+
+  // 4. DD MMM YYYY or DD-MMM-YYYY or DD Month YYYY (e.g. "20 Sep 2026")
+  const dMmmYMatch = str.match(/^(\d{1,2})[\s\-\/\.]*([a-zA-Z]{3,9})[\s\-\/\.,]*(\d{2,4})/);
+  if (dMmmYMatch) {
+    const d = dMmmYMatch[1].padStart(2, '0');
+    const mStr = dMmmYMatch[2].toLowerCase().slice(0, 3);
+    const mIdx = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(mStr);
+    if (mIdx !== -1) {
+      const m = String(mIdx + 1).padStart(2, '0');
+      let y = parseInt(dMmmYMatch[3], 10);
+      if (y < 100) y += 2000;
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  // 5. MMM DD, YYYY or Month DD, YYYY (e.g. "Sep 20, 2026")
+  const mmmDYMatch = str.match(/^([a-zA-Z]{3,9})[\s\-\/\.]*(\d{1,2})(?:st|nd|rd|th)?[\s\-\/\.,]*(\d{2,4})/);
+  if (mmmDYMatch) {
+    const mStr = mmmDYMatch[1].toLowerCase().slice(0, 3);
+    const mIdx = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(mStr);
+    if (mIdx !== -1) {
+      const m = String(mIdx + 1).padStart(2, '0');
+      const d = mmmDYMatch[2].padStart(2, '0');
+      let y = parseInt(mmmDYMatch[3], 10);
+      if (y < 100) y += 2000;
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  // Fallback
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) {
+    const y = fallback.getFullYear();
+    const m = String(fallback.getMonth() + 1).padStart(2, '0');
+    const d = String(fallback.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return null;
+};
+
+export const getEventDateSortKey = (dateVal?: string | null | Date): string => {
+  const cal = toCalendarDateString(dateVal);
+  if (cal) return cal;
+  return '9999-99-99';
+};
+
+export const sortEventsByDateAsc = (events: any[]): any[] => {
+  if (!Array.isArray(events)) return [];
+  return [...events].sort((a, b) => {
+    const keyA = getEventDateSortKey(a?.event_date);
+    const keyB = getEventDateSortKey(b?.event_date);
+    if (keyA !== keyB) {
+      return keyA.localeCompare(keyB);
+    }
+    const nameA = String(a?.event_name || a?.id || '');
+    const nameB = String(b?.event_name || b?.id || '');
+    return nameA.localeCompare(nameB);
+  });
+};
+
+const isEventWithinDateRange = (
+  dateStr: string | null | undefined,
+  filterType: string,
+  customStart?: string,
+  customEnd?: string
+): boolean => {
+  if (filterType === 'All') return true;
+  if (!dateStr) return false;
+
+  const calDate = toCalendarDateString(dateStr);
+  if (!calDate) return false;
+
+  const now = new Date();
+  const todayCalStr = toCalendarDateString(now);
+
+  if (filterType === 'Today') {
+    return calDate === todayCalStr;
+  }
+
+  if (filterType === 'Tomorrow') {
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    const tomorrowCalStr = toCalendarDateString(tomorrow);
+    return calDate === tomorrowCalStr;
+  }
+
+  if (filterType === 'This Week') {
+    const dayOfWeek = now.getDay(); // 0 is Sunday
+    const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek);
+    const endOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 6);
+    const startOfWeekStr = toCalendarDateString(startOfWeek);
+    const endOfWeekStr = toCalendarDateString(endOfWeek);
+    if (!startOfWeekStr || !endOfWeekStr) return false;
+    return calDate >= startOfWeekStr && calDate <= endOfWeekStr;
+  }
+
+  if (filterType === 'This Month') {
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const startOfMonthStr = toCalendarDateString(startOfMonth);
+    const endOfMonthStr = toCalendarDateString(endOfMonth);
+    if (!startOfMonthStr || !endOfMonthStr) return false;
+    return calDate >= startOfMonthStr && calDate <= endOfMonthStr;
+  }
+
+  if (filterType === 'Custom') {
+    const startStr = customStart ? toCalendarDateString(customStart) : null;
+    const endStr = customEnd ? toCalendarDateString(customEnd) : null;
+    if (startStr && endStr) {
+      const minDate = startStr <= endStr ? startStr : endStr;
+      const maxDate = startStr <= endStr ? endStr : startStr;
+      return calDate >= minDate && calDate <= maxDate;
+    }
+    if (startStr) {
+      return calDate >= startStr;
+    }
+    if (endStr) {
+      return calDate <= endStr;
+    }
+    return true;
+  }
+
+  return true;
+};
+
+const findLeadForOrder = (ord: Order, leadsList: Lead[]) => {
+  return (leadsList || []).find(l => 
+    (ord.lead_id && (l.lead_id === ord.lead_id || (l as any).id === ord.lead_id)) || 
+    (l.order_id && l.order_id === ord.order_id) || 
+    (ord.quotation_id && l.quotation_id && l.quotation_id === ord.quotation_id) || 
+    (ord.customer_name && ord.mobile && l.customer_name === ord.customer_name && l.mobile === ord.mobile)
+  );
+};
+
+export const isLocationUrl = (val: any): boolean => {
+  if (!val || typeof val !== 'string') return false;
+  const trimmed = val.trim();
+  return /^(https?:\/\/|www\.)/i.test(trimmed) || /^(maps\.google\.|goo\.gl\/maps)/i.test(trimmed);
+};
+
+export const getLocationUrlHref = (val: string): string => {
+  const trimmed = val.trim();
+  if (/^www\./i.test(trimmed) || /^maps\.google\./i.test(trimmed) || /^goo\.gl\//i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  return trimmed;
+};
+
+const getOrderEventsList = (ord: Order, lead?: Lead) => {
+  let rawList: any[] = [];
+  if (lead?.events) {
+    let evs = lead.events;
+    if (typeof evs === 'string') {
+      try { evs = JSON.parse(evs); } catch (e) {}
+    }
+    if (Array.isArray(evs) && evs.length > 0) {
+      rawList = evs;
+    }
+  }
+  if (rawList.length === 0 && (ord as any)?.events) {
+    let evs = (ord as any).events;
+    if (typeof evs === 'string') {
+      try { evs = JSON.parse(evs); } catch (e) {}
+    }
+    if (Array.isArray(evs) && evs.length > 0) {
+      rawList = evs;
+    }
+  }
+  if (rawList.length === 0 && lead?.notes_special_customizations) {
+    rawList = deserializeLeadEvents(lead.notes_special_customizations).events;
+  }
+  if (rawList.length === 0 && ord?.notes_special_customizations) {
+    rawList = deserializeLeadEvents(ord.notes_special_customizations).events;
+  }
+
+  if (rawList.length > 0) {
+    return rawList.map((ev: any, idx: number) => {
+      // Get exact saved Sales venue address for this specific event AS-IS without altering or stripping
+      const getExactRaw = (val: any) => {
+        if (val === undefined || val === null) return '';
+        const s = String(val);
+        return s.trim() ? s : '';
+      };
+
+      const specificVenue = 
+        getExactRaw(ev.event_location) ||
+        getExactRaw(ev.venue_address) ||
+        getExactRaw(ev.venue) ||
+        getExactRaw(ev.address) ||
+        getExactRaw(ev.location) ||
+        (rawList.length === 1
+          ? (getExactRaw(ord.event_location) || getExactRaw(lead?.event_location) || getExactRaw(lead?.address))
+          : '');
+
+      return {
+        ...ev,
+        id: ev.id || ev.event_id || (ord.order_id ? `${ord.order_id}_ev_${idx + 1}` : `EV-${idx + 1}`),
+        event_name: ev.event_name || ev.event_type || ev.Event_Name || `Event ${idx + 1}`,
+        event_date: ev.event_date || ev.eventDate || ev.event_start_date || ev.Event_Date || ev.date || ev.booking_date || (rawList.length === 1 ? (ord.event_date || lead?.event_date || '') : ''),
+        event_location: specificVenue,
+      };
+    });
+  }
+
+  const getExactRaw = (val: any) => {
+    if (val === undefined || val === null) return '';
+    const s = String(val);
+    return s.trim() ? s : '';
+  };
+
+  const singleVenue =
+    getExactRaw(ord.event_location) ||
+    getExactRaw(lead?.event_location) ||
+    getExactRaw(lead?.address) ||
+    '';
+
+  return [{
+    id: ord.order_id || 'ev_1',
+    event_name: ord.custom_event_name || ord.event_name || ord.event_type || lead?.custom_event_name || lead?.event_name || lead?.event_type || 'Event',
+    event_date: ord.event_date || lead?.event_date || '',
+    event_location: singleVenue,
+  }];
+};
 
 const OperationsActionColumn = ({ ord, actionItems, isOpen, setActiveMenuOrderId, setMenuCoords, setActiveMenuItems }: any) => {
   return (
@@ -312,6 +614,18 @@ export const OperationsLeads: React.FC = () => {
     evEnd: any; 
   } | null>(null);
   const [imagePreviewModal, setImagePreviewModal] = useState<{ url: string, date: string, time: string, staffName: string, stage: string } | null>(null);
+  const [viewingLocationsModal, setViewingLocationsModal] = useState<{ orderId: string; customerName?: string; events: any[] } | null>(null);
+  const [viewingDatesModal, setViewingDatesModal] = useState<{ orderId: string; customerName?: string; events: any[] } | null>(null);
+
+  useEffect(() => {
+    if (viewingLocationsModal || viewingDatesModal) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [viewingLocationsModal, viewingDatesModal]);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ left: number, top: number, width: number, maxHeight: number, openUpward: boolean }>({ left: 0, top: 0, width: 220, maxHeight: 280, openUpward: false });
 
@@ -1759,52 +2073,7 @@ export const OperationsLeads: React.FC = () => {
 
   // Search filtered orders
   const isWithinDateRange = (dateStr: string, filterType: string, customStart?: string, customEnd?: string) => {
-    if (!dateStr) return false;
-    
-    // Normalise dateStr
-    let normStr = dateStr;
-    if (dateStr.includes('T')) {
-      normStr = dateStr.split('T')[0];
-    }
-    const itemDate = new Date(normStr);
-    itemDate.setHours(0, 0, 0, 0);
-
-    const today = systemToday;
-    today.setHours(0, 0, 0, 0);
-
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    if (filterType === 'Today') {
-      return itemDate.getTime() === today.getTime();
-    }
-    if (filterType === 'Tomorrow') {
-      return itemDate.getTime() === tomorrow.getTime();
-    }
-    if (filterType === 'This Week') {
-      // Calculate start and end of week (June 15 to June 21, 2026)
-      const startOfWeek = new Date(today); // June 15
-      const endOfWeek = new Date(today);
-      endOfWeek.setDate(today.getDate() + 6); // June 21
-      return itemDate >= startOfWeek && itemDate <= endOfWeek;
-    }
-    if (filterType === 'This Month') {
-      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      return itemDate >= startOfMonth && itemDate <= endOfMonth;
-    }
-    if (filterType === 'Custom') {
-      if (!customStart && !customEnd) return true;
-      const start = customStart ? new Date(customStart) : null;
-      if (start) start.setHours(0, 0, 0, 0);
-      const end = customEnd ? new Date(customEnd) : null;
-      if (end) end.setHours(23, 59, 59, 999);
-      
-      if (start && end) return itemDate >= start && itemDate <= end;
-      if (start) return itemDate >= start;
-      if (end) return itemDate <= end;
-    }
-    return true;
+    return isEventWithinDateRange(dateStr, filterType, customStart, customEnd);
   };
 
   const getOpDetails = (orderId: string) => {
@@ -1846,8 +2115,8 @@ export const OperationsLeads: React.FC = () => {
 
       // 1. Status Dropdown filter
       if (statusFilter === 'All') {
-        // Exclude records whose current status is Verified Footage (or beyond) from Operations active list/view
-        if (isVerifiedFootageOrder(o)) return false;
+        // Exclude records whose current status is Verified Footage (or beyond) from Operations active list/view only when no specific date filter is selected
+        if (dateFilter === 'All' && isVerifiedFootageOrder(o)) return false;
       } else {
         const isStaffAssigned = staffAssignments ? staffAssignments.some(x => x.order_id === o.order_id) : false;
         const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
@@ -1873,11 +2142,9 @@ export const OperationsLeads: React.FC = () => {
           if (o.current_stage !== 'Order Confirmed' && o.current_stage !== 'New Order Received') return false;
         }
         if (statusFilter === "Today's Events") {
-          const todayStr = new Date().toISOString().split('T')[0];
-          const lead = leads.find(l => l.lead_id === o.lead_id);
-          const hasTodayEvent = (lead && lead.events && lead.events.length > 0) 
-            ? lead.events.some((e: any) => e.event_date === todayStr)
-            : o.event_date === todayStr;
+          const lead = findLeadForOrder(o, leads || []);
+          const orderEvents = getOrderEventsList(o, lead);
+          const hasTodayEvent = orderEvents.some((ev) => isEventWithinDateRange(ev.event_date, 'Today'));
           if (!hasTodayEvent) return false;
         }
         if (statusFilter === 'Scheduled Events' && o.current_stage !== 'Event Scheduled') return false;
@@ -1898,9 +2165,14 @@ export const OperationsLeads: React.FC = () => {
         }
       }
 
-      // 2. Date Filter based on Event Date
+      // 2. Date Filter based on actual Event Date
       if (dateFilter !== 'All') {
-        if (!isWithinDateRange(o.event_date, dateFilter, customStartDate, customEndDate)) {
+        const lead = findLeadForOrder(o, leads || []);
+        const orderEvents = getOrderEventsList(o, lead);
+        const hasMatchingEvent = orderEvents.some((ev) =>
+          isEventWithinDateRange(ev.event_date, dateFilter, customStartDate, customEndDate)
+        );
+        if (!hasMatchingEvent) {
           return false;
         }
       }
@@ -1917,7 +2189,8 @@ export const OperationsLeads: React.FC = () => {
     customEndDate,
     staffAssignments,
     rawFootage,
-    operations
+    operations,
+    leads
   ]);
 
   // Sorted list implementation
@@ -1934,8 +2207,15 @@ export const OperationsLeads: React.FC = () => {
         valA = a.customer_name.toLowerCase();
         valB = b.customer_name.toLowerCase();
       } else if (sortBy === 'event_date') {
-        valA = a.event_date;
-        valB = b.event_date;
+        const leadA = findLeadForOrder(a, leads || []);
+        const evsA = getOrderEventsList(a, leadA);
+        const sortedA = sortEventsByDateAsc(evsA);
+        valA = sortedA[0]?.event_date ? getEventDateSortKey(sortedA[0].event_date) : (a.event_date ? getEventDateSortKey(a.event_date) : '9999-99-99');
+
+        const leadB = findLeadForOrder(b, leads || []);
+        const evsB = getOrderEventsList(b, leadB);
+        const sortedB = sortEventsByDateAsc(evsB);
+        valB = sortedB[0]?.event_date ? getEventDateSortKey(sortedB[0].event_date) : (b.event_date ? getEventDateSortKey(b.event_date) : '9999-99-99');
       } else if (sortBy === 'status') {
         valA = a.current_stage.toLowerCase();
         valB = b.current_stage.toLowerCase();
@@ -2728,7 +3008,16 @@ export const OperationsLeads: React.FC = () => {
               >
                 Customer Name {renderSortIndicator('customer_name')}
               </th>
+              <th className="p-4 font-bold">Mobile Number</th>
               <th className="p-4 font-bold">Event Name</th>
+              <th 
+                onClick={() => toggleSort('event_date')}
+                className="p-4 font-bold cursor-pointer hover:bg-zinc-800/40 hover:text-white transition-colors"
+                title="Click to Sort by Event Date"
+              >
+                Event Date {renderSortIndicator('event_date')}
+              </th>
+              <th className="p-4 font-bold whitespace-nowrap">EVENT LOCATION</th>
               <th className="p-4 font-bold">Reporting Time</th>
               <th className="p-4 font-bold">Assigned Team</th>
               <th className="p-4 font-bold">Current Stage</th>
@@ -2742,7 +3031,7 @@ export const OperationsLeads: React.FC = () => {
               if (mainBoardList.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-zinc-500 italic">
+                    <td colSpan={10} className="p-8 text-center text-zinc-500 italic">
                       No matching operations leads found.
                     </td>
                   </tr>
@@ -2804,12 +3093,20 @@ export const OperationsLeads: React.FC = () => {
                   });
                 });
 
-                const lead = leads.find(l => l.lead_id === ord.lead_id);
+                const lead = findLeadForOrder(ord, leads || []);
                 const assignedStaffDetails = getAssignedStaffDetailsForOrder(ord);
                 const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
                 const baseStage = ord.current_stage || (lead ? getLeadCurrentStatus(lead) : 'Order Confirmed');
                 const currentStage = getCalculatedOrderStage(baseStage, staffStatuses);
                 const isLocked = currentStage === 'Raw Footage Received';
+
+                // Extract exact event list for this specific order/lead, filtering by dateFilter if active
+                const allOrderEvents = getOrderEventsList(ord, lead);
+                const orderEvents = dateFilter === 'All'
+                  ? allOrderEvents
+                  : allOrderEvents.filter(ev => isEventWithinDateRange(ev.event_date, dateFilter, customStartDate, customEndDate));
+
+                const clientMobile = ord.mobile || lead?.mobile || ord.whatsapp_number || lead?.whatsapp_number || '';
 
                 return (
                   <tr key={ord.order_id} className={`hover:bg-zinc-900/20 transition-all ${isLocked ? 'opacity-85' : ''}`}>
@@ -2821,13 +3118,117 @@ export const OperationsLeads: React.FC = () => {
                     <td className="p-4 font-bold text-zinc-100">
                       <div>{ord.customer_name}</div>
                     </td>
+                    <td className="p-4 font-mono text-zinc-300 whitespace-nowrap text-xs">
+                      {clientMobile ? (
+                        <span>{clientMobile}</span>
+                      ) : (
+                        <span className="text-zinc-600 italic">—</span>
+                      )}
+                    </td>
                     <td className="p-4 text-zinc-300 font-sans">
-                      <UnifiedEventDropdownCell lead={lead || ord} />
+                      <UnifiedEventDropdownCell lead={lead ? { ...lead, events: orderEvents } : { ...ord, events: orderEvents }} />
                       {isCompletedEvent(ord) && (
                         <div className="text-[10px] text-emerald-400 mt-1 font-sans font-medium">
                           Done: {getCompletionDate(ord)}
                         </div>
                       )}
+                    </td>
+                    <td className="p-4 font-mono text-zinc-300 text-xs">
+                      {(() => {
+                        const sortedDateEvents = sortEventsByDateAsc(orderEvents);
+                        const primaryDate = sortedDateEvents[0]?.event_date ? (formatDateDDMMYY(sortedDateEvents[0].event_date) || sortedDateEvents[0].event_date) : '';
+                        if (sortedDateEvents.length <= 1) {
+                          return (
+                            <div className="font-mono text-zinc-200 text-xs whitespace-nowrap">
+                              {primaryDate || <span className="text-zinc-600 italic">—</span>}
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="max-w-[130px]">
+                            <div 
+                              onClick={() => setViewingDatesModal({ orderId: ord.order_id, customerName: ord.customer_name, events: sortedDateEvents })}
+                              className="font-mono text-zinc-200 text-xs whitespace-nowrap cursor-pointer hover:text-indigo-300 transition-colors"
+                              title="Click to view all event dates in ascending order"
+                            >
+                              {primaryDate || <span className="text-zinc-600 italic">—</span>}
+                            </div>
+                            <div className="mt-0.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingDatesModal({ orderId: ord.order_id, customerName: ord.customer_name, events: sortedDateEvents });
+                                }}
+                                className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 hover:border-indigo-500/50 transition-colors cursor-pointer"
+                                title="Click to view all event dates in ascending order"
+                              >
+                                +{sortedDateEvents.length - 1}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="p-4 text-zinc-300 text-xs">
+                      {(() => {
+                        const loc = orderEvents[0]?.event_location || '';
+                        const renderCellLoc = (val: string) => {
+                          if (!val || !val.trim()) {
+                            return <span className="text-zinc-600 italic">—</span>;
+                          }
+                          if (isLocationUrl(val)) {
+                            return (
+                              <a
+                                href={getLocationUrlHref(val)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-indigo-400 hover:text-indigo-300 underline font-sans text-xs max-w-[150px] truncate block font-medium transition-colors"
+                                title={val}
+                              >
+                                [Open Location Link]
+                              </a>
+                            );
+                          }
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setViewingLocationsModal({ orderId: ord.order_id, customerName: ord.customer_name, events: orderEvents });
+                              }}
+                              className="text-indigo-400 hover:text-indigo-300 underline font-sans text-xs cursor-pointer text-left font-medium transition-colors"
+                              title="Click to view full address"
+                            >
+                              View Address
+                            </button>
+                          );
+                        };
+
+                        if (orderEvents.length <= 1) {
+                          return renderCellLoc(loc);
+                        }
+
+                        return (
+                          <div className="max-w-[150px]">
+                            {renderCellLoc(loc)}
+                            <div className="mt-0.5">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingLocationsModal({ orderId: ord.order_id, customerName: ord.customer_name, events: orderEvents });
+                                }}
+                                className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 hover:border-indigo-500/50 transition-colors cursor-pointer"
+                                title="Click to view all event locations"
+                              >
+                                +{orderEvents.length - 1}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="p-4 font-mono text-zinc-300">
                       {op?.reporting_time ? formatTime12Hour(op.reporting_time) : <span className="text-zinc-600 italic">—</span>}
@@ -4933,7 +5334,7 @@ export const OperationsLeads: React.FC = () => {
                       Consolidated_Drive_Link: consolidatedDriveLink,
                       raw_footage_drive_link: consolidatedDriveLink,
                       event_status: 'Verified Footage',
-                      remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${new Date().toLocaleDateString()}`,
+                      remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${formatDateDDMMYY(new Date())}`,
                       updated_by: currentUserName || 'Operations Manager'
                     });
 
@@ -5961,6 +6362,194 @@ export const OperationsLeads: React.FC = () => {
           </div>
         </div>
       , document.body)}
+
+      {/* Event Locations Modal */}
+      {viewingLocationsModal && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2147483647] flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setViewingLocationsModal(null)}
+        >
+          <div 
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 sm:p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/70">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white font-sans flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-indigo-400" /> Event Location
+                </h3>
+                <div className="text-xs text-zinc-400 font-mono mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="text-indigo-400 font-bold bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800/60">
+                    {viewingLocationsModal.orderId}
+                  </span>
+                  {viewingLocationsModal.customerName && (
+                    <span className="text-zinc-300">• {viewingLocationsModal.customerName}</span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingLocationsModal(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 max-h-[60vh]">
+              {viewingLocationsModal.events.map((ev: any, idx: number) => {
+                const rawName = (ev.event_name || '').trim();
+                let eventLabel = `Event ${idx + 1}`;
+                if (rawName) {
+                  if (/^Event\s*\d+/i.test(rawName)) {
+                    eventLabel = rawName;
+                  } else {
+                    eventLabel = `Event ${idx + 1}: ${rawName}`;
+                  }
+                }
+                const locValue = ev.event_location || '';
+                return (
+                  <div 
+                    key={ev.id || `${viewingLocationsModal.orderId}_ev_${idx + 1}`}
+                    className="p-3.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-indigo-300 font-sans">
+                        {eventLabel}
+                      </span>
+                      {ev.id && (
+                        <span className="text-[10px] font-mono text-zinc-500 bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">
+                          {ev.id}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs font-sans pt-0.5">
+                      {(() => {
+                        if (!locValue || !locValue.trim()) {
+                          return <span className="text-zinc-600 italic">No location specified</span>;
+                        }
+                        if (isLocationUrl(locValue)) {
+                          return (
+                            <a
+                              href={getLocationUrlHref(locValue)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 underline font-medium break-all"
+                              title={locValue}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 shrink-0" /> [Open Location Link]
+                            </a>
+                          );
+                        }
+                        return (
+                          <div className="whitespace-pre-wrap break-words text-zinc-100">
+                            {locValue}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/60 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingLocationsModal(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Event Dates Modal */}
+      {viewingDatesModal && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2147483647] flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setViewingDatesModal(null)}
+        >
+          <div 
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 sm:p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/70">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white font-sans flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-indigo-400" /> Event Dates
+                </h3>
+                <div className="text-xs text-zinc-400 font-mono mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="text-indigo-400 font-bold bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800/60">
+                    {viewingDatesModal.orderId}
+                  </span>
+                  {viewingDatesModal.customerName && (
+                    <span className="text-zinc-300">• {viewingDatesModal.customerName}</span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingDatesModal(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-3 max-h-[60vh]">
+              {sortEventsByDateAsc(viewingDatesModal.events).map((ev: any, idx: number) => {
+                const rawName = (ev.event_name || '').trim();
+                let eventLabel = `Event ${idx + 1}`;
+                if (rawName) {
+                  if (/^Event\s*\d+/i.test(rawName)) {
+                    eventLabel = rawName;
+                  } else {
+                    eventLabel = `Event ${idx + 1}: ${rawName}`;
+                  }
+                }
+                const formattedDate = ev.event_date ? (formatDateDDMMYY(ev.event_date) || ev.event_date) : '';
+                return (
+                  <div 
+                    key={ev.id || `${viewingDatesModal.orderId}_ev_${idx + 1}`}
+                    className="p-3.5 bg-zinc-950/60 border border-zinc-800/80 rounded-xl flex items-center justify-between gap-3"
+                  >
+                    <div>
+                      <div className="text-xs font-bold text-indigo-300 font-sans">
+                        {eventLabel}
+                      </div>
+                      {ev.id && (
+                        <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
+                          {ev.id}
+                        </div>
+                      )}
+                    </div>
+                    <div className="font-mono text-xs font-bold text-zinc-100 bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-800 whitespace-nowrap">
+                      {formattedDate || <span className="text-zinc-600 italic font-normal">—</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/60 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingDatesModal(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

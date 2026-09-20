@@ -502,17 +502,50 @@ export function buildStep3EventPayloads(
   };
 }
 
+/**
+ * Safely normalizes a CRM array field according to normalization rules:
+ * - If already an array, return it directly.
+ * - If null, undefined, or empty, return [].
+ * - If a JSON string containing an array, parse it safely and return the parsed array.
+ * - Do NOT convert arbitrary strings or objects into fake array items.
+ * - Preserves actual CRM data exactly as stored.
+ */
+export function normalizeCrmArray<T = any>(val: any): T[] {
+  if (Array.isArray(val)) {
+    return val;
+  }
+  if (val === null || val === undefined || val === '') {
+    return [];
+  }
+  if (typeof val === 'string') {
+    const trimmed = val.trim();
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch {
+        // invalid JSON, fall through
+      }
+    }
+    return [];
+  }
+  return [];
+}
+
 export function parseTeamMembersJsonToRecord(
   rawTeamData: any,
   pkgId: string,
   eventsList: any[] = []
 ): Record<string, string[]> {
+  const safeEvents = normalizeCrmArray(eventsList);
   const result: Record<string, string[]> = {};
-  if (!rawTeamData && (!eventsList || eventsList.length === 0)) return result;
+  if (!rawTeamData && safeEvents.length === 0) return result;
 
   // 1. Check if events have direct team_members / inclusions properties attached
-  if (eventsList && eventsList.length > 0) {
-    eventsList.forEach((ev, idx) => {
+  if (safeEvents.length > 0) {
+    safeEvents.forEach((ev, idx) => {
       const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
       const directTm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included;
       if (directTm) {
@@ -560,8 +593,8 @@ export function parseTeamMembersJsonToRecord(
         return text ? combineQtyAndText(qty, text) : '';
       }).filter(Boolean);
       if (list.length > 0) {
-        if (eventsList && eventsList.length === 1) {
-          const singleEvId = String(eventsList[0].id || eventsList[0].event_id || 'EV-1');
+        if (safeEvents.length === 1) {
+          const singleEvId = String(safeEvents[0].id || safeEvents[0].event_id || 'EV-1');
           result[`${pkgId}_${singleEvId}`] = list;
           result[`Custom Package_${singleEvId}`] = list;
           result[singleEvId] = list;
@@ -594,7 +627,7 @@ export function parseTeamMembersJsonToRecord(
           if (evName === 'General' || (!evName && !evId)) {
             generalList = [...generalList, ...members];
           } else {
-            const matchedEv = (eventsList || []).find((e, eIdx) =>
+            const matchedEv = safeEvents.find((e, eIdx) =>
               (evId && (e.id && String(e.id) === String(evId) || e.event_id && String(e.event_id) === String(evId))) ||
               (!evId && eIdx === idx)
             );
@@ -620,8 +653,8 @@ export function parseTeamMembersJsonToRecord(
     });
 
     if (generalList.length > 0) {
-      if (eventsList && eventsList.length === 1) {
-        const singleEvId = String(eventsList[0].id || eventsList[0].event_id || 'EV-1');
+      if (safeEvents.length === 1) {
+        const singleEvId = String(safeEvents[0].id || safeEvents[0].event_id || 'EV-1');
         result[`${pkgId}_${singleEvId}`] = generalList;
         result[`Custom Package_${singleEvId}`] = generalList;
         result[singleEvId] = generalList;
@@ -649,12 +682,13 @@ export function parseDeliverablesJsonToRecord(
   pkgId: string,
   eventsList: any[] = []
 ): Record<string, string[]> {
+  const safeEvents = normalizeCrmArray(eventsList);
   const result: Record<string, string[]> = {};
-  if (!rawDelData && (!eventsList || eventsList.length === 0)) return result;
+  if (!rawDelData && safeEvents.length === 0) return result;
 
   // 1. Check if events have direct deliverables properties attached
-  if (eventsList && eventsList.length > 0) {
-    eventsList.forEach((ev, idx) => {
+  if (safeEvents.length > 0) {
+    safeEvents.forEach((ev, idx) => {
       const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
       const directDel = ev.deliverables || ev.Add_Deliverable || ev.deliverables_description;
       if (directDel) {
@@ -702,8 +736,8 @@ export function parseDeliverablesJsonToRecord(
         return text ? combineQtyAndText(qty, text) : '';
       }).filter(Boolean);
       if (list.length > 0) {
-        if (eventsList && eventsList.length === 1) {
-          const singleEvId = String(eventsList[0].id || eventsList[0].event_id || 'EV-1');
+        if (safeEvents.length === 1) {
+          const singleEvId = String(safeEvents[0].id || safeEvents[0].event_id || 'EV-1');
           result[`${pkgId}_${singleEvId}`] = list;
           result[`Custom Package_${singleEvId}`] = list;
           result[singleEvId] = list;
@@ -743,7 +777,7 @@ export function parseDeliverablesJsonToRecord(
           if (evName === 'General' || (!evName && !evId) || (!evId && evName === 'Unnamed Event')) {
             generalList = [...generalList, ...deliverables];
           } else {
-            const matchedEv = (eventsList || []).find((e, eIdx) =>
+            const matchedEv = safeEvents.find((e, eIdx) =>
               (evId && (e.id && String(e.id) === String(evId) || e.event_id && String(e.event_id) === String(evId))) ||
               (!evId && eIdx === idx)
             );
@@ -769,8 +803,8 @@ export function parseDeliverablesJsonToRecord(
     });
 
     if (generalList.length > 0) {
-      if (eventsList && eventsList.length === 1) {
-        const singleEvId = String(eventsList[0].id || eventsList[0].event_id || 'EV-1');
+      if (safeEvents.length === 1) {
+        const singleEvId = String(safeEvents[0].id || safeEvents[0].event_id || 'EV-1');
         result[`${pkgId}_${singleEvId}`] = generalList;
         result[`Custom Package_${singleEvId}`] = generalList;
         result[singleEvId] = generalList;

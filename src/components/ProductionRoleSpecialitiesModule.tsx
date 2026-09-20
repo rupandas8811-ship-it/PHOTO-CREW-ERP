@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useRole } from './RoleContext';
 import { Plus, Edit2, Check, X, ShieldAlert, Sparkles, UserPlus, Users, Trash2, Ban, Sliders } from 'lucide-react';
 import { motion } from 'motion/react';
+import { formatDateDDMMYY } from '../utils';
 
 export const ProductionRoleSpecialitiesModule: React.FC = () => {
   const { 
@@ -256,7 +257,7 @@ export const ProductionRoleSpecialitiesModule: React.FC = () => {
                       <div className="text-[10px] text-zinc-550 font-mono mt-1 flex items-center gap-3">
                         <span>ID: <strong className="text-zinc-400">{spec.speciality_id}</strong></span>
                         <span>•</span>
-                        <span>Created: <strong>{spec.created_at ? new Date(spec.created_at).toLocaleDateString() : 'System Default'}</strong></span>
+                        <span>Created: <strong>{spec.created_at ? formatDateDDMMYY(spec.created_at) : 'System Default'}</strong></span>
                       </div>
                     </div>
                   )}

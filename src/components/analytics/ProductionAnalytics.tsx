@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import { jsPDF } from 'jspdf';
 import { CameraLensStatsCard } from '../CameraLensStatsCard';
+import { formatDateDDMMYY } from '../../utils';
 
 export const ProductionAnalytics: React.FC = () => {
   const { leads, orders, production, payments, operations, staff, globalDateRange, editorAssignments, rawFootage } = useRole();
@@ -669,8 +670,8 @@ export const ProductionAnalytics: React.FC = () => {
             const xlsHeader = `sep=,\r\n`;
             const xlsRows = [
               ['Production Studio Editors Performance Dossier'],
-              [`Scope Date Bounds: ${activeRange.start} through ${activeRange.end}`],
-              [`Export Date: ${new Date().toLocaleString()}`],
+              [`Scope Date Bounds: ${formatDateDDMMYY(activeRange.start)} through ${formatDateDDMMYY(activeRange.end)}`],
+              [`Export Date: ${formatDateDDMMYY(new Date())}`],
               [],
               ['Editor Name', 'Speciality', 'Status', 'Assigned Projects', 'Completed Projects', 'Pending Projects', 'Currently Editing', 'Approved Projects', 'Revision Cycles', 'Client Approval Rate %', 'Avg Turnaround Days'],
               ...filteredEditorsPerformance.map(e => [

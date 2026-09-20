@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useRole } from './RoleContext';
 import { Notification } from '../types';
+import { formatDateTime } from '../utils';
 import { 
   Bell, Check, Trash2, Clock, X, CheckSquare, AlertCircle, AlertTriangle, 
   CheckCircle2, Info, Eye, Sparkles, RefreshCw, Volume2, VolumeX, Archive
@@ -236,7 +237,7 @@ export const NotificationBell: React.FC = () => {
                       <div className="flex items-center gap-2 pt-1 font-mono text-[8px] text-zinc-500">
                         <span className="flex items-center gap-1">
                           <Clock className="w-2.5 h-2.5" />
-                          {notif.created_at ? new Date(notif.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
+                          {notif.created_at ? formatDateTime(notif.created_at) : 'Just now'}
                         </span>
                         <span>•</span>
                         <span className="uppercase text-[7px] bg-zinc-900 px-1 py-0.2 rounded border border-zinc-850">
@@ -359,7 +360,7 @@ export const NotificationBell: React.FC = () => {
                   <div className="text-left p-3 bg-zinc-900/20 border border-zinc-900 rounded-lg">
                     <span className="text-[8px] uppercase font-mono tracking-wider text-zinc-500 block">Created Timestamp</span>
                     <strong className="text-xs font-bold text-white block mt-0.5">
-                      {selectedNotif.created_at ? new Date(selectedNotif.created_at).toLocaleString() : 'N/A'}
+                      {selectedNotif.created_at ? formatDateTime(selectedNotif.created_at) : 'N/A'}
                     </strong>
                   </div>
 
