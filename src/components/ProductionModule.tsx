@@ -2673,17 +2673,6 @@ Production Team`;
   const [newDeliverableInput, setNewDeliverableInput] = useState('');
   const [openDropdownDeliverable, setOpenDropdownDeliverable] = useState<string | null>(null);
   const [assignedEditorsModalProd, setAssignedEditorsModalProd] = useState<Production | null>(null);
-
-  useEffect(() => {
-    if (assignedEditorsModalProd) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'auto';
-    }
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, [assignedEditorsModalProd]);
   const [previewProofModal, setPreviewProofModal] = useState<{
     imageUrl: string;
     staffName: string;
@@ -3803,7 +3792,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <td className="p-3 font-sans text-center">
                               {editorsList.length > 0 ? (
                                 <span 
-                                  onClick={(e) => { e.stopPropagation(); setAssignedEditorsModalProd(prod); }}
+                                  onClick={() => setAssignedEditorsModalProd(prod)}
                                   className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
                                   title="View Assigned Team"
                                 >
@@ -4179,7 +4168,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 }
                                 return (
                                   <span 
-                                    onClick={(e) => { e.stopPropagation(); setAssignedEditorsModalProd(prod); }}
+                                    onClick={() => setAssignedEditorsModalProd(prod)}
                                     className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
                                     title="View Assigned Team"
                                   >
@@ -9905,7 +9894,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* ASSIGNED EDITORS / TEAM POPUP */}
       {assignedEditorsModalProd && (
-        <div className="fixed inset-0 z-[99999] flex flex-col w-full h-full bg-zinc-950 text-white animate-fade-in">
+        <div className="fixed inset-0 z-[110] flex flex-col w-screen h-screen min-h-screen max-h-screen bg-zinc-950 text-white animate-fade-in overflow-hidden">
           {/* Header */}
           <div className="px-5 py-4 sm:px-6 lg:px-8 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between shrink-0 sticky top-0 z-20">
             <div>
