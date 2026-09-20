@@ -2537,11 +2537,12 @@ Production Team`;
       const currentEventId = currentEvent ? (currentEvent.id || currentEvent.event_id) : prod.event_id;
 
       let parsedDeliverablesList: { name: string; qty: number }[] = [];
-      if (currentEvent && currentEvent.deliverables) {
-        if (Array.isArray(currentEvent.deliverables)) {
-          parsedDeliverablesList = parseDeliverablesWithQty(JSON.stringify(currentEvent.deliverables));
-        } else if (typeof currentEvent.deliverables === 'string') {
-          parsedDeliverablesList = parseDeliverablesWithQty(currentEvent.deliverables);
+      if (currentEvent && (currentEvent.deliverables || currentEvent.deliverable)) {
+        const deliverablesData = currentEvent.deliverables || currentEvent.deliverable;
+        if (Array.isArray(deliverablesData)) {
+          parsedDeliverablesList = parseDeliverablesWithQty(JSON.stringify(deliverablesData));
+        } else if (typeof deliverablesData === 'string') {
+          parsedDeliverablesList = parseDeliverablesWithQty(deliverablesData);
         }
       }
 
@@ -8666,10 +8667,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         setIsSaving(true);
                         const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
 
-                        const assignedForOrder = (editorAssignments || []).filter(a => 
-                          a.production_id === activeWorkflowProd.production_id || a.order_id === orderId
-                        );
-
                         // 1. Delete all existing editor assignments for this production
                         const { error: deleteError } = await supabaseClient
                           .from('editor_assignments')
@@ -8681,12 +8678,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         // 2. Prepare new assignments across all sections
                         const newAssignments = [];
                         for (const section of wfEventSections) {
+                          const assignedForSection = (editorAssignments || []).filter(a => 
+                            (a.production_id === activeWorkflowProd.production_id || a.order_id === orderId) &&
+                            (section.eventId ? a.event_id === section.eventId : !a.event_id)
+                          );
                           for (const item of section.items) {
                             if (!item.editor || item.editor === 'Unassigned') continue;
                             const st = (productionStaff || []).find(s => s.name === item.editor);
                             if (st) {
-                              const originalAssignment = assignedForOrder.find(a => 
-                                (a.event_id === section.eventId || !a.event_id) && 
+                              const originalAssignment = assignedForSection.find(a => 
                                 (a.speciality === item.text || a.deliverable_id === item.text)
                               );
                               const hasChanged = originalAssignment ? originalAssignment.staff_name !== item.editor : true;
