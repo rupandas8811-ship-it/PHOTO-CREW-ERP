@@ -9900,7 +9900,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             return () => { document.body.style.overflow = ''; };
           }, []);
           return (
-            <div className="absolute top-0 left-0 z-[110] flex flex-col w-full min-h-full bg-zinc-950 text-white animate-fade-in">
+            <div className="fixed inset-0 z-[200] flex flex-col w-full h-full bg-zinc-950 text-white animate-fade-in">
               {/* Header */}
               <div className="px-5 py-4 sm:px-6 lg:px-8 border-b border-zinc-900 bg-[#0c0d10] flex items-center justify-between shrink-0 sticky top-0 z-20">
                 <div>

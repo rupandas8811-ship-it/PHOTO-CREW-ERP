@@ -83,7 +83,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         const isPending = h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval'));
         return {
           ...h,
-          approval_status: isPending ? 'Waiting for Approval' : 'Approved'
+          approval_status: isPending ? 'Waiting for Approval' : (h.approval_status === 'Rejected' ? 'Rejected' : (h.approval_status === 'Approved' ? 'Approved' : 'Approved'))
         };
       });
 
@@ -118,8 +118,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   // Payment amounts
   const finalQuotation = Number(orderObj?.quotation_amount) || Number(order.totalRevenue) || Number(order.finalPackageAmount) || Number(leadObj?.final_amount) || Number(leadObj?.Final_Quotation_Amount) || Number(leadObj?.budget) || 0;
 
-  const pendingItems = historyList.filter(h => h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval')));
-  const approvedItems = historyList.filter(h => h.approval_status === 'Approved' || (h.approval_status !== 'Waiting for Approval' && (!h.notes || !h.notes.includes('Waiting for Approval'))));
+  const pendingItems = historyList.filter(h => h.approval_status === 'Waiting for Approval');
+  const approvedItems = historyList.filter(h => h.approval_status === 'Approved');
+  const rejectedItems = historyList.filter(h => h.approval_status === 'Rejected');
 
   let totalPaid = approvedItems.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
   if (historyList.length === 0 && paymentObj && paymentObj.payment_status !== 'Waiting for Approval') {
@@ -156,6 +157,32 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
       event_start_time: (orderObj as any)?.event_start_time
     }];
   }
+
+  const handleReject = async (histId: string) => {
+    setIsApprovingId(histId);
+    try {
+      if (supabaseClient) {
+        await supabaseClient
+          .from('payment_history')
+          .update({ approval_status: 'Rejected' })
+          .eq('id', histId);
+      }
+      setHistoryList(prev => prev.map(p => {
+        const idMatch = p.id === histId || p.payment_history_id === histId || String(p.id) === String(histId);
+        if (idMatch) {
+          return {
+            ...p,
+            approval_status: 'Rejected'
+          };
+        }
+        return p;
+      }));
+    } catch (err) {
+      console.error("Error rejecting payment:", err);
+    } finally {
+      setIsApprovingId(null);
+    }
+  };
 
   const handleApprove = async (histId: string) => {
     setIsApprovingId(histId);
@@ -435,16 +462,31 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                     Waiting for Approval
                                   </span>
                                   {currentRole === 'Business Owner' && (
-                                    <button
-                                      type="button"
-                                      disabled={isRowApproving}
-                                      onClick={() => handleApprove(histId)}
-                                      className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-[10px] cursor-pointer transition-colors shadow-sm disabled:opacity-50"
-                                    >
-                                      {isRowApproving ? 'Approving...' : 'Approve'}
-                                    </button>
+                                    <>
+                                      <button
+                                        type="button"
+                                        disabled={isRowApproving}
+                                        onClick={() => handleApprove(histId)}
+                                        className="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-[10px] cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+                                      >
+                                        {isRowApproving ? 'Approving...' : 'Approve'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={isRowApproving}
+                                        onClick={() => handleReject(histId)}
+                                        className="px-2.5 py-1 rounded bg-rose-500 hover:bg-rose-400 text-white font-bold text-[10px] cursor-pointer transition-colors shadow-sm disabled:opacity-50"
+                                      >
+                                        {isRowApproving ? 'Rejecting...' : 'Reject'}
+                                      </button>
+                                    </>
                                   )}
                                 </div>
+                              ) : h.approval_status === 'Rejected' ? (
+                                <span className="px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 text-[9px] font-bold text-rose-400 flex items-center gap-1 w-fit">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Rejected
+                                </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold text-emerald-400 flex items-center gap-1 w-fit">
                                   <CheckCircle className="w-3 h-3" />

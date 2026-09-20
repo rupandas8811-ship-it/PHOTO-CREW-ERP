@@ -3105,6 +3105,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
       const approvedHistories = (paymentHistory || []).filter(h => 
         (h.order_id === o.order_id || h.order_id === o.lead_id) && 
+        h.approval_status !== 'Rejected' &&
         (h.approval_status === 'Approved' || (!h.notes || !h.notes.includes('Waiting for Approval')))
       );
       const historyApprovedSum = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
