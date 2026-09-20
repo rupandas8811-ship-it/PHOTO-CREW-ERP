@@ -3200,7 +3200,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             const isPending = h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval'));
             return {
               ...h,
-              approval_status: isPending ? 'Waiting for Approval' : 'Approved'
+              approval_status: isPending ? 'Waiting for Approval' : (h.approval_status === 'Rejected' ? 'Rejected' : 'Approved')
             };
           });
           setPaymentHistory(mappedHistory);
@@ -6933,7 +6933,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     const approvedHistories = updatedHistoryList.filter(h => 
       (h.order_id === orderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
-      (h.approval_status === 'Approved' || (!h.notes || !h.notes.includes('Waiting for Approval')))
+      h.approval_status !== 'Rejected' && (h.approval_status === 'Approved' || (!h.notes || !h.notes.includes('Waiting for Approval')))
     );
 
     const totalApprovedReceived = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
