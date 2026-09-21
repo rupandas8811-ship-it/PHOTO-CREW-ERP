@@ -91,7 +91,10 @@ export const ProductionFullScreenManager: React.FC = () => {
                                   (overlay.querySelector('#production_workflow_modal') !== null && text.includes('assign editor'));
 
       const isClientAcceptanceModal = text.includes('client acceptance verification deck') ||
-                                      (text.includes('client acceptance') && (text.includes('project id') || text.includes('tracking id') || text.includes('approve client acceptance')));
+                                      (text.includes('client acceptance') && (text.includes('project id') || text.includes('tracking id') || text.includes('approve client acceptance'))) ||
+                                      (text.includes('client approval') && (text.includes('project id') || text.includes('footage deleted') || text.includes('content usage'))) ||
+                                      overlay.querySelector('#production_client_approval_modal') !== null ||
+                                      overlay.id === 'production_client_approval_overlay';
 
       return hasWorkflowModalCard || isWorkflowWizardModal || isAssignOpsModal || isClientAcceptanceModal || isAssignEditorModal;
     };
@@ -142,7 +145,10 @@ export const ProductionFullScreenManager: React.FC = () => {
           hasActiveTargetModal = true;
           const overlayText = (overlay.textContent || '').toLowerCase();
           const isClientAcceptanceModal = overlayText.includes('client acceptance verification deck') ||
-                                          (overlayText.includes('client acceptance') && (overlayText.includes('project id') || overlayText.includes('tracking id') || overlayText.includes('approve client acceptance')));
+                                          (overlayText.includes('client acceptance') && (overlayText.includes('project id') || overlayText.includes('tracking id') || overlayText.includes('approve client acceptance'))) ||
+                                          (overlayText.includes('client approval') && (overlayText.includes('project id') || overlayText.includes('footage deleted') || overlayText.includes('content usage'))) ||
+                                          overlay.querySelector('#production_client_approval_modal') !== null ||
+                                          overlay.id === 'production_client_approval_overlay';
 
           // Add ancestor class to all parent elements up to document.body
           // to neutralize transform/filter/will-change containing blocks
@@ -160,7 +166,6 @@ export const ProductionFullScreenManager: React.FC = () => {
             overlay.classList.remove('prod-fullscreen-overlay');
             overlay.classList.remove('prod-client-acceptance-overlay');
             overlay.style.setProperty('z-index', '9999999', 'important');
-            overlay.style.setProperty('padding-top', 'calc(var(--prod-nav-header-height, 64px) + 16px)', 'important');
             overlay.style.setProperty('align-items', 'center', 'important');
             overlay.style.setProperty('justify-content', 'center', 'important');
           } else {
@@ -176,6 +181,7 @@ export const ProductionFullScreenManager: React.FC = () => {
 
           // 2. Mark inner card as full screen container
           const modalCard = overlay.querySelector<HTMLElement>('#production_workflow_modal') ||
+            overlay.querySelector<HTMLElement>('#production_client_approval_modal') ||
             overlay.querySelector<HTMLElement>('div.bg-zinc-950') ||
             (overlay.firstElementChild as HTMLElement);
 
@@ -183,7 +189,7 @@ export const ProductionFullScreenManager: React.FC = () => {
             if (isClientAcceptanceModal) {
               modalCard.classList.remove('prod-fullscreen-card');
               modalCard.classList.remove('prod-client-acceptance-card');
-              modalCard.style.setProperty('max-height', 'calc(100vh - var(--prod-nav-header-height, 64px) - 32px)', 'important');
+              modalCard.style.setProperty('max-height', 'min(92vh, 92dvh, calc(100vh - var(--prod-nav-header-height, 64px) - 24px))', 'important');
               modalCard.style.setProperty('margin-top', '0', 'important');
               modalCard.style.setProperty('display', 'flex', 'important');
               modalCard.style.setProperty('flex-direction', 'column', 'important');

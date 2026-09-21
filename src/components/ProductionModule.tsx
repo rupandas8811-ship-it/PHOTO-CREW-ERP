@@ -3295,6 +3295,20 @@ _Please acknowledge receipt of this task assignment._`;
     }
   }, [previewProofModal]);
 
+  useEffect(() => {
+    if (clientAcceptanceProd) {
+      triggerAutoScrollAndFocus('#production_client_approval_modal', 300);
+      
+      // Explicitly reset scroll for internal checklist container if present
+      setTimeout(() => {
+        const scrollElem = document.getElementById('production_client_approval_checklist_container');
+        if (scrollElem) {
+          scrollElem.scrollTop = 0;
+        }
+      }, 350);
+    }
+  }, [clientAcceptanceProd]);
+
   const getRawFootageStatus = (prod: Production) => {
     if (prod.raw_footage_status) return prod.raw_footage_status;
     const rf = (rawFootage || []).find(r => r.tracking_id === prod.tracking_id);
@@ -11377,20 +11391,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           const trackingId = clientAcceptanceProd.tracking_id || 'N/A';
           
           return (
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div 
+              id="production_client_approval_overlay"
+              className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-hidden"
+            >
               <motion.div
+                id="production_client_approval_modal"
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-[#0a0a0a] border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
+                className="bg-[#0a0a0a] border border-zinc-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl relative flex flex-col max-h-[92vh] max-h-[92dvh] my-auto"
               >
                 {/* Header */}
-                <div className="p-5 flex justify-between items-start">
+                <div className="p-4 sm:p-5 flex justify-between items-start shrink-0">
                   <div>
                     <h3 className="text-[13px] font-black text-white flex items-center gap-1.5 uppercase tracking-widest font-mono">
                       <span className="text-emerald-400">✓</span> CLIENT APPROVAL
                     </h3>
-                    <p className="text-[10px] text-zinc-500 mt-2 font-mono uppercase tracking-wider">
+                    <p className="text-[10px] text-zinc-500 mt-1.5 sm:mt-2 font-mono uppercase tracking-wider">
                       PROJECT ID: <span className="text-violet-400 font-bold">{clientAcceptanceProd.production_id}</span>
                     </p>
                   </div>
@@ -11400,7 +11418,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       setClientAcceptanceProd(null);
                       setCaUploadConfirmations({});
                     }}
-                    className="p-1.5 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer flex items-center justify-center"
+                    className="p-1.5 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer flex items-center justify-center shrink-0"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                   </button>
@@ -11442,9 +11460,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       setIsSaving(false);
                     }
                   }}
-                  className="px-5 pb-5 space-y-4 flex flex-col"
+                  className="px-4 pb-4 sm:px-5 sm:pb-5 space-y-4 flex flex-col flex-1 min-h-0 overflow-hidden"
                 >
-                  <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[60vh] pr-2">
+                  <div 
+                    id="production_client_approval_checklist_container"
+                    className="space-y-2 overflow-y-auto custom-scrollbar flex-1 min-h-0 pr-1 sm:pr-2 overscroll-contain"
+                  >
                     <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
                       <input
                         type="checkbox"
@@ -11507,14 +11528,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   </div>
 
                   {/* Buttons */}
-                  <div className="flex gap-3 pt-4">
+                  <div className="flex gap-2.5 sm:gap-3 pt-3 sm:pt-4 shrink-0">
                     <button
                       type="button"
                       onClick={() => {
                         setClientAcceptanceProd(null);
                         setCaUploadConfirmations({});
                       }}
-                      className="py-3.5 px-6 bg-[#1f1f22] hover:bg-[#2a2a2d] text-zinc-100 font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
+                      className="py-3 sm:py-3.5 px-4 sm:px-6 bg-[#1f1f22] hover:bg-[#2a2a2d] text-zinc-100 font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm shrink-0"
                     >
                       CANCEL
                     </button>
@@ -11542,14 +11563,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           setIsSavingProgress(false);
                         }
                       }}
-                      className="py-3.5 px-6 bg-[#2a2a2d] hover:bg-[#353538] text-[#e0b04a] font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm"
+                      className="py-3 sm:py-3.5 px-4 sm:px-6 bg-[#2a2a2d] hover:bg-[#353538] text-[#e0b04a] font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer disabled:opacity-50 shadow-sm shrink-0"
                     >
                       {isSavingProgress ? 'SAVING...' : 'SAVE'}
                     </button>
                     <button
                       type="submit"
                       disabled={isSaving || isSavingProgress}
-                      className="flex-1 py-3.5 px-6 bg-[#00A36C] hover:bg-[#008F5D] text-white font-black text-[11px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 shadow-md"
+                      className="flex-1 py-3 sm:py-3.5 px-3 sm:px-6 bg-[#00A36C] hover:bg-[#008F5D] text-white font-black text-[11px] uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-1.5 sm:gap-2 cursor-pointer disabled:opacity-50 shadow-md min-w-0"
                     >
                       {isSaving ? 'SUBMITTING...' : '✓ CLIENT APPROVED'}
                     </button>
