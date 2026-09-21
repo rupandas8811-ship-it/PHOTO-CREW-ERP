@@ -9957,7 +9957,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <th className="p-3.5 font-bold">Assigned Deliverable</th>
                   <th className="p-3.5 font-bold">Current Status</th>
                   <th className="p-3.5 font-bold whitespace-nowrap">Server Upload</th>
-                  <th className="p-3.5 font-bold whitespace-nowrap">Customer Review Link</th>
                   <th className="p-3.5 font-bold whitespace-nowrap">Final Drive Link</th>
                   <th className="p-3.5 font-bold whitespace-nowrap">Customer Proof</th>
                 </tr>
@@ -10030,7 +10029,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     if (displayItems.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={8} className="p-8 text-center text-zinc-500 italic font-mono text-xs">
+                          <td colSpan={7} className="p-8 text-center text-zinc-500 italic font-mono text-xs">
                             No assigned staff or deliverables found for this order.
                           </td>
                         </tr>
@@ -10183,30 +10182,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 );
                               }
                               return (
-                                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono font-semibold">
+                                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono font-semibold">
                                   <span>☐</span>
                                   <span>Pending Upload</span>
                                 </span>
                               );
                             })()}
-                          </td>
-                          {/* Customer Review Link */}
-                          <td className="p-3">
-                            {hasCustomerReviewLink ? (
-                              <a
-                                href={customerReviewLinkStr.startsWith('http') ? customerReviewLinkStr : `https://${customerReviewLinkStr}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                referrerPolicy="no-referrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 font-bold text-xs transition-colors cursor-pointer"
-                                title={customerReviewLinkStr}
-                              >
-                                <span>🔗 Open Link</span>
-                                <ExternalLink className="w-3.5 h-3.5" />
-                              </a>
-                            ) : (
-                              <span className="text-zinc-500 italic text-xs font-mono">Pending Upload</span>
-                            )}
                           </td>
                           {/* Final Drive Link */}
                           <td className="p-3">
@@ -10232,36 +10213,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <Clock className="w-3 h-3 text-zinc-600" />
                                 <span>Pending</span>
                               </span>
-                            ) : proof.proofType === 'both' && proof.imageUrl && proof.linkUrl ? (
-                              <div className="inline-flex items-center gap-1.5 flex-wrap">
-                                <button
-                                  type="button"
-                                  onClick={() => setPreviewProofModal({
-                                    imageUrl: proof.imageUrl!,
-                                    staffName,
-                                    deliverableName,
-                                    eventName,
-                                    orderId: prod.production_id || orderId
-                                  })}
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/25 font-bold font-mono text-[11px] transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                                  title="Click to view uploaded confirmation image"
-                                >
-                                  <Eye className="w-3.5 h-3.5" />
-                                  <span>View Image</span>
-                                </button>
-                                <a
-                                  href={proof.linkUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  referrerPolicy="no-referrer"
-                                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 font-bold font-mono text-[11px] transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                                  title={proof.linkUrl}
-                                >
-                                  <ExternalLink className="w-3.5 h-3.5" />
-                                  <span>Open Link</span>
-                                </a>
-                              </div>
-                            ) : proof.proofType === 'image' && proof.imageUrl ? (
+                            ) : proof.imageUrl ? (
                               <button
                                 type="button"
                                 onClick={() => setPreviewProofModal({
@@ -10277,31 +10229,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <Eye className="w-3.5 h-3.5" />
                                 <span>View Image</span>
                               </button>
-                            ) : proof.proofType === 'link' && proof.linkUrl ? (
-                              <a
-                                href={proof.linkUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                referrerPolicy="no-referrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/25 font-bold font-mono text-xs transition-colors cursor-pointer shadow-sm hover:scale-[1.02] active:scale-[0.98] whitespace-nowrap"
-                                title={proof.linkUrl}
-                              >
-                                <ExternalLink className="w-3.5 h-3.5" />
-                                <span>View Customer Proof</span>
-                              </a>
-                            ) : (
+                            ) : proof.linkUrl ? (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (proof.imageUrl) {
-                                    setPreviewProofModal({
-                                      imageUrl: proof.imageUrl,
-                                      staffName,
-                                      deliverableName,
-                                      eventName,
-                                      orderId: prod.production_id || orderId
-                                    });
-                                  } else if (proof.linkUrl) {
+                                  if (proof.linkUrl) {
                                     window.open(proof.linkUrl, '_blank', 'noopener,noreferrer');
                                   }
                                 }}
@@ -10311,6 +10243,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 <CheckCircle2 className="w-3.5 h-3.5" />
                                 <span>View Proof</span>
                               </button>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-800 text-[11px] font-mono">
+                                <Clock className="w-3 h-3 text-zinc-600" />
+                                <span>Pending</span>
+                              </span>
                             )}
                           </td>
                         </tr>
