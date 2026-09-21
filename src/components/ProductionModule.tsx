@@ -9957,7 +9957,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <th className="p-3.5 font-bold">Assigned Deliverable</th>
                   <th className="p-3.5 font-bold">Current Status</th>
                   <th className="p-3.5 font-bold whitespace-nowrap">Server Upload</th>
-                  <th className="p-3.5 font-bold">Upload Link</th>
+                  <th className="p-3.5 font-bold whitespace-nowrap">Customer Review Link</th>
+                  <th className="p-3.5 font-bold whitespace-nowrap">Final Drive Link</th>
                   <th className="p-3.5 font-bold whitespace-nowrap">Customer Proof</th>
                 </tr>
               </thead>
@@ -10029,7 +10030,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     if (displayItems.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={7} className="p-8 text-center text-zinc-500 italic font-mono text-xs">
+                          <td colSpan={8} className="p-8 text-center text-zinc-500 italic font-mono text-xs">
                             No assigned staff or deliverables found for this order.
                           </td>
                         </tr>
@@ -10047,34 +10048,87 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       
                       const statusText = (assignment.status === 'Assigned' || !assignment.status) ? 'Assigned Editor' : assignment.status;
 
-                      // Extract specific link for this exact assignment/deliverable record
-                      const getSpecificAssignmentLink = (a: any): string => {
+                      // Helper to check valid external or cloud storage link
+                      const isValidLinkValue = (cand: any): boolean => {
+                        if (!cand || typeof cand !== 'string') return false;
+                        const trimmed = cand.trim();
+                        return (
+                          trimmed.startsWith('http://') ||
+                          trimmed.startsWith('https://') ||
+                          trimmed.includes('drive.google.com') ||
+                          trimmed.includes('dropbox.com') ||
+                          trimmed.includes('mega.nz') ||
+                          trimmed.length > 5
+                        );
+                      };
+
+                      // 1. Customer Review Link for this exact assignment/deliverable
+                      const getSpecificCustomerReviewLink = (a: any): string => {
                         if (!a) return '';
                         const candidates = [
                           a.Edited_Drive_Link,
                           a.edited_drive_link,
-                          a.edited_link,
-                          a.upload_link,
-                          a.drive_link,
-                          a.edited_drive_url,
                           a.customer_review_link,
+                          a.edited_link,
+                          a.edited_drive_url,
+                          a.drive_link,
+                          (!a.server_file_link && !a.final_edited_footage_link && !a.final_drive_link ? a.upload_link : null),
                           a.link,
-                          a.url,
-                          a.raw_footage_link
+                          a.url
                         ];
                         for (const cand of candidates) {
-                          if (cand && typeof cand === 'string') {
-                            const trimmed = cand.trim();
-                            if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.includes('drive.google.com') || trimmed.includes('dropbox.com') || trimmed.includes('mega.nz') || trimmed.length > 10) {
-                              return trimmed;
-                            }
+                          if (isValidLinkValue(cand)) {
+                            return cand.trim();
                           }
                         }
                         return '';
                       };
 
-                      const linkStr = getSpecificAssignmentLink(assignment);
-                      const hasLink = Boolean(linkStr);
+                      // 2. Final Drive Link for this exact assignment/deliverable
+                      const getSpecificFinalDriveLink = (a: any): string => {
+                        if (!a) return '';
+                        // Check direct properties on this exact deliverable / assignment record
+                        const directCandidates = [
+                          a.final_drive_link,
+                          a.Final_Drive_Link,
+                          a.final_edited_footage_link,
+                          a.server_file_link,
+                          a.upload_link_path,
+                          a.upload_link
+                        ];
+                        for (const cand of directCandidates) {
+                          if (isValidLinkValue(cand)) {
+                            return cand.trim();
+                          }
+                        }
+
+                        // Check clientAcceptanceVerifications strictly for this exact assignment/deliverable ID
+                        if (a.assignment_id && Array.isArray(clientAcceptanceVerifications)) {
+                          const matchingVerif = clientAcceptanceVerifications.find(v =>
+                            (v.assignment_id && v.assignment_id === a.assignment_id) ||
+                            (v.task_id && v.task_id === a.assignment_id)
+                          );
+                          if (matchingVerif) {
+                            const verifCandidates = [
+                              matchingVerif.final_edited_footage_link,
+                              matchingVerif.upload_link_path
+                            ];
+                            for (const cand of verifCandidates) {
+                              if (isValidLinkValue(cand)) {
+                                return cand.trim();
+                              }
+                            }
+                          }
+                        }
+
+                        return '';
+                      };
+
+                      const customerReviewLinkStr = getSpecificCustomerReviewLink(assignment);
+                      const hasCustomerReviewLink = Boolean(customerReviewLinkStr);
+
+                      const finalDriveLinkStr = getSpecificFinalDriveLink(assignment);
+                      const hasFinalDriveLink = Boolean(finalDriveLinkStr);
 
                       // Parse Customer Proof according to unified logic across Supabase storage & records
                       const proof = parseCustomerProof(assignment, prod, order);
@@ -10136,15 +10190,34 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               );
                             })()}
                           </td>
+                          {/* Customer Review Link */}
                           <td className="p-3">
-                            {hasLink ? (
+                            {hasCustomerReviewLink ? (
                               <a
-                                href={linkStr.startsWith('http') ? linkStr : `https://${linkStr}`}
+                                href={customerReviewLinkStr.startsWith('http') ? customerReviewLinkStr : `https://${customerReviewLinkStr}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 referrerPolicy="no-referrer"
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 font-bold text-xs transition-colors cursor-pointer"
-                                title={linkStr}
+                                title={customerReviewLinkStr}
+                              >
+                                <span>🔗 Open Link</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            ) : (
+                              <span className="text-zinc-500 italic text-xs font-mono">Pending Upload</span>
+                            )}
+                          </td>
+                          {/* Final Drive Link */}
+                          <td className="p-3">
+                            {hasFinalDriveLink ? (
+                              <a
+                                href={finalDriveLinkStr.startsWith('http') ? finalDriveLinkStr : `https://${finalDriveLinkStr}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                referrerPolicy="no-referrer"
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:text-indigo-300 font-bold text-xs transition-colors cursor-pointer"
+                                title={finalDriveLinkStr}
                               >
                                 <span>🔗 Open Link</span>
                                 <ExternalLink className="w-3.5 h-3.5" />
