@@ -844,7 +844,8 @@ export function deserializeLeadEvents(textNotes: string | undefined): { events: 
 export function parseTeamMembers(
   teamMembersStr: string | undefined | null,
   targetEventName?: string,
-  targetEventId?: string
+  targetEventId?: string,
+  targetEventIndex?: number
 ): string[] {
   if (!teamMembersStr) return [];
   const trimmed = teamMembersStr.trim();
@@ -852,6 +853,50 @@ export function parseTeamMembers(
   
   const cleanTargetId = (targetEventId || '').trim().toLowerCase();
   const cleanTargetName = (targetEventName || '').trim().toLowerCase();
+
+  const isEventMatch = (ev: any, idx: number): boolean => {
+    const evId = String(ev.event_id || ev.id || '').trim().toLowerCase();
+    const evName = String(ev.event_name || ev.custom_event_name || ev.event_type || '').trim().toLowerCase();
+    
+    // 1. Match by ID (strongest when target ID is specified)
+    if (cleanTargetId && evId) {
+      if (evId === cleanTargetId) return true;
+      const normEvId = evId.replace(/[^a-z0-9]/g, '');
+      const normTargetId = cleanTargetId.replace(/[^a-z0-9]/g, '');
+      if (normEvId && normTargetId && (normEvId === normTargetId || normEvId.replace(/^0+/, '') === normTargetId.replace(/^0+/, ''))) return true;
+
+      const targetIdxMatch = cleanTargetId.match(/^(?:evt|ev|event)[-_ ]*0*(\d+)$/i);
+      const evIdxMatch = evId.match(/^(?:evt|ev|event)[-_ ]*0*(\d+)$/i);
+      if (targetIdxMatch && evIdxMatch && targetIdxMatch[1] === evIdxMatch[1]) return true;
+      if (targetIdxMatch && parseInt(targetIdxMatch[1], 10) === idx + 1) return true;
+      if (evIdxMatch && targetEventIndex !== undefined && parseInt(evIdxMatch[1], 10) === targetEventIndex + 1) return true;
+    }
+    
+    // 2. Match by Name
+    if (cleanTargetName && evName) {
+      if (evName === cleanTargetName) return true;
+      const normEvName = evName.replace(/[^a-z0-9]/g, '');
+      const normTargetName = cleanTargetName.replace(/[^a-z0-9]/g, '');
+      if (normEvName && normTargetName && normEvName === normTargetName) return true;
+
+      const targetNameIdx = cleanTargetName.match(/^event\s*0*(\d+)$/i);
+      const evNameIdx = evName.match(/^event\s*0*(\d+)$/i);
+      if (targetNameIdx && evNameIdx && targetNameIdx[1] === evNameIdx[1]) return true;
+      if (targetNameIdx && parseInt(targetNameIdx[1], 10) === idx + 1) return true;
+      if (evNameIdx && targetEventIndex !== undefined && parseInt(evNameIdx[1], 10) === targetEventIndex + 1) return true;
+    }
+
+    // 3. Match by Positional Index
+    if (targetEventIndex !== undefined && targetEventIndex === idx) {
+      const idConflict = cleanTargetId && evId && evId !== cleanTargetId && !cleanTargetId.match(/^(?:evt|ev|event)/i) && !evId.match(/^(?:evt|ev|event)/i);
+      const nameConflict = cleanTargetName && evName && evName !== cleanTargetName && !cleanTargetName.match(/^event\s*\d+/i) && !evName.match(/^event\s*\d+/i);
+      if (!idConflict && !nameConflict) {
+        return true;
+      }
+    }
+
+    return false;
+  };
 
   if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
     try {
@@ -862,14 +907,8 @@ export function parseTeamMembers(
           let eventsToUse = parsed;
           let isFilteredButNoMatch = false;
 
-          if (cleanTargetId || cleanTargetName) {
-            const matched = parsed.filter((ev: any) => {
-              const evId = String(ev.event_id || ev.id || '').trim().toLowerCase();
-              const evName = String(ev.event_name || ev.custom_event_name || ev.event_type || '').trim().toLowerCase();
-              const idMatch = cleanTargetId !== '' && evId === cleanTargetId;
-              const nameMatch = cleanTargetName !== '' && evName === cleanTargetName;
-              return idMatch || nameMatch;
-            });
+          if (cleanTargetId || cleanTargetName || targetEventIndex !== undefined) {
+            const matched = parsed.filter((ev: any, idx: number) => isEventMatch(ev, idx));
 
             if (matched.length > 0) {
               eventsToUse = matched;
@@ -895,6 +934,10 @@ export function parseTeamMembers(
           }
           return result;
         } else {
+          const isSecondary = (targetEventIndex !== undefined && targetEventIndex > 0) ||
+                              (cleanTargetId && Boolean(cleanTargetId.match(/^(?:evt|ev|event)[-_ ]*0*([2-9]|\d{2,})$/i))) || 
+                              (cleanTargetName && Boolean(cleanTargetName.match(/^event\s*0*([2-9]|\d{2,})$/i)));
+          if (isSecondary && !cleanTargetId && !cleanTargetName) return [];
           return parsed.map(item => {
             if (typeof item === 'object' && item !== null) {
               const qty = Number(item.qty || item.quantity || 1);
@@ -910,8 +953,11 @@ export function parseTeamMembers(
     }
   }
 
-  // If a specific event was requested and it wasn't a JSON array of events, don't leak global text
-  if (cleanTargetId || cleanTargetName) {
+  // If a specific secondary event was requested and it wasn't a JSON array of events, don't leak global text
+  const isSecondary = (targetEventIndex !== undefined && targetEventIndex > 0) ||
+                      (cleanTargetId && Boolean(cleanTargetId.match(/^(?:evt|ev|event)[-_ ]*0*([2-9]|\d{2,})$/i))) || 
+                      (cleanTargetName && Boolean(cleanTargetName.match(/^event\s*0*([2-9]|\d{2,})$/i)));
+  if (isSecondary) {
     return [];
   }
 
@@ -1021,7 +1067,8 @@ export function combineQtyAndText(qty: number | string, text: string): string {
 export function parseDeliverablesWithQty(
   description: string | any | undefined | null,
   targetEventName?: string,
-  targetEventId?: string
+  targetEventId?: string,
+  targetEventIndex?: number
 ): { name: string; qty: number }[] {
   if (!description) return [];
 
@@ -1036,30 +1083,43 @@ export function parseDeliverablesWithQty(
     const evId = String(ev.event_id || ev.id || '').trim().toLowerCase();
     const evName = String(ev.event_name || ev.custom_event_name || ev.event_type || ev.name || '').trim().toLowerCase();
     
-    if (cleanTargetId) {
+    // 1. Match by ID (strongest when target ID is specified)
+    if (cleanTargetId && evId) {
       if (evId === cleanTargetId) return true;
       const normEvId = evId.replace(/[^a-z0-9]/g, '');
       const normTargetId = cleanTargetId.replace(/[^a-z0-9]/g, '');
       if (normEvId && normTargetId && (normEvId === normTargetId || normEvId.replace(/^0+/, '') === normTargetId.replace(/^0+/, ''))) return true;
-      
-      const targetIdxMatch = cleanTargetId.match(/(?:evt|ev|event)?-?0*(\d+)/i);
-      const evIdxMatch = evId.match(/(?:evt|ev|event)?-?0*(\d+)/i);
+
+      const targetIdxMatch = cleanTargetId.match(/^(?:evt|ev|event)[-_ ]*0*(\d+)$/i);
+      const evIdxMatch = evId.match(/^(?:evt|ev|event)[-_ ]*0*(\d+)$/i);
       if (targetIdxMatch && evIdxMatch && targetIdxMatch[1] === evIdxMatch[1]) return true;
       if (targetIdxMatch && parseInt(targetIdxMatch[1], 10) === idx + 1) return true;
+      if (evIdxMatch && targetEventIndex !== undefined && parseInt(evIdxMatch[1], 10) === targetEventIndex + 1) return true;
     }
     
-    if (cleanTargetName) {
+    // 2. Match by Name
+    if (cleanTargetName && evName) {
       if (evName === cleanTargetName) return true;
       const normEvName = evName.replace(/[^a-z0-9]/g, '');
       const normTargetName = cleanTargetName.replace(/[^a-z0-9]/g, '');
       if (normEvName && normTargetName && normEvName === normTargetName) return true;
-      
-      const targetNameIdx = cleanTargetName.match(/event\s*0*(\d+)/i);
-      const evNameIdx = evName.match(/event\s*0*(\d+)/i);
+
+      const targetNameIdx = cleanTargetName.match(/^event\s*0*(\d+)$/i);
+      const evNameIdx = evName.match(/^event\s*0*(\d+)$/i);
       if (targetNameIdx && evNameIdx && targetNameIdx[1] === evNameIdx[1]) return true;
       if (targetNameIdx && parseInt(targetNameIdx[1], 10) === idx + 1) return true;
+      if (evNameIdx && targetEventIndex !== undefined && parseInt(evNameIdx[1], 10) === targetEventIndex + 1) return true;
     }
-    
+
+    // 3. Match by Positional Index
+    if (targetEventIndex !== undefined && targetEventIndex === idx) {
+      const idConflict = cleanTargetId && evId && evId !== cleanTargetId && !cleanTargetId.match(/^(?:evt|ev|event)/i) && !evId.match(/^(?:evt|ev|event)/i);
+      const nameConflict = cleanTargetName && evName && evName !== cleanTargetName && !cleanTargetName.match(/^event\s*\d+/i) && !evName.match(/^event\s*\d+/i);
+      if (!idConflict && !nameConflict) {
+        return true;
+      }
+    }
+
     return false;
   };
 
@@ -1068,7 +1128,7 @@ export function parseDeliverablesWithQty(
     isJson = true;
     if (description[0] && typeof description[0] === 'object' && ('event_name' in description[0] || 'event_type' in description[0] || 'deliverables' in description[0] || 'event_id' in description[0] || 'id' in description[0])) {
       let targetEvents = description;
-      if (cleanTargetId || cleanTargetName) {
+      if (cleanTargetId || cleanTargetName || targetEventIndex !== undefined) {
         const matched = description.filter((ev: any, idx: number) => isEventMatch(ev, idx));
         if (matched.length > 0) {
           targetEvents = matched;
@@ -1089,6 +1149,7 @@ export function parseDeliverablesWithQty(
         });
       }
     } else {
+      // Direct array of deliverable items
       itemsRaw = description;
     }
   } else if (typeof description === 'object' && description !== null) {
@@ -1107,7 +1168,7 @@ export function parseDeliverablesWithQty(
       if (deserialized.events && deserialized.events.length > 0) {
         isJson = true;
         let targetEvents = deserialized.events;
-        if (cleanTargetId || cleanTargetName) {
+        if (cleanTargetId || cleanTargetName || targetEventIndex !== undefined) {
           const matched = deserialized.events.filter((ev: any, idx: number) => isEventMatch(ev, idx));
           if (matched.length > 0) {
             targetEvents = matched;
@@ -1135,7 +1196,7 @@ export function parseDeliverablesWithQty(
           // Case A: Array of event objects: [{ event_name: "...", deliverables: [...] }]
           if (parsed[0] && typeof parsed[0] === 'object' && ('event_name' in parsed[0] || 'event_type' in parsed[0] || 'deliverables' in parsed[0] || 'event_id' in parsed[0] || 'id' in parsed[0])) {
             let targetEvents = parsed;
-            if (cleanTargetId || cleanTargetName) {
+            if (cleanTargetId || cleanTargetName || targetEventIndex !== undefined) {
               const matched = parsed.filter((ev: any, idx: number) => isEventMatch(ev, idx));
               if (matched.length > 0) {
                 targetEvents = matched;
@@ -1158,7 +1219,15 @@ export function parseDeliverablesWithQty(
           } 
           // Case B: Array of items directly: [{ qty: 2, name: "..." }] or ["2 x Photo"]
           else {
-            itemsRaw = parsed;
+            const isSecondaryTarget = (targetEventIndex !== undefined && targetEventIndex > 0) ||
+                                     (cleanTargetId && Boolean(cleanTargetId.match(/^(?:evt|ev|event)[-_ ]*0*([2-9]|\d{2,})$/i))) || 
+                                     (cleanTargetName && Boolean(cleanTargetName.match(/^event\s*0*([2-9]|\d{2,})$/i)));
+            if (isSecondaryTarget) {
+              itemsRaw = [];
+              isFilteredButNoMatch = true;
+            } else {
+              itemsRaw = parsed;
+            }
           }
         } else if (parsed && typeof parsed === 'object') {
           if (Array.isArray(parsed.deliverables)) {
@@ -1173,8 +1242,12 @@ export function parseDeliverablesWithQty(
     }
   }
 
+  const isSecondaryTarget = (targetEventIndex !== undefined && targetEventIndex > 0) ||
+                           (cleanTargetId && Boolean(cleanTargetId.match(/^(?:evt|ev|event)[-_ ]*0*([2-9]|\d{2,})$/i))) || 
+                           (cleanTargetName && Boolean(cleanTargetName.match(/^event\s*0*([2-9]|\d{2,})$/i)));
+
   // 2. If no JSON items extracted, treat description as plain text ONLY if description was NOT valid JSON and target event wasn't filtered out
-  if (itemsRaw.length === 0 && typeof description === 'string' && !isJson && !isFilteredButNoMatch) {
+  if (itemsRaw.length === 0 && typeof description === 'string' && !isJson && !isFilteredButNoMatch && !isSecondaryTarget) {
     itemsRaw = description.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
   }
 

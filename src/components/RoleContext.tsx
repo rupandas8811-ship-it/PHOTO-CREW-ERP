@@ -3134,7 +3134,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
               let eventDeliverables = e.deliverables;
               if ((!eventDeliverables || (Array.isArray(eventDeliverables) && eventDeliverables.length === 0)) && l.deliverables_description) {
-                const parsed = parseDeliverablesWithQty(l.deliverables_description, eName, eId);
+                const parsed = parseDeliverablesWithQty(l.deliverables_description, eName, eId, idx);
                 if (parsed.length > 0) {
                   eventDeliverables = parsed;
                 }
@@ -3143,7 +3143,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               let eventTeamMembers = e.team_members || e.Team_Members;
               if ((!eventTeamMembers || (Array.isArray(eventTeamMembers) && eventTeamMembers.length === 0)) && (l.team_members || l.Team_member || l.Team_Members)) {
                 const rawTm = l.team_members || l.Team_member || l.Team_Members;
-                const parsedTm = parseTeamMembers(rawTm, eName, eId);
+                const parsedTm = parseTeamMembers(rawTm, eName, eId, idx);
                 if (parsedTm.length > 0) {
                   eventTeamMembers = parsedTm;
                 }
@@ -3714,7 +3714,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                     let eventDeliverables = e.deliverables;
                     if ((!eventDeliverables || (Array.isArray(eventDeliverables) && eventDeliverables.length === 0)) && (mappedItem.deliverables_description || existingLead?.deliverables_description)) {
                       const delText = mappedItem.deliverables_description || existingLead?.deliverables_description;
-                      const parsed = parseDeliverablesWithQty(delText, eName, eId);
+                      const parsed = parseDeliverablesWithQty(delText, eName, eId, idx);
                       if (parsed.length > 0) {
                         eventDeliverables = parsed;
                       }
@@ -3723,7 +3723,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                     let eventTeamMembers = e.team_members || e.Team_Members;
                     if ((!eventTeamMembers || (Array.isArray(eventTeamMembers) && eventTeamMembers.length === 0)) && (mappedItem.team_members || mappedItem.Team_member || mappedItem.Team_Members || existingLead?.team_members)) {
                       const rawTm = mappedItem.team_members || mappedItem.Team_member || mappedItem.Team_Members || existingLead?.team_members;
-                      const parsedTm = parseTeamMembers(rawTm, eName, eId);
+                      const parsedTm = parseTeamMembers(rawTm, eName, eId, idx);
                       if (parsedTm.length > 0) {
                         eventTeamMembers = parsedTm;
                       }

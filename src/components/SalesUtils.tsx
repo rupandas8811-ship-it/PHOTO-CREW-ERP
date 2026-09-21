@@ -402,11 +402,14 @@ export function buildStep3EventPayloads(
 
     // Direct event fallback only for this exact event
     if (list.length === 0 && event) {
-      const directTm = event.team_members || event.Team_Members || event.inclusions;
-      if (Array.isArray(directTm)) {
-        list = directTm;
-      } else if (typeof directTm === 'string' && directTm.trim()) {
-        list = parseTeamMembers(directTm, evName, evId);
+      if (Array.isArray(event.team_members) && event.team_members.length > 0) {
+        list = event.team_members;
+      } else if (Array.isArray(event.members) && event.members.length > 0) {
+        list = event.members;
+      } else if (typeof event.team_members === 'string' && event.team_members.trim() && event.team_members.trim() !== '[]') {
+        list = parseTeamMembers(event.team_members, evName, evId, idx);
+      } else if (!isMultiEvent && (event.team_members_included || event.inclusions)) {
+        list = parseTeamMembers(event.team_members_included || event.inclusions, evName, evId, idx);
       }
     }
 
@@ -459,11 +462,14 @@ export function buildStep3EventPayloads(
 
     // Direct event fallback only for this exact event
     if (list.length === 0 && event) {
-      const directDel = event.deliverables || event.Add_Deliverable || event.deliverables_list || event.deliverables_description;
-      if (Array.isArray(directDel)) {
-        list = directDel;
-      } else if (typeof directDel === 'string' && directDel.trim()) {
-        list = parseDeliverablesWithQty(directDel, evName, evId);
+      if (Array.isArray(event.deliverables) && event.deliverables.length > 0) {
+        list = event.deliverables;
+      } else if (Array.isArray(event.deliverables_list) && event.deliverables_list.length > 0) {
+        list = event.deliverables_list;
+      } else if (typeof event.deliverables === 'string' && event.deliverables.trim() && event.deliverables.trim() !== '[]') {
+        list = parseDeliverablesWithQty(event.deliverables, evName, evId, idx);
+      } else if (!isMultiEvent && event.deliverables_description) {
+        list = parseDeliverablesWithQty(event.deliverables_description, evName, evId, idx);
       }
     }
 
@@ -545,9 +551,10 @@ export function parseTeamMembersJsonToRecord(
 
   // 1. Check if events have direct team_members / inclusions properties attached
   if (safeEvents.length > 0) {
+    const isMulti = safeEvents.length > 1;
     safeEvents.forEach((ev, idx) => {
       const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
-      const directTm = ev.team_members || ev.inclusions || ev.Team_Members || ev.team_members_included;
+      const directTm = ev.team_members || ev.members || (!isMulti ? (ev.inclusions || ev.Team_Members || ev.team_members_included) : null);
       if (directTm) {
         let members: string[] = [];
         if (Array.isArray(directTm)) {
@@ -555,7 +562,7 @@ export function parseTeamMembersJsonToRecord(
             const { qty, text } = parseQtyAndText(m);
             return text ? combineQtyAndText(qty, text) : '';
           }).filter(Boolean);
-        } else if (typeof directTm === 'string') {
+        } else if (typeof directTm === 'string' && directTm.trim() && directTm.trim() !== '[]') {
           try {
             const parsedTm = JSON.parse(directTm);
             if (Array.isArray(parsedTm)) {
@@ -565,10 +572,12 @@ export function parseTeamMembersJsonToRecord(
               }).filter(Boolean);
             }
           } catch (e) {
-            members = directTm.split(/[,\n]/).map((s: string) => {
-              const { qty, text } = parseQtyAndText(s);
-              return text ? combineQtyAndText(qty, text) : '';
-            }).filter(Boolean);
+            if (!isMulti) {
+              members = directTm.split(/[,\n]/).map((s: string) => {
+                const { qty, text } = parseQtyAndText(s);
+                return text ? combineQtyAndText(qty, text) : '';
+              }).filter(Boolean);
+            }
           }
         }
         if (members.length > 0) {
@@ -688,9 +697,10 @@ export function parseDeliverablesJsonToRecord(
 
   // 1. Check if events have direct deliverables properties attached
   if (safeEvents.length > 0) {
+    const isMulti = safeEvents.length > 1;
     safeEvents.forEach((ev, idx) => {
       const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
-      const directDel = ev.deliverables || ev.Add_Deliverable || ev.deliverables_description;
+      const directDel = ev.deliverables || ev.deliverables_list || (!isMulti ? (ev.Add_Deliverable || ev.deliverables_description) : null);
       if (directDel) {
         let deliverables: string[] = [];
         if (Array.isArray(directDel)) {
@@ -698,7 +708,7 @@ export function parseDeliverablesJsonToRecord(
             const { qty, text } = parseQtyAndText(d);
             return text ? combineQtyAndText(qty, text) : '';
           }).filter(Boolean);
-        } else if (typeof directDel === 'string') {
+        } else if (typeof directDel === 'string' && directDel.trim() && directDel.trim() !== '[]') {
           try {
             const parsedDel = JSON.parse(directDel);
             if (Array.isArray(parsedDel)) {
@@ -708,10 +718,12 @@ export function parseDeliverablesJsonToRecord(
               }).filter(Boolean);
             }
           } catch (e) {
-            deliverables = directDel.split(/[,\n]/).map((s: string) => {
-              const { qty, text } = parseQtyAndText(s);
-              return text ? combineQtyAndText(qty, text) : '';
-            }).filter(Boolean);
+            if (!isMulti) {
+              deliverables = directDel.split(/[,\n]/).map((s: string) => {
+                const { qty, text } = parseQtyAndText(s);
+                return text ? combineQtyAndText(qty, text) : '';
+              }).filter(Boolean);
+            }
           }
         }
         if (deliverables.length > 0) {
@@ -1218,7 +1230,7 @@ export const generateQuotationPDF = (
       const eventKey = `${pkgId}_${evId}`;
       const altKey = `Custom Package_${evId}`;
       
-      const directTm = event.team_members || event.inclusions || event.Team_Members || event.team_members_included;
+      const directTm = event.team_members || event.members || (!isMulti ? (event.inclusions || event.Team_Members || event.team_members_included) : null);
       const parsedDirectTm = directTm ? (Array.isArray(directTm) ? directTm.map((m: any) => {
         const { qty, text } = parseQtyAndText(m);
         return text ? combineQtyAndText(qty, text) : '';
@@ -1234,7 +1246,7 @@ export const generateQuotationPDF = (
 
       const eventName = event.event_name || event.event_type || `Event ${eventIdx + 1}`;
 
-      const directDel = event.deliverables || event.Add_Deliverable || event.deliverables_description;
+      const directDel = event.deliverables || event.deliverables_list || (!isMulti ? (event.Add_Deliverable || event.deliverables_description) : null);
       const parsedDirectDel = directDel ? (Array.isArray(directDel) ? directDel.map((d: any) => {
         const { qty, text } = parseQtyAndText(d);
         return text ? combineQtyAndText(qty, text) : '';

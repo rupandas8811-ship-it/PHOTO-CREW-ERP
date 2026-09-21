@@ -75,8 +75,8 @@ function toInputDateFormat(dateStr?: string | null): string {
   }
 }
 
-function parseExactDeliverables(description: string, targetEventName?: string, targetEventId?: string): string[] {
-  const list = parseDeliverablesWithQty(description, targetEventName, targetEventId);
+function parseExactDeliverables(description: string, targetEventName?: string, targetEventId?: string, targetEventIndex?: number): string[] {
+  const list = parseDeliverablesWithQty(description, targetEventName, targetEventId, targetEventIndex);
   return list.map(item => `${item.qty} × ${item.name}`);
 }
 
@@ -2539,20 +2539,21 @@ Production Team`;
       let parsedDeliverablesList: { name: string; qty: number }[] = [];
       if (currentEvent && (currentEvent.deliverables || currentEvent.deliverable)) {
         const deliverablesData = currentEvent.deliverables || currentEvent.deliverable;
-        if (Array.isArray(deliverablesData)) {
-          parsedDeliverablesList = parseDeliverablesWithQty(JSON.stringify(deliverablesData));
-        } else if (typeof deliverablesData === 'string') {
-          parsedDeliverablesList = parseDeliverablesWithQty(deliverablesData);
+        if (Array.isArray(deliverablesData) && deliverablesData.length > 0) {
+          parsedDeliverablesList = parseDeliverablesWithQty(deliverablesData, currentEventName, currentEventId, idx);
+        } else if (typeof deliverablesData === 'string' && deliverablesData.trim() !== '' && deliverablesData.trim() !== '[]') {
+          parsedDeliverablesList = parseDeliverablesWithQty(deliverablesData, currentEventName, currentEventId, idx);
         }
       }
 
-      if (parsedDeliverablesList.length === 0) {
-        parsedDeliverablesList = parseDeliverablesWithQty(deliverablesText, currentEventName, currentEventId);
+      if (parsedDeliverablesList.length === 0 && deliverablesText) {
+        parsedDeliverablesList = parseDeliverablesWithQty(deliverablesText, currentEventName, currentEventId, idx);
       }
 
+      const sectionEventId = currentEventId || `EVT-0${idx + 1}`;
       const assignedForThis = (editorAssignments || []).filter(a => 
         (a.production_id === prod.production_id || a.order_id === orderId) && 
-        (a.event_id === currentEventId || (!a.event_id && !currentEventId) || (!a.event_id && idx === 0))
+        (a.event_id === currentEventId || a.event_id === sectionEventId || (!a.event_id && idx === 0))
       );
 
       const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
