@@ -1090,17 +1090,30 @@ export const OperationsLeads: React.FC = () => {
   const getRecordMeta = (record: any) => {
     if (!record) return { url: null, date: '-', time: '-' };
 
+    let parsed: any = null;
     let url = record.photo_url || null;
-    if (!url && record.remarks) {
+    if (record.remarks) {
       try {
-        const parsed = JSON.parse(record.remarks);
-        url = parsed.photo_url || parsed.url || null;
+        parsed = typeof record.remarks === 'string' ? JSON.parse(record.remarks) : record.remarks;
+        if (!url) {
+          url = parsed.photo_url || parsed.url || null;
+        }
       } catch (e) {}
     }
 
     let date = '-';
     let time = '-';
-    const timestamp = record.returned_at || record.created_at;
+    let timestamp = parsed?.uploaded_at || record.returned_at || record.created_at;
+    if (!timestamp && url) {
+      const match = url.match(/_(\d{12,14})\./);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > 1000000000000 && num < 4000000000000) {
+          timestamp = new Date(num).toISOString();
+        }
+      }
+    }
+
     if (timestamp) {
       const dt = new Date(timestamp);
       if (!isNaN(dt.getTime())) {
@@ -5853,12 +5866,21 @@ export const OperationsLeads: React.FC = () => {
                                     });
 
                                     if (matches.length === 0) return null;
-                                    // Prioritize record with uploaded photo
-                                    const withPhoto = matches.find(m => {
+                                    // Prioritize most recent upload with uploaded photo
+                                    const sorted = [...matches].sort((a, b) => {
+                                      const getTs = (rec: any) => {
+                                        let p: any = {};
+                                        if (rec.remarks) { try { p = typeof rec.remarks === 'string' ? JSON.parse(rec.remarks) : rec.remarks; } catch (e) {} }
+                                        const ts = p?.uploaded_at || rec.returned_at || rec.created_at;
+                                        return ts ? new Date(ts).getTime() : 0;
+                                      };
+                                      return getTs(b) - getTs(a);
+                                    });
+                                    const withPhoto = sorted.find(m => {
                                       const meta = getRecordMeta(m);
                                       return !!meta.url;
                                     });
-                                    return withPhoto || matches[0];
+                                    return withPhoto || sorted[0];
                                   };
 
                                   const assetCollection = getRecordForStage(['Equipment Received', 'Asset Collection Photo Proof', 'Asset Collection', 'Received', 'Equipment Received / Asset Picture'], 'Asset Collection');

@@ -768,6 +768,7 @@ export async function uploadProofImage(params: {
 export async function uploadEquipmentReceived(params: {
   assignmentId: string;
   orderId: string;
+  leadId?: string;
   eventId?: string;
   eventName?: string;
   staffName: string;
@@ -777,7 +778,7 @@ export async function uploadEquipmentReceived(params: {
   pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
   pushInsertFn?: (table: string, payload: any) => Promise<any>;
 }): Promise<{ success: boolean; photoUrl: string }> {
-  const { assignmentId, orderId, eventId, eventName, staffName, photoInput, remarks, updatedBy, pushUpdateFn, pushInsertFn } = params;
+  const { assignmentId, orderId, leadId, eventId, eventName, staffName, photoInput, remarks, updatedBy, pushUpdateFn, pushInsertFn } = params;
   const timestamp = new Date().toISOString();
 
   // 1. Upload to Supabase Storage
@@ -787,13 +788,34 @@ export async function uploadEquipmentReceived(params: {
     photoInput
   });
 
-  // 2. Update staff_assignments row ONLY
-  const updatePayload = {
+  // Preserve existing proofs to prevent overwriting handover time
+  let existingProofs: any = {};
+  try {
+    const { data: saRow } = await supabaseClient
+      .from('staff_assignments')
+      .select('proofs')
+      .eq('assignment_id', assignmentId)
+      .maybeSingle();
+    if (saRow?.proofs) {
+      existingProofs = typeof saRow.proofs === 'string' ? JSON.parse(saRow.proofs) : saRow.proofs;
+    }
+  } catch (e) {}
+
+  const updatedProofs = {
+    ...existingProofs,
+    equipment_received_photo: photoUrl,
+    equipment_received_time: timestamp,
+    equipment_received_date: timestamp.split('T')[0]
+  };
+
+  // 2. Update staff_assignments row
+  const updatePayload: any = {
     equipment_received_photo: photoUrl,
     task_status: 'Equipment Received',
     assignment_status: 'Assigned',
     updated_at: timestamp,
-    updated_by: updatedBy || staffName
+    updated_by: updatedBy || staffName,
+    proofs: updatedProofs
   };
 
   if (pushUpdateFn) {
@@ -809,16 +831,26 @@ export async function uploadEquipmentReceived(params: {
   try {
     const historyPayload = {
       order_id: orderId,
+      lead_id: leadId || orderId,
       assignment_id: assignmentId,
       event_id: eventId || null,
       event_name: eventName || null,
       equipment_name: 'Equipment Received Proof',
-      equipment_status: 'Received',
-      proof_type: 'equipment_received',
+      equipment_status: 'Equipment Received',
+      proof_type: 'Equipment Received',
       photo_url: photoUrl,
       returned_by: staffName,
+      returned_at: timestamp,
       created_at: timestamp,
-      remarks: remarks || `Equipment Received proof uploaded by ${staffName}`
+      remarks: JSON.stringify({
+        assignment_id: assignmentId,
+        proof_type: 'Equipment Received',
+        staff_name: staffName,
+        photo_url: photoUrl,
+        uploaded_at: timestamp,
+        uploaded_by: staffName,
+        remarks: remarks || `Equipment Received proof uploaded by ${staffName}`
+      })
     };
     if (pushInsertFn) {
       await pushInsertFn('lead_equipment_history', historyPayload);
@@ -840,6 +872,7 @@ export async function uploadEquipmentReceived(params: {
 export async function uploadEquipmentHandover(params: {
   assignmentId: string;
   orderId: string;
+  leadId?: string;
   eventId?: string;
   eventName?: string;
   staffName: string;
@@ -850,7 +883,7 @@ export async function uploadEquipmentHandover(params: {
   pushUpdateFn?: (table: string, matchCol: string, matchVal: string, updates: any) => Promise<any>;
   pushInsertFn?: (table: string, payload: any) => Promise<any>;
 }): Promise<{ success: boolean; photoUrl: string }> {
-  const { assignmentId, orderId, eventId, eventName, staffName, photoInput, handoverTo, handoverNotes, updatedBy, pushUpdateFn, pushInsertFn } = params;
+  const { assignmentId, orderId, leadId, eventId, eventName, staffName, photoInput, handoverTo, handoverNotes, updatedBy, pushUpdateFn, pushInsertFn } = params;
   const timestamp = new Date().toISOString();
 
   // 1. Upload to Supabase Storage
@@ -860,14 +893,35 @@ export async function uploadEquipmentHandover(params: {
     photoInput
   });
 
-  // 2. Update staff_assignments row ONLY
-  const updatePayload = {
+  // Preserve existing proofs to prevent overwriting received time
+  let existingProofs: any = {};
+  try {
+    const { data: saRow } = await supabaseClient
+      .from('staff_assignments')
+      .select('proofs')
+      .eq('assignment_id', assignmentId)
+      .maybeSingle();
+    if (saRow?.proofs) {
+      existingProofs = typeof saRow.proofs === 'string' ? JSON.parse(saRow.proofs) : saRow.proofs;
+    }
+  } catch (e) {}
+
+  const updatedProofs = {
+    ...existingProofs,
+    equipment_handover_photo: photoUrl,
+    equipment_handover_time: timestamp,
+    equipment_handover_date: timestamp.split('T')[0]
+  };
+
+  // 2. Update staff_assignments row
+  const updatePayload: any = {
     equipment_handover_photo: photoUrl,
     equipment_handover_to: handoverTo || staffName,
     equipment_handover_notes: handoverNotes || null,
     task_status: 'Equipment Handover',
     updated_at: timestamp,
-    updated_by: updatedBy || staffName
+    updated_by: updatedBy || staffName,
+    proofs: updatedProofs
   };
 
   if (pushUpdateFn) {
@@ -883,16 +937,26 @@ export async function uploadEquipmentHandover(params: {
   try {
     const historyPayload = {
       order_id: orderId,
+      lead_id: leadId || orderId,
       assignment_id: assignmentId,
       event_id: eventId || null,
       event_name: eventName || null,
       equipment_name: 'Equipment Handover Proof',
-      equipment_status: 'Handover',
-      proof_type: 'equipment_handover',
+      equipment_status: 'Equipment Handover Completed',
+      proof_type: 'Equipment Handover',
       photo_url: photoUrl,
       returned_by: staffName,
+      returned_at: timestamp,
       created_at: timestamp,
-      remarks: handoverNotes || `Equipment Handover to ${handoverTo || staffName} proof uploaded by ${staffName}`
+      remarks: JSON.stringify({
+        assignment_id: assignmentId,
+        proof_type: 'Equipment Handover',
+        staff_name: staffName,
+        photo_url: photoUrl,
+        uploaded_at: timestamp,
+        uploaded_by: staffName,
+        remarks: handoverNotes || `Equipment Handover to ${handoverTo || staffName} proof uploaded by ${staffName}`
+      })
     };
     if (pushInsertFn) {
       await pushInsertFn('lead_equipment_history', historyPayload);
@@ -1065,9 +1129,23 @@ export async function uploadRawFootage(params: {
 // 5. Query Resolvers: Single Source of Truth for Modals and UI
 // ============================================================================
 
+// Helper to extract timestamp from a storage URL if present (e.g. ..._1789472717871.jpg)
+function extractTimestampFromUrl(url?: string | null): string | null {
+  if (!url || typeof url !== 'string') return null;
+  const match = url.match(/_(\d{12,14})\./);
+  if (match && match[1]) {
+    const num = parseInt(match[1], 10);
+    if (!isNaN(num) && num > 1000000000000 && num < 4000000000000) {
+      return new Date(num).toISOString();
+    }
+  }
+  return null;
+}
+
 /**
  * Resolves Equipment Verification data strictly from assignment_id.
  * Equipment Handover will NEVER display Equipment Received image as fallback.
+ * Each upload maintains its own independent upload timestamp.
  */
 export function getEquipmentVerificationData(params: {
   assignmentId?: string;
@@ -1099,13 +1177,16 @@ export function getEquipmentVerificationData(params: {
 
   let recPhoto = sa?.equipment_received_photo || null;
   let handPhoto = sa?.equipment_handover_photo || null;
-  let recTimestamp = (sa as any)?.equipment_received_time || null;
-  let handTimestamp = (sa as any)?.equipment_handover_time || null;
 
-  if (sa?.updated_at) {
-    if (recPhoto && !recTimestamp) recTimestamp = sa.updated_at;
-    if (handPhoto && !handTimestamp) handTimestamp = sa.updated_at;
+  let proofsObj: any = {};
+  if (sa?.proofs) {
+    try {
+      proofsObj = typeof sa.proofs === 'string' ? JSON.parse(sa.proofs) : sa.proofs;
+    } catch (e) {}
   }
+
+  let recTimestamp: string | null = null;
+  let handTimestamp: string | null = null;
 
   // 2. Check lead_equipment_history strictly for matching assignment_id or matching (order_id + event_id + staff)
   const matchingHistory = leadEquipmentHistory.filter(h => {
@@ -1126,26 +1207,80 @@ export function getEquipmentVerificationData(params: {
     return false;
   });
 
-  matchingHistory.forEach(h => {
+  const parsedHistory = matchingHistory.map(h => {
     let parsed: any = {};
     if (h.remarks) {
       try { parsed = typeof h.remarks === 'string' ? JSON.parse(h.remarks) : h.remarks; } catch (e) {}
     }
     const pType = (parsed.proof_type || h.proof_type || h.equipment_name || h.equipment_status || '').toLowerCase();
     const hUrl = h.photo_url || parsed.photo_url || null;
-    const hTimeStr = h.created_at || h.returned_at || parsed.uploaded_at || null;
-
-    if (pType.includes('received') || pType.includes('collection')) {
-      if (!recPhoto) recPhoto = hUrl;
-      if (hTimeStr && !recTimestamp) recTimestamp = hTimeStr;
-    }
-
-    if (pType.includes('handover') || pType.includes('return')) {
-      if (!handPhoto) handPhoto = hUrl;
-      if (hTimeStr && !handTimestamp) handTimestamp = hTimeStr;
-    }
+    const hTime = parsed.uploaded_at || h.returned_at || h.created_at || extractTimestampFromUrl(hUrl);
+    const isRec = pType.includes('received') || pType.includes('asset collection') || pType.includes('asset_collection') || pType.includes('collection') || pType === 'equipment received';
+    const isHand = pType.includes('handover') || pType.includes('asset return') || pType.includes('asset_return') || pType.includes('return') || pType === 'equipment handover';
+    return { parsed, pType, hUrl, hTime, isRec, isHand, raw: h };
   });
 
+  // A. RESOLVE EQUIPMENT RECEIVED TIMESTAMP
+  // 1) From proofs JSON if exact photo matches or no photo specified
+  if (proofsObj.equipment_received_time && (!proofsObj.equipment_received_photo || proofsObj.equipment_received_photo === recPhoto)) {
+    recTimestamp = proofsObj.equipment_received_time;
+  }
+  // 2) From exact photo URL match in history
+  if (!recTimestamp && recPhoto) {
+    const exactMatch = parsedHistory.find(p => p.isRec && p.hUrl === recPhoto && p.hTime);
+    if (exactMatch) {
+      recTimestamp = exactMatch.hTime;
+    }
+  }
+  // 3) From most recent received record in history
+  if (!recTimestamp) {
+    const recHistory = parsedHistory.filter(p => p.isRec && (p.hUrl || p.hTime));
+    recHistory.sort((a, b) => new Date(b.hTime || 0).getTime() - new Date(a.hTime || 0).getTime());
+    if (recHistory[0]) {
+      if (!recPhoto && recHistory[0].hUrl) recPhoto = recHistory[0].hUrl;
+      if (recHistory[0].hTime) recTimestamp = recHistory[0].hTime;
+    }
+  }
+  // 4) Extract from photo URL if it contains a timestamp
+  if (!recTimestamp && recPhoto) {
+    recTimestamp = extractTimestampFromUrl(recPhoto);
+  }
+  // 5) Direct column fallback on sa if present
+  if (!recTimestamp && (sa as any)?.equipment_received_time) {
+    recTimestamp = (sa as any).equipment_received_time;
+  }
+
+  // B. RESOLVE EQUIPMENT HANDOVER TIMESTAMP
+  // 1) From proofs JSON if exact photo matches or no photo specified
+  if (proofsObj.equipment_handover_time && (!proofsObj.equipment_handover_photo || proofsObj.equipment_handover_photo === handPhoto)) {
+    handTimestamp = proofsObj.equipment_handover_time;
+  }
+  // 2) From exact photo URL match in history
+  if (!handTimestamp && handPhoto) {
+    const exactMatch = parsedHistory.find(p => p.isHand && p.hUrl === handPhoto && p.hTime);
+    if (exactMatch) {
+      handTimestamp = exactMatch.hTime;
+    }
+  }
+  // 3) From most recent handover record in history
+  if (!handTimestamp) {
+    const handHistory = parsedHistory.filter(p => p.isHand && (p.hUrl || p.hTime));
+    handHistory.sort((a, b) => new Date(b.hTime || 0).getTime() - new Date(a.hTime || 0).getTime());
+    if (handHistory[0]) {
+      if (!handPhoto && handHistory[0].hUrl) handPhoto = handHistory[0].hUrl;
+      if (handHistory[0].hTime) handTimestamp = handHistory[0].hTime;
+    }
+  }
+  // 4) Extract from photo URL if it contains a timestamp
+  if (!handTimestamp && handPhoto) {
+    handTimestamp = extractTimestampFromUrl(handPhoto);
+  }
+  // 5) Direct column fallback on sa if present
+  if (!handTimestamp && (sa as any)?.equipment_handover_time) {
+    handTimestamp = (sa as any).equipment_handover_time;
+  }
+
+  // FORMAT IN APPLICATION'S STANDARD IST FORMAT
   const recDate = recTimestamp ? formatISTDate(recTimestamp) : null;
   const recTime = recTimestamp ? formatISTTime12Hour(recTimestamp) : null;
   const handDate = handTimestamp ? formatISTDate(handTimestamp) : null;

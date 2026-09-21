@@ -1821,25 +1821,37 @@ export const StaffModule: React.FC = () => {
       const compressedBase64 = await compressImage(file);
       setModalPhotos(prev => {
         const next = { ...prev, [eqName]: compressedBase64 };
-        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:')) {
+        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:') || eqName === 'Equipment Received / Asset Picture' || eqName === 'Equipment Received') {
           next['Equipment Received / Asset Picture'] = compressedBase64;
           next['Asset Collection Photo Proof'] = compressedBase64;
+          next['Equipment Received'] = compressedBase64;
         }
         if (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image') {
           next['Event Start Photo Proof'] = compressedBase64;
           next['Event Start Image'] = compressedBase64;
         }
+        if (eqName === 'Equipment Handover Photo Proof' || eqName === 'Asset Return Photo Proof' || eqName === 'Equipment Handover' || eqName.startsWith('Equipment Handover:') || eqName.startsWith('Asset Return:')) {
+          next['Equipment Handover Photo Proof'] = compressedBase64;
+          next['Asset Return Photo Proof'] = compressedBase64;
+          next['Equipment Handover'] = compressedBase64;
+        }
         return next;
       });
       setModalPhotoTimestamps(prev => {
         const next = { ...prev, [eqName]: captureTime };
-        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:')) {
+        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:') || eqName === 'Equipment Received / Asset Picture' || eqName === 'Equipment Received') {
           next['Equipment Received / Asset Picture'] = captureTime;
           next['Asset Collection Photo Proof'] = captureTime;
+          next['Equipment Received'] = captureTime;
         }
         if (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image') {
           next['Event Start Photo Proof'] = captureTime;
           next['Event Start Image'] = captureTime;
+        }
+        if (eqName === 'Equipment Handover Photo Proof' || eqName === 'Asset Return Photo Proof' || eqName === 'Equipment Handover' || eqName.startsWith('Equipment Handover:') || eqName.startsWith('Asset Return:')) {
+          next['Equipment Handover Photo Proof'] = captureTime;
+          next['Asset Return Photo Proof'] = captureTime;
+          next['Equipment Handover'] = captureTime;
         }
         return next;
       });
@@ -2069,6 +2081,26 @@ export const StaffModule: React.FC = () => {
             const actualStartTime = startProofItem?.capturedAt || new Date().toISOString();
             const actualEqTime = eqProofItem?.capturedAt || booking.equipmentReceivedTime || new Date().toISOString();
 
+            let existingProofs: any = {};
+            if (existingSA?.proofs) {
+              try {
+                existingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+              } catch (e) {}
+            }
+            const updatedProofs = {
+              ...existingProofs,
+              ...(eqReceivedPhoto ? {
+                equipment_received_photo: eqReceivedPhoto,
+                equipment_received_time: actualEqTime,
+                equipment_received_date: actualEqTime.split('T')[0]
+              } : {}),
+              ...(startPhotoUrl ? {
+                event_start_photo: startPhotoUrl,
+                event_start_time: actualStartTime,
+                event_start_date: actualStartTime.split('T')[0]
+              } : {})
+            };
+
             if (existingSA) {
               targetAssignmentId = existingSA.assignment_id;
               await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
@@ -2076,7 +2108,8 @@ export const StaffModule: React.FC = () => {
                 assignment_status: 'Assigned',
                 updated_at: timestamp,
                 updated_by: staffName,
-                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: existingSA.equipment_received_time || actualEqTime } : {}),
+                proofs: updatedProofs,
+                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: actualEqTime } : {}),
                 ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: actualStartTime } : {})
               });
             } else {
@@ -2095,6 +2128,7 @@ export const StaffModule: React.FC = () => {
                 assignment_status: 'Assigned',
                 updated_at: timestamp,
                 updated_by: staffName,
+                proofs: updatedProofs,
                 ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: actualEqTime } : {}),
                 ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: actualStartTime } : {})
               });
@@ -2632,6 +2666,27 @@ export const StaffModule: React.FC = () => {
         }
 
         const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
+        let dbExistingProofs: any = {};
+        if (existingSA?.proofs) {
+          try {
+            dbExistingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+          } catch (e) {}
+        }
+
+        const updatedProofs = {
+          ...dbExistingProofs,
+          ...(stage === 'Equipment Received' && targetPhotoUrl ? {
+            equipment_received_photo: targetPhotoUrl,
+            equipment_received_time: targetPhotoTime,
+            equipment_received_date: targetPhotoTime.split('T')[0]
+          } : {}),
+          ...(stage === 'Equipment Handover' ? {
+            equipment_handover_photo: targetPhotoUrl || existingSA?.equipment_handover_photo,
+            equipment_handover_time: targetPhotoTime,
+            equipment_handover_date: targetPhotoTime.split('T')[0]
+          } : {})
+        };
+        updateAssignmentPayload.proofs = updatedProofs;
 
         if (existingSA) {
           targetAssignmentId = existingSA.assignment_id;
