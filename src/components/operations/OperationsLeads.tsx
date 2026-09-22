@@ -6540,11 +6540,6 @@ export const OperationsLeads: React.FC = () => {
                       <div className="text-xs font-bold text-indigo-300 font-sans">
                         {eventLabel}
                       </div>
-                      {ev.id && (
-                        <div className="text-[10px] font-mono text-zinc-500 mt-0.5">
-                          {ev.id}
-                        </div>
-                      )}
                     </div>
                     <div className="font-mono text-xs font-bold text-zinc-100 bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-800 whitespace-nowrap">
                       {formattedDate || <span className="text-zinc-600 italic font-normal">—</span>}

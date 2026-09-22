@@ -3031,6 +3031,86 @@ interface RevenuePaymentSummarySectionProps {
   production: Production[];
 }
 
+// Helper to normalize any event date format to standard YYYY-MM-DD without timezone shifts
+const normalizeEventDateToYYYYMMDD = (dateVal: any): string | null => {
+  if (!dateVal) return null;
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return null;
+    const y = dateVal.getFullYear();
+    const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+    const d = String(dateVal.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const rawStr = String(dateVal).trim();
+  if (!rawStr || rawStr === 'undefined' || rawStr === 'null' || rawStr === '—' || rawStr === '-' || rawStr === 'N/A' || rawStr === 'TBD') {
+    return null;
+  }
+
+  // 1. ISO string with T (e.g. "2026-09-22T00:00:00.000Z")
+  if (rawStr.includes('T')) {
+    const isoPart = rawStr.split('T')[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(isoPart)) {
+      return isoPart;
+    }
+  }
+
+  // 2. Format like "22 Sep 2026" or "22-Sep-2026" or "22 September 2026"
+  const MONTHS: Record<string, string> = {
+    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
+    january: '01', february: '02', march: '03', april: '04', june: '06',
+    july: '07', august: '08', september: '09', october: '10', november: '11', december: '12'
+  };
+  const dMmmYMatch = rawStr.match(/^(\d{1,2})[\/\-\.\s]+([a-zA-Z]{3,9})[\/\-\.\s]+(\d{2,4})/);
+  if (dMmmYMatch) {
+    const day = dMmmYMatch[1].padStart(2, '0');
+    const mKey = dMmmYMatch[2].toLowerCase();
+    const month = MONTHS[mKey] || MONTHS[mKey.slice(0, 3)] || '01';
+    let year = dMmmYMatch[3];
+    if (year.length === 2) year = '20' + year;
+    return `${year}-${month}-${day}`;
+  }
+
+  // 3. Format like "2026-09-22" or "2026/09/22" or "2026.09.22"
+  const ymdMatch = rawStr.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/);
+  if (ymdMatch) {
+    const year = ymdMatch[1];
+    const month = ymdMatch[2].padStart(2, '0');
+    const day = ymdMatch[3].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // 4. Format like "22/09/2026" or "22-09-2026" or "22.09.2026"
+  const dmyMatch = rawStr.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/);
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, '0');
+    const month = dmyMatch[2].padStart(2, '0');
+    const year = dmyMatch[3];
+    return `${year}-${month}-${day}`;
+  }
+
+  // Fallback to Date object parsing
+  try {
+    const d = new Date(rawStr);
+    if (!isNaN(d.getTime())) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+  } catch (_) {}
+
+  return null;
+};
+
+const isDateInRange = (dateStr: string | null, start: string | null, end: string | null): boolean => {
+  if (!dateStr) return false;
+  if (start && dateStr < start) return false;
+  if (end && dateStr > end) return false;
+  return true;
+};
+
 const getPeriodDates = (period: 'this_month' | 'last_month' | 'last_3_months') => {
   const now = new Date();
   const year = now.getFullYear();
@@ -3128,6 +3208,27 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
     return orders.map(o => {
       const pay = payments.find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
       const prod = production.find(p => p.tracking_id === o.lead_id || p.order_id === o.lead_id || p.tracking_id === o.order_id);
+      const ld = leads.find(l => l.lead_id === o.lead_id || l.lead_id === o.order_id);
+
+      // Extract all real event records for this order/lead
+      const rawLeadEvents = ld?.events && Array.isArray(ld.events) && ld.events.length > 0
+        ? ld.events
+        : (o?.events && Array.isArray((o as any).events) && (o as any).events.length > 0 ? (o as any).events : []);
+      const deserialized = (!rawLeadEvents || rawLeadEvents.length === 0) && (ld?.notes_special_customizations || o?.notes_special_customizations)
+        ? deserializeLeadEvents(ld?.notes_special_customizations || o?.notes_special_customizations).events
+        : [];
+      const extractedEvents = rawLeadEvents.length > 0 ? rawLeadEvents : (deserialized.length > 0 ? deserialized : []);
+
+      const events = extractedEvents.length > 0
+        ? extractedEvents
+        : [{
+            event_name: o.custom_event_name || o.event_type || ld?.custom_event_name || ld?.event_type || 'Event Photography',
+            event_date: o.event_date || ld?.event_date || (o as any).Reporting_date || (ld as any).Reporting_date || '',
+            event_start_time: (o as any).event_start_time || o.event_time || ld?.event_time || (o as any).reporting_time || ld?.reporting_time || ''
+          }];
+
+      const primaryEventDate = events[0]?.event_date || o.event_date || ld?.event_date || '';
+      const primaryEventName = events[0]?.event_name || events[0]?.event_type || o.custom_event_name || o.event_type || 'Event Photography';
 
       const approvedHistories = (paymentHistory || []).filter(h => 
         (h.order_id === o.order_id || h.order_id === o.lead_id) && 
@@ -3136,10 +3237,31 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       );
       const historyApprovedSum = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
 
-      const hasPendingApproval = (paymentHistory || []).some(h => 
-        (h.order_id === o.order_id || h.order_id === o.lead_id) && 
-        (h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval')))
-      );
+      let rejectedIds = new Set<string>();
+      try {
+        const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+        if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
+      } catch (_) {}
+
+      const hasPendingApproval = (paymentHistory || []).some(h => {
+        const isThisOrder = (h.order_id === o.order_id || h.order_id === o.lead_id);
+        if (!isThisOrder) return false;
+        const histId = String(h.id || h.payment_history_id || '');
+        if (rejectedIds.has(histId)) return false;
+        const isExplicitlyRejected = h.approval_status === 'Rejected' || 
+          (typeof h.notes === 'string' && (
+            h.notes.includes('Rejected') || 
+            h.notes.includes('[REJECTED]') || 
+            h.notes.endsWith('- Rejected') || 
+            h.notes.toLowerCase().includes('rejected by business owner')
+          ));
+        if (isExplicitlyRejected) return false;
+
+        return (
+          h.approval_status === 'Waiting for Approval' ||
+          (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
+        );
+      }) || (pay?.payment_status === 'Waiting for Approval');
 
       const totalRevenue = o.quotation_amount || o.advance_received || 0;
       const paymentReceived = approvedHistories.length > 0
@@ -3150,7 +3272,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       const isCompleted = ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed'].includes(o.current_stage) || prod?.editing_status === 'Client Acceptance';
       const isClosed = o.current_stage === 'Order Closed' || o.current_stage === 'Closed' || prod?.editing_status === 'Order Closed';
 
-      const paymentDate = pay?.payment_date || o.created_at || o.event_date;
+      const paymentDate = pay?.payment_date || '-';
       const paymentType = pay?.payment_type || pay?.Payment_type || (pay?.final_payment_received ? 'Final Payment' : pay?.advance_received ? 'Advance Payment' : 'Standard Payment');
       const transactionId = pay?.transaction_id || '-';
 
@@ -3160,8 +3282,9 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         orderId: o.order_id,
         leadId: o.lead_id,
         customerName: o.customer_name,
-        eventName: o.custom_event_name || o.event_type || 'Event Photography',
-        eventDate: o.event_date,
+        eventName: primaryEventName,
+        eventDate: primaryEventDate,
+        events,
         paymentDate,
         paymentType,
         transactionId,
@@ -3175,20 +3298,49 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         isClosed
       };
     });
-  }, [orders, payments, production, paymentHistory]);
+  }, [orders, payments, production, paymentHistory, leads]);
 
-  // Base filtered by Search & Date & Payment Tab (used for KPI card totals)
+  // Base filtered by Search & Event Date & Payment Tab (used for KPI card totals)
   const baseFiltered = useMemo(() => {
-    const matched = records.filter(r => {
+    const startNorm = normalizeEventDateToYYYYMMDD(startDate);
+    const endNorm = normalizeEventDateToYYYYMMDD(endDate);
+
+    const matched = records.map(r => {
+      // 1. Search text match
       const matchSearch = 
         !searchTerm.trim() ||
         r.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.eventName.toLowerCase().includes(searchTerm.toLowerCase());
+        r.eventName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (r.events && r.events.some((ev: any) => (ev.event_name || ev.event_type || '').toLowerCase().includes(searchTerm.toLowerCase())));
 
-      const itemDate = (r.eventDate ? r.eventDate.split('T')[0] : (r.paymentDate ? r.paymentDate.split('T')[0] : '')).trim();
-      const matchDate = !startDate || !endDate || !itemDate || (itemDate >= startDate && itemDate <= endDate);
+      // 2. Strict Event Date Only filter
+      let matchDate = true;
+      let matchingEvents: any[] = r.events || [];
 
+      if (startNorm || endNorm) {
+        matchingEvents = (r.events || []).filter((ev: any) => {
+          const evDate = ev.event_date || ev.event_start_date || ev.reporting_date;
+          const normalized = normalizeEventDateToYYYYMMDD(evDate);
+          return isDateInRange(normalized, startNorm, endNorm);
+        });
+
+        // If events array had no dates, fallback to top-level eventDate
+        if (matchingEvents.length === 0 && (!r.events || r.events.length === 0 || !r.events[0]?.event_date)) {
+          const topLevelDateNorm = normalizeEventDateToYYYYMMDD(r.eventDate);
+          const topLevelMatch = isDateInRange(topLevelDateNorm, startNorm, endNorm);
+          if (topLevelMatch) {
+            matchingEvents = r.events || [];
+            matchDate = true;
+          } else {
+            matchDate = false;
+          }
+        } else {
+          matchDate = matchingEvents.length > 0;
+        }
+      }
+
+      // 3. Tab filter
       let matchTab = true;
       if (paymentTab === 'pending') {
         matchTab = r.outstanding > 0 || r.paymentStatus === 'Pending' || r.paymentStatus === 'Partially Paid' || r.hasPendingApproval;
@@ -3196,8 +3348,15 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         matchTab = r.paymentReceived > 0 || r.paymentStatus === 'Fully Paid';
       }
 
-      return matchSearch && matchDate && matchTab;
-    });
+      if (!matchSearch || !matchDate || !matchTab) {
+        return null;
+      }
+
+      return {
+        ...r,
+        matchingEvents
+      };
+    }).filter(Boolean) as (typeof records[0] & { matchingEvents: any[] })[];
 
     return matched.sort((a, b) => {
       if (a.hasPendingApproval && !b.hasPendingApproval) return -1;
@@ -3428,17 +3587,26 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       : 'Revenue_Summary';
 
     const headers = ['Order ID', 'Customer Name', 'Event Name', 'Event Date', 'Total Revenue (INR)', 'Payment Received (INR)', 'Outstanding (INR)', 'Payment Status', 'Current Status'];
-    const rows = dataToExport.map(r => [
-      `"${String(r.orderId || '').replace(/"/g, '""')}"`,
-      `"${String(r.customerName || '').replace(/"/g, '""')}"`,
-      `"${String(r.eventName || '').replace(/"/g, '""')}"`,
-      `"${String(r.eventDate || '').replace(/"/g, '""')}"`,
-      r.totalRevenue || 0,
-      r.paymentReceived || 0,
-      r.outstanding || 0,
-      `"${String(r.paymentStatus || '').replace(/"/g, '""')}"`,
-      `"${String(r.currentStage || '').replace(/"/g, '""')}"`
-    ]);
+    const rows = dataToExport.map(r => {
+      const displayEvName = (r.matchingEvents && r.matchingEvents.length > 0)
+        ? r.matchingEvents.map(e => e.event_name || e.event_type || 'Event').join(' | ')
+        : (r.eventName || '');
+      const displayEvDate = (r.matchingEvents && r.matchingEvents.length > 0)
+        ? r.matchingEvents.map(e => formatDateDDMMYY(e.event_date || e.event_start_date)).join(' | ')
+        : (r.eventDate ? formatDateDDMMYY(r.eventDate) : '');
+
+      return [
+        `"${String(r.orderId || '').replace(/"/g, '""')}"`,
+        `"${String(r.customerName || '').replace(/"/g, '""')}"`,
+        `"${String(displayEvName).replace(/"/g, '""')}"`,
+        `"${String(displayEvDate).replace(/"/g, '""')}"`,
+        r.totalRevenue || 0,
+        r.paymentReceived || 0,
+        r.outstanding || 0,
+        `"${String(r.paymentStatus || '').replace(/"/g, '""')}"`,
+        `"${String(r.currentStage || '').replace(/"/g, '""')}"`
+      ];
+    });
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -3464,17 +3632,26 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       : selectedCard === 'summary_closed' ? 'Closed_Orders'
       : 'Revenue_Summary';
 
-    const excelData = dataToExport.map(r => ({
-      'Order ID': r.orderId || '',
-      'Customer Name': r.customerName || '',
-      'Event Name': r.eventName || '',
-      'Event Date': r.eventDate || '',
-      'Total Revenue (₹)': r.totalRevenue || 0,
-      'Payment Received (₹)': r.paymentReceived || 0,
-      'Outstanding Balance (₹)': r.outstanding || 0,
-      'Payment Status': r.paymentStatus || '',
-      'Current Status': r.currentStage || ''
-    }));
+    const excelData = dataToExport.map(r => {
+      const displayEvName = (r.matchingEvents && r.matchingEvents.length > 0)
+        ? r.matchingEvents.map(e => e.event_name || e.event_type || 'Event').join(' | ')
+        : (r.eventName || '');
+      const displayEvDate = (r.matchingEvents && r.matchingEvents.length > 0)
+        ? r.matchingEvents.map(e => formatDateDDMMYY(e.event_date || e.event_start_date)).join(' | ')
+        : (r.eventDate ? formatDateDDMMYY(r.eventDate) : '');
+
+      return {
+        'Order ID': r.orderId || '',
+        'Customer Name': r.customerName || '',
+        'Event Name': displayEvName,
+        'Event Date': displayEvDate,
+        'Total Revenue (₹)': r.totalRevenue || 0,
+        'Payment Received (₹)': r.paymentReceived || 0,
+        'Outstanding Balance (₹)': r.outstanding || 0,
+        'Payment Status': r.paymentStatus || '',
+        'Current Status': r.currentStage || ''
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
@@ -3536,9 +3713,13 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         doc.addPage();
         y = 20;
       }
+      const displayEvName = (r.matchingEvents && r.matchingEvents.length > 0)
+        ? r.matchingEvents.map(e => e.event_name || e.event_type || 'Event').join(' | ')
+        : (r.eventName || '');
+
       doc.text(String(r.orderId || ''), 14, y);
       doc.text(String(r.customerName || '').substring(0, 20), 45, y);
-      doc.text(String(r.eventName || '').substring(0, 22), 90, y);
+      doc.text(String(displayEvName).substring(0, 22), 90, y);
       doc.text(`Rs.${r.totalRevenue || 0}`, 140, y);
       doc.text(`Rs.${r.paymentReceived || 0}`, 170, y);
       doc.text(`Rs.${r.outstanding || 0}`, 200, y);
@@ -3873,8 +4054,26 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                     <td className="py-3.5 px-4 font-bold text-amber-400">{r.orderId}</td>
                     <td className="py-3.5 px-4 font-sans font-bold text-zinc-200">{r.customerName}</td>
                     <td className="py-3.5 px-4 font-sans text-zinc-300">
-                      <div>{r.eventName}</div>
-                      <div className="text-[10px] font-mono text-zinc-500">{formatDateDDMMYY(r.eventDate)}</div>
+                      {r.matchingEvents && r.matchingEvents.length > 1 ? (
+                        <div className="space-y-1.5">
+                          {r.matchingEvents.map((ev: any, idx: number) => (
+                            <div key={idx} className={idx > 0 ? "pt-1 border-t border-zinc-800/60" : ""}>
+                              <div className="font-semibold text-zinc-200">{ev.event_name || ev.event_type || `Event ${idx + 1}`}</div>
+                              <div className="text-[10px] font-mono text-zinc-500">{formatDateDDMMYY(ev.event_date || ev.event_start_date)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : r.matchingEvents && r.matchingEvents.length === 1 ? (
+                        <div>
+                          <div className="font-semibold text-zinc-200">{r.matchingEvents[0].event_name || r.matchingEvents[0].event_type || r.eventName}</div>
+                          <div className="text-[10px] font-mono text-zinc-500">{formatDateDDMMYY(r.matchingEvents[0].event_date || r.eventDate)}</div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div>{r.eventName}</div>
+                          <div className="text-[10px] font-mono text-zinc-500">{formatDateDDMMYY(r.eventDate)}</div>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 font-sans">
                       <AssignedStaffDropdown orderId={r.orderId} leadId={r.leadId} />

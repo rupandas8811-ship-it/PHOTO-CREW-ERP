@@ -73,7 +73,9 @@ const MainAppContent: React.FC = () => {
     resetGlobalDateRange,
     isDataLoading,
     orders,
-    production
+    production,
+    payments,
+    paymentHistory
   } = useRole();
   const [appLoaded, setAppLoaded] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -172,6 +174,43 @@ const MainAppContent: React.FC = () => {
     const pendingUnlocks = unlockRequests.filter(u => u.request_status === 'Pending' || u.status === 'Pending');
     return pendingUnlocks.length + candidatesMap.size;
   }, [currentRole, orders, production, unlockRequests]);
+
+  const pendingPaymentApprovalCount = useMemo(() => {
+    if (currentRole !== 'Business Owner' || !orders) return 0;
+
+    let rejectedIds = new Set<string>();
+    try {
+      const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+      if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
+    } catch (_) {}
+
+    // Count distinct orders that have pending payment approval, exactly matching Revenue Summary records
+    return orders.filter(o => {
+      const pay = (payments || []).find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
+      
+      const hasHistPending = (paymentHistory || []).some(h => {
+        const isThisOrder = (h.order_id === o.order_id || h.order_id === o.lead_id);
+        if (!isThisOrder) return false;
+        const histId = String(h.id || h.payment_history_id || '');
+        if (rejectedIds.has(histId)) return false;
+        const isExplicitlyRejected = h.approval_status === 'Rejected' || 
+          (typeof h.notes === 'string' && (
+            h.notes.includes('Rejected') || 
+            h.notes.includes('[REJECTED]') || 
+            h.notes.endsWith('- Rejected') || 
+            h.notes.toLowerCase().includes('rejected by business owner')
+          ));
+        if (isExplicitlyRejected) return false;
+
+        return (
+          h.approval_status === 'Waiting for Approval' ||
+          (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
+        );
+      });
+
+      return hasHistPending || (pay?.payment_status === 'Waiting for Approval');
+    }).length;
+  }, [currentRole, orders, paymentHistory, payments]);
 
   const [showInitialLoader, setShowInitialLoader] = useState(() => {
     return localStorage.getItem('erp_current_user') !== null;
@@ -789,7 +828,7 @@ const MainAppContent: React.FC = () => {
               { id: 'owner_overview', label: '1. Business Overview', icon: LayoutDashboard, color: 'text-amber-400' },
               { id: 'owner_calendar', label: '2. Event Calendar', icon: Calendar, color: 'text-purple-400' },
               { id: 'owner_approval', label: '3. Waiting Approval', icon: ShieldCheck, color: 'text-emerald-400', badge: pendingApprovalCount > 0 ? pendingApprovalCount : null },
-              { id: 'owner_summary', label: '4. Revenue Summary', icon: FileText, color: 'text-blue-400' },
+              { id: 'owner_summary', label: '4. Revenue Summary', icon: FileText, color: 'text-blue-400', badge: pendingPaymentApprovalCount > 0 ? pendingPaymentApprovalCount : null },
               { id: 'owner_leads_report', label: '5. Leads Report', icon: FileText, color: 'text-cyan-400' },
               { id: 'owner_staff_performance', label: '📊 6. Staff Performance', icon: BarChart3, color: 'text-pink-400' },
               { id: 'sales_staff_management', label: '7. Sales Staff Management', icon: Users, color: 'text-indigo-400' },
@@ -797,7 +836,9 @@ const MainAppContent: React.FC = () => {
             ].map((tab) => {
               const IconComponent = tab.icon;
               const isSelected = activeTab === tab.id;
-              const isHighlighted = tab.id === 'owner_approval' && pendingApprovalCount > 0;
+              const isApprovalHighlighted = tab.id === 'owner_approval' && pendingApprovalCount > 0;
+              const isRevenueHighlighted = tab.id === 'owner_summary' && pendingPaymentApprovalCount > 0;
+              const isHighlighted = isApprovalHighlighted || isRevenueHighlighted;
               return (
                 <button
                   key={tab.id}

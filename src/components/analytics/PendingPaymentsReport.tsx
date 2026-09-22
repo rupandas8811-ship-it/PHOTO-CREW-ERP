@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useRole } from '../RoleContext';
 import { 
   DollarSign, 
@@ -55,7 +56,26 @@ export const PendingPaymentsReport: React.FC = () => {
 
   useEffect(() => {
     if (showPaymentModal) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
       ensureModalScrolledToTop('#update_payment_modal_content');
+      const resetScroll = () => {
+        const el = document.getElementById('update_payment_modal_content');
+        if (el) el.scrollTop = 0;
+      };
+      resetScroll();
+      const raf = requestAnimationFrame(resetScroll);
+      const timer = setTimeout(() => {
+        resetScroll();
+        ensureModalScrolledToTop('#update_payment_modal_content');
+      }, 50);
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        cancelAnimationFrame(raf);
+        clearTimeout(timer);
+      };
     }
   }, [showPaymentModal]);
 
@@ -1066,14 +1086,22 @@ export const PendingPaymentsReport: React.FC = () => {
         </div>
       </div>
 
-      {showPaymentModal && paymentModalRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      {showPaymentModal && paymentModalRecord && createPortal(
+        <div 
+          className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 md:p-6 overflow-y-auto"
+          onClick={() => {
+            setShowPaymentModal(false);
+            setModalSuccessMsg('');
+            setModalErrorMsg('');
+          }}
+        >
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-full w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
+            className="w-full max-w-md my-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex justify-between items-center p-4 border-b border-zinc-850">
+            <div className="flex justify-between items-center p-4 border-b border-zinc-850 shrink-0">
               <div>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-emerald-500" />
@@ -1084,12 +1112,13 @@ export const PendingPaymentsReport: React.FC = () => {
                 </p>
               </div>
               <button 
+                type="button"
                 onClick={() => {
                   setShowPaymentModal(false);
                   setModalSuccessMsg('');
                   setModalErrorMsg('');
                 }}
-                className="p-1 px-2 hover:bg-zinc-900 rounded text-zinc-400 uppercase font-mono text-[10px]"
+                className="p-1 px-2 hover:bg-zinc-900 rounded text-zinc-400 hover:text-white uppercase font-mono text-[10px] cursor-pointer"
               >
                 Close
               </button>
@@ -1097,17 +1126,17 @@ export const PendingPaymentsReport: React.FC = () => {
             
             {/* Modal level success and error messages */}
             {modalSuccessMsg && (
-              <div className="bg-emerald-950/40 border-b border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 font-bold text-center">
+              <div className="bg-emerald-950/40 border-b border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 font-bold text-center shrink-0">
                 {modalSuccessMsg}
               </div>
             )}
             {modalErrorMsg && (
-              <div className="bg-rose-950/40 border-b border-rose-500/30 text-rose-400 text-xs px-4 py-2.5 font-bold text-center">
+              <div className="bg-rose-950/40 border-b border-rose-500/30 text-rose-400 text-xs px-4 py-2.5 font-bold text-center shrink-0">
                 {modalErrorMsg}
               </div>
             )}
 
-            <div id="update_payment_modal_content" className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+            <div id="update_payment_modal_content" className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 overscroll-contain">
               <div className="space-y-2">
                 <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
                   <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Final Quotation Amount</span>
@@ -1208,8 +1237,9 @@ export const PendingPaymentsReport: React.FC = () => {
               )}
             </div>
             
-            <div className="p-4 border-t border-zinc-850 bg-zinc-900/50 flex gap-3">
+            <div className="p-4 border-t border-zinc-850 bg-zinc-900/50 flex gap-3 shrink-0">
               <button
+                type="button"
                 onClick={() => {
                   setShowPaymentModal(false);
                   setModalSuccessMsg('');
@@ -1220,6 +1250,7 @@ export const PendingPaymentsReport: React.FC = () => {
                 Close Panel
               </button>
               <button
+                type="button"
                 onClick={async () => {
                   if (isSaving) return;
                   const amt = Number(paymentAmount);
@@ -1284,7 +1315,8 @@ export const PendingPaymentsReport: React.FC = () => {
               </button>
             </div>
           </motion.div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <PaymentHistoryModal 
