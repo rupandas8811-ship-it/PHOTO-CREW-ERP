@@ -10,12 +10,11 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
-import { formatDateDDMMYY, checkGlobalStaffUniqueness } from '../utils';
+import { formatDateDDMMYY } from '../utils';
 
 export const ProductionStaffDirectoryModule: React.FC = () => {
   const { 
     productionStaff: staff = [], 
-    staff: operationsStaff = [],
     users = [],
     addProductionStaff: addStaff, 
     updateProductionStaff: updateStaff, 
@@ -93,11 +92,11 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormMobile(member.mobile);
     setFormWhatsapp(member.whatsapp_number || member.mobile);
     setFormEmail(member.email);
-    const currentPwd = getStaffCurrentPassword(member, users, staff);
+    const currentPwd = getStaffCurrentPassword(member, users);
     setFormPassword(currentPwd);
     setShowFormPassword(true);
     if (!currentPwd) {
-      fetchStaffCurrentPassword(member, users, staff).then(livePwd => {
+      fetchStaffCurrentPassword(member, users).then(livePwd => {
         if (livePwd) setFormPassword(livePwd);
       });
     }
@@ -146,21 +145,27 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       Skill: [formSpeciality]
     };
 
-    // Strict Global Uniqueness Validation across users, operations_staff, and production_staff
+    // Duplicate Check Validation
     const finalEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
-    const uniquenessCheck = checkGlobalStaffUniqueness(
-      formMobile.trim(),
-      finalEmail,
-      editingStaff?.staff_id || null,
-      users,
-      operationsStaff || [],
-      staff,
-      editingStaff?.email,
-      editingStaff?.mobile
+    let existingUserIdForDuplicateCheck = null;
+    if (editingStaff) {
+      const match = users.find(u => 
+        (editingStaff.email && u.email?.toLowerCase() === editingStaff.email.toLowerCase()) ||
+        (editingStaff.mobile && u.mobile === editingStaff.mobile) ||
+        (editingStaff.email && u.username?.toLowerCase() === editingStaff.email.toLowerCase())
+      );
+      if (match) existingUserIdForDuplicateCheck = match.id;
+    }
+
+    const isDuplicate = users.find(u => 
+      u.id !== existingUserIdForDuplicateCheck && 
+      ((finalEmail && u.email?.toLowerCase() === finalEmail.toLowerCase()) || 
+       (formMobile.trim() && u.mobile === formMobile.trim()) ||
+       (finalEmail && u.username?.toLowerCase() === finalEmail.toLowerCase()))
     );
 
-    if (!uniquenessCheck.isUnique) {
-      alert(uniquenessCheck.error || "Mobile number or email already belongs to another staff account. Please use unique credentials.");
+    if (isDuplicate) {
+      alert("Validation Error: This email or mobile number already belongs to another user. Please use a unique email and mobile number.");
       return;
     }
 
@@ -231,7 +236,6 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
         
         const res = await updateStaff(editingStaff.staff_id, {
           ...payload,
-          ...(formPassword.trim() ? { password: formPassword.trim() } : {}),
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
         showToast('success', '✅ Production staff saved successfully.');

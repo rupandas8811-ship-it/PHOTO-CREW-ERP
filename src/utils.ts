@@ -577,53 +577,28 @@ export function cleanPhone(phone: string | undefined | null): string {
 
 export const normalizeMobileNumber = cleanPhone;
 
-export function cleanEmail(email: string | undefined | null): string {
-  if (!email) return '';
-  return String(email).trim().toLowerCase();
-}
-
 export function checkGlobalMobileUnique(
   mobile: string | undefined | null,
   excludeId?: string | null,
   usersList: any[] = [],
   opStaffList: any[] = [],
-  prodStaffList: any[] = [],
-  excludeEmail?: string | null,
-  excludeMobile?: string | null
+  prodStaffList: any[] = []
 ): { isUnique: boolean; existingAccountName?: string; existingRole?: string; error?: string } {
   const norm = normalizeMobileNumber(mobile);
   if (!norm || norm.length < 7) {
     return { isUnique: true };
   }
 
-  const cleanExcludeId = excludeId ? String(excludeId).trim().toLowerCase() : null;
-  const cleanExcludeEmail = cleanEmail(excludeEmail);
-  const cleanExcludeMobile = normalizeMobileNumber(excludeMobile);
-
-  const isSelf = (rowId?: string | null, rowAuthId?: string | null, rowEmail?: string | null, rowMobile?: string | null): boolean => {
-    const rId = rowId ? String(rowId).trim().toLowerCase() : '';
-    const rAuthId = rowAuthId ? String(rowAuthId).trim().toLowerCase() : '';
-    const rEmail = cleanEmail(rowEmail);
-    const rMobile = normalizeMobileNumber(rowMobile);
-
-    if (cleanExcludeId && (rId === cleanExcludeId || rAuthId === cleanExcludeId)) {
-      return true;
-    }
-    if (cleanExcludeEmail && rEmail && rEmail === cleanExcludeEmail) {
-      return true;
-    }
-    if (cleanExcludeMobile && rMobile && rMobile === cleanExcludeMobile) {
-      return true;
-    }
-    return false;
-  };
+  const cleanExclude = excludeId ? String(excludeId).trim().toLowerCase() : null;
 
   // 1. Check users table/state
   for (const u of usersList) {
     if (!u) continue;
     const uNorm = normalizeMobileNumber(u.mobile || u.phone);
     if (uNorm && uNorm === norm) {
-      if (isSelf(u.id, u.auth_user_id, u.email || u.username, u.mobile || u.phone)) {
+      const uId = u.id ? String(u.id).trim().toLowerCase() : '';
+      const uAuthId = u.auth_user_id ? String(u.auth_user_id).trim().toLowerCase() : '';
+      if (cleanExclude && (uId === cleanExclude || uAuthId === cleanExclude)) {
         continue;
       }
       return {
@@ -640,7 +615,9 @@ export function checkGlobalMobileUnique(
     if (!s) continue;
     const sNorm = normalizeMobileNumber(s.mobile || s.mobile_number || s.phone);
     if (sNorm && sNorm === norm) {
-      if (isSelf(s.staff_id || s.id, s.auth_user_id, s.email, s.mobile || s.mobile_number || s.phone)) {
+      const sId = s.staff_id ? String(s.staff_id).trim().toLowerCase() : (s.id ? String(s.id).trim().toLowerCase() : '');
+      const sAuthId = s.auth_user_id ? String(s.auth_user_id).trim().toLowerCase() : '';
+      if (cleanExclude && (sId === cleanExclude || sAuthId === cleanExclude)) {
         continue;
       }
       return {
@@ -657,7 +634,9 @@ export function checkGlobalMobileUnique(
     if (!p) continue;
     const pNorm = normalizeMobileNumber(p.mobile || p.mobile_number || p.phone);
     if (pNorm && pNorm === norm) {
-      if (isSelf(p.staff_id || p.id, p.auth_user_id, p.email, p.mobile || p.mobile_number || p.phone)) {
+      const pId = p.staff_id ? String(p.staff_id).trim().toLowerCase() : (p.id ? String(p.id).trim().toLowerCase() : '');
+      const pAuthId = p.auth_user_id ? String(p.auth_user_id).trim().toLowerCase() : '';
+      if (cleanExclude && (pId === cleanExclude || pAuthId === cleanExclude)) {
         continue;
       }
       return {
@@ -672,132 +651,9 @@ export function checkGlobalMobileUnique(
   return { isUnique: true };
 }
 
-export function checkGlobalEmailUnique(
-  email: string | undefined | null,
-  excludeId?: string | null,
-  usersList: any[] = [],
-  opStaffList: any[] = [],
-  prodStaffList: any[] = [],
-  excludeEmail?: string | null,
-  excludeMobile?: string | null
-): { isUnique: boolean; existingAccountName?: string; existingRole?: string; error?: string } {
-  const norm = cleanEmail(email);
-  if (!norm || !norm.includes('@')) {
-    return { isUnique: true };
-  }
-
-  const cleanExcludeId = excludeId ? String(excludeId).trim().toLowerCase() : null;
-  const cleanExcludeEmail = cleanEmail(excludeEmail);
-  const cleanExcludeMobile = normalizeMobileNumber(excludeMobile);
-
-  const isSelf = (rowId?: string | null, rowAuthId?: string | null, rowEmail?: string | null, rowMobile?: string | null): boolean => {
-    const rId = rowId ? String(rowId).trim().toLowerCase() : '';
-    const rAuthId = rowAuthId ? String(rowAuthId).trim().toLowerCase() : '';
-    const rEmail = cleanEmail(rowEmail);
-    const rMobile = normalizeMobileNumber(rowMobile);
-
-    if (cleanExcludeId && (rId === cleanExcludeId || rAuthId === cleanExcludeId)) {
-      return true;
-    }
-    if (cleanExcludeEmail && rEmail && rEmail === cleanExcludeEmail) {
-      return true;
-    }
-    if (cleanExcludeMobile && rMobile && rMobile === cleanExcludeMobile) {
-      return true;
-    }
-    return false;
-  };
-
-  // 1. Check users table/state
-  for (const u of usersList) {
-    if (!u) continue;
-    const uNorm = cleanEmail(u.email || u.username);
-    if (uNorm && uNorm === norm) {
-      if (isSelf(u.id, u.auth_user_id, u.email || u.username, u.mobile || u.phone)) {
-        continue;
-      }
-      return {
-        isUnique: false,
-        existingAccountName: u.name || u.full_name || 'User',
-        existingRole: u.role || 'Staff',
-        error: 'Email address already exists. Please use a different email address.'
-      };
-    }
-  }
-
-  // 2. Check operations staff
-  for (const s of opStaffList) {
-    if (!s) continue;
-    const sNorm = cleanEmail(s.email);
-    if (sNorm && sNorm === norm) {
-      if (isSelf(s.staff_id || s.id, s.auth_user_id, s.email, s.mobile || s.mobile_number || s.phone)) {
-        continue;
-      }
-      return {
-        isUnique: false,
-        existingAccountName: s.name || s.staff_name || 'Staff',
-        existingRole: 'Operations Staff',
-        error: 'Email address already exists. Please use a different email address.'
-      };
-    }
-  }
-
-  // 3. Check production staff
-  for (const p of prodStaffList) {
-    if (!p) continue;
-    const pNorm = cleanEmail(p.email);
-    if (pNorm && pNorm === norm) {
-      if (isSelf(p.staff_id || p.id, p.auth_user_id, p.email, p.mobile || p.mobile_number || p.phone)) {
-        continue;
-      }
-      return {
-        isUnique: false,
-        existingAccountName: p.name || p.staff_name || 'Staff',
-        existingRole: 'Production Staff',
-        error: 'Email address already exists. Please use a different email address.'
-      };
-    }
-  }
-
-  return { isUnique: true };
-}
-
-export function checkGlobalStaffUniqueness(params: {
-  mobile?: string | null;
-  email?: string | null;
-  excludeId?: string | null;
-  excludeEmail?: string | null;
-  excludeMobile?: string | null;
-  usersList?: any[];
-  opStaffList?: any[];
-  prodStaffList?: any[];
-}): { isUnique: boolean; error?: string } {
-  const {
-    mobile,
-    email,
-    excludeId,
-    excludeEmail,
-    excludeMobile,
-    usersList = [],
-    opStaffList = [],
-    prodStaffList = []
-  } = params;
-
-  if (mobile) {
-    const mobileCheck = checkGlobalMobileUnique(mobile, excludeId, usersList, opStaffList, prodStaffList, excludeEmail, excludeMobile);
-    if (!mobileCheck.isUnique) {
-      return { isUnique: false, error: mobileCheck.error || 'Mobile number already exists. Please use a different mobile number.' };
-    }
-  }
-
-  if (email) {
-    const emailCheck = checkGlobalEmailUnique(email, excludeId, usersList, opStaffList, prodStaffList, excludeEmail, excludeMobile);
-    if (!emailCheck.isUnique) {
-      return { isUnique: false, error: emailCheck.error || 'Email address already exists. Please use a different email address.' };
-    }
-  }
-
-  return { isUnique: true };
+export function cleanEmail(email: string | undefined): string {
+  if (!email) return '';
+  return email.trim().toLowerCase();
 }
 
 /**

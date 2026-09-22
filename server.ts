@@ -561,39 +561,13 @@ async function startServer() {
     return String(email).trim().toLowerCase();
   }
 
-  async function checkGlobalMobileUniqueInDb(
-    db: any,
-    mobile: string | undefined | null,
-    excludeId?: string | null,
-    excludeEmail?: string | null,
-    excludeMobile?: string | null
-  ): Promise<{ isUnique: boolean; error?: string }> {
+  async function checkGlobalMobileUniqueInDb(db: any, mobile: string | undefined | null, excludeId?: string | null): Promise<{ isUnique: boolean; error?: string }> {
     const norm = cleanPhone(mobile);
     if (!norm || norm.length < 7) {
       return { isUnique: true };
     }
 
-    const cleanExcludeId = excludeId ? String(excludeId).trim().toLowerCase() : null;
-    const cleanExcludeEmail = cleanEmail(excludeEmail);
-    const cleanExcludeMobile = cleanPhone(excludeMobile);
-
-    const isSelf = (rowId?: string | null, rowAuthId?: string | null, rowEmail?: string | null, rowMobile?: string | null): boolean => {
-      const rId = rowId ? String(rowId).trim().toLowerCase() : '';
-      const rAuthId = rowAuthId ? String(rowAuthId).trim().toLowerCase() : '';
-      const rEmail = cleanEmail(rowEmail);
-      const rMobile = cleanPhone(rowMobile);
-
-      if (cleanExcludeId && (rId === cleanExcludeId || rAuthId === cleanExcludeId)) {
-        return true;
-      }
-      if (cleanExcludeEmail && rEmail && rEmail === cleanExcludeEmail) {
-        return true;
-      }
-      if (cleanExcludeMobile && rMobile && rMobile === cleanExcludeMobile) {
-        return true;
-      }
-      return false;
-    };
+    const cleanExclude = excludeId ? String(excludeId).trim().toLowerCase() : null;
 
     try {
       // 1. Check public.users
@@ -602,7 +576,8 @@ async function startServer() {
         for (const u of usersData) {
           const uNorm = cleanPhone(u.mobile);
           if (uNorm && uNorm === norm) {
-            if (isSelf(u.id, null, u.email, u.mobile)) continue;
+            const uId = u.id ? String(u.id).trim().toLowerCase() : '';
+            if (cleanExclude && uId === cleanExclude) continue;
             return { isUnique: false, error: 'Mobile number already exists. Please use a different mobile number.' };
           }
         }
@@ -614,7 +589,8 @@ async function startServer() {
         for (const s of opData) {
           const sNorm = cleanPhone(s.mobile || s.mobile_number || s.phone);
           if (sNorm && sNorm === norm) {
-            if (isSelf(s.staff_id, null, s.email, s.mobile || s.mobile_number || s.phone)) continue;
+            const sId = s.staff_id ? String(s.staff_id).trim().toLowerCase() : (s.id ? String(s.id).trim().toLowerCase() : '');
+            if (cleanExclude && sId === cleanExclude) continue;
             return { isUnique: false, error: 'Mobile number already exists. Please use a different mobile number.' };
           }
         }
@@ -626,7 +602,8 @@ async function startServer() {
         for (const p of prodData) {
           const pNorm = cleanPhone(p.mobile || p.mobile_number || p.phone);
           if (pNorm && pNorm === norm) {
-            if (isSelf(p.staff_id, null, p.email, p.mobile || p.mobile_number || p.phone)) continue;
+            const pId = p.staff_id ? String(p.staff_id).trim().toLowerCase() : (p.id ? String(p.id).trim().toLowerCase() : '');
+            if (cleanExclude && pId === cleanExclude) continue;
             return { isUnique: false, error: 'Mobile number already exists. Please use a different mobile number.' };
           }
         }
@@ -638,106 +615,20 @@ async function startServer() {
     return { isUnique: true };
   }
 
-  async function checkGlobalEmailUniqueInDb(
-    db: any,
-    email: string | undefined | null,
-    excludeId?: string | null,
-    excludeEmail?: string | null,
-    excludeMobile?: string | null
-  ): Promise<{ isUnique: boolean; error?: string }> {
-    const norm = cleanEmail(email);
-    if (!norm || !norm.includes('@')) {
-      return { isUnique: true };
-    }
-
-    const cleanExcludeId = excludeId ? String(excludeId).trim().toLowerCase() : null;
-    const cleanExcludeEmail = cleanEmail(excludeEmail);
-    const cleanExcludeMobile = cleanPhone(excludeMobile);
-
-    const isSelf = (rowId?: string | null, rowAuthId?: string | null, rowEmail?: string | null, rowMobile?: string | null): boolean => {
-      const rId = rowId ? String(rowId).trim().toLowerCase() : '';
-      const rAuthId = rowAuthId ? String(rowAuthId).trim().toLowerCase() : '';
-      const rEmail = cleanEmail(rowEmail);
-      const rMobile = cleanPhone(rowMobile);
-
-      if (cleanExcludeId && (rId === cleanExcludeId || rAuthId === cleanExcludeId)) {
-        return true;
-      }
-      if (cleanExcludeEmail && rEmail && rEmail === cleanExcludeEmail) {
-        return true;
-      }
-      if (cleanExcludeMobile && rMobile && rMobile === cleanExcludeMobile) {
-        return true;
-      }
-      return false;
-    };
-
-    try {
-      // 1. Check public.users
-      const { data: usersData } = await db.from('users').select('id, name, mobile, email, username');
-      if (Array.isArray(usersData)) {
-        for (const u of usersData) {
-          const uNorm = cleanEmail(u.email || u.username);
-          if (uNorm && uNorm === norm) {
-            if (isSelf(u.id, null, u.email || u.username, u.mobile)) continue;
-            return { isUnique: false, error: 'Email address already exists. Please use a different email address.' };
-          }
-        }
-      }
-
-      // 2. Check operations_staff
-      const { data: opData } = await db.from('operations_staff').select('staff_id, name, mobile, email');
-      if (Array.isArray(opData)) {
-        for (const s of opData) {
-          const sNorm = cleanEmail(s.email);
-          if (sNorm && sNorm === norm) {
-            if (isSelf(s.staff_id, null, s.email, s.mobile || s.mobile_number || s.phone)) continue;
-            return { isUnique: false, error: 'Email address already exists. Please use a different email address.' };
-          }
-        }
-      }
-
-      // 3. Check production_staff
-      const { data: prodData } = await db.from('production_staff').select('staff_id, name, mobile, email');
-      if (Array.isArray(prodData)) {
-        for (const p of prodData) {
-          const pNorm = cleanEmail(p.email);
-          if (pNorm && pNorm === norm) {
-            if (isSelf(p.staff_id, null, p.email, p.mobile || p.mobile_number || p.phone)) continue;
-            return { isUnique: false, error: 'Email address already exists. Please use a different email address.' };
-          }
-        }
-      }
-    } catch (err: any) {
-      console.warn('[checkGlobalEmailUniqueInDb] DB check warning:', err?.message || err);
-    }
-
-    return { isUnique: true };
-  }
-
   async function executeWithSelfHealing(table: string, operation: 'insert' | 'update' | 'upsert', payload: any, matchCol?: string, matchVal?: any) {
     const db = getServerSupabase();
 
-    // Global unique mobile and email enforcement across operations_staff, production_staff, users, and staff
-    if (['operations_staff', 'production_staff', 'users', 'staff'].includes(table)) {
+    // Global unique mobile enforcement across operations_staff, production_staff, and users
+    if (['operations_staff', 'production_staff', 'users'].includes(table)) {
       const items = Array.isArray(payload) ? payload : [payload];
       for (const item of items) {
         if (!item) continue;
         const incomingMobile = item.mobile || item.mobile_number || item.phone;
-        const incomingEmail = item.email || item.username;
         const excludeVal = (operation === 'update' || operation === 'upsert') ? (matchVal || item.staff_id || item.id) : null;
-        
         if (incomingMobile) {
-          const uniqueMobileCheck = await checkGlobalMobileUniqueInDb(db, incomingMobile, excludeVal, item.email, item.mobile);
-          if (!uniqueMobileCheck.isUnique) {
-            return { success: false, error: uniqueMobileCheck.error || 'Mobile number already exists. Please use a different mobile number.' };
-          }
-        }
-
-        if (incomingEmail && incomingEmail.includes('@')) {
-          const uniqueEmailCheck = await checkGlobalEmailUniqueInDb(db, incomingEmail, excludeVal, item.email, item.mobile);
-          if (!uniqueEmailCheck.isUnique) {
-            return { success: false, error: uniqueEmailCheck.error || 'Email address already exists. Please use a different email address.' };
+          const uniqueCheck = await checkGlobalMobileUniqueInDb(db, incomingMobile, excludeVal);
+          if (!uniqueCheck.isUnique) {
+            return { success: false, error: uniqueCheck.error };
           }
         }
       }
@@ -1853,19 +1744,16 @@ async function startServer() {
       const cleanMobile = cleanPhone(mobile);
       console.log(`[Server Auth] Creating/Syncing user ${cleanEmail} (mobile: ${cleanMobile}) with role ${role}`);
       
-      // Global email uniqueness check on create
-      if (cleanEmail && cleanEmail.includes('@')) {
-        const uniqueEmailCheck = await checkGlobalEmailUniqueInDb(db, cleanEmail);
-        if (!uniqueEmailCheck.isUnique) {
-          return res.status(400).json({ success: false, error: 'Email address already exists. Please use a different email address.' });
-        }
-      }
-
       // Global mobile uniqueness check on create
       if (cleanMobile) {
-        const uniqueMobileCheck = await checkGlobalMobileUniqueInDb(db, cleanMobile);
-        if (!uniqueMobileCheck.isUnique) {
+        const { data: matchedDbUsers } = await db.from('users').select('id, email, mobile');
+        const existingWithMobile = (matchedDbUsers || []).find((u: any) => cleanPhone(u.mobile) === cleanMobile);
+        if (existingWithMobile && cleanEmail && existingWithMobile.email?.trim().toLowerCase() !== cleanEmail) {
           return res.status(400).json({ success: false, error: 'Mobile number already exists. Please use a different mobile number.' });
+        }
+        const uniqueCheck = await checkGlobalMobileUniqueInDb(db, cleanMobile);
+        if (!uniqueCheck.isUnique && (!existingWithMobile || (cleanEmail && existingWithMobile.email?.trim().toLowerCase() !== cleanEmail))) {
+          return res.status(400).json({ success: false, error: uniqueCheck.error });
         }
       }
 
@@ -2052,21 +1940,12 @@ async function startServer() {
       
       const isStaffRole = role && ['Operation Staff', 'production staff', 'Editor', 'Sales Team'].some(r => role.toLowerCase().includes(r.toLowerCase()));
       const cleanMobile = mobile ? cleanPhone(mobile) : undefined;
-      const cleanEmailVal = email ? cleanEmail(email) : undefined;
-
-      // Check global email uniqueness if email is being updated
-      if (cleanEmailVal && cleanEmailVal.includes('@')) {
-        const uniqueEmailCheck = await checkGlobalEmailUniqueInDb(db, cleanEmailVal, auth_id);
-        if (!uniqueEmailCheck.isUnique) {
-          return res.status(400).json({ success: false, error: 'Email address already exists. Please use a different email address.' });
-        }
-      }
 
       // Check global mobile uniqueness if mobile is being updated
       if (cleanMobile) {
-        const uniqueMobileCheck = await checkGlobalMobileUniqueInDb(db, cleanMobile, auth_id);
-        if (!uniqueMobileCheck.isUnique) {
-          return res.status(400).json({ success: false, error: 'Mobile number already exists. Please use a different mobile number.' });
+        const uniqueCheck = await checkGlobalMobileUniqueInDb(db, cleanMobile, auth_id);
+        if (!uniqueCheck.isUnique) {
+          return res.status(400).json({ success: false, error: uniqueCheck.error });
         }
       }
 
