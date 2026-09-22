@@ -676,10 +676,14 @@ async function startServer() {
         const orderIdToMatch = payload?.order_id;
         if (orderIdToMatch) {
           const { data: existingRows } = await db.from('payment_history').select('*').eq('order_id', orderIdToMatch);
-          const found = (existingRows || []).find((r: any) => 
-            (r.notes && r.notes.includes('Waiting for Approval')) ||
-            (payload.transaction_id && r.transaction_id === payload.transaction_id) ||
-            (Number(payload.amount) && Number(r.amount) === Number(payload.amount))
+          const rows = existingRows || [];
+          const found = rows.find((r: any) => 
+            (payload.transaction_id && r.transaction_id && r.transaction_id === payload.transaction_id) ||
+            (payload.id && r.id === payload.id)
+          ) || rows.find((r: any) => 
+            (Number(payload.amount) && Number(r.amount) === Number(payload.amount) && payload.payment_type && r.payment_type === payload.payment_type)
+          ) || rows.find((r: any) => 
+            (r.notes && r.notes.includes('Waiting for Approval'))
           );
           if (found) {
             matchVal = found.id;

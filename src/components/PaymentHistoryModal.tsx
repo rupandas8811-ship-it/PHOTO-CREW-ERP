@@ -79,6 +79,12 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         }
       });
 
+      let approvedIds = new Set<string>();
+      try {
+        const approvedSaved = localStorage.getItem('approved_payment_history_ids');
+        if (approvedSaved) approvedIds = new Set(JSON.parse(approvedSaved));
+      } catch (_) {}
+
       let rejectedIds = new Set<string>();
       try {
         const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
@@ -96,7 +102,18 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
             h.notes.toLowerCase().includes('rejected by business owner')
           ));
 
-        const isPending = !isExplicitlyRejected && (
+        const isExplicitlyApproved = !isExplicitlyRejected && (
+          h.approval_status === 'Approved' ||
+          approvedIds.has(histId) ||
+          (typeof h.notes === 'string' && (
+            h.notes.includes('Approved') ||
+            h.notes.includes('[APPROVED]') ||
+            h.notes.endsWith('- Approved') ||
+            h.notes.toLowerCase().includes('approved by business owner')
+          ))
+        );
+
+        const isPending = !isExplicitlyRejected && !isExplicitlyApproved && (
           h.approval_status === 'Waiting for Approval' || 
           (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
         );
@@ -179,26 +196,28 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   }
 
   const handleReject = async (histId: string) => {
+    if (!histId) return;
     setIsApprovingId(histId);
     try {
       await rejectPayment(histId, primaryOrderId);
       await refreshHistory();
     } catch (err: any) {
       console.error("Error rejecting payment:", err);
-      alert("Failed to reject payment. Please check your connection and try again.");
+      alert(`Failed to reject payment: ${err.message || 'Please check your connection and try again.'}`);
     } finally {
       setIsApprovingId(null);
     }
   };
 
   const handleApprove = async (histId: string) => {
+    if (!histId) return;
     setIsApprovingId(histId);
     try {
       await approvePayment(histId, primaryOrderId);
       await refreshHistory();
     } catch (err: any) {
       console.error("Error approving payment:", err);
-      alert("Failed to approve payment. Please check your connection and try again.");
+      alert(`Failed to approve payment: ${err.message || 'Please check your connection and try again.'}`);
     } finally {
       setIsApprovingId(null);
     }
