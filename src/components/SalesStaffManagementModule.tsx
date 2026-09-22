@@ -8,10 +8,10 @@ import {
   Trash2, Briefcase, Eye, EyeOff, Save, Lock, Copy, CheckCheck, Loader2
 } from 'lucide-react';
 import { User, UserRole, Lead } from '../types';
-import { formatDateDDMMYY, checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../utils';
+import { formatDateDDMMYY } from '../utils';
 
 export const SalesStaffManagementModule: React.FC = () => {
-  const { users, staff = [], productionStaff = [], currentUser, addUser, editUser, deleteUser, toggleUserStatus, resetUserPassword, leads, currentRole } = useRole();
+  const { users, currentUser, addUser, editUser, deleteUser, toggleUserStatus, resetUserPassword, leads, currentRole } = useRole();
 
   // Filter only sales team users
   const salesStaffList = useMemo(() => {
@@ -161,23 +161,9 @@ export const SalesStaffManagementModule: React.FC = () => {
       return;
     }
 
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile: newMobile,
-      email: newEmail.trim() || undefined,
-      excludeId: null,
-      usersList: users,
-      opStaffList: staff,
-      prodStaffList: productionStaff
-    });
-    if (!uniquenessCheck.isUnique) {
-      alert(uniquenessCheck.error || "Duplicate staff details detected.");
-      return;
-    }
-
     try {
       await addUser(newName, newEmail, newMobile, 'Sales Team', newActive, newPassword, newEmployeeId);
       
-      alert("Staff added successfully.");
       setNewName('');
       setNewEmail('');
       setNewMobile('');
@@ -186,7 +172,7 @@ export const SalesStaffManagementModule: React.FC = () => {
       setNewActive(true);
       setShowAddForm(false);
     } catch (err: any) {
-      alert(formatStaffErrorMessage(err));
+      alert(`Failed to add staff: ${err.message}`);
     }
   };
 
@@ -259,22 +245,6 @@ export const SalesStaffManagementModule: React.FC = () => {
       return;
     }
 
-    const existingUser = users.find(u => u.id === selectedUserId);
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile: editMobile.trim(),
-      email: editEmail.trim() || undefined,
-      excludeId: selectedUserId,
-      excludeEmail: existingUser?.email,
-      excludeMobile: existingUser?.mobile,
-      usersList: users,
-      opStaffList: staff,
-      prodStaffList: productionStaff
-    });
-    if (!uniquenessCheck.isUnique) {
-      alert(uniquenessCheck.error || "Duplicate staff details detected.");
-      return;
-    }
-
     try {
       await editUser(selectedUserId, {
         name: editName.trim(),
@@ -285,11 +255,11 @@ export const SalesStaffManagementModule: React.FC = () => {
         active: editActive,
         password: editPassword.trim()
       });
-      alert("Staff details updated successfully.");
       setShowEditForm(false);
       setSelectedUserId(null);
+      alert("Staff account details and password saved successfully!");
     } catch (err: any) {
-      alert(formatStaffErrorMessage(err));
+      alert(`Failed to update staff: ${err.message}`);
     }
   };
 

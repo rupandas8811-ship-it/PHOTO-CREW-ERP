@@ -630,7 +630,7 @@ export function checkGlobalMobileUnique(
         isUnique: false,
         existingAccountName: u.name || u.full_name || 'User',
         existingRole: u.role || 'Staff',
-        error: 'Duplicate mobile number. This number is already registered to an existing staff member.'
+        error: 'Mobile number already exists. Please use a different mobile number.'
       };
     }
   }
@@ -640,20 +640,14 @@ export function checkGlobalMobileUnique(
     if (!s) continue;
     const sNorm = normalizeMobileNumber(s.mobile || s.mobile_number || s.phone);
     if (sNorm && sNorm === norm) {
-      let sAuthId = s.auth_user_id;
-      if (!sAuthId && typeof s.notes === 'string' && s.notes.includes('auth_user_id')) {
-        try {
-          sAuthId = JSON.parse(s.notes).auth_user_id;
-        } catch (e) {}
-      }
-      if (isSelf(s.staff_id || s.id, sAuthId, s.email, s.mobile || s.mobile_number || s.phone)) {
+      if (isSelf(s.staff_id || s.id, s.auth_user_id, s.email, s.mobile || s.mobile_number || s.phone)) {
         continue;
       }
       return {
         isUnique: false,
         existingAccountName: s.name || s.staff_name || 'Staff',
         existingRole: 'Operations Staff',
-        error: 'Duplicate mobile number. This number is already registered to an existing staff member.'
+        error: 'Mobile number already exists. Please use a different mobile number.'
       };
     }
   }
@@ -663,20 +657,14 @@ export function checkGlobalMobileUnique(
     if (!p) continue;
     const pNorm = normalizeMobileNumber(p.mobile || p.mobile_number || p.phone);
     if (pNorm && pNorm === norm) {
-      let pAuthId = p.auth_user_id;
-      if (!pAuthId && typeof p.notes === 'string' && p.notes.includes('auth_user_id')) {
-        try {
-          pAuthId = JSON.parse(p.notes).auth_user_id;
-        } catch (e) {}
-      }
-      if (isSelf(p.staff_id || p.id, pAuthId, p.email, p.mobile || p.mobile_number || p.phone)) {
+      if (isSelf(p.staff_id || p.id, p.auth_user_id, p.email, p.mobile || p.mobile_number || p.phone)) {
         continue;
       }
       return {
         isUnique: false,
         existingAccountName: p.name || p.staff_name || 'Staff',
         existingRole: 'Production Staff',
-        error: 'Duplicate mobile number. This number is already registered to an existing staff member.'
+        error: 'Mobile number already exists. Please use a different mobile number.'
       };
     }
   }
@@ -732,7 +720,7 @@ export function checkGlobalEmailUnique(
         isUnique: false,
         existingAccountName: u.name || u.full_name || 'User',
         existingRole: u.role || 'Staff',
-        error: 'Duplicate email address. This email is already registered to an existing staff member.'
+        error: 'Email address already exists. Please use a different email address.'
       };
     }
   }
@@ -742,20 +730,14 @@ export function checkGlobalEmailUnique(
     if (!s) continue;
     const sNorm = cleanEmail(s.email);
     if (sNorm && sNorm === norm) {
-      let sAuthId = s.auth_user_id;
-      if (!sAuthId && typeof s.notes === 'string' && s.notes.includes('auth_user_id')) {
-        try {
-          sAuthId = JSON.parse(s.notes).auth_user_id;
-        } catch (e) {}
-      }
-      if (isSelf(s.staff_id || s.id, sAuthId, s.email, s.mobile || s.mobile_number || s.phone)) {
+      if (isSelf(s.staff_id || s.id, s.auth_user_id, s.email, s.mobile || s.mobile_number || s.phone)) {
         continue;
       }
       return {
         isUnique: false,
         existingAccountName: s.name || s.staff_name || 'Staff',
         existingRole: 'Operations Staff',
-        error: 'Duplicate email address. This email is already registered to an existing staff member.'
+        error: 'Email address already exists. Please use a different email address.'
       };
     }
   }
@@ -765,20 +747,14 @@ export function checkGlobalEmailUnique(
     if (!p) continue;
     const pNorm = cleanEmail(p.email);
     if (pNorm && pNorm === norm) {
-      let pAuthId = p.auth_user_id;
-      if (!pAuthId && typeof p.notes === 'string' && p.notes.includes('auth_user_id')) {
-        try {
-          pAuthId = JSON.parse(p.notes).auth_user_id;
-        } catch (e) {}
-      }
-      if (isSelf(p.staff_id || p.id, pAuthId, p.email, p.mobile || p.mobile_number || p.phone)) {
+      if (isSelf(p.staff_id || p.id, p.auth_user_id, p.email, p.mobile || p.mobile_number || p.phone)) {
         continue;
       }
       return {
         isUnique: false,
         existingAccountName: p.name || p.staff_name || 'Staff',
         existingRole: 'Production Staff',
-        error: 'Duplicate email address. This email is already registered to an existing staff member.'
+        error: 'Email address already exists. Please use a different email address.'
       };
     }
   }
@@ -786,118 +762,42 @@ export function checkGlobalEmailUnique(
   return { isUnique: true };
 }
 
-export function checkGlobalStaffUniqueness(
-  param1: any,
-  param2?: any,
-  param3?: any,
-  param4?: any,
-  param5?: any,
-  param6?: any,
-  param7?: any,
-  param8?: any
-): { isUnique: boolean; error?: string; isMobileDuplicate?: boolean; isEmailDuplicate?: boolean } {
-  let mobile: string | undefined | null;
-  let email: string | undefined | null;
-  let excludeId: string | undefined | null;
-  let excludeEmail: string | undefined | null;
-  let excludeMobile: string | undefined | null;
-  let usersList: any[] = [];
-  let opStaffList: any[] = [];
-  let prodStaffList: any[] = [];
+export function checkGlobalStaffUniqueness(params: {
+  mobile?: string | null;
+  email?: string | null;
+  excludeId?: string | null;
+  excludeEmail?: string | null;
+  excludeMobile?: string | null;
+  usersList?: any[];
+  opStaffList?: any[];
+  prodStaffList?: any[];
+}): { isUnique: boolean; error?: string } {
+  const {
+    mobile,
+    email,
+    excludeId,
+    excludeEmail,
+    excludeMobile,
+    usersList = [],
+    opStaffList = [],
+    prodStaffList = []
+  } = params;
 
-  if (typeof param1 === 'object' && param1 !== null && ('mobile' in param1 || 'email' in param1 || 'usersList' in param1 || 'opStaffList' in param1 || 'prodStaffList' in param1)) {
-    mobile = param1.mobile;
-    email = param1.email;
-    excludeId = param1.excludeId;
-    excludeEmail = param1.excludeEmail;
-    excludeMobile = param1.excludeMobile;
-    usersList = param1.usersList || [];
-    opStaffList = param1.opStaffList || [];
-    prodStaffList = param1.prodStaffList || [];
-  } else {
-    mobile = param1;
-    email = param2;
-    excludeId = param3;
-    usersList = param4 || [];
-    opStaffList = param5 || [];
-    prodStaffList = param6 || [];
-    excludeEmail = param7;
-    excludeMobile = param8;
-  }
-
-  let isMobileDuplicate = false;
-  let isEmailDuplicate = false;
-
-  if (mobile && normalizeMobileNumber(mobile).length >= 7) {
+  if (mobile) {
     const mobileCheck = checkGlobalMobileUnique(mobile, excludeId, usersList, opStaffList, prodStaffList, excludeEmail, excludeMobile);
     if (!mobileCheck.isUnique) {
-      isMobileDuplicate = true;
+      return { isUnique: false, error: mobileCheck.error || 'Mobile number already exists. Please use a different mobile number.' };
     }
   }
 
-  if (email && cleanEmail(email).includes('@')) {
+  if (email) {
     const emailCheck = checkGlobalEmailUnique(email, excludeId, usersList, opStaffList, prodStaffList, excludeEmail, excludeMobile);
     if (!emailCheck.isUnique) {
-      isEmailDuplicate = true;
+      return { isUnique: false, error: emailCheck.error || 'Email address already exists. Please use a different email address.' };
     }
-  }
-
-  if (isMobileDuplicate && isEmailDuplicate) {
-    return {
-      isUnique: false,
-      isMobileDuplicate: true,
-      isEmailDuplicate: true,
-      error: 'Duplicate mobile number and email address. Please use different details.'
-    };
-  }
-
-  if (isMobileDuplicate) {
-    return {
-      isUnique: false,
-      isMobileDuplicate: true,
-      isEmailDuplicate: false,
-      error: 'Duplicate mobile number. This number is already registered to an existing staff member.'
-    };
-  }
-
-  if (isEmailDuplicate) {
-    return {
-      isUnique: false,
-      isMobileDuplicate: false,
-      isEmailDuplicate: true,
-      error: 'Duplicate email address. This email is already registered to an existing staff member.'
-    };
   }
 
   return { isUnique: true };
-}
-
-/**
- * Parses raw database error into a clean user-facing error message, specifically mapping
- * unique constraint violations to the standard staff duplicate error messages.
- */
-export function formatStaffErrorMessage(err: any): string {
-  if (!err) return 'An unexpected error occurred while saving staff details.';
-  const msg = typeof err === 'string' ? err : (err.message || err.error || err.details || JSON.stringify(err));
-  const lower = String(msg).toLowerCase();
-
-  const isEmail = lower.includes('email') || lower.includes('users_email_key') || lower.includes('operations_staff_email_key') || lower.includes('production_staff_email_key');
-  const isMobile = lower.includes('mobile') || lower.includes('phone') || lower.includes('users_mobile_key') || lower.includes('operations_staff_mobile_key') || lower.includes('production_staff_mobile_key');
-
-  if (lower.includes('duplicate') || lower.includes('already exists') || lower.includes('unique constraint') || lower.includes('23505') || lower.includes('already registered')) {
-    if (isEmail && isMobile) {
-      return 'Duplicate mobile number and email address. Please use different details.';
-    }
-    if (isMobile) {
-      return 'Duplicate mobile number. This number is already registered to an existing staff member.';
-    }
-    if (isEmail) {
-      return 'Duplicate email address. This email is already registered to an existing staff member.';
-    }
-    return 'Duplicate mobile number or email address. This account is already registered to an existing staff member.';
-  }
-
-  return msg;
 }
 
 /**

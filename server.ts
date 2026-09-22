@@ -2049,13 +2049,6 @@ async function startServer() {
       if (!db.auth.admin) {
         return res.status(400).json({ success: false, error: 'Service Role Key not configured' });
       }
-
-      if (password !== undefined && password !== null && String(password).trim() !== '') {
-        const cleanPwd = String(password).trim();
-        if (cleanPwd.length < 8) {
-          return res.status(400).json({ success: false, error: 'Password must be at least 8 characters long.' });
-        }
-      }
       
       const isStaffRole = role && ['Operation Staff', 'production staff', 'Editor', 'Sales Team'].some(r => role.toLowerCase().includes(r.toLowerCase()));
       const cleanMobile = mobile ? cleanPhone(mobile) : undefined;
@@ -2078,100 +2071,35 @@ async function startServer() {
       }
 
       const updates: any = {};
-      if (password && String(password).trim()) updates.password = String(password).trim();
+      if (password) updates.password = password;
       if (email && !isStaffRole) updates.email = email.trim().toLowerCase();
       if (name || role || cleanMobile) updates.user_metadata = { name, role, mobile: cleanMobile || mobile };
-
-      let targetAuthId: string | null = null;
-
-      // 1. Try finding by auth_id directly in Supabase Auth
-      if (auth_id) {
+      
+      if (Object.keys(updates).length > 0 && auth_id) {
         try {
-          const { data: userObj, error: userErr } = await db.auth.admin.getUserById(auth_id);
-          if (!userErr && userObj?.user) {
-            targetAuthId = userObj.user.id;
+          const { error } = await db.auth.admin.updateUserById(auth_id, updates);
+          if (error) {
+            console.warn(`[Server Auth Update Warning]`, error.message);
           }
-        } catch (e) {}
-      }
-
-      // 2. If not found and email/mobile provided, search auth.users list
-      const searchEmail = cleanEmailVal || (cleanMobile ? `${cleanMobile}@photocrew.com` : undefined);
-      if (!targetAuthId && (searchEmail || cleanMobile)) {
-        try {
-          const { data: listData } = await db.auth.admin.listUsers();
-          const matched = listData?.users?.find((u: any) => 
-            (searchEmail && u.email && u.email.toLowerCase() === searchEmail.toLowerCase()) ||
-            (cleanMobile && u.user_metadata?.mobile && cleanPhone(u.user_metadata.mobile) === cleanMobile)
-          );
-          if (matched) {
-            targetAuthId = matched.id;
-          }
-        } catch (e) {}
-      }
-
-      // 3. If still not found, check public.users to see if there is an associated auth UUID
-      if (!targetAuthId) {
-        const orConds = [];
-        if (auth_id) orConds.push(`id.eq.${auth_id}`);
-        if (cleanEmailVal) orConds.push(`email.eq.${cleanEmailVal}`);
-        if (cleanMobile) orConds.push(`mobile.eq.${cleanMobile}`);
-        if (orConds.length > 0) {
-          const { data: foundUsers } = await db.from('users').select('*').or(orConds.join(',')).limit(1);
-          if (foundUsers && foundUsers.length > 0) {
-            const u = foundUsers[0];
-            try {
-              const { data: uAuth } = await db.auth.admin.getUserById(u.id);
-              if (uAuth?.user) {
-                targetAuthId = uAuth.user.id;
-              }
-            } catch (e) {}
-          }
+        } catch (e: any) {
+          console.warn(`[Server Auth Update Exception]`, e.message);
         }
-      }
-
-      // Execute Supabase Auth update or creation
-      if (targetAuthId) {
-        if (Object.keys(updates).length > 0) {
-          const { error: authErr } = await db.auth.admin.updateUserById(targetAuthId, updates);
-          if (authErr) {
-            console.error(`[Server Auth Update Error]`, authErr.message);
-            if (updates.password) {
-              return res.status(400).json({ success: false, error: authErr.message });
-            }
-          }
-        }
-      } else if (updates.password && searchEmail) {
-        // Create Supabase Auth user if not present yet
-        const { data: newAuth, error: createErr } = await db.auth.admin.createUser({
-          email: searchEmail,
-          password: updates.password,
-          email_confirm: true,
-          user_metadata: updates.user_metadata || { name, role, mobile: cleanMobile || mobile }
-        });
-        if (createErr) {
-          console.error(`[Server Auth Create On Update Error]`, createErr.message);
-          return res.status(400).json({ success: false, error: createErr.message });
-        }
-        targetAuthId = newAuth.user.id;
       }
       
-      // Update public.users table for authoritative persistence
+      // Update users table (note: public.users has created_at, no updated_at)
       const userUpdates: any = {};
       if (name) userUpdates.name = name;
-      if (cleanEmailVal) userUpdates.email = cleanEmailVal;
-      if (cleanEmailVal) userUpdates.username = cleanEmailVal;
+      if (email && !isStaffRole) userUpdates.email = email.trim().toLowerCase();
       if (role) userUpdates.role = role;
       if (cleanMobile !== undefined) userUpdates.mobile = cleanMobile;
-      if (password && String(password).trim()) userUpdates.password = String(password).trim();
+      if (password) userUpdates.password = password;
       if (active !== undefined) userUpdates.active = active;
       
       let query = db.from('users').update(userUpdates);
-      if (targetAuthId) {
-        query = query.eq('id', targetAuthId);
-      } else if (auth_id) {
+      if (auth_id) {
         query = query.eq('id', auth_id);
-      } else if (cleanEmailVal) {
-        query = query.eq('email', cleanEmailVal);
+      } else if (email) {
+        query = query.eq('email', email.trim().toLowerCase());
       } else if (cleanMobile) {
         query = query.eq('mobile', cleanMobile);
       }
@@ -2181,19 +2109,8 @@ async function startServer() {
       if (dbError) {
         console.warn(`[Server Auth DB Update Warning]`, dbError.message);
       }
-
-      // If production staff, link auth_user_id
-      if (targetAuthId && (isStaffRole || (role && String(role).toLowerCase().includes('prod')))) {
-        try {
-          if (auth_id) {
-            await db.from('production_staff').update({ auth_user_id: targetAuthId }).eq('staff_id', auth_id);
-          } else if (cleanMobile) {
-            await db.from('production_staff').update({ auth_user_id: targetAuthId }).eq('mobile', cleanMobile);
-          }
-        } catch (e) {}
-      }
       
-      res.json({ success: true, auth_id: targetAuthId, data: { record: dbData?.[0] || userUpdates } });
+      res.json({ success: true, data: { record: dbData?.[0] || userUpdates } });
     } catch (err: any) {
       console.error(`[Server Auth Update Exception]`, err);
       res.status(500).json({ success: false, error: err.message || String(err) });

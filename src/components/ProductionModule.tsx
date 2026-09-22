@@ -15,7 +15,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY, checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY } from '../utils';
 import { AppLogo } from './AppLogo';
 import { AddNoteModal } from './AddNoteModal';
 import { StatusText } from './ui/StatusText';
@@ -6010,12 +6010,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setIsSubmittingStaff(false);
             return;
           }
-          const mobileDigits = mobile.replace(/\D/g, '');
-          if (mobileDigits.length < 10) {
-            setAddStaffError('Please enter a valid 10-digit mobile number.');
-            setIsSubmittingStaff(false);
-            return;
-          }
           if (!email) {
             setAddStaffError('Email is required.');
             setIsSubmittingStaff(false);
@@ -6026,30 +6020,6 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setIsSubmittingStaff(false);
             return;
           }
-          if (!editingStaffId && password && password.trim().length < 8) {
-            setAddStaffError('Password must be at least 8 characters long.');
-            setIsSubmittingStaff(false);
-            return;
-          }
-
-          // Duplicate mobile and email uniqueness check across all staff & users
-          const currentStaffForCheck = editingStaffId ? productionStaff?.find(s => s.staff_id === editingStaffId) : null;
-          const uniquenessCheck = checkGlobalStaffUniqueness({
-            mobile,
-            email,
-            excludeId: editingStaffId,
-            excludeEmail: currentStaffForCheck?.email,
-            excludeMobile: currentStaffForCheck?.mobile,
-            usersList: users,
-            opStaffList: staff || [],
-            prodStaffList: productionStaff || []
-          });
-
-          if (!uniquenessCheck.isUnique) {
-            setAddStaffError(uniquenessCheck.error || 'Duplicate staff details detected. Mobile number or email is already registered.');
-            setIsSubmittingStaff(false);
-            return;
-          }
 
           // Comma-separated skills
           const skillsArray = newStaffSkills;
@@ -6057,84 +6027,55 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           try {
             if (editingStaffId) {
               const currentStaff = productionStaff?.find(s => s.staff_id === editingStaffId);
-              const cleanPwd = (password || '').trim();
-
-              if (cleanPwd) {
-                if (cleanPwd.length < 8) {
-                  setAddStaffError('Password must be at least 8 characters long.');
-                  setIsSubmittingStaff(false);
-                  return;
-                }
-
-                const targetEmail = currentStaff?.email || email || `${currentStaff?.mobile || mobile}@photocrew.com`;
-                const targetMobile = currentStaff?.mobile || mobile;
-
-                // Find matching user in state
-                const matchingUser = users.find(u => 
-                  (currentStaff?.auth_user_id && (u.id === currentStaff.auth_user_id || (u as any).auth_user_id === currentStaff.auth_user_id)) ||
-                  u.id === editingStaffId ||
-                  (targetEmail && u.email && u.email.trim().toLowerCase() === targetEmail.toLowerCase()) ||
-                  (targetMobile && u.mobile && u.mobile.replace(/\D/g, '').endsWith(targetMobile.replace(/\D/g, '').slice(-10)))
-                );
-                const targetAuthId = currentStaff?.auth_user_id || matchingUser?.id || undefined;
-
+              
+              if (password && currentStaff?.auth_user_id) {
                 const res = await fetch('/api/auth/update-user', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    auth_id: targetAuthId,
-                    email: targetEmail,
-                    mobile: targetMobile,
-                    password: cleanPwd,
+                    auth_id: currentStaff.auth_user_id,
+                    password,
                     name,
-                    role: 'Production Staff'
+                    role: 'Editor',
                   })
                 });
                 
                 if (!res.ok) {
-                  const errData = await res.json().catch(() => ({}));
-                  throw new Error(errData.error || 'Failed to update authentication credentials');
+                   const errData = await res.json();
+                   throw new Error(errData.error || 'Failed to update authentication credentials');
                 }
-                const resData = await res.json().catch(() => ({}));
-                if (!resData.success) {
-                  throw new Error(resData.error || 'Failed to update authentication credentials');
+              } else if (password && !currentStaff?.auth_user_id) {
+                 // Fallback if they were never created in auth system
+                 const computedEmail = currentStaff?.email || email || `${currentStaff?.mobile || mobile}@photocrew.com`;
+                 const res = await fetch('/api/auth/create-user', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    email: computedEmail,
+                    password,
+                    name,
+                    role: 'Editor',
+                  })
+                });
+                if (!res.ok) {
+                   const errData = await res.json();
+                   throw new Error(errData.error || 'Failed to create authentication credentials');
                 }
-
-                const resolvedAuthId = resData.auth_id || targetAuthId;
-
-                // Sync into users table directly to guarantee persistence
-                try {
-                  const userSyncId = resolvedAuthId || (matchingUser ? matchingUser.id : editingStaffId);
-                  if (userSyncId) {
-                    await resetUserPassword(userSyncId, cleanPwd);
-                  }
-                } catch (uErr) {
-                  console.warn("resetUserPassword sync warning:", uErr);
-                }
-
-                // Update explicit record in production_staff (linking auth_user_id, not plaintext password)
-                const staffUpdates: any = {
-                  name,
-                  whatsapp_number: whatsapp,
-                  Skill: skillsArray as any,
-                  staff_type: newStaffType as any,
-                  Staff_Type: newStaffType as any
-                };
-                if (resolvedAuthId) {
-                  staffUpdates.auth_user_id = resolvedAuthId;
-                }
-                await updateProductionStaff(editingStaffId, staffUpdates);
-              } else {
-                // If password is blank, keep existing authentication password unchanged
+                const resData = await res.json();
+                
                 await updateProductionStaff(editingStaffId, {
-                  name,
-                  whatsapp_number: whatsapp,
-                  Skill: skillsArray as any,
-                  staff_type: newStaffType as any,
-                  Staff_Type: newStaffType as any
+                  auth_user_id: resData.data.user.id
                 });
               }
 
+              // Update explicit record being edited (mobile and email are permanently locked)
+              await updateProductionStaff(editingStaffId, {
+                name,
+                whatsapp_number: whatsapp,
+                Skill: skillsArray as any,
+                staff_type: newStaffType as any,
+                Staff_Type: newStaffType as any
+              });
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
               // Create new auth user
@@ -6158,39 +6099,64 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               const authData = await authRes.json();
               const authUserId = authData.data.user.id;
 
-              // Create new staff record in production_staff table
-              await addProductionStaff({
-                name,
-                mobile,
-                email,
-                whatsapp_number: whatsapp,
-                Skill: skillsArray as any,
-                staff_type: newStaffType as any,
-                role: 'Editor',
-                department: 'Post-Production',
-                status: 'Active',
-                joining_date: new Date().toISOString().split('T')[0],
-                auth_user_id: authUserId
-              });
-              setAddStaffSuccess('✅ Staff member created successfully.');
+              // Check if duplicate exists (name or mobile matching)
+              const existingStaff = (productionStaff || []).find(
+                (s) =>
+                  s.name.toLowerCase() === name.toLowerCase() ||
+                  s.mobile === mobile
+              );
+
+              if (existingStaff) {
+                // Update existing staff
+                await updateProductionStaff(existingStaff.staff_id, {
+                  mobile,
+                  email,
+                  whatsapp_number: whatsapp,
+                  Skill: skillsArray as any,
+                  staff_type: newStaffType as any,
+                  Staff_Type: newStaffType as any,
+                  auth_user_id: authUserId
+                });
+                setAddStaffSuccess('✅ Staff details updated successfully.');
+              } else {
+                // Create new staff record in production_staff table
+                await addProductionStaff({
+                  name,
+                  mobile,
+                  email,
+                  whatsapp_number: whatsapp,
+                  Skill: skillsArray as any,
+                  staff_type: newStaffType as any,
+                  role: 'Editor',
+                  department: 'Post-Production',
+                  status: 'Active',
+                  joining_date: new Date().toISOString().split('T')[0],
+                  auth_user_id: authUserId
+                });
+                setAddStaffSuccess('✅ Staff details updated successfully.');
+              }
             }
 
-            // Brief delay to allow user to see the success notification before modal closes
+            // Set timeout to clear success message
             setTimeout(() => {
               setAddStaffSuccess('');
-              setNewStaffName('');
-              setNewStaffType('');
-              setNewStaffMobile('');
-              setNewStaffWhatsapp('');
-              setNewStaffEmail('');
-              setNewStaffPassword('');
-              setNewStaffSkills([]);
-              setEditingStaffId(null);
-              setShowStaffModal(false);
-            }, 1000);
+            }, 3000);
+
+            // Reset form
+            setNewStaffName('');
+            setNewStaffType('');
+            setNewStaffMobile('');
+            setNewStaffWhatsapp('');
+            setNewStaffEmail('');
+            setNewStaffPassword('');
+            setNewStaffType('');
+            setNewStaffMobile('');
+            setNewStaffWhatsapp('');
+            setNewStaffSkills([]);
+            setEditingStaffId(null);
+            setShowStaffModal(false);
           } catch (err: any) {
-            const formattedMsg = formatStaffErrorMessage(err);
-            setAddStaffError('❌ ' + formattedMsg);
+            setAddStaffError('❌ ' + (err.message || 'Failed to update staff details.'));
           } finally {
             setIsSubmittingStaff(false);
           }
@@ -6402,7 +6368,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Password {editingStaffId ? <span className="text-zinc-500 font-normal lowercase">(leave blank to keep current)</span> : <span className="text-rose-500">*</span>}
+                        Password {editingStaffId ? '' : <span className="text-rose-500">*</span>}
                       </label>
                       <div className="relative">
                         <input
@@ -6410,7 +6376,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           required={!editingStaffId}
                           value={newStaffPassword}
                           onChange={(e) => setNewStaffPassword(e.target.value)}
-                          placeholder={editingStaffId ? "Leave blank to keep current password" : "Enter password (min 8 chars)"}
+                          placeholder="••••••••"
                           className="w-full bg-zinc-900 border border-zinc-850 pl-4 pr-10 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
                         />
                         <button
@@ -6792,12 +6758,19 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       setNewStaffMobile(member.mobile);
                                       setNewStaffWhatsapp(member.whatsapp_number || '');
                                       setNewStaffEmail(member.email || '');
-                                      setNewStaffPassword('');
-                                      setShowPassword(false);
+                                      const currentPwd = getStaffCurrentPassword(member, users);
+                                      setNewStaffPassword(currentPwd);
+                                      setShowPassword(true);
                                       setNewStaffSkills(Array.isArray(member.Skill) ? member.Skill : member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
-                                      setAddStaffError('');
-                                      setAddStaffSuccess('');
                                       setShowStaffModal(true);
+
+                                      if (!currentPwd) {
+                                        fetchStaffCurrentPassword(member, users).then(livePwd => {
+                                          if (livePwd) {
+                                            setNewStaffPassword(livePwd);
+                                          }
+                                        });
+                                      }
                                     }}
                                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
                                   >
