@@ -79,11 +79,31 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         }
       });
 
+      let rejectedIds = new Set<string>();
+      try {
+        const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+        if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
+      } catch (_) {}
+
       const parsed = Array.from(combinedMap.values()).map(h => {
-        const isPending = h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval'));
+        const histId = String(h.id || h.payment_history_id || '');
+        const isExplicitlyRejected = h.approval_status === 'Rejected' || 
+          rejectedIds.has(histId) ||
+          (typeof h.notes === 'string' && (
+            h.notes.includes('Rejected') || 
+            h.notes.includes('[REJECTED]') || 
+            h.notes.endsWith('- Rejected') || 
+            h.notes.toLowerCase().includes('rejected by business owner')
+          ));
+
+        const isPending = !isExplicitlyRejected && (
+          h.approval_status === 'Waiting for Approval' || 
+          (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
+        );
+
         return {
           ...h,
-          approval_status: isPending ? 'Waiting for Approval' : (h.approval_status === 'Rejected' ? 'Rejected' : (h.approval_status === 'Approved' ? 'Approved' : 'Approved'))
+          approval_status: isExplicitlyRejected ? 'Rejected' : (isPending ? 'Waiting for Approval' : 'Approved')
         };
       });
 
@@ -162,19 +182,10 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setIsApprovingId(histId);
     try {
       await rejectPayment(histId, primaryOrderId);
-      setHistoryList(prev => prev.map(p => {
-        const idMatch = p.id === histId || p.payment_history_id === histId || String(p.id) === String(histId);
-        if (idMatch) {
-          return {
-            ...p,
-            approval_status: 'Rejected',
-            notes: (p.notes || '').replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, 'Rejected')
-          };
-        }
-        return p;
-      }));
-    } catch (err) {
+      await refreshHistory();
+    } catch (err: any) {
       console.error("Error rejecting payment:", err);
+      alert("Failed to reject payment. Please check your connection and try again.");
     } finally {
       setIsApprovingId(null);
     }
@@ -184,19 +195,10 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setIsApprovingId(histId);
     try {
       await approvePayment(histId, primaryOrderId);
-      setHistoryList(prev => prev.map(p => {
-        const idMatch = p.id === histId || p.payment_history_id === histId || String(p.id) === String(histId);
-        if (idMatch) {
-          return {
-            ...p,
-            approval_status: 'Approved',
-            notes: (p.notes || '').replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, 'Approved')
-          };
-        }
-        return p;
-      }));
-    } catch (err) {
+      await refreshHistory();
+    } catch (err: any) {
       console.error("Error approving payment:", err);
+      alert("Failed to approve payment. Please check your connection and try again.");
     } finally {
       setIsApprovingId(null);
     }

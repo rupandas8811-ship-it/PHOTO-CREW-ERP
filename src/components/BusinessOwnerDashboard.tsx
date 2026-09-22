@@ -2263,8 +2263,11 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
     };
   }, [isFilterOpen]);
 
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+
+  const year = selectedYear;
+  const month = selectedMonth;
 
   const monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -2272,9 +2275,26 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   ];
 
   // Navigate Months
-  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-  const todayMonth = () => setCurrentDate(new Date());
+  const prevMonth = () => {
+    if (month === 0) {
+      setSelectedYear(year - 1);
+      setSelectedMonth(11);
+    } else {
+      setSelectedMonth(month - 1);
+    }
+  };
+  const nextMonth = () => {
+    if (month === 11) {
+      setSelectedYear(year + 1);
+      setSelectedMonth(0);
+    } else {
+      setSelectedMonth(month + 1);
+    }
+  };
+  const todayMonth = () => {
+    setSelectedYear(new Date().getFullYear());
+    setSelectedMonth(new Date().getMonth());
+  };
 
   // Filter actions
   const handleApplyFilters = () => {
@@ -2466,10 +2486,29 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
       
       {/* Calendar Header Navigation & Filters */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pb-3 border-b border-zinc-850">
-        <div className="flex items-center gap-3">
-          <h3 className="text-base sm:text-lg font-black font-mono tracking-tight text-white">
-            {monthNames[month]} {year}
-          </h3>
+        <div className="flex items-center gap-2">
+          <select
+            value={month}
+            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+            className="bg-zinc-900 border border-zinc-800 text-white text-xs font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500"
+          >
+            {monthNames.map((name, index) => (
+              <option key={name} value={index}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={year}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            className="bg-zinc-900 border border-zinc-800 text-white text-xs font-mono rounded-lg px-2 py-1 focus:outline-none focus:border-purple-500"
+          >
+            {Array.from({ length: 5 }, (_, i) => year - 2 + i).map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
           <button
             onClick={todayMonth}
             className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 font-mono hover:bg-zinc-850 cursor-pointer transition-colors"
@@ -2479,19 +2518,6 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={prevMonth}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={nextMonth}
-            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-850 cursor-pointer transition-colors"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-
           {/* Calendar Filter Dropdown Container */}
           <div className="relative" ref={filterDropdownRef}>
             <button
@@ -3387,8 +3413,13 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   }, [selectedCard, totalRevSum, totalRecSum, totalOutSum, completedCount, closedCount]);
 
   // Export CSV
-  const downloadCSV = (customRecords?: any[]) => {
-    const dataToExport = customRecords || filtered;
+  const downloadCSV = () => {
+    const dataToExport = filtered;
+    if (dataToExport.length === 0) {
+      alert("No data available to export.");
+      return;
+    }
+
     const cardTitle = selectedCard === 'summary_revenue' ? 'Total_Revenue'
       : selectedCard === 'summary_payment' ? 'Payment_Received'
       : selectedCard === 'summary_outstanding' ? 'Outstanding'
@@ -3398,15 +3429,15 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
     const headers = ['Order ID', 'Customer Name', 'Event Name', 'Event Date', 'Total Revenue (INR)', 'Payment Received (INR)', 'Outstanding (INR)', 'Payment Status', 'Current Status'];
     const rows = dataToExport.map(r => [
-      `"${r.orderId || ''}"`,
-      `"${(r.customerName || '').replace(/"/g, '""')}"`,
-      `"${(r.eventName || '').replace(/"/g, '""')}"`,
-      `"${r.eventDate || ''}"`,
+      `"${String(r.orderId || '').replace(/"/g, '""')}"`,
+      `"${String(r.customerName || '').replace(/"/g, '""')}"`,
+      `"${String(r.eventName || '').replace(/"/g, '""')}"`,
+      `"${String(r.eventDate || '').replace(/"/g, '""')}"`,
       r.totalRevenue || 0,
       r.paymentReceived || 0,
       r.outstanding || 0,
-      `"${r.paymentStatus || ''}"`,
-      `"${r.currentStage || ''}"`
+      `"${String(r.paymentStatus || '').replace(/"/g, '""')}"`,
+      `"${String(r.currentStage || '').replace(/"/g, '""')}"`
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
@@ -3420,8 +3451,12 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   };
 
   // Export Excel (.xlsx)
-  const downloadExcel = (customRecords?: any[]) => {
-    const dataToExport = customRecords || filtered;
+  const downloadExcel = () => {
+    const dataToExport = filtered;
+    if (dataToExport.length === 0) {
+      alert("No data available to export.");
+      return;
+    }
     const cardTitle = selectedCard === 'summary_revenue' ? 'Total_Revenue'
       : selectedCard === 'summary_payment' ? 'Payment_Received'
       : selectedCard === 'summary_outstanding' ? 'Outstanding'
@@ -3448,8 +3483,12 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   };
 
   // Export PDF
-  const downloadPDF = (customRecords?: any[]) => {
-    const dataToExport = customRecords || filtered;
+  const downloadPDF = () => {
+    const dataToExport = filtered;
+    if (dataToExport.length === 0) {
+      alert("No data available to export.");
+      return;
+    }
     const cardLabel = selectedCard === 'summary_revenue' ? 'Total Revenue'
       : selectedCard === 'summary_payment' ? 'Payment Received'
       : selectedCard === 'summary_outstanding' ? 'Outstanding'

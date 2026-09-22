@@ -742,14 +742,20 @@ export function getCustomers(leads: Lead[], orders: Order[], payments: Payment[]
   });
 }
 
+export * from './utils/modalViewportHandler';
+import { ensureModalScrolledToTop } from './utils/modalViewportHandler';
+
 /**
- * Automatically scrolls to a popup or container and focuses the first input/interactive field inside it.
+ * Automatically scrolls to a popup or container, resets its internal scroll position to top, and focuses the first input/interactive field inside it.
  */
 export function triggerAutoScrollAndFocus(selector: string, delayMs: number = 100) {
   setTimeout(() => {
     const container = document.querySelector(selector) as HTMLElement;
     if (container) {
-      // Bring popup into view
+      // Ensure all internal scroll containers are reset to top
+      ensureModalScrolledToTop(container);
+
+      // Bring popup into view if needed
       container.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // Focus first field

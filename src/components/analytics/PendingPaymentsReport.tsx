@@ -19,7 +19,7 @@ import {
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'motion/react';
 import { EVENT_TYPES } from '../../types';
-import { formatDateDDMMYY, formatTime12Hour } from '../../utils';
+import { formatDateDDMMYY, formatTime12Hour, ensureModalScrolledToTop } from '../../utils';
 import { PaymentHistoryModal } from '../PaymentHistoryModal';
 
 export const PendingPaymentsReport: React.FC = () => {
@@ -52,6 +52,18 @@ export const PendingPaymentsReport: React.FC = () => {
     window.addEventListener('close-all-popups', handleClose);
     return () => window.removeEventListener('close-all-popups', handleClose);
   }, []);
+
+  useEffect(() => {
+    if (showPaymentModal) {
+      ensureModalScrolledToTop('#update_payment_modal_content');
+    }
+  }, [showPaymentModal]);
+
+  useEffect(() => {
+    if (showDetailsModal) {
+      ensureModalScrolledToTop('#payment_details_history_modal');
+    }
+  }, [showDetailsModal]);
   
   // Modal level feedback states
   const [modalSuccessMsg, setModalSuccessMsg] = useState('');
@@ -1095,7 +1107,7 @@ export const PendingPaymentsReport: React.FC = () => {
               </div>
             )}
 
-            <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+            <div id="update_payment_modal_content" className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
               <div className="space-y-2">
                 <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
                   <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Final Quotation Amount</span>

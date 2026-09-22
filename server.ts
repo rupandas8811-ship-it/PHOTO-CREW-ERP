@@ -482,15 +482,19 @@ async function startServer() {
     if (table === 'payment_history') {
       const validCols = new Set([
         'id', 'order_id', 'amount', 'payment_date', 'transaction_id',
-        'payment_mode', 'payment_type', 'updated_by', 'notes', 'created_at'
+        'payment_mode', 'payment_type', 'updated_by', 'notes', 'created_at', 'approval_status'
       ]);
       if (clone.approval_status) {
         const currentNotes = clone.notes || '';
-        if (clone.approval_status === 'Waiting for Approval' && !currentNotes.includes('Waiting for Approval')) {
-          clone.notes = currentNotes ? `${currentNotes} - Waiting for Approval` : 'Waiting for Approval';
+        if (clone.approval_status === 'Waiting for Approval') {
+          const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
+          clone.notes = stripped ? `${stripped} - Waiting for Approval` : 'Waiting for Approval';
         } else if (clone.approval_status === 'Approved') {
-          clone.notes = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, 'Approved');
-          if (!clone.notes) clone.notes = 'Approved by Business Owner';
+          const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
+          clone.notes = stripped ? `${stripped} - Approved` : 'Approved by Business Owner';
+        } else if (clone.approval_status === 'Rejected') {
+          const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
+          clone.notes = stripped ? `${stripped} - Rejected` : 'Rejected by Business Owner';
         }
       }
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

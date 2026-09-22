@@ -31,6 +31,7 @@ import {
   OwnerStaffPerformanceReport
 } from './components/OwnerModule';
 import { AppLogo } from './components/AppLogo';
+import { initGlobalModalViewportHandler } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Briefcase, Camera, Video, Landmark, Shield, Users, Search, Info, Target, Sparkles, Menu, RefreshCw, Activity, Bell,
@@ -78,6 +79,11 @@ const MainAppContent: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
+
+  // Automatically ensure every opened modal/popup across all dashboards scrolls into viewport and resets internal scroll to top
+  useEffect(() => {
+    return initGlobalModalViewportHandler();
+  }, []);
 
   useEffect(() => {
     if (currentRole !== 'Business Owner' || !supabaseClient) return;

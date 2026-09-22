@@ -1811,7 +1811,6 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (table === 'payment_history') {
       delete cloned.payment_history_id;
-      delete cloned.approval_status;
       delete cloned.lead_id;
     }
 
@@ -3196,11 +3195,31 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbProduction) setProduction(dbProduction);
         if (dbPayments) setPayments(dbPayments);
         if (dbPaymentHistory) {
+          let rejectedIds = new Set<string>();
+          try {
+            const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+            if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
+          } catch (_) {}
+
           const mappedHistory = dbPaymentHistory.map((h: any) => {
-            const isPending = h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval'));
+            const histId = String(h.id || h.payment_history_id || '');
+            const isExplicitlyRejected = h.approval_status === 'Rejected' || 
+              rejectedIds.has(histId) ||
+              (typeof h.notes === 'string' && (
+                h.notes.includes('Rejected') || 
+                h.notes.includes('[REJECTED]') || 
+                h.notes.endsWith('- Rejected') || 
+                h.notes.toLowerCase().includes('rejected by business owner')
+              ));
+
+            const isPending = !isExplicitlyRejected && (
+              h.approval_status === 'Waiting for Approval' || 
+              (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
+            );
+
             return {
               ...h,
-              approval_status: isPending ? 'Waiting for Approval' : (h.approval_status === 'Rejected' ? 'Rejected' : 'Approved')
+              approval_status: isExplicitlyRejected ? 'Rejected' : (isPending ? 'Waiting for Approval' : 'Approved')
             };
           });
           setPaymentHistory(mappedHistory);
@@ -3747,6 +3766,33 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                   };
                 }
                 if (table === 'orders') mappedItem = { ...mappedItem, current_stage: mappedItem.current_stage || mappedItem.order_status };
+                if (table === 'payment_history') {
+                  let rejectedIds = new Set<string>();
+                  try {
+                    const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+                    if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
+                  } catch (_) {}
+
+                  const histId = String(mappedItem.id || mappedItem.payment_history_id || '');
+                  const isExplicitlyRejected = mappedItem.approval_status === 'Rejected' || 
+                    rejectedIds.has(histId) ||
+                    (typeof mappedItem.notes === 'string' && (
+                      mappedItem.notes.includes('Rejected') || 
+                      mappedItem.notes.includes('[REJECTED]') || 
+                      mappedItem.notes.endsWith('- Rejected') || 
+                      mappedItem.notes.toLowerCase().includes('rejected by business owner')
+                    ));
+
+                  const isPending = !isExplicitlyRejected && (
+                    mappedItem.approval_status === 'Waiting for Approval' || 
+                    (typeof mappedItem.notes === 'string' && mappedItem.notes.includes('Waiting for Approval'))
+                  );
+
+                  mappedItem = {
+                    ...mappedItem,
+                    approval_status: isExplicitlyRejected ? 'Rejected' : (isPending ? 'Waiting for Approval' : 'Approved')
+                  };
+                }
                 if (table === 'operations_staff') {
                   let extra: any = {};
                   if (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) {
@@ -6993,16 +7039,48 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if (data) targetHistory = data;
     }
 
-    const cleanNotes = (targetHistory?.notes || '').replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, 'Rejected');
+    const resolvedOrderId = orderId || targetHistory?.order_id || '';
 
-    await pushUpdate('payment_history', 'id', historyId, { 
-      order_id: orderId || targetHistory?.order_id,
+    // Strip previous status tags and append - Rejected
+    const rawNotes = (targetHistory?.notes || '')
+      .replace(/ - Waiting for Approval/g, '')
+      .replace(/Waiting for Approval/g, '')
+      .replace(/ - Approved/g, '')
+      .replace(/Approved by Business Owner/g, '')
+      .replace(/ - Rejected/g, '')
+      .replace(/Rejected by Business Owner/g, '')
+      .trim();
+
+    const cleanNotes = rawNotes ? `${rawNotes} - Rejected` : 'Rejected by Business Owner';
+
+    const updatePayload = { 
+      order_id: resolvedOrderId || targetHistory?.order_id,
       approval_status: 'Rejected',
-      notes: cleanNotes || 'Rejected by Business Owner'
-    });
+      notes: cleanNotes
+    };
 
+    // 1. Direct Supabase update if client available
+    if (supabaseClient && isUuid) {
+      const { error: sbErr } = await supabaseClient
+        .from('payment_history')
+        .update(updatePayload)
+        .eq('id', historyId);
+      if (sbErr) {
+        console.warn("[Direct Supabase Rejection Update Warning]:", sbErr.message);
+      }
+    }
+
+    // 2. Server API pushUpdate for persistence, self-healing & Google Sheets backup
+    const res = await pushUpdate('payment_history', 'id', historyId, updatePayload);
+    if (!res?.success && res?.error) {
+      console.error("Failed to update rejection in DB:", res.error);
+      throw new Error(`Failed to reject payment: ${res.error}`);
+    }
+
+    // 3. Update React payment history state
     setPaymentHistory(prev => prev.map(h => (h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId)) ? { ...h, approval_status: 'Rejected', notes: cleanNotes } : h));
 
+    // 4. Update local storage caches
     try {
       const saved = localStorage.getItem('pending_payment_approvals');
       if (saved) {
@@ -7010,9 +7088,70 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const filtered = parsed.filter((p: any) => p.id !== historyId && p.payment_history_id !== historyId);
         localStorage.setItem('pending_payment_approvals', JSON.stringify(filtered));
       }
+
+      const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+      const rejectedSet = new Set(rejectedSaved ? JSON.parse(rejectedSaved) : []);
+      rejectedSet.add(historyId);
+      if (targetHistory?.payment_history_id) rejectedSet.add(targetHistory.payment_history_id);
+      if (targetHistory?.id) rejectedSet.add(targetHistory.id);
+      localStorage.setItem('rejected_payment_history_ids', JSON.stringify(Array.from(rejectedSet)));
     } catch (_) {}
+
+    // 5. Recalculate parent order and payment status
+    const updatedHistoryList = paymentHistory.map(h => 
+      (h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId)) 
+        ? { ...h, approval_status: 'Rejected', notes: cleanNotes } 
+        : h
+    );
+
+    const targetPayment = augmentedPayments.find(p => p.order_id === resolvedOrderId || p.lead_id === resolvedOrderId) || payments.find(p => p.order_id === resolvedOrderId || p.lead_id === resolvedOrderId);
+    const targetOrder = augmentedOrders.find(o => o.order_id === resolvedOrderId || o.lead_id === resolvedOrderId) || orders.find(o => o.order_id === resolvedOrderId || o.lead_id === resolvedOrderId);
+
+    const remainingPending = updatedHistoryList.some(h => 
+      (h.order_id === resolvedOrderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
+      (h.id !== historyId && h.payment_history_id !== historyId && String(h.id) !== String(historyId)) && 
+      h.approval_status !== 'Rejected' &&
+      (h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval')))
+    );
+
+    const approvedHistories = updatedHistoryList.filter(h => 
+      (h.order_id === resolvedOrderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
+      h.approval_status !== 'Rejected' && 
+      (h.approval_status === 'Approved' || (!h.notes || (!h.notes.includes('Waiting for Approval') && !h.notes.includes('Rejected'))))
+    );
+
+    const totalApprovedReceived = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+    const quotationAmt = targetPayment?.quotation_amount || targetOrder?.quotation_amount || 0;
+    const outstanding = Math.max(0, quotationAmt - totalApprovedReceived);
+    const isFullyPaid = outstanding === 0 && quotationAmt > 0;
+
+    const newPaymentStatus: PaymentStatus = remainingPending 
+      ? 'Waiting for Approval' 
+      : (isFullyPaid ? 'Fully Paid' : (totalApprovedReceived > 0 ? 'Partially Paid' : 'Pending'));
+
+    if (targetPayment) {
+      const paymentUpdates = {
+        advance_received: Math.min(quotationAmt, totalApprovedReceived),
+        final_payment_received: Math.max(0, totalApprovedReceived - Math.min(quotationAmt, totalApprovedReceived)),
+        balance_due: outstanding,
+        payment_status: newPaymentStatus
+      };
+
+      await pushUpdate('payments', 'payment_id', targetPayment.payment_id, paymentUpdates);
+      setPayments(prev => prev.map(p => p.payment_id === targetPayment.payment_id ? { ...p, ...paymentUpdates } : p));
+    }
+
+    if (targetOrder) {
+      await pushUpdate('orders', 'order_id', targetOrder.order_id, {
+        balance_amount: outstanding,
+        advance_received: totalApprovedReceived,
+        updated_by: currentUserName,
+        updated_at: new Date().toISOString()
+      });
+      setOrders(prev => prev.map(o => o.order_id === targetOrder.order_id ? { ...o, balance_amount: outstanding, advance_received: totalApprovedReceived } : o));
+    }
     
-    logActivity(`Rejected payment of ₹${Number(targetHistory?.amount || 0)} for Order ${orderId}`, 'Finance', orderId);
+    logActivity(`Rejected payment of ₹${Number(targetHistory?.amount || 0)} for Order ${resolvedOrderId}`, 'Finance', resolvedOrderId);
   };
 
   // User Management Admin features
