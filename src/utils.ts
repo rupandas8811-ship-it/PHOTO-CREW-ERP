@@ -1177,14 +1177,28 @@ export function parseDeliverablesWithQty(
       if (targetIdxMatch && evIdxMatch && targetIdxMatch[1] === evIdxMatch[1]) return true;
       if (targetIdxMatch && parseInt(targetIdxMatch[1], 10) === idx + 1) return true;
       if (evIdxMatch && targetEventIndex !== undefined && parseInt(evIdxMatch[1], 10) === targetEventIndex + 1) return true;
+
+      // CRITICAL: If both target ID and candidate event ID are present and do NOT match,
+      // this is definitively a different event. DO NOT fall through to match by generic name or index!
+      return false;
     }
     
-    // 2. Match by Name
+    // 2. Match by Name (only when ID matching didn't rule it out)
     if (cleanTargetName && evName) {
-      if (evName === cleanTargetName) return true;
+      if (evName === cleanTargetName) {
+        if (targetEventIndex !== undefined && targetEventIndex !== idx) {
+          return false;
+        }
+        return true;
+      }
       const normEvName = evName.replace(/[^a-z0-9]/g, '');
       const normTargetName = cleanTargetName.replace(/[^a-z0-9]/g, '');
-      if (normEvName && normTargetName && normEvName === normTargetName) return true;
+      if (normEvName && normTargetName && normEvName === normTargetName) {
+        if (targetEventIndex !== undefined && targetEventIndex !== idx) {
+          return false;
+        }
+        return true;
+      }
 
       const targetNameIdx = cleanTargetName.match(/^event\s*0*(\d+)$/i);
       const evNameIdx = evName.match(/^event\s*0*(\d+)$/i);
@@ -1208,7 +1222,15 @@ export function parseDeliverablesWithQty(
   // If description is already an array
   if (Array.isArray(description)) {
     isJson = true;
-    if (description[0] && typeof description[0] === 'object' && ('event_name' in description[0] || 'event_type' in description[0] || 'deliverables' in description[0] || 'event_id' in description[0] || 'id' in description[0])) {
+    // Check if array elements are event containers (having event_name, event_type, event_id, or deliverables array)
+    const isEventContainer = description[0] && typeof description[0] === 'object' && (
+      'event_name' in description[0] ||
+      'event_type' in description[0] ||
+      'deliverables' in description[0] ||
+      ('event_id' in description[0] && !('name' in description[0]))
+    );
+
+    if (isEventContainer) {
       let targetEvents = description;
       if (cleanTargetId || cleanTargetName || targetEventIndex !== undefined) {
         const matched = description.filter((ev: any, idx: number) => isEventMatch(ev, idx));
@@ -1276,7 +1298,14 @@ export function parseDeliverablesWithQty(
 
         if (Array.isArray(parsed)) {
           // Case A: Array of event objects: [{ event_name: "...", deliverables: [...] }]
-          if (parsed[0] && typeof parsed[0] === 'object' && ('event_name' in parsed[0] || 'event_type' in parsed[0] || 'deliverables' in parsed[0] || 'event_id' in parsed[0] || 'id' in parsed[0])) {
+          const isEventContainer = parsed[0] && typeof parsed[0] === 'object' && (
+            'event_name' in parsed[0] ||
+            'event_type' in parsed[0] ||
+            'deliverables' in parsed[0] ||
+            ('event_id' in parsed[0] && !('name' in parsed[0]))
+          );
+
+          if (isEventContainer) {
             let targetEvents = parsed;
             if (cleanTargetId || cleanTargetName || targetEventIndex !== undefined) {
               const matched = parsed.filter((ev: any, idx: number) => isEventMatch(ev, idx));
@@ -1333,19 +1362,23 @@ export function parseDeliverablesWithQty(
     itemsRaw = description.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
   }
 
-  // 3. Process raw items into { name, qty }
-  const result: { name: string; qty: number }[] = [];
-  const map = new Map<string, number>();
+  // 3. Process raw items into { name, qty, id, deliverable_id }
+  const result: { name: string; qty: number; id?: string; deliverable_id?: string }[] = [];
+  const map = new Map<string, { qty: number; id?: string; deliverable_id?: string }>();
 
   itemsRaw.forEach(item => {
     if (!item) return;
     let qty = 1;
     let text = '';
+    let itemId: string | undefined = undefined;
+    let itemDelivId: string | undefined = undefined;
 
     if (typeof item === 'object' && item !== null) {
       qty = Number(item.qty || item.quantity || item.count || 1);
       if (isNaN(qty) || qty < 1) qty = 1;
       text = String(item.name || item.text || item.deliverable || item.title || '').trim();
+      itemId = item.id ? String(item.id).trim() : undefined;
+      itemDelivId = item.deliverable_id ? String(item.deliverable_id).trim() : undefined;
     } else {
       const parsedItem = parseQtyAndText(String(item));
       qty = parsedItem.qty;
@@ -1354,13 +1387,19 @@ export function parseDeliverablesWithQty(
 
     if (text) {
       text = text.replace(/^[\*\-•xX×]\s*/, '').trim();
-      const existingQty = map.get(text) || 0;
-      map.set(text, existingQty + qty);
+      const existing = map.get(text);
+      if (existing) {
+        existing.qty += qty;
+        if (!existing.id && itemId) existing.id = itemId;
+        if (!existing.deliverable_id && itemDelivId) existing.deliverable_id = itemDelivId;
+      } else {
+        map.set(text, { qty, id: itemId, deliverable_id: itemDelivId });
+      }
     }
   });
 
-  map.forEach((qty, name) => {
-    result.push({ name, qty });
+  map.forEach((val, name) => {
+    result.push({ name, qty: val.qty, id: val.id, deliverable_id: val.deliverable_id });
   });
 
   return result;

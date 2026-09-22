@@ -2494,11 +2494,14 @@ Production Team`;
     { speciality: '', staffId: '', staffName: '' }
   ]);
   interface EventSectionItem {
+    id: string;
+    deliverableId: string;
     qty: number;
     text: string;
     editor: string;
     assignment_id?: string;
     status?: string;
+    isStarted?: boolean;
   }
 
   interface EventSection {
@@ -2508,8 +2511,44 @@ Production Team`;
   }
 
   const [wfEventSections, setWfEventSections] = useState<EventSection[]>([]);
+  const [assignedEditors, setAssignedEditors] = useState<Record<string, string>>({});
   const [wfError, setWfError] = useState('');
   const [wfSuccess, setWfSuccess] = useState('');
+
+  const resolveEventsListForProduction = (prod: any, ord?: any, ld?: any): any[] => {
+    const check = (val: any): any[] => {
+      if (!val) return [];
+      if (Array.isArray(val) && val.length > 0) return val;
+      if (typeof val === 'string' && val.trim().startsWith('[')) {
+        try {
+          const p = JSON.parse(val);
+          if (Array.isArray(p) && p.length > 0) return p;
+        } catch (e) {}
+      }
+      return [];
+    };
+
+    let evts = check(prod?.events);
+    if (evts.length === 0) evts = check(ord?.events);
+    if (evts.length === 0) evts = check(ld?.events);
+
+    if (evts.length === 0) {
+      const rawNotes = ld?.notes_special_customizations || ord?.notes_special_customizations;
+      if (rawNotes) {
+        const parsed = deserializeLeadEvents(rawNotes);
+        if (parsed.events && parsed.events.length > 0) evts = parsed.events;
+      }
+    }
+
+    if (evts.length === 0) {
+      const rawDel = ord?.deliverables_description || ld?.deliverables_description;
+      const parsed = check(rawDel);
+      if (parsed.length > 0 && parsed[0] && (parsed[0].event_name || parsed[0].event_id || parsed[0].deliverables)) {
+        evts = parsed;
+      }
+    }
+    return evts;
+  };
 
   const handleOpenAssignEditor = (prod: Production) => {
     if (prod.production_status === 'Order Closed' || prod.editing_status === 'Order Closed') return;
@@ -2521,13 +2560,7 @@ Production Team`;
     setWfTargetDeliveryDate(existingDate);
     
     const { order, lead } = resolveOrderAndLead(prod);
-    const eventsList = ((prod as any).events && Array.isArray((prod as any).events) && (prod as any).events.length > 0)
-      ? (prod as any).events
-      : (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
-        ? lead.events
-        : (order?.events && Array.isArray(order.events) && order.events.length > 0)
-          ? order.events
-          : [];
+    const eventsList = resolveEventsListForProduction(prod, order, lead);
 
     let deliverablesText = order?.deliverables_description || lead?.deliverables_description || '';
     if (!deliverablesText && lead) {
@@ -2543,15 +2576,20 @@ Production Team`;
     const listToProcess = eventsList.length > 0 ? eventsList : [null];
     const sections: EventSection[] = [];
     const usedAssignments = new Set<string>();
+    const newAssignedEditors: Record<string, string> = {};
 
     for (let idx = 0; idx < listToProcess.length; idx++) {
       const currentEvent = listToProcess[idx];
-      const currentEventName = currentEvent ? (currentEvent.event_name || currentEvent.event_type || `Event ${idx + 1}`) : (prod.custom_event_name || `Event ${idx + 1}`);
-      const currentEventId = currentEvent ? (currentEvent.id || currentEvent.event_id) : prod.event_id;
+      const currentEventName = currentEvent 
+        ? (currentEvent.event_name || currentEvent.custom_event_name || currentEvent.event_type || `Event ${idx + 1}`) 
+        : (prod.custom_event_name || `Event ${idx + 1}`);
+      const currentEventId = currentEvent 
+        ? (currentEvent.id || currentEvent.event_id || `EVT-0${idx + 1}`) 
+        : (prod.event_id || `EVT-0${idx + 1}`);
 
-      let parsedDeliverablesList: { name: string; qty: number }[] = [];
-      if (currentEvent && (currentEvent.deliverables || currentEvent.deliverable)) {
-        const deliverablesData = currentEvent.deliverables || currentEvent.deliverable;
+      let parsedDeliverablesList: { name: string; qty: number; id?: string; deliverable_id?: string }[] = [];
+      if (currentEvent && (currentEvent.deliverables || currentEvent.deliverable || currentEvent.deliverables_list)) {
+        const deliverablesData = currentEvent.deliverables || currentEvent.deliverable || currentEvent.deliverables_list;
         if (Array.isArray(deliverablesData) && deliverablesData.length > 0) {
           parsedDeliverablesList = parseDeliverablesWithQty(deliverablesData, currentEventName, currentEventId, idx);
         } else if (typeof deliverablesData === 'string' && deliverablesData.trim() !== '' && deliverablesData.trim() !== '[]') {
@@ -2563,59 +2601,98 @@ Production Team`;
         parsedDeliverablesList = parseDeliverablesWithQty(deliverablesText, currentEventName, currentEventId, idx);
       }
 
-      const sectionEventId = currentEventId || `EVT-0${idx + 1}`;
-      const assignedForThis = (editorAssignments || []).filter(a => 
-        (a.production_id === prod.production_id || a.order_id === orderId) && 
-        (a.event_id === currentEventId || a.event_id === sectionEventId || (!a.event_id && idx === 0))
-      );
+      // Filter editor assignments that strictly belong to THIS event
+      const assignedForThis = (editorAssignments || []).filter(a => {
+        const matchesOrderOrProd = (a.production_id === prod.production_id || (orderId && a.order_id === orderId));
+        if (!matchesOrderOrProd) return false;
 
-      const tempMap = new Map<string, { qty: number; text: string; editor: string; assignment_id?: string; status?: string }>();
+        const aEventId = String(a.event_id || '').trim().toLowerCase();
+        const curEvId = String(currentEventId).trim().toLowerCase();
+
+        if (aEventId && curEvId) {
+          if (aEventId === curEvId) return true;
+          const normA = aEventId.replace(/[^a-z0-9]/g, '');
+          const normCur = curEvId.replace(/[^a-z0-9]/g, '');
+          if (normA && normCur && normA === normCur) return true;
+          return false;
+        }
+
+        if (!aEventId && idx === 0 && listToProcess.length === 1) return true;
+        return false;
+      });
+
+      const sectionItems: EventSectionItem[] = [];
 
       for (const d of parsedDeliverablesList) {
         const qty = d.qty || 1;
-        const text = d.name;
-        if (text) {
-          const existing = tempMap.get(text);
-          if (existing) {
-            existing.qty += qty;
-          } else {
-            const existingAssignment = assignedForThis.find(a => (a.speciality === text || a.deliverable_id === text) && !usedAssignments.has(a.assignment_id));
-            const editor = existingAssignment ? (existingAssignment.staff_name || 'Unassigned') : 'Unassigned';
-            if (existingAssignment) {
-              usedAssignments.add(existingAssignment.assignment_id);
-            }
-            tempMap.set(text, {
-              qty,
-              text,
-              editor,
-              assignment_id: existingAssignment?.assignment_id,
-              status: existingAssignment?.status
-            });
-          }
+        const text = d.name.trim();
+        if (!text) continue;
+        const deliverableId = d.id || d.deliverable_id || text;
+
+        const existingAssignment = assignedForThis.find(a => {
+          if (usedAssignments.has(a.assignment_id)) return false;
+          const aDelId = String(a.deliverable_id || '').trim().toLowerCase();
+          const targetDelId = String(deliverableId).trim().toLowerCase();
+          const aSpec = String(a.speciality || '').trim().toLowerCase();
+          const targetText = text.toLowerCase();
+
+          return (aDelId && targetDelId && aDelId === targetDelId) ||
+                 (aDelId && targetText && aDelId === targetText) ||
+                 (aSpec && targetText && aSpec === targetText) ||
+                 (aSpec && targetDelId && aSpec === targetDelId);
+        });
+
+        const editor = existingAssignment ? (existingAssignment.staff_name || 'Unassigned') : 'Unassigned';
+        if (existingAssignment?.assignment_id) {
+          usedAssignments.add(existingAssignment.assignment_id);
         }
+
+        const isStarted = existingAssignment ? isEditorAssignmentStarted(existingAssignment) : false;
+        const assignmentKey = `${currentEventId}_${deliverableId}`;
+        newAssignedEditors[assignmentKey] = editor;
+
+        sectionItems.push({
+          id: deliverableId,
+          deliverableId,
+          qty,
+          text,
+          editor,
+          assignment_id: existingAssignment?.assignment_id,
+          status: existingAssignment?.status,
+          isStarted
+        });
       }
 
       sections.push({
-        eventId: currentEventId || `EVT-0${idx + 1}`,
+        eventId: currentEventId,
         eventName: currentEventName,
-        items: Array.from(tempMap.values())
+        items: sectionItems
       });
     }
 
+    setAssignedEditors(newAssignedEditors);
     setWfEventSections(sections);
     setWfProjectNotes(prod.project_notes || prod.remarks || '');
     setWorkflowActionType('assign_editor');
   };
 
-  const handleSectionEditorChange = (sectionIndex: number, itemIndex: number, editorName: string) => {
+  const handleSectionEditorChange = (eventId: string, deliverableId: string, editorName: string) => {
+    const assignmentKey = `${eventId}_${deliverableId}`;
+    setAssignedEditors(prev => ({
+      ...prev,
+      [assignmentKey]: editorName
+    }));
     setWfEventSections(prev => {
-      const updated = [...prev];
-      const section = { ...updated[sectionIndex] };
-      const items = [...section.items];
-      items[itemIndex] = { ...items[itemIndex], editor: editorName };
-      section.items = items;
-      updated[sectionIndex] = section;
-      return updated;
+      return prev.map(section => {
+        if (section.eventId !== eventId) return section;
+        return {
+          ...section,
+          items: section.items.map(item => {
+            if (item.deliverableId !== deliverableId) return item;
+            return { ...item, editor: editorName };
+          })
+        };
+      });
     });
   };
 
@@ -8754,20 +8831,34 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
 
                         // 1. Fetch latest editor_assignments from DB to validate started tasks
-                        const { data: latestDbAssignments, error: fetchErr } = await supabaseClient
+                        let fetchQuery = supabaseClient
                           .from('editor_assignments')
                           .select('*')
                           .eq('production_id', activeWorkflowProd.production_id);
+                        if (orderId) {
+                          fetchQuery = supabaseClient
+                            .from('editor_assignments')
+                            .select('*')
+                            .or(`production_id.eq.${activeWorkflowProd.production_id},order_id.eq.${orderId}`);
+                        }
+                        const { data: latestDbAssignments, error: fetchErr } = await fetchQuery;
                         if (fetchErr) throw fetchErr;
 
                         const startedAssignments = (latestDbAssignments || []).filter(a => isEditorAssignmentStarted(a));
 
                         // Validate that no started assignment was changed to another editor or unassigned
                         for (const started of startedAssignments) {
-                          const targetSection = wfEventSections.find(s => !started.event_id || s.eventId === started.event_id);
-                          const targetItem = targetSection?.items.find(i => i.text === started.speciality || i.text === started.deliverable_id);
-                          if (targetItem && targetItem.editor !== started.staff_name) {
-                            throw new Error("This task has already started and cannot be reassigned.");
+                          const targetSection = wfEventSections.find(s => s.eventId === started.event_id);
+                          const targetItem = targetSection?.items.find(i => 
+                            i.deliverableId === started.deliverable_id || 
+                            i.text === started.speciality || 
+                            i.text === started.deliverable_id
+                          );
+                          if (targetItem) {
+                            const selectedEditor = assignedEditors[`${targetSection?.eventId}_${targetItem.deliverableId}`] ?? targetItem.editor;
+                            if (selectedEditor && selectedEditor !== 'Unassigned' && selectedEditor !== started.staff_name) {
+                              throw new Error("This task has already started and cannot be reassigned.");
+                            }
                           }
                         }
 
@@ -8783,41 +8874,42 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           if (deleteError) throw deleteError;
                         }
                         
-                        // 3. Prepare new assignments across all sections (skip already started assignments)
+                        // 3. Prepare new assignments across all sections strictly preserving event_id and deliverable_id
                         const newAssignments = [];
                         for (const section of wfEventSections) {
                           for (const item of section.items) {
-                            if (!item.editor || item.editor === 'Unassigned') continue;
+                            const assignmentKey = `${section.eventId}_${item.deliverableId}`;
+                            const selectedEditor = assignedEditors[assignmentKey] ?? item.editor;
+                            if (!selectedEditor || selectedEditor === 'Unassigned') continue;
                             
-                            // If this assignment is already in startedAssignments with the same staff, skip inserting duplicate
+                            // If this assignment is already in startedAssignments with the same staff and event, skip inserting duplicate
                             const alreadyStarted = startedAssignments.find(s => 
-                              (s.speciality === item.text || s.deliverable_id === item.text) &&
-                              (section.eventId ? s.event_id === section.eventId : true) &&
-                              s.staff_name === item.editor
+                              (s.event_id === section.eventId) &&
+                              (s.deliverable_id === item.deliverableId || s.speciality === item.text || s.deliverable_id === item.text) &&
+                              s.staff_name === selectedEditor
                             );
                             if (alreadyStarted) {
                               continue;
                             }
 
-                            const st = (productionStaff || []).find(s => s.name === item.editor);
-                            if (st) {
-                              const id = item.assignment_id || `EDR-${crypto.randomUUID()}`;
-                              
-                              newAssignments.push({
-                                assignment_id: id,
-                                production_id: activeWorkflowProd.production_id,
-                                order_id: orderId,
-                                event_id: section.eventId,
-                                deliverable_id: item.text,
-                                staff_id: st.staff_id,
-                                staff_name: item.editor,
-                                speciality: item.text,
-                                assigned_date: new Date().toISOString().split('T')[0],
-                                target_finish_date: wfTargetDeliveryDate,
-                                status: 'Assigned',
-                                created_at: new Date().toISOString()
-                              });
-                            }
+                            const st = (productionStaff || []).find(s => s.name === selectedEditor);
+                            const staffId = st?.staff_id || '';
+                            const id = `EDR-${crypto.randomUUID()}`;
+                            
+                            newAssignments.push({
+                              assignment_id: id,
+                              production_id: activeWorkflowProd.production_id,
+                              order_id: orderId,
+                              event_id: section.eventId,
+                              deliverable_id: item.deliverableId || item.text,
+                              staff_id: staffId,
+                              staff_name: selectedEditor,
+                              speciality: item.text,
+                              assigned_date: new Date().toISOString().split('T')[0],
+                              target_finish_date: wfTargetDeliveryDate,
+                              status: 'Assigned',
+                              created_at: new Date().toISOString()
+                            });
                           }
                         }
                         
@@ -8885,7 +8977,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         });
                         
                         if (typeof refreshData === 'function') {
-                          refreshData();
+                          await refreshData();
                         }
                         
                         alert("Editor assignments saved successfully!");
@@ -8939,15 +9031,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       </tr>
                                     ) : (
                                       section.items.map((row, itemIdx) => {
+                                        const assignmentKey = `${section.eventId}_${row.deliverableId}`;
+                                        const currentEditor = assignedEditors[assignmentKey] ?? row.editor ?? 'Unassigned';
                                         const isStarted = row.isStarted || (editorAssignments || []).some(a => 
                                           (a.production_id === activeWorkflowProd?.production_id || a.order_id === orderIdDisplay) &&
-                                          (a.speciality === row.text || a.deliverable_id === row.text) &&
-                                          (section.eventId ? a.event_id === section.eventId : true) &&
+                                          (a.event_id === section.eventId) &&
+                                          (a.speciality === row.text || a.deliverable_id === row.deliverableId || a.deliverable_id === row.text) &&
                                           isEditorAssignmentStarted(a)
                                         );
 
                                         return (
-                                          <tr key={itemIdx} className="hover:bg-zinc-900/10 transition-colors">
+                                          <tr key={`${section.eventId}_${row.deliverableId}_${itemIdx}`} className="hover:bg-zinc-900/10 transition-colors">
                                             <td className="px-4 py-3 font-mono text-xs text-center font-bold text-zinc-400">
                                               {row.qty}
                                             </td>
@@ -8963,9 +9057,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                             </td>
                                             <td className="px-4 py-2">
                                               <select
-                                                value={row.editor}
+                                                id={`editor-select-${section.eventId}-${row.deliverableId}`}
+                                                value={currentEditor}
                                                 disabled={isStarted}
-                                                onChange={(e) => handleSectionEditorChange(sIdx, itemIdx, e.target.value)}
+                                                onChange={(e) => handleSectionEditorChange(section.eventId, row.deliverableId, e.target.value)}
                                                 className={`w-full border text-xs rounded-xl px-2.5 py-1.5 font-mono focus:outline-none h-9 ${
                                                   isStarted
                                                     ? 'bg-zinc-900/60 border-amber-900/40 text-amber-200/90 cursor-not-allowed opacity-90'

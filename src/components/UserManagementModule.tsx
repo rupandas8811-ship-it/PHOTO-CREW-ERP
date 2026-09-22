@@ -4,11 +4,11 @@ import {
   Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle, Activity, Server, Database, Check, AlertCircle, Terminal, HelpCircle as HelpIcon, Eye, EyeOff
 } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { formatDateDDMMYY } from '../utils';
+import { formatDateDDMMYY, checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../utils';
 import { supabaseClient, currentDiagnosticReport, updateDiagnosticMetric } from '../supabaseClient';
 
 export const UserManagementModule: React.FC = () => {
-  const { users, currentUser, addUser, editUser, toggleUserStatus, resetUserPassword } = useRole();
+  const { users, staff = [], productionStaff = [], currentUser, addUser, editUser, toggleUserStatus, resetUserPassword } = useRole();
 
   // Diagnostic states
   const [localReport, setLocalReport] = useState(() => currentDiagnosticReport);
@@ -159,11 +159,25 @@ export const UserManagementModule: React.FC = () => {
       return;
     }
 
+    const uniquenessCheck = checkGlobalStaffUniqueness({
+      mobile: newMobile.trim(),
+      email: newEmail.trim(),
+      excludeId: null,
+      usersList: users,
+      opStaffList: staff || [],
+      prodStaffList: productionStaff || []
+    });
+    if (!uniquenessCheck.isUnique) {
+      alert(uniquenessCheck.error || "Duplicate staff details detected.");
+      return;
+    }
+
     try {
       setIsSaving(true);
       await addUser(newName, newEmail, newMobile, newRole, newActive, newPassword);
       
-      // Clear state
+      alert('Staff account registered successfully in system directory!');
+      // Clear state and close form ONLY on success
       setNewName('');
       setNewEmail('');
       setNewMobile('');
@@ -171,10 +185,8 @@ export const UserManagementModule: React.FC = () => {
       setNewActive(true);
       setNewPassword('');
       setShowAddForm(false);
-      
-      alert('Staff account registered successfully in system directory!');
     } catch (err: any) {
-      alert(`Registration failed: ${err?.message || err}`);
+      alert(formatStaffErrorMessage(err));
     } finally {
       setIsSaving(false);
     }
@@ -202,6 +214,21 @@ export const UserManagementModule: React.FC = () => {
       return;
     }
 
+    const uniquenessCheck = checkGlobalStaffUniqueness({
+      mobile: editMobile.trim(),
+      email: editEmail.trim(),
+      excludeId: editingUser.id,
+      excludeEmail: editingUser.email,
+      excludeMobile: editingUser.mobile,
+      usersList: users,
+      opStaffList: staff || [],
+      prodStaffList: productionStaff || []
+    });
+    if (!uniquenessCheck.isUnique) {
+      alert(uniquenessCheck.error || "Duplicate staff details detected.");
+      return;
+    }
+
     try {
       setIsSaving(true);
       await editUser(editingUser.id, {
@@ -213,10 +240,10 @@ export const UserManagementModule: React.FC = () => {
         password: editPassword.trim() || undefined
       });
 
-      setEditingUser(null);
       alert(`Account details of ${editName} updated successfully!`);
+      setEditingUser(null);
     } catch (err: any) {
-      alert(`Failed to update user: ${err.message || err}`);
+      alert(formatStaffErrorMessage(err));
     } finally {
       setIsSaving(false);
     }
