@@ -1043,36 +1043,104 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                   return (activeEventsList.length > 0) ? (
                                     activeEventsList.map((event, eventIdx) => {
                                       const isMulti = activeEventsList.length > 1;
-                                      const evId = event.id || event.event_id || `EV-${eventIdx + 1}`;
+                                      const evId = String(event.id || event.event_id || `EV-${eventIdx + 1}`);
+                                      const evAltId = String(event.event_id || event.id || `EVT-0${eventIdx + 1}`);
+                                      const evIdxKey = `EV-${eventIdx + 1}`;
                                       const eventKey = `${selectedPkgId}_${evId}`;
                                       const altKey = `Custom Package_${evId}`;
+                                      const customKey = `custom_package_${evId}`;
+
+                                      const directTm = event.team_members || (event as any).inclusions || (event as any).Team_Members || (event as any).team_members_included;
+                                      const parsedDirectTm = directTm ? (Array.isArray(directTm) ? directTm.map((m: any) => {
+                                        const { qty, text } = parseQtyAndText(m);
+                                        return text ? combineQtyAndText(qty, text) : '';
+                                      }).filter(Boolean) : null) : null;
 
                                       const rawEventInclusions = editableInclusions[eventKey] !== undefined
                                         ? editableInclusions[eventKey]
-                                        : (editableInclusions[evId] !== undefined
-                                            ? editableInclusions[evId]
-                                            : (editableInclusions[altKey] !== undefined
-                                                ? editableInclusions[altKey]
-                                                : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))));
+                                        : (editableInclusions[altKey] !== undefined
+                                            ? editableInclusions[altKey]
+                                            : (editableInclusions[customKey] !== undefined
+                                                ? editableInclusions[customKey]
+                                                : (editableInclusions[evId] !== undefined
+                                                    ? editableInclusions[evId]
+                                                    : (editableInclusions[`${selectedPkgId}_${evAltId}`] !== undefined
+                                                        ? editableInclusions[`${selectedPkgId}_${evAltId}`]
+                                                        : (editableInclusions[`Custom Package_${evAltId}`] !== undefined
+                                                            ? editableInclusions[`Custom Package_${evAltId}`]
+                                                            : (editableInclusions[`custom_package_${evAltId}`] !== undefined
+                                                                ? editableInclusions[`custom_package_${evAltId}`]
+                                                                : (editableInclusions[evAltId] !== undefined
+                                                                    ? editableInclusions[evAltId]
+                                                                    : (editableInclusions[`${selectedPkgId}_${evIdxKey}`] !== undefined
+                                                                        ? editableInclusions[`${selectedPkgId}_${evIdxKey}`]
+                                                                        : (editableInclusions[`Custom Package_${evIdxKey}`] !== undefined
+                                                                            ? editableInclusions[`Custom Package_${evIdxKey}`]
+                                                                            : (editableInclusions[`custom_package_${evIdxKey}`] !== undefined
+                                                                                ? editableInclusions[`custom_package_${evIdxKey}`]
+                                                                                : (editableInclusions[evIdxKey] !== undefined
+                                                                                    ? editableInclusions[evIdxKey]
+                                                                                    : (parsedDirectTm !== null
+                                                                                        ? parsedDirectTm
+                                                                                        : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))))))))))))));
                                       const eventInclusions = normalizeCrmArray<string>(rawEventInclusions);
+
+                                      const directDel = event.deliverables || (event as any).deliverables_list || (event as any).Add_Deliverable || (event as any).deliverables_description;
+                                      const parsedDirectDel = directDel ? (Array.isArray(directDel) ? directDel.map((d: any) => {
+                                        const { qty, text } = parseQtyAndText(d);
+                                        return text ? combineQtyAndText(qty, text) : '';
+                                      }).filter(Boolean) : null) : null;
 
                                       const rawEventDeliverables = editableDeliverables[eventKey] !== undefined
                                         ? editableDeliverables[eventKey]
-                                        : (editableDeliverables[evId] !== undefined
-                                            ? editableDeliverables[evId]
-                                            : (editableDeliverables[altKey] !== undefined
-                                                ? editableDeliverables[altKey]
-                                                : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))));
+                                        : (editableDeliverables[altKey] !== undefined
+                                            ? editableDeliverables[altKey]
+                                            : (editableDeliverables[customKey] !== undefined
+                                                ? editableDeliverables[customKey]
+                                                : (editableDeliverables[evId] !== undefined
+                                                    ? editableDeliverables[evId]
+                                                    : (editableDeliverables[`${selectedPkgId}_${evAltId}`] !== undefined
+                                                        ? editableDeliverables[`${selectedPkgId}_${evAltId}`]
+                                                        : (editableDeliverables[`Custom Package_${evAltId}`] !== undefined
+                                                            ? editableDeliverables[`Custom Package_${evAltId}`]
+                                                            : (editableDeliverables[`custom_package_${evAltId}`] !== undefined
+                                                                ? editableDeliverables[`custom_package_${evAltId}`]
+                                                                : (editableDeliverables[evAltId] !== undefined
+                                                                    ? editableDeliverables[evAltId]
+                                                                    : (editableDeliverables[`${selectedPkgId}_${evIdxKey}`] !== undefined
+                                                                        ? editableDeliverables[`${selectedPkgId}_${evIdxKey}`]
+                                                                        : (editableDeliverables[`Custom Package_${evIdxKey}`] !== undefined
+                                                                            ? editableDeliverables[`Custom Package_${evIdxKey}`]
+                                                                            : (editableDeliverables[`custom_package_${evIdxKey}`] !== undefined
+                                                                                ? editableDeliverables[`custom_package_${evIdxKey}`]
+                                                                                : (editableDeliverables[evIdxKey] !== undefined
+                                                                                    ? editableDeliverables[evIdxKey]
+                                                                                    : (parsedDirectDel !== null
+                                                                                        ? parsedDirectDel
+                                                                                        : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))))))))))))));
                                       const eventDeliverables = normalizeCrmArray<string>(rawEventDeliverables);
 
                                     const updateInclusionsForEvent = (newList: string[]) => {
                                       const updated = {
                                         ...editableInclusions,
                                         [eventKey]: newList,
-                                        [`Custom Package_${evId}`]: newList,
-                                        [`custom_package_${evId}`]: newList,
-                                        [evId]: newList
+                                        [altKey]: newList,
+                                        [customKey]: newList,
+                                        [evId]: newList,
+                                        [`${selectedPkgId}_${evAltId}`]: newList,
+                                        [`Custom Package_${evAltId}`]: newList,
+                                        [`custom_package_${evAltId}`]: newList,
+                                        [evAltId]: newList,
+                                        [`${selectedPkgId}_${evIdxKey}`]: newList,
+                                        [`Custom Package_${evIdxKey}`]: newList,
+                                        [`custom_package_${evIdxKey}`]: newList,
+                                        [evIdxKey]: newList
                                       };
+                                      if (!isMulti) {
+                                        updated[selectedPkgId] = newList;
+                                        updated['Custom Package'] = newList;
+                                        updated['custom_package'] = newList;
+                                      }
                                       setEditableInclusions(updated);
                                       saveStep3DataRealtime(updated, editableDeliverables);
                                     };
@@ -1081,10 +1149,23 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                       const updated = {
                                         ...editableDeliverables,
                                         [eventKey]: newList,
-                                        [`Custom Package_${evId}`]: newList,
-                                        [`custom_package_${evId}`]: newList,
-                                        [evId]: newList
+                                        [altKey]: newList,
+                                        [customKey]: newList,
+                                        [evId]: newList,
+                                        [`${selectedPkgId}_${evAltId}`]: newList,
+                                        [`Custom Package_${evAltId}`]: newList,
+                                        [`custom_package_${evAltId}`]: newList,
+                                        [evAltId]: newList,
+                                        [`${selectedPkgId}_${evIdxKey}`]: newList,
+                                        [`Custom Package_${evIdxKey}`]: newList,
+                                        [`custom_package_${evIdxKey}`]: newList,
+                                        [evIdxKey]: newList
                                       };
+                                      if (!isMulti) {
+                                        updated[selectedPkgId] = newList;
+                                        updated['Custom Package'] = newList;
+                                        updated['custom_package'] = newList;
+                                      }
                                       setEditableDeliverables(updated);
                                       saveStep3DataRealtime(editableInclusions, updated);
                                     };

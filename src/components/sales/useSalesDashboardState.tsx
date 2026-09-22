@@ -1954,6 +1954,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             
             const primaryLp = lpData && lpData.length > 0 ? lpData[0] : null;
             const effectivePkgId = pkgId || data?.Select_Package_Option || primaryLp?.package_id || 'Custom Package';
+            const currentEvents = (activeTab === 'create' && createEvents.length > 0) ? createEvents : (crmEvents && crmEvents.length > 0 ? crmEvents : (data?.events || selectedLead?.events || []));
 
             const cleanCost = primaryLp?.package_cost ?? data?.package_price ?? data?.budget;
             if (cleanCost != null && !isNaN(Number(cleanCost))) {
@@ -1980,7 +1981,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             const rawTeamData = data?.Team_Members || data?.Team_member || (data as any)?.team_members || primaryLp?.Team_Members_Included || primaryLp?.editable_inclusions;
             console.log('TEAM MEMBERS LOADED', { leadId: targetLeadId, Team_Members: rawTeamData });
             if (rawTeamData) {
-              const loadedInclusions = parseTeamMembersJsonToRecord(rawTeamData, effectivePkgId, crmEvents);
+              const loadedInclusions = parseTeamMembersJsonToRecord(rawTeamData, effectivePkgId, currentEvents);
               if (Object.keys(loadedInclusions).length > 0) {
                 setEditableInclusions(loadedInclusions);
               }
@@ -1989,7 +1990,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             const rawDelData = data?.Add_Deliverable || primaryLp?.deliverables_descriptionn || primaryLp?.editable_deliverables || data?.deliverables_description;
             console.log('DELIVERABLES LOADED', { leadId: targetLeadId, Add_Deliverable: rawDelData });
             if (rawDelData) {
-              const loadedDeliverables = parseDeliverablesJsonToRecord(rawDelData, effectivePkgId, crmEvents);
+              const loadedDeliverables = parseDeliverablesJsonToRecord(rawDelData, effectivePkgId, currentEvents);
               if (Object.keys(loadedDeliverables).length > 0) {
                 setEditableDeliverables(loadedDeliverables);
               }
@@ -2005,7 +2006,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         lastLoadedLeadIdRef.current = null;
       }
     }
-  }, [selectedLead?.lead_id, createdLeadId, activeTab, wizardLeadData.selected_package_id, wizardLeadData.selected_package_id, supabaseClient, crmEvents, crmWizardStep, wizardStep]);
+  }, [selectedLead?.lead_id, createdLeadId, activeTab, wizardLeadData.selected_package_id, wizardLeadData.selected_package_id, supabaseClient, crmEvents, createEvents, crmWizardStep, wizardStep]);
 
   // Save to Supabase directly for the JSON columns
   const isFirstRender = React.useRef(true);
@@ -3219,6 +3220,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               const isMulti = currentEvents.length > 1;
               return currentEvents.map((event, eventIdx) => {
                 const evId = String(event.id || event.event_id || `EV-${eventIdx + 1}`);
+                const evAltId = String(event.event_id || event.id || `EVT-0${eventIdx + 1}`);
+                const evIdxKey = `EV-${eventIdx + 1}`;
                 const eventKey = `${selectedPkgId}_${evId}`;
                 const altKey = `Custom Package_${evId}`;
                 const customKey = `custom_package_${evId}`;
@@ -3229,49 +3232,90 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                   return text ? combineQtyAndText(qty, text) : '';
                 }).filter(Boolean) : null) : null;
 
-                const eventInclusions = editableInclusions[eventKey] !== undefined
+                const rawInclusions = editableInclusions[eventKey] !== undefined
                   ? editableInclusions[eventKey]
-                  : (isMulti
-                      ? []
-                      : (editableInclusions[evId] !== undefined
-                          ? editableInclusions[evId]
-                          : (editableInclusions[altKey] !== undefined
-                              ? editableInclusions[altKey]
-                              : (editableInclusions[customKey] !== undefined
-                                  ? editableInclusions[customKey]
-                                  : (parsedDirectTm !== null
-                                      ? parsedDirectTm
-                                      : (inclusionsList.length > 0 ? [...inclusionsList] : []))))));
+                  : (editableInclusions[altKey] !== undefined
+                      ? editableInclusions[altKey]
+                      : (editableInclusions[customKey] !== undefined
+                          ? editableInclusions[customKey]
+                          : (editableInclusions[evId] !== undefined
+                              ? editableInclusions[evId]
+                              : (editableInclusions[`${selectedPkgId}_${evAltId}`] !== undefined
+                                  ? editableInclusions[`${selectedPkgId}_${evAltId}`]
+                                  : (editableInclusions[`Custom Package_${evAltId}`] !== undefined
+                                      ? editableInclusions[`Custom Package_${evAltId}`]
+                                      : (editableInclusions[`custom_package_${evAltId}`] !== undefined
+                                          ? editableInclusions[`custom_package_${evAltId}`]
+                                          : (editableInclusions[evAltId] !== undefined
+                                              ? editableInclusions[evAltId]
+                                              : (editableInclusions[`${selectedPkgId}_${evIdxKey}`] !== undefined
+                                                  ? editableInclusions[`${selectedPkgId}_${evIdxKey}`]
+                                                  : (editableInclusions[`Custom Package_${evIdxKey}`] !== undefined
+                                                      ? editableInclusions[`Custom Package_${evIdxKey}`]
+                                                      : (editableInclusions[`custom_package_${evIdxKey}`] !== undefined
+                                                          ? editableInclusions[`custom_package_${evIdxKey}`]
+                                                          : (editableInclusions[evIdxKey] !== undefined
+                                                              ? editableInclusions[evIdxKey]
+                                                              : (parsedDirectTm !== null
+                                                                  ? parsedDirectTm
+                                                                  : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))))))))))))));
+                const eventInclusions = normalizeCrmArray<string>(rawInclusions);
 
-                const directDel = event.deliverables || event.Add_Deliverable || event.deliverables_description;
+                const directDel = event.deliverables || event.deliverables_list || event.Add_Deliverable || event.deliverables_description;
                 const parsedDirectDel = directDel ? (Array.isArray(directDel) ? directDel.map((d: any) => {
                   const { qty, text } = parseQtyAndText(d);
                   return text ? combineQtyAndText(qty, text) : '';
                 }).filter(Boolean) : null) : null;
 
-                const eventDeliverables = editableDeliverables[eventKey] !== undefined
+                const rawDeliverables = editableDeliverables[eventKey] !== undefined
                   ? editableDeliverables[eventKey]
-                  : (isMulti
-                      ? []
-                      : (editableDeliverables[evId] !== undefined
-                          ? editableDeliverables[evId]
-                          : (editableDeliverables[altKey] !== undefined
-                              ? editableDeliverables[altKey]
-                              : (editableDeliverables[customKey] !== undefined
-                                  ? editableDeliverables[customKey]
-                                  : (parsedDirectDel !== null
-                                      ? parsedDirectDel
-                                      : (deliverablesList.length > 0 ? [...deliverablesList] : []))))));
+                  : (editableDeliverables[altKey] !== undefined
+                      ? editableDeliverables[altKey]
+                      : (editableDeliverables[customKey] !== undefined
+                          ? editableDeliverables[customKey]
+                          : (editableDeliverables[evId] !== undefined
+                              ? editableDeliverables[evId]
+                              : (editableDeliverables[`${selectedPkgId}_${evAltId}`] !== undefined
+                                  ? editableDeliverables[`${selectedPkgId}_${evAltId}`]
+                                  : (editableDeliverables[`Custom Package_${evAltId}`] !== undefined
+                                      ? editableDeliverables[`Custom Package_${evAltId}`]
+                                      : (editableDeliverables[`custom_package_${evAltId}`] !== undefined
+                                          ? editableDeliverables[`custom_package_${evAltId}`]
+                                          : (editableDeliverables[evAltId] !== undefined
+                                              ? editableDeliverables[evAltId]
+                                              : (editableDeliverables[`${selectedPkgId}_${evIdxKey}`] !== undefined
+                                                  ? editableDeliverables[`${selectedPkgId}_${evIdxKey}`]
+                                                  : (editableDeliverables[`Custom Package_${evIdxKey}`] !== undefined
+                                                      ? editableDeliverables[`Custom Package_${evIdxKey}`]
+                                                      : (editableDeliverables[`custom_package_${evIdxKey}`] !== undefined
+                                                          ? editableDeliverables[`custom_package_${evIdxKey}`]
+                                                          : (editableDeliverables[evIdxKey] !== undefined
+                                                              ? editableDeliverables[evIdxKey]
+                                                              : (parsedDirectDel !== null
+                                                                  ? parsedDirectDel
+                                                                  : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))))))))))))));
+                const eventDeliverables = normalizeCrmArray<string>(rawDeliverables);
 
                 const updateInclusionsForEvent = (newList: string[]) => {
                   const updated = {
                     ...editableInclusions,
-                    [eventKey]: newList
+                    [eventKey]: newList,
+                    [altKey]: newList,
+                    [customKey]: newList,
+                    [evId]: newList,
+                    [`${selectedPkgId}_${evAltId}`]: newList,
+                    [`Custom Package_${evAltId}`]: newList,
+                    [`custom_package_${evAltId}`]: newList,
+                    [evAltId]: newList,
+                    [`${selectedPkgId}_${evIdxKey}`]: newList,
+                    [`Custom Package_${evIdxKey}`]: newList,
+                    [`custom_package_${evIdxKey}`]: newList,
+                    [evIdxKey]: newList
                   };
                   if (!isMulti) {
-                    updated[altKey] = newList;
-                    updated[customKey] = newList;
-                    updated[evId] = newList;
+                    updated[selectedPkgId] = newList;
+                    updated['Custom Package'] = newList;
+                    updated['custom_package'] = newList;
                   }
                   setEditableInclusions(updated);
                   saveStep3DataRealtime(updated, editableDeliverables);
@@ -3280,12 +3324,23 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 const updateDeliverablesForEvent = (newList: string[]) => {
                   const updated = {
                     ...editableDeliverables,
-                    [eventKey]: newList
+                    [eventKey]: newList,
+                    [altKey]: newList,
+                    [customKey]: newList,
+                    [evId]: newList,
+                    [`${selectedPkgId}_${evAltId}`]: newList,
+                    [`Custom Package_${evAltId}`]: newList,
+                    [`custom_package_${evAltId}`]: newList,
+                    [evAltId]: newList,
+                    [`${selectedPkgId}_${evIdxKey}`]: newList,
+                    [`Custom Package_${evIdxKey}`]: newList,
+                    [`custom_package_${evIdxKey}`]: newList,
+                    [evIdxKey]: newList
                   };
                   if (!isMulti) {
-                    updated[altKey] = newList;
-                    updated[customKey] = newList;
-                    updated[evId] = newList;
+                    updated[selectedPkgId] = newList;
+                    updated['Custom Package'] = newList;
+                    updated['custom_package'] = newList;
                   }
                   setEditableDeliverables(updated);
                   saveStep3DataRealtime(editableInclusions, updated);
@@ -4442,12 +4497,22 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         localStorage.setItem(`crm_last_step_${targetLeadId}`, String(newCompleted));
       }
 
+      // Invalidate the cache ref so subsequent fetches will pull the fresh saved data
+      lastLoadedLeadIdRef.current = null;
+
       setWizardLeadData(prev => ({
         ...prev,
-        deliverables: deliverablesText,
-        deliverables_description: deliverablesText,
+        deliverables: safeDeliverablesText,
+        deliverables_description: safeDeliverablesText,
+        Team_member: safeTeamMembersText,
+        Team_Members: safeTeamMembersText,
+        team_members: safeTeamMembersText,
+        Add_Deliverable: safeDeliverablesText,
+        Add_Member: safeTeamMembersText,
         package_price: cleanPkgCost ?? prev.package_price,
         selected_package_id: pkgId,
+        Select_Package_Option: pkgId,
+        final_amount: cleanFinalAmt
       }));
 
       // Update the local selectedLead state so that the UI reflects it
@@ -4458,15 +4523,24 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             ...prev,
             budget: cleanPkgCost || 0,
             package_price: cleanPkgCost || 0,
-            deliverables_description: deliverablesText,
+            deliverables_description: safeDeliverablesText,
+            Team_Members: safeTeamMembersText,
+            Team_member: safeTeamMembersText,
+            team_members: safeTeamMembersText,
+            Add_Deliverable: safeDeliverablesText,
+            Add_Member: safeTeamMembersText,
             notes_special_customizations: wizardLeadData.notes,
             remarks: updatedRemarks,
+            Select_Package_Option: pkgId,
             selected_package_id: pkgId,
             sales_staff_name: effectiveSalesName,
             sales_staff_mobile: effectiveSalesMobile,
             Quotation_Discount: cleanDiscount,
             Additional_Services_Cost: cleanAdditional,
             Final_Quotation_Amount: cleanFinalAmt,
+            Final_Package_Amount: cleanFinalAmt,
+            final_package_amount: cleanFinalAmt,
+            events: updatedEvents
           };
         });
         await completeApprovedUnlockRequest(selectedLead.lead_id);
