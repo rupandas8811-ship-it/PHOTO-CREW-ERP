@@ -180,6 +180,49 @@ export function generateDeterministicAssignmentId(orderId: string, eventId: stri
 }
 
 /**
+ * Helper to determine if an Operations staff assignment task has already started.
+ * Once started, its staff assignment must be strictly locked and cannot be reassigned.
+ */
+export function isOperationsAssignmentStarted(assignment: any): boolean {
+  if (!assignment) return false;
+  if (assignment.event_start_photo && String(assignment.event_start_photo).trim() !== '') return true;
+  if (assignment.event_start_time && String(assignment.event_start_time).trim() !== '') return true;
+  if (assignment.event_end_photo && String(assignment.event_end_photo).trim() !== '') return true;
+  if (assignment.event_end_time && String(assignment.event_end_time).trim() !== '') return true;
+  if (assignment.raw_footage_link && String(assignment.raw_footage_link).trim() !== '') return true;
+  
+  const status = String(assignment.task_status || assignment.assignment_status || '').trim();
+  const startedStatuses = [
+    'Event Started', 'Event Start', 'Event Complete', 'Event Completed', 'Event Ended',
+    'Footage Handover', 'Verified Footage', 'Footage Handover Verified',
+    'Raw Footage Received', 'Completed'
+  ];
+  return startedStatuses.some(s => s.toLowerCase() === status.toLowerCase());
+}
+
+/**
+ * Helper to determine if a Production editor assignment task has already started.
+ * Once started, its editor assignment must be strictly locked and cannot be reassigned.
+ */
+export function isEditorAssignmentStarted(assignment: any): boolean {
+  if (!assignment) return false;
+  if (assignment.server_drive_link && String(assignment.server_drive_link).trim() !== '') return true;
+  if (assignment.edited_drive_link && String(assignment.edited_drive_link).trim() !== '') return true;
+  if (assignment.customer_proof_url && String(assignment.customer_proof_url).trim() !== '') return true;
+  if (assignment.actual_completion_date && String(assignment.actual_completion_date).trim() !== '') return true;
+
+  const status = String(assignment.status || assignment.task_status || assignment.editing_status || '').trim();
+  const startedStatuses = [
+    'Editing Started', 'Editing In Progress', 'In Progress', 'Editing',
+    'Internal Review', 'Internal QC Review', 'Customer Review', 'Client Review',
+    'Client Review Sent', 'Ready For Review', 'Revision Required', 'Revision In Progress',
+    'Revision', 'Editing Complete', 'Editing Completed', 'Completed',
+    'Final Approval', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Closed'
+  ];
+  return startedStatuses.some(s => s.toLowerCase() === status.toLowerCase());
+}
+
+/**
  * Determines whether two assignment slots represent the exact same slot.
  * Enforces strict independence so changing one slot NEVER alters another slot.
  * Strictly guarantees:
@@ -1601,6 +1644,16 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
 
     const canonicalAssignId = matched?.assignment_id || deterministicAssignId;
 
+    // RULE: ONCE A TASK HAS STARTED, ITS ASSIGNMENT MUST BE LOCKED.
+    // If this task has already started, reject any reassignment attempt to a different staff member.
+    if (matched && isOperationsAssignmentStarted(matched)) {
+      const existingStaff = (matched.staff_name || '').trim().toLowerCase();
+      const newStaff = aStaffNameTrimmed.toLowerCase();
+      if (existingStaff && newStaff && existingStaff !== newStaff) {
+        throw new Error("This task has already started and cannot be reassigned.");
+      }
+    }
+
     // Parse equipment safely into array of strings
     let cleanEquipment: string[] = [];
     const eqVal = a.equipment as unknown;
@@ -1680,6 +1733,9 @@ export async function executeSaveStaffAssignments(params: ExecuteSaveAssignments
     if (!matchedDbAssignmentIds.has(ed.assignment_id) && !finalAssignmentsForState.some(r => r.assignment_id === ed.assignment_id)) {
       const belongsToTouchedEvent = ed.event_id && touchedEventIds.has(ed.event_id);
       if (belongsToTouchedEvent && ed.assignment_status !== 'Cancelled') {
+        if (isOperationsAssignmentStarted(ed)) {
+          throw new Error("This task has already started and cannot be reassigned.");
+        }
         updatedAssignments.push({
           matchColumn: 'assignment_id',
           matchValue: ed.assignment_id,

@@ -10,11 +10,12 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
-import { formatDateDDMMYY } from '../utils';
+import { formatDateDDMMYY, checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../utils';
 
 export const ProductionStaffDirectoryModule: React.FC = () => {
   const { 
     productionStaff: staff = [], 
+    staff: operationsStaff = [],
     users = [],
     addProductionStaff: addStaff, 
     updateProductionStaff: updateStaff, 
@@ -52,6 +53,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
   
   const [staffTypeError, setStaffTypeError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [formError, setFormError] = useState('');
   const [toastMessage, setToastMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   const showToast = (type: 'success' | 'error', text: string) => {
@@ -81,7 +83,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormSpeciality(firstActiveSpec);
     setFormStaffType('');
     setStaffTypeError(false);
-    
+    setFormError('');
     setIsFormOpen(true);
   };
 
@@ -92,14 +94,9 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormMobile(member.mobile);
     setFormWhatsapp(member.whatsapp_number || member.mobile);
     setFormEmail(member.email);
-    const currentPwd = getStaffCurrentPassword(member, users);
-    setFormPassword(currentPwd);
-    setShowFormPassword(true);
-    if (!currentPwd) {
-      fetchStaffCurrentPassword(member, users).then(livePwd => {
-        if (livePwd) setFormPassword(livePwd);
-      });
-    }
+    // Never load or prefill existing password in edit mode
+    setFormPassword('');
+    setShowFormPassword(false);
     // Use notes or a direct attribute for employee_id / city
     setFormEmployeeId((member as any).employee_id || member.staff_id);
     setFormCity((member as any).city || 'N/A');
@@ -108,23 +105,28 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormSpeciality(member.production_role_speciality || '');
     setFormStaffType(member.staff_type || (member as any).Staff_Type || '');
     setStaffTypeError(false);
+    setFormError('');
     setIsFormOpen(true);
   };
 
   // Handle submit addition or edit
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     
     // Strict Validation
-    if (!formName.trim()) { alert('Full Name is required.'); return; }
-    if (!formMobile.trim()) { alert('Mobile Number is required.'); return; }
-    if (!formEmail.trim()) { alert('Email Address is required.'); return; }
-    if (!formSpeciality) { alert('Role Speciality is required.'); return; }
-    if (!formDepartment) { alert('Department is required.'); return; }
+    if (!formName.trim()) { setFormError('Full Name is required.'); return; }
+    if (!formMobile.trim()) { setFormError('Mobile Number is required.'); return; }
+    const mobileDigits = formMobile.replace(/\D/g, '');
+    if (mobileDigits.length < 10) { setFormError('Please enter a valid 10-digit mobile number.'); return; }
+    if (!formEmail.trim()) { setFormError('Email Address is required.'); return; }
+    if (!formSpeciality) { setFormError('Role Speciality is required.'); return; }
+    if (!formDepartment) { setFormError('Department is required.'); return; }
     
     setStaffTypeError(false);
     if (!formStaffType) {
       setStaffTypeError(true);
+      setFormError('Staff Type is required.');
       return;
     }
 
@@ -145,27 +147,23 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
       Skill: [formSpeciality]
     };
 
-    // Duplicate Check Validation
+    // Strict Global Uniqueness Validation across users, operations_staff, and production_staff
     const finalEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
-    let existingUserIdForDuplicateCheck = null;
-    if (editingStaff) {
-      const match = users.find(u => 
-        (editingStaff.email && u.email?.toLowerCase() === editingStaff.email.toLowerCase()) ||
-        (editingStaff.mobile && u.mobile === editingStaff.mobile) ||
-        (editingStaff.email && u.username?.toLowerCase() === editingStaff.email.toLowerCase())
-      );
-      if (match) existingUserIdForDuplicateCheck = match.id;
-    }
+    const uniquenessCheck = checkGlobalStaffUniqueness({
+      mobile: formMobile.trim(),
+      email: finalEmail,
+      excludeId: editingStaff?.staff_id || null,
+      excludeEmail: editingStaff?.email,
+      excludeMobile: editingStaff?.mobile,
+      usersList: users,
+      opStaffList: operationsStaff || [],
+      prodStaffList: staff
+    });
 
-    const isDuplicate = users.find(u => 
-      u.id !== existingUserIdForDuplicateCheck && 
-      ((finalEmail && u.email?.toLowerCase() === finalEmail.toLowerCase()) || 
-       (formMobile.trim() && u.mobile === formMobile.trim()) ||
-       (finalEmail && u.username?.toLowerCase() === finalEmail.toLowerCase()))
-    );
-
-    if (isDuplicate) {
-      alert("Validation Error: This email or mobile number already belongs to another user. Please use a unique email and mobile number.");
+    if (!uniquenessCheck.isUnique) {
+      const errMsg = uniquenessCheck.error || "Duplicate staff details detected. Mobile number or email is already registered.";
+      setFormError(errMsg);
+      setIsSaving(false);
       return;
     }
 
@@ -173,159 +171,212 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     try {
       if (editingStaff) {
         // Edit Mode
-        let userId = null;
-        if (editingStaff) {
-           const targetEmail = (editingStaff.email || '').trim().toLowerCase();
-           const targetMobile10 = (editingStaff.mobile || '').replace(/\D/g, '').slice(-10);
-           const existingUser = users.find(u => {
-             const uEmail = (u.email || '').trim().toLowerCase();
-             const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
-             if (targetEmail && uEmail === targetEmail) return true;
-             if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
-             return false;
-           });
-           if (existingUser) userId = existingUser.id;
-        }
-        
-        if (userId) {
-            const updateAuthRes = await fetch('/api/auth/update-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                 auth_id: userId, 
-                 password: formPassword.trim() || undefined,
-                 name: formName.trim(),
-                 mobile: formMobile.trim(),
-                 role: 'production staff',
-                 active: formStatus === 'Active'
-              })
-            });
-            const updateAuthData = await updateAuthRes.json();
-            if (!updateAuthData.success) {
-                console.error("Auth update error:", updateAuthData.error);
-                // Non-fatal, just continue mapping staff record
-            }
+        let userId: string | null = null;
+        let authUidFromNotes: string | null = null;
+        try {
+          if (editingStaff.notes && editingStaff.notes.includes('auth_user_id')) {
+            authUidFromNotes = JSON.parse(editingStaff.notes).auth_user_id;
+          }
+        } catch (e) {}
 
-            // The /api/auth/update-user endpoint doesn't update public.users.password, so we must do it manually here.
-            const userUpdates: any = {
-              name: formName.trim(),
-              mobile: formMobile.trim()
-            };
-            if (formPassword.trim()) {
-              userUpdates.password = formPassword.trim();
-            }
-            if (Object.keys(userUpdates).length > 0) {
-              const dbUpdateRes = await fetch('/api/db/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  table: 'users',
-                  matchColumn: 'id',
-                  matchValue: userId,
-                  updates: userUpdates
-                })
-              });
-              const dbUpdateData = await dbUpdateRes.json();
-              if (!dbUpdateData.success) {
-                  alert(`Failed to update password: ${dbUpdateData.error}`);
-                  setIsSaving(false);
-                  return;
-              }
-            }
+        const targetEmail = (editingStaff.email || '').trim().toLowerCase();
+        const targetMobile10 = (editingStaff.mobile || '').replace(/\D/g, '').slice(-10);
+
+        const existingUser = users.find(u => {
+          if (authUidFromNotes && u.id === authUidFromNotes) return true;
+          if (editingStaff.staff_id && u.id === editingStaff.staff_id) return true;
+          const uEmail = (u.email || '').trim().toLowerCase();
+          const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
+          if (targetEmail && uEmail === targetEmail) return true;
+          if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
+          return false;
+        });
+
+        if (existingUser) {
+          userId = existingUser.id;
+        } else if (authUidFromNotes) {
+          userId = authUidFromNotes;
+        } else {
+          userId = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0')}`;
         }
-        
-        const res = await updateStaff(editingStaff.staff_id, {
+
+        const cleanPwd = formPassword.trim();
+        const computedEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
+
+        if (cleanPwd && cleanPwd.length < 8) {
+          alert('Password must be at least 8 characters long.');
+          setIsSaving(false);
+          return;
+        }
+
+        // 1. If password provided, update Supabase Auth via server endpoint first
+        if (cleanPwd) {
+          const authRes = await fetch('/api/auth/update-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              auth_id: userId, 
+              password: cleanPwd,
+              name: formName.trim(),
+              mobile: formMobile.trim(),
+              role: 'Production Team',
+              active: formStatus === 'Active'
+            })
+          });
+          if (!authRes.ok) {
+            const errData = await authRes.json().catch(() => ({}));
+            throw new Error(errData.error || 'Failed to update authentication password.');
+          }
+        }
+
+        // 2. Synchronize user record in public.users
+        const userPayload: any = {
+          name: formName.trim(),
+          mobile: formMobile.trim(),
+          email: computedEmail,
+          username: computedEmail,
+          role: 'Production Team',
+          active: formStatus === 'Active'
+        };
+        if (cleanPwd) {
+          userPayload.password = cleanPwd;
+        }
+
+        if (existingUser) {
+          const { error: updUserErr } = await supabaseClient
+            .from('users')
+            .update(userPayload)
+            .eq('id', existingUser.id);
+          if (updUserErr) {
+            console.warn("Update users table warning:", updUserErr);
+          }
+        } else {
+          const { error: insUserErr } = await supabaseClient
+            .from('users')
+            .insert({
+              id: userId,
+              ...userPayload,
+              created_at: new Date().toISOString()
+            });
+          if (insUserErr) {
+            console.warn("Insert users table warning:", insUserErr);
+          }
+        }
+
+        // 3. Update production_staff record (storing auth_user_id link, not plaintext password)
+        const staffNotes = JSON.stringify({ auth_user_id: userId });
+        await updateStaff(editingStaff.staff_id, {
           ...payload,
+          notes: staffNotes,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
-        showToast('success', '✅ Production staff saved successfully.');
+
+        showToast('success', '✅ Staff details updated successfully.');
+        setFormPassword('');
+        setShowFormPassword(false);
+        setIsFormOpen(false);
+        setEditingStaff(null);
       } else {
         // New Staff Mode
-        // 1. Create auth user
         const cleanPwd = formPassword.trim();
-        if (cleanPwd) {
-            const computedEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
-            const authRes = await fetch('/api/auth/create-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                email: computedEmail,
-                mobile: formMobile.trim(),
-                password: cleanPwd,
-                name: formName.trim(),
-                role: 'Production Team',
-                active: formStatus === 'Active'
-              })
-            });
-            
-            if (!authRes.ok) {
-              const text = await authRes.text();
-              let errData;
-              try { errData = JSON.parse(text); } catch (e) { throw new Error(`Server returned status ${authRes.status}: ${text.substring(0, 100)}`); }
-              throw new Error(errData.error || 'Failed to create authentication credentials');
-            }
-
-            const authData = await authRes.json();
-            if (!authData.success) {
-               throw new Error(authData.error);
-            }
-            if (authData.data?.user?.id) {
-               (payload as any).auth_user_id = authData.data.user.id;
-            }
-
-            // Also guarantee the password is saved in the users table
-            try {
-              const authUid = authData?.data?.user?.id || (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() : `00000000-0000-0000-0000-${Date.now().toString().slice(-12)}`);
-              const { data: existingUser } = await supabaseClient
-                .from('users')
-                .select('id')
-                .or(`email.eq.${computedEmail},mobile.eq.${formMobile.trim()}`)
-                .limit(1);
-
-              if (existingUser && existingUser.length > 0) {
-                await supabaseClient.from('users').update({
-                  name: formName.trim(),
-                  mobile: formMobile.trim(),
-                  email: computedEmail,
-                  username: computedEmail,
-                  role: 'Production Team',
-                  active: formStatus === 'Active',
-                  password: cleanPwd
-                }).eq('id', existingUser[0].id);
-              } else {
-                await supabaseClient.from('users').insert({
-                  id: authUid,
-                  name: formName.trim(),
-                  mobile: formMobile.trim(),
-                  email: computedEmail,
-                  username: computedEmail,
-                  role: 'Production Team',
-                  active: formStatus === 'Active',
-                  created_at: new Date().toISOString(),
-                  password: cleanPwd
-                });
-              }
-            } catch (syncErr) {
-              console.warn("Direct users sync warning for production staff:", syncErr);
-            }
-        } else {
-            alert('Password is required for new staff to enable login.');
-            setIsSaving(false);
-            return;
+        if (!cleanPwd) {
+          alert('Password is required for new staff to enable login.');
+          setIsSaving(false);
+          return;
         }
 
+        const computedEmail = formEmail.trim() || `${formMobile.trim()}@photocrew.com`;
+        let authUid = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0')}`;
+
+        // 1. Create auth user in Supabase Auth via server
+        try {
+          const authRes = await fetch('/api/auth/create-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: computedEmail,
+              mobile: formMobile.trim(),
+              password: cleanPwd,
+              name: formName.trim(),
+              role: 'Production Team',
+              active: formStatus === 'Active'
+            })
+          });
+          const authData = await authRes.json();
+          if (authData?.data?.user?.id) {
+            authUid = authData.data.user.id;
+          }
+        } catch (authErr) {
+          console.warn("Server auth create warning:", authErr);
+        }
+
+        // 2. Authoritatively create/sync record in public.users table
+        const { data: existingUser } = await supabaseClient
+          .from('users')
+          .select('id')
+          .or(`id.eq.${authUid},email.eq.${computedEmail},mobile.eq.${formMobile.trim()}`)
+          .limit(1);
+
+        if (existingUser && existingUser.length > 0) {
+          authUid = existingUser[0].id;
+          await supabaseClient.from('users').update({
+            name: formName.trim(),
+            mobile: formMobile.trim(),
+            email: computedEmail,
+            username: computedEmail,
+            role: 'Production Team',
+            active: formStatus === 'Active',
+            password: cleanPwd
+          }).eq('id', existingUser[0].id);
+        } else {
+          await supabaseClient.from('users').insert({
+            id: authUid,
+            name: formName.trim(),
+            mobile: formMobile.trim(),
+            email: computedEmail,
+            username: computedEmail,
+            role: 'Production Team',
+            active: formStatus === 'Active',
+            created_at: new Date().toISOString(),
+            password: cleanPwd
+          });
+        }
+
+        // 3. Save Production Staff member linked to authUid
+        const staffNotes = JSON.stringify({ auth_user_id: authUid });
         const res = await addStaff({
           ...payload,
+          notes: staffNotes,
           password: cleanPwd,
           ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
         });
-        showToast('success', '✅ Production staff saved successfully.');
+
+        // 4. Strict Database Verification: re-fetch exact user record from public.users
+        const { data: verifiedUser, error: verifyErr } = await supabaseClient
+          .from('users')
+          .select('id, name, email, mobile, password, active')
+          .eq('id', authUid)
+          .maybeSingle();
+
+        if (verifyErr || !verifiedUser) {
+          console.error("Verification failed for user:", authUid, verifyErr);
+          throw new Error("Failed to verify user record creation in database.");
+        }
+
+        if (verifiedUser.password !== cleanPwd) {
+          console.error("Password verification mismatch in users.password");
+          throw new Error("Password verification failed. users.password does not match.");
+        }
+
+        showToast('success', '✅ Production staff created and synchronized to users table successfully.');
       }
       setIsFormOpen(false);
       setEditingStaff(null);
     } catch (err: any) {
       console.warn("Failed saving staff", err?.message || err);
-      showToast('error', '❌ Failed to save Production Staff.');
+      const errMsg = formatStaffErrorMessage(err);
+      setFormError(errMsg);
+      showToast('error', `❌ ${errMsg}`);
     } finally {
       setIsSaving(false);
     }
@@ -869,6 +920,12 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
 
               {/* Form Body */}
               <form onSubmit={handleFormSubmit} className="p-6 space-y-4 text-xs font-mono">
+                {formError && (
+                  <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
+                    <span>{formError}</span>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Full Name */}
                   <div className="space-y-1.5">
@@ -969,12 +1026,12 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                   {/* Password */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold block">
-                      Password {editingStaff ? '' : '*'}
+                      Password {editingStaff ? <span className="text-zinc-500 font-normal lowercase">(leave blank to keep current)</span> : '*'}
                     </label>
                     <div className="relative">
                       <input
                         type={showFormPassword ? "text" : "password"}
-                        placeholder={editingStaff ? "Current password" : "Enter password"}
+                        placeholder={editingStaff ? "Leave blank to keep current password" : "Enter password (min 8 chars)"}
                         value={formPassword}
                         onChange={(e) => setFormPassword(e.target.value)}
                         className="w-full bg-zinc-900 border border-zinc-850 rounded-xl px-3.5 py-2.5 pr-10 text-white focus:outline-none focus:ring-1 focus:ring-amber-500 font-mono text-xs"
@@ -1199,7 +1256,7 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
                       <Lock className="w-4 h-4 text-purple-400" />
                       <div className="font-mono">
                         <div className="text-[9px] text-zinc-500 uppercase">Password</div>
-                        <div className="text-white font-bold mt-0.5 select-all">{getStaffCurrentPassword(viewingStaff, users) || '••••••••'}</div>
+                        <div className="text-zinc-400 font-mono mt-0.5 select-none tracking-widest font-bold">••••••••••••</div>
                       </div>
                     </div>
                   </div>

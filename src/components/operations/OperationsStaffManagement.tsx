@@ -9,9 +9,10 @@ import { Staff } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseClient } from '../../supabaseClient';
+import { checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../../utils';
 
 export const OperationsStaffManagement: React.FC = () => {
-  const { currentRole, staff, users = [], addStaff, updateStaff, operations, leads, orders, staffAssignments } = useRole();
+  const { currentRole, staff, productionStaff = [], users = [], addStaff, updateStaff, operations, leads, orders, staffAssignments } = useRole();
   const canEdit = currentRole === 'Operations Team' || currentRole === 'Business Owner';
 
   // Modal / Form state
@@ -21,6 +22,7 @@ export const OperationsStaffManagement: React.FC = () => {
   const [newSkill, setNewSkill] = useState('');
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [openSkillsStaffId, setOpenSkillsStaffId] = useState<string | null>(null);
+  const [formError, setFormError] = useState('');
 
   // Close skills dropdown on outside click or Escape
   useEffect(() => {
@@ -99,7 +101,7 @@ export const OperationsStaffManagement: React.FC = () => {
   const handleSelectEdit = (st: any) => {
     setEditingId(st.staff_id);
     setShowStaffModal(true);
-    const existingPassword = getStaffCurrentPassword(st, users);
+    setFormError('');
     setForm({
       name: st.name,
       role: st.role,
@@ -112,16 +114,8 @@ export const OperationsStaffManagement: React.FC = () => {
       joining_date: st.joining_date || new Date().toISOString().split('T')[0],
       profile_photo: st.profile_photo || '',
       notes: st.notes || '',
-      password: existingPassword
+      password: ''
     });
-
-    if (!existingPassword) {
-      fetchStaffCurrentPassword(st, users).then(livePwd => {
-        if (livePwd) {
-          setForm(prev => ({ ...prev, password: livePwd }));
-        }
-      });
-    }
 
     const loadedSkills = typeof st.Skill === 'string'
       ? st.Skill.split(',').map((s: string) => s.trim()).filter(Boolean)
@@ -132,6 +126,7 @@ export const OperationsStaffManagement: React.FC = () => {
   const handleCancel = () => {
     setEditingId(null);
     setShowStaffModal(false);
+    setFormError('');
     setForm({
       name: '',
       role: 'Lead Photographer',
@@ -143,7 +138,8 @@ export const OperationsStaffManagement: React.FC = () => {
       staff_type: 'In-House',
       joining_date: new Date().toISOString().split('T')[0],
       profile_photo: '',
-      notes: ''
+      notes: '',
+      password: ''
     });
     setSkills([]);
     setNewSkill('');
@@ -208,25 +204,22 @@ export const OperationsStaffManagement: React.FC = () => {
 
     // Duplicate Check Validation
     const originalStaffForDuplicateCheck = editingId ? staff.find(s => s.staff_id === editingId) : null;
-    let existingUserIdForDuplicateCheck = null;
-    if (originalStaffForDuplicateCheck) {
-      const match = users.find(u => 
-        (originalStaffForDuplicateCheck.email && u.email?.toLowerCase() === originalStaffForDuplicateCheck.email.toLowerCase()) ||
-        (originalStaffForDuplicateCheck.mobile && u.mobile === originalStaffForDuplicateCheck.mobile) ||
-        (originalStaffForDuplicateCheck.email && u.username?.toLowerCase() === originalStaffForDuplicateCheck.email.toLowerCase())
-      );
-      if (match) existingUserIdForDuplicateCheck = match.id;
-    }
+    
+    const uniquenessCheck = checkGlobalStaffUniqueness({
+      mobile: form.mobile,
+      email: form.email || (editingId ? undefined : finalEmail),
+      excludeId: editingId,
+      excludeEmail: originalStaffForDuplicateCheck?.email,
+      excludeMobile: originalStaffForDuplicateCheck?.mobile,
+      usersList: users,
+      opStaffList: staff,
+      prodStaffList: productionStaff || []
+    });
 
-    const isDuplicate = users.find(u => 
-      u.id !== existingUserIdForDuplicateCheck && 
-      ((finalEmail && u.email?.toLowerCase() === finalEmail.toLowerCase()) || 
-       (form.mobile && u.mobile === form.mobile) ||
-       (finalEmail && u.username?.toLowerCase() === finalEmail.toLowerCase()))
-    );
-
-    if (isDuplicate) {
-      alert("Validation Error: This email or mobile number already belongs to another user. Please use a unique email and mobile number.");
+    if (!uniquenessCheck.isUnique) {
+      const errMsg = uniquenessCheck.error || "Duplicate staff details detected. Mobile number or email is already registered.";
+      setFormError(errMsg);
+      alert(errMsg);
       setIsSaving(false);
       return;
     }
@@ -236,12 +229,12 @@ export const OperationsStaffManagement: React.FC = () => {
       if (editingId) {
         const originalStaff = staff.find(s => s.staff_id === editingId);
         const targetEmail = originalStaff?.email || form.email || finalEmail;
+        const cleanPwd = (password || '').trim();
 
-        const userUpdates: any = {
-          name: form.name
-        };
-        if (password) {
-          userUpdates.password = password;
+        if (cleanPwd && cleanPwd.length < 8) {
+          alert('Password must be at least 8 characters long.');
+          setIsSaving(false);
+          return;
         }
 
         let targetUserId = null;
@@ -266,6 +259,40 @@ export const OperationsStaffManagement: React.FC = () => {
           }
         }
 
+        if (cleanPwd) {
+          // Update Supabase Auth via secure endpoint
+          try {
+            const authRes = await fetch('/api/auth/update-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                auth_id: targetUserId,
+                email: targetEmail,
+                mobile: originalStaff?.mobile || form.mobile,
+                password: cleanPwd,
+                name: form.name,
+                role: 'Operation Staff'
+              })
+            });
+            if (!authRes.ok) {
+              const errData = await authRes.json().catch(() => ({}));
+              throw new Error(errData.error || 'Failed to update authentication credentials');
+            }
+          } catch (authErr: any) {
+            console.error("Auth update error:", authErr);
+            alert(`Failed to update authentication password: ${authErr.message}`);
+            setIsSaving(false);
+            return;
+          }
+        }
+
+        const userUpdates: any = {
+          name: form.name
+        };
+        if (cleanPwd) {
+          userUpdates.password = cleanPwd;
+        }
+
         if (targetUserId) {
           const { error: updateError } = await supabaseClient
             .from('users')
@@ -273,23 +300,16 @@ export const OperationsStaffManagement: React.FC = () => {
             .eq('id', targetUserId);
             
           if (updateError) {
-             console.error("Failed to update user password in users table:", updateError);
-             alert(`Failed to update password: ${updateError.message}`);
-             setIsSaving(false);
-             return;
+             console.error("Failed to update user in users table:", updateError);
           }
         } else {
           // Fallback if not found by original staff details
           if (targetEmail) {
-            const { error: updateError } = await supabaseClient
+            await supabaseClient
               .from('users')
               .update(userUpdates)
               .eq('email', targetEmail)
               .eq('role', 'Operation Staff');
-              
-            if (updateError && password) {
-               console.warn("Fallback update error by email:", updateError);
-            }
           }
           if (originalStaff?.mobile) {
             await supabaseClient
@@ -376,13 +396,15 @@ export const OperationsStaffManagement: React.FC = () => {
         await addStaff(submissionPayload);
         const toast = document.createElement('div');
         toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-2 rounded-xl shadow-lg z-50 font-sans text-sm font-bold flex items-center gap-2 animate-in slide-in-from-bottom-5';
-        toast.innerHTML = '✅ New staff member registered.';
+        toast.innerHTML = '✅ Staff added successfully.';
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
         handleCancel();
       }
     } catch (err: any) {
-      alert(`Operation failed: ${err.message || err}`);
+      const errMsg = formatStaffErrorMessage(err);
+      setFormError(errMsg);
+      alert(errMsg);
     } finally {
       setIsSaving(false);
     }
@@ -587,6 +609,12 @@ export const OperationsStaffManagement: React.FC = () => {
 
             <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
               <form onSubmit={handleSubmit} className="space-y-4 text-xs flex flex-col">
+                {formError && (
+                  <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
+                    <span>{formError}</span>
+                  </div>
+                )}
                 <fieldset disabled={!canEdit} className="space-y-4 flex-1">
                   <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
@@ -637,12 +665,12 @@ export const OperationsStaffManagement: React.FC = () => {
 
             <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
-                Password {editingId ? '' : '*'}
+                Password {editingId ? <span className="text-zinc-500 font-normal lowercase">(leave blank to keep current)</span> : '*'}
               </label>
               <input
-                type="text"
+                type="password"
                 required={!editingId}
-                placeholder="e.g. Staff@123"
+                placeholder={editingId ? "Leave blank to keep current password" : "Enter password (min 8 chars)"}
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="w-full min-w-0 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50"

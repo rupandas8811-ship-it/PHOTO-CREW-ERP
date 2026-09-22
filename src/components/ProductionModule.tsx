@@ -15,7 +15,7 @@ import { Production, EditingStatus, Staff } from '../types';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { ProjectDetailModal } from './ProjectDetailModal';
-import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY } from '../utils';
+import { formatINR, triggerAutoScrollAndFocus, convertTo12Hour, formatQtyItem, parseQtyAndText, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY, checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../utils';
 import { AppLogo } from './AppLogo';
 import { AddNoteModal } from './AddNoteModal';
 import { StatusText } from './ui/StatusText';
@@ -29,6 +29,7 @@ import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { ProductionStaffDirectoryModule } from './ProductionStaffDirectoryModule';
 import { ProductionRoleSpecialitiesModule } from './ProductionRoleSpecialitiesModule';
 import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
+import { isEditorAssignmentStarted } from '../services/operationsAssignmentService';
 
 function getIndividualDeliverables(description: string): string[] {
   if (!description) return [];
@@ -274,6 +275,7 @@ interface StaffSelectDropdownProps {
   editorAssignments: any[];
   onOpenRoster: (staffName: string) => void;
   allRowsForDeliverable: Array<{ id: string; staffType: string; staffId: string }>;
+  disabled?: boolean;
 }
 
 const StaffSelectDropdown = React.memo(({
@@ -285,7 +287,8 @@ const StaffSelectDropdown = React.memo(({
   productionStaff,
   editorAssignments,
   onOpenRoster,
-  allRowsForDeliverable
+  allRowsForDeliverable,
+  disabled
 }: StaffSelectDropdownProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -357,8 +360,13 @@ const StaffSelectDropdown = React.memo(({
     <div ref={dropdownRef} className="relative w-full text-left">
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2.5 py-1.5 font-sans focus:outline-none focus:border-purple-500 cursor-pointer min-h-[34px] flex items-center justify-between gap-1.5"
+        disabled={disabled}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full border text-xs rounded-xl px-2.5 py-1.5 font-sans focus:outline-none min-h-[34px] flex items-center justify-between gap-1.5 ${
+          disabled
+            ? 'bg-zinc-900/70 border-amber-900/40 text-amber-200/90 cursor-not-allowed opacity-90'
+            : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800 text-zinc-300 focus:border-purple-500 cursor-pointer'
+        }`}
       >
         <span className="truncate">
           {isDataLoading && productionStaff.length === 0 ? (
@@ -368,14 +376,19 @@ const StaffSelectDropdown = React.memo(({
             </span>
           ) : currentStaff ? (
             <span className="flex items-center gap-1.5">
-              <span className="text-xs shrink-0">{currentStaffIsBusy ? '🔴' : '🟢'}</span>
+              <span className="text-xs shrink-0">{disabled ? '🔒' : currentStaffIsBusy ? '🔴' : '🟢'}</span>
               <span className="truncate">{currentStaff.name}</span>
+              {disabled && (
+                <span className="text-[9px] bg-amber-950/60 text-amber-400 border border-amber-900/50 px-1.5 py-0.5 rounded font-mono font-semibold ml-1">
+                  Started (Locked)
+                </span>
+              )}
             </span>
           ) : (
             <span className="text-zinc-500">Select Staff</span>
           )}
         </span>
-        <span className="text-[10px] text-zinc-500 shrink-0 select-none">▼</span>
+        {!disabled && <span className="text-[10px] text-zinc-500 shrink-0 select-none">▼</span>}
       </button>
 
       {currentStaff && currentStaffIsBusy && (
@@ -2946,27 +2959,49 @@ _Please acknowledge receipt of this task assignment._`;
   ) => {
     if (!activeWorkflowProd) return;
     try {
-      // 1. Delete all existing assignments for this production + event
-      let deleteQuery = supabaseClient
-        .from('editor_assignments')
-        .delete()
-        .eq('production_id', activeWorkflowProd.production_id);
-      
-      if (activeWorkflowProd.event_id) {
-        deleteQuery = deleteQuery.eq('event_id', activeWorkflowProd.event_id);
-      }
-      
-      const { error: deleteError } = await deleteQuery;
-
-      if (deleteError) throw deleteError;
-
-      // 2. Prepare and insert new assignments
-      const newAssignments = [];
-      const activeStaffList = (productionStaff || []).filter(s => s.status === 'Active');
-      const currentDeliverablesList = Object.keys(currentRowsMap);
       const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
       const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
       const eventId = activeWorkflowProd?.event_id || lead?.events?.[0]?.id || 'EVT-01';
+
+      // 1. Fetch latest DB state to re-validate locking
+      let fetchQuery = supabaseClient
+        .from('editor_assignments')
+        .select('*')
+        .eq('production_id', activeWorkflowProd.production_id);
+      
+      if (activeWorkflowProd.event_id) {
+        fetchQuery = fetchQuery.eq('event_id', activeWorkflowProd.event_id);
+      }
+      const { data: latestDbAssignments, error: fetchErr } = await fetchQuery;
+      if (fetchErr) throw fetchErr;
+
+      const startedAssignments = (latestDbAssignments || []).filter(a => isEditorAssignmentStarted(a));
+
+      // Validate that no started assignment is modified, removed, or reassigned to a different staff
+      for (const started of startedAssignments) {
+        const deliverableName = started.speciality || started.deliverable_id;
+        const currentRows = currentRowsMap[deliverableName] || [];
+        const matchingRow = currentRows.find(r => r.staffId === started.staff_id);
+        if (!matchingRow) {
+          throw new Error("This task has already started and cannot be reassigned.");
+        }
+      }
+
+      // 2. Delete ONLY unstarted assignments for this production/event
+      const unstartedAssignments = (latestDbAssignments || []).filter(a => !isEditorAssignmentStarted(a));
+      const unstartedIds = unstartedAssignments.map(a => a.assignment_id || a.id).filter(Boolean);
+      if (unstartedIds.length > 0) {
+        const { error: deleteError } = await supabaseClient
+          .from('editor_assignments')
+          .delete()
+          .in('assignment_id', unstartedIds);
+        if (deleteError) throw deleteError;
+      }
+
+      // 3. Prepare and insert new assignments (excluding existing started ones)
+      const newAssignments = [];
+      const activeStaffList = (productionStaff || []).filter(s => s.status === 'Active');
+      const currentDeliverablesList = Object.keys(currentRowsMap);
 
       for (const d of currentDeliverablesList) {
         const rows = currentRowsMap[d] || [];
@@ -2979,6 +3014,14 @@ _Please acknowledge receipt of this task assignment._`;
           if (seenStaffIds.has(row.staffId)) continue;
           seenStaffIds.add(row.staffId);
           
+          // If this staff assignment already exists in startedAssignments, it is preserved intact
+          const alreadyStarted = startedAssignments.find(s => 
+            (s.speciality === d || s.deliverable_id === d) && s.staff_id === row.staffId
+          );
+          if (alreadyStarted) {
+            continue;
+          }
+
           const staffMem = activeStaffList.find(s => s.staff_id === row.staffId);
           if (staffMem) {
             const id = `EDR-${crypto.randomUUID()}`;
@@ -3000,7 +3043,6 @@ _Please acknowledge receipt of this task assignment._`;
       }
 
       if (newAssignments.length > 0) {
-        // Do not strip order_id and event_id
         const dbPayload = newAssignments;
         const { error: insertError } = await supabaseClient
           .from('editor_assignments')
@@ -3009,16 +3051,25 @@ _Please acknowledge receipt of this task assignment._`;
         if (insertError) throw insertError;
       }
 
-      // 3. Update production table with primary assigned editors details and target delivery date
-      const uniqueStaffNames = Array.from(new Set(newAssignments.map(a => a.staff_name)));
-      const primaryEditor = uniqueStaffNames[0] || 'Unassigned';
-      const assignedStaffJoined = uniqueStaffNames.join(', ');
+      // 4. Update production table with primary assigned editors details and target delivery date
+      const allActiveStaffNames = Array.from(new Set([
+        ...startedAssignments.map(a => a.staff_name),
+        ...newAssignments.map(a => a.staff_name)
+      ].filter(Boolean)));
+      const primaryEditor = allActiveStaffNames[0] || 'Unassigned';
+      const assignedStaffJoined = allActiveStaffNames.join(', ');
       
-      const assignedRoles = Array.from(new Set(newAssignments.map(a => {
-        const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name);
-        return staffMem?.role || 'Editor';
-      })));
-      const rolesJoined = assignedRoles.join(', ');
+      const assignedRoles = Array.from(new Set([
+        ...startedAssignments.map(a => {
+          const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name || s.staff_id === a.staff_id);
+          return staffMem?.role || 'Editor';
+        }),
+        ...newAssignments.map(a => {
+          const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name || s.staff_id === a.staff_id);
+          return staffMem?.role || 'Editor';
+        })
+      ]));
+      const rolesJoined = assignedRoles.join(', ') || 'Editor';
 
       // Check if ANY required deliverable is missing a staff assignment
       const isMissingAssignments = currentDeliverablesList.some(d => {
@@ -3042,8 +3093,9 @@ _Please acknowledge receipt of this task assignment._`;
       if (typeof refreshData === 'function') {
         refreshData();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to auto-save assignments:", err);
+      throw err;
     }
   };
 
@@ -5958,6 +6010,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setIsSubmittingStaff(false);
             return;
           }
+          const mobileDigits = mobile.replace(/\D/g, '');
+          if (mobileDigits.length < 10) {
+            setAddStaffError('Please enter a valid 10-digit mobile number.');
+            setIsSubmittingStaff(false);
+            return;
+          }
           if (!email) {
             setAddStaffError('Email is required.');
             setIsSubmittingStaff(false);
@@ -5968,6 +6026,30 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             setIsSubmittingStaff(false);
             return;
           }
+          if (!editingStaffId && password && password.trim().length < 8) {
+            setAddStaffError('Password must be at least 8 characters long.');
+            setIsSubmittingStaff(false);
+            return;
+          }
+
+          // Duplicate mobile and email uniqueness check across all staff & users
+          const currentStaffForCheck = editingStaffId ? productionStaff?.find(s => s.staff_id === editingStaffId) : null;
+          const uniquenessCheck = checkGlobalStaffUniqueness({
+            mobile,
+            email,
+            excludeId: editingStaffId,
+            excludeEmail: currentStaffForCheck?.email,
+            excludeMobile: currentStaffForCheck?.mobile,
+            usersList: users,
+            opStaffList: staff || [],
+            prodStaffList: productionStaff || []
+          });
+
+          if (!uniquenessCheck.isUnique) {
+            setAddStaffError(uniquenessCheck.error || 'Duplicate staff details detected. Mobile number or email is already registered.');
+            setIsSubmittingStaff(false);
+            return;
+          }
 
           // Comma-separated skills
           const skillsArray = newStaffSkills;
@@ -5975,55 +6057,84 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           try {
             if (editingStaffId) {
               const currentStaff = productionStaff?.find(s => s.staff_id === editingStaffId);
-              
-              if (password && currentStaff?.auth_user_id) {
+              const cleanPwd = (password || '').trim();
+
+              if (cleanPwd) {
+                if (cleanPwd.length < 8) {
+                  setAddStaffError('Password must be at least 8 characters long.');
+                  setIsSubmittingStaff(false);
+                  return;
+                }
+
+                const targetEmail = currentStaff?.email || email || `${currentStaff?.mobile || mobile}@photocrew.com`;
+                const targetMobile = currentStaff?.mobile || mobile;
+
+                // Find matching user in state
+                const matchingUser = users.find(u => 
+                  (currentStaff?.auth_user_id && (u.id === currentStaff.auth_user_id || (u as any).auth_user_id === currentStaff.auth_user_id)) ||
+                  u.id === editingStaffId ||
+                  (targetEmail && u.email && u.email.trim().toLowerCase() === targetEmail.toLowerCase()) ||
+                  (targetMobile && u.mobile && u.mobile.replace(/\D/g, '').endsWith(targetMobile.replace(/\D/g, '').slice(-10)))
+                );
+                const targetAuthId = currentStaff?.auth_user_id || matchingUser?.id || undefined;
+
                 const res = await fetch('/api/auth/update-user', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    auth_id: currentStaff.auth_user_id,
-                    password,
+                    auth_id: targetAuthId,
+                    email: targetEmail,
+                    mobile: targetMobile,
+                    password: cleanPwd,
                     name,
-                    role: 'Editor',
+                    role: 'Production Staff'
                   })
                 });
                 
                 if (!res.ok) {
-                   const errData = await res.json();
-                   throw new Error(errData.error || 'Failed to update authentication credentials');
+                  const errData = await res.json().catch(() => ({}));
+                  throw new Error(errData.error || 'Failed to update authentication credentials');
                 }
-              } else if (password && !currentStaff?.auth_user_id) {
-                 // Fallback if they were never created in auth system
-                 const computedEmail = currentStaff?.email || email || `${currentStaff?.mobile || mobile}@photocrew.com`;
-                 const res = await fetch('/api/auth/create-user', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    email: computedEmail,
-                    password,
-                    name,
-                    role: 'Editor',
-                  })
-                });
-                if (!res.ok) {
-                   const errData = await res.json();
-                   throw new Error(errData.error || 'Failed to create authentication credentials');
+                const resData = await res.json().catch(() => ({}));
+                if (!resData.success) {
+                  throw new Error(resData.error || 'Failed to update authentication credentials');
                 }
-                const resData = await res.json();
-                
+
+                const resolvedAuthId = resData.auth_id || targetAuthId;
+
+                // Sync into users table directly to guarantee persistence
+                try {
+                  const userSyncId = resolvedAuthId || (matchingUser ? matchingUser.id : editingStaffId);
+                  if (userSyncId) {
+                    await resetUserPassword(userSyncId, cleanPwd);
+                  }
+                } catch (uErr) {
+                  console.warn("resetUserPassword sync warning:", uErr);
+                }
+
+                // Update explicit record in production_staff (linking auth_user_id, not plaintext password)
+                const staffUpdates: any = {
+                  name,
+                  whatsapp_number: whatsapp,
+                  Skill: skillsArray as any,
+                  staff_type: newStaffType as any,
+                  Staff_Type: newStaffType as any
+                };
+                if (resolvedAuthId) {
+                  staffUpdates.auth_user_id = resolvedAuthId;
+                }
+                await updateProductionStaff(editingStaffId, staffUpdates);
+              } else {
+                // If password is blank, keep existing authentication password unchanged
                 await updateProductionStaff(editingStaffId, {
-                  auth_user_id: resData.data.user.id
+                  name,
+                  whatsapp_number: whatsapp,
+                  Skill: skillsArray as any,
+                  staff_type: newStaffType as any,
+                  Staff_Type: newStaffType as any
                 });
               }
 
-              // Update explicit record being edited (mobile and email are permanently locked)
-              await updateProductionStaff(editingStaffId, {
-                name,
-                whatsapp_number: whatsapp,
-                Skill: skillsArray as any,
-                staff_type: newStaffType as any,
-                Staff_Type: newStaffType as any
-              });
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
               // Create new auth user
@@ -6047,64 +6158,39 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               const authData = await authRes.json();
               const authUserId = authData.data.user.id;
 
-              // Check if duplicate exists (name or mobile matching)
-              const existingStaff = (productionStaff || []).find(
-                (s) =>
-                  s.name.toLowerCase() === name.toLowerCase() ||
-                  s.mobile === mobile
-              );
-
-              if (existingStaff) {
-                // Update existing staff
-                await updateProductionStaff(existingStaff.staff_id, {
-                  mobile,
-                  email,
-                  whatsapp_number: whatsapp,
-                  Skill: skillsArray as any,
-                  staff_type: newStaffType as any,
-                  Staff_Type: newStaffType as any,
-                  auth_user_id: authUserId
-                });
-                setAddStaffSuccess('✅ Staff details updated successfully.');
-              } else {
-                // Create new staff record in production_staff table
-                await addProductionStaff({
-                  name,
-                  mobile,
-                  email,
-                  whatsapp_number: whatsapp,
-                  Skill: skillsArray as any,
-                  staff_type: newStaffType as any,
-                  role: 'Editor',
-                  department: 'Post-Production',
-                  status: 'Active',
-                  joining_date: new Date().toISOString().split('T')[0],
-                  auth_user_id: authUserId
-                });
-                setAddStaffSuccess('✅ Staff details updated successfully.');
-              }
+              // Create new staff record in production_staff table
+              await addProductionStaff({
+                name,
+                mobile,
+                email,
+                whatsapp_number: whatsapp,
+                Skill: skillsArray as any,
+                staff_type: newStaffType as any,
+                role: 'Editor',
+                department: 'Post-Production',
+                status: 'Active',
+                joining_date: new Date().toISOString().split('T')[0],
+                auth_user_id: authUserId
+              });
+              setAddStaffSuccess('✅ Staff member created successfully.');
             }
 
-            // Set timeout to clear success message
+            // Brief delay to allow user to see the success notification before modal closes
             setTimeout(() => {
               setAddStaffSuccess('');
-            }, 3000);
-
-            // Reset form
-            setNewStaffName('');
-            setNewStaffType('');
-            setNewStaffMobile('');
-            setNewStaffWhatsapp('');
-            setNewStaffEmail('');
-            setNewStaffPassword('');
-            setNewStaffType('');
-            setNewStaffMobile('');
-            setNewStaffWhatsapp('');
-            setNewStaffSkills([]);
-            setEditingStaffId(null);
-            setShowStaffModal(false);
+              setNewStaffName('');
+              setNewStaffType('');
+              setNewStaffMobile('');
+              setNewStaffWhatsapp('');
+              setNewStaffEmail('');
+              setNewStaffPassword('');
+              setNewStaffSkills([]);
+              setEditingStaffId(null);
+              setShowStaffModal(false);
+            }, 1000);
           } catch (err: any) {
-            setAddStaffError('❌ ' + (err.message || 'Failed to update staff details.'));
+            const formattedMsg = formatStaffErrorMessage(err);
+            setAddStaffError('❌ ' + formattedMsg);
           } finally {
             setIsSubmittingStaff(false);
           }
@@ -6316,7 +6402,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5 font-mono">
-                        Password {editingStaffId ? '' : <span className="text-rose-500">*</span>}
+                        Password {editingStaffId ? <span className="text-zinc-500 font-normal lowercase">(leave blank to keep current)</span> : <span className="text-rose-500">*</span>}
                       </label>
                       <div className="relative">
                         <input
@@ -6324,7 +6410,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           required={!editingStaffId}
                           value={newStaffPassword}
                           onChange={(e) => setNewStaffPassword(e.target.value)}
-                          placeholder="••••••••"
+                          placeholder={editingStaffId ? "Leave blank to keep current password" : "Enter password (min 8 chars)"}
                           className="w-full bg-zinc-900 border border-zinc-850 pl-4 pr-10 py-2.5 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all font-sans"
                         />
                         <button
@@ -6706,19 +6792,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       setNewStaffMobile(member.mobile);
                                       setNewStaffWhatsapp(member.whatsapp_number || '');
                                       setNewStaffEmail(member.email || '');
-                                      const currentPwd = getStaffCurrentPassword(member, users);
-                                      setNewStaffPassword(currentPwd);
-                                      setShowPassword(true);
+                                      setNewStaffPassword('');
+                                      setShowPassword(false);
                                       setNewStaffSkills(Array.isArray(member.Skill) ? member.Skill : member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+                                      setAddStaffError('');
+                                      setAddStaffSuccess('');
                                       setShowStaffModal(true);
-
-                                      if (!currentPwd) {
-                                        fetchStaffCurrentPassword(member, users).then(livePwd => {
-                                          if (livePwd) {
-                                            setNewStaffPassword(livePwd);
-                                          }
-                                        });
-                                      }
                                     }}
                                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
                                   >
@@ -8426,6 +8505,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                     <td className="px-3.5 py-1.5">
                                       <div className="space-y-1.5">
                                         {rows.map((row, rIndex) => {
+                                          const { order: currentOrder } = resolveOrderAndLead(activeWorkflowProd);
+                                          const currentOrderId = currentOrder?.order_id || activeWorkflowProd.tracking_id || activeWorkflowProd.production_id;
+                                          const isRowStarted = Boolean(row.staffId) && (editorAssignments || []).some(a => 
+                                            (a.production_id === activeWorkflowProd.production_id || a.order_id === currentOrderId) &&
+                                            (a.speciality === deliverable || a.deliverable_id === deliverable) &&
+                                            (a.staff_id === row.staffId) &&
+                                            isEditorAssignmentStarted(a)
+                                          );
+
                                           return (
                                             <div 
                                               key={row.id} 
@@ -8435,6 +8523,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                               <div className="w-28 shrink-0">
                                                 <select
                                                   value={row.staffType}
+                                                  disabled={isRowStarted}
                                                   onChange={(e) => {
                                                     const newType = e.target.value as 'In-House' | 'Freelancer';
                                                     setDeliverableStaffRows(prev => {
@@ -8450,7 +8539,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                       };
                                                     });
                                                   }}
-                                                  className="w-full bg-zinc-950 border border-zinc-900 hover:border-zinc-800 text-[11px] text-zinc-400 hover:text-zinc-300 rounded-lg px-2 py-1 font-sans focus:outline-none focus:border-purple-500 cursor-pointer h-7"
+                                                  className={`w-full border text-[11px] rounded-lg px-2 py-1 font-sans focus:outline-none h-7 ${
+                                                    isRowStarted
+                                                      ? 'bg-zinc-900/60 border-zinc-900 text-zinc-500 cursor-not-allowed opacity-75'
+                                                      : 'bg-zinc-950 border-zinc-900 hover:border-zinc-800 text-zinc-400 hover:text-zinc-300 focus:border-purple-500 cursor-pointer'
+                                                  }`}
                                                 >
                                                   <option value="In-House">In-House</option>
                                                   <option value="Freelancer">Freelancer</option>
@@ -8464,6 +8557,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                                   rowId={row.id}
                                                   staffType={row.staffType}
                                                   selectedStaffId={row.staffId}
+                                                  disabled={isRowStarted}
                                                   onSelect={(val) => {
                                                     setDeliverableStaffRows(prev => {
                                                       const updatedRows = [...(prev[deliverable] || [])];
@@ -8486,7 +8580,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                                               {/* Row Actions */}
                                               <div className="w-6 shrink-0 flex justify-center">
-                                                {rows.length > 1 && (
+                                                {!isRowStarted && rows.length > 1 && (
                                                   <button
                                                     type="button"
                                                     onClick={() => {
@@ -8643,17 +8737,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               }
                             }
                             
-                            setWfError('');
-                            const prodId = activeWorkflowProd.production_id;
-                            await autoSaveAssignments(deliverableStaffRows, wfTargetDeliveryDate);
-                            setWfSuccess('Editor assignments saved successfully!');
-                            setTimeout(() => {
-                              setActiveWorkflowProd(null);
-                              setWorkflowActionType(null);
-                              setWfSuccess('');
-                              // Trigger WhatsApp sharing modal automatically
-                              prepareEditorWhatsappData(prodId);
-                            }, 1500);
+                            try {
+                              setWfError('');
+                              const prodId = activeWorkflowProd.production_id;
+                              await autoSaveAssignments(deliverableStaffRows, wfTargetDeliveryDate);
+                              setWfSuccess('Editor assignments saved successfully!');
+                              setTimeout(() => {
+                                setActiveWorkflowProd(null);
+                                setWorkflowActionType(null);
+                                setWfSuccess('');
+                                // Trigger WhatsApp sharing modal automatically
+                                prepareEditorWhatsappData(prodId);
+                              }, 1500);
+                            } catch (err: any) {
+                              setWfError(err.message || 'Failed to save assignments');
+                            }
                           }}
                           className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-500 border border-purple-500 text-white text-xs font-mono font-bold rounded-xl transition-colors cursor-pointer text-center"
                         >
@@ -8682,36 +8780,57 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         setIsSaving(true);
                         const orderId = order?.order_id || activeWorkflowProd?.tracking_id || activeWorkflowProd?.production_id;
 
-                        // 1. Delete all existing editor assignments for this production
-                        const { error: deleteError } = await supabaseClient
+                        // 1. Fetch latest editor_assignments from DB to validate started tasks
+                        const { data: latestDbAssignments, error: fetchErr } = await supabaseClient
                           .from('editor_assignments')
-                          .delete()
+                          .select('*')
                           .eq('production_id', activeWorkflowProd.production_id);
-                          
-                        if (deleteError) throw deleteError;
+                        if (fetchErr) throw fetchErr;
+
+                        const startedAssignments = (latestDbAssignments || []).filter(a => isEditorAssignmentStarted(a));
+
+                        // Validate that no started assignment was changed to another editor or unassigned
+                        for (const started of startedAssignments) {
+                          const targetSection = wfEventSections.find(s => !started.event_id || s.eventId === started.event_id);
+                          const targetItem = targetSection?.items.find(i => i.text === started.speciality || i.text === started.deliverable_id);
+                          if (targetItem && targetItem.editor !== started.staff_name) {
+                            throw new Error("This task has already started and cannot be reassigned.");
+                          }
+                        }
+
+                        // 2. Delete ONLY unstarted assignments
+                        const unstartedAssignments = (latestDbAssignments || []).filter(a => !isEditorAssignmentStarted(a));
+                        const unstartedIds = unstartedAssignments.map(a => a.assignment_id || a.id).filter(Boolean);
+                        if (unstartedIds.length > 0) {
+                          const { error: deleteError } = await supabaseClient
+                            .from('editor_assignments')
+                            .delete()
+                            .in('assignment_id', unstartedIds);
+                            
+                          if (deleteError) throw deleteError;
+                        }
                         
-                        // 2. Prepare new assignments across all sections
+                        // 3. Prepare new assignments across all sections (skip already started assignments)
                         const newAssignments = [];
                         for (const section of wfEventSections) {
-                          const assignedForSection = (editorAssignments || []).filter(a => 
-                            (a.production_id === activeWorkflowProd.production_id || a.order_id === orderId) &&
-                            (section.eventId ? a.event_id === section.eventId : !a.event_id)
-                          );
                           for (const item of section.items) {
                             if (!item.editor || item.editor === 'Unassigned') continue;
+                            
+                            // If this assignment is already in startedAssignments with the same staff, skip inserting duplicate
+                            const alreadyStarted = startedAssignments.find(s => 
+                              (s.speciality === item.text || s.deliverable_id === item.text) &&
+                              (section.eventId ? s.event_id === section.eventId : true) &&
+                              s.staff_name === item.editor
+                            );
+                            if (alreadyStarted) {
+                              continue;
+                            }
+
                             const st = (productionStaff || []).find(s => s.name === item.editor);
                             if (st) {
-                              const originalAssignment = assignedForSection.find(a => 
-                                (a.speciality === item.text || a.deliverable_id === item.text)
-                              );
-                              const hasChanged = originalAssignment ? originalAssignment.staff_name !== item.editor : true;
-                              const finalStatus = hasChanged ? 'Assigned' : (originalAssignment?.status || 'Assigned');
-                              
                               const id = item.assignment_id || `EDR-${crypto.randomUUID()}`;
-                              const preservedFields = !hasChanged && originalAssignment ? { ...originalAssignment } : {};
                               
                               newAssignments.push({
-                                ...preservedFields,
                                 assignment_id: id,
                                 production_id: activeWorkflowProd.production_id,
                                 order_id: orderId,
@@ -8720,10 +8839,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                 staff_id: st.staff_id,
                                 staff_name: item.editor,
                                 speciality: item.text,
-                                assigned_date: originalAssignment?.assigned_date || new Date().toISOString().split('T')[0],
+                                assigned_date: new Date().toISOString().split('T')[0],
                                 target_finish_date: wfTargetDeliveryDate,
-                                status: finalStatus,
-                                created_at: originalAssignment?.created_at || new Date().toISOString()
+                                status: 'Assigned',
+                                created_at: new Date().toISOString()
                               });
                             }
                           }
@@ -8736,20 +8855,30 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           if (insertError) throw insertError;
                         }
                         
-                        // 3. Update the production record
-                        const uniqueEditors = Array.from(new Set(newAssignments.map(a => a.staff_name).filter(Boolean)));
-                        const primaryEditor = uniqueEditors[0] || 'Unassigned';
-                        const assignedStaffJoined = uniqueEditors.join(', ');
+                        // 4. Update the production record
+                        const allEditors = Array.from(new Set([
+                          ...startedAssignments.map(a => a.staff_name),
+                          ...newAssignments.map(a => a.staff_name)
+                        ].filter(Boolean)));
+                        const primaryEditor = allEditors[0] || 'Unassigned';
+                        const assignedStaffJoined = allEditors.join(', ');
                         
                         const activeStaffList = (productionStaff || []).filter(s => s.status === 'Active');
-                        const assignedRoles = Array.from(new Set(newAssignments.map(a => {
-                          const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name);
-                          return staffMem?.role || 'Editor';
-                        })));
+                        const assignedRoles = Array.from(new Set([
+                          ...startedAssignments.map(a => {
+                            const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name || s.staff_id === a.staff_id);
+                            return staffMem?.role || 'Editor';
+                          }),
+                          ...newAssignments.map(a => {
+                            const staffMem = activeStaffList.find(s => s.staff_name === a.staff_name || s.staff_id === a.staff_id);
+                            return staffMem?.role || 'Editor';
+                          })
+                        ]));
                         const rolesJoined = assignedRoles.join(', ') || 'Editor';
                         
                         let newEditingStatus = 'Assigned Editor';
-                        if (newAssignments.length > 0) {
+                        const combinedAssignments = [...startedAssignments, ...newAssignments];
+                        if (combinedAssignments.length > 0) {
                           const getTaskStageRank = (st: string, driveLink?: string) => {
                             const status = st || '';
                             if (['Client Acceptance'].includes(status)) return 5;
@@ -8760,7 +8889,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             return 0;
                           };
 
-                          const ranks = newAssignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
+                          const ranks = combinedAssignments.map(a => getTaskStageRank(a.status, (a as any).edited_drive_link));
                           const minRank = Math.min(...ranks);
 
                           if (minRank >= 5) newEditingStatus = 'Client Acceptance';
@@ -8836,28 +8965,49 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                         </td>
                                       </tr>
                                     ) : (
-                                      section.items.map((row, itemIdx) => (
-                                        <tr key={itemIdx} className="hover:bg-zinc-900/10 transition-colors">
-                                          <td className="px-4 py-3 font-mono text-xs text-center font-bold text-zinc-400">
-                                            {row.qty}
-                                          </td>
-                                          <td className="px-4 py-3 font-semibold text-zinc-200">
-                                            {row.text}
-                                          </td>
-                                          <td className="px-4 py-2">
-                                            <select
-                                              value={row.editor}
-                                              onChange={(e) => handleSectionEditorChange(sIdx, itemIdx, e.target.value)}
-                                              className="w-full bg-zinc-905 border border-zinc-900 hover:border-zinc-800 text-xs text-zinc-300 rounded-xl px-2.5 py-1.5 font-mono focus:outline-none focus:border-purple-500 cursor-pointer h-9"
-                                            >
-                                              <option value="Unassigned">Select Editor</option>
-                                              {(productionStaff || []).map(s => (
-                                                <option key={s.staff_id} value={s.name}>{s.name}</option>
-                                              ))}
-                                            </select>
-                                          </td>
-                                        </tr>
-                                      ))
+                                      section.items.map((row, itemIdx) => {
+                                        const isStarted = row.isStarted || (editorAssignments || []).some(a => 
+                                          (a.production_id === activeWorkflowProd?.production_id || a.order_id === orderIdDisplay) &&
+                                          (a.speciality === row.text || a.deliverable_id === row.text) &&
+                                          (section.eventId ? a.event_id === section.eventId : true) &&
+                                          isEditorAssignmentStarted(a)
+                                        );
+
+                                        return (
+                                          <tr key={itemIdx} className="hover:bg-zinc-900/10 transition-colors">
+                                            <td className="px-4 py-3 font-mono text-xs text-center font-bold text-zinc-400">
+                                              {row.qty}
+                                            </td>
+                                            <td className="px-4 py-3 font-semibold text-zinc-200">
+                                              <div className="flex items-center gap-2">
+                                                <span>{row.text}</span>
+                                                {isStarted && (
+                                                  <span className="text-[10px] bg-amber-950/60 text-amber-400 border border-amber-900/50 px-2 py-0.5 rounded font-mono font-semibold flex items-center gap-1">
+                                                    🔒 Started (Locked)
+                                                  </span>
+                                                )}
+                                              </div>
+                                            </td>
+                                            <td className="px-4 py-2">
+                                              <select
+                                                value={row.editor}
+                                                disabled={isStarted}
+                                                onChange={(e) => handleSectionEditorChange(sIdx, itemIdx, e.target.value)}
+                                                className={`w-full border text-xs rounded-xl px-2.5 py-1.5 font-mono focus:outline-none h-9 ${
+                                                  isStarted
+                                                    ? 'bg-zinc-900/60 border-amber-900/40 text-amber-200/90 cursor-not-allowed opacity-90'
+                                                    : 'bg-zinc-905 border-zinc-900 hover:border-zinc-800 text-zinc-300 focus:border-purple-500 cursor-pointer'
+                                                }`}
+                                              >
+                                                <option value="Unassigned">Select Editor</option>
+                                                {(productionStaff || []).map(s => (
+                                                  <option key={s.staff_id} value={s.name}>{s.name}</option>
+                                                ))}
+                                              </select>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })
                                     )}
                                   </tbody>
                                 </table>

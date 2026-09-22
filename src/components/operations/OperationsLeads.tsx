@@ -43,6 +43,7 @@ import {
   generateDeterministicAssignmentId, getEventRolePadding,
   generateDeterministicTaskId,
   isSameAssignmentSlot,
+  isOperationsAssignmentStarted,
   getEquipmentVerificationData, 
   getEventImagesData, 
   getRawFootageData 
@@ -2576,6 +2577,41 @@ export const OperationsLeads: React.FC = () => {
 
       // Save the multi-staff role assignments to Supabase & Context state!
       const finalAssignments = allAssignedStaff.length > 0 ? allAssignedStaff : activeAssignments;
+
+      // RULE: ONCE A TASK HAS STARTED, ITS ASSIGNMENT MUST BE LOCKED.
+      // Re-verify against latest DB state and active memory assignments
+      let currentAssignmentsInDb = (staffAssignments || []).filter(sa => sa.order_id === assigningOrderId);
+      if (supabaseClient) {
+        try {
+          const { data: dbData } = await supabaseClient
+            .from('staff_assignments')
+            .select('*')
+            .eq('order_id', assigningOrderId);
+          if (dbData && Array.isArray(dbData)) {
+            currentAssignmentsInDb = dbData;
+          }
+        } catch (fetchErr) {
+          console.warn('[OperationsLeads] Could not re-fetch staff assignments from DB for lock validation:', fetchErr);
+        }
+      }
+
+      const startedDbAssignments = currentAssignmentsInDb.filter(isOperationsAssignmentStarted);
+      for (const started of startedDbAssignments) {
+        const matchingNew = finalAssignments.find(fa => isSameAssignmentSlot(fa, started));
+        if (!matchingNew) {
+          alert("This task has already started and cannot be reassigned.");
+          setIsSaving(false);
+          return;
+        }
+        const origName = (started.staff_name || '').trim().toLowerCase();
+        const newName = (matchingNew.staff_name || '').trim().toLowerCase();
+        if (origName && newName && origName !== newName) {
+          alert("This task has already started and cannot be reassigned.");
+          setIsSaving(false);
+          return;
+        }
+      }
+
       const matchedOrder = orders.find(o => o.order_id === assigningOrderId);
       const targetLeadPkgs = leadPackages?.filter(lp => lp.lead_id === parentLeadInstance?.lead_id) || [];
 
@@ -3993,27 +4029,36 @@ export const OperationsLeads: React.FC = () => {
                                       const isEmpty = !slot.staff_name || slot.staff_name.trim() === '';
                                       const currentStaffType = slot.staff_type || 'In-House';
                                       const slotKey = slot.slot_key || slot.assignment_id || slot.id || `slot_${evId}_${task.roleName}_${slot.slot_number || (slotIdx + 1)}`;
+                                      const isTaskStarted = isOperationsAssignmentStarted(slot) || ((staffAssignments || []).some(sa => sa.order_id === assigningOrderId && isSameAssignmentSlot(sa, slot) && isOperationsAssignmentStarted(sa)));
 
                                       return (
                                         <div key={slotKey} className={`pt-2.5 first:pt-0 space-y-2.5 ${validationAttempted && isEmpty ? 'bg-rose-950/10 p-2 rounded-lg' : ''}`}>
-                                          {targetQty > 1 && (
-                                            <div className="flex items-center gap-2 pb-0.5">
+                                          <div className="flex items-center gap-2 pb-0.5 flex-wrap">
+                                            {targetQty > 1 && (
                                               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-sky-400 font-bold border border-zinc-700/60 shrink-0">
                                                 Task/Slot {slot.slot_number || (slotIdx + 1)}
                                               </span>
-                                              {slot.staff_name && (
-                                                <span className="text-[10px] font-sans text-zinc-400">
-                                                  Assigned: <span className="text-emerald-400 font-semibold">{slot.staff_name}</span>
-                                                </span>
-                                              )}
-                                            </div>
-                                          )}
+                                            )}
+                                            {slot.staff_name && (
+                                              <span className="text-[10px] font-sans text-zinc-400">
+                                                Assigned: <span className="text-emerald-400 font-semibold">{slot.staff_name}</span>
+                                              </span>
+                                            )}
+                                            {isTaskStarted && (
+                                              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20 shrink-0 flex items-center gap-1">
+                                                🔒 Started - Assignment Locked
+                                              </span>
+                                            )}
+                                          </div>
                                           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                                             {/* Staff Type Select */}
                                             <div className="w-full sm:w-32 shrink-0">
                                               <select
+                                                disabled={isTaskStarted}
+                                                title={isTaskStarted ? "This task has already started and cannot be reassigned." : undefined}
                                                 value={currentStaffType}
                                                 onChange={(e) => {
+                                                  if (isTaskStarted) return;
                                                   const newType = e.target.value as 'In-House' | 'Freelancer';
                                                   setEventAllocations((prev: any) => {
                                                     const existingAlloc = prev[evId] || { staff: [] };
@@ -4031,7 +4076,9 @@ export const OperationsLeads: React.FC = () => {
                                                     return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
                                                   });
                                                 }}
-                                                className="w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs text-zinc-300 rounded-lg px-2.5 py-1.5 font-sans focus:outline-none focus:border-amber-500 cursor-pointer h-8"
+                                                className={`w-full bg-zinc-900 border border-zinc-800 text-xs text-zinc-300 rounded-lg px-2.5 py-1.5 font-sans focus:outline-none focus:border-amber-500 h-8 ${
+                                                  isTaskStarted ? 'opacity-60 cursor-not-allowed bg-zinc-950/80' : 'hover:border-zinc-700 cursor-pointer'
+                                                }`}
                                               >
                                                 <option value="In-House">In-House</option>
                                                 <option value="Freelancer">Freelancer</option>
@@ -4041,8 +4088,11 @@ export const OperationsLeads: React.FC = () => {
                                             {/* Staff Name Select */}
                                             <div className="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center gap-2">
                                               <select
+                                                disabled={isTaskStarted}
+                                                title={isTaskStarted ? "This task has already started and cannot be reassigned." : undefined}
                                                 value={slot.staff_name || ''}
                                                 onChange={(e) => {
+                                                  if (isTaskStarted) return;
                                                   const selectedName = e.target.value;
                                                   const memberInfo = staff?.find(st => st.name === selectedName);
                                                   const staffId = memberInfo?.staff_id || '';
@@ -4074,8 +4124,10 @@ export const OperationsLeads: React.FC = () => {
                                                     return { ...prev, [evId]: { ...existingAlloc, staff: updatedStaff } };
                                                   });
                                                 }}
-                                                className={`w-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-xs rounded-lg px-2.5 py-1.5 font-sans focus:outline-none focus:border-amber-500 cursor-pointer h-8 ${
-                                                  slot.staff_name ? 'text-emerald-400 font-bold' : 'text-zinc-400 font-normal'
+                                                className={`w-full bg-zinc-900 border border-zinc-800 text-xs rounded-lg px-2.5 py-1.5 font-sans focus:outline-none focus:border-amber-500 h-8 ${
+                                                  isTaskStarted 
+                                                    ? 'opacity-60 cursor-not-allowed bg-zinc-950/80 text-zinc-400 font-medium' 
+                                                    : slot.staff_name ? 'hover:border-zinc-700 text-emerald-400 font-bold cursor-pointer' : 'hover:border-zinc-700 text-zinc-400 font-normal cursor-pointer'
                                                 }`}
                                               >
                                                 {(() => {
@@ -4154,42 +4206,44 @@ export const OperationsLeads: React.FC = () => {
                                                 )}
 
                                                 {/* Remove Staff Slot Button */}
-                                                <button
-                                                  type="button"
-                                                  onClick={() => {
-                                                    setEventAllocations((prev: any) => {
-                                                      const existingAlloc = prev[evId] || { staff: [] };
-                                                      const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
-                                                        if (isSameAssignmentSlot(s, slot)) {
-                                                          return {
-                                                            ...s,
-                                                            staff_name: '',
-                                                            staff_id: '',
-                                                            mobile: '',
-                                                            equipment: []
-                                                          };
-                                                        }
-                                                        return s;
-                                                      }).filter((s: any) => {
-                                                        if (isSameAssignmentSlot(s, slot) && Number(s.slot_number || 1) > targetQty) {
-                                                          return false;
-                                                        }
-                                                        return true;
+                                                {!isTaskStarted && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEventAllocations((prev: any) => {
+                                                        const existingAlloc = prev[evId] || { staff: [] };
+                                                        const updatedStaff = (existingAlloc.staff || []).map((s: any) => {
+                                                          if (isSameAssignmentSlot(s, slot)) {
+                                                            return {
+                                                              ...s,
+                                                              staff_name: '',
+                                                              staff_id: '',
+                                                              mobile: '',
+                                                              equipment: []
+                                                            };
+                                                          }
+                                                          return s;
+                                                        }).filter((s: any) => {
+                                                          if (isSameAssignmentSlot(s, slot) && Number(s.slot_number || 1) > targetQty) {
+                                                            return false;
+                                                          }
+                                                          return true;
+                                                        });
+                                                        return {
+                                                          ...prev,
+                                                          [evId]: {
+                                                            ...existingAlloc,
+                                                            staff: updatedStaff
+                                                          }
+                                                        };
                                                       });
-                                                      return {
-                                                        ...prev,
-                                                        [evId]: {
-                                                          ...existingAlloc,
-                                                          staff: updatedStaff
-                                                        }
-                                                      };
-                                                    });
-                                                  }}
-                                                  className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded border border-rose-500/20 transition-colors cursor-pointer font-medium ml-auto sm:ml-0"
-                                                  title="Remove this staff assignment slot"
-                                                >
-                                                  ✕ <span className="hidden sm:inline">Remove</span>
-                                                </button>
+                                                    }}
+                                                    className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2 py-1 rounded border border-rose-500/20 transition-colors cursor-pointer font-medium ml-auto sm:ml-0"
+                                                    title="Remove this staff assignment slot"
+                                                  >
+                                                    ✕ <span className="hidden sm:inline">Remove</span>
+                                                  </button>
+                                                )}
                                               </div>
                                             </div>
                                           </div>
