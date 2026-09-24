@@ -3183,45 +3183,11 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
   leads,
   production
 }) => {
-  const { paymentHistory, approvePayment, rejectPayment, refreshData } = useRole();
+  const { paymentHistory } = useRole();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState<'this_month' | 'last_month' | 'last_3_months'>('this_month');
   const [startDate, setStartDate] = useState(() => getPeriodDates('this_month').startDate);
   const [endDate, setEndDate] = useState(() => getPeriodDates('this_month').endDate);
-
-  const [processingPaymentId, setProcessingPaymentId] = useState<string | null>(null);
-
-  const handleApprovePayment = async (histId: string, orderId: string) => {
-    if (!histId || processingPaymentId) return;
-    setProcessingPaymentId(histId);
-    try {
-      await approvePayment(histId, orderId);
-      if (typeof refreshData === 'function') {
-        await refreshData();
-      }
-    } catch (err: any) {
-      console.error("Error approving payment:", err);
-      alert(`Failed to approve payment: ${err.message || 'Please check your connection and try again.'}`);
-    } finally {
-      setProcessingPaymentId(null);
-    }
-  };
-
-  const handleRejectPayment = async (histId: string, orderId: string) => {
-    if (!histId || processingPaymentId) return;
-    setProcessingPaymentId(histId);
-    try {
-      await rejectPayment(histId, orderId);
-      if (typeof refreshData === 'function') {
-        await refreshData();
-      }
-    } catch (err: any) {
-      console.error("Error rejecting payment:", err);
-      alert(`Failed to reject payment: ${err.message || 'Please check your connection and try again.'}`);
-    } finally {
-      setProcessingPaymentId(null);
-    }
-  };
 
   useEffect(() => {
     const { startDate: s, endDate: e } = getPeriodDates(selectedPeriod);
@@ -3264,98 +3230,38 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       const primaryEventDate = events[0]?.event_date || o.event_date || ld?.event_date || '';
       const primaryEventName = events[0]?.event_name || events[0]?.event_type || o.custom_event_name || o.event_type || 'Event Photography';
 
+      const approvedHistories = (paymentHistory || []).filter(h => 
+        (h.order_id === o.order_id || h.order_id === o.lead_id) && 
+        h.approval_status !== 'Rejected' &&
+        (h.approval_status === 'Approved' || (!h.notes || !h.notes.includes('Waiting for Approval')))
+      );
+      const historyApprovedSum = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+
       let rejectedIds = new Set<string>();
       try {
         const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
         if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
       } catch (_) {}
 
-      let approvedIds = new Set<string>();
-      try {
-        const approvedSaved = localStorage.getItem('approved_payment_history_ids');
-        if (approvedSaved) approvedIds = new Set(JSON.parse(approvedSaved));
-      } catch (_) {}
-
-      let localPending: any[] = [];
-      try {
-        const saved = localStorage.getItem('pending_payment_approvals');
-        if (saved) {
-          localPending = (JSON.parse(saved) || []).filter(
-            (h: any) => h.order_id === o.order_id || (o.lead_id && h.order_id === o.lead_id)
-          );
-        }
-      } catch (_) {}
-
-      const allHistories = [
-        ...(paymentHistory || []).filter(h => (h.order_id === o.order_id || (o.lead_id && h.order_id === o.lead_id))),
-        ...localPending
-      ];
-
-      const historyMap = new Map<string, any>();
-      allHistories.forEach(item => {
-        const key = String(item.id || item.payment_history_id || '');
-        if (key && !historyMap.has(key)) {
-          historyMap.set(key, item);
-        }
-      });
-
-      const pendingPayments: any[] = [];
-      const approvedHistories: any[] = [];
-
-      historyMap.forEach(h => {
+      const hasPendingApproval = (paymentHistory || []).some(h => {
+        const isThisOrder = (h.order_id === o.order_id || h.order_id === o.lead_id);
+        if (!isThisOrder) return false;
         const histId = String(h.id || h.payment_history_id || '');
+        if (rejectedIds.has(histId)) return false;
         const isExplicitlyRejected = h.approval_status === 'Rejected' || 
-          rejectedIds.has(histId) ||
           (typeof h.notes === 'string' && (
             h.notes.includes('Rejected') || 
             h.notes.includes('[REJECTED]') || 
             h.notes.endsWith('- Rejected') || 
             h.notes.toLowerCase().includes('rejected by business owner')
           ));
-        if (isExplicitlyRejected) return;
+        if (isExplicitlyRejected) return false;
 
-        const isExplicitlyApproved = (
-          h.approval_status === 'Approved' ||
-          approvedIds.has(histId) ||
-          (typeof h.notes === 'string' && (
-            h.notes.includes('Approved') ||
-            h.notes.includes('[APPROVED]') ||
-            h.notes.endsWith('- Approved') ||
-            h.notes.toLowerCase().includes('approved by business owner')
-          ))
-        );
-
-        if (isExplicitlyApproved) {
-          approvedHistories.push(h);
-          return;
-        }
-
-        const isPending = (
+        return (
           h.approval_status === 'Waiting for Approval' ||
           (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
         );
-
-        if (isPending) {
-          pendingPayments.push(h);
-        }
-      });
-
-      if (pendingPayments.length === 0 && pay?.payment_status === 'Waiting for Approval') {
-        const fallbackId = pay.payment_id || `pay_${o.order_id}`;
-        pendingPayments.push({
-          id: fallbackId,
-          payment_history_id: fallbackId,
-          order_id: o.order_id,
-          amount: pay.advance_received || pay.final_payment_received || 0,
-          payment_type: pay.payment_type || 'Payment',
-          payment_mode: pay.payment_mode || 'UPI',
-          transaction_id: pay.transaction_id || '',
-          approval_status: 'Waiting for Approval'
-        });
-      }
-
-      const hasPendingApproval = pendingPayments.length > 0;
-      const historyApprovedSum = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+      }) || (pay?.payment_status === 'Waiting for Approval');
 
       const totalRevenue = o.quotation_amount || o.advance_received || 0;
       const paymentReceived = approvedHistories.length > 0
@@ -3387,7 +3293,6 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         outstanding,
         paymentStatus,
         hasPendingApproval,
-        pendingPayments,
         currentStage: isClosed ? 'Order Closed' : (prod?.editing_status || o.current_stage || 'Confirmed'),
         isCompleted,
         isClosed
@@ -4202,88 +4107,39 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      {r.hasPendingApproval ? (
-                        <div className="flex flex-col items-center justify-center gap-1.5">
-                          {r.pendingPayments && r.pendingPayments.length > 0 ? (
-                            r.pendingPayments.map((p: any, idx: number) => {
-                              const histId = String(p.id || p.payment_history_id || '');
-                              const isProcessing = processingPaymentId === histId;
-                              return (
-                                <div key={histId || idx} className="flex flex-wrap items-center justify-center gap-1.5">
-                                  {r.pendingPayments.length > 1 && (
-                                    <span className="text-[10px] text-amber-400 font-mono font-bold mr-1">
-                                      {formatINR(Number(p.amount) || 0)}:
-                                    </span>
-                                  )}
-                                  <button
-                                    type="button"
-                                    disabled={isProcessing}
-                                    onClick={() => handleApprovePayment(histId, r.orderId)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-mono font-bold text-xs shadow-md transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-                                    title={`Approve payment transaction ${p.transaction_id || histId}`}
-                                  >
-                                    <CheckCircle2 className="w-3.5 h-3.5" />
-                                    <span>{isProcessing ? 'Approving...' : 'APPROVE PAYMENT'}</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={isProcessing}
-                                    onClick={() => handleRejectPayment(histId, r.orderId)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 active:scale-95 text-white font-mono font-bold text-xs shadow-md transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-                                    title={`Reject payment transaction ${p.transaction_id || histId}`}
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                    <span>{isProcessing ? 'Rejecting...' : 'REJECT PAYMENT'}</span>
-                                  </button>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                type="button"
-                                disabled={processingPaymentId === r.orderId}
-                                onClick={() => handleApprovePayment(r.orderId, r.orderId)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-mono font-bold text-xs shadow-md transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                                <span>{processingPaymentId === r.orderId ? 'Approving...' : 'APPROVE PAYMENT'}</span>
-                              </button>
-                              <button
-                                type="button"
-                                disabled={processingPaymentId === r.orderId}
-                                onClick={() => handleRejectPayment(r.orderId, r.orderId)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 active:scale-95 text-white font-mono font-bold text-xs shadow-md transition-all cursor-pointer whitespace-nowrap disabled:opacity-50"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                                <span>{processingPaymentId === r.orderId ? 'Rejecting...' : 'REJECT PAYMENT'}</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-1.5">
-                          <select
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
-                              if (val === 'payment_history') {
-                                setSelectedPaymentHistoryOrder(fullOrder);
-                              } else if (val === 'add_note') {
-                                setNoteModalOrder(fullOrder);
-                              }
-                              e.target.value = "";
-                            }}
-                            defaultValue=""
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer shadow-sm focus:outline-none bg-zinc-900 border border-zinc-800 text-zinc-200 hover:bg-zinc-800"
-                            title="Actions"
-                          >
-                            <option value="" disabled>Action ▾</option>
-                            <option value="payment_history">Payment History</option>
-                            <option value="add_note">Add Note</option>
-                          </select>
-                        </div>
-                      )}
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
+                            setSelectedPaymentHistoryOrder(fullOrder);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold transition-all cursor-pointer shadow-sm"
+                          title="View Payment Details & Approval"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          <span>View/Details</span>
+                        </button>
+                        <select
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const fullOrder = orders.find(o => o.order_id === r.orderId || o.lead_id === r.leadId) || r;
+                            if (val === 'payment_history') {
+                              setSelectedPaymentHistoryOrder(fullOrder);
+                            } else if (val === 'add_note') {
+                              setNoteModalOrder(fullOrder);
+                            }
+                            e.target.value = "";
+                          }}
+                          defaultValue=""
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer shadow-sm focus:outline-none bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800"
+                          title="More Actions"
+                        >
+                          <option value="" disabled>More ▾</option>
+                          <option value="payment_history">Payment Details</option>
+                          <option value="add_note">Add Note</option>
+                        </select>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -4318,7 +4174,6 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         payments={payments}
         orders={orders}
         leads={leads}
-        hideApprovalSection={true}
       />
 
       {/* ORDER HISTORY & TIMELINE AUDIT MODAL */}
