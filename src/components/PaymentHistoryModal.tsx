@@ -13,7 +13,6 @@ export interface PaymentHistoryModalProps {
   payments?: Payment[];
   orders?: Order[];
   leads?: Lead[];
-  hideApprovalSection?: boolean;
 }
 
 export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
@@ -22,10 +21,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   order,
   payments = [],
   orders = [],
-  leads = [],
-  hideApprovalSection = false
+  leads = []
 }) => {
-  const { currentRole, approvePayment, rejectPayment, paymentHistory: contextPaymentHistory } = useRole();
+  const { currentRole, approvePayment, rejectPayment, paymentHistory: contextPaymentHistory, refreshData } = useRole();
   const [historyList, setHistoryList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
@@ -202,6 +200,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setIsApprovingId(histId);
     try {
       await rejectPayment(histId, primaryOrderId);
+      if (typeof refreshData === 'function') {
+        try { await refreshData(); } catch (_) {}
+      }
       await refreshHistory();
     } catch (err: any) {
       console.error("Error rejecting payment:", err);
@@ -216,6 +217,9 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
     setIsApprovingId(histId);
     try {
       await approvePayment(histId, primaryOrderId);
+      if (typeof refreshData === 'function') {
+        try { await refreshData(); } catch (_) {}
+      }
       await refreshHistory();
     } catch (err: any) {
       console.error("Error approving payment:", err);
@@ -252,104 +256,6 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         {/* Modal Content */}
         <div className="p-4 sm:p-6 space-y-6 overflow-y-auto max-h-[75vh]">
           
-          {/* Waiting for Approval Alert Card */}
-          {currentRole === 'Business Owner' && !hideApprovalSection && pendingItems.length > 0 && (
-            <div className="p-4 sm:p-5 bg-amber-500/10 border-2 border-amber-500/40 rounded-2xl space-y-4 shadow-xl">
-              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-3 w-3 rounded-full bg-amber-400 animate-ping" />
-                  <h4 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-amber-300 font-mono flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-amber-400" />
-                    Payments Waiting for Business Owner Approval ({pendingItems.length})
-                  </h4>
-                </div>
-                <span className="text-xs font-mono text-amber-200/80">
-                  Pending: <strong className="text-amber-400">{formatINR(pendingAmount)}</strong>
-                </span>
-              </div>
-
-              <div className="space-y-3">
-                {pendingItems.map((item, idx) => {
-                  const itemDate = item.payment_date || item.created_at || '';
-                  let datePart = 'N/A';
-                  let timePart = 'N/A';
-                  try {
-                    const d = new Date(itemDate);
-                    datePart = formatDateDDMMYY(d) || 'N/A';
-                    timePart = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-                  } catch (_) {}
-
-                  const histId = item.id || item.payment_history_id;
-                  const isPendingApproving = isApprovingId === histId;
-
-                  return (
-                    <div key={histId || idx} className="p-4 bg-zinc-900/90 rounded-xl border border-amber-500/30 flex flex-col gap-3.5">
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 w-full">
-                        <div>
-                          <span className="block text-[9px] text-zinc-400 uppercase font-mono tracking-wider">Payment Amount</span>
-                          <span className="text-base font-black text-amber-400 font-mono mt-0.5 block">
-                            {formatINR(Number(item.amount) || 0)}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] text-zinc-400 uppercase font-mono tracking-wider">Payment Type</span>
-                          <span className="text-xs font-bold text-zinc-200 font-mono mt-0.5 block">
-                            {item.payment_type || 'Payment'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] text-zinc-400 uppercase font-mono tracking-wider">Payment Mode</span>
-                          <span className="text-xs font-bold text-zinc-200 font-mono mt-0.5 block">
-                            {item.payment_mode || 'UPI'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] text-zinc-400 uppercase font-mono tracking-wider">Transaction ID</span>
-                          <span className="text-xs font-mono text-zinc-300 mt-0.5 block truncate" title={item.transaction_id}>
-                            {(!item.transaction_id || item.transaction_id.trim() === '' || item.transaction_id === 'null' || item.transaction_id === 'N/A') ? 'N/A' : item.transaction_id}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] text-zinc-400 uppercase font-mono tracking-wider">Payment Date & Time</span>
-                          <span className="text-xs font-mono text-zinc-300 mt-0.5 block whitespace-normal">
-                            {datePart} <span className="text-zinc-500">at</span> {timePart}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="block text-[9px] text-zinc-400 uppercase font-mono tracking-wider">Payment Note</span>
-                          <span className="text-xs font-sans text-zinc-300 mt-0.5 block break-words" title={item.notes}>
-                            {item.notes ? item.notes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '') : '-'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-end gap-2.5">
-                        <button
-                          type="button"
-                          disabled={isPendingApproving}
-                          onClick={() => handleApprove(histId)}
-                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 sm:py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-bold text-[11px] sm:text-xs uppercase tracking-wide cursor-pointer transition-all shadow-md font-mono disabled:opacity-50"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                          <span>{isPendingApproving ? 'Approving...' : 'Approve Payment'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isPendingApproving}
-                          onClick={() => handleReject(histId)}
-                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 sm:py-2 rounded-xl bg-rose-500 hover:bg-rose-400 active:scale-95 text-white font-bold text-[11px] sm:text-xs uppercase tracking-wide cursor-pointer transition-all shadow-md font-mono disabled:opacity-50"
-                        >
-                          <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                          <span>{isPendingApproving ? 'Rejecting...' : 'Reject Payment'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {/* Payment Summary */}
           <div>
             <h4 className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider mb-2.5 font-mono">
@@ -429,26 +335,27 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                 <table className="w-full text-left text-xs border-collapse min-w-max">
                   <thead>
                     <tr className="bg-zinc-900 border-b border-zinc-800 text-zinc-400 font-mono text-[9px] uppercase tracking-wider">
-                      <th className="p-3 pl-4 whitespace-nowrap">Date & Time</th>
-                      <th className="p-3 text-right whitespace-nowrap">Amount</th>
+                      <th className="p-3 pl-4 whitespace-nowrap">Payment Date</th>
+                      <th className="p-3 text-right whitespace-nowrap">Payment Amount</th>
                       <th className="p-3 whitespace-nowrap">Payment Type</th>
+                      <th className="p-3 whitespace-nowrap">Payment Mode</th>
                       <th className="p-3 whitespace-nowrap">Transaction ID</th>
-                      <th className="p-3 whitespace-nowrap">Method</th>
                       <th className="p-3 whitespace-nowrap">Updated By</th>
-                      <th className="p-3 pr-4 whitespace-nowrap">Notes</th>
-                      <th className="p-3 pr-4 whitespace-nowrap">Approval Status</th>
+                      <th className="p-3 whitespace-nowrap">Notes</th>
+                      <th className="p-3 whitespace-nowrap">Status</th>
+                      <th className="p-3 pr-4 text-center whitespace-nowrap">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-800/60 font-mono">
                     {isLoading ? (
                       <tr>
-                        <td colSpan={8} className="text-center py-6 text-zinc-500 text-[10px]">
+                        <td colSpan={9} className="text-center py-6 text-zinc-500 text-[10px]">
                           Loading records...
                         </td>
                       </tr>
                     ) : historyList.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="text-center py-6 text-zinc-500 text-[10px]">
+                        <td colSpan={9} className="text-center py-6 text-zinc-500 text-[10px]">
                           No payment history records found.
                         </td>
                       </tr>
@@ -461,13 +368,13 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
 
                         const displayType = h.payment_type || h.paymentType || (paymentObj ? ((paymentObj as any).Payment_type || paymentObj.payment_type) : '') || 'Payment';
                         const isPending = h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval'));
-                        const histId = h.id || h.payment_history_id;
+                        const histId = String(h.id || h.payment_history_id || h.transaction_id || '');
                         const isRowApproving = isApprovingId === histId;
 
                         return (
                           <tr key={histId || index} className={`hover:bg-zinc-800/30 text-zinc-300 ${isPending ? 'bg-amber-500/5' : ''}`}>
-                            <td className="p-3 pl-4 text-[10px] text-zinc-400 whitespace-nowrap">{displayDate}</td>
-                            <td className="p-3 text-right font-bold text-emerald-400 whitespace-nowrap">
+                            <td className="p-3 pl-4 text-[10px] text-zinc-400 whitespace-nowrap font-mono">{displayDate}</td>
+                            <td className="p-3 text-right font-bold text-emerald-400 whitespace-nowrap font-mono">
                               {formatINR(Number(h.amount) || 0)}
                             </td>
                             <td className="p-3 whitespace-nowrap">
@@ -475,29 +382,58 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                                 {displayType}
                               </span>
                             </td>
-                            <td className="p-3 text-[10px] text-zinc-400 whitespace-nowrap">
+                            <td className="p-3 text-[10px] text-zinc-300 whitespace-nowrap">{h.payment_mode || h.paymentMode || 'N/A'}</td>
+                            <td className="p-3 text-[10px] text-zinc-400 whitespace-nowrap font-mono">
                               {(!h.transaction_id && !h.transactionId || h.transaction_id?.trim() === '' || h.transaction_id === 'null' || h.transactionId?.trim() === '' || h.transactionId === 'null') ? 'N/A' : (h.transaction_id || h.transactionId)}
                             </td>
-                            <td className="p-3 text-[10px] text-zinc-300 whitespace-nowrap">{h.payment_mode || h.paymentMode || 'N/A'}</td>
                             <td className="p-3 text-[10px] text-zinc-400 whitespace-nowrap">{h.updated_by || h.updatedBy || 'N/A'}</td>
-                            <td className="p-3 pr-4 text-[10px] text-zinc-400 min-w-[150px] max-w-[250px] truncate" title={h.notes}>
-                              {h.notes ? h.notes.replace(/ - Waiting for Approval/g, '') : '-'}
+                            <td className="p-3 text-[10px] text-zinc-400 min-w-[120px] max-w-[200px] truncate" title={h.notes}>
+                              {h.notes ? h.notes.replace(/ - Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/ - Rejected/g, '') : '-'}
                             </td>
-                            <td className="p-3 pr-4 whitespace-nowrap">
+                            <td className="p-3 whitespace-nowrap">
                               {isPending ? (
-                                <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[9px] font-bold text-amber-400 animate-pulse">
-                                  Waiting for Approval
+                                <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[9px] font-bold text-amber-400 animate-pulse inline-flex items-center gap-1 w-fit">
+                                  <Clock className="w-3 h-3" />
+                                  Pending Approval
                                 </span>
                               ) : h.approval_status === 'Rejected' ? (
-                                <span className="px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 text-[9px] font-bold text-rose-400 flex items-center gap-1 w-fit">
+                                <span className="px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 text-[9px] font-bold text-rose-400 inline-flex items-center gap-1 w-fit">
                                   <AlertTriangle className="w-3 h-3" />
                                   Rejected
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold text-emerald-400 flex items-center gap-1 w-fit">
+                                <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-bold text-emerald-400 inline-flex items-center gap-1 w-fit">
                                   <CheckCircle className="w-3 h-3" />
                                   Approved
                                 </span>
+                              )}
+                            </td>
+                            <td className="p-3 pr-4 text-center whitespace-nowrap">
+                              {isPending && (currentRole === 'Business Owner' || !currentRole || currentRole === 'Super Admin') ? (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={isRowApproving}
+                                    onClick={() => handleApprove(histId)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-bold text-[10px] tracking-wide cursor-pointer transition-all shadow-sm font-mono disabled:opacity-50"
+                                    title="Approve this payment"
+                                  >
+                                    <CheckCircle className="w-3 h-3" />
+                                    <span>{isRowApproving ? '...' : 'Approve'}</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isRowApproving}
+                                    onClick={() => handleReject(histId)}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-500 hover:bg-rose-400 active:scale-95 text-white font-bold text-[10px] tracking-wide cursor-pointer transition-all shadow-sm font-mono disabled:opacity-50"
+                                    title="Reject this payment"
+                                  >
+                                    <X className="w-3 h-3" />
+                                    <span>{isRowApproving ? '...' : 'Reject'}</span>
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-zinc-500 text-xs">—</span>
                               )}
                             </td>
                           </tr>

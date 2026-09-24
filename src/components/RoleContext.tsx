@@ -7099,7 +7099,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const approvePayment = async (historyId: string, orderId: string) => {
-    let targetHistory = paymentHistory.find(h => h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId));
+    let targetHistory = paymentHistory.find(h => 
+      h.id === historyId || 
+      h.payment_history_id === historyId || 
+      String(h.id) === String(historyId) ||
+      (h.transaction_id && String(h.transaction_id) === String(historyId))
+    );
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(historyId);
     if (!targetHistory && supabaseClient && isUuid) {
       const { data } = await supabaseClient.from('payment_history').select('*').eq('id', historyId).maybeSingle();
@@ -7268,7 +7273,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const rejectPayment = async (historyId: string, orderId: string) => {
-    let targetHistory = paymentHistory.find(h => h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId));
+    let targetHistory = paymentHistory.find(h => 
+      h.id === historyId || 
+      h.payment_history_id === historyId || 
+      String(h.id) === String(historyId) ||
+      (h.transaction_id && String(h.transaction_id) === String(historyId))
+    );
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(historyId);
     if (!targetHistory && supabaseClient && isUuid) {
       const { data } = await supabaseClient.from('payment_history').select('*').eq('id', historyId).maybeSingle();
