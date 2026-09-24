@@ -10,7 +10,7 @@ import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, saveCustomCategoryToStorage } from '../../utils';
 import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
@@ -217,6 +217,10 @@ export const SalesPackagesManager: React.FC<SalesPackagesManagerProps> = (props)
                                 placeholder="e.g. Newborn Baby shoot"
                                 value={customCategory}
                                 onChange={(e) => setCustomCategory(e.target.value)}
+                                onBlur={(e) => {
+                                  const v = e.target.value.trim();
+                                  if (v) saveCustomCategoryToStorage(v);
+                                }}
                                 className="w-full bg-slate-950 border border-amber-500/40 focus:border-amber-500 rounded-xl py-2 px-3 text-slate-200 focus:outline-none font-sans text-xs"
                               />
                             </div>
@@ -453,6 +457,9 @@ export const SalesPackagesManager: React.FC<SalesPackagesManagerProps> = (props)
                             return;
                           }
                           resolvedCategory = customCategory.trim();
+                          saveCustomCategoryToStorage(resolvedCategory);
+                        } else if (resolvedCategory) {
+                          saveCustomCategoryToStorage(resolvedCategory);
                         }
                         
                         const filteredMembers = pkgTeamMembers.filter(item => item.name.trim() !== '');
@@ -465,7 +472,8 @@ export const SalesPackagesManager: React.FC<SalesPackagesManagerProps> = (props)
                           ...pkgForm,
                           team_members: teamMembersStr,
                           deliverables: deliverablesStr,
-                          category: resolvedCategory
+                          category: resolvedCategory,
+                          event_type: pkgForm.event_type || resolvedCategory
                         };
                         
                         try {
@@ -628,7 +636,7 @@ export const SalesPackagesManager: React.FC<SalesPackagesManagerProps> = (props)
                                       team_members: pkg.team_members || '',
                                       seasonal_offer: pkg.seasonal_offer || '',
                                       terms_conditions: pkg.terms_conditions || '',
-                                      event_type: pkg.event_type || '',
+                                      event_type: pkg.event_type || pkg.category || '',
                                       duration: pkg.duration || '',
                                       package_includes: pkg.package_includes || ''
                                     });

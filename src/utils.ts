@@ -2846,3 +2846,37 @@ export function formatISTTimestamp(dateVal?: string | null | Date): string {
   }
 }
 
+/**
+ * Returns saved custom package categories from persistent local storage
+ */
+export function getStoredCustomCategories(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('erp_custom_package_categories');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(Boolean).map((s: string) => String(s).trim()) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Saves a new custom package category into persistent local storage and dispatches sync event
+ */
+export function saveCustomCategoryToStorage(catName: string): void {
+  if (!catName || typeof window === 'undefined') return;
+  const clean = catName.trim();
+  if (!clean || clean.toUpperCase() === 'CUSTOM_CATEGORY') return;
+  try {
+    const existing = getStoredCustomCategories();
+    if (!existing.some(c => c.toLowerCase() === clean.toLowerCase())) {
+      const updated = [...existing, clean];
+      localStorage.setItem('erp_custom_package_categories', JSON.stringify(updated));
+    }
+  } catch (_) {}
+  try {
+    window.dispatchEvent(new CustomEvent('custom-category-updated', { detail: clean }));
+  } catch (_) {}
+}
+

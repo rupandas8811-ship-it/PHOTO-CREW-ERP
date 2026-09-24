@@ -26,7 +26,7 @@ export const SHOOT_TYPES = [
   "STANDARD PHOTOGRAPHY",
   "STANDARD VIDEOGRAPHY"
 ];
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, getStoredCustomCategories, saveCustomCategoryToStorage } from '../utils';
 import { SalesCalendar } from './SalesCalendar';
 import { CustomPackageMaster } from './CustomPackageMaster';
 import { AddressAutocomplete } from './AddressAutocomplete';
@@ -2076,13 +2076,76 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, []);
 
   // Group active packages directly loaded from Supabase!
+  const [customCategoryUpdateCounter, setCustomCategoryUpdateCounter] = useState(0);
+
+  useEffect(() => {
+    const handleCategoryUpdate = () => {
+      setCustomCategoryUpdateCounter(prev => prev + 1);
+    };
+    window.addEventListener('custom-category-updated', handleCategoryUpdate);
+    window.addEventListener('package-saved', handleCategoryUpdate);
+    return () => {
+      window.removeEventListener('custom-category-updated', handleCategoryUpdate);
+      window.removeEventListener('package-saved', handleCategoryUpdate);
+    };
+  }, []);
+
   const categoriesList = React.useMemo(() => {
     const dbCats = Array.from(new Set((packages || []).map((p) => p.category))).filter(Boolean) as string[];
-    const normalizedDbCats = dbCats.map(normalizeCategory);
+    const storedCats = getStoredCustomCategories();
+    const allDbCats = Array.from(new Set([...dbCats, ...storedCats]));
+
+    const normalizedDbCats = allDbCats.map(normalizeCategory);
     const normalizedPkgCats = PACKAGE_CATEGORIES.map(normalizeCategory);
-    const customCats = normalizedDbCats.filter(c => !normalizedPkgCats.includes(c)).sort();
+    const customCats = normalizedDbCats.filter(c => !normalizedPkgCats.some(pc => pc.toLowerCase() === c.toLowerCase())).sort();
     return Array.from(new Set([...normalizedPkgCats, ...customCats]));
-  }, [packages]);
+  }, [packages, customCategoryUpdateCounter]);
+
+  // Synchronized Event Types: base types + any custom package categories + 'Other'
+  const synchronizedEventTypes = React.useMemo(() => {
+    const baseEventTypes = EVENT_TYPES.filter(t => t !== 'Other');
+    const seenLower = new Set(baseEventTypes.map(t => t.toLowerCase()));
+
+    const candidates: string[] = [];
+
+    if (Array.isArray(categoriesList)) {
+      categoriesList.forEach(c => {
+        if (c && c !== 'CUSTOM_CATEGORY') candidates.push(c);
+      });
+    }
+
+    (packages || []).forEach(p => {
+      if (p.category && p.category !== 'CUSTOM_CATEGORY') candidates.push(p.category);
+      if (p.event_type && p.event_type !== 'CUSTOM_CATEGORY') candidates.push(p.event_type);
+    });
+
+    getStoredCustomCategories().forEach(c => candidates.push(c));
+
+    (leads || []).forEach(l => {
+      if (l.event_type && l.event_type !== 'Other') candidates.push(l.event_type);
+      if (Array.isArray(l.events)) {
+        l.events.forEach((ev: any) => {
+          if (ev.event_type && ev.event_type !== 'Other') candidates.push(ev.event_type);
+        });
+      }
+    });
+
+    const uniqueCustomTypes: string[] = [];
+    candidates.forEach(cand => {
+      const trimmed = (cand || '').trim();
+      if (!trimmed) return;
+      const lower = trimmed.toLowerCase();
+      if (lower === 'other' || lower === 'custom_category') return;
+      if (!seenLower.has(lower)) {
+        seenLower.add(lower);
+        uniqueCustomTypes.push(trimmed);
+      }
+    });
+
+    uniqueCustomTypes.sort((a, b) => a.localeCompare(b));
+
+    return [...baseEventTypes, ...uniqueCustomTypes, 'Other'];
+  }, [packages, categoriesList, leads, customCategoryUpdateCounter]);
 
   const PACKAGES_LIST = React.useMemo(() => {
     return categoriesList.map((cat) => ({
@@ -7918,7 +7981,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             className="w-full bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-lg py-2 px-3 text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-cyan-500/20 transition-all cursor-pointer font-bold"
           >
             <option value="">Select Event Type</option>
-            {EVENT_TYPES.map(type => (
+            {synchronizedEventTypes.map(type => (
               <option key={type} value={type}>{type}</option>
             ))}
           </select>
@@ -10300,7 +10363,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               onChange={(e) => setReorderForm({ ...reorderForm, event_type: e.target.value })}
                               className="w-full bg-slate-950 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100"
                             >
-                              {EVENT_TYPES.map(type => (
+                              {synchronizedEventTypes.map(type => (
                                 <option key={type} value={type}>{type}</option>
                               ))}
                             </select>

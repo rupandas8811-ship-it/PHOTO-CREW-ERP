@@ -5,7 +5,7 @@ import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
-import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers, checkGlobalMobileUnique, normalizeMobileNumber } from '../utils';
+import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers, checkGlobalMobileUnique, normalizeMobileNumber, saveCustomCategoryToStorage, getStoredCustomCategories } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { executeSaveStaffAssignments } from '../services/operationsAssignmentService';
 
@@ -699,7 +699,7 @@ export const mapDbRecordToPackage = (record: any): Package => {
       team_members = parsed.team_members || '';
       seasonal_offer = parsed.seasonal_offer || '';
       terms_conditions = parsed.terms_conditions || '';
-      event_type = parsed.event_type || '';
+      event_type = parsed.event_type || parsed.category || category;
       duration = parsed.duration || '';
       package_includes = parsed.package_includes || '';
     } catch (e) {
@@ -707,17 +707,20 @@ export const mapDbRecordToPackage = (record: any): Package => {
     }
   }
 
+  const finalCategory = record.category || category;
+  const finalEventType = event_type || finalCategory;
+
   return {
     package_id: record.package_id,
     package_name: record.name || record.package_name || '',
-    category: record.category || category,
+    category: finalCategory,
     price: record.price !== undefined && record.price !== null ? Number(record.price) : 0,
     status: record.status || 'Active',
     deliverables,
     team_members,
     seasonal_offer,
     terms_conditions,
-    event_type,
+    event_type: finalEventType,
     duration,
     package_includes,
     created_at: record.created_at
@@ -3413,6 +3416,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           .forEach(p => pkgMap.set(String(p.package_id), p));
 
         mappedDbPkgs.forEach(p => pkgMap.set(String(p.package_id), p));
+
+        // Sync all custom categories found in packages to persistent storage
+        try {
+          mappedDbPkgs.forEach(p => {
+            if (p.category) saveCustomCategoryToStorage(p.category);
+            if (p.event_type) saveCustomCategoryToStorage(p.event_type);
+          });
+        } catch (_) {}
 
         setPackages(Array.from(pkgMap.values()));
         if (dbCalendarMemos) setCalendarMemos(dbCalendarMemos);
@@ -8239,7 +8250,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       team_members: newPkg.team_members || '',
       seasonal_offer: newPkg.seasonal_offer || '',
       terms_conditions: newPkg.terms_conditions || '',
-      event_type: newPkg.event_type || '',
+      event_type: newPkg.event_type || newPkg.category || '',
       duration: newPkg.duration || '',
       package_includes: newPkg.package_includes || ''
     };
@@ -8283,6 +8294,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         // Update local React state only after successful post-save verification!
         setPackages((prev) => [savedPkg, ...prev]);
 
+        if (savedPkg.category) saveCustomCategoryToStorage(savedPkg.category);
+        if (savedPkg.event_type) saveCustomCategoryToStorage(savedPkg.event_type);
+
         window.alert('Package Created Successfully');
         logActivity(`Created Package: ${savedPkg.package_name}`, 'Sales', package_id, 'Active', 'Active');
         return package_id;
@@ -8312,7 +8326,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       team_members: merged.team_members || '',
       seasonal_offer: merged.seasonal_offer || '',
       terms_conditions: merged.terms_conditions || '',
-      event_type: merged.event_type || '',
+      event_type: merged.event_type || merged.category || '',
       duration: merged.duration || '',
       package_includes: merged.package_includes || ''
     };
@@ -8362,6 +8376,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
         // Update local React state only after successful post-save verification!
         setPackages((prev) => prev.map((p) => p.package_id === packageId ? updatedPkg : p));
+
+        if (updatedPkg.category) saveCustomCategoryToStorage(updatedPkg.category);
+        if (updatedPkg.event_type) saveCustomCategoryToStorage(updatedPkg.event_type);
 
         window.alert('Package Updated Successfully');
         logActivity(`Updated Package: ${updatedPkg.package_name}`, 'Sales', packageId, 'Active', 'Active');
