@@ -120,6 +120,7 @@ export const PendingPaymentsReport: React.FC = () => {
   const [paymentModalRecord, setPaymentModalRecord] = useState<any>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [viewDetailsRecord, setViewDetailsRecord] = useState<any>(null);
+  const [updateSuccessMsg, setUpdateSuccessMsg] = useState('');
 
   useEffect(() => {
     const handleClose = () => {
