@@ -4063,8 +4063,14 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   }, [selectedLead?.lead_id, supabaseClient]);
 
   // Sync wizardLeadData.advance_received and wizardLeadData.final_amount with latest payment and order confirmation data
+  const prevSyncedLeadIdRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!selectedLead?.lead_id) return;
+    if (!selectedLead?.lead_id) {
+      prevSyncedLeadIdRef.current = null;
+      return;
+    }
+    if (prevSyncedLeadIdRef.current === selectedLead.lead_id) return;
+    prevSyncedLeadIdRef.current = selectedLead.lead_id;
     const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
     const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : payments?.find(p => p.lead_id === selectedLead.lead_id);
     
@@ -4075,17 +4081,14 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         const latestAdvance = Math.max(payTotal, historyPaid);
         const latestFinalAmount = Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || (linkedOrder ? (linkedOrder.quotation_amount || 0) : prev.final_amount);
         
-        if (prev.advance_received !== latestAdvance || prev.final_amount !== latestFinalAmount) {
-          return {
-            ...prev,
-            advance_received: latestAdvance,
-            final_amount: latestFinalAmount
-          };
-        }
-        return prev;
+        return {
+          ...prev,
+          advance_received: latestAdvance,
+          final_amount: latestFinalAmount
+        };
       });
     }
-  }, [selectedLead?.lead_id, orders, payments, paymentHistory]);
+  }, [selectedLead?.lead_id]);
 
   // Handle lead select
   useEffect(() => {

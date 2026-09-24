@@ -290,7 +290,7 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                     <input
                       type="number"
                       min="0"
-                      value={confirmForm.advance_received !== undefined && confirmForm.advance_received !== null ? confirmForm.advance_received : 0}
+                      value={confirmForm.advance_received !== undefined && confirmForm.advance_received !== null ? confirmForm.advance_received : ''}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (val === '') {

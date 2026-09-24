@@ -5495,8 +5495,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
   }, [selectedLead?.lead_id, supabaseClient]);
 
   // Sync wizardLeadData.advance_received and wizardLeadData.final_amount with latest payment and order confirmation data
+  const prevSalesLeadSyncRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!selectedLead?.lead_id) return;
+    if (!selectedLead?.lead_id) {
+      prevSalesLeadSyncRef.current = null;
+      return;
+    }
+    if (prevSalesLeadSyncRef.current === selectedLead.lead_id) return;
+    prevSalesLeadSyncRef.current = selectedLead.lead_id;
     const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
     const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
     
@@ -5505,17 +5511,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
         const latestAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : prev.advance_received);
         const latestFinalAmount = linkedOrder ? (linkedOrder.quotation_amount || 0) : prev.final_amount;
         
-        if (prev.advance_received !== latestAdvance || prev.final_amount !== latestFinalAmount) {
-          return {
-            ...prev,
-            advance_received: latestAdvance,
-            final_amount: latestFinalAmount
-          };
-        }
-        return prev;
+        return {
+          ...prev,
+          advance_received: latestAdvance,
+          final_amount: latestFinalAmount
+        };
       });
     }
-  }, [selectedLead?.lead_id, orders, payments]);
+  }, [selectedLead?.lead_id]);
 
   // Handle lead select
   useEffect(() => {
@@ -14134,8 +14137,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <input
                                     id="input_final_amount"
                                     type="number"
-                                    value={wizardLeadData.final_amount || 0}
-                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
+                                    value={wizardLeadData.final_amount ?? ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setWizardLeadData({ ...wizardLeadData, final_amount: val === "" ? ("" as any) : Math.max(0, parseInt(val) || 0) });
+                                    }}
                                     className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
                                     required
                                   />
@@ -14145,8 +14151,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                   <input
                                     id="input_advance_received"
                                     type="number"
-                                    value={wizardLeadData.advance_received || 0}
-                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
+                                    value={wizardLeadData.advance_received ?? ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setWizardLeadData({ ...wizardLeadData, advance_received: val === "" ? ("" as any) : Math.max(0, parseInt(val) || 0) });
+                                    }}
                                     className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-emerald-400 font-mono font-bold"
                                     required
                                   />

@@ -118,15 +118,8 @@ export const PendingPaymentsReport: React.FC = () => {
   // Modal State for Payment Update
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentModalRecord, setPaymentModalRecord] = useState<any>(null);
-  const [paymentAmount, setPaymentAmount] = useState<number | ''>( '');
-  const [paymentNotes, setPaymentNotes] = useState('');
-  const [transactionIdInput, setTransactionIdInput] = useState('');
-  const [paymentMode, setPaymentMode] = useState('UPI');
-  const [paymentType, setPaymentType] = useState('');
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [viewDetailsRecord, setViewDetailsRecord] = useState<any>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [updateSuccessMsg, setUpdateSuccessMsg] = useState('');
 
   useEffect(() => {
     const handleClose = () => {
@@ -167,10 +160,6 @@ export const PendingPaymentsReport: React.FC = () => {
       ensureModalScrolledToTop('#payment_details_history_modal');
     }
   }, [showDetailsModal]);
-  
-  // Modal level feedback states
-  const [modalSuccessMsg, setModalSuccessMsg] = useState('');
-  const [modalErrorMsg, setModalErrorMsg] = useState('');
 
   // Normalize date string to standard YYYY-MM-DD
   const normalizeToYYYYMMDD = (dStr?: string): string => {
@@ -1688,15 +1677,6 @@ export const PendingPaymentsReport: React.FC = () => {
                         <button 
                           onClick={() => {
                             setPaymentModalRecord(rec);
-                            setPaymentAmount('');
-                            setTransactionIdInput('');
-                            setPaymentMode('UPI');
-                            const linkedPay = payments.find(p => p.order_id === rec.orderId || (rec.payment && p.payment_id === rec.payment.payment_id));
-                            const existingType = (linkedPay as any)?.Payment_type || linkedPay?.payment_type || (rec.payment as any)?.Payment_type || rec.payment?.payment_type || '';
-                            setPaymentType(existingType);
-                            setPaymentNotes('');
-                            setModalSuccessMsg('');
-                            setModalErrorMsg('');
                             setShowPaymentModal(true);
                           }}
                           className="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/25 border border-emerald-500/20 text-emerald-400 rounded transition font-bold text-[10px] uppercase tracking-wider cursor-pointer"

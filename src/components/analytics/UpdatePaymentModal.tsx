@@ -28,7 +28,7 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
 }) => {
   const { orders, payments, leads, recordPayment, refreshData } = useRole();
 
-  const [paymentAmount, setPaymentAmount] = useState<number | ''>('');
+  const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [transactionIdInput, setTransactionIdInput] = useState('');
   const [paymentMode, setPaymentMode] = useState('UPI');
   const [paymentType, setPaymentType] = useState('');
@@ -36,6 +36,9 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
   const [modalSuccessMsg, setModalSuccessMsg] = useState('');
   const [modalErrorMsg, setModalErrorMsg] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+
+  // Track initialization to prevent background polling or re-renders from clearing inputs
+  const initializedOrderRef = React.useRef<string | null>(null);
 
   // Format currency in INR style
   const formatPercentageOrINR = (amount: number, isPercentage = false) => {
@@ -48,7 +51,14 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && paymentModalRecord) {
+    if (!isOpen) {
+      initializedOrderRef.current = null;
+      return;
+    }
+
+    const currentOrderId = paymentModalRecord?.orderId;
+    if (isOpen && paymentModalRecord && initializedOrderRef.current !== currentOrderId) {
+      initializedOrderRef.current = currentOrderId || null;
       setPaymentAmount('');
       setTransactionIdInput('');
       setPaymentMode('UPI');
@@ -59,7 +69,7 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
       setModalSuccessMsg('');
       setModalErrorMsg('');
     }
-  }, [isOpen, paymentModalRecord, payments]);
+  }, [isOpen, paymentModalRecord?.orderId]);
 
   // Dynamically retrieve the real-time record to keep modal updated
   const currentRecord = useMemo(() => {
@@ -68,10 +78,14 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
     const payment = order ? payments.find(p => p.order_id === order.order_id) : payments.find(p => p.order_id === paymentModalRecord.orderId || (paymentModalRecord.lead && p.lead_id === paymentModalRecord.lead.lead_id));
     const lead = leads.find(l => paymentModalRecord.lead && l.lead_id === paymentModalRecord.lead.lead_id) || paymentModalRecord.lead;
     
-    const finalPackageAmount = Number(lead?.Final_Quotation_Amount) || Number((lead as any)?.final_quotation_amount) || (order ? Number(order.quotation_amount || order.final_amount) : 0) || Number(paymentModalRecord.finalPackageAmount) || Number(lead?.budget) || 0;
+    const finalPackageAmount = paymentModalRecord.finalPackageAmount ?? (Number(lead?.Final_Quotation_Amount) || Number((lead as any)?.final_quotation_amount) || (order ? Number(order.quotation_amount || order.final_amount) : 0) || Number(lead?.budget) || 0);
     const advanceReceived = order ? (Number(order.advance_received) || 0) : (Number(lead?.advance_collected) || 0);
-    const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
-    const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
+    const totalPaidAmount = paymentModalRecord.totalPaidAmount !== undefined
+      ? paymentModalRecord.totalPaidAmount
+      : (payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived);
+    const remainingAmount = paymentModalRecord.remainingAmount !== undefined
+      ? paymentModalRecord.remainingAmount
+      : Math.max(0, finalPackageAmount - totalPaidAmount);
     
     return {
       finalPackageAmount,
@@ -82,7 +96,8 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
 
   const handleSavePayment = async () => {
     if (isSaving || !paymentModalRecord) return;
-    const amt = Number(paymentAmount);
+    const cleanAmt = String(paymentAmount).trim();
+    const amt = Number(cleanAmt);
     setModalSuccessMsg('');
     setModalErrorMsg('');
 
@@ -91,7 +106,7 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
       return;
     }
 
-    if (!paymentAmount || amt <= 0) {
+    if (!cleanAmt || isNaN(amt) || amt <= 0) {
       setModalErrorMsg('❌ Please enter a valid payment amount.');
       return;
     }
@@ -251,9 +266,18 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
               <div className="space-y-1">
                 <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Received</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
+                  onChange={(e) => {
+                    const rawVal = e.target.value;
+                    if (rawVal === '' || /^\d*\.?\d*$/.test(rawVal)) {
+                      setPaymentAmount(rawVal);
+                      if (modalErrorMsg) {
+                        setModalErrorMsg('');
+                      }
+                    }
+                  }}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
                   placeholder="0"
                 />
@@ -313,7 +337,7 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
           <button
             type="button"
             onClick={handleSavePayment}
-            disabled={isSaving || (currentRecord && currentRecord.remainingAmount === 0) || !paymentAmount || Number(paymentAmount) <= 0 || !paymentType}
+            disabled={isSaving || (currentRecord && currentRecord.remainingAmount === 0) || !paymentAmount.trim() || isNaN(Number(paymentAmount)) || Number(paymentAmount) <= 0 || !paymentType}
             className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-950 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition uppercase tracking-wider cursor-pointer"
           >
             {isSaving ? 'Saving...' : 'Save Payment'}
