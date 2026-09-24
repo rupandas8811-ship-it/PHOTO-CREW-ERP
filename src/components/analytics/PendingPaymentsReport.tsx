@@ -435,14 +435,15 @@ export const PendingPaymentsReport: React.FC = () => {
       // Total Paid Amount includes approved amount plus any pending approval amount (unapproved amount displayed in RED)
       const totalPaidAmount = approvedAmount + pendingApprovalAmount;
 
-      const remainingAmount = Math.max(0, finalPackageAmount - approvedAmount);
-      const rawPaymentStatus = payment ? payment.payment_status : (approvedAmount > 0 ? (approvedAmount >= finalPackageAmount ? 'Fully Paid' : 'Partially Paid') : 'Pending');
+      // Pending Amount = Final Quotation Amount - Total Counted Payments (Approved + Pending Approval, excluding Rejected)
+      const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
+      const rawPaymentStatus = payment ? payment.payment_status : (totalPaidAmount > 0 ? (totalPaidAmount >= finalPackageAmount ? 'Fully Paid' : 'Partially Paid') : 'Pending');
 
       // Standardize status labels
       let paymentStatus: 'Pending' | 'Partial' | 'Fully Paid' = 'Pending';
       if (remainingAmount <= 0 && finalPackageAmount > 0) {
         paymentStatus = 'Fully Paid';
-      } else if (rawPaymentStatus === 'Partially Paid' || rawPaymentStatus === 'Partial' || (approvedAmount > 0 && remainingAmount > 0)) {
+      } else if (rawPaymentStatus === 'Partially Paid' || rawPaymentStatus === 'Partial' || (totalPaidAmount > 0 && remainingAmount > 0)) {
         paymentStatus = 'Partial';
       } else if (rawPaymentStatus === 'Fully Paid') {
         paymentStatus = 'Fully Paid';
@@ -1567,26 +1568,24 @@ export const PendingPaymentsReport: React.FC = () => {
                     <td className="px-4 py-4 text-xs text-right font-mono">
                       {rec.pendingApprovalAmount > 0 ? (
                         <div className="flex flex-col items-end">
-                          <div className="flex items-center justify-end gap-1 font-mono font-bold">
-                            {rec.approvedAmount > 0 ? (
-                              <>
-                                <span className="text-emerald-400">{formatPercentageOrINR(rec.approvedAmount)}</span>
-                                <span className="text-zinc-400 font-normal">+</span>
-                                <span className="text-rose-500 font-black">{formatPercentageOrINR(rec.pendingApprovalAmount)}</span>
-                              </>
+                          <div className="font-mono font-bold text-xs">
+                            {rec.approvedAmount === 0 ? (
+                              <span className="text-rose-500 font-black">
+                                {formatPercentageOrINR(rec.totalPaidAmount)}
+                              </span>
                             ) : (
-                              <span className="text-rose-500 font-black">{formatPercentageOrINR(rec.pendingApprovalAmount)}</span>
+                              <span className="text-zinc-100">
+                                {formatPercentageOrINR(rec.totalPaidAmount)}
+                              </span>
                             )}
                           </div>
-                          <div className="text-[10px] font-mono text-zinc-400 mt-0.5 whitespace-nowrap">
-                            <span>Total: </span>
-                            <span className="text-zinc-200 font-bold">{formatPercentageOrINR(rec.totalPaidAmount)}</span>
-                            <span className="text-rose-400 font-medium ml-1">({formatPercentageOrINR(rec.pendingApprovalAmount)} Pending Approval)</span>
+                          <div className="text-[10px] font-mono text-rose-500 font-bold whitespace-nowrap mt-0.5">
+                            ({formatPercentageOrINR(rec.pendingApprovalAmount)} Pending Approval)
                           </div>
                         </div>
                       ) : (
-                        <span className={rec.approvedAmount > 0 ? "text-emerald-400 font-semibold" : "text-zinc-400"}>
-                          {formatPercentageOrINR(rec.approvedAmount)}
+                        <span className={rec.totalPaidAmount > 0 ? "text-emerald-400 font-semibold" : "text-zinc-400"}>
+                          {formatPercentageOrINR(rec.totalPaidAmount)}
                         </span>
                       )}
                     </td>
