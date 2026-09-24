@@ -25,36 +25,60 @@ import { EVENT_TYPES } from '../../types';
 import { formatDateDDMMYY, formatTime12Hour, ensureModalScrolledToTop } from '../../utils';
 import { PaymentHistoryModal } from '../PaymentHistoryModal';
 import { UpdatePaymentModal } from './UpdatePaymentModal';
+import { supabaseClient } from '../../supabaseClient';
 
 export const PendingPaymentsReport: React.FC = () => {
-  const { leads, orders, payments, currentUserName, recordPayment, refreshData } = useRole();
+  const { leads, orders, payments, currentUserName, recordPayment, refreshData, paymentHistory: contextPaymentHistory } = useRole();
   const [isSyncing, setIsSyncing] = useState(false);
+  const [dbPaymentHistory, setDbPaymentHistory] = useState<any[]>([]);
+
+  // Function to fetch latest payment history records from Supabase directly
+  const fetchLatestPaymentHistory = useCallback(async () => {
+    try {
+      if (supabaseClient) {
+        const { data, error } = await supabaseClient
+          .from('payment_history')
+          .select('*')
+          .order('payment_date', { ascending: false });
+        if (!error && data) {
+          setDbPaymentHistory(data);
+        }
+      }
+    } catch (err) {
+      console.warn('[PendingPaymentsReport] Error fetching payment history:', err);
+    }
+  }, []);
 
   // Sync latest data on mount and provide manual refresh handler
   const handleManualSync = useCallback(async () => {
-    if (typeof refreshData === 'function' && !isSyncing) {
+    if (!isSyncing) {
       setIsSyncing(true);
       try {
-        await refreshData();
+        if (typeof refreshData === 'function') {
+          await refreshData();
+        }
+        await fetchLatestPaymentHistory();
       } catch (err) {
         console.warn('[PendingPaymentsReport] Sync error:', err);
       } finally {
         setTimeout(() => setIsSyncing(false), 400);
       }
     }
-  }, [refreshData, isSyncing]);
+  }, [refreshData, isSyncing, fetchLatestPaymentHistory]);
 
   useEffect(() => {
     if (typeof refreshData === 'function') {
       refreshData();
     }
-  }, []);
+    fetchLatestPaymentHistory();
+  }, [refreshData, fetchLatestPaymentHistory]);
 
   useEffect(() => {
     const handleSync = () => {
       if (typeof refreshData === 'function') {
         refreshData();
       }
+      fetchLatestPaymentHistory();
     };
 
     window.addEventListener('focus', handleSync);
@@ -77,7 +101,7 @@ export const PendingPaymentsReport: React.FC = () => {
       window.removeEventListener('order-updated', handleSync);
       window.removeEventListener('refresh-pending-payments', handleSync);
     };
-  }, [refreshData]);
+  }, [refreshData, fetchLatestPaymentHistory]);
 
   // Search and Filter states
   const [globalSearch, setGlobalSearch] = useState('');
@@ -266,6 +290,84 @@ export const PendingPaymentsReport: React.FC = () => {
     }).format(amount);
   };
 
+  // Combine all payment transactions from database, role context, and local storage caches
+  const allPaymentHistory = useMemo(() => {
+    let localPending: any[] = [];
+    try {
+      const saved = localStorage.getItem('pending_payment_approvals');
+      if (saved) localPending = JSON.parse(saved) || [];
+    } catch (_) {}
+
+    let approvedIds = new Set<string>();
+    try {
+      const approvedSaved = localStorage.getItem('approved_payment_history_ids');
+      if (approvedSaved) approvedIds = new Set(JSON.parse(approvedSaved));
+    } catch (_) {}
+
+    let rejectedIds = new Set<string>();
+    try {
+      const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+      if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
+    } catch (_) {}
+
+    const combinedMap = new Map<string, any>();
+
+    // 1. Direct database records
+    (dbPaymentHistory || []).forEach(item => {
+      const key = String(item.id || item.payment_history_id || '');
+      if (key) combinedMap.set(key, item);
+    });
+
+    // 2. React Context state records
+    (contextPaymentHistory || []).forEach(item => {
+      const key = String(item.id || item.payment_history_id || '');
+      if (key) combinedMap.set(key, { ...combinedMap.get(key), ...item });
+    });
+
+    // 3. LocalStorage pending approvals
+    localPending.forEach(item => {
+      const key = String(item.id || item.payment_history_id || '');
+      if (key && !combinedMap.has(key)) {
+        combinedMap.set(key, item);
+      }
+    });
+
+    return Array.from(combinedMap.values()).map(h => {
+      const histId = String(h.id || h.payment_history_id || '');
+      const isExplicitlyRejected = h.approval_status === 'Rejected' || 
+        rejectedIds.has(histId) ||
+        (typeof h.notes === 'string' && (
+          h.notes.includes('Rejected') || 
+          h.notes.includes('[REJECTED]') || 
+          h.notes.endsWith('- Rejected') || 
+          h.notes.toLowerCase().includes('rejected by business owner')
+        ));
+
+      const isExplicitlyApproved = !isExplicitlyRejected && (
+        h.approval_status === 'Approved' ||
+        approvedIds.has(histId) ||
+        (typeof h.notes === 'string' && (
+          h.notes.includes('Approved') || 
+          h.notes.includes('[APPROVED]') || 
+          h.notes.endsWith('- Approved') || 
+          h.notes.toLowerCase().includes('approved by business owner')
+        ))
+      );
+
+      const isPending = !isExplicitlyRejected && !isExplicitlyApproved && (
+        h.approval_status === 'Waiting for Approval' || 
+        (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
+      );
+
+      return {
+        ...h,
+        id: histId,
+        amount: Number(h.amount) || 0,
+        approval_status: isExplicitlyRejected ? 'Rejected' : (isPending ? 'Waiting for Approval' : 'Approved')
+      };
+    });
+  }, [dbPaymentHistory, contextPaymentHistory]);
+
   // Compile real-time pending payment records using saved Order records as the PRIMARY record source
   const allPendingRecords = useMemo(() => {
     const TODAY_STR = new Date().toISOString().split('T')[0];
@@ -291,18 +393,56 @@ export const PendingPaymentsReport: React.FC = () => {
 
       const advanceReceived = Number(order?.advance_received) || 0;
 
-      const totalPaidAmount = payment 
-        ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) 
-        : advanceReceived;
+      // Extract individual payment transactions belonging to this exact order
+      const orderHistories = allPaymentHistory.filter((h: any) => {
+        if (!h.order_id) return false;
+        if (h.order_id === orderId) return true;
+        if (order?.lead_id && h.order_id === order.lead_id) return true;
+        if (lead?.lead_id && h.order_id === lead.lead_id) return true;
+        return false;
+      });
 
-      const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
-      const rawPaymentStatus = payment ? payment.payment_status : (advanceReceived > 0 ? (advanceReceived >= finalPackageAmount ? 'Fully Paid' : 'Partially Paid') : 'Pending');
+      const approvedHistories = orderHistories.filter((h: any) => h.approval_status === 'Approved');
+      const pendingApprovalHistories = orderHistories.filter((h: any) => h.approval_status === 'Waiting for Approval');
+      const rejectedHistories = orderHistories.filter((h: any) => h.approval_status === 'Rejected');
+
+      let approvedAmount = 0;
+      let pendingApprovalAmount = 0;
+
+      if (orderHistories.length > 0) {
+        approvedAmount = approvedHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+        pendingApprovalAmount = pendingApprovalHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+
+        // Fallback for orders whose advance was stored on order record and not in payment_history
+        const hasAdvanceInHistory = orderHistories.some((h: any) => 
+          h.payment_type === 'Advance Payment' || 
+          (typeof h.notes === 'string' && h.notes.toLowerCase().includes('advance'))
+        );
+        if (!hasAdvanceInHistory && advanceReceived > approvedAmount) {
+          approvedAmount = advanceReceived;
+        }
+      } else {
+        // Fallback for older orders without payment_history rows
+        if (payment?.payment_status === 'Waiting for Approval') {
+          pendingApprovalAmount = (Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0) || advanceReceived;
+        } else {
+          approvedAmount = payment 
+            ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) 
+            : advanceReceived;
+        }
+      }
+
+      // Total Paid Amount includes approved amount plus any pending approval amount (unapproved amount displayed in RED)
+      const totalPaidAmount = approvedAmount + pendingApprovalAmount;
+
+      const remainingAmount = Math.max(0, finalPackageAmount - approvedAmount);
+      const rawPaymentStatus = payment ? payment.payment_status : (approvedAmount > 0 ? (approvedAmount >= finalPackageAmount ? 'Fully Paid' : 'Partially Paid') : 'Pending');
 
       // Standardize status labels
       let paymentStatus: 'Pending' | 'Partial' | 'Fully Paid' = 'Pending';
       if (remainingAmount <= 0 && finalPackageAmount > 0) {
         paymentStatus = 'Fully Paid';
-      } else if (rawPaymentStatus === 'Partially Paid' || rawPaymentStatus === 'Partial' || (totalPaidAmount > 0 && remainingAmount > 0)) {
+      } else if (rawPaymentStatus === 'Partially Paid' || rawPaymentStatus === 'Partial' || (approvedAmount > 0 && remainingAmount > 0)) {
         paymentStatus = 'Partial';
       } else if (rawPaymentStatus === 'Fully Paid') {
         paymentStatus = 'Fully Paid';
@@ -427,9 +567,15 @@ export const PendingPaymentsReport: React.FC = () => {
         paymentCompletionDate,
         finalPackageAmount,
         advanceReceived,
+        approvedAmount,
+        pendingApprovalAmount,
         totalPaidAmount,
         remainingAmount,
         paymentStatus,
+        orderHistories,
+        approvedHistories,
+        pendingApprovalHistories,
+        rejectedHistories,
         isOverdue,
         currentProjectStatus: status,
         currentStage,
@@ -464,26 +610,13 @@ export const PendingPaymentsReport: React.FC = () => {
 
     // Sort: Newest Order ID first using actual system's latest Order ID / order creation sequence
     return records.sort(compareOrderRecords);
-  }, [orders, leads, payments]);
+  }, [orders, leads, payments, allPaymentHistory]);
 
   // Dynamically retrieve the real-time record to keep modal updated
   const currentRecord = useMemo(() => {
     if (!paymentModalRecord) return null;
-    const order = orders.find(o => o.order_id === paymentModalRecord.orderId || o.lead_id === paymentModalRecord.lead.lead_id);
-    const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
-    const lead = leads.find(l => l.lead_id === paymentModalRecord.lead.lead_id) || paymentModalRecord.lead;
-    
-    const finalPackageAmount = Number(lead?.Final_Quotation_Amount) || Number((lead as any)?.final_quotation_amount) || (order ? Number(order.quotation_amount || order.final_amount) : 0) || Number(lead?.budget) || 0;
-    const advanceReceived = order ? (Number(order.advance_received) || 0) : 0;
-    const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
-    const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
-    
-    return {
-      finalPackageAmount,
-      totalPaidAmount,
-      remainingAmount
-    };
-  }, [allPendingRecords, paymentModalRecord, orders, payments, leads]);
+    return allPendingRecords.find(r => r.orderId === paymentModalRecord.orderId) || paymentModalRecord;
+  }, [allPendingRecords, paymentModalRecord]);
 
   // Compute metrics for the Pending Payment Analytics Cards
   const stats = useMemo(() => {
@@ -1431,8 +1564,31 @@ export const PendingPaymentsReport: React.FC = () => {
                     </td>
 
                     {/* Paid Amount */}
-                    <td className="px-4 py-4 text-xs text-zinc-400 text-right font-mono text-emerald-400">
-                      {formatPercentageOrINR(rec.totalPaidAmount)}
+                    <td className="px-4 py-4 text-xs text-right font-mono">
+                      {rec.pendingApprovalAmount > 0 ? (
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center justify-end gap-1 font-mono font-bold">
+                            {rec.approvedAmount > 0 ? (
+                              <>
+                                <span className="text-emerald-400">{formatPercentageOrINR(rec.approvedAmount)}</span>
+                                <span className="text-zinc-400 font-normal">+</span>
+                                <span className="text-rose-500 font-black">{formatPercentageOrINR(rec.pendingApprovalAmount)}</span>
+                              </>
+                            ) : (
+                              <span className="text-rose-500 font-black">{formatPercentageOrINR(rec.pendingApprovalAmount)}</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] font-mono text-zinc-400 mt-0.5 whitespace-nowrap">
+                            <span>Total: </span>
+                            <span className="text-zinc-200 font-bold">{formatPercentageOrINR(rec.totalPaidAmount)}</span>
+                            <span className="text-rose-400 font-medium ml-1">({formatPercentageOrINR(rec.pendingApprovalAmount)} Pending Approval)</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className={rec.approvedAmount > 0 ? "text-emerald-400 font-semibold" : "text-zinc-400"}>
+                          {formatPercentageOrINR(rec.approvedAmount)}
+                        </span>
+                      )}
                     </td>
 
                     {/* Pending Amount */}

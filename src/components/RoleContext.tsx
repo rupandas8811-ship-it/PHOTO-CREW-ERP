@@ -7091,6 +7091,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     } catch (_) {}
 
     logActivity(`Submitted payment of ₹${actualAmountReceived} for Order ${orderId} - Waiting for Approval`, 'Finance', orderId);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('payment-updated', { detail: { orderId } }));
+      window.dispatchEvent(new CustomEvent('refresh-pending-payments', { detail: { orderId } }));
+    }
   };
 
   const approvePayment = async (historyId: string, orderId: string) => {
@@ -7255,6 +7260,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     logActivity(`Approved payment of ₹${amountToApply} for Order ${resolvedOrderId}. Status: ${newPaymentStatus}`, 'Finance', resolvedOrderId);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('payment-updated', { detail: { orderId: resolvedOrderId } }));
+      window.dispatchEvent(new CustomEvent('refresh-pending-payments', { detail: { orderId: resolvedOrderId } }));
+    }
   };
 
   const rejectPayment = async (historyId: string, orderId: string) => {
@@ -7378,6 +7388,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
     
     logActivity(`Rejected payment of ₹${Number(targetHistory?.amount || 0)} for Order ${resolvedOrderId}`, 'Finance', resolvedOrderId);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('payment-updated', { detail: { orderId: resolvedOrderId } }));
+      window.dispatchEvent(new CustomEvent('refresh-pending-payments', { detail: { orderId: resolvedOrderId } }));
+    }
   };
 
   // User Management Admin features
