@@ -367,6 +367,7 @@ const MainAppContent: React.FC = () => {
       if (user.role === 'Sales Team') return 'sales';
       if (user.role === 'Operations Team') return 'operations';
       if (user.role === 'Production Team') return 'production';
+      if (user.role === 'Operation Staff' || user.role === 'Production Staff') return 'staff_dashboard';
     }
     return 'owner_overview';
   });

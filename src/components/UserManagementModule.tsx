@@ -4,11 +4,11 @@ import {
   Users, UserPlus, Shield, ToggleLeft, ToggleRight, Key, Mail, Phone, Calendar, PenTool, CheckCircle, Ban, RefreshCw, X, AlertOctagon, HelpCircle, Activity, Server, Database, Check, AlertCircle, Terminal, HelpCircle as HelpIcon, Eye, EyeOff
 } from 'lucide-react';
 import { User, UserRole } from '../types';
-import { formatDateDDMMYY, checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../utils';
+import { formatDateDDMMYY } from '../utils';
 import { supabaseClient, currentDiagnosticReport, updateDiagnosticMetric } from '../supabaseClient';
 
 export const UserManagementModule: React.FC = () => {
-  const { users, staff = [], productionStaff = [], currentUser, addUser, editUser, toggleUserStatus, resetUserPassword } = useRole();
+  const { users, currentUser, addUser, editUser, toggleUserStatus, resetUserPassword } = useRole();
 
   // Diagnostic states
   const [localReport, setLocalReport] = useState(() => currentDiagnosticReport);
@@ -159,25 +159,11 @@ export const UserManagementModule: React.FC = () => {
       return;
     }
 
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile: newMobile.trim(),
-      email: newEmail.trim(),
-      excludeId: null,
-      usersList: users,
-      opStaffList: staff || [],
-      prodStaffList: productionStaff || []
-    });
-    if (!uniquenessCheck.isUnique) {
-      alert(uniquenessCheck.error || "Duplicate staff details detected.");
-      return;
-    }
-
     try {
       setIsSaving(true);
       await addUser(newName, newEmail, newMobile, newRole, newActive, newPassword);
       
-      alert('Staff account registered successfully in system directory!');
-      // Clear state and close form ONLY on success
+      // Clear state
       setNewName('');
       setNewEmail('');
       setNewMobile('');
@@ -185,8 +171,10 @@ export const UserManagementModule: React.FC = () => {
       setNewActive(true);
       setNewPassword('');
       setShowAddForm(false);
+      
+      alert('Staff account registered successfully in system directory!');
     } catch (err: any) {
-      alert(formatStaffErrorMessage(err));
+      alert(`Registration failed: ${err?.message || err}`);
     } finally {
       setIsSaving(false);
     }
@@ -214,21 +202,6 @@ export const UserManagementModule: React.FC = () => {
       return;
     }
 
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile: editMobile.trim(),
-      email: editEmail.trim(),
-      excludeId: editingUser.id,
-      excludeEmail: editingUser.email,
-      excludeMobile: editingUser.mobile,
-      usersList: users,
-      opStaffList: staff || [],
-      prodStaffList: productionStaff || []
-    });
-    if (!uniquenessCheck.isUnique) {
-      alert(uniquenessCheck.error || "Duplicate staff details detected.");
-      return;
-    }
-
     try {
       setIsSaving(true);
       await editUser(editingUser.id, {
@@ -240,10 +213,10 @@ export const UserManagementModule: React.FC = () => {
         password: editPassword.trim() || undefined
       });
 
-      alert(`Account details of ${editName} updated successfully!`);
       setEditingUser(null);
+      alert(`Account details of ${editName} updated successfully!`);
     } catch (err: any) {
-      alert(formatStaffErrorMessage(err));
+      alert(`Failed to update user: ${err.message || err}`);
     } finally {
       setIsSaving(false);
     }
@@ -595,12 +568,14 @@ export const UserManagementModule: React.FC = () => {
                     <select
                       value={newRole}
                       onChange={(e) => setNewRole(e.target.value as UserRole)}
-                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-2 text-slate-200"
+                      className="w-full bg-slate-900 border border-slate-755 rounded-lg py-1.5 px-2 text-slate-200"
                     >
                       <option value="Business Owner">Business Owner</option>
                       <option value="Sales Team">Sales Team</option>
                       <option value="Operations Team">Operations Team</option>
                       <option value="Production Team">Production Team</option>
+                      <option value="Operation Staff">Operation Staff</option>
+                      <option value="Production Staff">Production Staff</option>
                     </select>
                   </div>
 
@@ -743,12 +718,14 @@ export const UserManagementModule: React.FC = () => {
                       value={editRole}
                       disabled={editingUser.id === currentUser?.id}
                       onChange={(e) => setEditRole(e.target.value as UserRole)}
-                      className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-2 text-slate-200 disabled:opacity-40"
+                      className="w-full bg-slate-900 border border-slate-755 rounded-lg py-1.5 px-2 text-slate-200 disabled:opacity-40"
                     >
                       <option value="Business Owner">Business Owner</option>
                       <option value="Sales Team">Sales Team</option>
                       <option value="Operations Team">Operations Team</option>
                       <option value="Production Team">Production Team</option>
+                      <option value="Operation Staff">Operation Staff</option>
+                      <option value="Production Staff">Production Staff</option>
                     </select>
                   </div>
 
@@ -970,6 +947,8 @@ export const UserManagementModule: React.FC = () => {
                         <option value="Sales Team">Sales Team</option>
                         <option value="Operations Team">Operations Team</option>
                         <option value="Production Team">Production Team</option>
+                        <option value="Operation Staff">Operation Staff</option>
+                        <option value="Production Staff">Production Staff</option>
                       </select>
                     </div>
 
@@ -1102,6 +1081,8 @@ export const UserManagementModule: React.FC = () => {
                         <option value="Sales Team">Sales Team</option>
                         <option value="Operations Team">Operations Team</option>
                         <option value="Production Team">Production Team</option>
+                        <option value="Operation Staff">Operation Staff</option>
+                        <option value="Production Staff">Production Staff</option>
                       </select>
                     </div>
 

@@ -1240,10 +1240,32 @@ export const generateQuotationPDF = (
   const wrapShootType = shootTypes.length > 0 
     ? shootTypes.map((st: string) => `• ${st}`) 
     : ['N/A'];  // Resolve dynamic services
+  // Helper to get latest saved Package Base Price directly without relying on stale cached line items
+  const getPackageBasePrice = (): number => {
+    if (lead?.package_price !== undefined && lead?.package_price !== null && !isNaN(Number(lead.package_price)) && Number(lead.package_price) > 0) {
+      return Number(lead.package_price);
+    }
+    if (lead?.package_cost !== undefined && lead?.package_cost !== null && !isNaN(Number(lead.package_cost)) && Number(lead.package_cost) > 0) {
+      return Number(lead.package_cost);
+    }
+    if (activePkgs && activePkgs.length > 0) {
+      const primaryCost = Number(activePkgs[0].package_cost || activePkgs[0].price || 0);
+      if (primaryCost > 0) return primaryCost;
+    }
+    if (lead?.Final_Quotation_Amount !== undefined && lead?.Final_Quotation_Amount !== null && Number(lead.Final_Quotation_Amount) > 0) {
+      return Math.max(0, Number(lead.Final_Quotation_Amount) + Number(discountValue || 0) - Number(additionalCharges || 0));
+    }
+    if (lead?.budget !== undefined && lead?.budget !== null && Number(lead.budget) > 0) {
+      return Number(lead.budget);
+    }
+    return 0;
+  };
+
+  const targetBasePrice = getPackageBasePrice();
   let services = [...quoteServices];
 
   if (!services || services.length === 0) {
-    const baseSum = activePkgs.reduce((sum, p) => sum + Number(p.package_cost || p.price || 0), 0);
+    const baseSum = targetBasePrice > 0 ? targetBasePrice : activePkgs.reduce((sum, p) => sum + Number(p.package_cost || p.price || 0), 0);
     const defaultItems = [
       '2 Photographers',
       '1 Cinematographer',
@@ -2173,17 +2195,13 @@ export const generateQuotationPDF = (
     return null;
   };
 
-  const savedFinalAmt = getSavedFinalAmount();
-  const baseSumValRaw = baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-  const addlSumVal = additionalServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0);
-
-  // Use the saved Final Quotation Amount from Section 2 if available, otherwise calculate
-  const finalAmountSum = savedFinalAmt !== null ? savedFinalAmt : Math.max(0, baseSumValRaw + addlSumVal - discountValue);
-
-  // Ensure baseSumVal matches when displayed if baseSumValRaw was 0
-  const baseSumVal = (baseSumValRaw > 0) 
-    ? baseSumValRaw 
-    : Math.max(0, finalAmountSum + discountValue - addlSumVal);
+  // Calculate pricing summary using verified latest Package Base Price as single source of truth
+  const baseSumVal = targetBasePrice > 0 
+    ? targetBasePrice 
+    : (getSavedFinalAmount() || baseServices.reduce((sum, s) => sum + (Number(s.qty) * Number(s.price)), 0) || 0);
+  const effectiveDiscount = Number(discountValue || lead?.Quotation_Discount || lead?.quotation_discount || 0);
+  const effectiveAdditional = Number(additionalCharges || lead?.Additional_Services_Cost || lead?.additional_services_cost || 0);
+  const finalAmountSum = Math.max(0, baseSumVal - effectiveDiscount + effectiveAdditional);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
@@ -2199,7 +2217,7 @@ export const generateQuotationPDF = (
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(51, 65, 85);
   doc.text(baseSumVal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + pricingRowH - 2, { align: 'right' });
-  doc.text('- ' + discountValue.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right' });
+  doc.text('- ' + effectiveDiscount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 2) - 2, { align: 'right' });
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
@@ -2478,5 +2496,151 @@ export const resolveSavedQuotationAmount = async (
 
   // 3. Fallback to synchronous in-memory store
   return getSyncSavedQuotationAmount(null, targetLeadId, targetOrderId, allQuotations, allLeads, allOrders);
+};
+
+/**
+ * Safely parses date string into { year, month, day }
+ */
+export const parseEventDateParts = (dStr: string | undefined | null): { year: number; month: number; day: number } | null => {
+  if (!dStr) return null;
+  const clean = String(dStr).trim();
+  if (!clean) return null;
+
+  // YYYY-MM-DD or YYYY/MM/DD
+  const ymdMatch = clean.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10);
+    const day = parseInt(ymdMatch[3], 10);
+    if (year > 1000 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  // DD-MM-YYYY or DD/MM/YYYY
+  const dmyMatch = clean.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10);
+    const year = parseInt(dmyMatch[3], 10);
+    if (year > 1000 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return { year, month, day };
+    }
+  }
+
+  const parsed = new Date(clean);
+  if (!isNaN(parsed.getTime())) {
+    return {
+      year: parsed.getFullYear(),
+      month: parsed.getMonth() + 1,
+      day: parsed.getDate()
+    };
+  }
+
+  return null;
+};
+
+/**
+ * Safely parses time string into { hours, minutes } in 24-hour format
+ */
+export const parseEventTimeParts = (tStr: string | undefined | null): { hours: number; minutes: number } | null => {
+  if (!tStr) return null;
+  const clean = String(tStr).trim().toUpperCase();
+  if (!clean) return null;
+
+  // 12-hour AM/PM format (e.g., "08:00 AM", "8:30 PM", "12:00 PM")
+  const ampmMatch = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = parseInt(ampmMatch[2], 10);
+    const period = ampmMatch[3];
+    if (period === 'PM' && hours < 12) hours += 12;
+    else if (period === 'AM' && hours === 12) hours = 0;
+    return { hours, minutes };
+  }
+
+  // 24-hour format (e.g., "14:30", "08:00")
+  const h24Match = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (h24Match) {
+    const hours = parseInt(h24Match[1], 10);
+    const minutes = parseInt(h24Match[2], 10);
+    if (!isNaN(hours) && !isNaN(minutes) && hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return { hours, minutes };
+    }
+  }
+
+  return null;
+};
+
+/**
+ * Detects if an individual event has completed/ended based on exact Event End Date and Event End Time.
+ * Uses exact event record data without hardcoding.
+ */
+export const checkIsEventEnded = (event: any): boolean => {
+  if (!event) return false;
+
+  // Exact Event End Date from saved event data
+  const rawEndDate = 
+    event.event_end_date || 
+    event.Event_End_Date || 
+    event.Event_end_date ||
+    event.event_date || 
+    event.event_start_date ||
+    event.booking_date;
+
+  if (!rawEndDate || typeof rawEndDate !== 'string' || !rawEndDate.trim()) {
+    return false;
+  }
+
+  // Exact Event End Time from saved event data
+  const rawEndTime = 
+    event.event_end_time || 
+    event.Event_End_Time || 
+    event.Event_end_time ||
+    event.event_time || 
+    event.event_start_time ||
+    event.booking_time;
+
+  const dParts = parseEventDateParts(rawEndDate);
+  if (!dParts) return false;
+
+  // If end time is provided, parse it. If omitted, default to 23:59:59 of that date
+  // so it does not lock prematurely during the day.
+  const tParts = parseEventTimeParts(rawEndTime) || { hours: 23, minutes: 59 };
+
+  const eventEndDateTime = new Date(
+    dParts.year,
+    dParts.month - 1,
+    dParts.day,
+    tParts.hours,
+    tParts.minutes,
+    59,
+    999
+  );
+
+  return Date.now() > eventEndDateTime.getTime();
+};
+
+/**
+ * Checks if the entire lead/order CRM is locked because all of its events have completed/ended.
+ * If lead has multiple events, it only locks the whole CRM if ALL events have ended.
+ */
+export const checkIsLeadCrmLocked = (lead: any, eventsList?: any[]): boolean => {
+  if (!lead) return false;
+
+  const events = (eventsList && eventsList.length > 0)
+    ? eventsList
+    : ((lead.events && lead.events.length > 0) ? lead.events : [lead]);
+
+  if (!events || events.length === 0) return false;
+
+  const validEvents = events.filter((ev: any) => {
+    const hasDate = ev.event_end_date || ev.Event_End_Date || ev.event_date || ev.event_start_date || ev.booking_date;
+    return !!hasDate;
+  });
+
+  if (validEvents.length === 0) return false;
+
+  return validEvents.every((ev: any) => checkIsEventEnded(ev));
 };
 

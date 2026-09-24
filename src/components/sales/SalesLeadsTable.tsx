@@ -15,7 +15,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, checkIsLeadCrmLocked } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 
 export interface SalesLeadsTableProps {
@@ -78,6 +78,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
     selectedLead,
     confirmForm,
     setConfirmForm,
+    handleConfirmOrderAction,
     initEventsReporting,
     setShowConfirmModal,
     setSelectedUnlockLead,
@@ -585,19 +586,24 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                         </button>
                                         
                                         {/* VIEW / MANAGE CRM */}
-                                        <button
-                                          type="button"
-                                          id={`btn_followup_${lead.lead_id}`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setOpenDropdownLeadId(null);
-                                            handleSelectLead(lead);
-                                          }}
-                                          className={`w-full h-8 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 shadow ${(!isLeadLostStatus && canEdit) ? 'bg-sky-950/30 hover:bg-sky-900/50 text-sky-400 hover:text-white border border-sky-900/50' : 'bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border border-zinc-850/40'}`}
-                                        >
-                                          {(!isLeadLostStatus && canEdit) ? <Edit className="w-3.5 h-3.5 shrink-0" /> : <Eye className="w-3.5 h-3.5 shrink-0" />}
-                                          <span>{(!isLeadLostStatus && canEdit) ? 'Manage CRM' : 'View CRM'}</span>
-                                        </button>
+                                        {(() => {
+                                          const isCrmEnded = checkIsLeadCrmLocked(lead);
+                                          return (
+                                            <button
+                                              type="button"
+                                              id={`btn_followup_${lead.lead_id}`}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setOpenDropdownLeadId(null);
+                                                handleSelectLead(lead);
+                                              }}
+                                              className={`w-full h-8 px-3 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-2 shadow ${(!isLeadLostStatus && canEdit && !isCrmEnded) ? 'bg-sky-950/30 hover:bg-sky-900/50 text-sky-400 hover:text-white border border-sky-900/50' : 'bg-zinc-950 hover:bg-zinc-900 text-amber-400 hover:text-white border border-zinc-850/40'}`}
+                                            >
+                                              {(!isLeadLostStatus && canEdit && !isCrmEnded) ? <Edit className="w-3.5 h-3.5 shrink-0" /> : <Eye className="w-3.5 h-3.5 shrink-0" />}
+                                              <span>{isCrmEnded ? 'View CRM (Locked)' : (!isLeadLostStatus && canEdit ? 'Manage CRM' : 'View CRM')}</span>
+                                            </button>
+                                          );
+                                        })()}
                                         
                                         {/* CONFIRM ORDER - only show before confirmation */}
                                         {!isLeadConfirmedRecord && isActionsDropdownStatus && leadStatus !== 'Order Close' && currentStage === 'Sales' && (
@@ -606,28 +612,32 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                             id={`btn_confirm_order_direct_${lead.lead_id}`}
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              setOpenDropdownLeadId(null);
-                                              handleSelectLead(lead);
-                                              const today = new Date().toISOString().split('T')[0];
-                                              const linkedOrder = orders?.find((o: any) => o.lead_id === lead.lead_id);
-                                              const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : null;
-                                              const calcAdvance = linkedPayment 
-                                                ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
-                                                : (linkedOrder 
-                                                    ? (linkedOrder.advance_received ?? 0) 
-                                                    : (lead.advance_collected !== undefined && lead.advance_collected !== null && lead.advance_collected !== ''
-                                                        ? Number(lead.advance_collected) 
-                                                        : 0));
-                                              setConfirmForm({
-                                                ...confirmForm,
-                                                package_name: packages?.find((p: any) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
-                                                quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || Number(lead.Final_Package_Amount) || Number((lead as any).final_package_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
-                                                advance_received: calcAdvance,
-                                                event_date: lead.event_date || today,
-                                                event_time: lead.event_time || ''
-                                              });
-                                              initEventsReporting(lead);
-                                              setShowConfirmModal(true);
+                                              if (handleConfirmOrderAction) {
+                                                handleConfirmOrderAction(lead);
+                                              } else {
+                                                setOpenDropdownLeadId(null);
+                                                handleSelectLead(lead);
+                                                const today = new Date().toISOString().split('T')[0];
+                                                const linkedOrder = orders?.find((o: any) => o.lead_id === lead.lead_id);
+                                                const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : null;
+                                                const calcAdvance = linkedPayment 
+                                                  ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+                                                  : (linkedOrder 
+                                                      ? (linkedOrder.advance_received ?? 0) 
+                                                      : (lead.advance_collected !== undefined && lead.advance_collected !== null && lead.advance_collected !== ''
+                                                          ? Number(lead.advance_collected) 
+                                                          : 0));
+                                                setConfirmForm({
+                                                  ...confirmForm,
+                                                  package_name: packages?.find((p: any) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
+                                                  quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || Number(lead.Final_Package_Amount) || Number((lead as any).final_package_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
+                                                  advance_received: calcAdvance,
+                                                  event_date: lead.event_date || today,
+                                                  event_time: lead.event_time || ''
+                                                });
+                                                initEventsReporting(lead);
+                                                setShowConfirmModal(true);
+                                              }
                                             }}
                                             className="w-full h-8 px-3 text-xs font-bold bg-emerald-950 hover:bg-emerald-900 text-emerald-400 hover:text-white rounded-lg border border-emerald-900/30 transition-all cursor-pointer flex items-center gap-2 shadow"
                                           >

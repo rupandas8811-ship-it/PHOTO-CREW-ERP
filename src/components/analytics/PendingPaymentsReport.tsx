@@ -15,22 +15,30 @@ import {
   FileText,
   Percent,
   TrendingUp,
-  CreditCard
+  CreditCard,
+  X
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'motion/react';
 import { EVENT_TYPES } from '../../types';
 import { formatDateDDMMYY, formatTime12Hour, ensureModalScrolledToTop } from '../../utils';
 import { PaymentHistoryModal } from '../PaymentHistoryModal';
+import { UpdatePaymentModal } from './UpdatePaymentModal';
 
 export const PendingPaymentsReport: React.FC = () => {
   const { leads, orders, payments, currentUserName, recordPayment } = useRole();
 
   // Search and Filter states
+  const [globalSearch, setGlobalSearch] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [searchOrderId, setSearchOrderId] = useState('');
   const [eventTypeFilter, setEventTypeFilter] = useState('All');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
+
+  // Date Filter Dropdown Options: 'This Month' | 'Last Month' | 'Last 3 Months' | 'Custom Date Range' | 'All Time'
+  const [dateFilterOption, setDateFilterOption] = useState<'This Month' | 'Last Month' | 'Last 3 Months' | 'Custom Date Range' | 'All Time'>('This Month');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
 
   // Modal State for Payment Update
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -157,7 +165,7 @@ export const PendingPaymentsReport: React.FC = () => {
       const order = orders.find(o => o.lead_id === lead.lead_id);
       const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
       
-      const finalPackageAmount = order ? order.quotation_amount : (Number((lead as any).final_amount) || Number(lead.Final_Quotation_Amount) || Number(lead.budget) || 0);
+      const finalPackageAmount = Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || (order ? Number(order.quotation_amount || order.final_amount) : 0) || Number((lead as any).final_amount) || Number(lead.budget) || 0;
       const advanceReceived = order ? (Number(order.advance_received) || 0) : 0;
       
       const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
@@ -289,7 +297,7 @@ export const PendingPaymentsReport: React.FC = () => {
     const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
     const lead = leads.find(l => l.lead_id === paymentModalRecord.lead.lead_id) || paymentModalRecord.lead;
     
-    const finalPackageAmount = order ? order.quotation_amount : lead.budget;
+    const finalPackageAmount = Number(lead?.Final_Quotation_Amount) || Number((lead as any)?.final_quotation_amount) || (order ? Number(order.quotation_amount || order.final_amount) : 0) || Number(lead?.budget) || 0;
     const advanceReceived = order ? (Number(order.advance_received) || 0) : 0;
     const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
     const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
@@ -342,15 +350,110 @@ export const PendingPaymentsReport: React.FC = () => {
     };
   }, [allPendingRecords]);
 
+  // Calculate active Event Date range based on selected option: 'This Month' | 'Last Month' | 'Last 3 Months' | 'Custom Date Range' | 'All Time'
+  const activeEventDateRange = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-indexed
+
+    const formatYMD = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+
+    if (dateFilterOption === 'This Month') {
+      return {
+        start: formatYMD(new Date(year, month, 1)),
+        end: formatYMD(new Date(year, month + 1, 0))
+      };
+    }
+
+    if (dateFilterOption === 'Last Month') {
+      return {
+        start: formatYMD(new Date(year, month - 1, 1)),
+        end: formatYMD(new Date(year, month, 0))
+      };
+    }
+
+    if (dateFilterOption === 'Last 3 Months') {
+      let startMonth = month - 2;
+      let startYear = year;
+      if (startMonth < 0) {
+        startMonth += 12;
+        startYear = year - 1;
+      }
+      return {
+        start: formatYMD(new Date(startYear, startMonth, 1)),
+        end: formatYMD(new Date(year, month + 1, 0))
+      };
+    }
+
+    if (dateFilterOption === 'Custom Date Range') {
+      return {
+        start: customStartDate || '',
+        end: customEndDate || ''
+      };
+    }
+
+    return { start: '', end: '' };
+  }, [dateFilterOption, customStartDate, customEndDate]);
+
   // Apply filters and date ranges
   const filteredRecords = useMemo(() => {
     return allPendingRecords.filter(rec => {
-      // Date filters
-      if (startDate && rec.eventDate && rec.eventDate < startDate) return false;
-      if (endDate && rec.eventDate && rec.eventDate > endDate) return false;
+      // 1. FILTER BY SAVED EVENT DATE (Case-tested across single and multi-event orders)
+      const { start: dateStart, end: dateEnd } = activeEventDateRange;
+      if (dateStart || dateEnd) {
+        const isDateWithinRange = (dStr?: string) => {
+          if (!dStr) return false;
+          const clean = dStr.split('T')[0].trim();
+          if (dateStart && clean < dateStart) return false;
+          if (dateEnd && clean > dateEnd) return false;
+          return true;
+        };
 
-      // Search filters
-      if (searchTerm && !rec.customerName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+        const hasMatchingEventDate = (() => {
+          // For multi-event orders, verify each saved event record and its event date
+          if (rec.events && Array.isArray(rec.events) && rec.events.length > 0) {
+            return rec.events.some((ev: any) => {
+              const d = ev.event_date || ev.event_start_date;
+              return isDateWithinRange(d);
+            });
+          }
+          return isDateWithinRange(rec.eventDate);
+        })();
+
+        if (!hasMatchingEventDate) return false;
+      }
+
+      // Legacy start/end date overrides if customized manually in expanded workspace
+      if (startDate && (!dateStart || dateFilterOption === 'All Time') && rec.eventDate && rec.eventDate < startDate) return false;
+      if (endDate && (!dateEnd || dateFilterOption === 'All Time') && rec.eventDate && rec.eventDate > endDate) return false;
+
+      // 2. GLOBAL SEARCH (Strictly CASE-INSENSITIVE across Customer Name, Order ID, Mobile Number, related fields)
+      const cleanGlobalSearch = (globalSearch || searchTerm).trim().toLowerCase();
+      if (cleanGlobalSearch) {
+        const cName = String(rec.customerName || '').toLowerCase();
+        const oId = String(rec.orderId || '').toLowerCase();
+        const mob = String(rec.mobileNumber || '').toLowerCase();
+        const groom = String(rec.lead?.groom_name || '').toLowerCase();
+        const bride = String(rec.lead?.bride_name || '').toLowerCase();
+        const contact = String(rec.lead?.contact_person || '').toLowerCase();
+        const evNames = (rec.events || []).map((e: any) => String(e.event_name || '').toLowerCase()).join(' ');
+
+        const matchesGlobal = cName.includes(cleanGlobalSearch) ||
+          oId.includes(cleanGlobalSearch) ||
+          mob.includes(cleanGlobalSearch) ||
+          groom.includes(cleanGlobalSearch) ||
+          bride.includes(cleanGlobalSearch) ||
+          contact.includes(cleanGlobalSearch) ||
+          evNames.includes(cleanGlobalSearch);
+
+        if (!matchesGlobal) return false;
+      }
+
       if (searchOrderId && !rec.orderId.toLowerCase().includes(searchOrderId.toLowerCase())) return false;
 
       // Event Type Filter (strictly matches actual saved event types)
@@ -380,7 +483,7 @@ export const PendingPaymentsReport: React.FC = () => {
 
       return true;
     });
-  }, [allPendingRecords, startDate, endDate, searchTerm, searchOrderId, eventTypeFilter, paymentStatusFilter, activeCardFilter]);
+  }, [allPendingRecords, activeEventDateRange, globalSearch, dateFilterOption, startDate, endDate, searchTerm, searchOrderId, eventTypeFilter, paymentStatusFilter, activeCardFilter]);
 
   // Unique event types for dropdown - strictly sourced from Sales Step 2 EVENT_TYPES
   const uniqueEventTypes = useMemo(() => {
@@ -718,7 +821,166 @@ export const PendingPaymentsReport: React.FC = () => {
 
       </div>
 
-      <div className="flex justify-end mb-4">
+      {/* GLOBAL SEARCH BOX & DATE FILTER (EVENT DATE) */}
+      <div className="bg-zinc-900/90 border border-zinc-800 p-4 rounded-2xl shadow-xl space-y-3">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
+          
+          {/* 1. Global Search Box */}
+          <div className="relative flex-1 min-w-[260px]">
+            <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-zinc-400 mb-1.5">
+              Global Search
+            </label>
+            <div className="relative">
+              <input
+                id="input_global_search"
+                data-testid="input_global_search"
+                type="text"
+                placeholder="Search by Customer Name / Order ID / Mobile..."
+                value={globalSearch}
+                onChange={(e) => {
+                  setGlobalSearch(e.target.value);
+                  setSearchTerm(e.target.value); // keep legacy search synced
+                }}
+                className="w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none transition-colors font-medium"
+              />
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-zinc-500 pointer-events-none" />
+              {globalSearch && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGlobalSearch('');
+                    setSearchTerm('');
+                  }}
+                  className="absolute right-2.5 top-2.5 p-0.5 text-zinc-400 hover:text-white rounded transition cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Date Filter Dropdown (Strictly filters by actual saved Event Date) */}
+          <div className="w-full md:w-56">
+            <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-zinc-400 mb-1.5">
+              Date Filter (By Event Date)
+            </label>
+            <div className="relative">
+              <select
+                id="select_date_filter"
+                data-testid="select_date_filter"
+                value={dateFilterOption}
+                onChange={(e) => setDateFilterOption(e.target.value as any)}
+                className="w-full bg-zinc-950 border border-zinc-800 focus:border-amber-500 rounded-xl px-3 py-2 text-xs text-white font-medium focus:outline-none cursor-pointer"
+              >
+                <option value="This Month">This Month</option>
+                <option value="Last Month">Last Month</option>
+                <option value="Last 3 Months">Last 3 Months</option>
+                <option value="Custom Date Range">Custom Date Range</option>
+                <option value="All Time">All Time</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Action toggle button for extra downloads / filters */}
+          <div className="self-end md:self-auto flex items-center gap-2 pt-2 md:pt-5">
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={`flex items-center gap-1.5 px-3 py-2 bg-zinc-950 hover:bg-zinc-800 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                showFilters ? 'border-amber-500/40 text-amber-400 bg-amber-500/5' : 'border-zinc-800 text-zinc-400'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Export / More</span>
+            </button>
+          </div>
+
+        </div>
+
+        {/* 3. Custom Date Range Inputs - Active when 'Custom Date Range' is selected */}
+        {dateFilterOption === 'Custom Date Range' && (
+          <div className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center gap-3 animate-in fade-in slide-in-from-top-1">
+            <div className="flex-1 min-w-[150px]">
+              <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-amber-400 mb-1">
+                Start Date (Event Date)
+              </label>
+              <input
+                id="input_start_date"
+                data-testid="input_start_date"
+                type="date"
+                value={customStartDate}
+                onChange={(e) => {
+                  setCustomStartDate(e.target.value);
+                  setStartDate(e.target.value);
+                }}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
+              />
+            </div>
+            <div className="flex-1 min-w-[150px]">
+              <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-amber-400 mb-1">
+                End Date (Event Date)
+              </label>
+              <input
+                id="input_end_date"
+                data-testid="input_end_date"
+                type="date"
+                value={customEndDate}
+                onChange={(e) => {
+                  setCustomEndDate(e.target.value);
+                  setEndDate(e.target.value);
+                }}
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
+              />
+            </div>
+            {(customStartDate || customEndDate) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="self-end pb-2 text-[11px] text-zinc-400 hover:text-white underline cursor-pointer"
+              >
+                Reset range
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Filter Summary Status */}
+        <div className="flex items-center justify-between text-[11px] text-zinc-400 font-mono pt-1">
+          <div className="flex items-center gap-2">
+            <span>
+              Showing <strong className="text-white">{filteredRecords.length}</strong> of{' '}
+              <strong className="text-zinc-300">{allPendingRecords.length}</strong> records
+            </span>
+            {activeEventDateRange.start && activeEventDateRange.end && (
+              <span className="text-[10px] bg-zinc-800 px-2 py-0.5 rounded text-amber-400 border border-zinc-700">
+                {dateFilterOption === 'Custom Date Range' ? 'Custom Range' : dateFilterOption}: {formatDateDDMMYY(activeEventDateRange.start)} - {formatDateDDMMYY(activeEventDateRange.end)}
+              </span>
+            )}
+          </div>
+          {(globalSearch || dateFilterOption !== 'This Month') && (
+            <button
+              type="button"
+              onClick={() => {
+                setGlobalSearch('');
+                setSearchTerm('');
+                setDateFilterOption('This Month');
+                setCustomStartDate('');
+                setCustomEndDate('');
+              }}
+              className="text-amber-400 hover:text-amber-300 underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="hidden flex justify-end mb-4">
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-1.5 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -1086,238 +1348,14 @@ export const PendingPaymentsReport: React.FC = () => {
         </div>
       </div>
 
-      {showPaymentModal && paymentModalRecord && createPortal(
-        <div 
-          className="fixed inset-0 z-[2147483647] flex items-center justify-center bg-black/80 backdrop-blur-sm p-3 sm:p-4 md:p-6 overflow-y-auto"
-          onClick={() => {
-            setShowPaymentModal(false);
-            setModalSuccessMsg('');
-            setModalErrorMsg('');
-          }}
-        >
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md my-auto bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] sm:max-h-[85vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-center p-4 border-b border-zinc-850 shrink-0">
-              <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                  <CreditCard className="w-4 h-4 text-emerald-500" />
-                  Update Payment
-                </h3>
-                <p className="text-[10px] text-zinc-400 mt-1 uppercase font-mono tracking-widest">
-                  Order: {paymentModalRecord.orderId}
-                </p>
-              </div>
-              <button 
-                type="button"
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  setModalSuccessMsg('');
-                  setModalErrorMsg('');
-                }}
-                className="p-1 px-2 hover:bg-zinc-900 rounded text-zinc-400 hover:text-white uppercase font-mono text-[10px] cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-            
-            {/* Modal level success and error messages */}
-            {modalSuccessMsg && (
-              <div className="bg-emerald-950/40 border-b border-emerald-500/30 text-emerald-400 text-xs px-4 py-2.5 font-bold text-center shrink-0">
-                {modalSuccessMsg}
-              </div>
-            )}
-            {modalErrorMsg && (
-              <div className="bg-rose-950/40 border-b border-rose-500/30 text-rose-400 text-xs px-4 py-2.5 font-bold text-center shrink-0">
-                {modalErrorMsg}
-              </div>
-            )}
-
-            <div id="update_payment_modal_content" className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 overscroll-contain">
-              <div className="space-y-2">
-                <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
-                  <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Final Quotation Amount</span>
-                  <span className="text-sm font-black text-white font-mono">
-                    {formatPercentageOrINR(currentRecord ? currentRecord.finalPackageAmount : paymentModalRecord.finalPackageAmount)}
-                  </span>
-                </div>
-                <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
-                  <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Total Payment Received</span>
-                  <span className="text-sm font-black text-emerald-450 font-mono">
-                    {formatPercentageOrINR(currentRecord ? currentRecord.totalPaidAmount : (paymentModalRecord.finalPackageAmount - paymentModalRecord.remainingAmount))}
-                  </span>
-                </div>
-                <div className="p-3 bg-zinc-900 rounded-lg flex justify-between items-center border border-zinc-850">
-                  <span className="text-xs text-zinc-400 font-bold uppercase tracking-wider">Total Pending Amount</span>
-                  <span className={`text-sm font-black font-mono ${currentRecord && currentRecord.remainingAmount === 0 ? 'text-emerald-400' : 'text-rose-450'}`}>
-                    {formatPercentageOrINR(currentRecord ? currentRecord.remainingAmount : paymentModalRecord.remainingAmount)}
-                  </span>
-                </div>
-              </div>
-              
-              {currentRecord && currentRecord.remainingAmount === 0 ? (
-                <div className="p-4 bg-emerald-950/20 border border-emerald-500/30 rounded-xl text-center text-emerald-400 text-xs font-bold">
-                  🎉 This order is Fully Paid. No outstanding dues remain.
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                      <span>Payment Type</span>
-                      <span className="text-rose-500 font-black">*</span>
-                    </label>
-                    <select
-                      value={paymentType}
-                      onChange={(e) => {
-                        setPaymentType(e.target.value);
-                        if (modalErrorMsg && modalErrorMsg.includes('Payment Type')) {
-                          setModalErrorMsg('');
-                        }
-                      }}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
-                      required
-                    >
-                      <option value="">-- Select Payment Type * --</option>
-                      <option value="Shoot Time Payment">Shoot Time Payment</option>
-                      <option value="Advance Payment">Advance Payment</option>
-                      <option value="Final Payment">Final Payment</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Received</label>
-                    <input
-                      type="number"
-                      value={paymentAmount}
-                      onChange={(e) => setPaymentAmount(e.target.value === '' ? '' : Number(e.target.value))}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 font-mono font-bold"
-                      placeholder="0"
-                    />
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Transaction ID</label>
-                    <input
-                      type="text"
-                      value={transactionIdInput}
-                      onChange={(e) => setTransactionIdInput(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                      placeholder="e.g. TXN1002345"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Mode</label>
-                    <select
-                      value={paymentMode}
-                      onChange={(e) => setPaymentMode(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-bold"
-                    >
-                      <option value="UPI">UPI / Google Pay / PhonePe</option>
-                      <option value="Bank Transfer">Bank NEFT/IMPS/RTGS</option>
-                      <option value="Cash">Cash payment</option>
-                      <option value="Card">Credit/Debit Card</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Payment Notes</label>
-                    <input
-                      type="text"
-                      value={paymentNotes}
-                      onChange={(e) => setPaymentNotes(e.target.value)}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                      placeholder="e.g. Part payment for reception event"
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-            
-            <div className="p-4 border-t border-zinc-850 bg-zinc-900/50 flex gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowPaymentModal(false);
-                  setModalSuccessMsg('');
-                  setModalErrorMsg('');
-                }}
-                className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-400 hover:text-white bg-zinc-800 hover:bg-zinc-750 transition cursor-pointer"
-              >
-                Close Panel
-              </button>
-              <button
-                type="button"
-                onClick={async () => {
-                  if (isSaving) return;
-                  const amt = Number(paymentAmount);
-                  setModalSuccessMsg('');
-                  setModalErrorMsg('');
-
-                  if (!paymentType || paymentType.trim() === '') {
-                    setModalErrorMsg('❌ Please select a Payment Type.');
-                    return;
-                  }
-
-                  if (!paymentAmount || amt <= 0) {
-                    setModalErrorMsg('❌ Please enter a valid payment amount.');
-                    return;
-                  }
-
-                  const maxAllowed = currentRecord ? currentRecord.remainingAmount : paymentModalRecord.remainingAmount;
-                  if (amt > maxAllowed) {
-                    setModalErrorMsg(`❌ Payment cannot exceed the pending amount of ₹${maxAllowed.toLocaleString('en-IN')}`);
-                    return;
-                  }
-
-                  try {
-                    setIsSaving(true);
-                    await recordPayment(
-                      paymentModalRecord.orderId, 
-                      amt, 
-                      new Date().toISOString().split('T')[0], 
-                      undefined, 
-                      transactionIdInput,
-                      paymentMode,
-                      paymentNotes,
-                      paymentType
-                    );
-                    
-                    // Show success message inside popup
-                    setModalSuccessMsg('✅ Payment updated successfully.');
-                    setUpdateSuccessMsg('✅ Payment updated successfully.');
-                    
-                    // Reset input fields
-                    setPaymentAmount('');
-                    setTransactionIdInput('');
-                    setPaymentMode('UPI');
-                    setPaymentNotes('');
-                    
-                    // Auto hide the success message after 2.5 seconds
-                    setTimeout(() => {
-                      setModalSuccessMsg('');
-                      setUpdateSuccessMsg('');
-                    }, 2500);
-                  } catch (err: any) {
-                    console.error(err);
-                    setModalErrorMsg('❌ Payment update failed.');
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }}
-                disabled={isSaving || (currentRecord && currentRecord.remainingAmount === 0) || !paymentAmount || Number(paymentAmount) <= 0 || !paymentType}
-                className="flex-1 py-2 rounded-xl text-xs font-bold text-zinc-950 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition uppercase tracking-wider cursor-pointer"
-              >
-                {isSaving ? 'Saving...' : 'Save Payment'}
-              </button>
-            </div>
-          </motion.div>
-        </div>,
-        document.body
-      )}
+      <UpdatePaymentModal
+        isOpen={showPaymentModal && !!paymentModalRecord}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setPaymentModalRecord(null);
+        }}
+        record={paymentModalRecord}
+      />
 
       <PaymentHistoryModal 
         isOpen={showDetailsModal && !!viewDetailsRecord} 

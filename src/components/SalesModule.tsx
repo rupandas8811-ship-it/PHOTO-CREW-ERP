@@ -32,6 +32,7 @@ import { CustomPackageMaster } from './CustomPackageMaster';
 import { AddressAutocomplete } from './AddressAutocomplete';
 import { TimePicker12Hour } from './TimePicker12Hour';
 import { jsPDF } from 'jspdf';
+import { SearchablePackageSelect } from './sales/SearchablePackageSelect';
 
 interface LocalEditableInputProps {
   value: string;
@@ -1738,7 +1739,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     getLeadCurrentStatus,
     getLeadCurrentStage,
     addNotification,
-    users
+    users,
+    refreshData
   } = useRole();
 
   const leads = currentRole === 'Sales Team' 
@@ -3096,90 +3098,45 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     step3SaveTimeoutRef.current = setTimeout(async () => {
       try {
         // Direct Supabase update to ensure public.leads.Team_Members and Final_Package_Amount are immediately saved
-        try {
-          const { data: dbResult, error: dbError } = await supabaseClient
-            .from('leads')
-            .update({
-              Team_Members: safeTeamMembersText,
-              Add_Deliverable: safeDeliverablesText,
-              Select_Package_Option: pkgId,
-              Quotation_Discount: cleanDiscount,
-              Additional_Services_Cost: cleanAdditional,
-              Final_Quotation_Amount: cleanFinalAmt,
-              Final_Package_Amount: cleanFinalAmt,
-              ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? { package_price: cleanPkgCost, budget: cleanPkgCost } : {})
-            })
-            .eq('lead_id', leadId)
-            .select('*');
-          console.log('TEAM MEMBERS SAVED', { leadId, Team_Members: safeTeamMembersText });
-          console.log('FINAL PACKAGE AMOUNT SAVED', { leadId, Final_Package_Amount: cleanFinalAmt });
-          console.log('TEAM MEMBERS DB RESULT', { data: dbResult, error: dbError });
-        } catch (dbErr) {
-          console.warn("Direct Supabase update warning:", dbErr);
-        }
-
-        // Update using RoleContext to keep the local leads array perfectly in sync
-        await updateLead(leadId, updatePayload);
-        setStep3AutoSaveStatus('saved');
-        
-        // Update local context manually to ensure instant visual sync in modal
-        if (selectedLead) {
-          setSelectedLead(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              Team_member: safeTeamMembersText,
-              Team_Members: safeTeamMembersText,
-              team_members: safeTeamMembersText,
-              Add_Deliverable: safeDeliverablesText,
-              deliverables_description: safeDeliverablesText,
-              Select_Package_Option: pkgId,
-              Quotation_Discount: cleanDiscount,
-              Additional_Services_Cost: cleanAdditional,
-              Final_Quotation_Amount: cleanFinalAmt,
-              Final_Package_Amount: cleanFinalAmt,
-              final_package_amount: cleanFinalAmt,
-              ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
-                package_price: cleanPkgCost,
-                budget: cleanPkgCost
-              } : {})
-            };
-          });
-        }
-        
-        // Also sync wizardLeadData deliverables and team members state
-        setWizardLeadData(prev => ({
-          ...prev,
-          Team_member: safeTeamMembersText,
-          Team_Members: safeTeamMembersText,
-          team_members: safeTeamMembersText,
-          Add_Deliverable: safeDeliverablesText,
-          deliverables: deliverablesText,
-          deliverables_description: deliverablesText,
-          Select_Package_Option: pkgId,
-          final_amount: cleanFinalAmt,
-          ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
+        // 1. Direct Supabase update to ensure public.leads has latest Package Base Price and Final Amounts
+        const { error: dbError } = await supabaseClient
+          .from('leads')
+          .update({
+            Team_Members: safeTeamMembersText,
+            Add_Deliverable: safeDeliverablesText,
+            Select_Package_Option: pkgId,
+            Quotation_Discount: cleanDiscount,
+            Additional_Services_Cost: cleanAdditional,
+            Final_Quotation_Amount: cleanFinalAmt,
+            Final_Package_Amount: cleanFinalAmt,
+            final_package_amount: cleanFinalAmt,
             package_price: cleanPkgCost,
-            budget: cleanPkgCost
-          } : {})
-        }));
+            budget: cleanPkgCost,
+            updated_at: new Date().toISOString()
+          })
+          .eq('lead_id', leadId);
 
-        // Also save / update lead_packages record in Supabase
+        if (dbError) {
+          console.error("Direct Supabase update error on leads:", dbError);
+          setStep3AutoSaveStatus('error');
+          return;
+        }
+
+        // 2. Also save / update lead_packages record in Supabase
         try {
-          const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
-          const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
-
           const packagePayload = {
             lead_id: leadId,
             package_id: pkgId,
             package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
             quantity: 1,
+            package_cost: cleanPkgCost || 0,
             total_amount: cleanPkgCost || 0,
-            discount: quoteDiscount || 0,
-            final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
+            discount: cleanDiscount || 0,
+            additional_services_cost: cleanAdditional || 0,
+            final_amount: cleanFinalAmt,
             Team_Members_Included: teamMembersJson,
             editable_inclusions: updatedInclusions,
-            deliverables_descriptionn: deliverablesJson, // keeping typo just in case other code uses it, but adding deliverables_json too
+            deliverables_descriptionn: deliverablesJson,
             deliverables_json: deliverablesJson,
             deliverables_description: deliverablesText,
             editable_deliverables: updatedDeliverables,
@@ -3209,9 +3166,160 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 created_at: new Date().toISOString()
               });
           }
-        } catch (e) {
-          console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
+        } catch (lpErr) {
+          console.warn("Could not update lead_packages in saveStep3DataRealtime:", lpErr);
         }
+
+        // 3. Synchronize quotations table in Supabase
+        try {
+          const { data: existingQuotes } = await supabaseClient
+            .from('quotations')
+            .select('quotation_id')
+            .eq('lead_id', leadId);
+          if (existingQuotes && existingQuotes.length > 0) {
+            for (const q of existingQuotes) {
+              await supabaseClient
+                .from('quotations')
+                .update({
+                  package_price: cleanPkgCost,
+                  quotation_amount: cleanFinalAmt,
+                  final_amount: cleanFinalAmt,
+                  discount_amount: cleanDiscount,
+                  additional_services_cost: cleanAdditional,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('quotation_id', q.quotation_id);
+            }
+          }
+        } catch (qErr) {
+          console.warn("Could not sync quotations table:", qErr);
+        }
+
+        // 4. Synchronize orders and payments tables in Supabase for confirmed orders
+        try {
+          const { data: linkedOrders } = await supabaseClient
+            .from('orders')
+            .select('*')
+            .eq('lead_id', leadId);
+
+          if (linkedOrders && linkedOrders.length > 0) {
+            for (const ord of linkedOrders) {
+              const adv = Number(ord.advance_received || 0);
+              const newBalance = Math.max(0, cleanFinalAmt - adv);
+              await supabaseClient
+                .from('orders')
+                .update({
+                  package_price: cleanPkgCost,
+                  quotation_amount: cleanFinalAmt,
+                  final_amount: cleanFinalAmt,
+                  quotation_discount: cleanDiscount,
+                  additional_services_cost: cleanAdditional,
+                  balance_amount: newBalance,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('order_id', ord.order_id);
+
+              // 5. Synchronize payments table without altering historical payment records
+              const { data: linkedPayments } = await supabaseClient
+                .from('payments')
+                .select('*')
+                .eq('order_id', ord.order_id);
+
+              if (linkedPayments && linkedPayments.length > 0) {
+                for (const pay of linkedPayments) {
+                  const actualPaid = (Number(pay.advance_received) || 0) + (Number(pay.final_payment_received) || 0) + (Number(pay.additional_received) || 0);
+                  const newBalanceDue = Math.max(0, cleanFinalAmt - actualPaid);
+                  const newStatus = (newBalanceDue <= 0 && cleanFinalAmt > 0) 
+                    ? 'Fully Paid' 
+                    : (actualPaid > 0 ? 'Partially Paid' : (pay.payment_status || 'Pending'));
+
+                  await supabaseClient
+                    .from('payments')
+                    .update({
+                      quotation_amount: cleanFinalAmt,
+                      balance_due: newBalanceDue,
+                      payment_status: newStatus,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('payment_id', pay.payment_id);
+                }
+              }
+            }
+          }
+        } catch (ordErr) {
+          console.warn("Could not sync orders/payments in saveStep3DataRealtime:", ordErr);
+        }
+
+        // 6. Database Source of Truth: Re-fetch and verify the actual saved record from Supabase
+        const { data: verifiedLead, error: verifyErr } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', leadId)
+          .single();
+
+        if (verifyErr || !verifiedLead) {
+          throw new Error(verifyErr?.message || "Failed to verify saved record from database.");
+        }
+
+        const verifiedPkgPrice = Number(verifiedLead.package_price ?? cleanPkgCost);
+        const verifiedDiscount = Number(verifiedLead.Quotation_Discount ?? cleanDiscount);
+        const verifiedAdditional = Number(verifiedLead.Additional_Services_Cost ?? cleanAdditional);
+        const verifiedFinalAmt = Math.max(0, verifiedPkgPrice - verifiedDiscount + verifiedAdditional);
+
+        // Update local context manually to ensure instant visual sync in modal
+        if (selectedLead) {
+          setSelectedLead(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              ...verifiedLead,
+              Team_member: safeTeamMembersText,
+              Team_Members: safeTeamMembersText,
+              team_members: safeTeamMembersText,
+              Add_Deliverable: safeDeliverablesText,
+              deliverables_description: safeDeliverablesText,
+              Select_Package_Option: pkgId,
+              selected_package_id: pkgId,
+              Quotation_Discount: verifiedDiscount,
+              Additional_Services_Cost: verifiedAdditional,
+              Final_Quotation_Amount: verifiedFinalAmt,
+              Final_Package_Amount: verifiedFinalAmt,
+              final_package_amount: verifiedFinalAmt,
+              package_price: verifiedPkgPrice,
+              budget: verifiedPkgPrice
+            };
+          });
+        }
+        
+        // Also sync wizardLeadData deliverables and team members state
+        setWizardLeadData(prev => ({
+          ...prev,
+          Team_member: safeTeamMembersText,
+          Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
+          Add_Deliverable: safeDeliverablesText,
+          deliverables: deliverablesText,
+          deliverables_description: deliverablesText,
+          Select_Package_Option: pkgId,
+          selected_package_id: pkgId,
+          package_cost: verifiedPkgPrice,
+          package_price: verifiedPkgPrice,
+          budget: verifiedPkgPrice,
+          final_amount: verifiedFinalAmt,
+          final_quoted_amount: verifiedFinalAmt
+        }));
+
+        // Invalidate stale cached quote services in localStorage
+        try {
+          localStorage.removeItem(`erp_quote_services_${leadId}`);
+        } catch (e) {}
+
+        // Global refresh
+        if (refreshData) {
+          await refreshData();
+        }
+
+        setStep3AutoSaveStatus('saved');
       } catch (err) {
         console.error("Exception in saveStep3DataRealtime:", err);
         setStep3AutoSaveStatus('error');
@@ -4766,39 +4874,16 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               </span>
             )}
           </div>
-          <select
-            id={isEdit ? "select_package_option" : "wizard_step3_first_field"}
+          <SearchablePackageSelect
+            id="select_package_option"
             value={currentPkgId}
-            onChange={(e) => {
-              const val = e.target.value;
+            onChange={(val) => {
               setSelectedPkgIds([val]);
               handlePackageDropdownChange(val);
             }}
-            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 text-white focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer"
-          >
-              <option value="Custom Package">Custom Package</option>
-              {(() => {
-                const activePkgs = availablePkgs.filter(p => {
-                  if (p.status && p.status.toLowerCase() !== 'active') return false;
-                  const pId = String(p.package_id || '');
-                  const pName = String(p.package_name || '');
-                  if (pId === 'Custom Package' || pId === 'custom_package' || pName === 'Custom Package') return false;
-                  if (pName.toLowerCase().includes('legacy') || pName.toLowerCase().includes('₹0')) return false;
-                  return true;
-                });
-                if (currentPkgId && currentPkgId !== 'Custom Package' && currentPkgId !== 'custom_package' && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
-                  const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
-                  if (matched && !String(matched.package_name || '').toLowerCase().includes('legacy')) {
-                    activePkgs.unshift(matched);
-                  }
-                }
-                return activePkgs.map((pkg) => (
-                  <option key={pkg.package_id} value={pkg.package_id}>
-                    {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
-                  </option>
-                ));
-              })()}
-            </select>
+            packages={availablePkgs}
+            isLocked={isStep3Locked}
+          />
           </div>
 
           {/* Sales Executive Details */}
@@ -4909,6 +4994,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 const startTimeStr = event.event_start_time ? convertTo12Hour(event.event_start_time) : 'N/A';
                 const endTimeStr = event.event_end_time ? convertTo12Hour(event.event_end_time) : 'N/A';
                 const guestPaxVal = event.guest_pax !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
+                const isMulti = currentEvents && currentEvents.length > 1;
+                const specificEventLocation = (event.event_location || (event as any).location || (event as any).venue_address || (event as any).venue || (event as any).event_venue || '').trim();
+                const eventLocationDisplay = specificEventLocation || (!isMulti ? (wizardLeadData.event_location || selectedLead?.event_location || 'N/A') : 'N/A');
 
                 return (
                   <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
@@ -4939,6 +5027,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <span className="text-slate-500">•</span>
                         <span>
                           Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
+                        </span>
+                      </div>
+                      <div className="mt-2 pt-1.5 border-t border-slate-800/60 text-[11px] text-slate-300">
+                        <span className="text-slate-400 font-semibold uppercase font-mono text-[10px] mr-1.5">
+                          Event Location / Venue Address:
+                        </span>
+                        <span className="text-slate-100 font-medium break-words font-sans">
+                          {eventLocationDisplay}
                         </span>
                       </div>
                     </div>
@@ -12189,63 +12285,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               {/* ONE SINGLE SCROLLABLE CONTAINER FOR THE ENTIRE POPUP CONTENT */}
               <div className="overflow-y-auto overflow-x-hidden px-3.5 sm:px-5 md:px-6 py-4 custom-scrollbar flex-1 min-h-0 space-y-4 text-xs">
                 
-                {/* Collapsible Customer Information Card - Expands naturally with NO inner scrollbar */}
-                {(() => {
-                  const combinedType = (selectedLead.events && selectedLead.events.length > 0)
-                    ? selectedLead.events
-                        .map(ev => ev.event_name || ev.event_type)
-                        .filter(Boolean)
-                        .join(', ') || selectedLead.event_type || 'Event'
-                    : (selectedLead.event_type === 'Other'
-                        ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other')
-                        : (selectedLead.event_type || 'Event'));
-
-                  return (
-                    <div className="bg-slate-900/90 rounded-xl border border-slate-800 overflow-hidden">
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomerInfoExpanded(!isCustomerInfoExpanded)}
-                        className="w-full px-3.5 py-2.5 flex items-center justify-between text-left text-xs font-semibold text-slate-200 hover:bg-slate-800/60 transition-colors cursor-pointer select-none"
-                      >
-                        <span className="flex items-center gap-1.5 text-slate-200 font-medium truncate">
-                          Customer Information
-                        </span>
-                        <span className="flex items-center gap-1 text-slate-400 text-[11px] font-medium shrink-0">
-                          <span>{isCustomerInfoExpanded ? 'Hide' : 'Show'}</span>
-                          {isCustomerInfoExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-                          )}
-                        </span>
-                      </button>
-
-                      {isCustomerInfoExpanded && (
-                        <div className="px-3.5 pb-3.5 pt-1.5 border-t border-slate-800/60 text-xs">
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-slate-300">
-                            <div className="min-w-0">
-                              <span className="text-slate-400 font-medium text-[11px] block">Client Name</span>
-                              <strong className="text-slate-100 font-semibold text-xs break-words">{selectedLead.customer_name || 'N/A'}</strong>
-                            </div>
-                            <div className="min-w-0">
-                              <span className="text-slate-400 font-medium text-[11px] block">Mobile Number</span>
-                              <strong className="text-slate-100 font-mono font-semibold text-xs break-all">{selectedLead.mobile || 'N/A'}</strong>
-                            </div>
-                            <div className="sm:col-span-2 min-w-0">
-                              <span className="text-slate-400 font-medium text-[11px] block">Address</span>
-                              <strong className="text-slate-100 font-semibold text-xs break-words">{selectedLead.event_location || 'N/A'}</strong>
-                            </div>
-                            <div className="sm:col-span-2 pt-1 border-t border-slate-800/60 min-w-0">
-                              <span className="text-slate-400 font-medium text-[11px] block">Type</span>
-                              <strong className="text-amber-400 font-semibold text-xs break-words">{combinedType}</strong>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-
                 {/* Product package name - Read-Only */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1.5">
@@ -12275,11 +12314,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           reporting_time: ev.reporting_time || selectedLead.reporting_time || ''
                         };
 
-                        const startDateStr = formatDDMMYYYY(ev.event_start_date || ev.event_date);
-                        const startTimeStr = ev.event_start_time ? convertTo12Hour(ev.event_start_time) : (selectedLead.event_time ? convertTo12Hour(selectedLead.event_time) : 'TBD');
-                        const endTimeStr = ev.event_end_time ? convertTo12Hour(ev.event_end_time) : '';
-                        const eventTimeDisplay = endTimeStr ? `${startTimeStr} – ${endTimeStr}` : startTimeStr;
-
                         return (
                           <div key={key} className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 space-y-2.5">
                             <div className="flex items-center justify-between border-b border-slate-800/60 pb-1.5">
@@ -12291,19 +12325,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               </span>
                             </div>
 
-                            {/* Event Name, Date, Time info */}
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
+                            {/* Event Name info (Event Date & Event Time removed from UI) */}
+                            <div className="bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
                               <div className="min-w-0">
                                 <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Name</span>
-                                <span className="text-slate-200 font-semibold break-words">{ev.event_name || ev.event_type || 'Event'}</span>
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Date</span>
-                                <span className="text-slate-200 font-semibold font-mono">{startDateStr}</span>
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Time</span>
-                                <span className="text-slate-200 font-semibold font-mono">{eventTimeDisplay}</span>
+                                <span className="text-slate-200 font-semibold break-words">{ev.event_name || 'Event'}</span>
                               </div>
                             </div>
 
@@ -12362,19 +12388,11 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </span>
                         </div>
 
-                        {/* Single Event Info */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
+                        {/* Single Event Info (Event Date & Event Time removed from UI) */}
+                        <div className="bg-slate-900/60 p-2.5 rounded-md border border-slate-800/60 text-[11px]">
                           <div className="min-w-0">
                             <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Name</span>
                             <span className="text-slate-200 font-semibold break-words">{selectedLead.event_type === 'Other' ? (selectedLead.custom_event_name || selectedLead.custom_event_type || 'Other') : (selectedLead.event_type || 'General Event')}</span>
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Date</span>
-                            <span className="text-slate-200 font-semibold font-mono">{formatDDMMYYYY(selectedLead.event_date)}</span>
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-slate-400 block text-[10px] uppercase font-mono">Event Time</span>
-                            <span className="text-slate-200 font-semibold font-mono">{selectedLead.event_time ? convertTo12Hour(selectedLead.event_time) : 'TBD'}</span>
                           </div>
                         </div>
 
@@ -13315,7 +13333,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                          <div>
                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
                            <select
-                             id="select_package_option"
+                             id="hidden_legacy_select_package_option"
                              value={wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || ''}
                              onChange={(e) => handlePackageDropdownChange(e.target.value)}
                              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
@@ -13458,6 +13476,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                     const startTimeStr = event.event_start_time ? convertTo12Hour(event.event_start_time) : 'N/A';
                                     const endTimeStr = event.event_end_time ? convertTo12Hour(event.event_end_time) : 'N/A';
                                     const guestPaxVal = event.guest_pax !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
+                                    const isMulti = crmEvents && crmEvents.length > 1;
+                                    const specificEventLocation = (event.event_location || (event as any).location || (event as any).venue_address || (event as any).venue || (event as any).event_venue || '').trim();
+                                    const eventLocationDisplay = specificEventLocation || (!isMulti ? (wizardLeadData.event_location || selectedLead?.event_location || 'N/A') : 'N/A');
 
                                     return (
                                       <div key={event.id || eventIdx} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
@@ -13488,6 +13509,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                             <span className="text-slate-500">•</span>
                                             <span>
                                               Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
+                                            </span>
+                                          </div>
+                                          <div className="mt-2 pt-1.5 border-t border-slate-800/60 text-[11px] text-slate-300">
+                                            <span className="text-slate-400 font-semibold uppercase font-mono text-[10px] mr-1.5">
+                                              Event Location / Venue Address:
+                                            </span>
+                                            <span className="text-slate-100 font-medium break-words font-sans">
+                                              {eventLocationDisplay}
                                             </span>
                                           </div>
                                         </div>

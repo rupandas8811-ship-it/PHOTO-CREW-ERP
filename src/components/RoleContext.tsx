@@ -5,7 +5,7 @@ import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
-import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers, checkGlobalMobileUnique, checkGlobalEmailUnique, checkGlobalStaffUniqueness, normalizeMobileNumber } from '../utils';
+import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers, checkGlobalMobileUnique, normalizeMobileNumber } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { executeSaveStaffAssignments } from '../services/operationsAssignmentService';
 
@@ -409,20 +409,135 @@ export const mapUserFieldsFromDb = (u: any): any => {
 };
 
 export const getStaffCurrentPassword = (
-  _member: any,
-  _usersList: any[] = [],
-  _productionStaffList: any[] = []
+  member: any,
+  usersList: any[] = []
 ): string => {
-  // Passwords must never be retrieved or prefilled in plaintext
+  if (!member) return '';
+  if (member.Password && typeof member.Password === 'string' && member.Password.trim()) {
+    return member.Password.trim();
+  }
+  if (member.password && typeof member.password === 'string' && member.password.trim()) {
+    return member.password.trim();
+  }
+
+  let staffAuthId = member.auth_user_id;
+  if (!staffAuthId && typeof member.notes === 'string' && member.notes.includes('auth_user_id')) {
+    try {
+      const parsed = JSON.parse(member.notes);
+      if (parsed.auth_user_id) staffAuthId = parsed.auth_user_id;
+    } catch (e) {}
+  }
+
+  const staffId = member.staff_id;
+  const staffEmail = (member.email || '').trim().toLowerCase();
+  const rawMobile = member.mobile || '';
+  const mobileDigits = rawMobile.replace(/\D/g, '');
+  const mobileLast10 = mobileDigits.length >= 10 ? mobileDigits.slice(-10) : mobileDigits;
+  const staffName = (member.name || '').trim().toLowerCase();
+
+  const checkUser = (u: any): string | null => {
+    if (!u) return null;
+    const pwd = u.password;
+    if (pwd !== undefined && pwd !== null && String(pwd).trim() !== '') {
+      return String(pwd).trim();
+    }
+    return null;
+  };
+
+  // 1. Check auth_user_id match
+  if (staffAuthId) {
+    const u = usersList.find(x => x && (x.id === staffAuthId || mapToDbUserId(x.id) === staffAuthId || (x as any).auth_user_id === staffAuthId));
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  // 2. Check email or username match
+  if (staffEmail) {
+    const u = usersList.find(x => {
+      if (!x) return false;
+      const uEmail = (x.email || '').trim().toLowerCase();
+      const uUsername = (x.username || '').trim().toLowerCase();
+      return uEmail === staffEmail || uUsername === staffEmail;
+    });
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  // 3. Check mobile match (exact digits or 10-digit suffix)
+  if (mobileLast10 && mobileLast10.length >= 7) {
+    const u = usersList.find(x => {
+      if (!x) return false;
+      const uMobileDigits = (x.mobile || x.phone || '').replace(/\D/g, '');
+      const uMobileLast10 = uMobileDigits.length >= 10 ? uMobileDigits.slice(-10) : uMobileDigits;
+      return uMobileDigits === mobileDigits || (uMobileLast10 && uMobileLast10 === mobileLast10);
+    });
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  // 4. Check staff_id match
+  if (staffId) {
+    const u = usersList.find(x => x && (x.id === staffId || mapToDbUserId(x.id) === mapToDbUserId(staffId) || x.id === mapToDbStaffId(staffId)));
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
+  // 5. Check exact trimmed name match
+  if (staffName) {
+    const u = usersList.find(x => x && (x.name || x.full_name || '').trim().toLowerCase() === staffName);
+    const pwd = checkUser(u);
+    if (pwd) return pwd;
+  }
+
   return '';
 };
 
 export const fetchStaffCurrentPassword = async (
-  _member: any,
-  _usersList: any[] = [],
-  _productionStaffList: any[] = []
+  member: any,
+  usersList: any[] = []
 ): Promise<string> => {
-  // Passwords must never be fetched or exposed in UI
+  const syncPwd = getStaffCurrentPassword(member, usersList);
+  if (syncPwd) return syncPwd;
+  if (!member) return '';
+
+  let staffAuthId = member.auth_user_id;
+  if (!staffAuthId && typeof member.notes === 'string' && member.notes.includes('auth_user_id')) {
+    try {
+      const parsed = JSON.parse(member.notes);
+      if (parsed.auth_user_id) staffAuthId = parsed.auth_user_id;
+    } catch (e) {}
+  }
+
+  const staffEmail = (member.email || '').trim().toLowerCase();
+  const rawMobile = (member.mobile || '').trim();
+  const staffName = (member.name || '').trim();
+
+  try {
+    const orClauses: string[] = [];
+    if (staffAuthId) orClauses.push(`id.eq.${staffAuthId}`);
+    if (staffEmail) {
+      orClauses.push(`email.ilike.${staffEmail}`);
+      orClauses.push(`username.ilike.${staffEmail}`);
+    }
+    if (rawMobile) orClauses.push(`mobile.eq.${rawMobile}`);
+    if (staffName) orClauses.push(`name.ilike.${staffName}`);
+
+    if (orClauses.length > 0 && supabaseClient) {
+      const { data } = await supabaseClient
+        .from('users')
+        .select('password')
+        .or(orClauses.join(','))
+        .not('password', 'is', null)
+        .limit(1);
+
+      if (data && data.length > 0 && data[0]?.password) {
+        return String(data[0].password).trim();
+      }
+    }
+  } catch (err) {
+    console.warn("Live password retrieval warning:", err);
+  }
+
   return '';
 };
 
@@ -701,7 +816,7 @@ export const getProductionStaffColumns = async (): Promise<string[]> => {
   } catch (err) {
     console.error('[RoleContext] Error detecting production_staff columns:', err);
   }
-  return ['staff_id', 'name', 'mobile', 'email', 'role', 'department', 'status', 'joining_date', 'notes', 'created_at', "'production_role_speciality", 'Staff_Type', 'staff_type', 'whatsapp_number', 'production_role_speciality', 'Skill', 'skill', 'city', 'experience', 'employee_id', 'password'];
+  return ['staff_id', 'name', 'mobile', 'email', 'role', 'department', 'status', 'joining_date', 'notes', 'created_at', "'production_role_speciality", 'Staff_Type', 'staff_type', 'whatsapp_number', 'production_role_speciality', 'Skill', 'skill', 'city', 'experience', 'employee_id', 'Password', 'password'];
 };
 
 export const mapProductionStaffFromDb = (item: any): Staff => {
@@ -740,8 +855,6 @@ export const mapProductionStaffFromDb = (item: any): Staff => {
   ].filter(val => val === 'In-House' || val === 'Freelancer');
   const resolvedStaffType = candidates.includes('Freelancer') ? 'Freelancer' : 'In-House';
 
-  const resolvedPassword = item.password || extra.password || nestedExtra.password || (item as any).password || '';
-
   return {
     ...item,
     ...extra,
@@ -751,13 +864,14 @@ export const mapProductionStaffFromDb = (item: any): Staff => {
     whatsapp_number,
     production_role_speciality,
     staff_type: resolvedStaffType,
-    password: resolvedPassword || undefined,
     email: item.email || `${name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`,
     role: item.role || 'Editor',
     department: item.department || 'Post-Production',
     status: item.status || 'Active',
     joining_date: item.joining_date || new Date().toISOString().split('T')[0],
     Skill: Array.isArray(item.Skill) ? item.Skill : (typeof item.Skill === 'string' ? item.Skill.split(',').map((s: any) => s.trim()).filter(Boolean) : (Array.isArray(extra.Skill) ? extra.Skill : [])),
+    password: item.Password || item.password || extra.password || extra.Password || '',
+    Password: item.Password || item.password || extra.password || extra.Password || '',
     notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
   };
 };
@@ -838,12 +952,16 @@ export const mapProductionStaffToDb = async (member: Staff | Partial<Staff>) => 
     }
   }
 
-  if ((member as any).password !== undefined && (member as any).password !== null) {
-    const pwdVal = String((member as any).password).trim();
+  const pwdVal = (member as any).Password || (member as any).password || extra.Password || extra.password;
+  if (pwdVal !== undefined) {
+    if (cols.includes('Password')) {
+      dbRecord.Password = pwdVal;
+    }
     if (cols.includes('password')) {
       dbRecord.password = pwdVal;
-    } else {
-      extra.password = pwdVal;
+    }
+    if (!cols.includes('Password') && !cols.includes('password')) {
+      dbRecord.Password = pwdVal;
     }
   }
 
@@ -1782,6 +1900,13 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (table === 'equipment') {
       cloned.Equipment_Category = cloned.equipment_type || cloned.Equipment_Category || 'Camera';
       cloned.Equipment_Status = cloned.status || cloned.Equipment_Status || 'Active';
+    }
+
+    if (table === 'leads') {
+      if (cloned.selected_package_id && !cloned.Select_Package_Option) {
+        cloned.Select_Package_Option = cloned.selected_package_id;
+      }
+      delete cloned.selected_package_id;
     }
 
     const allowedColumns: Record<string, string[]> = {
@@ -4098,7 +4223,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
       let authSuccess = false;
 
-      // 1. Direct password check against candidate users' password AND production_staff.password
+      // 1. Direct password check against candidate users' public.users.password
       for (const candidate of candidateUsers) {
         const storedPwd = String(candidate.password ?? '').trim();
         if (storedPwd !== '' && storedPwd === cleanPassword) {
@@ -4106,99 +4231,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           dbUser = candidate;
           break;
         }
-
-        // Check if candidate matches any production_staff record and verify production_staff.password
-        const candEmail = (candidate.email || '').trim().toLowerCase();
-        const candMobile = (candidate.mobile || '').replace(/\D/g, '');
-        const matchingProd = productionStaff.find(p => {
-          if (!p) return false;
-          if (p.staff_id === candidate.id || p.staff_id === mapToDbUserId(candidate.id)) return true;
-          if (candEmail && p.email && p.email.trim().toLowerCase() === candEmail) return true;
-          if (candMobile.length >= 7 && (p.mobile || '').replace(/\D/g, '').endsWith(candMobile.slice(-10))) return true;
-          return false;
-        });
-
-        if (matchingProd?.password && String(matchingProd.password).trim() === cleanPassword) {
-          authSuccess = true;
-          dbUser = candidate;
-          dbUser.password = cleanPassword;
-          try {
-            if (supabaseClient) {
-              await supabaseClient.from('users').update({ password: cleanPassword }).eq('id', candidate.id);
-            }
-          } catch (syncErr) {
-            console.warn('[LOGIN] Sync password to users table warning:', syncErr);
-          }
-          break;
-        }
       }
 
-      // 2. Direct query against public.production_staff table for live credentials
-      if (!authSuccess) {
-        try {
-          const prodOrClauses: string[] = [];
-          if (cleanInput.includes('@')) {
-            prodOrClauses.push(`email.ilike.${cleanInput.trim().toLowerCase()}`);
-          }
-          if (rawDigits.length >= 7) {
-            prodOrClauses.push(`mobile.eq.${rawDigits}`);
-            prodOrClauses.push(`mobile.like.%${last10}`);
-          }
-          if (cleanInput.startsWith('STF-') || cleanInput.startsWith('PS-')) {
-            prodOrClauses.push(`staff_id.eq.${cleanInput.trim()}`);
-          }
-
-          if (prodOrClauses.length > 0 && supabaseClient) {
-            const { data: matchedProds } = await supabaseClient
-              .from('production_staff')
-              .select('*')
-              .or(prodOrClauses.join(','))
-              .limit(5);
-
-            if (matchedProds && matchedProds.length > 0) {
-              for (const prodRow of matchedProds) {
-                const prodPwd = String(prodRow.password ?? '').trim();
-                if (prodPwd !== '' && prodPwd === cleanPassword) {
-                  authSuccess = true;
-                  const mappedStaff = mapProductionStaffFromDb(prodRow);
-                  const staffEmail = mappedStaff.email || `${mappedStaff.mobile ? mappedStaff.mobile.replace(/\D/g, '') : mappedStaff.name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`;
-                  
-                  dbUser = {
-                    id: mappedStaff.staff_id || `STAFF-${Date.now()}`,
-                    name: mappedStaff.name,
-                    email: staffEmail,
-                    username: staffEmail,
-                    mobile: mappedStaff.mobile || '',
-                    role: 'Production Staff' as UserRole,
-                    active: mappedStaff.status !== 'Inactive',
-                    password: cleanPassword
-                  };
-
-                  try {
-                    await supabaseClient.from('users').upsert({
-                      id: dbUser.id,
-                      name: dbUser.name,
-                      email: dbUser.email,
-                      username: dbUser.username,
-                      mobile: dbUser.mobile,
-                      role: 'Production Staff',
-                      active: dbUser.active,
-                      password: cleanPassword,
-                      created_at: new Date().toISOString()
-                    }, { onConflict: 'email' });
-                  } catch (e) {}
-
-                  break;
-                }
-              }
-            }
-          }
-        } catch (prodLookupErr) {
-          console.warn('[LOGIN] Direct production_staff credentials lookup warning:', prodLookupErr);
-        }
-      }
-
-      // 3. If direct password check didn't match, check Supabase Auth as secondary fallback
+      // 2. If direct password check didn't match, check Supabase Auth as secondary fallback
       if (!authSuccess && candidateUsers.length > 0) {
         for (const candidate of candidateUsers) {
           const loginEmail = candidate.email || (cleanInput.includes('@') ? cleanInput : null);
@@ -4212,7 +4247,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               if (!authErr && authData?.session) {
                 authSuccess = true;
                 dbUser = candidate;
-                // Sync password to public.users and production_staff table
+                // Sync password to public.users table so future logins use public.users.password directly
                 try {
                   await supabaseClient
                     .from('users')
@@ -4226,6 +4261,74 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               }
             } catch (e: any) {
               console.warn("Supabase Auth sign in failed:", e?.message || e);
+            }
+          }
+        }
+      }
+
+      // 3. Fallback: check production_staff table directly for matching password
+      if (!authSuccess) {
+        let matchedProd = productionStaff.find(s => {
+          const sEmail = (s.email || '').trim().toLowerCase();
+          const sMobile = (s.mobile || '').replace(/\D/g, '');
+          const sWa = (s.whatsapp_number || '').replace(/\D/g, '');
+          if (sEmail && sEmail === cleanInput.toLowerCase()) return true;
+          if (rawDigits.length >= 7 && (sMobile === rawDigits || sMobile.endsWith(last10) || rawDigits.endsWith(sMobile))) return true;
+          if (rawDigits.length >= 7 && (sWa === rawDigits || sWa.endsWith(last10))) return true;
+          return false;
+        });
+
+        if (!matchedProd && supabaseClient) {
+          try {
+            const { data: dbPs } = await supabaseClient
+              .from('production_staff')
+              .select('*')
+              .or(`email.ilike.${cleanInput},mobile.ilike.%${last10}%`);
+            if (dbPs && dbPs.length > 0) {
+              matchedProd = mapProductionStaffFromDb(dbPs[0]);
+            }
+          } catch (e) {}
+        }
+
+        if (matchedProd) {
+          const prodPwd = String((matchedProd as any).Password || (matchedProd as any).password || '').trim();
+          if (prodPwd && prodPwd === cleanPassword) {
+            authSuccess = true;
+            const existingCandidate = candidateUsers.find(u => 
+              (u.email && matchedProd.email && u.email.toLowerCase() === matchedProd.email.toLowerCase()) ||
+              (u.mobile && matchedProd.mobile && cleanPhone(u.mobile) === cleanPhone(matchedProd.mobile))
+            );
+            if (existingCandidate) {
+              dbUser = { ...existingCandidate, role: 'Production Staff', password: cleanPassword };
+            } else {
+              const staffEmail = matchedProd.email || `${matchedProd.mobile ? matchedProd.mobile.replace(/\D/g, '') : matchedProd.name.toLowerCase().replace(/\s+/g, '')}@photocrew.com`;
+              dbUser = {
+                id: matchedProd.staff_id || `STAFF-${Date.now()}`,
+                name: matchedProd.name,
+                email: staffEmail,
+                username: staffEmail,
+                mobile: matchedProd.mobile || '',
+                role: 'Production Staff',
+                active: matchedProd.status !== 'Inactive',
+                password: cleanPassword
+              };
+            }
+
+            try {
+              if (supabaseClient && dbUser.id) {
+                await supabaseClient.from('users').upsert({
+                  id: dbUser.id,
+                  name: dbUser.name,
+                  email: dbUser.email,
+                  username: dbUser.username || dbUser.email,
+                  mobile: dbUser.mobile,
+                  role: 'Production Staff',
+                  active: dbUser.active !== false,
+                  password: cleanPassword
+                }, { onConflict: 'email' });
+              }
+            } catch (syncErr) {
+              console.warn("[LOGIN] Production staff sync to users warning:", syncErr);
             }
           }
         }
@@ -4374,6 +4477,33 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         const msg = 'User role is not configured.';
         logAttempt('Failed', msg, dbUser.id);
         return { success: false, error: msg };
+      }
+
+      // Explicit Production Staff Role Detection:
+      // If dbUser is an actual Production Staff member (present in production_staff), ensure they are routed to Production Staff dashboard, NOT Production Team dashboard.
+      // Do NOT touch dedicated Production Team accounts (e.g. production@photocrew.com).
+      const isDedicatedProdTeamAccount =
+        (dbUser.email || '').trim().toLowerCase() === 'production@photocrew.com' ||
+        dbUser.id === '00000000-0000-0000-0000-000000000004';
+
+      if (!isDedicatedProdTeamAccount) {
+        const uEmail = (dbUser.email || '').trim().toLowerCase();
+        const uMobile = (dbUser.mobile || '').replace(/\D/g, '');
+        const matchedInProdStaff = productionStaff.some(ps => {
+          if (ps.staff_id && ps.staff_id === dbUser.id) return true;
+          const psEmail = (ps.email || '').trim().toLowerCase();
+          const psMobile = (ps.mobile || '').replace(/\D/g, '');
+          if (psEmail && uEmail && psEmail === uEmail) return true;
+          if (psMobile && uMobile && psMobile.length >= 7 && (psMobile === uMobile || psMobile.endsWith(uMobile) || uMobile.endsWith(psMobile))) return true;
+          return false;
+        });
+
+        if (matchedInProdStaff) {
+          dbUser.role = 'Production Staff';
+          if (supabaseClient) {
+            supabaseClient.from('users').update({ role: 'Production Staff' }).eq('id', dbUser.id).then(() => null);
+          }
+        }
       }
 
       const normalizeUserRole = (rawRole: string): UserRole => {
@@ -7214,17 +7344,12 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
   // User Management Admin features
   const addUser = async (name: string, email: string, mobile: string, role: UserRole, active: boolean, password?: string, employee_id?: string) => {
-    // Validate global mobile and email uniqueness
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile,
-      email,
-      excludeId: null,
-      usersList: users,
-      opStaffList: staff,
-      prodStaffList: productionStaff
-    });
-    if (!uniquenessCheck.isUnique) {
-      throw new Error(uniquenessCheck.error || "Duplicate staff details detected.");
+    // Validate global mobile uniqueness
+    if (mobile) {
+      const uniqueCheck = checkGlobalMobileUnique(mobile, null, users, staff, productionStaff);
+      if (!uniqueCheck.isUnique) {
+        throw new Error(uniqueCheck.error || "Mobile number already exists. Please use a different mobile number.");
+      }
     }
 
     const newId = crypto.randomUUID ? crypto.randomUUID() : `U-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -7278,7 +7403,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const dbRes = await pushUpsert('users', { ...newUser, id: mapToDbUserId(finalAuthId) });
     if (!dbRes.success) {
       if (dbRes.error && dbRes.error.includes('users_email_key')) {
-        throw new Error("Duplicate email address. This email is already registered to an existing staff member.");
+        throw new Error("This email address is already in use by another user.");
       }
       throw new Error(dbRes.error || "Failed to save user to database");
     }
@@ -7310,22 +7435,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    // Validate global uniqueness if mobile or email is being modified
-    const isMobileChanging = updates.mobile && (!targetUser || cleanPhone(updates.mobile) !== cleanPhone(targetUser.mobile));
-    const isEmailChanging = updates.email && (!targetUser || cleanEmail(updates.email) !== cleanEmail(targetUser.email));
-    if (isMobileChanging || isEmailChanging) {
-      const uniquenessCheck = checkGlobalStaffUniqueness({
-        mobile: updates.mobile || targetUser?.mobile,
-        email: updates.email || targetUser?.email,
-        excludeId: id,
-        excludeEmail: targetUser?.email,
-        excludeMobile: targetUser?.mobile,
-        usersList: users,
-        opStaffList: staff,
-        prodStaffList: productionStaff
-      });
-      if (!uniquenessCheck.isUnique) {
-        throw new Error(uniquenessCheck.error || "Duplicate staff details detected.");
+    // Validate global mobile uniqueness if mobile is being modified
+    if (updates.mobile && (!targetUser || cleanPhone(updates.mobile) !== cleanPhone(targetUser.mobile))) {
+      const uniqueCheck = checkGlobalMobileUnique(updates.mobile, id, users, staff, productionStaff);
+      if (!uniqueCheck.isUnique) {
+        throw new Error(uniqueCheck.error || "Mobile number already exists. Please use a different mobile number.");
       }
     }
 
@@ -7541,10 +7655,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const resetUserPassword = async (id: string, newPassword: string) => {
-    const cleanPassword = (newPassword || '').trim();
-    if (!cleanPassword || cleanPassword.length < 8) {
-      throw new Error('Password must be at least 8 characters long.');
-    }
+    const cleanPassword = newPassword.trim();
     const dbUserId = mapToDbUserId(id);
     
     // Find target user in state or database
@@ -7565,107 +7676,93 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       }
     }
 
-    const targetEmail = (targetUser?.email || '').trim().toLowerCase();
-    const targetMobile = (targetUser?.mobile || '').trim();
-
-    // 1. Authoritative update in Supabase Auth via server admin endpoint
-    const authRes = await fetch('/api/auth/update-user', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        auth_id: dbUserId,
-        email: targetEmail || undefined,
-        mobile: targetMobile || undefined,
-        password: cleanPassword,
-        name: targetUser?.name,
-        role: targetUser?.role
-      })
-    });
-
-    if (!authRes.ok) {
-      const errData = await authRes.json().catch(() => ({}));
-      throw new Error(errData.error || 'Failed to update authentication password.');
-    }
-
-    const authData = await authRes.json().catch(() => ({}));
-    if (!authData.success) {
-      throw new Error(authData.error || 'Failed to update authentication password.');
-    }
-
-    const resolvedAuthId = authData.auth_id || dbUserId;
-
-    // 2. Direct update in public.users table for persistence
+    // 1. Direct update in public.users table for immediate persistence
     if (supabaseClient) {
       try {
         await supabaseClient.from('users').update({ password: cleanPassword }).eq('id', dbUserId);
-        if (targetEmail) {
-          await supabaseClient.from('users').update({ password: cleanPassword }).ilike('email', targetEmail);
+        if (targetUser?.email) {
+          await supabaseClient.from('users').update({ password: cleanPassword }).ilike('email', targetUser.email.trim());
         }
-        if (targetMobile) {
-          await supabaseClient.from('users').update({ password: cleanPassword }).eq('mobile', targetMobile);
+        if (targetUser?.mobile) {
+          await supabaseClient.from('users').update({ password: cleanPassword }).eq('mobile', targetUser.mobile.trim());
         }
       } catch (directSbErr) {
         console.warn("Direct Supabase update warning in resetUserPassword:", directSbErr);
       }
     }
     
+    // 2. Also update in users table via server proxy
     try {
       await pushUpdate('users', 'id', dbUserId, { password: cleanPassword });
     } catch (pushErr) {
       console.warn("pushUpdate users password warning:", pushErr);
     }
-
-    // 3. Link auth_user_id in production_staff (never store plaintext password)
+    
+    // 3. Also update Supabase Auth via server admin endpoint
     try {
-      const targetMobileDigits = targetMobile.replace(/\D/g, '');
-      const targetMobileLast10 = targetMobileDigits.length >= 10 ? targetMobileDigits.slice(-10) : targetMobileDigits;
-
-      const matchingProd = productionStaff.find(p => {
-        if (!p) return false;
-        if (p.staff_id === id || p.staff_id === dbUserId) return true;
-        if (targetEmail && p.email && p.email.trim().toLowerCase() === targetEmail) return true;
-        if (targetMobileLast10.length >= 7) {
-          const pM = (p.mobile || '').replace(/\D/g, '');
-          if (pM === targetMobileDigits || (pM.length >= 10 && pM.slice(-10) === targetMobileLast10)) return true;
-        }
-        return false;
+      await fetch('/api/auth/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          auth_id: dbUserId,
+          email: targetUser?.email,
+          mobile: targetUser?.mobile,
+          password: cleanPassword,
+          name: targetUser?.name,
+          role: targetUser?.role
+        })
       });
-
-      if (matchingProd || id.startsWith('STF-') || id.startsWith('PS-') || targetUser?.role === 'Production Staff' || targetUser?.role === 'Production Team') {
-        const targetStaffId = matchingProd?.staff_id || (id.startsWith('STF-') || id.startsWith('PS-') ? id : null);
-        
-        if (targetStaffId && supabaseClient && resolvedAuthId) {
-          await supabaseClient.from('production_staff').update({ auth_user_id: resolvedAuthId }).eq('staff_id', targetStaffId);
-        }
-
-        // Update in-memory productionStaff state (link auth_user_id, remove any plaintext password)
-        setProductionStaff((prev) => prev.map((p) => {
-          const isMatch = (targetStaffId && p.staff_id === targetStaffId) ||
-                          (targetEmail && p.email && p.email.trim().toLowerCase() === targetEmail) ||
-                          (targetMobileLast10.length >= 7 && (p.mobile || '').replace(/\D/g, '').endsWith(targetMobileLast10));
-          return isMatch ? { ...p, auth_user_id: resolvedAuthId || p.auth_user_id, password: '' } : p;
-        }));
-      }
-    } catch (prodSyncErr) {
-      console.warn("production_staff auth linking warning:", prodSyncErr);
+    } catch (authErr) {
+      console.warn("Supabase Auth password update warning:", authErr);
     }
 
     setUsers((prev) => prev.map((u) => (u.id === id || mapToDbUserId(u.id) === dbUserId || u.id === dbUserId) ? { ...u, password: cleanPassword } : u));
+
+    // 4. If target is a Production Staff, guarantee production_staff.Password is updated in database
+    try {
+      const matchingProdStaff = productionStaff.find(ps => {
+        if (ps.staff_id === id || ps.staff_id === dbUserId) return true;
+        if (targetUser?.email && ps.email && ps.email.trim().toLowerCase() === targetUser.email.trim().toLowerCase()) return true;
+        if (targetUser?.mobile && ps.mobile && cleanPhone(ps.mobile) === cleanPhone(targetUser.mobile)) return true;
+        return false;
+      });
+
+      if (matchingProdStaff) {
+        await pushUpdate('production_staff', 'staff_id', matchingProdStaff.staff_id, {
+          Password: cleanPassword,
+          password: cleanPassword
+        });
+        setProductionStaff(prev => prev.map(ps => ps.staff_id === matchingProdStaff.staff_id ? { ...ps, password: cleanPassword, Password: cleanPassword } : ps));
+      } else if (targetUser?.mobile || targetUser?.email) {
+        if (targetUser?.mobile) {
+          await pushUpdate('production_staff', 'mobile', targetUser.mobile.trim(), { Password: cleanPassword, password: cleanPassword }).catch(() => null);
+        }
+        if (targetUser?.email) {
+          await pushUpdate('production_staff', 'email', targetUser.email.trim(), { Password: cleanPassword, password: cleanPassword }).catch(() => null);
+        }
+      }
+    } catch (prodErr) {
+      console.warn("resetUserPassword sync to production_staff warning:", prodErr);
+    }
+
     logActivity(`Reset Password for User account: ${targetUser?.name || id}`, 'UserManagement', id);
   };
 
   const addStaff = async (member: Omit<Staff, "staff_id">) => {
-    // Validate global mobile and email uniqueness
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile: member.mobile,
-      email: member.email,
-      excludeId: null,
-      usersList: users,
-      opStaffList: staff,
-      prodStaffList: productionStaff
-    });
-    if (!uniquenessCheck.isUnique) {
-      throw new Error(uniquenessCheck.error || "Duplicate staff details detected.");
+    // Validate global mobile uniqueness
+    if (member.mobile) {
+      const uniqueCheck = checkGlobalMobileUnique(member.mobile, null, users, staff, productionStaff);
+      if (!uniqueCheck.isUnique) {
+        throw new Error(uniqueCheck.error || "Mobile number already exists. Please use a different mobile number.");
+      }
+    }
+
+    const newEmailClean = cleanEmail(member.email);
+    for (const s of staff) {
+      const existingEmailClean = cleanEmail(s.email);
+      if (newEmailClean && existingEmailClean && newEmailClean === existingEmailClean) {
+        throw new Error("This email is already registered.");
+      }
     }
 
     const staffId = `STF-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -7741,25 +7838,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const existing = staff.find(s => s.staff_id === staffId);
     const timestamp = new Date().toISOString();
     
-    // Validate uniqueness if mobile or email are provided
-    const isMobileChanging = updates.mobile && (!existing || cleanPhone(updates.mobile) !== cleanPhone(existing.mobile));
-    const isEmailChanging = updates.email && (!existing || cleanEmail(updates.email) !== cleanEmail(existing.email));
-    if (isMobileChanging || isEmailChanging) {
-      const uniquenessCheck = checkGlobalStaffUniqueness({
-        mobile: updates.mobile || existing?.mobile,
-        email: updates.email || existing?.email,
-        excludeId: staffId,
-        excludeEmail: existing?.email,
-        excludeMobile: existing?.mobile,
-        usersList: users,
-        opStaffList: staff,
-        prodStaffList: productionStaff
-      });
-      if (!uniquenessCheck.isUnique) {
-        throw new Error(uniquenessCheck.error || "Duplicate staff details detected.");
-      }
-    }
-
     // Strip mobile and email so they can never be modified after staff creation
     const { mobile, phone, mobile_number, email, ...safeUpdates } = updates as any;
 
@@ -7821,43 +7899,30 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
   };
 
   const addProductionStaff = async (member: Omit<Staff, "staff_id">) => {
-    // Validate global mobile and email uniqueness
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile: member.mobile,
-      email: member.email,
-      excludeId: null,
-      usersList: users,
-      opStaffList: staff,
-      prodStaffList: productionStaff
-    });
-    if (!uniquenessCheck.isUnique) {
-      throw new Error(uniquenessCheck.error || "Duplicate staff details detected.");
+    // Validate global mobile uniqueness
+    if (member.mobile) {
+      const uniqueCheck = checkGlobalMobileUnique(member.mobile, null, users, staff, productionStaff);
+      if (!uniqueCheck.isUnique) {
+        throw new Error(uniqueCheck.error || "Mobile number already exists. Please use a different mobile number.");
+      }
+    }
+
+    const newEmailClean = cleanEmail(member.email);
+    for (const s of productionStaff) {
+      const existingEmailClean = cleanEmail(s.email);
+      if (newEmailClean && existingEmailClean && newEmailClean === existingEmailClean) {
+        throw new Error("This email is already registered.");
+      }
     }
 
     const staffId = `STF-${Math.floor(10000 + Math.random() * 90000)}`;
     const timestamp = new Date().toISOString();
-    const pwd = ((member as any).password && typeof (member as any).password === 'string' && (member as any).password.trim())
-      ? (member as any).password.trim()
-      : 'Staff@123';
-    const emailVal = (member.email || '').trim().toLowerCase() || `${member.mobile ? member.mobile.replace(/\D/g, '') : staffId.toLowerCase()}@photocrew.com`;
-
-    let authUid = (member as any).auth_user_id;
-    if (!authUid && typeof member.notes === 'string' && member.notes.includes('auth_user_id')) {
-      try {
-        const parsed = JSON.parse(member.notes);
-        if (parsed.auth_user_id) authUid = parsed.auth_user_id;
-      } catch (e) {}
-    }
-    if (!authUid) {
-      authUid = (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : `00000000-0000-4000-8000-${Date.now().toString(16).padStart(12, '0')}`;
-    }
-
-    const linkedNotes = JSON.stringify({ auth_user_id: authUid });
-
+    const pwd = ((member as any).password || (member as any).Password || '').trim();
     const newStaff: Staff = {
       ...member,
       staff_id: staffId,
-      notes: linkedNotes,
+      password: pwd,
+      Password: pwd,
       created_by: currentUserName,
       updated_by: currentUserName,
       created_at: timestamp,
@@ -7866,87 +7931,59 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     setProductionStaff((prev) => [newStaff, ...prev]);
 
-    // 1. Authoritative insert or update to public.users table
-    try {
-      if (supabaseClient) {
-        const { data: existingUser } = await supabaseClient
-          .from('users')
-          .select('id')
-          .or(`id.eq.${authUid},email.eq.${emailVal},mobile.eq.${member.mobile || ''}`)
-          .limit(1);
-
-        if (existingUser && existingUser.length > 0) {
-          authUid = existingUser[0].id;
-          await supabaseClient.from('users').update({
-            name: member.name,
-            mobile: member.mobile || '0000000000',
-            email: emailVal,
-            username: emailVal,
-            role: 'Production Team',
-            active: member.status !== 'Inactive',
-            password: pwd
-          }).eq('id', existingUser[0].id);
-        } else {
-          await supabaseClient.from('users').insert({
-            id: authUid,
-            name: member.name,
-            mobile: member.mobile || '0000000000',
-            email: emailVal,
-            username: emailVal,
-            role: 'Production Team',
-            active: member.status !== 'Inactive',
-            created_at: timestamp,
-            password: pwd
-          });
-        }
-      }
-
-      // Sync via auth server endpoint
-      await fetch('/api/auth/create-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailVal,
-          password: pwd,
-          name: member.name,
-          role: 'Production Team',
-          mobile: member.mobile,
-          active: member.status !== 'Inactive'
-        })
-      });
-
-      // Update in-memory users list
-      setUsers((prev) => {
-        const cleanM = cleanPhone(member.mobile);
-        const exists = prev.some(u => u.id === authUid || (cleanM && cleanPhone(u.mobile) === cleanM) || (u.email && u.email.toLowerCase() === emailVal));
-        if (exists) {
-          return prev.map(u => {
-            if (u.id === authUid || (cleanM && cleanPhone(u.mobile) === cleanM) || (u.email && u.email.toLowerCase() === emailVal)) {
-              return { ...u, id: authUid, name: member.name, mobile: member.mobile, password: pwd, role: 'Production Team' };
-            }
-            return u;
-          });
-        }
-        return [...prev, {
-          id: authUid,
-          name: member.name,
-          mobile: member.mobile,
-          email: emailVal,
-          username: emailVal,
-          role: 'Production Team',
-          active: member.status !== 'Inactive',
-          password: pwd,
-          created_at: timestamp
-        }];
-      });
-    } catch (err) {
-      console.warn("addProductionStaff users sync warning:", err);
+    const dbPayload = await mapProductionStaffToDb(newStaff);
+    if (pwd) {
+      dbPayload.Password = pwd;
+      dbPayload.password = pwd;
     }
-
-    const dbPayload = await mapProductionStaffToDb({ ...newStaff, notes: JSON.stringify({ auth_user_id: authUid }) });
     const res = await pushInsert('production_staff', dbPayload);
     if (res.success) {
       logActivity(`Added Production Staff Member: ${newStaff.name}`, 'StaffManagement', staffId);
+      if (pwd) {
+        const emailVal = (member.email || '').trim().toLowerCase() || `${member.mobile ? member.mobile.replace(/\D/g, '') : 'staff'}@photocrew.com`;
+        try {
+          // Sync via auth server endpoint with role 'Production Staff'
+          await fetch('/api/auth/create-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: emailVal,
+              password: pwd,
+              name: member.name,
+              role: 'Production Staff',
+              mobile: member.mobile,
+              active: member.status !== 'Inactive'
+            })
+          });
+
+          // Sync into memory users list
+          setUsers((prev) => {
+            const cleanM = cleanPhone(member.mobile);
+            const exists = prev.some(u => (cleanM && cleanPhone(u.mobile) === cleanM) || (u.email && u.email.toLowerCase() === emailVal));
+            if (exists) {
+              return prev.map(u => {
+                if ((cleanM && cleanPhone(u.mobile) === cleanM) || (u.email && u.email.toLowerCase() === emailVal)) {
+                  return { ...u, name: member.name, mobile: member.mobile, password: pwd, role: 'Production Staff' };
+                }
+                return u;
+              });
+            }
+            return [...prev, {
+              id: staffId,
+              name: member.name,
+              mobile: member.mobile,
+              email: emailVal,
+              username: emailVal,
+              role: 'Production Staff',
+              active: member.status !== 'Inactive',
+              password: pwd,
+              created_at: new Date().toISOString()
+            }];
+          });
+        } catch (err) {
+          console.warn("addProductionStaff password sync to users table warning:", err);
+        }
+      }
     } else {
       setProductionStaff((prev) => prev.filter(s => s.staff_id !== staffId));
       throw new Error(res.error || 'Failed to add production staff');
@@ -7959,25 +7996,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     const existing = productionStaff.find(s => s.staff_id === staffId);
     const timestamp = new Date().toISOString();
     
-    // Validate uniqueness if mobile or email are provided
-    const isMobileChanging = updates.mobile && (!existing || cleanPhone(updates.mobile) !== cleanPhone(existing.mobile));
-    const isEmailChanging = updates.email && (!existing || cleanEmail(updates.email) !== cleanEmail(existing.email));
-    if (isMobileChanging || isEmailChanging) {
-      const uniquenessCheck = checkGlobalStaffUniqueness({
-        mobile: updates.mobile || existing?.mobile,
-        email: updates.email || existing?.email,
-        excludeId: staffId,
-        excludeEmail: existing?.email,
-        excludeMobile: existing?.mobile,
-        usersList: users,
-        opStaffList: staff,
-        prodStaffList: productionStaff
-      });
-      if (!uniquenessCheck.isUnique) {
-        throw new Error(uniquenessCheck.error || "Duplicate staff details detected.");
-      }
-    }
-
     // Strip mobile and email so they can never be modified after staff creation
     const { mobile, phone, mobile_number, email, ...safeUpdates } = updates as any;
 
@@ -7997,58 +8015,60 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     delete (dbPayload as any).mobile_number;
     delete (dbPayload as any).email;
 
+    const pwd = ((updates as any).password || (updates as any).Password || '').trim();
+    if (pwd) {
+      (updatedWithMetadata as any).password = pwd;
+      (updatedWithMetadata as any).Password = pwd;
+      (dbPayload as any).password = pwd;
+      (dbPayload as any).Password = pwd;
+    }
+
     const dbUpdates = await mapProductionStaffToDb(dbPayload);
     delete (dbUpdates as any).mobile;
     delete (dbUpdates as any).phone;
     delete (dbUpdates as any).mobile_number;
     delete (dbUpdates as any).email;
+    if (pwd) {
+      dbUpdates.Password = pwd;
+      dbUpdates.password = pwd;
+    }
 
     const res = await pushUpdate('production_staff', 'staff_id', staffId, dbUpdates);
     if (res.success) {
       logActivity(`Updated Production Staff Member details: ${staffId}`, 'StaffManagement', staffId);
-      
-      let targetAuthUid: string | null = null;
-      try {
-        if (existing?.notes && existing.notes.includes('auth_user_id')) {
-          targetAuthUid = JSON.parse(existing.notes).auth_user_id;
-        }
-      } catch (e) {}
-
-      const targetMobile = existing?.mobile;
-      const targetEmail = (existing?.email || '').trim().toLowerCase();
-      const pwd = ((updates as any).password && typeof (updates as any).password === 'string' && (updates as any).password.trim())
-        ? (updates as any).password.trim()
-        : null;
-
-      try {
-        if (supabaseClient) {
-          const userUpdates: any = {};
-          if (pwd) userUpdates.password = pwd;
-          if (updates.name) userUpdates.name = updates.name;
-          if (updates.status) userUpdates.active = updates.status !== 'Inactive';
-
-          if (Object.keys(userUpdates).length > 0) {
-            if (targetAuthUid) {
-              await supabaseClient.from('users').update(userUpdates).eq('id', targetAuthUid);
-            } else if (targetMobile) {
-              await supabaseClient.from('users').update(userUpdates).eq('mobile', targetMobile);
-            } else if (targetEmail) {
-              await supabaseClient.from('users').update(userUpdates).eq('email', targetEmail);
-            }
+      if (pwd) {
+        const targetMobile = existing?.mobile;
+        const targetEmail = (existing?.email || '').trim().toLowerCase();
+        try {
+          if (targetMobile) {
+            await pushUpdate('users', 'mobile', targetMobile, { password: pwd, role: 'Production Staff' });
           }
-        }
-
-        if (pwd) {
+          if (targetEmail) {
+            await pushUpdate('users', 'email', targetEmail, { password: pwd, role: 'Production Staff' });
+          }
+          // Also sync to auth if auth_user_id exists
+          const authId = (existing as any)?.auth_user_id || (existing?.notes && existing.notes.includes('auth_user_id') ? JSON.parse(existing.notes).auth_user_id : null);
+          if (authId) {
+            await fetch('/api/auth/update-user', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                auth_id: authId,
+                password: pwd,
+                role: 'Production Staff'
+              })
+            }).catch(() => null);
+          }
           setUsers((prev) => prev.map(u => {
             const cleanM = cleanPhone(targetMobile);
-            if ((targetAuthUid && u.id === targetAuthUid) || (cleanM && cleanPhone(u.mobile) === cleanM) || (targetEmail && u.email && u.email.toLowerCase() === targetEmail)) {
-              return { ...u, password: pwd };
+            if ((cleanM && cleanPhone(u.mobile) === cleanM) || (targetEmail && u.email && u.email.toLowerCase() === targetEmail)) {
+              return { ...u, password: pwd, role: 'Production Staff' };
             }
             return u;
           }));
+        } catch (err) {
+          console.warn("updateProductionStaff password sync warning:", err);
         }
-      } catch (err) {
-        console.warn("updateProductionStaff password sync warning:", err);
       }
     } else {
       setProductionStaff(prevStaffList);

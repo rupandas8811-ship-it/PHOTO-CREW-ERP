@@ -146,6 +146,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
     isStep3Locked,
     resetForm,
     initEventsReporting,
+    handleConfirmOrderAction,
     renderEventDetailsSection,
     renderStep3Workspace,
     customSource,
@@ -237,7 +238,6 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
 
     const activeEventsList = (createEvents && createEvents.length > 0) ? createEvents : (targetLead.events || []);
     const activePkgId = selectedPkgIds[0] || createForm.selected_package_id || createForm.Select_Package_Option || targetLead.Select_Package_Option || 'Custom Package';
-    const activePkgName = packages?.find((p: any) => String(p.package_id) === String(activePkgId))?.package_name || activePkgId;
 
     const leadForConfirmation: Lead = {
       ...targetLead,
@@ -253,43 +253,41 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
       final_package_amount: finalTotal || targetLead.final_package_amount,
       Select_Package_Option: activePkgId,
       selected_package_id: activePkgId,
-      events: activeEventsList
+      events: activeEventsList,
+      event_date: (activeEventsList[0]?.event_date) || targetLead.event_date || createForm.event_date || new Date().toISOString().split('T')[0],
+      event_time: (activeEventsList[0]?.event_time) || targetLead.event_time || createForm.event_time || ''
     };
 
-    if (areReportingDetailsComplete && !areReportingDetailsComplete(leadForConfirmation)) {
-      if (openReportingDetailsModal) {
-        openReportingDetailsModal(leadForConfirmation, "Please complete and save the Reporting Details before confirming the order.");
+    if (handleConfirmOrderAction) {
+      handleConfirmOrderAction(leadForConfirmation);
+    } else {
+      setSelectedLead(leadForConfirmation);
+      const today = new Date().toISOString().split('T')[0];
+      const linkedOrder = orders?.find((o: any) => o.lead_id === leadForConfirmation.lead_id);
+      const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : null;
+      const calcAdvance = linkedPayment 
+        ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+        : (linkedOrder 
+            ? (linkedOrder.advance_received ?? 0) 
+            : (leadForConfirmation.advance_collected !== undefined && leadForConfirmation.advance_collected !== null && leadForConfirmation.advance_collected !== ''
+                ? Number(leadForConfirmation.advance_collected) 
+                : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
+                    ? Number(wizardLeadData.advance_received)
+                    : 0)));
+
+      setConfirmForm({
+        ...confirmForm,
+        package_name: packages?.find((p: any) => String(p.package_id) === String(activePkgId))?.package_name || activePkgId,
+        quotation_amount: finalTotal || Number(leadForConfirmation.Final_Quotation_Amount) || Number(leadForConfirmation.budget) || 0,
+        advance_received: calcAdvance,
+        event_date: (activeEventsList[0]?.event_date) || leadForConfirmation.event_date || today,
+        event_time: (activeEventsList[0]?.event_time) || leadForConfirmation.event_time || ''
+      });
+      if (initEventsReporting) {
+        initEventsReporting(leadForConfirmation);
       }
-      return;
+      setShowConfirmModal(true);
     }
-
-    setSelectedLead(leadForConfirmation);
-
-    const today = new Date().toISOString().split('T')[0];
-    const linkedOrder = orders?.find((o: any) => o.lead_id === leadForConfirmation.lead_id);
-    const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : null;
-    const calcAdvance = linkedPayment 
-      ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
-      : (linkedOrder 
-          ? (linkedOrder.advance_received ?? 0) 
-          : (leadForConfirmation.advance_collected !== undefined && leadForConfirmation.advance_collected !== null && leadForConfirmation.advance_collected !== ''
-              ? Number(leadForConfirmation.advance_collected) 
-              : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
-                  ? Number(wizardLeadData.advance_received)
-                  : 0)));
-
-    setConfirmForm({
-      ...confirmForm,
-      package_name: activePkgName,
-      quotation_amount: finalTotal || Number(leadForConfirmation.Final_Quotation_Amount) || Number(leadForConfirmation.budget) || 0,
-      advance_received: calcAdvance,
-      event_date: (activeEventsList[0]?.event_date) || leadForConfirmation.event_date || today,
-      event_time: (activeEventsList[0]?.event_time) || leadForConfirmation.event_time || ''
-    });
-    if (initEventsReporting) {
-      initEventsReporting(leadForConfirmation);
-    }
-    setShowConfirmModal(true);
   };
 
   if (activeTab === 'create') {
@@ -914,7 +912,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                          <div>
                            <label className="block text-[10px] font-bold text-slate-400 mb-1 uppercase font-mono tracking-wider">Select Package Option *</label>
                            <select
-                             id="select_package_option"
+                             id="hidden_legacy_select_package_option"
                              value={wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || ''}
                              onChange={(e) => handlePackageDropdownChange(e.target.value)}
                              className={`w-full bg-slate-955 border focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer ${
@@ -1176,6 +1174,8 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                     const startTimeStr = event.event_start_time ? convertTo12Hour(event.event_start_time) : 'N/A';
                                     const endTimeStr = event.event_end_time ? convertTo12Hour(event.event_end_time) : 'N/A';
                                     const guestPaxVal = event.guest_pax !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
+                                    const specificEventLocation = (event.event_location || (event as any).location || (event as any).venue_address || (event as any).venue || (event as any).event_venue || '').trim();
+                                    const eventLocationDisplay = specificEventLocation || (!isMulti ? (wizardLeadData.event_location || selectedLead?.event_location || 'N/A') : 'N/A');
 
                                     return (
                                       <div key={evId} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
@@ -1206,6 +1206,14 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                             <span className="text-slate-500">•</span>
                                             <span>
                                               Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
+                                            </span>
+                                          </div>
+                                          <div className="mt-2 pt-1.5 border-t border-slate-800/60 text-[11px] text-slate-300">
+                                            <span className="text-slate-400 font-semibold uppercase font-mono text-[10px] mr-1.5">
+                                              Event Location / Venue Address:
+                                            </span>
+                                            <span className="text-slate-100 font-medium break-words font-sans">
+                                              {eventLocationDisplay}
                                             </span>
                                           </div>
                                         </div>
@@ -1507,298 +1515,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                         </div>
                       </div>
 
-                      {/* STEP 5 INTEGRATED (CRM): Status Update / Order Confirmation Details at BOTTOM of Step 3 */}
-                      <div className="space-y-4 animate-fade-in text-left mt-6">
-                        <div className="border-b border-slate-800 pb-1.5">
-                          <h3 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
-                            <span className="p-0.5 px-1.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px] font-mono">4</span>
-                            <span>Status Update</span>
-                          </h3>
-                        </div>
-                        <div className="space-y-4 text-left">
-                          {['Lost Lead', 'Lead Lost', 'Lost'].includes(wizardLeadData.status || selectedLead?.status || (selectedLead as any)?.current_status || '') ? (() => {
-                            const { reason: lostReasonText, notes: lostNotesText } = getStrictLostReasonAndNotes(selectedLead || (wizardLeadData as any));
-                            return (
-                              <div id="lost_lead_status_update_section" className="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
-                                <div className="border-b border-rose-500/20 pb-1.5 flex items-center justify-between">
-                                  <h4 className="text-[11px] font-black text-rose-400 uppercase tracking-widest font-mono flex items-center gap-1.5">
-                                    <span>💔</span> Lost Lead Information
-                                  </h4>
-                                  <span className="text-[9px] bg-rose-500/20 text-rose-300 border border-rose-500/30 px-2 py-0.5 rounded font-mono font-bold uppercase">
-                                    Status: Lost Lead
-                                  </span>
-                                </div>
-
-                                <div className="grid grid-cols-1 gap-3.5 text-left text-xs">
-                                  <div>
-                                    <span className="block text-[10px] text-zinc-400 uppercase font-mono font-bold mb-1">Lost Reason</span>
-                                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-rose-300 font-semibold font-mono text-xs">
-                                      {lostReasonText}
-                                    </div>
-                                  </div>
-
-                                  <div>
-                                    <span className="block text-[10px] text-zinc-400 uppercase font-mono font-bold mb-1">Lost Note</span>
-                                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 text-xs whitespace-pre-wrap font-sans">
-                                      {lostNotesText}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })() : (['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Raw Footage Received', 'Editing Started', 'Client Review', 'Editing Complete', 'Completed'].includes(wizardLeadData.status || selectedLead?.status || '') || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
-                            (selectedLead?.status === 'Order Confirmed' || selectedLead?.status === 'Event Scheduled' || selectedLead?.booking_status === 'Confirmed' || !!orders?.find(o => o.lead_id === selectedLead?.lead_id)) ? (
-                              <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
-                                <div className="border-b border-emerald-500/20 pb-1.5">
-                                  <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Order Confirmation Details</h4>
-                                  <p className="text-[10px] text-zinc-400 mt-0.5">These are the finalized details saved for this order from the database.</p>
-                                </div>
-                                
-                                <div className="hidden">
-                                  <input type="text" value={selectedLead?.booking_date || selectedLead?.event_date || wizardLeadData.confirmed_event_date || ''} onChange={() => {}} />
-                                  <input type="number" value={selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0} onChange={() => {}} />
-                                  <input type="number" value={selectedLead?.advance_collected || wizardLeadData.advance_received || 0} onChange={() => {}} />
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left text-xs">
-                                  <div>
-                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Order Status</span>
-                                    <strong className="text-emerald-400">Order Confirmed</strong>
-                                  </div>
-                                  
-                                  <div className="col-span-1 sm:col-span-2 space-y-2 mb-2">
-                                    {normalizedCrmEvents.length > 0 ? (
-                                      sortedCrmEvents.map((ev: any, idx: number) => (
-                                        <div key={ev.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-                                          <div className="flex flex-col min-w-max">
-                                            <span className="text-[10px] text-amber-500 font-black uppercase tracking-wider mb-0.5">Event {idx + 1}</span>
-                                            <span className="text-xs font-bold text-slate-200">{ev.event_name || ev.event_type || 'N/A'}</span>
-                                          </div>
-                                          <div className="flex gap-4">
-                                            <div>
-                                              <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Date</span>
-                                              <strong className="text-slate-300 text-xs font-mono">{ev.event_date || 'N/A'}</strong>
-                                            </div>
-                                            <div>
-                                              <span className="block text-[9px] text-zinc-500 uppercase font-mono font-bold">Booking Time</span>
-                                              <strong className="text-slate-300 text-xs font-mono">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</strong>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <div>
-                                        <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Date & Time</span>
-                                        <strong className="text-slate-200">{selectedLead?.booking_date || 'N/A'} {selectedLead?.booking_time ? `at ${selectedLead.booking_time}` : ''}</strong>
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div>
-                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Final Package Amount</span>
-                                    <strong className="text-amber-400 font-mono">₹{Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0).toLocaleString('en-IN')}</strong>
-                                  </div>
-                                  <div>
-                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Advance Payment</span>
-                                    <strong className="text-emerald-400 font-mono">₹{Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
-                                  </div>
-                                  <div>
-                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Payment Mode</span>
-                                    <strong className="text-slate-200">{selectedLead?.payment_mode || 'N/A'}</strong>
-                                  </div>
-                                  <div>
-                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Transaction ID</span>
-                                    <strong className="text-slate-200">
-                                      {(selectedLead?.payment_mode === 'Cash' || selectedLead?.payment_mode === 'Other') ? 'N/A' : (selectedLead?.transaction_id || payments?.find(p => p.order_id === (orders?.find(o => o.lead_id === selectedLead?.lead_id)?.order_id || selectedLead?.lead_id))?.transaction_id || 'N/A')}
-                                    </strong>
-                                  </div>
-                                  <div className="col-span-1 sm:col-span-2">
-                                    <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Booking Notes</span>
-                                    <p className="text-slate-300 whitespace-pre-wrap">{selectedLead?.contract_notes || 'No extra notes'}</p>
-                                  </div>
-                                </div>
-
-                                {normalizedCrmEvents.length > 0 && (
-                                  <div className="mt-4 space-y-3">
-                                    <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Details</h5>
-                                    {sortedCrmEvents.map((ev: any) => (
-                                      <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-4 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                                        <div className="col-span-1 sm:col-span-4">
-                                          <span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span>
-                                        </div>
-                                        <div>
-                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Event Date</span>
-                                           <strong className="text-slate-300 font-mono">{ev.event_date || 'N/A'}</strong>
-                                        </div>
-                                        <div>
-                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Date</span>
-                                           <strong className="text-slate-300 font-mono">{ev.reporting_date || ev.event_date || 'N/A'}</strong>
-                                        </div>
-                                        <div>
-                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting End Date</span>
-                                           <strong className="text-slate-300 font-mono">{ev.event_end_date || ev.Event_End_Date || (crmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : 'N/A')}</strong>
-                                        </div>
-                                        <div>
-                                           <span className="block text-[10px] text-zinc-500 uppercase font-mono font-bold mb-0.5">Reporting Time</span>
-                                           <strong className="text-slate-300 font-mono">{ev.reporting_time || 'N/A'}</strong>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-
-                                <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs mt-4">
-                                  <div>
-                                    <span className="text-[10px] text-zinc-555 uppercase font-bold font-mono">Calculated Pending Amount</span>
-                                    <strong className="block text-red-500 text-sm font-mono mt-0.5">
-                                      ₹{(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0))).toLocaleString('en-IN')}
-                                    </strong>
-                                  </div>
-                                  {(Number(selectedLead?.final_package_amount || selectedLead?.Final_Quotation_Amount || wizardLeadData.final_amount || 0) - Number((selectedLead?.advance_collected !== undefined && selectedLead?.advance_collected !== null && selectedLead?.advance_collected !== '') ? selectedLead.advance_collected : (wizardLeadData.advance_received || 0))) > 0 ? (
-                                    <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
-                                  ) : (
-                                    <span className="text-[9px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Fully Paid</span>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-
-                            <div id="configure_confirmed_order_section" className="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3.5 space-y-3.5 animate-in fade-in zoom-in-95 duration-200">
-                              <div className="border-b border-emerald-500/20 pb-1.5">
-                                <h4 className="text-[11px] font-black text-emerald-400 uppercase tracking-widest font-mono">💍 Configure Confirmed Order & Booking Contract</h4>
-                                <p className="text-[10px] text-zinc-400 mt-0.5">Confirming this order creates a real-time production entry. The CRM profile remains editable if the client requests changes.</p>
-                              </div>
-
-                              {/* Display each event separately */}
-                              {normalizedCrmEvents.length > 0 && (
-                                <div className="space-y-2 mb-4">
-                                  <label className="block text-[10px] text-zinc-400 mb-2 uppercase font-mono font-bold border-b border-zinc-800 pb-1">Confirmed Event Dates</label>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {sortedCrmEvents.map(ev => (
-                                      <div key={ev.id} className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
-                                        <div className="flex flex-col">
-                                          <span className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-0.5">🎬 {ev.event_name || ev.event_type || 'Event'}</span>
-                                          <div className="flex items-center gap-3 mt-1">
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="text-[10px] text-slate-500 font-mono">Date:</span>
-                                              <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_date || 'N/A'}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5">
-                                              <span className="text-[10px] text-slate-500 font-mono">Time:</span>
-                                              <span className="text-[11px] text-slate-300 font-mono font-semibold">{ev.event_start_time ? convertTo12Hour(ev.event_start_time) : 'N/A'}</span>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-left">
-                                {/* Hidden input to preserve business logic without confusing the UI */}
-                                <div className="hidden">
-                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Confirmed Event Date *</label>
-                                  <input
-                                    id="input_confirmed_event_date"
-                                    type="date"
-                                    value={wizardLeadData.confirmed_event_date || (normalizedCrmEvents.length > 0 ? normalizedCrmEvents[0].event_date : '') || ''}
-                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, confirmed_event_date: e.target.value })}
-                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Contract Final Amount (₹) *</label>
-                                  <input
-                                    id="input_final_amount"
-                                    type="number"
-                                    value={wizardLeadData.final_amount || 0}
-                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, final_amount: Math.max(0, parseInt(e.target.value) || 0) })}
-                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-amber-400 font-mono font-bold"
-                                    required
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Advance Payment Received (₹) *</label>
-                                  <input
-                                    id="input_advance_received"
-                                    type="number"
-                                    value={wizardLeadData.advance_received || 0}
-                                    onChange={(e) => setWizardLeadData({ ...wizardLeadData, advance_received: Math.max(0, parseInt(e.target.value) || 0) })}
-                                    className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-emerald-400 font-mono font-bold"
-                                    required
-                                  />
-                                </div>
-                                
-                                {normalizedCrmEvents.length > 0 && (
-                                  <div className="col-span-1 sm:col-span-2 mt-4 space-y-3">
-                                    <h5 className="text-[10px] font-black text-emerald-400 uppercase tracking-widest font-mono border-b border-emerald-500/20 pb-1.5">Event-wise Reporting Details</h5>
-                                    {sortedCrmEvents.map(ev => {
-                                      const repEndDate = ev.event_end_date || ev.Event_End_Date || (normalizedCrmEvents.length === 1 && selectedLead?.Event_End_Date ? selectedLead.Event_End_Date : '');
-                                      return (
-                                        <div key={ev.id} className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 bg-slate-900/50 p-3 rounded-lg border border-slate-800">
-                                          <div className="col-span-1 sm:col-span-3"><span className="text-xs font-bold text-slate-200">🎬 {ev.event_name || ev.event_type}</span></div>
-                                          <div>
-                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Date *</label>
-                                             <input 
-                                               id={`reporting_date_${ev.id}`}
-                                               type="date" 
-                                               value={ev.reporting_date || ev.event_date || ''} 
-                                               onChange={(e) => {
-                                                 const updated = normalizedCrmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_date: e.target.value } : eItem);
-                                                 setCrmEvents(updated);
-                                               }} 
-                                               className="w-full bg-slate-950 border border-slate-850 rounded-lg py-1.5 px-3 text-xs text-white font-mono"
-                                               required 
-                                             />
-                                          </div>
-                                          <div>
-                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting End Date</label>
-                                             <input 
-                                               id={`reporting_end_date_${ev.id}`}
-                                               type="date" 
-                                               value={repEndDate} 
-                                               readOnly 
-                                               placeholder="N/A"
-                                               className="w-full bg-slate-950/60 border border-slate-850/80 rounded-lg py-1.5 px-3 text-xs text-slate-300 font-mono cursor-not-allowed"
-                                             />
-                                          </div>
-                                          <div>
-                                             <label className="block text-[10px] text-zinc-400 mb-1 uppercase font-mono font-bold">Reporting Time *</label>
-                                             <TimePicker12Hour 
-                                               id={`reporting_time_${ev.id}`}
-                                               required
-                                               value={ev.reporting_time || ''} 
-                                               onChange={(val24) => {
-                                                 const updated = normalizedCrmEvents.map(eItem => eItem.id === ev.id ? { ...eItem, reporting_time: val24 } : eItem);
-                                                 setCrmEvents(updated);
-                                               }} 
-                                             />
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-
-                              <div className="bg-slate-950 p-3 rounded-lg border border-slate-850 flex items-center justify-between text-xs">
-                                <div>
-                                  <span className="text-[10px] text-zinc-550 uppercase font-bold font-mono">Calculated Pending Amount</span>
-                                  <strong className="block text-red-500 text-sm font-mono mt-0.5">₹{((wizardLeadData.final_amount || 0) - (wizardLeadData.advance_received || 0)).toLocaleString('en-IN')}</strong>
-                                </div>
-                                <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/20 px-2 py-0.5 rounded uppercase font-bold font-mono">Payment Pending</span>
-                              </div>
-                            </div>
-                            )
-                          ) : (
-                            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 text-center">
-                              <span className="text-slate-500 text-xs font-mono">No Order Confirmation Details Available.</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      {/* Status Update section removed from Step 3 as requested */}
                      </div>
                    )}
                   </fieldset>
@@ -1857,35 +1574,35 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                           id="btn_step3_order_confirmed"
                           onClick={() => {
                             if (!selectedLead) return;
-                            if (!areReportingDetailsComplete(selectedLead)) {
-                              openReportingDetailsModal(selectedLead, "Please complete and save the Reporting Details before confirming the order.");
-                              return;
+                            if (handleConfirmOrderAction) {
+                              handleConfirmOrderAction(selectedLead);
+                            } else {
+                              const today = new Date().toISOString().split('T')[0];
+                              const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
+                              const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+                              const calcAdvance = linkedPayment 
+                                ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+                                : (linkedOrder 
+                                    ? (linkedOrder.advance_received ?? 0) 
+                                    : (selectedLead.advance_collected !== undefined && selectedLead.advance_collected !== null && selectedLead.advance_collected !== ''
+                                        ? Number(selectedLead.advance_collected) 
+                                        : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
+                                            ? Number(wizardLeadData.advance_received) 
+                                            : 0)));
+                              
+                              setConfirmForm({
+                                ...confirmForm,
+                                package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
+                                quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number((selectedLead as any).final_amount) || 0,
+                                advance_received: calcAdvance,
+                                event_date: selectedLead.event_date || today,
+                                event_time: selectedLead.event_time || ''
+                              });
+                              if (initEventsReporting) {
+                                initEventsReporting(selectedLead);
+                              }
+                              setShowConfirmModal(true);
                             }
-                            const today = new Date().toISOString().split('T')[0];
-                            const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
-                            const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
-                            const calcAdvance = linkedPayment 
-                              ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
-                              : (linkedOrder 
-                                  ? (linkedOrder.advance_received ?? 0) 
-                                  : (selectedLead.advance_collected !== undefined && selectedLead.advance_collected !== null && selectedLead.advance_collected !== ''
-                                      ? Number(selectedLead.advance_collected) 
-                                      : (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== ''
-                                          ? Number(wizardLeadData.advance_received) 
-                                          : 0)));
-                            
-                            setConfirmForm({
-                              ...confirmForm,
-                              package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
-                              quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number((selectedLead as any).final_amount) || 0,
-                              advance_received: calcAdvance,
-                              event_date: selectedLead.event_date || today,
-                              event_time: selectedLead.event_time || ''
-                            });
-                            if (initEventsReporting) {
-                              initEventsReporting(selectedLead);
-                            }
-                            setShowConfirmModal(true);
                           }}
                           disabled={isSaving || isCrmLocked || !hasCrmPackage}
                           className={`w-full sm:w-auto h-9 sm:h-7 px-4 py-1.5 sm:py-1 text-xs font-mono font-bold uppercase rounded transition-all shadow-md flex items-center justify-center gap-1.5 border-0 ${

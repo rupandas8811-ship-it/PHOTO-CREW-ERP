@@ -153,7 +153,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const leadObj = leads.find(l => (leadId && l.lead_id === leadId) || (orderObj && l.lead_id === orderObj.lead_id));
 
   // Payment amounts
-  const finalQuotation = Number(orderObj?.quotation_amount) || Number(order.totalRevenue) || Number(order.finalPackageAmount) || Number(leadObj?.final_amount) || Number(leadObj?.Final_Quotation_Amount) || Number(leadObj?.budget) || 0;
+  const finalQuotation = Number(leadObj?.Final_Quotation_Amount) || Number((leadObj as any)?.final_quotation_amount) || Number(orderObj?.quotation_amount) || Number(order.totalRevenue) || Number(order.finalPackageAmount) || Number(leadObj?.final_amount) || Number(leadObj?.budget) || 0;
 
   const pendingItems = historyList.filter(h => h.approval_status === 'Waiting for Approval');
   const approvedItems = historyList.filter(h => h.approval_status === 'Approved');

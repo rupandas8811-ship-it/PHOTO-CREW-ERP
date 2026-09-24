@@ -6113,7 +6113,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     auth_id: currentStaff.auth_user_id,
                     password,
                     name,
-                    role: 'Editor',
+                    role: 'Production Staff',
                   })
                 });
                 
@@ -6131,7 +6131,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     email: computedEmail,
                     password,
                     name,
-                    role: 'Editor',
+                    role: 'Production Staff',
                   })
                 });
                 if (!res.ok) {
@@ -6151,7 +6151,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 whatsapp_number: whatsapp,
                 Skill: skillsArray as any,
                 staff_type: newStaffType as any,
-                Staff_Type: newStaffType as any
+                Staff_Type: newStaffType as any,
+                ...(password ? { password, Password: password } : {})
               });
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
@@ -6164,7 +6165,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   email: computedEmail,
                   password,
                   name,
-                  role: 'Editor',
+                  role: 'Production Staff',
                 })
               });
               
@@ -6192,7 +6193,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   Skill: skillsArray as any,
                   staff_type: newStaffType as any,
                   Staff_Type: newStaffType as any,
-                  auth_user_id: authUserId
+                  auth_user_id: authUserId,
+                  ...(password ? { password, Password: password } : {})
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
               } else {
@@ -6204,11 +6206,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   whatsapp_number: whatsapp,
                   Skill: skillsArray as any,
                   staff_type: newStaffType as any,
-                  role: 'Editor',
+                  role: 'Production Staff',
                   department: 'Post-Production',
                   status: 'Active',
                   joining_date: new Date().toISOString().split('T')[0],
-                  auth_user_id: authUserId
+                  auth_user_id: authUserId,
+                  password,
+                  Password: password
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
               }

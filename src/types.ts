@@ -194,6 +194,7 @@ export interface LeadEvent {
   guest_pax: number;
   staff_pax: number;
   event_start_time?: string;
+  event_time?: string;
   event_end_time?: string;
   google_maps_link?: string;
   assigned_staff_names?: string;

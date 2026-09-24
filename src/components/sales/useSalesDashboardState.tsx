@@ -16,6 +16,8 @@ import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { TimePicker12Hour } from '../TimePicker12Hour';
+import { UpdatePaymentModal } from '../analytics/UpdatePaymentModal';
+import { SearchablePackageSelect } from './SearchablePackageSelect';
 
 export const useSalesDashboardState = (externalActiveTab?: string, externalSetActiveTab?: (tab: any) => void) => {
   const { 
@@ -49,7 +51,9 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     getLeadCurrentStatus,
     getLeadCurrentStage,
     addNotification,
-    users
+    users,
+    refreshData,
+    paymentHistory
   } = useRole();
 
   const leads = currentRole === 'Sales Team' 
@@ -68,6 +72,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   const [logoBase64, setLogoBase64] = useState<string>('');
   const [logoAspectRatio, setLogoAspectRatio] = useState<number>(1);
   const [unlockRequests, setUnlockRequests] = useState<any[]>([]);
+  const [showStep3PaymentModal, setShowStep3PaymentModal] = useState(false);
 
   // Fetch unlock requests
   useEffect(() => {
@@ -1421,7 +1426,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     const updatePayload: any = {
       Team_Members: safeTeamMembersText,
       Add_Deliverable: safeDeliverablesText,
-      selected_package_id: pkgId,
+      Select_Package_Option: pkgId,
       Quotation_Discount: cleanDiscount,
       Additional_Services_Cost: cleanAdditional,
       Final_Quotation_Amount: cleanFinalAmt,
@@ -1442,93 +1447,46 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     step3SaveTimeoutRef.current = setTimeout(async () => {
       try {
-        // Direct Supabase update to ensure public.leads.Team_Members and Final_Package_Amount are immediately saved
-        try {
-          const { data: dbResult, error: dbError } = await supabaseClient
-            .from('leads')
-            .update({
-              Team_Members: safeTeamMembersText,
-              Add_Deliverable: safeDeliverablesText,
-              selected_package_id: pkgId,
-              Quotation_Discount: cleanDiscount,
-              Additional_Services_Cost: cleanAdditional,
-              Final_Quotation_Amount: cleanFinalAmt,
-              Final_Package_Amount: cleanFinalAmt,
-              ...(updatedEventsWithData.length > 0 ? { events: updatedEventsWithData } : {}),
-              ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? { package_price: cleanPkgCost, budget: cleanPkgCost } : {})
-            })
-            .eq('lead_id', leadId)
-            .select('*');
-          console.log('TEAM MEMBERS SAVED', { leadId, Team_Members: safeTeamMembersText });
-          console.log('FINAL PACKAGE AMOUNT SAVED', { leadId, Final_Package_Amount: cleanFinalAmt });
-          console.log('TEAM MEMBERS DB RESULT', { data: dbResult, error: dbError });
-        } catch (dbErr) {
-          console.warn("Direct Supabase update warning:", dbErr);
-        }
-
-        // Update using RoleContext to keep the local leads array perfectly in sync
-        await updateLead(leadId, updatePayload);
-        setStep3AutoSaveStatus('saved');
-        
-        // Update local context manually to ensure instant visual sync in modal
-        if (selectedLead) {
-          setSelectedLead(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              Team_member: safeTeamMembersText,
-              Team_Members: safeTeamMembersText,
-              team_members: safeTeamMembersText,
-              Add_Deliverable: safeDeliverablesText,
-              deliverables_description: safeDeliverablesText,
-              selected_package_id: pkgId,
-              Quotation_Discount: cleanDiscount,
-              Additional_Services_Cost: cleanAdditional,
-              Final_Quotation_Amount: cleanFinalAmt,
-              Final_Package_Amount: cleanFinalAmt,
-              final_package_amount: cleanFinalAmt,
-              events: updatedEventsWithData.length > 0 ? updatedEventsWithData : prev.events,
-              ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
-                package_price: cleanPkgCost,
-                budget: cleanPkgCost
-              } : {})
-            };
-          });
-        }
-        
-        // Also sync wizardLeadData deliverables and team members state
-        setWizardLeadData(prev => ({
-          ...prev,
-          Team_member: safeTeamMembersText,
-          Team_Members: safeTeamMembersText,
-          team_members: safeTeamMembersText,
-          Add_Deliverable: safeDeliverablesText,
-          deliverables: deliverablesText,
-          deliverables_description: deliverablesText,
-          selected_package_id: pkgId,
-          final_amount: cleanFinalAmt,
-          ...(cleanPkgCost !== null && cleanPkgCost !== undefined ? {
+        // 1. Direct Supabase update to ensure public.leads has latest Package Base Price and Final Amounts
+        const { error: dbError } = await supabaseClient
+          .from('leads')
+          .update({
+            Team_Members: safeTeamMembersText,
+            Add_Deliverable: safeDeliverablesText,
+            Select_Package_Option: pkgId,
+            Quotation_Discount: cleanDiscount,
+            Additional_Services_Cost: cleanAdditional,
+            Final_Quotation_Amount: cleanFinalAmt,
+            Final_Package_Amount: cleanFinalAmt,
+            final_package_amount: cleanFinalAmt,
             package_price: cleanPkgCost,
-            budget: cleanPkgCost
-          } : {})
-        }));
+            budget: cleanPkgCost,
+            ...(updatedEventsWithData.length > 0 ? { events: updatedEventsWithData } : {}),
+            updated_at: new Date().toISOString()
+          })
+          .eq('lead_id', leadId);
 
-        // Also save / update lead_packages record in Supabase
+        if (dbError) {
+          console.error("Direct Supabase update error on leads:", dbError);
+          setStep3AutoSaveStatus('error');
+          return;
+        }
+
+        // 2. Also save / update lead_packages record in Supabase
         try {
-          const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
-          const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
-
           const packagePayload = {
             lead_id: leadId,
             package_id: pkgId,
             package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
             quantity: 1,
+            package_cost: cleanPkgCost || 0,
             total_amount: cleanPkgCost || 0,
-            discount: quoteDiscount || 0,
-            final_amount: (cleanPkgCost || 0) + (quoteAdditional || 0) - (quoteDiscount || 0),
+            discount: cleanDiscount || 0,
+            additional_services_cost: cleanAdditional || 0,
+            final_amount: cleanFinalAmt,
             Team_Members_Included: teamMembersJson,
             editable_inclusions: updatedInclusions,
-            deliverables_descriptionn: deliverablesJson, // keeping typo just in case other code uses it, but adding deliverables_json too
+            deliverables_descriptionn: deliverablesJson,
             deliverables_json: deliverablesJson,
             deliverables_description: deliverablesText,
             editable_deliverables: updatedDeliverables,
@@ -1558,9 +1516,157 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 created_at: new Date().toISOString()
               });
           }
-        } catch (e) {
-          console.warn("Could not update lead_packages in saveStep3DataRealtime:", e);
+        } catch (lpErr) {
+          console.warn("Could not update lead_packages in saveStep3DataRealtime:", lpErr);
         }
+
+        // 3. Synchronize quotations table in Supabase
+        try {
+          const { data: existingQuotes } = await supabaseClient
+            .from('quotations')
+            .select('quotation_id')
+            .eq('lead_id', leadId);
+          if (existingQuotes && existingQuotes.length > 0) {
+            for (const q of existingQuotes) {
+              await supabaseClient
+                .from('quotations')
+                .update({
+                  package_price: cleanPkgCost,
+                  quotation_amount: cleanFinalAmt,
+                  final_amount: cleanFinalAmt,
+                  discount_amount: cleanDiscount,
+                  additional_services_cost: cleanAdditional,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('quotation_id', q.quotation_id);
+            }
+          }
+        } catch (qErr) {
+          console.warn("Could not sync quotations table:", qErr);
+        }
+
+        // 4. Synchronize orders and payments tables in Supabase for confirmed orders
+        try {
+          const { data: linkedOrders } = await supabaseClient
+            .from('orders')
+            .select('*')
+            .eq('lead_id', leadId);
+
+          if (linkedOrders && linkedOrders.length > 0) {
+            for (const ord of linkedOrders) {
+              const adv = Number(ord.advance_received || 0);
+              const newBalance = Math.max(0, cleanFinalAmt - adv);
+              await supabaseClient
+                .from('orders')
+                .update({
+                  package_price: cleanPkgCost,
+                  quotation_amount: cleanFinalAmt,
+                  final_amount: cleanFinalAmt,
+                  quotation_discount: cleanDiscount,
+                  additional_services_cost: cleanAdditional,
+                  balance_amount: newBalance,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('order_id', ord.order_id);
+
+              // 5. Synchronize payments table without altering historical payment records
+              const { data: linkedPayments } = await supabaseClient
+                .from('payments')
+                .select('*')
+                .eq('order_id', ord.order_id);
+
+              if (linkedPayments && linkedPayments.length > 0) {
+                for (const pay of linkedPayments) {
+                  const actualPaid = (Number(pay.advance_received) || 0) + (Number(pay.final_payment_received) || 0) + (Number(pay.additional_received) || 0);
+                  const newBalanceDue = Math.max(0, cleanFinalAmt - actualPaid);
+                  const newStatus = (newBalanceDue <= 0 && cleanFinalAmt > 0) 
+                    ? 'Fully Paid' 
+                    : (actualPaid > 0 ? 'Partially Paid' : (pay.payment_status || 'Pending'));
+
+                  await supabaseClient
+                    .from('payments')
+                    .update({
+                      quotation_amount: cleanFinalAmt,
+                      balance_due: newBalanceDue,
+                      payment_status: newStatus,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('payment_id', pay.payment_id);
+                }
+              }
+            }
+          }
+        } catch (ordErr) {
+          console.warn("Could not sync orders/payments in saveStep3DataRealtime:", ordErr);
+        }
+
+        // 6. Database Source of Truth: Re-fetch and verify the actual saved record from Supabase
+        const { data: verifiedLead, error: verifyErr } = await supabaseClient
+          .from('leads')
+          .select('*')
+          .eq('lead_id', leadId)
+          .single();
+
+        if (verifyErr || !verifiedLead) {
+          throw new Error(verifyErr?.message || "Failed to verify saved record from database.");
+        }
+
+        const verifiedPkgPrice = Number(verifiedLead.package_price ?? cleanPkgCost);
+        const verifiedDiscount = Number(verifiedLead.Quotation_Discount ?? cleanDiscount);
+        const verifiedAdditional = Number(verifiedLead.Additional_Services_Cost ?? cleanAdditional);
+        const verifiedFinalAmt = Math.max(0, verifiedPkgPrice - verifiedDiscount + verifiedAdditional);
+
+        // Update local context manually to ensure instant visual sync
+        setSelectedLead(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            ...verifiedLead,
+            Team_member: safeTeamMembersText,
+            Team_Members: safeTeamMembersText,
+            team_members: safeTeamMembersText,
+            Add_Deliverable: safeDeliverablesText,
+            deliverables_description: safeDeliverablesText,
+            selected_package_id: pkgId,
+            Quotation_Discount: verifiedDiscount,
+            Additional_Services_Cost: verifiedAdditional,
+            Final_Quotation_Amount: verifiedFinalAmt,
+            Final_Package_Amount: verifiedFinalAmt,
+            final_package_amount: verifiedFinalAmt,
+            package_price: verifiedPkgPrice,
+            budget: verifiedPkgPrice,
+            events: updatedEventsWithData.length > 0 ? updatedEventsWithData : prev.events
+          };
+        });
+
+        // Also sync wizardLeadData deliverables and team members state
+        setWizardLeadData(prev => ({
+          ...prev,
+          Team_member: safeTeamMembersText,
+          Team_Members: safeTeamMembersText,
+          team_members: safeTeamMembersText,
+          Add_Deliverable: safeDeliverablesText,
+          deliverables: deliverablesText,
+          deliverables_description: deliverablesText,
+          selected_package_id: pkgId,
+          package_cost: verifiedPkgPrice,
+          package_price: verifiedPkgPrice,
+          budget: verifiedPkgPrice,
+          final_amount: verifiedFinalAmt,
+          final_quoted_amount: verifiedFinalAmt
+        }));
+
+        // Invalidate stale cached quote services in localStorage
+        try {
+          localStorage.removeItem(`erp_quote_services_${leadId}`);
+        } catch (e) {}
+
+        // Global refresh to ensure all dashboards, pending payments, and revenue reports are synchronized
+        if (refreshData) {
+          await refreshData();
+        }
+
+        setStep3AutoSaveStatus('saved');
       } catch (err) {
         console.error("Exception in saveStep3DataRealtime:", err);
         setStep3AutoSaveStatus('error');
@@ -2259,7 +2365,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
          initEventsReporting(selectedLead);
          setConfirmForm(prev => ({
             ...prev,
-            quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.final_amount) || 0
+            quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(wizardLeadData.final_amount) || Number(selectedLead.final_amount) || prev.quotation_amount || 0
          }));
       }
     }
@@ -2286,11 +2392,17 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       ? (wizardLeadData.selected_package_id || wizardLeadData.selected_package_id || selectedLead?.Select_Package_Option)
       : (wizardLeadData.selected_package_id || wizardLeadData.selected_package_id || selectedPkgIds[0])) || 'Custom Package';
 
+    const explicitPkgCost = (wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null && wizardLeadData.package_cost !== '' && !isNaN(Number(wizardLeadData.package_cost)))
+      ? Number(wizardLeadData.package_cost)
+      : ((selectedLead?.package_price !== undefined && selectedLead?.package_price !== null && !isNaN(Number(selectedLead?.package_price)))
+        ? Number(selectedLead?.package_price)
+        : undefined);
+
     if (finalPkgId === 'Custom Package' || finalPkgId === 'custom_package') {
       return [{
         package_name: 'Custom Package',
         package_id: 'Custom Package',
-        package_cost: Number(wizardLeadData.package_cost) || 0,
+        package_cost: explicitPkgCost !== undefined ? explicitPkgCost : (Number(wizardLeadData.package_cost) || 0),
         deliverables: wizardLeadData.deliverables || '',
         inclusions: '',
         team_members: '',
@@ -2307,7 +2419,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       return [{
         package_name: primaryPkg.package_name,
         package_id: primaryPkg.package_id,
-        package_cost: pkgPrices[primaryPkg.package_id] !== undefined ? Number(pkgPrices[primaryPkg.package_id]) : (Number(wizardLeadData.package_cost) || Number(primaryPkg.price) || 0),
+        package_cost: explicitPkgCost !== undefined ? explicitPkgCost : (pkgPrices[primaryPkg.package_id] !== undefined ? Number(pkgPrices[primaryPkg.package_id]) : (Number(wizardLeadData.package_cost) || Number(primaryPkg.price) || 0)),
         deliverables: wizardLeadData.deliverables || pkgDeliverables[primaryPkg.package_id] || primaryPkg.deliverables || '',
         inclusions: primaryPkg.package_includes || '',
         team_members: primaryPkg.team_members || '',
@@ -2322,7 +2434,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     return [{
       package_name: wizardLeadData.package_name || 'Custom Package',
       package_id: finalPkgId || 'Custom Package',
-      package_cost: Number(wizardLeadData.package_cost) || 0,
+      package_cost: explicitPkgCost !== undefined ? explicitPkgCost : (Number(wizardLeadData.package_cost) || 0),
       deliverables: wizardLeadData.deliverables || '',
       inclusions: '',
       team_members: '',
@@ -2355,7 +2467,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     const effectiveSalesName = getEffectiveSalesStaffName();
     const effectiveSalesMobile = getEffectiveSalesStaffMobile();
 
-    const finalAmountVal = dynamicFinalAmt;
+    const explicitPkgCost = Number(
+      wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null && wizardLeadData.package_cost !== '' && !isNaN(Number(wizardLeadData.package_cost))
+        ? Number(wizardLeadData.package_cost)
+        : (wizardLeadData.package_price !== undefined && wizardLeadData.package_price !== null && wizardLeadData.package_price !== '' && !isNaN(Number(wizardLeadData.package_price))
+          ? Number(wizardLeadData.package_price)
+          : (selectedLead?.package_price || selectedLead?.budget || 0))
+    );
+    const finalAmountVal = dynamicFinalAmt || Math.max(0, explicitPkgCost - Number(quoteDiscount || 0) + Number(quoteAdditional || 0));
+
     if (isEdit) {
       return {
         ...selectedLead,
@@ -2366,7 +2486,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         event_location: wizardLeadData.event_location,
         event_type: wizardLeadData.event_type,
         event_shoot_type: wizardLeadData.event_shoot_type,
-        budget: wizardLeadData.budget || finalAmountVal,
+        budget: explicitPkgCost || finalAmountVal,
+        package_price: explicitPkgCost,
+        package_cost: explicitPkgCost,
+        Quotation_Discount: Number(quoteDiscount || 0),
+        quotation_discount: Number(quoteDiscount || 0),
+        Additional_Services_Cost: Number(quoteAdditional || 0),
+        additional_services_cost: Number(quoteAdditional || 0),
         whatsapp_number: wizardLeadData.whatsapp_number,
         address: wizardLeadData.address,
         city: wizardLeadData.city,
@@ -2389,6 +2515,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       return {
         ...createForm,
         lead_id: createdLeadId || 'DRAFT-LEAD',
+        package_price: explicitPkgCost,
+        package_cost: explicitPkgCost,
+        Quotation_Discount: Number(quoteDiscount || 0),
+        quotation_discount: Number(quoteDiscount || 0),
+        Additional_Services_Cost: Number(quoteAdditional || 0),
+        additional_services_cost: Number(quoteAdditional || 0),
         deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
 
@@ -2619,7 +2751,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           pincode: leadObj.pincode,
           desired_event_shoot_type: leadObj.desired_event_shoot_type || leadObj.shoot_type,
           remarks: updatedRemarks,
-          selected_package_id: leadObj.Select_Package_Option || ''
+          Select_Package_Option: leadObj.Select_Package_Option || ''
         });
         
         setSelectedLead(prev => {
@@ -3042,6 +3174,88 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             </div>
           </div>
 
+          {/* Payment Summary & Update Payment Action */}
+          {(() => {
+            const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || '');
+            const activeLead = selectedLead || leads?.find(l => l.lead_id === currentLeadId);
+            const linkedOrder = orders?.find(o => currentLeadId && o.lead_id === currentLeadId);
+            const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : payments?.find(p => currentLeadId && p.lead_id === currentLeadId);
+
+            const paymentPaid = linkedPayment ? ((Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0)) : 0;
+            const orderAdvance = linkedOrder ? (Number(linkedOrder.advance_received) || 0) : 0;
+            const leadAdvance = (activeLead?.advance_collected !== undefined && activeLead?.advance_collected !== null && activeLead?.advance_collected !== '') ? Number(activeLead.advance_collected) : 0;
+            const wizardAdvance = (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== '') ? Number(wizardLeadData.advance_received) : 0;
+            const historyPaid = (paymentHistory || []).filter((h: any) => ((linkedOrder && h.order_id === linkedOrder.order_id) || (currentLeadId && h.order_id === currentLeadId)) && h.approval_status !== 'Rejected').reduce((acc: number, h: any) => acc + (Number(h.amount) || 0), 0);
+
+            const totalPaymentReceived = Math.max(paymentPaid, orderAdvance, leadAdvance, wizardAdvance, historyPaid);
+            const totalPendingAmount = Math.max(0, finalAmt - totalPaymentReceived);
+
+            return (
+              <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-inner">
+                <div className="grid grid-cols-2 gap-4 flex-1">
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">TOTAL PAYMENT</p>
+                    <p className="text-sm font-extrabold text-emerald-400 font-mono mt-0.5">
+                      ₹{totalPaymentReceived.toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider font-mono">TOTAL PENDING</p>
+                    <p className={`text-sm font-extrabold font-mono mt-0.5 ${totalPendingAmount === 0 ? 'text-emerald-400' : 'text-rose-450'}`}>
+                      ₹{totalPendingAmount.toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  id="btn_step3_update_payment"
+                  onClick={() => setShowStep3PaymentModal(true)}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono text-xs font-bold uppercase tracking-wider rounded-lg shadow transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                >
+                  <span>💳</span>
+                  <span>UPDATE PAYMENT</span>
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* Update Payment Modal */}
+          <UpdatePaymentModal
+            isOpen={showStep3PaymentModal}
+            onClose={() => setShowStep3PaymentModal(false)}
+            record={(() => {
+              const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || '');
+              const activeLead = selectedLead || leads?.find(l => l.lead_id === currentLeadId);
+              const linkedOrder = orders?.find(o => currentLeadId && o.lead_id === currentLeadId);
+              const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : payments?.find(p => currentLeadId && p.lead_id === currentLeadId);
+
+              const paymentPaid = linkedPayment ? ((Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0)) : 0;
+              const orderAdvance = linkedOrder ? (Number(linkedOrder.advance_received) || 0) : 0;
+              const leadAdvance = (activeLead?.advance_collected !== undefined && activeLead?.advance_collected !== null && activeLead?.advance_collected !== '') ? Number(activeLead.advance_collected) : 0;
+              const wizardAdvance = (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== '') ? Number(wizardLeadData.advance_received) : 0;
+              const historyPaid = (paymentHistory || []).filter((h: any) => ((linkedOrder && h.order_id === linkedOrder.order_id) || (currentLeadId && h.order_id === currentLeadId)) && h.approval_status !== 'Rejected').reduce((acc: number, h: any) => acc + (Number(h.amount) || 0), 0);
+
+              const totalPaymentReceived = Math.max(paymentPaid, orderAdvance, leadAdvance, wizardAdvance, historyPaid);
+              const totalPendingAmount = Math.max(0, finalAmt - totalPaymentReceived);
+
+              const orderId = linkedOrder?.order_id || linkedPayment?.order_id || (activeLead ? `ORD-${activeLead.lead_id}` : (currentLeadId || 'ORDER-NEW'));
+
+              return {
+                orderId,
+                lead: activeLead || { lead_id: currentLeadId },
+                finalPackageAmount: finalAmt,
+                totalPaidAmount: totalPaymentReceived,
+                remainingAmount: totalPendingAmount,
+                payment: linkedPayment
+              };
+            })()}
+            onSuccess={() => {
+              if (refreshData) {
+                refreshData();
+              }
+            }}
+          />
+
           {/* Action buttons directly under Quotation Details */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-3 border-t border-slate-800/60">
             {/* Download PDF */}
@@ -3116,39 +3330,16 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               </span>
             )}
           </div>
-          <select
-            id={isEdit ? "select_package_option" : "wizard_step3_first_field"}
+          <SearchablePackageSelect
+            id="select_package_option"
             value={currentPkgId}
-            onChange={(e) => {
-              const val = e.target.value;
+            onChange={(val) => {
               setSelectedPkgIds([val]);
               handlePackageDropdownChange(val);
             }}
-            className="w-full bg-slate-955 border border-slate-800 focus:border-indigo-500 text-white focus:outline-none rounded-lg py-1.5 px-3 text-xs cursor-pointer"
-          >
-              <option value="Custom Package">Custom Package</option>
-              {(() => {
-                const activePkgs = availablePkgs.filter(p => {
-                  if (p.status && p.status.toLowerCase() !== 'active') return false;
-                  const pId = String(p.package_id || '');
-                  const pName = String(p.package_name || '');
-                  if (pId === 'Custom Package' || pId === 'custom_package' || pName === 'Custom Package') return false;
-                  if (pName.toLowerCase().includes('legacy') || pName.toLowerCase().includes('₹0')) return false;
-                  return true;
-                });
-                if (currentPkgId && currentPkgId !== 'Custom Package' && currentPkgId !== 'custom_package' && !activePkgs.some(p => String(p.package_id) === String(currentPkgId))) {
-                  const matched = availablePkgs.find(p => String(p.package_id) === String(currentPkgId));
-                  if (matched && !String(matched.package_name || '').toLowerCase().includes('legacy')) {
-                    activePkgs.unshift(matched);
-                  }
-                }
-                return activePkgs.map((pkg) => (
-                  <option key={pkg.package_id} value={pkg.package_id}>
-                    {pkg.package_name} (₹{Number(pkg.price).toLocaleString('en-IN')})
-                  </option>
-                ));
-              })()}
-            </select>
+            packages={availablePkgs}
+            isLocked={isStep3Locked}
+          />
           </div>
 
           {/* Sales Executive Details */}
@@ -3352,6 +3543,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 const startTimeStr = event.event_start_time ? convertTo12Hour(event.event_start_time) : 'N/A';
                 const endTimeStr = event.event_end_time ? convertTo12Hour(event.event_end_time) : 'N/A';
                 const guestPaxVal = String(event.guest_pax) !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
+                const specificEventLocation = (event.event_location || (event as any).location || (event as any).venue_address || (event as any).venue || (event as any).event_venue || '').trim();
+                const eventLocationDisplay = specificEventLocation || (!isMulti ? (wizardLeadData.event_location || selectedLead?.event_location || 'N/A') : 'N/A');
 
                 return (
                   <div key={evId} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
@@ -3384,7 +3577,87 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                           Guest Pax: <span className="text-slate-100 font-semibold">{guestPaxVal}</span>
                         </span>
                       </div>
+                      <div className="mt-2 pt-1.5 border-t border-slate-800/60 text-[11px] text-slate-300">
+                        <span className="text-slate-400 font-semibold uppercase font-mono text-[10px] mr-1.5">
+                          Event Location / Venue Address:
+                        </span>
+                        <span className="text-slate-100 font-medium break-words font-sans">
+                          {eventLocationDisplay}
+                        </span>
+                      </div>
                     </div>
+
+                    {/* Multi-Event Independent Package Selection */}
+                    {isMulti && (
+                      <div className="space-y-1.5 text-left bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase font-mono tracking-wider">
+                            Select Package Option ({event.event_name || `Event ${eventIdx + 1}`}) *
+                          </label>
+                          <span className="text-[10px] text-slate-500 font-mono">
+                            Independent Event Package
+                          </span>
+                        </div>
+                        <SearchablePackageSelect
+                          id={`select_package_option_${evId}`}
+                          value={(event as any).package_id || (event as any).selected_package_id || currentPkgId}
+                          onChange={(newPkgId) => {
+                            if (isStep3Locked) {
+                              showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
+                              return;
+                            }
+                            const setEvs = isEdit ? setCrmEvents : setCreateEvents;
+                            setEvs(prev => {
+                              const next = [...prev];
+                              if (next[eventIdx]) {
+                                const selectedObj = availablePkgs.find(p => String(p.package_id) === String(newPkgId));
+                                next[eventIdx] = {
+                                  ...next[eventIdx],
+                                  package_id: newPkgId,
+                                  selected_package_id: newPkgId,
+                                  package_name: selectedObj?.package_name || newPkgId
+                                };
+                              }
+                              return next;
+                            });
+
+                            if (newPkgId !== 'Custom Package' && newPkgId !== 'custom_package') {
+                              const pkg = availablePkgs.find(p => String(p.package_id) === String(newPkgId));
+                              if (pkg) {
+                                const incList = parseTeamMembers(pkg.team_members);
+                                const delList = parseTeamMembers(pkg.deliverables);
+                                
+                                const updatedInc = {
+                                  ...editableInclusions,
+                                  [`${newPkgId}_${evId}`]: [...incList],
+                                  [`${newPkgId}_${evAltId}`]: [...incList],
+                                  [`${newPkgId}_${evIdxKey}`]: [...incList],
+                                  [evId]: [...incList],
+                                  [evAltId]: [...incList],
+                                  [evIdxKey]: [...incList],
+                                };
+
+                                const updatedDel = {
+                                  ...editableDeliverables,
+                                  [`${newPkgId}_${evId}`]: [...delList],
+                                  [`${newPkgId}_${evAltId}`]: [...delList],
+                                  [`${newPkgId}_${evIdxKey}`]: [...delList],
+                                  [evId]: [...delList],
+                                  [evAltId]: [...delList],
+                                  [evIdxKey]: [...delList],
+                                };
+
+                                setEditableInclusions(updatedInc);
+                                setEditableDeliverables(updatedDel);
+                                saveStep3DataRealtime(updatedInc, updatedDel);
+                              }
+                            }
+                          }}
+                          packages={availablePkgs}
+                          isLocked={isStep3Locked}
+                        />
+                      </div>
+                    )}
 
                     {/* Team Members Included */}
                     <div>
@@ -3730,12 +4003,14 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   React.useEffect(() => {
     if (!selectedLead?.lead_id) return;
     const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
-    const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : null;
+    const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : payments?.find(p => p.lead_id === selectedLead.lead_id);
     
-    if (linkedOrder || linkedPayment) {
+    if (linkedOrder || linkedPayment || (paymentHistory && paymentHistory.length > 0)) {
       setWizardLeadData(prev => {
-        const latestAdvance = linkedPayment ? ((linkedPayment.advance_received || 0) + (linkedPayment.final_payment_received || 0)) : (linkedOrder ? (linkedOrder.advance_received || 0) : prev.advance_received);
-        const latestFinalAmount = linkedOrder ? (linkedOrder.quotation_amount || 0) : prev.final_amount;
+        const historyPaid = (paymentHistory || []).filter((h: any) => ((linkedOrder && h.order_id === linkedOrder.order_id) || (selectedLead?.lead_id && h.order_id === selectedLead.lead_id)) && h.approval_status !== 'Rejected').reduce((acc: number, h: any) => acc + (Number(h.amount) || 0), 0);
+        const payTotal = linkedPayment ? ((Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0)) : (linkedOrder ? (Number(linkedOrder.advance_received) || 0) : prev.advance_received);
+        const latestAdvance = Math.max(payTotal, historyPaid);
+        const latestFinalAmount = Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || (linkedOrder ? (linkedOrder.quotation_amount || 0) : prev.final_amount);
         
         if (prev.advance_received !== latestAdvance || prev.final_amount !== latestFinalAmount) {
           return {
@@ -3747,7 +4022,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         return prev;
       });
     }
-  }, [selectedLead?.lead_id, orders, payments]);
+  }, [selectedLead?.lead_id, orders, payments, paymentHistory]);
 
   // Handle lead select
   useEffect(() => {
@@ -3789,6 +4064,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           fullLead = {
             ...lead,
             ...dbLead,
+            Select_Package_Option: dbLead.Select_Package_Option || lead.Select_Package_Option,
+            selected_package_id: dbLead.selected_package_id || lead.selected_package_id,
+            Final_Quotation_Amount: dbLead.Final_Quotation_Amount || lead.Final_Quotation_Amount,
+            Final_Package_Amount: dbLead.Final_Package_Amount || lead.Final_Package_Amount,
+            final_package_amount: (dbLead as any).final_package_amount || (lead as any).final_package_amount,
+            budget: dbLead.budget || lead.budget,
+            events: (dbLead.events && Array.isArray(dbLead.events) && dbLead.events.length > 0) ? dbLead.events : (lead.events || []),
             Lost_Reason: directLostReason,
             lost_reason: directLostReason,
             Lost_Notes: directLostNotes,
@@ -4599,7 +4881,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           Specify_Custom_Lead_Source_Name: wizardLeadData.lead_source === 'Other' && wizardLeadData.Specify_Custom_Lead_Source_Name?.trim() !== '' ? wizardLeadData.Specify_Custom_Lead_Source_Name.trim() : null,
           total_pax: wizardLeadData.total_pax,
           reference_source: wizardLeadData.reference_source,
-          selected_package_id: wizardLeadData.selected_package_id || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
+          Select_Package_Option: wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || selectedLead.Select_Package_Option || '',
           remarks: updatedRemarks,
           status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.status || 'Create Quote'),
           current_status: getStatusRank(selectedLead.status || selectedLead.current_status) < 1 || selectedLead.status === 'New Lead' ? 'Create Quote' : (selectedLead.current_status || selectedLead.status || 'Create Quote')
@@ -4931,21 +5213,99 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
           try {
             const linkedOrder = orders?.find(o => o.lead_id === selectedLead.lead_id);
             if (linkedOrder && supabaseClient) {
+              const adv = Number(linkedOrder.advance_received || 0);
+              const newBalance = Math.max(0, cleanFinalAmt - adv);
               await supabaseClient
                 .from('orders')
                 .update({
                   package_name: packages.find(p => p.package_id === pkgId)?.package_name || pkgId,
+                  quotation_amount: cleanFinalAmt,
                   final_amount: cleanFinalAmt,
                   package_price: cleanPkgCost,
+                  quotation_discount: cleanDiscount,
+                  additional_services_cost: cleanAdditional,
+                  balance_amount: newBalance,
                   deliverables_description: safeDeliverablesText,
                   team_members: safeTeamMembersText,
-                  notes: wizardLeadData.notes || linkedOrder.notes,
+                  notes: wizardLeadData.notes || (linkedOrder as any)?.notes || '',
                   updated_at: new Date().toISOString()
                 })
                 .eq('order_id', linkedOrder.order_id);
+
+              // Update payments table without modifying historical payment transactions
+              const { data: linkedPayments } = await supabaseClient
+                .from('payments')
+                .select('*')
+                .eq('order_id', linkedOrder.order_id);
+
+              if (linkedPayments && linkedPayments.length > 0) {
+                for (const pay of linkedPayments) {
+                  const actualPaid = (Number(pay.advance_received) || 0) + (Number(pay.final_payment_received) || 0) + (Number(pay.additional_received) || 0);
+                  const newBalanceDue = Math.max(0, cleanFinalAmt - actualPaid);
+                  const newStatus = (newBalanceDue <= 0 && cleanFinalAmt > 0) 
+                    ? 'Fully Paid' 
+                    : (actualPaid > 0 ? 'Partially Paid' : (pay.payment_status || 'Pending'));
+
+                  await supabaseClient
+                    .from('payments')
+                    .update({
+                      quotation_amount: cleanFinalAmt,
+                      balance_due: newBalanceDue,
+                      payment_status: newStatus,
+                      updated_at: new Date().toISOString()
+                    })
+                    .eq('payment_id', pay.payment_id);
+                }
+              }
+            }
+
+            // Invalidate stale cached quote services in localStorage
+            try {
+              localStorage.removeItem(`erp_quote_services_${selectedLead.lead_id}`);
+            } catch (e) {}
+
+            // Re-fetch and verify from Supabase
+            if (supabaseClient) {
+              const { data: verifiedLead } = await supabaseClient
+                .from('leads')
+                .select('*')
+                .eq('lead_id', selectedLead.lead_id)
+                .single();
+
+              if (verifiedLead) {
+                const verifiedPkgPrice = Number(verifiedLead.package_price ?? cleanPkgCost);
+                const verifiedDiscount = Number(verifiedLead.Quotation_Discount ?? cleanDiscount);
+                const verifiedAdditional = Number(verifiedLead.Additional_Services_Cost ?? cleanAdditional);
+                const verifiedFinalAmt = Math.max(0, verifiedPkgPrice - verifiedDiscount + verifiedAdditional);
+
+                setSelectedLead(prev => prev ? {
+                  ...prev,
+                  ...verifiedLead,
+                  package_price: verifiedPkgPrice,
+                  budget: verifiedPkgPrice,
+                  Quotation_Discount: verifiedDiscount,
+                  Additional_Services_Cost: verifiedAdditional,
+                  Final_Quotation_Amount: verifiedFinalAmt,
+                  Final_Package_Amount: verifiedFinalAmt,
+                  final_package_amount: verifiedFinalAmt
+                } : null);
+
+                setWizardLeadData(prev => ({
+                  ...prev,
+                  package_cost: verifiedPkgPrice,
+                  package_price: verifiedPkgPrice,
+                  budget: verifiedPkgPrice,
+                  final_amount: verifiedFinalAmt,
+                  final_quoted_amount: verifiedFinalAmt
+                }));
+              }
+            }
+
+            if (refreshData) {
+              await refreshData();
             }
           } catch (syncErr) {
-            console.warn("Order sync warning on Step 3 Save:", syncErr);
+            console.warn("Order/payment sync warning on Step 3 Save:", syncErr);
           }
 
           showToastMsg("Record saved successfully.", "success");
@@ -7613,6 +7973,36 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     }
   };
 
+  // Canonical Action column & Step 3 Confirm handler
+  const handleConfirmOrderAction = (lead: Lead) => {
+    if (setOpenDropdownLeadId) {
+      setOpenDropdownLeadId(null);
+    }
+    handleSelectLead(lead);
+
+    const today = new Date().toISOString().split('T')[0];
+    const linkedOrder = orders?.find((o: any) => o.lead_id === lead.lead_id);
+    const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : null;
+    const calcAdvance = linkedPayment 
+      ? ((linkedPayment.advance_received ?? 0) + (linkedPayment.final_payment_received ?? 0)) 
+      : (linkedOrder 
+          ? (linkedOrder.advance_received ?? 0) 
+          : (lead.advance_collected !== undefined && lead.advance_collected !== null && lead.advance_collected !== ''
+              ? Number(lead.advance_collected) 
+              : 0));
+
+    setConfirmForm({
+      ...confirmForm,
+      package_name: packages?.find((p: any) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
+      quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || Number(lead.Final_Package_Amount) || Number((lead as any).final_package_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
+      advance_received: calcAdvance,
+      event_date: lead.event_date || (lead.events && lead.events[0]?.event_date) || today,
+      event_time: lead.event_time || (lead.events && (lead.events[0]?.event_start_time || (lead.events[0] as any)?.event_time)) || ''
+    });
+    initEventsReporting(lead);
+    setShowConfirmModal(true);
+  };
+
   // Handle Order Confirmation Process
   const handleConfirmOrderSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -7998,6 +8388,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     confirmBookingModalRef,
     confirmForm,
     confirmOrder,
+    handleConfirmOrderAction,
     confirmedEventDate,
     confirmedEventTime,
     convertTo12Hour,

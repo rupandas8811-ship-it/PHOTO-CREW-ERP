@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from './RoleContext';
 import { supabaseClient } from '../supabaseClient';
 import { Staff, UserRole } from '../types';
-import { triggerAutoScrollAndFocus, checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../utils';
+import { triggerAutoScrollAndFocus } from '../utils';
 import { 
   Users, UserPlus, Phone, Mail, Award, Clock, FileText, ToggleLeft, ToggleRight, ShieldAlert,
   Search, Filter, Calendar, FolderOpen, Heart, CheckCircle2, ChevronRight, X, Sparkles, Image,
@@ -11,7 +11,7 @@ import {
 
 export const StaffManagementModule: React.FC = () => {
   const { 
-    staff, productionStaff = [], addStaff, updateStaff, production, currentRole,
+    staff, addStaff, updateStaff, production, currentRole,
     specialities = [], addSpeciality, updateSpeciality, deactivateSpeciality,
     addUser, resetUserPassword, users
   } = useRole();
@@ -136,22 +136,6 @@ export const StaffManagementModule: React.FC = () => {
       Skill: skills
     };
 
-    const existingStaff = editingStaffId ? staff.find(s => s.staff_id === editingStaffId) : null;
-    const uniquenessCheck = checkGlobalStaffUniqueness({
-      mobile: mobile.trim(),
-      email: email.trim(),
-      excludeId: editingStaffId,
-      excludeEmail: existingStaff?.email,
-      excludeMobile: existingStaff?.mobile,
-      usersList: users,
-      opStaffList: staff,
-      prodStaffList: productionStaff
-    });
-    if (!uniquenessCheck.isUnique) {
-      alert(uniquenessCheck.error || "Duplicate staff details detected.");
-      return;
-    }
-
     try {
       if (editingStaffId) {
         const { mobile: _m, email: _e, ...safePayload } = payload;
@@ -195,14 +179,14 @@ export const StaffManagementModule: React.FC = () => {
           }
         }
 
-        alert('Staff details updated successfully.');
+        alert('Staff member updated successfully!');
         setEditingStaffId(null);
       } else {
         const cleanPwd = (staffPassword || '').trim();
         await addStaff({ ...payload, password: cleanPwd || undefined });
 
         // Also create login user with the specified password for authentication
-        const userRole: UserRole = (department === 'Operations' || role.toLowerCase().includes('operation')) ? 'Operation Staff' : 'Production Team';
+        const userRole: UserRole = (department === 'Operations' || role.toLowerCase().includes('operation')) ? 'Operation Staff' : 'Production Staff';
         try {
           await addUser(name, email, mobile, userRole, status === 'Active', cleanPwd);
         } catch (authErr) {
@@ -235,10 +219,10 @@ export const StaffManagementModule: React.FC = () => {
           }
         }
 
-        alert('Staff added successfully.');
+        alert('Staff member registered and login password configured successfully!');
       }
 
-      // Reset Form ONLY on verified success
+      // Reset Form
       setName('');
       setMobile('');
       setWhatsappNumber('');
@@ -256,7 +240,7 @@ export const StaffManagementModule: React.FC = () => {
 
       setActiveSubTab('list');
     } catch (err: any) {
-      alert(formatStaffErrorMessage(err));
+      alert(err.message || 'Failed to register or update staff member.');
     }
   };
 
@@ -337,8 +321,14 @@ export const StaffManagementModule: React.FC = () => {
     setMobile(member.mobile);
     setWhatsappNumber(member.whatsapp_number || '');
     setEmail(member.email);
-    setStaffPassword('');
-    setShowStaffPassword(false);
+    const currentPwd = getStaffCurrentPassword(member, users);
+    setStaffPassword(currentPwd);
+    setShowStaffPassword(true);
+    if (!currentPwd) {
+      fetchStaffCurrentPassword(member, users).then(livePwd => {
+        if (livePwd) setStaffPassword(livePwd);
+      });
+    }
     setRole(member.role);
     setDepartment(member.department);
     setStatus(member.status);
@@ -854,14 +844,15 @@ export const StaffManagementModule: React.FC = () => {
                 <label className="text-[10px] font-mono text-zinc-400 uppercase font-bold flex items-center gap-1">
                   <Key className="w-3 h-3 text-violet-400" />
                   <span>Account Login Password</span>
-                  {editingStaffId ? <span className="text-zinc-500 font-normal lowercase">(leave blank to keep current)</span> : <span className="text-rose-500">*</span>}
+                  {!editingStaffId && <span className="text-rose-500">*</span>}
                 </label>
               </div>
               <div className="relative">
                 <input
                   type={showStaffPassword ? "text" : "password"}
                   required={!editingStaffId}
-                  placeholder={editingStaffId ? "Leave blank to keep current password" : "Enter password (min 8 chars)"}
+                  minLength={6}
+                  placeholder="Password"
                   value={staffPassword}
                   onChange={(e) => setStaffPassword(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-xl p-3 pr-10 text-xs text-white placeholder-zinc-500 focus:border-violet-500 outline-none font-mono"

@@ -78,6 +78,8 @@ export interface CalendarEvent {
   expectedDeliveryDate?: string;
   targetDeliveryDate?: string;
   orderId?: string;
+  eventId?: string;
+  salesCrew?: string;
   
   raw: any;
 }
@@ -595,6 +597,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
         eventsList.forEach((ev, index) => {
           if (!ev) return;
 
+          const exactEventId = ev.id || `evt-${leadId}-${index}`;
+          const isOnlyEvent = eventsList.length === 1;
+
           const evTargetDeliveryDate = normalizeToYYYYMMDD(
             ev.target_delivery_date || 
             ev.targeted_date || 
@@ -606,22 +611,37 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
           const evSavedEventDate = normalizeToYYYYMMDD(
             ev.event_date || 
             ev.event_start_date || 
-            ld.event_date || 
-            ord?.event_date || 
-            ''
+            ev.date ||
+            (isOnlyEvent ? (ld.event_date || ord?.event_date || '') : '')
           );
 
-          const evStartTime = ev.event_start_time || ev.event_time || ld.event_time || ord?.event_time || '10:00 AM';
-          const evName = ev.event_name || ld.custom_event_name || ord?.custom_event_name || ev.event_type || ld.event_type || ord?.event_type || 'Event Shoot';
-          const evType = ev.event_type || ld.event_type || ord?.event_type || 'Shoot';
-          const evLoc = ev.event_location || ld.event_location || ord?.event_location || 'Studio';
+          const evStartTime = ev.event_start_time || ev.event_time || ev.time || (isOnlyEvent ? (ld.event_time || ord?.event_time) : '') || '10:00 AM';
+          const evName = ev.event_name || ev.custom_event_name || ev.event_type || (isOnlyEvent ? (ld.custom_event_name || ord?.custom_event_name || ld.event_type || ord?.event_type) : '') || 'Event Shoot';
+          const evType = ev.event_type || (isOnlyEvent ? (ld.event_type || ord?.event_type) : '') || 'Shoot';
+          const evLoc = ev.event_location || ev.location || ev.venue || ev.venue_address || (isOnlyEvent ? (ld.event_location || ord?.event_location) : '') || 'Studio';
+
+          // Sales Crew mapping per exact event record:
+          const eventSpecificStaff = staffAssignments?.filter(a => a.event_id && ev.id && a.event_id === ev.id) || [];
+          const eventSalesStaff = eventSpecificStaff.filter(a => a.staff_role?.toLowerCase().includes('sales'));
+          const eventSpecificCrew = eventSalesStaff.length > 0
+            ? eventSalesStaff.map(a => a.staff_name).join(', ')
+            : (eventSpecificStaff.length > 0 ? eventSpecificStaff.map(a => a.staff_name).join(', ') : '');
+
+          const evSalesCrew = eventSpecificCrew || 
+            (ev.assigned_staff_names && String(ev.assigned_staff_names).trim() ? String(ev.assigned_staff_names).trim() : '') ||
+            ev.sales_crew ||
+            ev.sales_staff_name ||
+            ld.sales_staff_name ||
+            ld.sales_person ||
+            ord?.sales_person ||
+            'Unassigned';
 
           if (role === 'owner') {
             // Business Owner Calendar:
             // 1. Display on exact saved Event Date
             if (evSavedEventDate) {
               events.push({
-                id: `lead-event-${leadId}-${index}-${ev.id || 'idx'}`,
+                id: ev.id ? `lead-event-${leadId}-${ev.id}` : `lead-event-${leadId}-${index}`,
                 sourceType: 'order',
                 eventClass: 'Event Scheduled',
                 date: evSavedEventDate,
@@ -631,6 +651,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                 eventType: evType,
                 eventTime: evStartTime,
                 eventLocation: evLoc,
+                salesCrew: evSalesCrew,
+                eventId: exactEventId,
                 currentStage: statusClean || ld.status,
                 notes: 'On Track',
                 packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
@@ -642,6 +664,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                   ...ev,
                   lead_id: leadId,
                   order_id: orderId,
+                  event_id: exactEventId,
+                  eventId: exactEventId,
                   event_name: evName,
                   event_type: evType,
                   event_date: evSavedEventDate,
@@ -649,6 +673,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                   event_end_time: ev.event_end_time || '',
                   reporting_date: ev.reporting_date || '',
                   reporting_time: ev.reporting_time || '',
+                  event_location: evLoc,
+                  salesCrew: evSalesCrew,
+                  sales_crew: evSalesCrew,
+                  sales_staff_name: evSalesCrew,
                   assignedTeamCount,
                   assigns,
                   targetDeliveryDate: evTargetDeliveryDate,
@@ -662,7 +690,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
             // 2. If Targeted Date exists and differs from event date, also display on exact Targeted Date
             if (evTargetDeliveryDate && evTargetDeliveryDate !== evSavedEventDate) {
               events.push({
-                id: `lead-target-delivery-${leadId}-${index}-${ev.id || 'idx'}`,
+                id: ev.id ? `lead-target-delivery-${leadId}-${ev.id}` : `lead-target-delivery-${leadId}-${index}`,
                 sourceType: 'order',
                 eventClass: 'Target Delivery',
                 date: evTargetDeliveryDate,
@@ -672,6 +700,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                 eventType: evType,
                 eventTime: evStartTime,
                 eventLocation: evLoc,
+                salesCrew: evSalesCrew,
+                eventId: exactEventId,
                 currentStage: statusClean || ld.status,
                 notes: 'Target Delivery',
                 packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
@@ -683,6 +713,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                   ...ev,
                   lead_id: leadId,
                   order_id: orderId,
+                  event_id: exactEventId,
+                  eventId: exactEventId,
                   event_name: evName,
                   event_type: evType,
                   event_date: evSavedEventDate || evTargetDeliveryDate,
@@ -690,6 +722,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                   event_end_time: ev.event_end_time || '',
                   reporting_date: ev.reporting_date || '',
                   reporting_time: ev.reporting_time || '',
+                  event_location: evLoc,
+                  salesCrew: evSalesCrew,
+                  sales_crew: evSalesCrew,
+                  sales_staff_name: evSalesCrew,
                   assignedTeamCount,
                   assigns,
                   targetDeliveryDate: evTargetDeliveryDate,
@@ -713,7 +749,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
             if (!dateToUse) return;
 
             events.push({
-              id: `lead-event-${leadId}-${index}-${ev.id || 'idx'}`,
+              id: ev.id ? `lead-event-${leadId}-${ev.id}` : `lead-event-${leadId}-${index}`,
               sourceType: 'order',
               eventClass: role === 'production' ? 'Target Delivery' : 'Event Scheduled',
               date: dateToUse,
@@ -723,6 +759,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
               eventType: evType,
               eventTime: evStartTime,
               eventLocation: evLoc,
+              salesCrew: evSalesCrew,
+              eventId: exactEventId,
               currentStage: statusClean || ld.status,
               notes: 'On Track',
               packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
@@ -734,6 +772,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                 ...ev,
                 lead_id: leadId,
                 order_id: orderId,
+                event_id: exactEventId,
+                eventId: exactEventId,
                 event_name: evName,
                 event_type: evType,
                 event_date: evSavedEventDate || dateToUse,
@@ -741,6 +781,10 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                 event_end_time: ev.event_end_time || '',
                 reporting_date: ev.reporting_date || '',
                 reporting_time: ev.reporting_time || '',
+                event_location: evLoc,
+                salesCrew: evSalesCrew,
+                sales_crew: evSalesCrew,
+                sales_staff_name: evSalesCrew,
                 assignedTeamCount,
                 assigns,
                 targetDeliveryDate: evTargetDeliveryDate,
@@ -1322,10 +1366,21 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-max">
+              <table className="w-full text-left text-xs border-collapse min-w-[1180px]">
                 <thead>
                   <tr className="bg-zinc-900/80 text-zinc-400 text-[10px] font-mono uppercase tracking-wider border-b border-zinc-800">
-                    {role === 'production' ? (
+                    {role === 'sales' ? (
+                      <>
+                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[110px]">Event Time</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
+                        <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
+                      </>
+                    ) : role === 'production' ? (
                       <>
                         <th className="p-3 text-amber-400">ORDER ID</th>
                         <th className="p-3">CUSTOMER NAME</th>
@@ -1349,6 +1404,90 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                 </thead>
                 <tbody className="divide-y divide-zinc-900">
                   {searchResultsEvents.map((ev, idx) => {
+                    if (role === 'sales') {
+                      const custName = ev.customerName || ev.raw?.customer_name || '—';
+                      const custNumber = ev.mobile || ev.raw?.mobile || ev.raw?.whatsapp_number || '';
+                      const evName = ev.eventName || ev.raw?.event_name || ev.raw?.custom_event_name || ev.eventType || 'Event';
+                      const location = ev.eventLocation || ev.raw?.event_location || '—';
+                      const salesCrew = ev.salesCrew || ev.raw?.salesCrew || ev.raw?.sales_crew || ev.raw?.sales_staff_name || ev.raw?.sales_person || 'Unassigned';
+                      const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
+                      const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
+                      const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
+
+                      return (
+                        <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
+                          <td className="p-3.5 pl-4 align-middle min-w-[190px]">
+                            <div 
+                              className="font-bold text-white text-xs leading-snug"
+                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                            >
+                              {custName}
+                            </div>
+                            {custNumber ? (
+                              <div className="text-[11px] font-mono text-zinc-400 mt-1 whitespace-nowrap">
+                                {custNumber}
+                              </div>
+                            ) : (
+                              <div className="text-[10px] font-mono text-zinc-500 italic mt-0.5">—</div>
+                            )}
+                          </td>
+                          <td className="p-3.5 align-middle min-w-[180px]">
+                            <div 
+                              className="font-bold text-white text-xs leading-snug"
+                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                            >
+                              {evName}
+                            </div>
+                          </td>
+                          <td className="p-3.5 align-middle min-w-[210px]">
+                            <div 
+                              className="text-zinc-300 text-xs leading-snug"
+                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                              title={location}
+                            >
+                              {location}
+                            </div>
+                          </td>
+                          <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
+                            <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                              {evDate}
+                            </span>
+                          </td>
+                          <td className="p-3.5 align-middle whitespace-nowrap min-w-[110px]">
+                            <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                              {evTime ? formatTime12Hour(evTime) : '—'}
+                            </span>
+                          </td>
+                          <td className="p-3.5 align-middle min-w-[160px]">
+                            <div 
+                              className="text-zinc-200 text-xs leading-relaxed"
+                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                            >
+                              <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
+                                {salesCrew}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-3.5 align-middle min-w-[130px]">
+                            <span 
+                              className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 leading-tight text-center"
+                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                            >
+                              {status}
+                            </span>
+                          </td>
+                          <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
+                            <button
+                              onClick={() => handleEventAction(ev)}
+                              className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                            >
+                              Details
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }
+
                     if (role === 'production') {
                       const leadId = ev.raw?.lead_id || ev.orderId;
                       const leadObj = leads.find(l => l.lead_id === leadId);
@@ -1567,7 +1706,9 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         {evs.length > 0 && (
                           <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-y-auto overflow-x-hidden mt-0.5 min-h-0 pr-0.5 pointer-events-auto">
                             {evs.map((ev, eIdx) => {
-                              const displayName = ev.eventName || ev.raw?.event_name || ev.eventType || ev.customerName || 'Event';
+                              const displayName = role === 'sales'
+                                ? (ev.customerName || ev.raw?.customer_name || 'Client')
+                                : (ev.eventName || ev.raw?.event_name || ev.eventType || ev.customerName || 'Event');
                               return (
                                 <div
                                   key={ev.id || eIdx}
@@ -2040,10 +2181,21 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
             </div>
             
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-max">
+              <table className="w-full text-left text-xs border-collapse min-w-[1180px]">
                 <thead>
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
-                    {role === 'production' ? (
+                    {role === 'sales' ? (
+                      <>
+                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[110px]">Event Time</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
+                        <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
+                      </>
+                    ) : role === 'production' ? (
                       <>
                         <th className="p-3.5 pl-5 text-amber-400">ORDER ID</th>
                         <th className="p-3.5">CUSTOMER NAME</th>
@@ -2073,6 +2225,108 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
                   {(() => {
+                    if (role === 'sales') {
+                      let evsToShow: CalendarEvent[] = [];
+                      if (popupLeadId) {
+                        evsToShow = filteredEvents.filter(e => (e.raw?.lead_id === popupLeadId || e.orderId === popupLeadId || e.raw?.order_id === popupLeadId));
+                      } else if (popupDate) {
+                        evsToShow = filteredEvents.filter(e => e.date === popupDate && e.sourceType !== 'memo');
+                      }
+
+                      if (evsToShow.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={8} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
+                          </tr>
+                        );
+                      }
+
+                      return evsToShow.map((ev, idx) => {
+                        const custName = ev.customerName || ev.raw?.customer_name || '—';
+                        const custNumber = ev.mobile || ev.raw?.mobile || ev.raw?.whatsapp_number || '';
+                        const evName = ev.eventName || ev.raw?.event_name || ev.raw?.custom_event_name || ev.eventType || 'Event';
+                        const location = ev.eventLocation || ev.raw?.event_location || '—';
+                        const salesCrew = ev.salesCrew || ev.raw?.salesCrew || ev.raw?.sales_crew || ev.raw?.sales_staff_name || ev.raw?.sales_person || 'Unassigned';
+                        const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
+                        const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
+                        const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
+
+                        return (
+                          <tr key={ev.id || idx} className="hover:bg-zinc-900/30 text-zinc-300 transition-all select-text">
+                            <td className="p-3.5 pl-4 align-middle min-w-[190px]">
+                              <div 
+                                className="font-bold text-white text-xs leading-snug"
+                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                              >
+                                {custName}
+                              </div>
+                              {custNumber ? (
+                                <div className="text-[11px] font-mono text-zinc-400 mt-1 whitespace-nowrap">
+                                  {custNumber}
+                                </div>
+                              ) : (
+                                <div className="text-[10px] font-mono text-zinc-500 italic mt-0.5">—</div>
+                              )}
+                            </td>
+                            <td className="p-3.5 align-middle min-w-[180px]">
+                              <div 
+                                className="font-bold text-zinc-100 text-xs leading-snug"
+                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                              >
+                                {evName}
+                              </div>
+                            </td>
+                            <td className="p-3.5 align-middle min-w-[210px]">
+                              <div 
+                                className="text-zinc-300 text-xs leading-snug"
+                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                                title={location}
+                              >
+                                {location}
+                              </div>
+                            </td>
+                            <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
+                              <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                                {evDate}
+                              </span>
+                            </td>
+                            <td className="p-3.5 align-middle whitespace-nowrap min-w-[110px]">
+                              <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                                {evTime ? formatTime12Hour(evTime) : '—'}
+                              </span>
+                            </td>
+                            <td className="p-3.5 align-middle min-w-[160px]">
+                              <div 
+                                className="text-zinc-200 text-xs leading-relaxed"
+                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                              >
+                                <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
+                                  {salesCrew}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-3.5 align-middle min-w-[130px]">
+                              <span 
+                                className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 leading-tight text-center"
+                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                              >
+                                {status}
+                              </span>
+                            </td>
+                            <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
+                              <button
+                                type="button"
+                                onClick={() => handleEventAction(ev)}
+                                className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                              >
+                                Details
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    }
+
                     let leadsToShow = [];
                     if (popupLeadId) {
                       const found = leads.find(l => l.lead_id === popupLeadId);
@@ -2249,7 +2503,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
           onClick={(e) => { e.stopPropagation(); setShowSelectedDateModal(false); }}
         >
           <div 
-            className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
+            className="bg-zinc-900 border border-zinc-800 w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
@@ -2290,35 +2544,148 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
 
                 return (
                   <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
-                    <table className="w-full text-left border-collapse min-w-[850px]">
+                    <table className="w-full text-left border-collapse min-w-[1180px]">
                       <thead>
                         <tr className="border-b border-zinc-850 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
-                          <th className="p-3.5 pl-4">Order ID</th>
-                          <th className="p-3.5">Event Name</th>
-                          <th className="p-3.5">Customer</th>
-                          <th className="p-3.5">Assigned Staff</th>
-                          <th className="p-3.5">Event Date</th>
-                          <th className="p-3.5">Event Time</th>
-                          <th className="p-3.5">Location</th>
-                          <th className="p-3.5">Status</th>
-                          {role !== 'operations' && role !== 'worker' && (
-                            <th className={`p-3.5 ${role === 'production' ? 'pr-4' : ''}`}>Target Delivery Date</th>
-                          )}
-                          {role !== 'production' && (
-                            <th className="p-3.5 pr-4 text-right">Action</th>
+                          {role === 'sales' ? (
+                            <>
+                              <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[110px]">Event Time</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
+                              <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
+                            </>
+                          ) : (
+                            <>
+                              <th className="p-3.5 pl-4">Order ID</th>
+                              <th className="p-3.5">Event Name</th>
+                              <th className="p-3.5">Customer</th>
+                              <th className="p-3.5">Assigned Staff</th>
+                              <th className="p-3.5">Event Date</th>
+                              <th className="p-3.5">Event Time</th>
+                              <th className="p-3.5">Location</th>
+                              <th className="p-3.5">Status</th>
+                              {role !== 'operations' && role !== 'worker' && (
+                                <th className={`p-3.5 ${role === 'production' ? 'pr-4' : ''}`}>Target Delivery Date</th>
+                              )}
+                              {role !== 'production' && (
+                                <th className="p-3.5 pr-4 text-right">Action</th>
+                              )}
+                            </>
                           )}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
                         {selectedEvs.map((ev, idx) => {
                           const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.tracking_id || ev.raw?.lead_id || '—';
-                          const evName = ev.eventName || ev.raw?.event_name || ev.eventType || 'Event';
+                          const evName = ev.eventName || ev.raw?.event_name || ev.raw?.custom_event_name || ev.eventType || 'Event';
                           const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
                           const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
                           const custName = ev.customerName || ev.raw?.customer_name || '—';
+                          const custNumber = ev.mobile || ev.raw?.mobile || ev.raw?.whatsapp_number || '';
                           const location = ev.eventLocation || ev.raw?.event_location || '—';
+                          const salesCrew = ev.salesCrew || ev.raw?.salesCrew || ev.raw?.sales_crew || ev.raw?.sales_staff_name || ev.raw?.sales_person || 'Unassigned';
                           const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
                           const targetDelDate = formatDateDMY(ev.targetDeliveryDate || ev.raw?.targetDeliveryDate || ev.raw?.delivery_target_date || ev.raw?.expected_delivery_date || '—');
+
+                          if (role === 'sales') {
+                            return (
+                              <tr 
+                                key={ev.id || idx}
+                                className="bg-zinc-950/30 hover:bg-zinc-900/40 transition-colors select-text"
+                              >
+                                {/* 1. Customer Name and Number */}
+                                <td className="p-3.5 pl-4 align-middle min-w-[190px]">
+                                  <div 
+                                    className="font-bold text-zinc-100 text-xs leading-snug"
+                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                                  >
+                                    {custName}
+                                  </div>
+                                  {custNumber ? (
+                                    <div className="text-[11px] font-mono text-zinc-400 mt-1 whitespace-nowrap">
+                                      {custNumber}
+                                    </div>
+                                  ) : (
+                                    <div className="text-[10px] font-mono text-zinc-500 italic mt-0.5">—</div>
+                                  )}
+                                </td>
+
+                                {/* 2. Event Name */}
+                                <td className="p-3.5 align-middle min-w-[180px]">
+                                  <div 
+                                    className="font-bold text-zinc-100 text-xs leading-snug"
+                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                                  >
+                                    {evName}
+                                  </div>
+                                </td>
+
+                                {/* 3. Event Location */}
+                                <td className="p-3.5 align-middle min-w-[210px]">
+                                  <div 
+                                    className="text-zinc-300 text-xs leading-snug"
+                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                                    title={location}
+                                  >
+                                    {location}
+                                  </div>
+                                </td>
+
+                                {/* 4. Event Date */}
+                                <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
+                                  <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                                    {evDate}
+                                  </span>
+                                </td>
+
+                                {/* 5. Event Time */}
+                                <td className="p-3.5 align-middle whitespace-nowrap min-w-[110px]">
+                                  <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                                    {evTime ? formatTime12Hour(evTime) : '—'}
+                                  </span>
+                                </td>
+
+                                {/* 6. Sales Crew */}
+                                <td className="p-3.5 align-middle min-w-[160px]">
+                                  <div 
+                                    className="text-zinc-200 text-xs leading-relaxed"
+                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                                  >
+                                    <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
+                                      {salesCrew}
+                                    </span>
+                                  </div>
+                                </td>
+
+                                {/* 7. Status */}
+                                <td className="p-3.5 align-middle min-w-[130px]">
+                                  <span 
+                                    className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 leading-tight text-center"
+                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
+                                  >
+                                    {status}
+                                  </span>
+                                </td>
+
+                                {/* 8. Action */}
+                                <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleEventAction(ev);
+                                    }}
+                                    className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                                  >
+                                    Details
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          }
 
                           return (
                             <tr 

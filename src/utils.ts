@@ -656,6 +656,119 @@ export function cleanEmail(email: string | undefined): string {
   return email.trim().toLowerCase();
 }
 
+export interface CheckGlobalStaffUniquenessParams {
+  mobile?: string | null;
+  email?: string | null;
+  excludeId?: string | null;
+  excludeEmail?: string | null;
+  excludeMobile?: string | null;
+  usersList?: any[];
+  opStaffList?: any[];
+  prodStaffList?: any[];
+}
+
+export function checkGlobalStaffUniqueness(params: CheckGlobalStaffUniquenessParams): {
+  isUnique: boolean;
+  error?: string;
+  existingAccountName?: string;
+  existingRole?: string;
+} {
+  const {
+    mobile,
+    email,
+    excludeId,
+    excludeEmail,
+    excludeMobile,
+    usersList = [],
+    opStaffList = [],
+    prodStaffList = []
+  } = params;
+
+  if (mobile) {
+    const normMobile = normalizeMobileNumber(mobile);
+    const normExcludeMobile = excludeMobile ? normalizeMobileNumber(excludeMobile) : null;
+    if (!normExcludeMobile || normMobile !== normExcludeMobile) {
+      const mobCheck = checkGlobalMobileUnique(mobile, excludeId, usersList, opStaffList, prodStaffList);
+      if (!mobCheck.isUnique) {
+        return mobCheck;
+      }
+    }
+  }
+
+  if (email) {
+    const normEmail = cleanEmail(email);
+    const normExcludeEmail = excludeEmail ? cleanEmail(excludeEmail) : null;
+    if (normEmail && (!normExcludeEmail || normEmail !== normExcludeEmail)) {
+      const cleanExclude = excludeId ? String(excludeId).trim().toLowerCase() : null;
+
+      for (const u of usersList) {
+        if (!u) continue;
+        const uEmail = cleanEmail(u.email);
+        if (uEmail && uEmail === normEmail) {
+          const uId = u.id ? String(u.id).trim().toLowerCase() : '';
+          const uAuthId = u.auth_user_id ? String(u.auth_user_id).trim().toLowerCase() : '';
+          if (cleanExclude && (uId === cleanExclude || uAuthId === cleanExclude)) continue;
+          return {
+            isUnique: false,
+            existingAccountName: u.name || u.full_name || 'User',
+            existingRole: u.role || 'Staff',
+            error: 'Email is already registered. Please use a different email.'
+          };
+        }
+      }
+
+      for (const s of opStaffList) {
+        if (!s) continue;
+        const sEmail = cleanEmail(s.email);
+        if (sEmail && sEmail === normEmail) {
+          const sId = s.staff_id ? String(s.staff_id).trim().toLowerCase() : (s.id ? String(s.id).trim().toLowerCase() : '');
+          const sAuthId = s.auth_user_id ? String(s.auth_user_id).trim().toLowerCase() : '';
+          if (cleanExclude && (sId === cleanExclude || sAuthId === cleanExclude)) continue;
+          return {
+            isUnique: false,
+            existingAccountName: s.name || s.staff_name || 'Staff',
+            existingRole: 'Operations Staff',
+            error: 'Email is already registered. Please use a different email.'
+          };
+        }
+      }
+
+      for (const p of prodStaffList) {
+        if (!p) continue;
+        const pEmail = cleanEmail(p.email);
+        if (pEmail && pEmail === normEmail) {
+          const pId = p.staff_id ? String(p.staff_id).trim().toLowerCase() : (p.id ? String(p.id).trim().toLowerCase() : '');
+          const pAuthId = p.auth_user_id ? String(p.auth_user_id).trim().toLowerCase() : '';
+          if (cleanExclude && (pId === cleanExclude || pAuthId === cleanExclude)) continue;
+          return {
+            isUnique: false,
+            existingAccountName: p.name || p.staff_name || 'Staff',
+            existingRole: 'Production Staff',
+            error: 'Email is already registered. Please use a different email.'
+          };
+        }
+      }
+    }
+  }
+
+  return { isUnique: true };
+}
+
+export function formatStaffErrorMessage(err: any): string {
+  if (!err) return "An unexpected error occurred.";
+  const msg = err.message || (typeof err === 'string' ? err : JSON.stringify(err));
+  if (msg.includes("duplicate key") || msg.includes("already exists") || msg.includes("unique")) {
+    if (msg.includes("mobile") || msg.includes("phone")) {
+      return "Mobile number already exists. Please use a different mobile number.";
+    }
+    if (msg.includes("email")) {
+      return "Email already exists. Please use a different email address.";
+    }
+    return "Staff with these details already exists. Please check mobile number and email.";
+  }
+  return msg;
+}
+
 /**
  * Compile unified Customer Profiles dynamically from Leads, Orders, and Payments.
  * Ensures consistent Customer ID mapping using deterministic sorting and links history.

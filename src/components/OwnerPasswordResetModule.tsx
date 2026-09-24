@@ -14,12 +14,12 @@ export const OwnerPasswordResetModule: React.FC = () => {
     users[0];
   const operationsDashboardAccount =
     users.find(u => u.email?.toLowerCase() === 'operation@photocrew.com') ||
-    users.find(u => u.role === 'Operations Team') ||
-    users.find(u => u.role === 'Operation Staff');
+    users.find(u => u.id === '00000000-0000-0000-0000-000000000003') ||
+    users.find(u => u.role === 'Operations Team');
   const productionDashboardAccount =
     users.find(u => u.email?.toLowerCase() === 'production@photocrew.com') ||
-    users.find(u => u.role === 'Production Team') ||
-    users.find(u => u.role === 'Production Staff');
+    users.find(u => u.id === '00000000-0000-0000-0000-000000000004') ||
+    users.find(u => u.role === 'Production Team');
 
   // Business Owner reset state
   const [ownerPassword, setOwnerPassword] = useState<string>(() => businessOwnerAccount?.password || '');
