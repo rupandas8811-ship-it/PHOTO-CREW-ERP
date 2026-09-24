@@ -5301,6 +5301,21 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         additional_services_cost: targetLead.additional_services_cost || 0,
       });
       if (!rOrd?.success) throw new Error("Failed to update existing order: " + rOrd?.error);
+      setOrders(prev => prev.map(o => o.order_id === masterOrderId ? {
+        ...o,
+        customer_name: targetLead.customer_name,
+        mobile: targetLead.mobile,
+        event_type: targetLead.event_type,
+        event_date: eventDate || targetLead.event_date || o.event_date,
+        event_time: eventTime || targetLead.event_time || o.event_time,
+        reporting_time: reportingTime || targetLead.reporting_time || o.reporting_time,
+        event_location: targetLead.event_location,
+        package_name: packageName,
+        quotation_amount: quotationAmount,
+        order_status: 'Confirmed',
+        current_stage: 'Order Confirmed',
+        updated_at: timestamp
+      } : o));
     } else {
       const newOrder: Order = {
         order_id: masterOrderId,
@@ -5349,6 +5364,10 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         rOrd = await pushInsert('orders', newOrder);
       }
       if (!rOrd?.success) throw new Error("Failed to insert Order: " + rOrd?.error);
+      setOrders(prev => {
+        const filtered = prev.filter(o => o.order_id !== masterOrderId);
+        return [newOrder, ...filtered];
+      });
     }
 
     // Payments
@@ -5532,6 +5551,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     
 
     logActivity(`Confirmed Order for ${targetLead.customer_name}. Package: ${packageName}`, 'Sales', masterOrderId, targetLead.status, 'Order Confirmed');
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('order-confirmed', { detail: { orderId: masterOrderId } }));
+      window.dispatchEvent(new CustomEvent('order-updated', { detail: { orderId: masterOrderId } }));
+      window.dispatchEvent(new CustomEvent('refresh-pending-payments', { detail: { orderId: masterOrderId } }));
+    }
+    // Background fetch to guarantee all relational records sync
+    fetchFromDb(false).catch(() => {});
 
     return masterOrderId;
   };

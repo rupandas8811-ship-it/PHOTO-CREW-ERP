@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole } from '../RoleContext';
 import { 
@@ -16,7 +16,8 @@ import {
   Percent,
   TrendingUp,
   CreditCard,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'motion/react';
@@ -26,7 +27,57 @@ import { PaymentHistoryModal } from '../PaymentHistoryModal';
 import { UpdatePaymentModal } from './UpdatePaymentModal';
 
 export const PendingPaymentsReport: React.FC = () => {
-  const { leads, orders, payments, currentUserName, recordPayment } = useRole();
+  const { leads, orders, payments, currentUserName, recordPayment, refreshData } = useRole();
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // Sync latest data on mount and provide manual refresh handler
+  const handleManualSync = useCallback(async () => {
+    if (typeof refreshData === 'function' && !isSyncing) {
+      setIsSyncing(true);
+      try {
+        await refreshData();
+      } catch (err) {
+        console.warn('[PendingPaymentsReport] Sync error:', err);
+      } finally {
+        setTimeout(() => setIsSyncing(false), 400);
+      }
+    }
+  }, [refreshData, isSyncing]);
+
+  useEffect(() => {
+    if (typeof refreshData === 'function') {
+      refreshData();
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleSync = () => {
+      if (typeof refreshData === 'function') {
+        refreshData();
+      }
+    };
+
+    window.addEventListener('focus', handleSync);
+    const handleVisChange = () => {
+      if (document.visibilityState === 'visible') {
+        handleSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisChange);
+    window.addEventListener('lead-updated', handleSync);
+    window.addEventListener('payment-updated', handleSync);
+    window.addEventListener('order-updated', handleSync);
+    window.addEventListener('refresh-pending-payments', handleSync);
+
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleVisChange);
+      window.removeEventListener('lead-updated', handleSync);
+      window.removeEventListener('payment-updated', handleSync);
+      window.removeEventListener('order-updated', handleSync);
+      window.removeEventListener('refresh-pending-payments', handleSync);
+    };
+  }, [refreshData]);
 
   // Search and Filter states
   const [globalSearch, setGlobalSearch] = useState('');
@@ -97,10 +148,68 @@ export const PendingPaymentsReport: React.FC = () => {
   const [modalSuccessMsg, setModalSuccessMsg] = useState('');
   const [modalErrorMsg, setModalErrorMsg] = useState('');
 
+  // Normalize date string to standard YYYY-MM-DD
+  const normalizeToYYYYMMDD = (dStr?: string): string => {
+    if (!dStr) return '';
+    const s = String(dStr).split('T')[0].trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (dmyMatch) {
+      const day = dmyMatch[1].padStart(2, '0');
+      const month = dmyMatch[2].padStart(2, '0');
+      const year = dmyMatch[3];
+      return `${year}-${month}-${day}`;
+    }
+    const ymdSlashMatch = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (ymdSlashMatch) {
+      const year = ymdSlashMatch[1];
+      const month = ymdSlashMatch[2].padStart(2, '0');
+      const day = ymdSlashMatch[3].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) {
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    return s;
+  };
+
+  // Helper to extract sequential number from Order ID (e.g. "OR063" -> 63, "OR057" -> 57, "OR030" -> 30)
+  const extractOrderSeq = (orderId?: string): number => {
+    if (!orderId) return 0;
+    const match = String(orderId).match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 0;
+  };
+
+  // Sort comparator: Newest Order ID / order creation sequence first (never sort by Event Date)
+  const compareOrderRecords = (a: any, b: any): number => {
+    const seqA = extractOrderSeq(a.orderId);
+    const seqB = extractOrderSeq(b.orderId);
+
+    // 1. If sequential numbers exist on both and differ:
+    // Higher sequential Order ID is strictly newest (e.g. OR063 (63) > OR057 (57) > OR055 (55) > OR030 (30))
+    if (seqA > 0 && seqB > 0 && seqA !== seqB) {
+      return seqB - seqA;
+    }
+
+    // 2. Creation timestamp of the order (or lead)
+    const timeA = a.order?.created_at ? (Date.parse(a.order.created_at) || 0) : (a.lead?.created_at ? (Date.parse(a.lead.created_at) || 0) : 0);
+    const timeB = b.order?.created_at ? (Date.parse(b.order.created_at) || 0) : (b.lead?.created_at ? (Date.parse(b.lead.created_at) || 0) : 0);
+    if (timeB !== timeA) {
+      return timeB - timeA;
+    }
+
+    // 3. Fallback: string comparison descending
+    return String(b.orderId || '').localeCompare(String(a.orderId || ''));
+  };
+
   // Parse event date robustly and compute overdue days
   const getOverdueDays = (eventDateStr: string, remainingAmount: number) => {
     if (!eventDateStr || remainingAmount <= 0) return 0;
-    const clean = eventDateStr.split('T')[0].trim();
+    const clean = normalizeToYYYYMMDD(eventDateStr);
     const parts = clean.split('-');
     if (parts.length !== 3) return 0;
     const ey = parseInt(parts[0], 10);
@@ -157,22 +266,38 @@ export const PendingPaymentsReport: React.FC = () => {
     }).format(amount);
   };
 
-  // Compile real-time pending payment records from Supabase tables: leads & lead_events
+  // Compile real-time pending payment records using saved Order records as the PRIMARY record source
   const allPendingRecords = useMemo(() => {
     const TODAY_STR = new Date().toISOString().split('T')[0];
 
-    return (leads || []).map(lead => {
-      const order = orders.find(o => o.lead_id === lead.lead_id);
-      const payment = order ? payments.find(p => p.order_id === order.order_id) : null;
-      
-      const finalPackageAmount = Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || (order ? Number(order.quotation_amount || order.final_amount) : 0) || Number((lead as any).final_amount) || Number(lead.budget) || 0;
-      const advanceReceived = order ? (Number(order.advance_received) || 0) : 0;
-      
-      const totalPaidAmount = payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived;
-      
+    const records: any[] = [];
+    const seenOrderIds = new Set<string>();
+
+    const processRecord = (order: any, lead?: any) => {
+      if (!order && !lead) return null;
+
+      const orderId = order?.order_id || (lead as any)?.order_id || `OR-${lead?.lead_id?.slice(-4)}`;
+      if (!orderId || seenOrderIds.has(orderId)) return null;
+      seenOrderIds.add(orderId);
+
+      const payment = payments.find(p => p.order_id === orderId);
+
+      // Final package / quotation amount
+      const finalPackageAmount = Number(lead?.Final_Quotation_Amount) || 
+        Number((lead as any)?.final_quotation_amount) || 
+        Number(order?.quotation_amount || order?.final_amount) || 
+        Number((lead as any)?.final_amount) || 
+        Number(lead?.budget) || 0;
+
+      const advanceReceived = Number(order?.advance_received) || 0;
+
+      const totalPaidAmount = payment 
+        ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) 
+        : advanceReceived;
+
       const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
       const rawPaymentStatus = payment ? payment.payment_status : (advanceReceived > 0 ? (advanceReceived >= finalPackageAmount ? 'Fully Paid' : 'Partially Paid') : 'Pending');
-      
+
       // Standardize status labels
       let paymentStatus: 'Pending' | 'Partial' | 'Fully Paid' = 'Pending';
       if (remainingAmount <= 0 && finalPackageAmount > 0) {
@@ -187,10 +312,9 @@ export const PendingPaymentsReport: React.FC = () => {
       let paymentCompletionDate = '';
       if (paymentStatus === 'Fully Paid') {
         if (payment?.payment_date) {
-          paymentCompletionDate = payment.payment_date;
+          paymentCompletionDate = normalizeToYYYYMMDD(payment.payment_date);
         } else {
-          const orderIdStr = order?.order_id || `MOCK-${lead.lead_id.slice(-4)}`;
-          const historyKey = `payment_history_${orderIdStr}`;
+          const historyKey = `payment_history_${orderId}`;
           const existingHistoryStr = typeof window !== 'undefined' ? localStorage.getItem(historyKey) : null;
           if (existingHistoryStr) {
             try {
@@ -198,70 +322,108 @@ export const PendingPaymentsReport: React.FC = () => {
               if (Array.isArray(hist) && hist.length > 0) {
                 const lastEntry = hist[hist.length - 1];
                 if (lastEntry && lastEntry.date) {
-                  paymentCompletionDate = String(lastEntry.date).split('T')[0];
+                  paymentCompletionDate = normalizeToYYYYMMDD(String(lastEntry.date));
                 }
               }
             } catch (e) {}
           }
         }
         if (!paymentCompletionDate) {
-          paymentCompletionDate = (lead.updated_at || lead.created_date || TODAY_STR).split('T')[0];
+          paymentCompletionDate = normalizeToYYYYMMDD(order?.updated_at || order?.created_at || lead?.updated_at || lead?.created_date || TODAY_STR);
         }
       }
 
-      // Read actual confirmed order event data from lead_events (via lead.events)
-      const leadEvents = (lead.events && Array.isArray(lead.events) && lead.events.length > 0)
-        ? lead.events
-        : (lead.event_date ? [{ event_name: lead.event_name || lead.event_type || 'Event', event_type: lead.event_type, event_date: lead.event_date }] : []);
+      // Read actual confirmed order event data
+      let orderEvents: any[] = [];
+      if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
+        orderEvents = lead.events.map((e: any, idx: number) => ({
+          ...e,
+          id: e.id || `${orderId}-ev-${idx}`,
+          event_name: e.event_name || e.event_type || `Event ${idx + 1}`,
+          event_type: e.event_type || 'Event',
+          event_date: normalizeToYYYYMMDD(e.event_date || e.event_start_date || e.reporting_date || order?.event_date || lead?.event_date || ''),
+          event_time: e.event_time || e.event_start_time || order?.event_time || lead?.event_time || ''
+        }));
+      } else if (order?.event_date || lead?.event_date) {
+        const d = normalizeToYYYYMMDD(order?.event_date || lead?.event_date || '');
+        orderEvents = [{
+          id: orderId,
+          event_name: order?.custom_event_name || order?.event_type || lead?.event_name || lead?.event_type || 'Event',
+          event_type: order?.event_type || lead?.event_type || 'Event',
+          event_date: d,
+          event_time: order?.event_time || lead?.event_time || ''
+        }];
+      }
 
-      const primaryEvent = leadEvents[0];
-      const primaryEventDate = primaryEvent?.event_date || primaryEvent?.event_start_date || lead.event_date || '';
+      // Sort events chronologically by exact event_date
+      const sortedEvents = [...orderEvents].sort((a: any, b: any) => {
+        const da = a.event_date || '';
+        const db = b.event_date || '';
+        return da.localeCompare(db);
+      });
 
-      // Extract actual saved event types (strictly event_type, not event_name)
+      const primaryEvent = sortedEvents[0] || null;
+      const primaryEventDate = primaryEvent?.event_date || normalizeToYYYYMMDD(order?.event_date || lead?.event_date || '');
+
+      // Extract actual saved event types
       const rawEventTypes: string[] = [];
-      if (leadEvents && leadEvents.length > 0) {
-        leadEvents.forEach((e: any) => {
+      if (orderEvents && orderEvents.length > 0) {
+        orderEvents.forEach((e: any) => {
           if (e.event_type && typeof e.event_type === 'string' && e.event_type.trim()) {
             rawEventTypes.push(e.event_type.trim());
           }
         });
       }
-      if (lead.event_type && typeof lead.event_type === 'string' && lead.event_type.trim()) {
-        rawEventTypes.push(lead.event_type.trim());
-      }
       if (order?.event_type && typeof order.event_type === 'string' && order.event_type.trim()) {
         rawEventTypes.push(order.event_type.trim());
       }
+      if (lead?.event_type && typeof lead.event_type === 'string' && lead.event_type.trim()) {
+        rawEventTypes.push(lead.event_type.trim());
+      }
 
-      // De-duplicate actual event types
       const recordEventTypes = Array.from(new Set(rawEventTypes));
-      const eventType = recordEventTypes.join(', ') || primaryEvent?.event_type || lead.event_type || order?.event_type || 'Other';
+      const eventType = recordEventTypes.join(', ') || primaryEvent?.event_type || order?.event_type || lead?.event_type || 'Other';
 
       const isOverdue = primaryEventDate && primaryEventDate < TODAY_STR && remainingAmount > 0;
-      
-      // Get the semantic stage of the lead
-      const status = lead.current_status || lead.status || 'New Lead';
-      const salesStatuses = ['New Lead', 'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead', 'Cancelled', 'Lost'];
+
+      // Stage of the project
+      const status = order?.current_stage || lead?.current_status || lead?.status || order?.order_status || 'Order Confirmed';
       const opsStatuses = ['Order Confirmed', 'Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Completed', 'New Order Received'];
       const prodStatuses = ['Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review', 'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval', 'Ready for Delivery'];
       const completedStatuses = ['Delivered', 'Completed', 'Closed', 'Project Closed', 'Project Delivered'];
 
-      let currentStage: 'Sales' | 'Operations' | 'Production' | 'Completed' = 'Sales';
+      let currentStage: 'Sales' | 'Operations' | 'Production' | 'Completed' = 'Operations';
       if (completedStatuses.includes(status)) currentStage = 'Completed';
       else if (prodStatuses.includes(status)) currentStage = 'Production';
       else if (opsStatuses.includes(status)) currentStage = 'Operations';
 
+      const effectiveLead = lead || {
+        lead_id: order?.lead_id || orderId,
+        customer_name: order?.customer_name || 'Customer',
+        mobile: order?.mobile || '',
+        event_type: eventType,
+        event_date: primaryEventDate,
+        event_time: order?.event_time || '',
+        event_location: order?.event_location || '',
+        budget: finalPackageAmount,
+        Final_Quotation_Amount: finalPackageAmount,
+        status: status,
+        current_status: status,
+        events: sortedEvents
+      };
+
       return {
-        lead,
+        lead: effectiveLead,
         order,
         payment,
-        orderId: order?.order_id || `MOCK-${lead.lead_id.slice(-4)}`,
-        customerName: lead.customer_name,
-        mobileNumber: lead.mobile,
+        orderId,
+        customerName: order?.customer_name || lead?.customer_name || 'Customer',
+        mobileNumber: order?.mobile || lead?.mobile || '',
         eventType,
         recordEventTypes,
         eventDate: primaryEventDate,
-        events: leadEvents,
+        effectiveEventDate: primaryEventDate,
+        events: sortedEvents,
         paymentCompletionDate,
         finalPackageAmount,
         advanceReceived,
@@ -271,24 +433,38 @@ export const PendingPaymentsReport: React.FC = () => {
         isOverdue,
         currentProjectStatus: status,
         currentStage,
-        lastUpdatedDate: lead.updated_at || lead.created_date,
+        lastUpdatedDate: order?.updated_at || order?.created_at || lead?.updated_at || lead?.created_date,
       };
-    }).filter(rec => {
-      // 1. Order has reached Order Confirmed or later stage
-      const isConfirmedOrder = rec.order && (rec.order.order_status === 'Confirmed' || rec.order.status === 'Confirmed');
-      const isPostSalesStage = ['Operations', 'Production', 'Completed'].includes(rec.currentStage);
-      const isOrderConfirmedStatus = rec.currentProjectStatus === 'Order Confirmed' || rec.currentProjectStatus === 'Confirmed';
-      
-      if (!isConfirmedOrder && !isPostSalesStage && !isOrderConfirmedStatus) return false;
+    };
 
-      // 3 & 4. Exclude Cancelled and Lost
-      const explicitExclusions = ['Lost', 'Cancelled', 'Lost Lead', 'New Lead', 'Contacted', 'Follow-up', 'Follow Up', 'Quotation Sent', 'Negotiation'];
-      if (explicitExclusions.includes(rec.currentProjectStatus)) return false;
+    // 1. Process all actual saved Order records as the PRIMARY record source
+    (orders || []).forEach(order => {
+      if (!order || !order.order_id) return;
+      if (order.order_status === 'Cancelled' || (order as any).status === 'Cancelled') return;
 
-      // Keep fully paid orders visible in report
-      return true;
+      const linkedLead = (leads || []).find(l => l.lead_id === order.lead_id);
+      const rec = processRecord(order, linkedLead);
+      if (rec) records.push(rec);
     });
-  }, [leads, orders, payments]);
+
+    // 2. Also include any confirmed leads that don't have a row in orders (safety fallback)
+    (leads || []).forEach(lead => {
+      if (!lead || !lead.lead_id) return;
+      const status = lead.current_status || lead.status || '';
+      const isConfirmed = status === 'Order Confirmed' || status === 'Confirmed' || ['Operations Assigned', 'Staff Assigned', 'Event Scheduled', 'Event Completed', 'New Order Received', 'Delivered', 'Completed', 'Closed'].includes(status);
+      if (!isConfirmed) return;
+      if (status === 'Cancelled' || status === 'Lost' || status === 'Lost Lead') return;
+
+      const linkedOrder = (orders || []).find(o => o.lead_id === lead.lead_id);
+      if (linkedOrder && seenOrderIds.has(linkedOrder.order_id)) return;
+
+      const rec = processRecord(linkedOrder, lead);
+      if (rec) records.push(rec);
+    });
+
+    // Sort: Newest Order ID first using actual system's latest Order ID / order creation sequence
+    return records.sort(compareOrderRecords);
+  }, [orders, leads, payments]);
 
   // Dynamically retrieve the real-time record to keep modal updated
   const currentRecord = useMemo(() => {
@@ -378,66 +554,76 @@ export const PendingPaymentsReport: React.FC = () => {
     }
 
     if (dateFilterOption === 'Last 3 Months') {
-      let startMonth = month - 2;
-      let startYear = year;
-      if (startMonth < 0) {
-        startMonth += 12;
-        startYear = year - 1;
-      }
       return {
-        start: formatYMD(new Date(startYear, startMonth, 1)),
+        start: formatYMD(new Date(year, month - 2, 1)),
         end: formatYMD(new Date(year, month + 1, 0))
       };
     }
 
     if (dateFilterOption === 'Custom Date Range') {
       return {
-        start: customStartDate || '',
-        end: customEndDate || ''
+        start: customStartDate ? normalizeToYYYYMMDD(customStartDate) : '',
+        end: customEndDate ? normalizeToYYYYMMDD(customEndDate) : ''
       };
     }
 
     return { start: '', end: '' };
   }, [dateFilterOption, customStartDate, customEndDate]);
 
-  // Apply filters and date ranges
+  // Apply filters and date ranges strictly using actual saved Event Date
   const filteredRecords = useMemo(() => {
-    return allPendingRecords.filter(rec => {
+    const result = allPendingRecords.map(rec => {
       // 1. FILTER BY SAVED EVENT DATE (Case-tested across single and multi-event orders)
       const { start: dateStart, end: dateEnd } = activeEventDateRange;
+      let matchingEvents: any[] = [];
+      let isDateMatch = true;
+
       if (dateStart || dateEnd) {
         const isDateWithinRange = (dStr?: string) => {
           if (!dStr) return false;
-          const clean = dStr.split('T')[0].trim();
+          const clean = normalizeToYYYYMMDD(dStr);
+          if (!clean) return false;
           if (dateStart && clean < dateStart) return false;
           if (dateEnd && clean > dateEnd) return false;
           return true;
         };
 
-        const hasMatchingEventDate = (() => {
-          // For multi-event orders, verify each saved event record and its event date
-          if (rec.events && Array.isArray(rec.events) && rec.events.length > 0) {
-            return rec.events.some((ev: any) => {
-              const d = ev.event_date || ev.event_start_date;
-              return isDateWithinRange(d);
-            });
-          }
-          return isDateWithinRange(rec.eventDate);
-        })();
+        // For multi-event orders, treat each event independently using exact event ID & exact saved event_date
+        if (rec.events && Array.isArray(rec.events) && rec.events.length > 0) {
+          matchingEvents = rec.events.filter((ev: any) => {
+            const d = ev.event_date || ev.event_start_date;
+            return isDateWithinRange(d);
+          });
+        } else if (isDateWithinRange(rec.eventDate)) {
+          matchingEvents = [{
+            id: rec.lead.lead_id,
+            event_name: rec.eventType,
+            event_type: rec.eventType,
+            event_date: rec.eventDate
+          }];
+        }
 
-        if (!hasMatchingEventDate) return false;
+        if (matchingEvents.length === 0) {
+          isDateMatch = false;
+        }
+      } else {
+        matchingEvents = rec.events || [];
       }
 
-      // Legacy start/end date overrides if customized manually in expanded workspace
-      if (startDate && (!dateStart || dateFilterOption === 'All Time') && rec.eventDate && rec.eventDate < startDate) return false;
-      if (endDate && (!dateEnd || dateFilterOption === 'All Time') && rec.eventDate && rec.eventDate > endDate) return false;
+      if (!isDateMatch) return null;
+
+      // Assign matching event date if specific events matched the date filter
+      const primaryMatchingEvent = matchingEvents[0] || null;
+      const effectiveEventDate = primaryMatchingEvent?.event_date || rec.eventDate;
 
       // 2. GLOBAL SEARCH (Strictly CASE-INSENSITIVE across Customer Name, Order ID, Mobile Number, related fields)
       const cleanGlobalSearch = (globalSearch || searchTerm).trim().toLowerCase();
       if (cleanGlobalSearch) {
         const cName = String(rec.customerName || '').toLowerCase();
         const oId = String(rec.orderId || '').toLowerCase();
-        const mob = String(rec.mobileNumber || '').toLowerCase();
+        const mob = String(rec.mobileNumber || '').toLowerCase().replace(/[\s\-+]/g, '');
+        const cleanQ = cleanGlobalSearch.replace(/[\s\-+]/g, '');
+        const rawMob = String(rec.mobileNumber || '').toLowerCase();
         const groom = String(rec.lead?.groom_name || '').toLowerCase();
         const bride = String(rec.lead?.bride_name || '').toLowerCase();
         const contact = String(rec.lead?.contact_person || '').toLowerCase();
@@ -445,16 +631,17 @@ export const PendingPaymentsReport: React.FC = () => {
 
         const matchesGlobal = cName.includes(cleanGlobalSearch) ||
           oId.includes(cleanGlobalSearch) ||
-          mob.includes(cleanGlobalSearch) ||
+          mob.includes(cleanQ) ||
+          rawMob.includes(cleanGlobalSearch) ||
           groom.includes(cleanGlobalSearch) ||
           bride.includes(cleanGlobalSearch) ||
           contact.includes(cleanGlobalSearch) ||
           evNames.includes(cleanGlobalSearch);
 
-        if (!matchesGlobal) return false;
+        if (!matchesGlobal) return null;
       }
 
-      if (searchOrderId && !rec.orderId.toLowerCase().includes(searchOrderId.toLowerCase())) return false;
+      if (searchOrderId && !rec.orderId.toLowerCase().includes(searchOrderId.toLowerCase())) return null;
 
       // Event Type Filter (strictly matches actual saved event types)
       if (eventTypeFilter !== 'All') {
@@ -465,25 +652,32 @@ export const PendingPaymentsReport: React.FC = () => {
           || (rec.order?.event_type && String(rec.order.event_type).trim().toLowerCase() === filterVal)
           || (rec.events && rec.events.some((e: any) => e.event_type && String(e.event_type).trim().toLowerCase() === filterVal));
 
-        if (!hasMatchingEventType) return false;
+        if (!hasMatchingEventType) return null;
       }
 
       // Payment Status Filter
       if (paymentStatusFilter !== 'All') {
-        if (paymentStatusFilter === 'Pending' && rec.paymentStatus !== 'Pending') return false;
-        if ((paymentStatusFilter === 'Partially Paid' || paymentStatusFilter === 'Partial') && rec.paymentStatus !== 'Partial') return false;
-        if (paymentStatusFilter === 'Fully Paid' && rec.paymentStatus !== 'Fully Paid') return false;
+        if (paymentStatusFilter === 'Pending' && rec.paymentStatus !== 'Pending') return null;
+        if ((paymentStatusFilter === 'Partially Paid' || paymentStatusFilter === 'Partial') && rec.paymentStatus !== 'Partial') return null;
+        if (paymentStatusFilter === 'Fully Paid' && rec.paymentStatus !== 'Fully Paid') return null;
       }
 
       // Card Click Filter (interactive filter feedback)
-      if (activeCardFilter === 'Pending' && rec.paymentStatus !== 'Pending') return false;
-      if (activeCardFilter === 'Partial' && rec.paymentStatus !== 'Partial') return false;
-      if (activeCardFilter === 'Overdue' && !rec.isOverdue) return false;
-      if (activeCardFilter === 'Upcoming' && (rec.isOverdue || rec.remainingAmount <= 0)) return false;
+      if (activeCardFilter === 'Pending' && rec.paymentStatus !== 'Pending') return null;
+      if (activeCardFilter === 'Partial' && rec.paymentStatus !== 'Partial') return null;
+      if (activeCardFilter === 'Overdue' && !rec.isOverdue) return null;
+      if (activeCardFilter === 'Upcoming' && (rec.isOverdue || rec.remainingAmount <= 0)) return null;
 
-      return true;
-    });
-  }, [allPendingRecords, activeEventDateRange, globalSearch, dateFilterOption, startDate, endDate, searchTerm, searchOrderId, eventTypeFilter, paymentStatusFilter, activeCardFilter]);
+      return {
+        ...rec,
+        matchingEvents,
+        effectiveEventDate
+      };
+    }).filter(Boolean) as any[];
+
+    // Ensure newest Order ID / order creation sequence appears first (never sort by Event Date)
+    return result.sort(compareOrderRecords);
+  }, [allPendingRecords, activeEventDateRange, globalSearch, searchTerm, searchOrderId, eventTypeFilter, paymentStatusFilter, activeCardFilter]);
 
   // Unique event types for dropdown - strictly sourced from Sales Step 2 EVENT_TYPES
   const uniqueEventTypes = useMemo(() => {
@@ -714,12 +908,24 @@ export const PendingPaymentsReport: React.FC = () => {
           </p>
         </div>
 
-        {/* Real-time sync tracker badge */}
-        <div className="flex items-center gap-2 self-start bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
-            leads database synchronized
-          </span>
+        {/* Real-time sync tracker badge + manual refresh */}
+        <div className="flex items-center gap-2 self-start">
+          <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 px-3 py-1.5 rounded-xl">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[10px] uppercase font-bold tracking-wider text-zinc-400 font-mono">
+              leads database synchronized
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-[10px] uppercase font-bold tracking-wider text-zinc-300 hover:text-white transition cursor-pointer disabled:opacity-50"
+            title="Fetch latest database records"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-amber-500 ${isSyncing ? 'animate-spin' : ''}`} />
+            <span>{isSyncing ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
         </div>
       </div>
 
@@ -1183,8 +1389,9 @@ export const PendingPaymentsReport: React.FC = () => {
                 </tr>
               ) : (
                 filteredRecords.map((rec, i) => {
-                  const daysOverdue = getOverdueDays(rec.eventDate, rec.remainingAmount);
-                  const formattedEventDate = formatEventDate(rec.eventDate);
+                  const effectiveEventDate = rec.effectiveEventDate || rec.eventDate;
+                  const daysOverdue = getOverdueDays(effectiveEventDate, rec.remainingAmount);
+                  const formattedEventDate = formatEventDate(effectiveEventDate);
 
                   return (
                   <tr 
@@ -1244,13 +1451,27 @@ export const PendingPaymentsReport: React.FC = () => {
                           {rec.events.map((ev: any, idx: number) => {
                             const d = ev.event_date || ev.event_start_date;
                             const formatted = formatEventDate(d);
+                            const cleanEvDate = normalizeToYYYYMMDD(d);
+                            const isMatch = (activeEventDateRange.start || activeEventDateRange.end)
+                              ? (
+                                  (!activeEventDateRange.start || cleanEvDate >= activeEventDateRange.start) &&
+                                  (!activeEventDateRange.end || cleanEvDate <= activeEventDateRange.end)
+                                )
+                              : true;
+
                             return (
                               <span
-                                key={ev.id || idx}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-900/90 border border-zinc-800 text-[11px] font-mono text-zinc-200"
+                                key={ev.id || `ev-dt-${idx}`}
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono border ${
+                                  isMatch 
+                                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 font-semibold' 
+                                    : 'bg-zinc-900/90 border-zinc-800 text-zinc-400'
+                                }`}
                                 title={`${ev.event_name || ev.event_type || `Event ${idx + 1}`}: ${formatted}`}
                               >
-                                <span className="text-[10px] text-indigo-400 font-semibold">{ev.event_name || ev.event_type || `E${idx + 1}`}:</span>
+                                <span className={`text-[10px] ${isMatch ? 'text-amber-400 font-bold' : 'text-indigo-400 font-semibold'}`}>
+                                  {ev.event_name || ev.event_type || `E${idx + 1}`}:
+                                </span>
                                 <span>{formatted}</span>
                               </span>
                             );
@@ -1268,7 +1489,7 @@ export const PendingPaymentsReport: React.FC = () => {
 
                     {/* Overdue Since */}
                     <td className="px-4 py-4 text-xs text-center font-mono text-zinc-300">
-                      {rec.paymentStatus === 'Fully Paid' ? '-' : (rec.eventDate ? formattedEventDate : 'N/A')}
+                      {rec.paymentStatus === 'Fully Paid' ? '-' : (effectiveEventDate ? formattedEventDate : 'N/A')}
                     </td>
 
                     {/* Days Overdue */}
@@ -1355,6 +1576,7 @@ export const PendingPaymentsReport: React.FC = () => {
           setPaymentModalRecord(null);
         }}
         record={paymentModalRecord}
+        onSuccess={handleManualSync}
       />
 
       <PaymentHistoryModal 
