@@ -2163,6 +2163,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     }));
   }, [categoriesList, packages]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [createEvents, setCreateEvents] = useState<LeadEvent[]>([]);
+  const [crmEvents, setCrmEvents] = useState<LeadEvent[]>([]);
   const [crmWizardStep, setCrmWizardStep] = useState<number>(1);
   const [crmHighestStep, setCrmHighestStep] = useState<number>(1);
   const [saveErrorPopup, setSaveErrorPopup] = useState<{ title: string; message: string } | null>(null);
@@ -2519,18 +2521,25 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
        })) && selectedLead.quotation_locked !== true
     : false;
 
-  const isCrmLocked = false;
-  const isLeadLocked = false;
+  // Event completion CRM lock logic
+  const leadEventsForLockCheck = (crmEvents && crmEvents.length > 0)
+    ? crmEvents
+    : ((selectedLead?.events && selectedLead.events.length > 0)
+        ? selectedLead.events
+        : (selectedLead?.event_date ? [selectedLead] : []));
+
+  const isMultiEventLead = Boolean(leadEventsForLockCheck && leadEventsForLockCheck.length > 1);
+  const isCrmLocked = Boolean(selectedLead && checkIsLeadCrmLocked(selectedLead, leadEventsForLockCheck));
+  const isLeadLocked = isCrmLocked;
   const isLeadLost = Boolean(
     selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(
       selectedLead.status || (selectedLead as any).current_status || wizardLeadData.status || ''
     )
   );
 
-  // No longer locking steps so Sales can update/add required services
-  const isStep1Locked = false;
-  const isStep2Locked = false;
-  const isStep3Locked = false;
+  const isStep1Locked = isCrmLocked;
+  const isStep2Locked = isCrmLocked;
+  const isStep3Locked = isCrmLocked;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
@@ -2654,8 +2663,6 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     booking_status: '',
   });
 
-  const [createEvents, setCreateEvents] = useState<LeadEvent[]>([]);
-  const [crmEvents, setCrmEvents] = useState<LeadEvent[]>([]);
   const [collapsedEventIds, setCollapsedEventIds] = useState<Record<string, boolean>>({});
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showEventForm, setShowEventForm] = useState(false);
@@ -13240,6 +13247,18 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               }`}>
                 <span>{crmToast.type === 'success' ? '⚡' : '⚠️'}</span>
                 <span className="text-[10px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
+              </div>
+            )}
+
+            {/* Event Completion CRM Lock Banner */}
+            {isCrmLocked && (
+              <div className="mx-4 sm:mx-5 mt-2 p-2.5 sm:p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2.5 text-amber-300 font-mono text-xs sm:text-sm font-bold shadow-md animate-fade-in shrink-0">
+                <span className="text-base sm:text-lg">🔒</span>
+                <span>
+                  {isMultiEventLead
+                    ? "All events have ended. This CRM is now locked."
+                    : "Event has ended. This CRM is now locked."}
+                </span>
               </div>
             )}
 

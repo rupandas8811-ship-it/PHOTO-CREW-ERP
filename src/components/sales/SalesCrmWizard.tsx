@@ -84,6 +84,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
     isApprovedUnlocked,
     isLeadLocked,
     isCrmLocked,
+    isMultiEventLead,
     isLeadLost,
     isLeadConfirmed,
     currentRole,
@@ -749,6 +750,18 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
               }`}>
                 <span>{crmToast.type === 'success' ? '⚡' : '⚠️'}</span>
                 <span className="text-[10px] font-mono font-bold whitespace-pre-wrap">{crmToast.message}</span>
+              </div>
+            )}
+
+            {/* Event Completion CRM Lock Banner */}
+            {isCrmLocked && (
+              <div className="mx-4 sm:mx-5 mt-2 p-2.5 sm:p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center gap-2.5 text-amber-300 font-mono text-xs sm:text-sm font-bold shadow-md animate-fade-in shrink-0">
+                <span className="text-base sm:text-lg">🔒</span>
+                <span>
+                  {isMultiEventLead
+                    ? "All events have ended. This CRM is now locked."
+                    : "Event has ended. This CRM is now locked."}
+                </span>
               </div>
             )}
 

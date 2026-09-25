@@ -2635,7 +2635,7 @@ export const checkIsLeadCrmLocked = (lead: any, eventsList?: any[]): boolean => 
   if (!events || events.length === 0) return false;
 
   const validEvents = events.filter((ev: any) => {
-    const hasDate = ev.event_end_date || ev.Event_End_Date || ev.event_date || ev.event_start_date || ev.booking_date;
+    const hasDate = ev.event_end_date || ev.Event_End_Date || ev.Event_end_date || ev.event_date || ev.event_start_date || ev.booking_date;
     return !!hasDate;
   });
 

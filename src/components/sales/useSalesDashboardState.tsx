@@ -7,7 +7,7 @@ import { supabaseClient } from '../../supabaseClient';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../../types';
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, getStoredCustomCategories, saveCustomCategoryToStorage } from '../../utils';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, normalizeCrmArray } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, normalizeCrmArray, checkIsEventEnded, checkIsLeadCrmLocked } from '../SalesUtils';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
 import { StatusText } from '../ui/StatusText';
 import { EventDropdownCell } from '../EventDropdownCell';
@@ -480,6 +480,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     }));
   }, [categoriesList, packages]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [createEvents, setCreateEvents] = useState<LeadEvent[]>([]);
+  const [crmEvents, setCrmEvents] = useState<LeadEvent[]>([]);
   const [crmWizardStep, setCrmWizardStep] = useState<number>(1);
   const [crmHighestStep, setCrmHighestStep] = useState<number>(1);
   const [saveErrorPopup, setSaveErrorPopup] = useState<{ title: string; message: string } | null>(null);
@@ -837,18 +839,25 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
        })) && selectedLead.quotation_locked !== true
     : false;
 
-  const isCrmLocked = false;
-  const isLeadLocked = false;
+  // Event completion CRM lock logic
+  const leadEventsForLockCheck = (crmEvents && crmEvents.length > 0)
+    ? crmEvents
+    : ((selectedLead?.events && selectedLead.events.length > 0)
+        ? selectedLead.events
+        : (selectedLead?.event_date ? [selectedLead] : []));
+
+  const isMultiEventLead = Boolean(leadEventsForLockCheck && leadEventsForLockCheck.length > 1);
+  const isCrmLocked = Boolean(selectedLead && checkIsLeadCrmLocked(selectedLead, leadEventsForLockCheck));
+  const isLeadLocked = isCrmLocked;
   const isLeadLost = Boolean(
     selectedLead && ['Lost Lead', 'Lead Lost', 'Lost'].includes(
       selectedLead.status || (selectedLead as any).current_status || wizardLeadData.status || ''
     )
   );
 
-  // No longer locking steps so Sales can update/add required services
-  const isStep1Locked = false;
-  const isStep2Locked = false;
-  const isStep3Locked = false;
+  const isStep1Locked = isCrmLocked;
+  const isStep2Locked = isCrmLocked;
+  const isStep3Locked = isCrmLocked;
 
   const [openDropdownLeadId, setOpenDropdownLeadId] = useState<string | null>(null);
   const [dropdownCoords, setDropdownCoords] = useState<{ top: number | string, right: number | string, bottom: number | string }>({ top: 0, right: 0, bottom: 'auto' });
@@ -972,8 +981,6 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     booking_status: '',
   });
 
-  const [createEvents, setCreateEvents] = useState<LeadEvent[]>([]);
-  const [crmEvents, setCrmEvents] = useState<LeadEvent[]>([]);
   const [collapsedEventIds, setCollapsedEventIds] = useState<Record<string, boolean>>({});
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [showEventForm, setShowEventForm] = useState(false);
@@ -3612,9 +3619,18 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 const guestPaxVal = String(event.guest_pax) !== '' && event.guest_pax !== null && event.guest_pax !== undefined ? event.guest_pax : 'N/A';
                 const specificEventLocation = (event.event_location || (event as any).location || (event as any).venue_address || (event as any).venue || (event as any).event_venue || '').trim();
                 const eventLocationDisplay = specificEventLocation || (!isMulti ? (wizardLeadData.event_location || selectedLead?.event_location || 'N/A') : 'N/A');
+                const isEventLocked = isCrmLocked || checkIsEventEnded(event);
 
                 return (
                   <div key={evId} className="bg-slate-900/25 border border-slate-800/60 p-4 rounded-xl space-y-4 mt-3 mb-4">
+                    {/* Locked Event Notice */}
+                    {isEventLocked && (
+                      <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs font-mono font-bold flex items-center gap-2">
+                        <span>🔒</span>
+                        <span>Event has ended. This event is locked.</span>
+                      </div>
+                    )}
+
                     {/* VERY SMALL COMPACT EVENT SUMMARY */}
                     <div className="bg-slate-950/60 border border-slate-800/70 p-2.5 sm:p-3 rounded-lg text-left font-mono">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -3624,6 +3640,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                         {event.event_type && (
                           <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold border border-slate-700">
                             [{event.event_type}]
+                          </span>
+                        )}
+                        {isEventLocked && (
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
+                            <span>🔒</span>
+                            <span>Event has ended. This event is locked.</span>
                           </span>
                         )}
                       </div>
@@ -3662,39 +3684,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                       {eventInclusions.length === 0 ? (
                         <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
                           <p className="text-xs text-zinc-500 italic">No team members added yet.</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const currentList = [...eventInclusions, ""];
-                              updateInclusionsForEvent(currentList);
-                            }}
-                            className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
-                          >
-                            + Add Member
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {eventInclusions.map((item, idx) => (
-                            <CompactQtyItemRow
-                              key={`inc_ev_${evId}_${idx}`}
-                              value={item}
-                              options={activeMasterRoles}
-                              placeholder="Type or select Role / Team Member..."
-                              accentColor="indigo"
-                              onChange={(newVal) => {
-                                const currentList = [...eventInclusions];
-                                currentList[idx] = newVal;
-                                updateInclusionsForEvent(currentList);
-                              }}
-                              onDelete={() => {
-                                const currentList = [...eventInclusions];
-                                currentList.splice(idx, 1);
-                                updateInclusionsForEvent(currentList);
-                              }}
-                            />
-                          ))}
-                          <div className="flex justify-end pt-1">
+                          {!isEventLocked && (
                             <button
                               type="button"
                               onClick={() => {
@@ -3705,7 +3695,46 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                             >
                               + Add Member
                             </button>
-                          </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {eventInclusions.map((item, idx) => (
+                            <CompactQtyItemRow
+                              key={`inc_ev_${evId}_${idx}`}
+                              value={item}
+                              disabled={isEventLocked}
+                              options={activeMasterRoles}
+                              placeholder="Type or select Role / Team Member..."
+                              accentColor="indigo"
+                              onChange={(newVal) => {
+                                if (isEventLocked) return;
+                                const currentList = [...eventInclusions];
+                                currentList[idx] = newVal;
+                                updateInclusionsForEvent(currentList);
+                              }}
+                              onDelete={() => {
+                                if (isEventLocked) return;
+                                const currentList = [...eventInclusions];
+                                currentList.splice(idx, 1);
+                                updateInclusionsForEvent(currentList);
+                              }}
+                            />
+                          ))}
+                          {!isEventLocked && (
+                            <div className="flex justify-end pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentList = [...eventInclusions, ""];
+                                  updateInclusionsForEvent(currentList);
+                                }}
+                                className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
+                              >
+                                + Add Member
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -3718,39 +3747,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                       {eventDeliverables.length === 0 ? (
                         <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-xl flex items-center justify-between">
                           <p className="text-xs text-zinc-500 italic">No deliverables added yet.</p>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const currentList = [...eventDeliverables, ""];
-                              updateDeliverablesForEvent(currentList);
-                            }}
-                            className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
-                          >
-                            + Add Deliverable
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {eventDeliverables.map((item, idx) => (
-                            <CompactQtyItemRow
-                              key={`del_ev_${evId}_${idx}`}
-                              value={item}
-                              options={activeMasterDeliverables}
-                              placeholder="Type or select Deliverable..."
-                              accentColor="emerald"
-                              onChange={(newVal) => {
-                                const currentList = [...eventDeliverables];
-                                currentList[idx] = newVal;
-                                updateDeliverablesForEvent(currentList);
-                              }}
-                              onDelete={() => {
-                                const currentList = [...eventDeliverables];
-                                currentList.splice(idx, 1);
-                                updateDeliverablesForEvent(currentList);
-                              }}
-                            />
-                          ))}
-                          <div className="flex justify-end pt-1">
+                          {!isEventLocked && (
                             <button
                               type="button"
                               onClick={() => {
@@ -3761,7 +3758,46 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                             >
                               + Add Deliverable
                             </button>
-                          </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {eventDeliverables.map((item, idx) => (
+                            <CompactQtyItemRow
+                              key={`del_ev_${evId}_${idx}`}
+                              value={item}
+                              disabled={isEventLocked}
+                              options={activeMasterDeliverables}
+                              placeholder="Type or select Deliverable..."
+                              accentColor="emerald"
+                              onChange={(newVal) => {
+                                if (isEventLocked) return;
+                                const currentList = [...eventDeliverables];
+                                currentList[idx] = newVal;
+                                updateDeliverablesForEvent(currentList);
+                              }}
+                              onDelete={() => {
+                                if (isEventLocked) return;
+                                const currentList = [...eventDeliverables];
+                                currentList.splice(idx, 1);
+                                updateDeliverablesForEvent(currentList);
+                              }}
+                            />
+                          ))}
+                          {!isEventLocked && (
+                            <div className="flex justify-end pt-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const currentList = [...eventDeliverables, ""];
+                                  updateDeliverablesForEvent(currentList);
+                                }}
+                                className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
+                              >
+                                + Add Deliverable
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -4619,6 +4655,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
   const handleSavePackageOnly = async () => {
     if (isSaving) return;
+    if (isCrmLocked) {
+      showToastMsg(
+        isMultiEventLead
+          ? "All events have ended. This CRM is now locked."
+          : "Event has ended. This CRM is now locked.",
+        "error"
+      );
+      return;
+    }
     if (isStep3Locked) {
       showToastMsg("Quotation details are locked. Owner unlock approval required to edit.", "error");
       return;
@@ -4842,6 +4887,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
   const handleSaveStep = async (step: number) => {
     if (!selectedLead) return;
+    if (isCrmLocked) {
+      showToastMsg(
+        isMultiEventLead
+          ? "All events have ended. This CRM is now locked."
+          : "Event has ended. This CRM is now locked.",
+        "error"
+      );
+      return;
+    }
     setIsSaving(true);
     try {
       if (step === 1) {
@@ -6199,6 +6253,22 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   };
 
   const handleSaveEventForm = (isCrm: boolean = !!selectedLead, addAnother: boolean = false) => {
+    if (isCrm && isCrmLocked) {
+      showToastMsg(
+        isMultiEventLead
+          ? "All events have ended. This CRM is now locked."
+          : "Event has ended. This CRM is now locked.",
+        "error"
+      );
+      return;
+    }
+    if (isCrm && editingEventId) {
+      const evToEdit = crmEvents.find(e => e.id === editingEventId);
+      if (evToEdit && checkIsEventEnded(evToEdit)) {
+        showToastMsg("Event has ended. This event is locked.", "error");
+        return;
+      }
+    }
     if (!eventForm.event_type) {
       showValidationError("input_event_type", "Event Type is required.");
       return;
@@ -6281,6 +6351,19 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   };
 
   const handleEditEvent = (ev: LeadEvent) => {
+    if (isCrmLocked) {
+      showToastMsg(
+        isMultiEventLead
+          ? "All events have ended. This CRM is now locked."
+          : "Event has ended. This CRM is now locked.",
+        "error"
+      );
+      return;
+    }
+    if (checkIsEventEnded(ev)) {
+      showToastMsg("Event has ended. This event is locked.", "error");
+      return;
+    }
     setEditingEventId(ev.id);
     const startDate = ev.event_start_date || ev.event_date || '';
     const endDate = ev.event_end_date || (ev as any).Event_End_Date || (ev as any).Event_end_date || '';
@@ -6310,6 +6393,20 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
   const handleDeleteEvent = (id: string, isCrm: boolean = !!selectedLead) => {
     if (isCrm) {
+      if (isCrmLocked) {
+        showToastMsg(
+          isMultiEventLead
+            ? "All events have ended. This CRM is now locked."
+            : "Event has ended. This CRM is now locked.",
+          "error"
+        );
+        return;
+      }
+      const evToDelete = crmEvents.find(e => e.id === id);
+      if (evToDelete && checkIsEventEnded(evToDelete)) {
+        showToastMsg("Event has ended. This event is locked.", "error");
+        return;
+      }
       setCrmEvents(prev => prev.filter(ev => ev.id !== id));
     } else {
       setCreateEvents(prev => prev.filter(ev => ev.id !== id));
@@ -6318,6 +6415,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   };
 
   const handleAddNewEventClick = (isCrm: boolean = !!selectedLead) => {
+    if (isCrm && isCrmLocked) {
+      showToastMsg(
+        isMultiEventLead
+          ? "All events have ended. This CRM is now locked."
+          : "Event has ended. This CRM is now locked.",
+        "error"
+      );
+      return;
+    }
     setEditingEventId(null);
     setEventForm({
       event_type: '',
@@ -6774,6 +6880,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
                 const guestPaxVal = ev.guest_pax !== '' && ev.guest_pax !== null && ev.guest_pax !== undefined ? ev.guest_pax : 'N/A';
                 const staffPaxVal = ev.staff_pax !== '' && ev.staff_pax !== null && ev.staff_pax !== undefined ? ev.staff_pax : 'N/A';
+                const isEventLocked = isCrmLocked || checkIsEventEnded(ev);
 
                 const dateTimeSummary = (() => {
                   const startPart = `${startDateStr} • ${startTimeStr}`;
@@ -6825,6 +6932,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                             <span className="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded font-mono font-bold">
                               {ev.event_type}
                             </span>
+                            {isEventLocked && (
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
+                                <span>🔒</span>
+                                <span>Event has ended. This event is locked.</span>
+                              </span>
+                            )}
                           </div>
 
                           {/* Show compact summary ONLY when COLLAPSED */}
@@ -6843,17 +6956,39 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                       <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          onClick={() => handleEditEvent(ev)}
-                          className="p-1.5 hover:bg-slate-800 rounded text-slate-300 hover:text-cyan-400 transition-colors cursor-pointer"
-                          title="Edit Event"
+                          disabled={isEventLocked}
+                          onClick={() => {
+                            if (isEventLocked) {
+                              showToastMsg("Event has ended. This event is locked.", "error");
+                              return;
+                            }
+                            handleEditEvent(ev);
+                          }}
+                          className={`p-1.5 rounded transition-colors ${
+                            isEventLocked
+                              ? 'opacity-30 cursor-not-allowed text-slate-600'
+                              : 'hover:bg-slate-800 text-slate-300 hover:text-cyan-400 cursor-pointer'
+                          }`}
+                          title={isEventLocked ? "Event has ended. This event is locked." : "Edit Event"}
                         >
                           <Edit className="w-3.5 h-3.5" />
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteEvent(ev.id, isCrm)}
-                          className="p-1.5 hover:bg-slate-800 rounded text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
-                          title="Remove Event"
+                          disabled={isEventLocked}
+                          onClick={() => {
+                            if (isEventLocked) {
+                              showToastMsg("Event has ended. This event is locked.", "error");
+                              return;
+                            }
+                            handleDeleteEvent(ev.id, isCrm);
+                          }}
+                          className={`p-1.5 rounded transition-colors ${
+                            isEventLocked
+                              ? 'opacity-30 cursor-not-allowed text-slate-600'
+                              : 'hover:bg-slate-800 text-slate-400 hover:text-rose-400 cursor-pointer'
+                          }`}
+                          title={isEventLocked ? "Event has ended. This event is locked." : "Remove Event"}
                         >
                           <Trash className="w-3.5 h-3.5" />
                         </button>
@@ -6869,6 +7004,12 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
                     {!isCollapsed && (
                       <div className="p-4 bg-slate-900/50 text-xs text-slate-300 space-y-3">
+                        {isEventLocked && (
+                          <div className="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-300 text-xs font-mono font-bold flex items-center gap-2">
+                            <span>🔒</span>
+                            <span>Event has ended. This event is locked.</span>
+                          </div>
+                        )}
                         {/* Event Name & Type Info Header if name differs */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 bg-slate-950/40 p-3 rounded-lg border border-slate-850/60 font-mono">
                           <div>
@@ -8505,6 +8646,9 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     isApprovedUnlocked,
     isComparingPkgs,
     isCrmLocked,
+    isMultiEventLead,
+    checkIsEventEnded,
+    checkIsLeadCrmLocked,
     isCustomerInfoExpanded,
     isDeletingPackage,
     isDepartmentAllowedToEdit,
