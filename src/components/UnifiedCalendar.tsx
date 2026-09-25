@@ -621,20 +621,31 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
           const evLoc = ev.event_location || ev.location || ev.venue || ev.venue_address || (isOnlyEvent ? (ld.event_location || ord?.event_location) : '') || 'Studio';
 
           // Sales Crew mapping per exact event record:
-          const eventSpecificStaff = staffAssignments?.filter(a => a.event_id && ev.id && a.event_id === ev.id) || [];
-          const eventSalesStaff = eventSpecificStaff.filter(a => a.staff_role?.toLowerCase().includes('sales'));
-          const eventSpecificCrew = eventSalesStaff.length > 0
-            ? eventSalesStaff.map(a => a.staff_name).join(', ')
-            : (eventSpecificStaff.length > 0 ? eventSpecificStaff.map(a => a.staff_name).join(', ') : '');
-
-          const evSalesCrew = eventSpecificCrew || 
-            (ev.assigned_staff_names && String(ev.assigned_staff_names).trim() ? String(ev.assigned_staff_names).trim() : '') ||
-            ev.sales_crew ||
-            ev.sales_staff_name ||
+          // Strictly show ONLY the Sales Staff Name of the person who originally created/confirmed that order from the Sales Dashboard
+          // Do NOT show assigned operations/production staff (photographers, drone operators, editors, etc.)
+          const rawSalesStaffCandidate = 
             ld.sales_staff_name ||
+            ord?.sales_staff_name ||
             ld.sales_person ||
             ord?.sales_person ||
+            ld.Sales_Staff ||
+            ord?.Sales_Staff ||
+            ld.sales_staff ||
+            ord?.sales_staff ||
+            (ld.created_by ? (String(ld.created_by).includes('|') ? String(ld.created_by).split('|')[0].trim() : String(ld.created_by).trim()) : '') ||
+            (ord?.created_by ? (String(ord.created_by).includes('|') ? String(ord.created_by).split('|')[0].trim() : String(ord.created_by).trim()) : '') ||
             'Unassigned';
+
+          let evSalesCrew = String(rawSalesStaffCandidate).trim();
+          if (evSalesCrew.includes('|')) {
+            evSalesCrew = evSalesCrew.split('|')[0].trim();
+          }
+          if (evSalesCrew.includes(',')) {
+            evSalesCrew = evSalesCrew.split(',')[0].trim();
+          }
+          if (!evSalesCrew || evSalesCrew === 'null' || evSalesCrew === 'undefined') {
+            evSalesCrew = 'Unassigned';
+          }
 
           if (role === 'owner') {
             // Business Owner Calendar:
