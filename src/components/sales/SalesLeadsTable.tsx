@@ -113,7 +113,60 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safePackages = Array.isArray(packages) ? packages : [];
 
-  const [eventCategorySortOrder, setEventCategorySortOrder] = useState<'asc' | 'desc' | null>(null);
+  const [sortColumn, setSortColumn] = useState<'created_date' | 'lead_id' | 'order_id' | 'event_date'>('created_date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+  // Sync toolbar sortOrder if changed from outside
+  useEffect(() => {
+    if (sortOrder === 'latest') {
+      setSortDirection('desc');
+    } else if (sortOrder === 'oldest') {
+      setSortDirection('asc');
+    }
+  }, [sortOrder]);
+
+  const handleColumnSort = (column: 'created_date' | 'lead_id' | 'order_id' | 'event_date') => {
+    if (sortColumn === column) {
+      const nextDir = sortDirection === 'desc' ? 'asc' : 'desc';
+      setSortDirection(nextDir);
+      if (setSortOrder) {
+        setSortOrder(nextDir === 'desc' ? 'latest' : 'oldest');
+      }
+    } else {
+      setSortColumn(column);
+      const initialDir = column === 'event_date' ? 'asc' : 'desc';
+      setSortDirection(initialDir);
+      if (setSortOrder) {
+        setSortOrder(initialDir === 'desc' ? 'latest' : 'oldest');
+      }
+    }
+  };
+
+  const getLeadOrderId = (leadObj: Lead): string => {
+    let cachedOrderId: string | undefined = undefined;
+    try {
+      cachedOrderId = localStorage.getItem(`lead_order_${leadObj.lead_id}`) || undefined;
+    } catch (e) {}
+
+    const linkedOrder = safeOrders.find((o) => 
+      o.lead_id === leadObj.lead_id || 
+      o.order_id === leadObj.lead_id || 
+      (leadObj.order_id && (o.order_id === leadObj.order_id || o.lead_id === leadObj.order_id)) ||
+      ((leadObj as any).orders && (o.order_id === (leadObj as any).orders || o.lead_id === (leadObj as any).orders))
+    );
+    return (linkedOrder?.order_id || leadObj.order_id || (leadObj as any).orders || cachedOrderId || '').trim();
+  };
+
+  const getLeadCreatedTimestamp = (leadObj: Lead): number => {
+    const dateVal = leadObj.created_at || leadObj.updated_at || leadObj.created_date;
+    if (!dateVal) return 0;
+    const t = new Date(dateVal).getTime();
+    return isNaN(t) ? 0 : t;
+  };
+
+  const compareAlphanumeric = (valA: string, valB: string): number => {
+    return valA.localeCompare(valB, undefined, { numeric: true, sensitivity: 'base' });
+  };
 
   const getLeadEventTimestamp = (leadObj: Lead): number => {
     const linkedOrder = safeOrders.find((o: any) => 
@@ -200,24 +253,67 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   };
 
   const displayedLeads = React.useMemo(() => {
-    if (!eventCategorySortOrder) return safeFilteredLeads;
     return [...safeFilteredLeads].sort((a, b) => {
-      const tsA = getLeadEventTimestamp(a);
-      const tsB = getLeadEventTimestamp(b);
-      if (tsA > 0 && tsB > 0) {
-        if (tsA !== tsB) {
-          return eventCategorySortOrder === 'asc' ? tsA - tsB : tsB - tsA;
+      // 1. If sorting by Lead ID
+      if (sortColumn === 'lead_id') {
+        const idA = (a.lead_id || '').trim();
+        const idB = (b.lead_id || '').trim();
+        if (idA && idB) {
+          const comp = compareAlphanumeric(idA, idB);
+          if (comp !== 0) {
+            return sortDirection === 'desc' ? -comp : comp;
+          }
+        } else if (idA) {
+          return sortDirection === 'desc' ? -1 : 1;
+        } else if (idB) {
+          return sortDirection === 'desc' ? 1 : -1;
         }
-      } else if (tsA > 0) {
-        return -1;
-      } else if (tsB > 0) {
-        return 1;
       }
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
-      return timeB - timeA;
+
+      // 2. If sorting by Order ID
+      if (sortColumn === 'order_id') {
+        const ordA = getLeadOrderId(a);
+        const ordB = getLeadOrderId(b);
+        if (ordA && ordB) {
+          const comp = compareAlphanumeric(ordA, ordB);
+          if (comp !== 0) {
+            return sortDirection === 'desc' ? -comp : comp;
+          }
+        } else if (ordA) {
+          return -1;
+        } else if (ordB) {
+          return 1;
+        }
+      }
+
+      // 3. If sorting by Event Category / Event Date
+      if (sortColumn === 'event_date') {
+        const tsA = getLeadEventTimestamp(a);
+        const tsB = getLeadEventTimestamp(b);
+        if (tsA > 0 && tsB > 0) {
+          if (tsA !== tsB) {
+            return sortDirection === 'asc' ? tsA - tsB : tsB - tsA;
+          }
+        } else if (tsA > 0) {
+          return -1;
+        } else if (tsB > 0) {
+          return 1;
+        }
+      }
+
+      // 4. Default / Created Date sort
+      const timeA = getLeadCreatedTimestamp(a);
+      const timeB = getLeadCreatedTimestamp(b);
+      if (timeA !== timeB) {
+        return sortDirection === 'desc' ? timeB - timeA : timeA - timeB;
+      }
+
+      // Secondary tie-breaker by Lead ID descending (newest first)
+      const idA = (a.lead_id || '').trim();
+      const idB = (b.lead_id || '').trim();
+      return compareAlphanumeric(idB, idA);
     });
-  }, [safeFilteredLeads, eventCategorySortOrder, safeOrders, filterEventDateOption]);
+  }, [safeFilteredLeads, sortColumn, sortDirection, safeOrders, filterEventDateOption]);
 
   const getMostRecentEventDisplay = (leadObj: Lead, ordersList?: any[]): string => {
     const linkedOrder = ordersList?.find((o: any) => 
@@ -673,23 +769,53 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
               <table className="w-full text-left text-xs border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
-                    <th className="p-3.5 pl-5">Lead ID</th>
-                    <th className="p-3.5">Order ID</th>
+                    <th className="p-3.5 pl-5">
+                      <button
+                        type="button"
+                        onClick={() => handleColumnSort('lead_id')}
+                        className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-405 hover:text-white transition-colors cursor-pointer select-none group"
+                        title="Sort by Lead ID (Newest / Oldest)"
+                      >
+                        <span>Lead ID</span>
+                        <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'lead_id' ? 'text-sky-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                      </button>
+                    </th>
+                    <th className="p-3.5">
+                      <button
+                        type="button"
+                        onClick={() => handleColumnSort('order_id')}
+                        className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-405 hover:text-white transition-colors cursor-pointer select-none group"
+                        title="Sort by Order ID (Highest / Lowest)"
+                      >
+                        <span>Order ID</span>
+                        <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'order_id' ? 'text-sky-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                      </button>
+                    </th>
                     <th className="p-3.5">Customer Name</th>
                     <th className="p-3.5">Mobile Number</th>
                     <th className="p-3.5">
                       <button
                         type="button"
-                        onClick={() => setEventCategorySortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                        onClick={() => handleColumnSort('event_date')}
                         className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-405 hover:text-white transition-colors cursor-pointer select-none group"
                         title="Sort by Event Date (Earliest / Latest)"
                       >
                         <span>Event Category</span>
-                        <ArrowUpDown className={`w-3 h-3 transition-colors ${eventCategorySortOrder ? 'text-sky-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                        <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'event_date' ? 'text-sky-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
                       </button>
                     </th>
                     <th className="p-3.5">Current Status</th>
-                    <th className="p-3.5">Created Date</th>
+                    <th className="p-3.5">
+                      <button
+                        type="button"
+                        onClick={() => handleColumnSort('created_date')}
+                        className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-405 hover:text-white transition-colors cursor-pointer select-none group"
+                        title="Sort by Created Date (Newest / Oldest)"
+                      >
+                        <span>Created Date</span>
+                        <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'created_date' ? 'text-sky-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                      </button>
+                    </th>
                     <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
                   </tr>
                 </thead>

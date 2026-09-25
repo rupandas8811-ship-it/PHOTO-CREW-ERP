@@ -8673,7 +8673,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
     const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
-    return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
+    if (timeA !== timeB && !isNaN(timeA) && !isNaN(timeB)) {
+      return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
+    }
+    const idA = (a.lead_id || '').trim();
+    const idB = (b.lead_id || '').trim();
+    const comp = idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+    return sortOrder === 'latest' ? -comp : comp;
   });
 
     return {
