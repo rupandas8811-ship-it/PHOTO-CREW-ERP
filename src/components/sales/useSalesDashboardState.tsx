@@ -3642,7 +3642,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                       </div>
                       <div className="mt-2 pt-1.5 border-t border-slate-800/60 text-[11px] text-slate-300">
                         <span className="text-slate-400 font-semibold uppercase font-mono text-[10px] mr-1.5">
-                          Event Location / Venue Address:
+                          Event Address:
                         </span>
                         <span className="text-slate-100 font-medium break-words font-sans">
                           {eventLocationDisplay}
