@@ -4379,13 +4379,9 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: customPkgVal,
+        Select_Package_Option: customPkgVal,
         package_name: 'Custom Package',
-        package_cost: 0,
-        package_price: 0,
-        budget: 0,
-        final_quoted_amount: 0,
       }));
-      setPkgPrices(prev => ({ ...prev, [customPkgVal]: 0, 'custom_package': 0 }));
 
       const newInclusions = { ...editableInclusions };
       if (!newInclusions[customPkgVal]) newInclusions[customPkgVal] = [];
@@ -4422,6 +4418,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: pkgIdStr,
+        Select_Package_Option: pkgIdStr,
         package_name: pkg.package_name,
         package_cost: pkgPrice,
         package_price: pkgPrice,
@@ -4430,6 +4427,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         budget: pkgPrice,
         final_quoted_amount: pkgPrice,
       }));
+      setPkgPrices(prev => ({ ...prev, [pkgIdStr]: pkgPrice, [targetPkgId]: pkgPrice }));
       
       const incList = parseTeamMembers(pkg.team_members);
       const defaultInc = incList.length > 0 ? incList : [];
@@ -4465,12 +4463,13 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       setEditableInclusions(newInclusions);
       setEditableDeliverables(newDeliverables);
       if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
-        saveStep3DataRealtime(newInclusions, newDeliverables, pkgIdStr);
+        saveStep3DataRealtime(newInclusions, newDeliverables, pkgIdStr, pkgPrice);
       }
     } else {
       setWizardLeadData((prev) => ({
         ...prev,
         selected_package_id: targetPkgId,
+        Select_Package_Option: targetPkgId,
       }));
       if (selectedLead && selectedLead.lead_id && selectedLead.lead_id !== 'DRAFT-LEAD') {
         saveStep3DataRealtime(editableInclusions, editableDeliverables, targetPkgId);
