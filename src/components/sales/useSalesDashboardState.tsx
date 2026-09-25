@@ -3285,6 +3285,17 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             const totalPaymentReceived = approvedAmount + pendingApprovalAmount;
             const totalPendingAmount = Math.max(0, finalAmt - totalPaymentReceived);
 
+            const isOrderConfirmed = Boolean(
+              isLeadConfirmed ||
+              wizardLeadData.status === 'Order Confirmed' ||
+              salesStatus === 'Order Confirmed' ||
+              (activeLead && ['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(activeLead.status || '')) ||
+              (activeLead && (activeLead as any).current_status === 'Order Confirmed') ||
+              (activeLead && (activeLead as any).booking_status === 'Confirmed') ||
+              (linkedOrder && linkedOrder.status !== 'Cancelled') ||
+              (orders && orders.some(o => (currentLeadId && o.lead_id === currentLeadId && o.status !== 'Cancelled') || (resolvedOrderId && o.order_id === resolvedOrderId && o.status !== 'Cancelled')))
+            );
+
             return (
               <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shadow-inner">
                 <div className="grid grid-cols-2 gap-4 flex-1">
@@ -3301,15 +3312,17 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                     </p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  id="btn_step3_update_payment"
-                  onClick={() => setShowStep3PaymentModal(true)}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono text-xs font-bold uppercase tracking-wider rounded-lg shadow transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
-                >
-                  <span>💳</span>
-                  <span>UPDATE PAYMENT</span>
-                </button>
+                {isOrderConfirmed && (
+                  <button
+                    type="button"
+                    id="btn_step3_update_payment"
+                    onClick={() => setShowStep3PaymentModal(true)}
+                    className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-mono text-xs font-bold uppercase tracking-wider rounded-lg shadow transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    <span>💳</span>
+                    <span>UPDATE PAYMENT</span>
+                  </button>
+                )}
               </div>
             );
           })()}
