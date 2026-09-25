@@ -3253,15 +3253,36 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
             const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || '');
             const activeLead = selectedLead || leads?.find(l => l.lead_id === currentLeadId);
             const linkedOrder = orders?.find(o => currentLeadId && o.lead_id === currentLeadId);
-            const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : payments?.find(p => currentLeadId && p.lead_id === currentLeadId);
+            const resolvedOrderId = selectedLead?.order_id || (selectedLead as any)?.Order_ID || linkedOrder?.order_id || (activeLead as any)?.order_id || wizardLeadData.order_id || currentLeadId || '';
+            const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : payments?.find(p => (resolvedOrderId && p.order_id === resolvedOrderId) || (currentLeadId && p.lead_id === currentLeadId));
 
-            const paymentPaid = linkedPayment ? ((Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0)) : 0;
-            const orderAdvance = linkedOrder ? (Number(linkedOrder.advance_received) || 0) : 0;
-            const leadAdvance = (activeLead?.advance_collected !== undefined && activeLead?.advance_collected !== null && activeLead?.advance_collected !== '') ? Number(activeLead.advance_collected) : 0;
-            const wizardAdvance = (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== '') ? Number(wizardLeadData.advance_received) : 0;
-            const historyPaid = (paymentHistory || []).filter((h: any) => ((linkedOrder && h.order_id === linkedOrder.order_id) || (currentLeadId && h.order_id === currentLeadId)) && h.approval_status !== 'Rejected').reduce((acc: number, h: any) => acc + (Number(h.amount) || 0), 0);
+            const orderHistories = (paymentHistory || []).filter((h: any) => {
+              if (!h.order_id) return false;
+              if (resolvedOrderId && h.order_id === resolvedOrderId) return true;
+              if (linkedOrder?.order_id && h.order_id === linkedOrder.order_id) return true;
+              if (currentLeadId && (h.order_id === currentLeadId || h.order_id === `ORD-${currentLeadId}`)) return true;
+              return false;
+            });
 
-            const totalPaymentReceived = Math.max(paymentPaid, orderAdvance, leadAdvance, wizardAdvance, historyPaid);
+            const approvedHistories = orderHistories.filter((h: any) => h.approval_status === 'Approved');
+            const pendingApprovalHistories = orderHistories.filter((h: any) => h.approval_status === 'Waiting for Approval');
+
+            let approvedAmount = approvedHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+            let pendingApprovalAmount = pendingApprovalHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+
+            const advanceReceived = linkedOrder ? (Number(linkedOrder.advance_received) || 0) : ((activeLead?.advance_collected !== undefined && activeLead?.advance_collected !== null && activeLead?.advance_collected !== '') ? Number(activeLead.advance_collected) : 0);
+
+            if (orderHistories.length === 0) {
+              if (linkedPayment?.payment_status === 'Waiting for Approval') {
+                pendingApprovalAmount = (Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0) || advanceReceived;
+              } else {
+                approvedAmount = linkedPayment
+                  ? ((Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0))
+                  : advanceReceived;
+              }
+            }
+
+            const totalPaymentReceived = approvedAmount + pendingApprovalAmount;
             const totalPendingAmount = Math.max(0, finalAmt - totalPaymentReceived);
 
             return (
@@ -3301,22 +3322,41 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || '');
               const activeLead = selectedLead || leads?.find(l => l.lead_id === currentLeadId);
               const linkedOrder = orders?.find(o => currentLeadId && o.lead_id === currentLeadId);
-              const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : payments?.find(p => currentLeadId && p.lead_id === currentLeadId);
+              const resolvedOrderId = selectedLead?.order_id || (selectedLead as any)?.Order_ID || linkedOrder?.order_id || (activeLead as any)?.order_id || wizardLeadData.order_id || currentLeadId || '';
+              const linkedPayment = linkedOrder ? payments?.find(p => p.order_id === linkedOrder.order_id) : payments?.find(p => (resolvedOrderId && p.order_id === resolvedOrderId) || (currentLeadId && p.lead_id === currentLeadId));
 
-              const paymentPaid = linkedPayment ? ((Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0)) : 0;
-              const orderAdvance = linkedOrder ? (Number(linkedOrder.advance_received) || 0) : 0;
-              const leadAdvance = (activeLead?.advance_collected !== undefined && activeLead?.advance_collected !== null && activeLead?.advance_collected !== '') ? Number(activeLead.advance_collected) : 0;
-              const wizardAdvance = (wizardLeadData.advance_received !== undefined && wizardLeadData.advance_received !== null && wizardLeadData.advance_received !== '') ? Number(wizardLeadData.advance_received) : 0;
-              const historyPaid = (paymentHistory || []).filter((h: any) => ((linkedOrder && h.order_id === linkedOrder.order_id) || (currentLeadId && h.order_id === currentLeadId)) && h.approval_status !== 'Rejected').reduce((acc: number, h: any) => acc + (Number(h.amount) || 0), 0);
+              const orderHistories = (paymentHistory || []).filter((h: any) => {
+                if (!h.order_id) return false;
+                if (resolvedOrderId && h.order_id === resolvedOrderId) return true;
+                if (linkedOrder?.order_id && h.order_id === linkedOrder.order_id) return true;
+                if (currentLeadId && (h.order_id === currentLeadId || h.order_id === `ORD-${currentLeadId}`)) return true;
+                return false;
+              });
 
-              const totalPaymentReceived = Math.max(paymentPaid, orderAdvance, leadAdvance, wizardAdvance, historyPaid);
+              const approvedHistories = orderHistories.filter((h: any) => h.approval_status === 'Approved');
+              const pendingApprovalHistories = orderHistories.filter((h: any) => h.approval_status === 'Waiting for Approval');
+
+              let approvedAmount = approvedHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+              let pendingApprovalAmount = pendingApprovalHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+
+              const advanceReceived = linkedOrder ? (Number(linkedOrder.advance_received) || 0) : ((activeLead?.advance_collected !== undefined && activeLead?.advance_collected !== null && activeLead?.advance_collected !== '') ? Number(activeLead.advance_collected) : 0);
+
+              if (orderHistories.length === 0) {
+                if (linkedPayment?.payment_status === 'Waiting for Approval') {
+                  pendingApprovalAmount = (Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0) || advanceReceived;
+                } else {
+                  approvedAmount = linkedPayment
+                    ? ((Number(linkedPayment.advance_received) || 0) + (Number(linkedPayment.final_payment_received) || 0) + (Number(linkedPayment.additional_received) || 0))
+                    : advanceReceived;
+                }
+              }
+
+              const totalPaymentReceived = approvedAmount + pendingApprovalAmount;
               const totalPendingAmount = Math.max(0, finalAmt - totalPaymentReceived);
 
-              const orderId = linkedOrder?.order_id || linkedPayment?.order_id || (activeLead ? `ORD-${activeLead.lead_id}` : (currentLeadId || 'ORDER-NEW'));
-
               return {
-                orderId,
-                lead: activeLead || { lead_id: currentLeadId },
+                orderId: resolvedOrderId,
+                lead: activeLead || { lead_id: currentLeadId, order_id: resolvedOrderId },
                 finalPackageAmount: finalAmt,
                 totalPaidAmount: totalPaymentReceived,
                 remainingAmount: totalPendingAmount,

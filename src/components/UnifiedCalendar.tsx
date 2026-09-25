@@ -1371,7 +1371,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                   <tr className="bg-zinc-900/80 text-zinc-400 text-[10px] font-mono uppercase tracking-wider border-b border-zinc-800">
                     {role === 'sales' ? (
                       <>
-                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
+                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
                         <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
                         <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
                         <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
@@ -1410,13 +1411,19 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                       const evName = ev.eventName || ev.raw?.event_name || ev.raw?.custom_event_name || ev.eventType || 'Event';
                       const location = ev.eventLocation || ev.raw?.event_location || '—';
                       const salesCrew = ev.salesCrew || ev.raw?.salesCrew || ev.raw?.sales_crew || ev.raw?.sales_staff_name || ev.raw?.sales_person || 'Unassigned';
+                      const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.Order_ID || ev.raw?.tracking_id || ev.raw?.lead_id || '—';
                       const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
                       const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
                       const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
 
                       return (
                         <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
-                          <td className="p-3.5 pl-4 align-middle min-w-[190px]">
+                          <td className="p-3.5 pl-4 align-middle min-w-[130px]">
+                            <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
+                              {orderDisplayId}
+                            </span>
+                          </td>
+                          <td className="p-3.5 align-middle min-w-[190px]">
                             <div 
                               className="font-bold text-white text-xs leading-snug"
                               style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
@@ -2186,7 +2193,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                   <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
                     {role === 'sales' ? (
                       <>
-                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
+                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
                         <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
                         <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
                         <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
@@ -2236,7 +2244,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                       if (evsToShow.length === 0) {
                         return (
                           <tr>
-                            <td colSpan={8} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
+                            <td colSpan={9} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
                           </tr>
                         );
                       }
@@ -2247,13 +2255,19 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         const evName = ev.eventName || ev.raw?.event_name || ev.raw?.custom_event_name || ev.eventType || 'Event';
                         const location = ev.eventLocation || ev.raw?.event_location || '—';
                         const salesCrew = ev.salesCrew || ev.raw?.salesCrew || ev.raw?.sales_crew || ev.raw?.sales_staff_name || ev.raw?.sales_person || 'Unassigned';
+                        const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.Order_ID || ev.raw?.tracking_id || ev.raw?.lead_id || '—';
                         const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
                         const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
                         const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
 
                         return (
                           <tr key={ev.id || idx} className="hover:bg-zinc-900/30 text-zinc-300 transition-all select-text">
-                            <td className="p-3.5 pl-4 align-middle min-w-[190px]">
+                            <td className="p-3.5 pl-4 align-middle min-w-[130px]">
+                              <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
+                                {orderDisplayId}
+                              </span>
+                            </td>
+                            <td className="p-3.5 align-middle min-w-[190px]">
                               <div 
                                 className="font-bold text-white text-xs leading-snug"
                                 style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
@@ -2549,7 +2563,8 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         <tr className="border-b border-zinc-850 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
                           {role === 'sales' ? (
                             <>
-                              <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
+                              <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
                               <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
                               <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
                               <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
@@ -2597,8 +2612,15 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                 key={ev.id || idx}
                                 className="bg-zinc-950/30 hover:bg-zinc-900/40 transition-colors select-text"
                               >
-                                {/* 1. Customer Name and Number */}
-                                <td className="p-3.5 pl-4 align-middle min-w-[190px]">
+                                {/* 1. Order ID */}
+                                <td className="p-3.5 pl-4 align-middle min-w-[130px]">
+                                  <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
+                                    {orderDisplayId}
+                                  </span>
+                                </td>
+
+                                {/* 2. Customer Name and Number */}
+                                <td className="p-3.5 align-middle min-w-[190px]">
                                   <div 
                                     className="font-bold text-zinc-100 text-xs leading-snug"
                                     style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
@@ -2614,7 +2636,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                   )}
                                 </td>
 
-                                {/* 2. Event Name */}
+                                {/* 3. Event Name */}
                                 <td className="p-3.5 align-middle min-w-[180px]">
                                   <div 
                                     className="font-bold text-zinc-100 text-xs leading-snug"
@@ -2624,7 +2646,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                   </div>
                                 </td>
 
-                                {/* 3. Event Location */}
+                                {/* 4. Event Location */}
                                 <td className="p-3.5 align-middle min-w-[210px]">
                                   <div 
                                     className="text-zinc-300 text-xs leading-snug"
@@ -2635,21 +2657,21 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                   </div>
                                 </td>
 
-                                {/* 4. Event Date */}
+                                {/* 5. Event Date */}
                                 <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
                                   <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
                                     {evDate}
                                   </span>
                                 </td>
 
-                                {/* 5. Event Time */}
+                                {/* 6. Event Time */}
                                 <td className="p-3.5 align-middle whitespace-nowrap min-w-[110px]">
                                   <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
                                     {evTime ? formatTime12Hour(evTime) : '—'}
                                   </span>
                                 </td>
 
-                                {/* 6. Sales Crew */}
+                                {/* 7. Sales Crew */}
                                 <td className="p-3.5 align-middle min-w-[160px]">
                                   <div 
                                     className="text-zinc-200 text-xs leading-relaxed"
@@ -2661,7 +2683,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                   </div>
                                 </td>
 
-                                {/* 7. Status */}
+                                {/* 8. Status */}
                                 <td className="p-3.5 align-middle min-w-[130px]">
                                   <span 
                                     className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 leading-tight text-center"
@@ -2671,7 +2693,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                   </span>
                                 </td>
 
-                                {/* 8. Action */}
+                                {/* 9. Action */}
                                 <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
                                   <button
                                     type="button"

@@ -26,7 +26,7 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
   record: paymentModalRecord,
   onSuccess
 }) => {
-  const { orders, payments, leads, recordPayment, refreshData } = useRole();
+  const { orders, payments, leads, paymentHistory, recordPayment, refreshData } = useRole();
 
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [transactionIdInput, setTransactionIdInput] = useState('');
@@ -71,28 +71,61 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
     }
   }, [isOpen, paymentModalRecord?.orderId]);
 
-  // Dynamically retrieve the real-time record to keep modal updated
+  // Dynamically retrieve the real-time record to keep modal updated and synchronized
   const currentRecord = useMemo(() => {
     if (!paymentModalRecord) return null;
-    const order = orders.find(o => o.order_id === paymentModalRecord.orderId || (paymentModalRecord.lead && o.lead_id === paymentModalRecord.lead.lead_id));
-    const payment = order ? payments.find(p => p.order_id === order.order_id) : payments.find(p => p.order_id === paymentModalRecord.orderId || (paymentModalRecord.lead && p.lead_id === paymentModalRecord.lead.lead_id));
-    const lead = leads.find(l => paymentModalRecord.lead && l.lead_id === paymentModalRecord.lead.lead_id) || paymentModalRecord.lead;
+    const targetOrderId = paymentModalRecord.orderId;
+    const targetLeadId = paymentModalRecord.lead?.lead_id;
+
+    const order = orders.find(o => o.order_id === targetOrderId || (targetLeadId && o.lead_id === targetLeadId));
+    const resolvedOrderId = order?.order_id || targetOrderId;
+    const payment = order ? payments.find(p => p.order_id === order.order_id) : payments.find(p => (resolvedOrderId && p.order_id === resolvedOrderId) || (targetLeadId && p.lead_id === targetLeadId));
+    const lead = leads.find(l => targetLeadId && l.lead_id === targetLeadId) || paymentModalRecord.lead;
     
-    const finalPackageAmount = paymentModalRecord.finalPackageAmount ?? (Number(lead?.Final_Quotation_Amount) || Number((lead as any)?.final_quotation_amount) || (order ? Number(order.quotation_amount || order.final_amount) : 0) || Number(lead?.budget) || 0);
+    const finalPackageAmount = Number(lead?.Final_Quotation_Amount) || 
+      Number((lead as any)?.final_quotation_amount) || 
+      (paymentModalRecord.finalPackageAmount != null ? paymentModalRecord.finalPackageAmount : 0) || 
+      (order ? Number(order.quotation_amount || order.final_amount) : 0) || 
+      Number(lead?.budget) || 0;
+
     const advanceReceived = order ? (Number(order.advance_received) || 0) : (Number(lead?.advance_collected) || 0);
-    const totalPaidAmount = paymentModalRecord.totalPaidAmount !== undefined
-      ? paymentModalRecord.totalPaidAmount
-      : (payment ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) : advanceReceived);
-    const remainingAmount = paymentModalRecord.remainingAmount !== undefined
-      ? paymentModalRecord.remainingAmount
-      : Math.max(0, finalPackageAmount - totalPaidAmount);
+
+    const orderHistories = (paymentHistory || []).filter((h: any) => {
+      if (!h.order_id) return false;
+      if (resolvedOrderId && h.order_id === resolvedOrderId) return true;
+      if (targetOrderId && h.order_id === targetOrderId) return true;
+      if (order?.order_id && h.order_id === order.order_id) return true;
+      if (targetLeadId && (h.order_id === targetLeadId || h.order_id === `ORD-${targetLeadId}`)) return true;
+      return false;
+    });
+
+    const approvedHistories = orderHistories.filter((h: any) => h.approval_status === 'Approved');
+    const pendingApprovalHistories = orderHistories.filter((h: any) => h.approval_status === 'Waiting for Approval');
+
+    let approvedAmount = approvedHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+    let pendingApprovalAmount = pendingApprovalHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+
+    if (orderHistories.length === 0) {
+      if (payment?.payment_status === 'Waiting for Approval') {
+        pendingApprovalAmount = (Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0) || advanceReceived;
+      } else {
+        approvedAmount = payment 
+          ? ((Number(payment.advance_received) || 0) + (Number(payment.final_payment_received) || 0) + (Number(payment.additional_received) || 0)) 
+          : advanceReceived;
+      }
+    }
+
+    const totalPaidAmount = approvedAmount + pendingApprovalAmount;
+    const remainingAmount = Math.max(0, finalPackageAmount - totalPaidAmount);
     
     return {
       finalPackageAmount,
       totalPaidAmount,
-      remainingAmount
+      remainingAmount,
+      approvedAmount,
+      pendingApprovalAmount
     };
-  }, [paymentModalRecord, orders, payments, leads]);
+  }, [paymentModalRecord, orders, payments, leads, paymentHistory]);
 
   const handleSavePayment = async () => {
     if (isSaving || !paymentModalRecord) return;
@@ -130,13 +163,13 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
         paymentType
       );
       
-      // Refresh global state so leads, orders, and payments immediately reflect updates
+      // Refresh global state so leads, orders, payments, and paymentHistory immediately reflect updates
       if (refreshData) {
         await refreshData();
       }
 
-      // Show success message inside popup
-      setModalSuccessMsg('✅ Payment updated successfully.');
+      // Show verified success message inside popup
+      setModalSuccessMsg('✅ Payment successfully saved.');
       
       // Reset input fields
       setPaymentAmount('');
@@ -154,7 +187,7 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
       }, 2500);
     } catch (err: any) {
       console.error(err);
-      setModalErrorMsg('❌ Payment update failed.');
+      setModalErrorMsg('❌ ' + (err?.message || 'Payment update failed. Please retry.'));
     } finally {
       setIsSaving(false);
     }
