@@ -4,6 +4,7 @@ import { X, Search, Calendar, Info, Download, FileSpreadsheet } from 'lucide-rea
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
 import { formatINR, formatDateDDMMYY } from '../utils';
+import { compareRecordsByDate } from './ui/ListSortFilter';
 
 interface ColumnDefinition {
   key: string;
@@ -46,14 +47,17 @@ export const BusinessOwnerCardDetailModal: React.FC<BusinessOwnerCardDetailModal
 
   // Search filter inside the modal for ease of review
   const filteredData = useMemo(() => {
-    if (!searchTerm.trim()) return data;
-    const lowerSearch = searchTerm.toLowerCase();
-    return data.filter(item => {
-      return Object.values(item).some(val => {
-        if (val === null || val === undefined) return false;
-        return String(val).toLowerCase().includes(lowerSearch);
+    let list = data || [];
+    if (searchTerm.trim()) {
+      const lowerSearch = searchTerm.toLowerCase();
+      list = list.filter(item => {
+        return Object.values(item).some(val => {
+          if (val === null || val === undefined) return false;
+          return String(val).toLowerCase().includes(lowerSearch);
+        });
       });
-    });
+    }
+    return [...list].sort((a, b) => compareRecordsByDate(a, b, 'latest'));
   }, [data, searchTerm]);
 
   // Download handlers for the displayed/filtered records

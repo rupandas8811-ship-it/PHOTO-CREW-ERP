@@ -113,7 +113,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safePackages = Array.isArray(packages) ? packages : [];
 
-  const [sortColumn, setSortColumn] = useState<'created_date' | 'lead_id' | 'order_id' | 'event_date'>('created_date');
+  const [sortColumn, setSortColumn] = useState<'created_date' | 'lead_id' | 'order_id' | 'event_date' | null>('created_date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Sync toolbar sortOrder if changed from outside
@@ -126,6 +126,26 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   }, [sortOrder]);
 
   const handleColumnSort = (column: 'created_date' | 'lead_id' | 'order_id' | 'event_date') => {
+    if (column === 'created_date') {
+      if (sortColumn !== 'created_date') {
+        // 1st CLICK: Most Recent (Descending: Newest -> Oldest)
+        setSortColumn('created_date');
+        setSortDirection('desc');
+        if (setSortOrder) setSortOrder('latest');
+      } else if (sortDirection === 'desc') {
+        // 2nd CLICK: Last (Ascending: Oldest -> Newest)
+        setSortColumn('created_date');
+        setSortDirection('asc');
+        if (setSortOrder) setSortOrder('oldest');
+      } else {
+        // 3rd CLICK: All / Reset (Reset sorting and return to normal/default table order)
+        setSortColumn(null);
+        setSortDirection('desc');
+        if (setSortOrder) setSortOrder('latest');
+      }
+      return;
+    }
+
     if (sortColumn === column) {
       const nextDir = sortDirection === 'desc' ? 'asc' : 'desc';
       setSortDirection(nextDir);
@@ -158,7 +178,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   };
 
   const getLeadCreatedTimestamp = (leadObj: Lead): number => {
-    const dateVal = leadObj.created_at || leadObj.updated_at || leadObj.created_date;
+    // Sourced strictly from actual saved created_at or created_date
+    const dateVal = leadObj.created_at || leadObj.created_date;
     if (!dateVal) return 0;
     const t = new Date(dateVal).getTime();
     return isNaN(t) ? 0 : t;
@@ -253,8 +274,28 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   };
 
   const displayedLeads = React.useMemo(() => {
+    // If sortColumn is null (3rd Click / All / Reset state), return default table order
+    if (!sortColumn) {
+      return [...safeFilteredLeads];
+    }
+
     return [...safeFilteredLeads].sort((a, b) => {
-      // 1. If sorting by Lead ID
+      // 1. If sorting by Created Date (Click 1: desc / Most Recent -> Click 2: asc / Last -> Click 3: All/Reset)
+      if (sortColumn === 'created_date') {
+        const timeA = getLeadCreatedTimestamp(a);
+        const timeB = getLeadCreatedTimestamp(b);
+        if (timeA !== timeB && timeA > 0 && timeB > 0) {
+          return sortDirection === 'desc' ? timeB - timeA : timeA - timeB;
+        }
+        if (timeA > 0) return -1;
+        if (timeB > 0) return 1;
+        const idA = (a.lead_id || '').trim();
+        const idB = (b.lead_id || '').trim();
+        const comp = compareAlphanumeric(idA, idB);
+        return sortDirection === 'desc' ? -comp : comp;
+      }
+
+      // 2. If sorting by Lead ID
       if (sortColumn === 'lead_id') {
         const idA = (a.lead_id || '').trim();
         const idB = (b.lead_id || '').trim();
@@ -270,7 +311,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         }
       }
 
-      // 2. If sorting by Order ID
+      // 3. If sorting by Order ID
       if (sortColumn === 'order_id') {
         const ordA = getLeadOrderId(a);
         const ordB = getLeadOrderId(b);
@@ -286,8 +327,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         }
       }
 
-      // 3. If sorting by Event Category / Event Date
-      if (sortColumn === 'event_date') {
+      // 4. If sorting by Event Category / Event Date OR if Event Date filter option is active
+      if (sortColumn === 'event_date' || filterEventDateOption === 'most_recent' || filterEventDateOption === 'last_event') {
         const tsA = getLeadEventTimestamp(a);
         const tsB = getLeadEventTimestamp(b);
         if (tsA > 0 && tsB > 0) {
@@ -301,14 +342,13 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         }
       }
 
-      // 4. Default / Created Date sort
+      // Default fallback
       const timeA = getLeadCreatedTimestamp(a);
       const timeB = getLeadCreatedTimestamp(b);
-      if (timeA !== timeB) {
+      if (timeA !== timeB && timeA > 0 && timeB > 0) {
         return sortDirection === 'desc' ? timeB - timeA : timeA - timeB;
       }
 
-      // Secondary tie-breaker by Lead ID descending (newest first)
       const idA = (a.lead_id || '').trim();
       const idB = (b.lead_id || '').trim();
       return compareAlphanumeric(idB, idA);
@@ -506,6 +546,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
               Boolean(filterQuery.trim()),
               Boolean(filterSource),
               Boolean(filterStatus),
+              Boolean(filterEventDateOption && filterEventDateOption !== 'all'),
               Boolean(dateRangeStart || appliedStartDate),
               Boolean(dateRangeEnd || appliedEndDate)
             ].filter(Boolean).length;
@@ -526,6 +567,31 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                     <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                       {/* Sort Order Filter Button */}
                       <ListSortFilter value={sortOrder} onChange={setSortOrder} />
+
+                      {/* Event Date Filter selector (Most Recent Event / Last Event / All) */}
+                      <div className="relative">
+                        <select
+                          id="select_event_date_filter_toolbar"
+                          value={filterEventDateOption || 'all'}
+                          onChange={(e) => {
+                            const val = e.target.value as 'all' | 'most_recent' | 'last_event' | '';
+                            if (setFilterEventDateOption) {
+                              setFilterEventDateOption(val === 'all' ? '' : val);
+                            }
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm appearance-none pr-8 ${
+                            filterEventDateOption && filterEventDateOption !== 'all'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
+                              : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                          }`}
+                          title="Event Date Filter: Most Recent Event, Last Event, All"
+                        >
+                          <option value="most_recent" className="bg-zinc-950 text-amber-300">Most Recent Event</option>
+                          <option value="last_event" className="bg-zinc-950 text-amber-300">Last Event</option>
+                          <option value="all" className="bg-zinc-950 text-zinc-300">All</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
 
                       {/* Download Reports Button */}
                       <button
@@ -810,10 +876,16 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                         type="button"
                         onClick={() => handleColumnSort('created_date')}
                         className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-405 hover:text-white transition-colors cursor-pointer select-none group"
-                        title="Sort by Created Date (Newest / Oldest)"
+                        title={
+                          sortColumn === 'created_date'
+                            ? sortDirection === 'desc'
+                              ? 'Created Date: Most Recent (1st Click) → Click for Last / Oldest'
+                              : 'Created Date: Last / Oldest (2nd Click) → Click for All / Reset'
+                            : 'Created Date: All / Default (3rd Click) → Click for Most Recent'
+                        }
                       >
                         <span>Created Date</span>
-                        <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'created_date' ? 'text-sky-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                        <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'created_date' ? (sortDirection === 'desc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
                       </button>
                     </th>
                     <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>

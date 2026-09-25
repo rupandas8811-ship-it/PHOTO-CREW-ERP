@@ -3941,7 +3941,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-900">
-                      {rawFootageLeads.map(prod => {
+                      {[...rawFootageLeads].sort((a, b) => compareRecordsByDate(a, b, 'latest')).map(prod => {
                         const { order } = resolveOrderAndLead(prod);
                         if (!order) return null;
 
@@ -7033,8 +7033,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     const sortedRosterRows = [...filteredRosterRows].sort((a, b) => {
                       const dateA = a.dateAssigned !== '—' ? new Date(a.dateAssigned).getTime() : 0;
                       const dateB = b.dateAssigned !== '—' ? new Date(b.dateAssigned).getTime() : 0;
-                      if (dateA !== dateB) return dateB - dateA;
-                      return String(b.assignmentId).localeCompare(String(a.assignmentId));
+                      if (dateA !== dateB && dateA > 0 && dateB > 0) return dateB - dateA;
+                      const ordComp = String(b.orderId || '').localeCompare(String(a.orderId || ''), undefined, { numeric: true, sensitivity: 'base' });
+                      if (ordComp !== 0) return ordComp;
+                      return String(b.assignmentId).localeCompare(String(a.assignmentId), undefined, { numeric: true, sensitivity: 'base' });
                     });
 
                     if (sortedRosterRows.length === 0) {

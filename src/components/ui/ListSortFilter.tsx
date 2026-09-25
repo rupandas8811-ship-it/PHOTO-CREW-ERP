@@ -15,20 +15,93 @@ export interface ListSortFilterProps {
 }
 
 /**
+ * Parses any date string and optional time string into a millisecond timestamp.
+ * Handles DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD, ISO timestamps, and 12-hour/24-hour time formats.
+ */
+export function parseDateTimeToTimestamp(dStr?: string, tStr?: string): number {
+  if (!dStr || typeof dStr !== 'string' || !dStr.trim()) return 0;
+  const s = dStr.trim();
+  let year = 1970, month = 0, day = 1;
+  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(s)) {
+    const parts = s.split(/[-/]/);
+    day = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+    year = parseInt(parts[2], 10);
+  } else if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(s)) {
+    const parts = s.split(/[-/]/);
+    year = parseInt(parts[0], 10);
+    month = parseInt(parts[1], 10) - 1;
+    day = parseInt(parts[2], 10);
+  } else {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      year = d.getFullYear();
+      month = d.getMonth();
+      day = d.getDate();
+    }
+  }
+
+  let hours = 0, minutes = 0;
+  if (tStr && typeof tStr === 'string' && tStr.trim()) {
+    const t = tStr.trim().toUpperCase();
+    const isPM = t.includes('PM');
+    const isAM = t.includes('AM');
+    const cleanTime = t.replace(/(AM|PM)/g, '').trim();
+    const timeParts = cleanTime.split(':');
+    if (timeParts.length >= 1) {
+      let h = parseInt(timeParts[0], 10) || 0;
+      const m = parseInt(timeParts[1] || '0', 10) || 0;
+      if (isPM && h < 12) h += 12;
+      if (isAM && h === 12) h = 0;
+      hours = h;
+      minutes = m;
+    }
+  }
+
+  const combined = new Date(year, month, day, hours, minutes);
+  return isNaN(combined.getTime()) ? 0 : combined.getTime();
+}
+
+/**
+ * Natural alphanumeric comparator for IDs (e.g. ORD-100 > ORD-99, LEAD-200 > LEAD-99).
+ */
+export function compareAlphanumeric(valA: any, valB: any): number {
+  const strA = String(valA || '').trim();
+  const strB = String(valB || '').trim();
+  return strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+}
+
+/**
  * Extracts a high-accuracy numerical timestamp from any record across dashboards.
- * Prioritizes event dates, then created timestamps, then ID numerical values.
+ * Prioritizes event dates, target delivery dates, reporting dates, then created timestamps, then ID numerical values.
  */
 export function getRecordDateTimestamp(item: any): number {
   if (!item) return 0;
 
-  // 1. EVENT DATE PRIORITIZATION (Strictly prioritize Event Date)
-  const eventDateStr = item.event_date || item.eventDate || item.orderObj?.event_date || item.leadObj?.event_date || item.targetFinishDate || item.expected_delivery_date || item.order_date || item.date;
+  // 1. Direct or nested event_date + event_time
+  const eventDateStr = item.event_date || item.eventDate || item.orderObj?.event_date || item.leadObj?.event_date || item.date;
+  const eventTimeStr = item.event_time || item.eventStartTime || item.event_start_time || item.start_time || item.time || item.orderObj?.event_time || item.leadObj?.event_time;
   if (eventDateStr) {
-    const t = new Date(eventDateStr).getTime();
-    if (!isNaN(t) && t > 0) return t;
+    const t = parseDateTimeToTimestamp(String(eventDateStr), eventTimeStr ? String(eventTimeStr) : undefined);
+    if (t > 0) return t;
   }
 
-  // 2. Direct created_at or created_date
+  // 2. Direct or nested Target Delivery Date / Expected Delivery Date
+  const targetDelivDateStr = item.targetDeliveryDate || item.target_delivery_date || item.expected_delivery_date || item.targetFinishDate || item.delivery_date;
+  if (targetDelivDateStr) {
+    const t = parseDateTimeToTimestamp(String(targetDelivDateStr));
+    if (t > 0) return t;
+  }
+
+  // 3. Direct or nested Reporting Date + Reporting Time
+  const reportingDateStr = item.reporting_date || item.reportingDate || item.Reporting_date;
+  const reportingTimeStr = item.reporting_time || item.reportingTime;
+  if (reportingDateStr) {
+    const t = parseDateTimeToTimestamp(String(reportingDateStr), reportingTimeStr ? String(reportingTimeStr) : undefined);
+    if (t > 0) return t;
+  }
+
+  // 4. Direct created_at or created_date
   if (item.created_at) {
     const t = new Date(item.created_at).getTime();
     if (!isNaN(t) && t > 0) return t;
@@ -38,7 +111,7 @@ export function getRecordDateTimestamp(item: any): number {
     if (!isNaN(t) && t > 0) return t;
   }
 
-  // 3. Nested orderObj or leadObj or prodObj timestamps
+  // 5. Nested orderObj or leadObj or prodObj timestamps
   if (item.orderObj?.created_at) {
     const t = new Date(item.orderObj.created_at).getTime();
     if (!isNaN(t) && t > 0) return t;
@@ -52,24 +125,20 @@ export function getRecordDateTimestamp(item: any): number {
     if (!isNaN(t) && t > 0) return t;
   }
 
-  // 4. updated_at or modified_at
+  // 6. updated_at or modified_at
   if (item.updated_at) {
     const t = new Date(item.updated_at).getTime();
     if (!isNaN(t) && t > 0) return t;
   }
 
-  // 5. Specific dates like request_date, assignment_date
+  // 7. Specific dates like request_date, requested_at, assignment_date
   if (item.request_date || item.requested_at) {
     const t = new Date(item.request_date || item.requested_at).getTime();
     if (!isNaN(t) && t > 0) return t;
   }
-
-  // 6. Tiebreaker from numeric sequence in IDs (e.g. ORD-1005, LEA-2003)
-  const idStr = String(item.order_id || item.orderId || item.lead_id || item.leadId || item.id || '');
-  const digits = idStr.match(/\d+/g);
-  if (digits && digits.length > 0) {
-    const num = parseInt(digits.join(''), 10);
-    if (!isNaN(num)) return num;
+  if (item.assignment_date || item.assigned_at) {
+    const t = new Date(item.assignment_date || item.assigned_at).getTime();
+    if (!isNaN(t) && t > 0) return t;
   }
 
   return 0;
@@ -82,14 +151,21 @@ export function compareRecordsByDate(a: any, b: any, order: SortOrder = 'latest'
   const timeA = getRecordDateTimestamp(a);
   const timeB = getRecordDateTimestamp(b);
 
-  if (timeA !== timeB) {
+  if (timeA !== timeB && timeA > 0 && timeB > 0) {
     return order === 'latest' ? timeB - timeA : timeA - timeB;
   }
 
-  // Tiebreaker by ID if timestamps are identical
-  const idA = String(a.order_id || a.orderId || a.lead_id || a.id || '');
-  const idB = String(b.order_id || b.orderId || b.lead_id || b.id || '');
-  return order === 'latest' ? idB.localeCompare(idA) : idA.localeCompare(idB);
+  // Tiebreaker by natural alphanumeric ID (so ORD-100 appears before ORD-99 when latest/descending)
+  const idA = String(a.order_id || a.orderId || a.lead_id || a.leadId || a.id || '');
+  const idB = String(b.order_id || b.orderId || b.lead_id || b.leadId || b.id || '');
+  if (idA && idB) {
+    const comp = compareAlphanumeric(idA, idB);
+    if (comp !== 0) {
+      return order === 'latest' ? -comp : comp;
+    }
+  }
+
+  return 0;
 }
 
 export const ListSortFilter: React.FC<ListSortFilterProps> = ({

@@ -12,7 +12,7 @@ import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
 import { EquipmentSelectorDropdown } from './EquipmentSelectorDropdown';
-import { ListSortFilter, SortOrder, compareRecordsByDate } from '../ui/ListSortFilter';
+import { ListSortFilter, SortOrder, compareRecordsByDate, parseDateTimeToTimestamp, compareAlphanumeric } from '../ui/ListSortFilter';
 
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { 
@@ -2214,22 +2214,38 @@ export const OperationsLeads: React.FC = () => {
       if (sortBy === 'created_at') {
         return compareRecordsByDate(a, b, sortDateOrder);
       }
+      
+      if (sortBy === 'event_date') {
+        const leadA = findLeadForOrder(a, leads || []);
+        const evsA = getOrderEventsList(a, leadA);
+        const sortedA = sortEventsByDateAsc(evsA);
+        const evA = sortedA[0];
+        const dateA = evA?.event_date || a.event_date || '';
+        const timeA = evA?.event_start_time || evA?.event_time || a.event_time || '';
+        const tsA = parseDateTimeToTimestamp(dateA, timeA);
+
+        const leadB = findLeadForOrder(b, leads || []);
+        const evsB = getOrderEventsList(b, leadB);
+        const sortedB = sortEventsByDateAsc(evsB);
+        const evB = sortedB[0];
+        const dateB = evB?.event_date || b.event_date || '';
+        const timeB = evB?.event_start_time || evB?.event_time || b.event_time || '';
+        const tsB = parseDateTimeToTimestamp(dateB, timeB);
+
+        if (tsA !== tsB && tsA > 0 && tsB > 0) {
+          return sortOrder === 'asc' ? tsA - tsB : tsB - tsA;
+        }
+        if (tsA > 0) return -1;
+        if (tsB > 0) return 1;
+        return compareRecordsByDate(a, b, sortDateOrder);
+      }
+
       let valA: any = '';
       let valB: any = '';
 
       if (sortBy === 'customer_name') {
         valA = a.customer_name.toLowerCase();
         valB = b.customer_name.toLowerCase();
-      } else if (sortBy === 'event_date') {
-        const leadA = findLeadForOrder(a, leads || []);
-        const evsA = getOrderEventsList(a, leadA);
-        const sortedA = sortEventsByDateAsc(evsA);
-        valA = sortedA[0]?.event_date ? getEventDateSortKey(sortedA[0].event_date) : (a.event_date ? getEventDateSortKey(a.event_date) : '9999-99-99');
-
-        const leadB = findLeadForOrder(b, leads || []);
-        const evsB = getOrderEventsList(b, leadB);
-        const sortedB = sortEventsByDateAsc(evsB);
-        valB = sortedB[0]?.event_date ? getEventDateSortKey(sortedB[0].event_date) : (b.event_date ? getEventDateSortKey(b.event_date) : '9999-99-99');
       } else if (sortBy === 'status') {
         valA = a.current_stage.toLowerCase();
         valB = b.current_stage.toLowerCase();

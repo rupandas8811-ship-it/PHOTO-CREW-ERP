@@ -11686,6 +11686,31 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       {/* Sort Order Filter Button */}
                       <ListSortFilter value={sortOrder} onChange={setSortOrder} />
 
+                      {/* Event Date Filter selector (Most Recent Event / Last Event / All) */}
+                      <div className="relative">
+                        <select
+                          id="select_event_date_filter_toolbar_module"
+                          value={filterEventDateOption || 'all'}
+                          onChange={(e) => {
+                            const val = e.target.value as 'all' | 'most_recent' | 'last_event' | '';
+                            if (setFilterEventDateOption) {
+                              setFilterEventDateOption(val === 'all' ? '' : val);
+                            }
+                          }}
+                          className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm appearance-none pr-8 ${
+                            filterEventDateOption && filterEventDateOption !== 'all'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
+                              : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                          }`}
+                          title="Event Date Filter: Most Recent Event, Last Event, All"
+                        >
+                          <option value="most_recent" className="bg-zinc-950 text-amber-300">Most Recent Event</option>
+                          <option value="last_event" className="bg-zinc-950 text-amber-300">Last Event</option>
+                          <option value="all" className="bg-zinc-950 text-zinc-300">All</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
+
                       {/* Download Reports Button */}
                       <button
                         type="button"

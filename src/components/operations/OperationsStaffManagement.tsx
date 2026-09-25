@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { createClient } from '@supabase/supabase-js';
 import { supabaseClient } from '../../supabaseClient';
 import { checkGlobalStaffUniqueness, formatStaffErrorMessage } from '../../utils';
+import { parseDateTimeToTimestamp } from '../ui/ListSortFilter';
 
 export const OperationsStaffManagement: React.FC = () => {
   const { currentRole, staff, productionStaff = [], users = [], addStaff, updateStaff, operations, leads, orders, staffAssignments } = useRole();
@@ -580,6 +581,21 @@ export const OperationsStaffManagement: React.FC = () => {
           });
         }
       }
+    });
+
+    activeBookings.sort((a, b) => {
+      const dateA = a.eventDate !== 'N/A' ? a.eventDate : a.reportingDate;
+      const timeA = a.eventStartTime !== 'N/A' ? a.eventStartTime : a.reportingTime;
+      const tsA = parseDateTimeToTimestamp(dateA, timeA);
+
+      const dateB = b.eventDate !== 'N/A' ? b.eventDate : b.reportingDate;
+      const timeB = b.eventStartTime !== 'N/A' ? b.eventStartTime : b.reportingTime;
+      const tsB = parseDateTimeToTimestamp(dateB, timeB);
+
+      if (tsA !== tsB && tsA > 0 && tsB > 0) return tsB - tsA;
+      if (tsA > 0) return -1;
+      if (tsB > 0) return 1;
+      return 0;
     });
 
     return activeBookings;

@@ -53,6 +53,7 @@ import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
 import { AssignedStaffDropdown } from './AssignedStaffDropdown';
 import { OwnerPasswordResetModule } from './OwnerPasswordResetModule';
+import { compareRecordsByDate } from './ui/ListSortFilter';
 
 interface BusinessOwnerDashboardProps {
   activeSection?: string;
@@ -368,7 +369,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       }
     });
 
-    return Array.from(candidatesMap.values());
+    return Array.from(candidatesMap.values()).sort((a, b) => compareRecordsByDate(a, b, 'latest'));
   }, [orders, production, leads, payments]);
 
   // KPI Metrics Calculation for Overview
@@ -1865,7 +1866,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-850">
-                      {unlockRequests.map(request => {
+                      {[...unlockRequests].sort((a, b) => compareRecordsByDate(a, b, 'latest')).map(request => {
                         const orderDetails = orders.find(o => o.order_id === request.order_id || o.lead_id === request.lead_id);
                         const leadDetails = leads.find(l => l.lead_id === request.lead_id || (request.order_id && l.lead_id === request.order_id));
 
@@ -2776,7 +2777,7 @@ const LeadsReportSection: React.FC<LeadsReportSectionProps> = ({ leads }) => {
       }
 
       return true;
-    });
+    }).sort((a, b) => compareRecordsByDate(a, b, 'latest'));
   }, [leads, leadsStartDate, leadsEndDate, selectedLeadStages, selectedLeadEventType, leadSearchTerm]);
 
   const handleDownloadLeadsReport = () => {
@@ -3361,7 +3362,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
     return matched.sort((a, b) => {
       if (a.hasPendingApproval && !b.hasPendingApproval) return -1;
       if (!a.hasPendingApproval && b.hasPendingApproval) return 1;
-      return 0;
+      return compareRecordsByDate(a, b, 'latest');
     });
   }, [records, searchTerm, startDate, endDate, paymentTab]);
 
