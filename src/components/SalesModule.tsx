@@ -10,6 +10,8 @@ import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIV
 import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
 import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
+import { EventCategoryCell } from './EventCategoryCell';
+import { EventCell } from './EventCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
@@ -11929,6 +11931,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                     <th className="p-3.5">Order ID</th>
                     <th className="p-3.5">Customer Name</th>
                     <th className="p-3.5">Mobile Number</th>
+                    <th className="p-3.5">Event Category</th>
                     <th className="p-3.5">Event</th>
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Created Date</th>
@@ -11942,6 +11945,44 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       const currentStage = getLeadCurrentStage(lead);
                       const isActiveInSales = currentStage === 'Sales';
                       const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
+                      
+                      const rawEventsList = (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
+                        ? lead.events
+                        : (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0)
+                          ? linkedOrder.events
+                          : [];
+
+                      let eventDisplay = (lead.custom_event_name || lead.event_name || lead.event_type || linkedOrder?.custom_event_name || linkedOrder?.event_name || linkedOrder?.event_type || 'Event').trim();
+                      if (rawEventsList.length > 0) {
+                        const parsedEvents = rawEventsList.map((ev: any, idx: number) => {
+                          const name = (ev.event_name || ev.custom_event_name || ev.event_type || ev.Event_Name || lead.custom_event_name || lead.event_name || lead.event_type || `Event ${idx + 1}`).trim();
+                          const dateStr = (ev.event_date || ev.Event_Date || ev.date || '').trim();
+                          let timestamp = 0;
+                          if (dateStr) {
+                            if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(dateStr)) {
+                              const parts = dateStr.split(/[-/]/);
+                              const day = parseInt(parts[0], 10);
+                              const month = parseInt(parts[1], 10) - 1;
+                              const year = parseInt(parts[2], 10);
+                              const d = new Date(year, month, day);
+                              if (!isNaN(d.getTime())) timestamp = d.getTime();
+                            } else {
+                              const d = new Date(dateStr);
+                              if (!isNaN(d.getTime())) timestamp = d.getTime();
+                            }
+                          }
+                          return { name: name || 'Event', timestamp };
+                        });
+                        parsedEvents.sort((a, b) => {
+                          if (a.timestamp && b.timestamp) return b.timestamp - a.timestamp;
+                          if (a.timestamp) return -1;
+                          if (b.timestamp) return 1;
+                          return 0;
+                        });
+                        const mostRecentName = parsedEvents[0]?.name || 'Event';
+                        eventDisplay = parsedEvents.length > 1 ? `${mostRecentName} +${parsedEvents.length - 1}` : mostRecentName;
+                      }
+
                       return (
                         <tr 
                           key={lead.lead_id} 
@@ -11960,7 +12001,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             {formatIndianPhoneNumber(lead.mobile)}
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
-                            <UnifiedEventDropdownCell lead={lead} />
+                            <EventCategoryCell lead={lead} orders={orders} filterEventDateOption={filterEventDateOption} />
+                          </td>
+                          <td className="p-3.5 text-zinc-200 font-sans text-xs font-medium">
+                            <EventCell lead={lead} orders={orders} filterEventDateOption={filterEventDateOption} />
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />

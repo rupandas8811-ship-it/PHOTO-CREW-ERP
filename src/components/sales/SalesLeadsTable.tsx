@@ -7,6 +7,8 @@ import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIV
 import { StatusText } from '../ui/StatusText';
 import { EventDropdownCell } from '../EventDropdownCell';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
+import { EventCategoryCell } from '../EventCategoryCell';
+import { EventCell } from '../EventCell';
 import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
@@ -48,6 +50,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
     setFilterSalesPerson,
     filterDate,
     setFilterDate,
+    filterEventDateOption,
+    setFilterEventDateOption,
     dateRangeStart,
     setDateRangeStart,
     dateRangeEnd,
@@ -108,6 +112,93 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   const safeFilteredLeads = Array.isArray(filteredLeads) ? filteredLeads : [];
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safePackages = Array.isArray(packages) ? packages : [];
+
+  const getMostRecentEventDisplay = (leadObj: Lead, ordersList?: any[]): string => {
+    const linkedOrder = ordersList?.find((o: any) => 
+      o.lead_id === leadObj.lead_id || 
+      o.order_id === leadObj.lead_id || 
+      (leadObj.order_id && (o.order_id === leadObj.order_id || o.lead_id === leadObj.order_id)) ||
+      ((leadObj as any).orders && (o.order_id === (leadObj as any).orders || o.lead_id === (leadObj as any).orders))
+    );
+
+    const rawEventsList = (leadObj?.events && Array.isArray(leadObj.events) && leadObj.events.length > 0)
+      ? leadObj.events
+      : (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0)
+        ? linkedOrder.events
+        : [];
+
+    if (rawEventsList.length > 0) {
+      const parsedEvents = rawEventsList.map((ev: any, idx: number) => {
+        const name = (
+          ev.event_name || 
+          ev.custom_event_name || 
+          ev.event_type || 
+          ev.Event_Name || 
+          leadObj.custom_event_name || 
+          leadObj.event_name || 
+          leadObj.event_type || 
+          `Event ${idx + 1}`
+        ).trim();
+
+        const dateStr = (ev.event_date || ev.Event_Date || ev.date || '').trim();
+        let timestamp = 0;
+        if (dateStr) {
+          if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(dateStr)) {
+            const parts = dateStr.split(/[-/]/);
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            const d = new Date(year, month, day);
+            if (!isNaN(d.getTime())) timestamp = d.getTime();
+          } else {
+            const d = new Date(dateStr);
+            if (!isNaN(d.getTime())) {
+              timestamp = d.getTime();
+            }
+          }
+        }
+
+        return {
+          id: ev.id || ev.event_id || `evt-${idx}`,
+          name: name || 'Event',
+          dateStr,
+          timestamp
+        };
+      });
+
+      // Sort by MOST RECENT event date FIRST (descending timestamp: furthest/latest event date first)
+      parsedEvents.sort((a, b) => {
+        if (a.timestamp && b.timestamp) {
+          return b.timestamp - a.timestamp;
+        }
+        if (a.timestamp) return -1;
+        if (b.timestamp) return 1;
+        return 0;
+      });
+
+      const mostRecentEvent = parsedEvents[0];
+      const mostRecentName = mostRecentEvent?.name || 'Event';
+      const totalCount = parsedEvents.length;
+
+      if (totalCount > 1) {
+        return `${mostRecentName} +${totalCount - 1}`;
+      }
+      return mostRecentName;
+    }
+
+    // Single fallback event on lead/order
+    const singleName = (
+      leadObj.custom_event_name || 
+      leadObj.event_name || 
+      leadObj.event_type || 
+      linkedOrder?.custom_event_name || 
+      linkedOrder?.event_name || 
+      linkedOrder?.event_type || 
+      'Event'
+    ).trim();
+
+    return singleName || 'Event';
+  };
 
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
 
@@ -213,6 +304,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
               Boolean(filterQuery.trim()),
               Boolean(filterSource),
               Boolean(filterStatus),
+              Boolean(filterEventDateOption),
               Boolean(dateRangeStart || appliedStartDate),
               Boolean(dateRangeEnd || appliedEndDate)
             ].filter(Boolean).length;
@@ -233,6 +325,26 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                     <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                       {/* Sort Order Filter Button */}
                       <ListSortFilter value={sortOrder} onChange={setSortOrder} />
+
+                      {/* Event Date Filter selector */}
+                      <div className="relative">
+                        <select
+                          id="select_event_date_filter_toolbar"
+                          value={filterEventDateOption || ''}
+                          onChange={(e) => setFilterEventDateOption && setFilterEventDateOption(e.target.value as any)}
+                          className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm appearance-none pr-8 ${
+                            filterEventDateOption
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
+                              : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                          }`}
+                          title="Filter & sort table by Event Date sequence"
+                        >
+                          <option value="" className="bg-zinc-950 text-zinc-300">📅 Event Date: All</option>
+                          <option value="most_recent" className="bg-zinc-950 text-amber-300">📅 Most Recent Event</option>
+                          <option value="last_event" className="bg-zinc-950 text-amber-300">📅 Last Event</option>
+                        </select>
+                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      </div>
 
                       {/* Download Reports Button */}
                       <button
@@ -403,10 +515,26 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                           </select>
                         </div>
 
-                        {/* Start Date */}
+                        {/* Event Date Filter */}
                         <div className="md:col-span-2">
                           <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
-                            Start Date (Created)
+                            Event Date Filter
+                          </label>
+                          <select
+                            value={filterEventDateOption || ''}
+                            onChange={(e) => setFilterEventDateOption && setFilterEventDateOption(e.target.value as any)}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
+                          >
+                            <option value="">All Events</option>
+                            <option value="most_recent">Most Recent Event</option>
+                            <option value="last_event">Last Event</option>
+                          </select>
+                        </div>
+
+                        {/* Start Date */}
+                        <div className="md:col-span-1 sm:col-span-2">
+                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
+                            Start Date
                           </label>
                           <input
                             type="date"
@@ -417,9 +545,9 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                         </div>
 
                         {/* End Date */}
-                        <div className="md:col-span-2">
+                        <div className="md:col-span-1 sm:col-span-2">
                           <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
-                            End Date (Created)
+                            End Date
                           </label>
                           <input
                             type="date"
@@ -450,6 +578,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                               setFilterStatus('');
                               setFilterSalesPerson('');
                               setFilterDate('');
+                              if (setFilterEventDateOption) setFilterEventDateOption('');
                               setDateRangeStart('');
                               setDateRangeEnd('');
                               setAppliedStartDate('');
@@ -479,6 +608,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                     <th className="p-3.5">Order ID</th>
                     <th className="p-3.5">Customer Name</th>
                     <th className="p-3.5">Mobile Number</th>
+                    <th className="p-3.5">Event Category</th>
                     <th className="p-3.5">Event</th>
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Created Date</th>
@@ -522,7 +652,10 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                             {formatIndianPhoneNumber(lead.mobile)}
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
-                            <UnifiedEventDropdownCell lead={lead} />
+                            <EventCategoryCell lead={lead} orders={safeOrders} filterEventDateOption={filterEventDateOption} />
+                          </td>
+                          <td className="p-3.5 text-zinc-200 font-sans text-xs font-medium">
+                            <EventCell lead={lead} orders={safeOrders} filterEventDateOption={filterEventDateOption} />
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />

@@ -163,6 +163,16 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
     }
   };
 
+  // Sort events by date descending (most recent first)
+  const sortedEventsList = [...eventsList].sort((a, b) => {
+    const timeA = a.event_date && a.event_date !== '—' ? new Date(a.event_date).getTime() : 0;
+    const timeB = b.event_date && b.event_date !== '—' ? new Date(b.event_date).getTime() : 0;
+    return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+  });
+
+  const primaryEventName = sortedEventsList[0]?.event_name || 'Event';
+  const displayLabel = sortedEventsList.length > 1 ? `${primaryEventName} +${sortedEventsList.length - 1}` : primaryEventName;
+
   return (
     <div className="inline-block text-left" ref={containerRef}>
       <button
@@ -174,10 +184,10 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
             ? 'bg-sky-500/25 text-sky-300 border border-sky-400/60 ring-2 ring-sky-500/20'
             : 'bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 hover:text-sky-300 border border-sky-500/30 hover:border-sky-500/50'
         }`}
-        title="Click to View Event Details"
+        title={`Event Details: ${displayLabel}`}
       >
         <Calendar className="w-3.5 h-3.5 shrink-0 text-sky-400" />
-        <span>Click to View</span>
+        <span>{displayLabel}</span>
       </button>
 
       {isOpen && coords && typeof document !== 'undefined' && createPortal(

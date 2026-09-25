@@ -900,6 +900,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   // Filter & Collapse States
   const [filterQuery, setFilterQuery] = useState('');
   const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
+  const [filterEventDateOption, setFilterEventDateOption] = useState<'all' | 'most_recent' | 'last_event' | ''>('');
   const [isDownloadReportsExpanded, setIsDownloadReportsExpanded] = useState(false);
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [filterSource, setFilterSource] = useState('');
@@ -8550,6 +8551,126 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     return matchesSearch && matchesSource && matchesStatus && matchesSales && matchesDate && matchesDateRange;
   }).sort((a, b) => {
+    // Helper to extract datetime timestamps for events
+    const getLeadEventDetails = (leadObj: Lead) => {
+      const linkedOrder = orders?.find((o: any) => 
+        o.lead_id === leadObj.lead_id || 
+        o.order_id === leadObj.lead_id || 
+        (leadObj.order_id && (o.order_id === leadObj.order_id || o.lead_id === leadObj.order_id)) ||
+        ((leadObj as any).orders && (o.order_id === (leadObj as any).orders || o.lead_id === (leadObj as any).orders))
+      );
+
+      const rawEventsList = (leadObj?.events && Array.isArray(leadObj.events) && leadObj.events.length > 0)
+        ? leadObj.events
+        : (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0)
+          ? linkedOrder.events
+          : [];
+
+      const parseDateTime = (dStr: string, tStr?: string): number => {
+        if (!dStr || !dStr.trim()) return 0;
+        const s = dStr.trim();
+        let year = 1970, month = 0, day = 1;
+        if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(s)) {
+          const parts = s.split(/[-/]/);
+          day = parseInt(parts[0], 10);
+          month = parseInt(parts[1], 10) - 1;
+          year = parseInt(parts[2], 10);
+        } else if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(s)) {
+          const parts = s.split(/[-/]/);
+          year = parseInt(parts[0], 10);
+          month = parseInt(parts[1], 10) - 1;
+          day = parseInt(parts[2], 10);
+        } else {
+          const d = new Date(s);
+          if (!isNaN(d.getTime())) {
+            year = d.getFullYear();
+            month = d.getMonth();
+            day = d.getDate();
+          }
+        }
+
+        let hours = 0, minutes = 0;
+        if (tStr && tStr.trim()) {
+          const t = tStr.trim().toUpperCase();
+          const isPM = t.includes('PM');
+          const isAM = t.includes('AM');
+          const cleanTime = t.replace(/(AM|PM)/g, '').trim();
+          const timeParts = cleanTime.split(':');
+          if (timeParts.length >= 1) {
+            let h = parseInt(timeParts[0], 10) || 0;
+            const m = parseInt(timeParts[1] || '0', 10) || 0;
+            if (isPM && h < 12) h += 12;
+            if (isAM && h === 12) h = 0;
+            hours = h;
+            minutes = m;
+          }
+        }
+
+        const combined = new Date(year, month, day, hours, minutes);
+        return isNaN(combined.getTime()) ? 0 : combined.getTime();
+      };
+
+      const eventTimestamps: number[] = [];
+      if (rawEventsList.length > 0) {
+        rawEventsList.forEach((ev: any) => {
+          const dStr = ev.event_date || ev.Event_Date || ev.date || leadObj.event_date || '';
+          const tStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || leadObj.event_time || '';
+          const ts = parseDateTime(dStr, tStr);
+          if (ts > 0) eventTimestamps.push(ts);
+        });
+      }
+
+      if (eventTimestamps.length === 0) {
+        const singleDate = leadObj.event_date || linkedOrder?.event_date || '';
+        const singleTime = leadObj.event_time || linkedOrder?.event_time || '';
+        const ts = parseDateTime(singleDate, singleTime);
+        if (ts > 0) eventTimestamps.push(ts);
+      }
+
+      if (eventTimestamps.length === 0) {
+        return { mostRecent: 0, lastEvent: 0, hasDate: false };
+      }
+
+      // Sort descending (latest event first)
+      eventTimestamps.sort((a, b) => b - a);
+
+      const mostRecent = eventTimestamps[0];
+      // Last Event: event immediately before most recent if >= 2 events exist, else single event
+      const lastEvent = eventTimestamps.length >= 2 ? eventTimestamps[1] : eventTimestamps[0];
+
+      return {
+        mostRecent,
+        lastEvent,
+        hasDate: true
+      };
+    };
+
+    if (filterEventDateOption === 'most_recent') {
+      const detailsA = getLeadEventDetails(a);
+      const detailsB = getLeadEventDetails(b);
+      if (detailsA.hasDate && detailsB.hasDate) {
+        if (detailsA.mostRecent !== detailsB.mostRecent) {
+          return detailsA.mostRecent - detailsB.mostRecent; // Earliest upcoming event date first (ascending)
+        }
+      } else if (detailsA.hasDate) {
+        return -1;
+      } else if (detailsB.hasDate) {
+        return 1;
+      }
+    } else if (filterEventDateOption === 'last_event') {
+      const detailsA = getLeadEventDetails(a);
+      const detailsB = getLeadEventDetails(b);
+      if (detailsA.hasDate && detailsB.hasDate) {
+        if (detailsA.lastEvent !== detailsB.lastEvent) {
+          return detailsA.lastEvent - detailsB.lastEvent; // Earliest event date first (ascending)
+        }
+      } else if (detailsA.hasDate) {
+        return -1;
+      } else if (detailsB.hasDate) {
+        return 1;
+      }
+    }
+
     const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
     const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
     return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
@@ -8626,6 +8747,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     eventForm,
     eventsReporting,
     filterDate,
+    filterEventDateOption,
+    setFilterEventDateOption,
     filterQuery,
     filterSalesPerson,
     filterSource,
