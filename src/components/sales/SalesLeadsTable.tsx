@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw, AlertCircle, MessageSquare
+  FileText, Plus, Edit, CheckSquare, Search, Filter, Ban, X, Phone, Mail, MapPin, Calendar, DollarSign, Clock, Users, ArrowRight, ChevronDown, ChevronUp, Check, Package, Trash, Trash2, Eye, Loader2, CheckCircle2, RefreshCw, AlertCircle, MessageSquare, ArrowUpDown
 } from 'lucide-react';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../../types';
 import { StatusText } from '../ui/StatusText';
@@ -112,6 +112,112 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   const safeFilteredLeads = Array.isArray(filteredLeads) ? filteredLeads : [];
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safePackages = Array.isArray(packages) ? packages : [];
+
+  const [eventCategorySortOrder, setEventCategorySortOrder] = useState<'asc' | 'desc' | null>(null);
+
+  const getLeadEventTimestamp = (leadObj: Lead): number => {
+    const linkedOrder = safeOrders.find((o: any) => 
+      o.lead_id === leadObj.lead_id || 
+      o.order_id === leadObj.lead_id || 
+      (leadObj.order_id && (o.order_id === leadObj.order_id || o.lead_id === leadObj.order_id)) ||
+      ((leadObj as any).orders && (o.order_id === (leadObj as any).orders || o.lead_id === (leadObj as any).orders))
+    );
+
+    const rawEventsList = (leadObj?.events && Array.isArray(leadObj.events) && leadObj.events.length > 0)
+      ? leadObj.events
+      : (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0)
+        ? linkedOrder.events
+        : [];
+
+    const parseDateTime = (dStr: string, tStr?: string): number => {
+      if (!dStr || !dStr.trim()) return 0;
+      const s = dStr.trim();
+      let year = 1970, month = 0, day = 1;
+      if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(s)) {
+        const parts = s.split(/[-/]/);
+        day = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10) - 1;
+        year = parseInt(parts[2], 10);
+      } else if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(s)) {
+        const parts = s.split(/[-/]/);
+        year = parseInt(parts[0], 10);
+        month = parseInt(parts[1], 10) - 1;
+        day = parseInt(parts[2], 10);
+      } else {
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) {
+          year = d.getFullYear();
+          month = d.getMonth();
+          day = d.getDate();
+        }
+      }
+
+      let hours = 0, minutes = 0;
+      if (tStr && tStr.trim()) {
+        const t = tStr.trim().toUpperCase();
+        const isPM = t.includes('PM');
+        const isAM = t.includes('AM');
+        const cleanTime = t.replace(/(AM|PM)/g, '').trim();
+        const timeParts = cleanTime.split(':');
+        if (timeParts.length >= 1) {
+          let h = parseInt(timeParts[0], 10) || 0;
+          const m = parseInt(timeParts[1] || '0', 10) || 0;
+          if (isPM && h < 12) h += 12;
+          if (isAM && h === 12) h = 0;
+          hours = h;
+          minutes = m;
+        }
+      }
+
+      const combined = new Date(year, month, day, hours, minutes);
+      return isNaN(combined.getTime()) ? 0 : combined.getTime();
+    };
+
+    const timestamps: number[] = [];
+    if (rawEventsList.length > 0) {
+      rawEventsList.forEach((ev: any) => {
+        const dStr = ev.event_date || ev.Event_Date || ev.date || leadObj.event_date || '';
+        const tStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || leadObj.event_time || '';
+        const ts = parseDateTime(dStr, tStr);
+        if (ts > 0) timestamps.push(ts);
+      });
+    }
+
+    if (timestamps.length === 0) {
+      const singleDate = leadObj.event_date || linkedOrder?.event_date || '';
+      const singleTime = leadObj.event_time || linkedOrder?.event_time || '';
+      const ts = parseDateTime(singleDate, singleTime);
+      if (ts > 0) timestamps.push(ts);
+    }
+
+    if (timestamps.length === 0) return 0;
+
+    timestamps.sort((a, b) => b - a);
+    if (filterEventDateOption === 'last_event' && timestamps.length >= 2) {
+      return timestamps[1];
+    }
+    return timestamps[0];
+  };
+
+  const displayedLeads = React.useMemo(() => {
+    if (!eventCategorySortOrder) return safeFilteredLeads;
+    return [...safeFilteredLeads].sort((a, b) => {
+      const tsA = getLeadEventTimestamp(a);
+      const tsB = getLeadEventTimestamp(b);
+      if (tsA > 0 && tsB > 0) {
+        if (tsA !== tsB) {
+          return eventCategorySortOrder === 'asc' ? tsA - tsB : tsB - tsA;
+        }
+      } else if (tsA > 0) {
+        return -1;
+      } else if (tsB > 0) {
+        return 1;
+      }
+      const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
+      const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
+      return timeB - timeA;
+    });
+  }, [safeFilteredLeads, eventCategorySortOrder, safeOrders, filterEventDateOption]);
 
   const getMostRecentEventDisplay = (leadObj: Lead, ordersList?: any[]): string => {
     const linkedOrder = ordersList?.find((o: any) => 
@@ -304,7 +410,6 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
               Boolean(filterQuery.trim()),
               Boolean(filterSource),
               Boolean(filterStatus),
-              Boolean(filterEventDateOption),
               Boolean(dateRangeStart || appliedStartDate),
               Boolean(dateRangeEnd || appliedEndDate)
             ].filter(Boolean).length;
@@ -325,26 +430,6 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                     <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
                       {/* Sort Order Filter Button */}
                       <ListSortFilter value={sortOrder} onChange={setSortOrder} />
-
-                      {/* Event Date Filter selector */}
-                      <div className="relative">
-                        <select
-                          id="select_event_date_filter_toolbar"
-                          value={filterEventDateOption || ''}
-                          onChange={(e) => setFilterEventDateOption && setFilterEventDateOption(e.target.value as any)}
-                          className={`flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer shadow-sm appearance-none pr-8 ${
-                            filterEventDateOption
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
-                              : 'bg-zinc-950 hover:bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-700'
-                          }`}
-                          title="Filter & sort table by Event Date sequence"
-                        >
-                          <option value="" className="bg-zinc-950 text-zinc-300">📅 Event Date: All</option>
-                          <option value="most_recent" className="bg-zinc-950 text-amber-300">📅 Most Recent Event</option>
-                          <option value="last_event" className="bg-zinc-950 text-amber-300">📅 Last Event</option>
-                        </select>
-                        <ChevronDown className="w-3.5 h-3.5 text-zinc-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                      </div>
 
                       {/* Download Reports Button */}
                       <button
@@ -515,22 +600,6 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                           </select>
                         </div>
 
-                        {/* Event Date Filter */}
-                        <div className="md:col-span-2">
-                          <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
-                            Event Date Filter
-                          </label>
-                          <select
-                            value={filterEventDateOption || ''}
-                            onChange={(e) => setFilterEventDateOption && setFilterEventDateOption(e.target.value as any)}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100/90 font-sans cursor-pointer focus:outline-none focus:border-emerald-500"
-                          >
-                            <option value="">All Events</option>
-                            <option value="most_recent">Most Recent Event</option>
-                            <option value="last_event">Last Event</option>
-                          </select>
-                        </div>
-
                         {/* Start Date */}
                         <div className="md:col-span-1 sm:col-span-2">
                           <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
@@ -608,16 +677,25 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                     <th className="p-3.5">Order ID</th>
                     <th className="p-3.5">Customer Name</th>
                     <th className="p-3.5">Mobile Number</th>
-                    <th className="p-3.5">Event Category</th>
-                    <th className="p-3.5">Event</th>
+                    <th className="p-3.5">
+                      <button
+                        type="button"
+                        onClick={() => setEventCategorySortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                        className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-405 hover:text-white transition-colors cursor-pointer select-none group"
+                        title="Sort by Event Date (Earliest / Latest)"
+                      >
+                        <span>Event Category</span>
+                        <ArrowUpDown className={`w-3 h-3 transition-colors ${eventCategorySortOrder ? 'text-sky-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                      </button>
+                    </th>
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Created Date</th>
                     <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900/60">
-                  {safeFilteredLeads.length > 0 ? (
-                    safeFilteredLeads.map((lead) => {
+                  {displayedLeads.length > 0 ? (
+                    displayedLeads.map((lead) => {
                       const leadStatus = getLeadCurrentStatus ? getLeadCurrentStatus(lead) : lead.status;
                       const currentStage = getLeadCurrentStage ? getLeadCurrentStage(lead) : 'Sales';
                       const isActiveInSales = currentStage === 'Sales';
@@ -653,9 +731,6 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
                             <EventCategoryCell lead={lead} orders={safeOrders} filterEventDateOption={filterEventDateOption} />
-                          </td>
-                          <td className="p-3.5 text-zinc-200 font-sans text-xs font-medium">
-                            <EventCell lead={lead} orders={safeOrders} filterEventDateOption={filterEventDateOption} />
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />
