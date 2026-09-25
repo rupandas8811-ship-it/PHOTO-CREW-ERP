@@ -1026,6 +1026,10 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                       budget: numVal,
                                       final_quoted_amount: numVal
                                     }));
+                                  }}
+                                  onBlur={(e) => {
+                                    const val = e.target.value;
+                                    const numVal = val === '' ? 0 : Number(val);
                                     saveStep3DataRealtime(editableInclusions, editableDeliverables, wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option, numVal);
                                   }}
                                   placeholder="Enter package base price..."

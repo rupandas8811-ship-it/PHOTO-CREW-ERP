@@ -3157,22 +3157,26 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
               <input
                 type="number"
                 id={isEdit ? "input_section2_package_base_price" : "create_section2_package_base_price"}
-                value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (basePkgSum || 0)}
+                value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (basePkgSum !== undefined ? basePkgSum : '')}
                 onChange={(e) => {
                   const rawVal = e.target.value;
-                  const numVal = rawVal === '' ? '' : rawVal;
-                  const parsedNum = rawVal === '' ? 0 : Number(numVal);
-                  const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.selected_package_id || 'Custom Package';
+                  const parsedNum = rawVal === '' ? 0 : Number(rawVal);
+                  const currentPkg = wizardLeadData.selected_package_id || 'Custom Package';
                   setWizardLeadData(prev => ({
                     ...prev,
-                    package_cost: numVal,
-                    package_price: numVal,
+                    package_cost: rawVal,
+                    package_price: parsedNum,
                     budget: parsedNum,
                     final_quoted_amount: parsedNum
                   }));
                   if (currentPkg) {
                     setPkgPrices(prev => ({ ...prev, [currentPkg]: parsedNum }));
                   }
+                }}
+                onBlur={(e) => {
+                  const rawVal = e.target.value;
+                  const parsedNum = rawVal === '' ? 0 : Number(rawVal);
+                  const currentPkg = wizardLeadData.selected_package_id || 'Custom Package';
                   saveStep3DataRealtime(editableInclusions, editableDeliverables, currentPkg, parsedNum);
                 }}
                 placeholder="0"
@@ -4785,7 +4789,9 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         team_members: safeTeamMembersText,
         Add_Deliverable: safeDeliverablesText,
         Add_Member: safeTeamMembersText,
+        package_cost: cleanPkgCost ?? prev.package_cost,
         package_price: cleanPkgCost ?? prev.package_price,
+        budget: cleanPkgCost ?? prev.budget,
         selected_package_id: pkgId,
         Select_Package_Option: pkgId,
         final_amount: cleanFinalAmt

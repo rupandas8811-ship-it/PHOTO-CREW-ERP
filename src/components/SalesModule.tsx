@@ -4785,22 +4785,26 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
               <input
                 type="number"
                 id={isEdit ? "input_section2_package_base_price" : "create_section2_package_base_price"}
-                value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (basePkgSum || 0)}
+                value={wizardLeadData.package_cost !== undefined && wizardLeadData.package_cost !== null ? wizardLeadData.package_cost : (basePkgSum !== undefined ? basePkgSum : '')}
                 onChange={(e) => {
                   const rawVal = e.target.value;
-                  const numVal = rawVal === '' ? '' : rawVal;
-                  const parsedNum = rawVal === '' ? 0 : Number(numVal);
+                  const parsedNum = rawVal === '' ? 0 : Number(rawVal);
                   const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
                   setWizardLeadData(prev => ({
                     ...prev,
-                    package_cost: numVal,
-                    package_price: numVal,
+                    package_cost: rawVal,
+                    package_price: parsedNum,
                     budget: parsedNum,
                     final_quoted_amount: parsedNum
                   }));
                   if (currentPkg) {
                     setPkgPrices(prev => ({ ...prev, [currentPkg]: parsedNum }));
                   }
+                }}
+                onBlur={(e) => {
+                  const rawVal = e.target.value;
+                  const parsedNum = rawVal === '' ? 0 : Number(rawVal);
+                  const currentPkg = wizardLeadData.selected_package_id || wizardLeadData.Select_Package_Option || 'Custom Package';
                   saveStep3DataRealtime(editableInclusions, editableDeliverables, currentPkg, parsedNum);
                 }}
                 placeholder="0"
