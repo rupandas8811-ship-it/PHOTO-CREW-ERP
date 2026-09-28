@@ -53,8 +53,18 @@ export const ProductionNoteManager: React.FC = () => {
             );
 
             const finalLeadId = targetOrder?.lead_id || targetLead?.lead_id || prodItem?.tracking_id || prodItem?.lead_id || rawIdText;
-            const finalOrderId = targetOrder?.order_id || prodItem?.order_id || (rawIdText.startsWith('ORD-') ? rawIdText : '');
-            const finalCustomerName = targetOrder?.customer_name || targetLead?.customer_name || prodItem?.customer_name || 'Client';
+            const finalOrderId = targetOrder?.order_id || 
+              (targetLead?.order_id && !targetLead.order_id.startsWith('TRK-') ? targetLead.order_id : '') || 
+              (prodItem?.order_id && !prodItem.order_id.startsWith('TRK-') ? prodItem.order_id : '') || 
+              (rawIdText && !rawIdText.startsWith('TRK-') ? rawIdText : '') || 
+              prodItem?.order_id || 
+              rawIdText;
+            const finalCustomerName = targetOrder?.customer_name || 
+              (targetOrder as any)?.client_name || 
+              targetLead?.customer_name || 
+              (targetLead as any)?.client_name || 
+              (prodItem?.customer_name && prodItem.customer_name !== 'Client' ? prodItem.customer_name : '') || 
+              'Client';
 
             setNoteModalState({
               isOpen: true,

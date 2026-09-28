@@ -568,19 +568,188 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
   const resolveOrderAndLead = (prodItem: any) => {
     if (!prodItem) return { order: undefined, lead: undefined };
     
-    // 1. Try to find via raw footage matching tracking_id or order_id
-    const rf = (rawFootage || []).find(f => f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id || f.order_id === prodItem.order_id);
+    // 1. Direct match on orders using order_id, tracking_id, lead_id, or production_id
+    let order = (orders || []).find(o => 
+      (prodItem.order_id && o.order_id === prodItem.order_id) ||
+      (prodItem.tracking_id && (o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id)) ||
+      (prodItem.lead_id && (o.lead_id === prodItem.lead_id || o.order_id === prodItem.lead_id)) ||
+      (prodItem.production_id && (
+        o.order_id === prodItem.production_id || 
+        o.lead_id === prodItem.production_id ||
+        (prodItem.production_id.startsWith('PRD-') && (o.order_id === prodItem.production_id.replace(/^PRD-/, '') || o.lead_id === prodItem.production_id.replace(/^PRD-/, '')))
+      ))
+    );
+
+    // 2. Lookup via rawFootage matching tracking_id, order_id, or production_id
+    const rf = (rawFootage || []).find(f => 
+      (prodItem.tracking_id && (f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id)) ||
+      (prodItem.order_id && (f.order_id === prodItem.order_id || f.tracking_id === prodItem.order_id)) ||
+      (prodItem.production_id && (
+        f.tracking_id === prodItem.production_id || 
+        f.order_id === prodItem.production_id ||
+        (prodItem.production_id.startsWith('PRD-') && (f.tracking_id === prodItem.production_id.replace(/^PRD-/, '') || f.order_id === prodItem.production_id.replace(/^PRD-/, '')))
+      ))
+    );
     
-    // 2. Find order by order_id or lead_id matching tracking_id
-    let order = (orders || []).find(o => o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id || o.order_id === prodItem.order_id || o.lead_id === prodItem.lead_id);
     if (!order && rf) {
-      order = (orders || []).find(o => o.order_id === rf.order_id);
+      order = (orders || []).find(o => 
+        (rf.order_id && (o.order_id === rf.order_id || o.lead_id === rf.order_id)) || 
+        (rf.lead_id && (o.lead_id === rf.lead_id || o.order_id === rf.lead_id)) ||
+        (rf.tracking_id && (o.order_id === rf.tracking_id || o.lead_id === rf.tracking_id))
+      );
+    }
+
+    // 3. Lookup via editorAssignments
+    if (!order) {
+      const ea = (editorAssignments || []).find(a => 
+        (prodItem.production_id && (a.production_id === prodItem.production_id || a.order_id === prodItem.production_id)) ||
+        (prodItem.tracking_id && (a.production_id === prodItem.tracking_id || a.order_id === prodItem.tracking_id)) ||
+        (prodItem.order_id && (a.order_id === prodItem.order_id || a.production_id === prodItem.order_id))
+      );
+      if (ea && (ea.order_id || ea.production_id)) {
+        order = (orders || []).find(o => 
+          o.order_id === ea.order_id || 
+          o.lead_id === ea.order_id ||
+          o.order_id === ea.production_id ||
+          o.lead_id === ea.production_id
+        );
+      }
+    }
+
+    // 4. Lookup via operations
+    if (!order) {
+      const op = (operations || []).find(o => 
+        (prodItem.order_id && o.order_id === prodItem.order_id) ||
+        (prodItem.tracking_id && (o.order_id === prodItem.tracking_id || o.lead_id === prodItem.tracking_id)) ||
+        (rf?.order_id && (o.order_id === rf.order_id || o.lead_id === rf.order_id)) ||
+        (rf?.tracking_id && (o.order_id === rf.tracking_id || o.lead_id === rf.tracking_id))
+      );
+      if (op) {
+        order = (orders || []).find(o => o.order_id === op.order_id || o.lead_id === op.order_id);
+      }
+    }
+
+    // 5. Lookup matching lead
+    let lead = (leadsData || []).find(l => 
+      (order?.lead_id && l.lead_id === order.lead_id) ||
+      (order?.order_id && (l.order_id === order.order_id || l.lead_id === order.order_id)) ||
+      (prodItem.lead_id && (l.lead_id === prodItem.lead_id || l.order_id === prodItem.lead_id)) ||
+      (prodItem.order_id && (l.order_id === prodItem.order_id || l.lead_id === prodItem.order_id)) ||
+      (prodItem.tracking_id && (l.lead_id === prodItem.tracking_id || l.order_id === prodItem.tracking_id || (l as any).tracking_id === prodItem.tracking_id)) ||
+      (rf?.lead_id && (l.lead_id === rf.lead_id || l.order_id === rf.lead_id)) ||
+      (rf?.order_id && (l.order_id === rf.order_id || l.lead_id === rf.order_id))
+    );
+
+    // 6. If order was missing but lead was found, find order from lead
+    if (!order && lead) {
+      order = (orders || []).find(o => 
+        (lead.lead_id && (o.lead_id === lead.lead_id || o.order_id === lead.lead_id)) ||
+        (lead.order_id && (o.order_id === lead.order_id || o.lead_id === lead.order_id))
+      );
     }
     
-    // 3. Find lead by lead_id matching tracking_id or order's lead_id
-    const lead = leadsData?.find(l => l.lead_id === prodItem.tracking_id || l.lead_id === order?.lead_id || l.lead_id === prodItem.lead_id);
-    
+    // 7. If order is still missing, check quotations
+    if (!order) {
+      const q = (quotations || []).find(quo => 
+        (prodItem.order_id && quo.order_id === prodItem.order_id) ||
+        (prodItem.lead_id && (quo.lead_id === prodItem.lead_id || quo.order_id === prodItem.lead_id)) ||
+        (lead?.lead_id && (quo.lead_id === lead.lead_id || quo.order_id === lead.lead_id)) ||
+        (lead?.order_id && (quo.order_id === lead.order_id || quo.lead_id === lead.order_id)) ||
+        (rf?.order_id && (quo.order_id === rf.order_id || quo.lead_id === rf.order_id))
+      );
+      if (q) {
+        order = (orders || []).find(o => (q.order_id && o.order_id === q.order_id) || (q.lead_id && (o.lead_id === q.lead_id || o.order_id === q.lead_id)));
+      }
+    }
+
     return { order, lead };
+  };
+
+  // Helper to extract the exact real Order ID, Customer Name, and Contact details
+  const getRowOrderDetails = (prodItem: any) => {
+    if (!prodItem) {
+      return {
+        order_id: '',
+        customer_name: 'Client',
+        mobile: 'No contact phone',
+        event_type: 'Event',
+        event_date: '',
+        current_stage: 'Verified Footage',
+        quotation_amount: 0,
+        lead_id: '',
+        foundOrder: undefined as any,
+        foundLead: undefined as any,
+      };
+    }
+
+    const { order: foundOrder, lead: foundLead } = resolveOrderAndLead(prodItem);
+    const rf = (rawFootage || []).find(f => 
+      (prodItem.tracking_id && (f.tracking_id === prodItem.tracking_id || f.order_id === prodItem.tracking_id)) ||
+      (prodItem.order_id && (f.order_id === prodItem.order_id || f.tracking_id === prodItem.order_id)) ||
+      (prodItem.production_id && (f.tracking_id === prodItem.production_id || f.order_id === prodItem.production_id))
+    );
+
+    // Exact Order ID resolution:
+    // Prefer real saved Order ID from linked order, lead, raw footage, or production record
+    let resolvedOrderId = foundOrder?.order_id || '';
+    if (!resolvedOrderId && foundLead?.order_id && !foundLead.order_id.startsWith('TRK-')) {
+      resolvedOrderId = foundLead.order_id;
+    }
+    if (!resolvedOrderId && rf?.order_id && !rf.order_id.startsWith('TRK-')) {
+      resolvedOrderId = rf.order_id;
+    }
+    if (!resolvedOrderId && prodItem.order_id && !prodItem.order_id.startsWith('TRK-')) {
+      resolvedOrderId = prodItem.order_id;
+    }
+    if (!resolvedOrderId && foundLead?.lead_id && !foundLead.lead_id.startsWith('TRK-')) {
+      resolvedOrderId = foundLead.lead_id;
+    }
+    if (!resolvedOrderId && prodItem.lead_id && !prodItem.lead_id.startsWith('TRK-')) {
+      resolvedOrderId = prodItem.lead_id;
+    }
+    // Fallback only if genuinely no real Order ID exists anywhere
+    if (!resolvedOrderId) {
+      resolvedOrderId = prodItem.order_id || prodItem.tracking_id || prodItem.production_id || '';
+    }
+
+    // Exact Customer Name resolution:
+    // Must belong to the exact SAME resolved order/lead
+    const resolvedCustomerName = foundOrder?.customer_name || 
+      (foundOrder as any)?.client_name || 
+      foundLead?.customer_name || 
+      (foundLead as any)?.client_name || 
+      (foundLead as any)?.name || 
+      (prodItem.customer_name && prodItem.customer_name !== 'Client' ? prodItem.customer_name : '') || 
+      'Client';
+
+    // Exact Contact Phone resolution:
+    const resolvedMobile = foundOrder?.mobile || 
+      foundOrder?.customer_phone || 
+      (foundOrder as any)?.phone || 
+      (foundOrder as any)?.contact_number || 
+      (foundOrder as any)?.whatsapp_number || 
+      foundLead?.mobile || 
+      foundLead?.whatsapp_number || 
+      (foundLead as any)?.customer_phone || 
+      (foundLead as any)?.phone || 
+      (foundLead as any)?.contact_number || 
+      (prodItem.customer_mobile && prodItem.customer_mobile !== 'No contact phone' ? prodItem.customer_mobile : '') || 
+      (prodItem.mobile && prodItem.mobile !== 'No contact phone' ? prodItem.mobile : '') || 
+      'No contact phone';
+
+    return {
+      ...foundOrder,
+      order_id: resolvedOrderId,
+      customer_name: resolvedCustomerName,
+      mobile: resolvedMobile,
+      event_type: foundLead?.event_type || foundOrder?.event_type || prodItem.event_type || 'Event',
+      event_date: prodItem.event_date || foundLead?.event_date || foundOrder?.event_date || '',
+      current_stage: prodItem.editing_status || foundOrder?.current_stage || 'Verified Footage',
+      quotation_amount: foundOrder?.quotation_amount || foundOrder?.total_amount || 0,
+      lead_id: foundLead?.lead_id || foundOrder?.lead_id || prodItem.lead_id || prodItem.tracking_id,
+      foundOrder,
+      foundLead,
+    };
   };
 
   const getProductionProgress = (prodId: string) => {
@@ -825,7 +994,7 @@ ${coordinatorName}`;
       return existing;
     };
 
-    // 1. Process orders
+    // 1. Process orders first
     (orders || []).forEach(order => {
       const key = order?.order_id || order?.lead_id;
       if (!key) return;
@@ -833,15 +1002,43 @@ ${coordinatorName}`;
       if (cand) cand.order = order;
     });
 
-    // 2. Process production records
-    (production || []).forEach(p => {
-      const key = p.order_id || p.tracking_id || p.production_id || p.lead_id;
+    // 2. Process rawFootage
+    (rawFootage || []).forEach(rf => {
+      const key = rf.order_id || rf.tracking_id;
       if (!key) return;
       const cand = getOrCreateCandidate(key);
-      if (cand) cand.prod = p;
+      if (cand) {
+        cand.rawFootage = rf;
+        if (rf.order_id && !cand.order) {
+          cand.order = (orders || []).find(o => o.order_id === rf.order_id);
+        }
+      }
     });
 
-    // 3. Process editorAssignments
+    // 3. Process production records
+    (production || []).forEach(p => {
+      const matchingRf = (rawFootage || []).find(rf => 
+        (p.tracking_id && (rf.tracking_id === p.tracking_id || rf.order_id === p.tracking_id)) ||
+        (p.order_id && (rf.order_id === p.order_id || rf.tracking_id === p.order_id)) ||
+        (p.production_id && (rf.tracking_id === p.production_id || rf.order_id === p.production_id))
+      );
+      const matchingOrder = (orders || []).find(o => 
+        (p.order_id && o.order_id === p.order_id) ||
+        (p.tracking_id && (o.order_id === p.tracking_id || o.lead_id === p.tracking_id)) ||
+        (matchingRf && (o.order_id === matchingRf.order_id || o.lead_id === matchingRf.lead_id))
+      );
+
+      const key = matchingOrder?.order_id || matchingRf?.order_id || p.order_id || p.tracking_id || p.production_id || p.lead_id;
+      if (!key) return;
+      const cand = getOrCreateCandidate(key);
+      if (cand) {
+        cand.prod = p;
+        if (matchingOrder && !cand.order) cand.order = matchingOrder;
+        if (matchingRf && !cand.rawFootage) cand.rawFootage = matchingRf;
+      }
+    });
+
+    // 4. Process editorAssignments
     (editorAssignments || []).forEach(ea => {
       const key = ea.order_id || ea.production_id;
       if (!key) return;
@@ -850,14 +1047,6 @@ ${coordinatorName}`;
         if (!cand.assignments) cand.assignments = [];
         cand.assignments.push(ea);
       }
-    });
-
-    // 4. Process rawFootage
-    (rawFootage || []).forEach(rf => {
-      const key = rf.order_id || rf.tracking_id;
-      if (!key) return;
-      const cand = getOrCreateCandidate(key);
-      if (cand) cand.rawFootage = rf;
     });
 
     // 5. Process CRM leads
@@ -871,30 +1060,50 @@ ${coordinatorName}`;
     const candidatesList: any[] = [];
 
     for (const cand of candidatesMap.values()) {
-      // Cross-link lead, order, prod, rawFootage if not set
-      if (!cand.order) {
-        cand.order = (orders || []).find(o => 
-          (cand.lead && o.lead_id === cand.lead.lead_id) ||
-          (cand.prod && (o.order_id === cand.prod.order_id || o.order_id === cand.prod.tracking_id || o.lead_id === cand.prod.lead_id)) ||
-          (cand.rawFootage && o.order_id === cand.rawFootage.order_id)
-        );
-      }
-      if (!cand.lead) {
-        cand.lead = (leadsData || []).find(l => 
-          (cand.order && l.lead_id === cand.order?.lead_id) ||
-          (cand.prod && (l.lead_id === cand.prod.lead_id || l.lead_id === cand.prod.tracking_id))
-        );
-      }
-      if (!cand.prod) {
-        cand.prod = (production || []).find(p => 
-          (cand.order && (p.order_id === cand.order?.order_id || p.tracking_id === cand.order?.order_id || p.production_id === cand.order?.order_id || p.lead_id === cand.order?.lead_id || p.production_id === `PRD-${cand.order?.order_id}`)) ||
-          (cand.lead && (p.tracking_id === cand.lead.lead_id || p.lead_id === cand.lead.lead_id || p.production_id === `PRD-${cand.lead.lead_id}`))
-        );
-      }
+      // 1. Cross-link rawFootage
       if (!cand.rawFootage) {
         cand.rawFootage = (rawFootage || []).find(rf => 
-          (cand.order && (rf.order_id === cand.order?.order_id || rf.tracking_id === cand.order?.order_id)) ||
-          (cand.prod && (rf.order_id === cand.prod.order_id || rf.tracking_id === cand.prod.tracking_id))
+          (cand.order && (rf.order_id === cand.order.order_id || rf.tracking_id === cand.order.order_id || (cand.order.lead_id && rf.lead_id === cand.order.lead_id))) ||
+          (cand.prod && (rf.tracking_id === cand.prod.tracking_id || rf.order_id === cand.prod.tracking_id || rf.order_id === cand.prod.order_id)) ||
+          (cand.lead && (rf.lead_id === cand.lead.lead_id || (cand.lead.order_id && rf.order_id === cand.lead.order_id))) ||
+          (cand.key && (rf.tracking_id === cand.key || rf.order_id === cand.key || rf.lead_id === cand.key))
+        );
+      }
+
+      // 2. Cross-link order
+      if (!cand.order) {
+        cand.order = (orders || []).find(o => 
+          (cand.lead && (o.lead_id === cand.lead.lead_id || o.order_id === cand.lead.lead_id || (cand.lead.order_id && o.order_id === cand.lead.order_id))) ||
+          (cand.rawFootage && (o.order_id === cand.rawFootage.order_id || (cand.rawFootage.lead_id && o.lead_id === cand.rawFootage.lead_id))) ||
+          (cand.prod && (o.order_id === cand.prod.order_id || o.order_id === cand.prod.tracking_id || (cand.prod.lead_id && o.lead_id === cand.prod.lead_id))) ||
+          (cand.key && (o.order_id === cand.key || o.lead_id === cand.key))
+        );
+      }
+
+      // 3. Cross-link lead
+      if (!cand.lead) {
+        cand.lead = (leadsData || []).find(l => 
+          (cand.order && (l.lead_id === cand.order.lead_id || l.order_id === cand.order.order_id || (cand.order.order_id && l.lead_id === cand.order.order_id))) ||
+          (cand.rawFootage && (l.lead_id === cand.rawFootage.lead_id || (cand.rawFootage.order_id && (l.order_id === cand.rawFootage.order_id || l.lead_id === cand.rawFootage.order_id)))) ||
+          (cand.prod && (l.lead_id === cand.prod.lead_id || l.lead_id === cand.prod.tracking_id || (cand.prod.order_id && l.order_id === cand.prod.order_id))) ||
+          (cand.key && (l.lead_id === cand.key || l.order_id === cand.key))
+        );
+      }
+
+      // 4. If order was missing but lead was just found, retry finding order from lead
+      if (!cand.order && cand.lead) {
+        cand.order = (orders || []).find(o => 
+          (cand.lead.lead_id && (o.lead_id === cand.lead.lead_id || o.order_id === cand.lead.lead_id)) ||
+          (cand.lead.order_id && (o.order_id === cand.lead.order_id || o.lead_id === cand.lead.order_id))
+        );
+      }
+
+      // 5. Cross-link prod if not set
+      if (!cand.prod) {
+        cand.prod = (production || []).find(p => 
+          (cand.rawFootage && (p.tracking_id === cand.rawFootage.tracking_id || p.order_id === cand.rawFootage.order_id || p.tracking_id === cand.rawFootage.order_id)) ||
+          (cand.order && (p.order_id === cand.order.order_id || p.tracking_id === cand.order.order_id || p.production_id === cand.order.order_id || (cand.order.lead_id && p.lead_id === cand.order.lead_id) || p.production_id === `PRD-${cand.order.order_id}`)) ||
+          (cand.lead && (p.tracking_id === cand.lead.lead_id || p.lead_id === cand.lead.lead_id || p.production_id === `PRD-${cand.lead.lead_id}`))
         );
       }
       if (!cand.assignments || cand.assignments.length === 0) {
@@ -992,17 +1201,43 @@ ${coordinatorName}`;
         computedTargetDate = (l as any)?.delivery_target_date;
       }
 
+      const realOrderId = order?.order_id || 
+        l?.order_id || 
+        (prod?.order_id && !prod.order_id.startsWith('TRK-') ? prod.order_id : '') || 
+        (rf?.order_id && !rf.order_id.startsWith('TRK-') ? rf.order_id : '') || 
+        l?.lead_id || 
+        trackingId;
+
+      const realCustomerName = order?.customer_name || 
+        (order as any)?.client_name || 
+        l?.customer_name || 
+        (l as any)?.client_name || 
+        (l as any)?.name || 
+        (prod?.customer_name && prod.customer_name !== 'Client' ? prod.customer_name : '') || 
+        'Client';
+
+      const realCustomerMobile = order?.customer_phone || 
+        order?.mobile || 
+        (order as any)?.phone || 
+        (order as any)?.whatsapp_number || 
+        l?.mobile || 
+        l?.whatsapp_number || 
+        (l as any)?.customer_phone || 
+        (l as any)?.phone || 
+        (prod?.customer_mobile && prod.customer_mobile !== 'No contact phone' ? prod.customer_mobile : '') || 
+        '';
+
       const candidateObj = {
         ...(prod || {}),
         production_id: prodId,
         tracking_id: trackingId,
-        order_id: order?.order_id || prod?.order_id || trackingId,
+        order_id: realOrderId,
         lead_id: l?.lead_id || order?.lead_id || trackingId,
         event_id: hasMultipleEvents ? 'MULTIPLE' : evtId,
         custom_event_name: evtName,
         events: eventsList,
-        customer_name: order?.customer_name || l?.customer_name || prod?.customer_name || 'Client',
-        customer_mobile: order?.customer_phone || order?.mobile || l?.mobile || prod?.customer_mobile || '',
+        customer_name: realCustomerName,
+        customer_mobile: realCustomerMobile,
         editor_assigned: prod?.editor_assigned || (l as any)?.assigned_editor || 'Unassigned',
         assigned_staff: prod?.assigned_staff || (l as any)?.assigned_editors || '',
         raw_footage_location: prod?.raw_footage_location || rf?.server_path || order?.raw_footage_link || '',
@@ -2189,14 +2424,7 @@ Production Team`;
   // Base list filtered by applied date range, customer name, and order ID
   const filteredLeadsList = useMemo(() => {
     return (leads || []).filter(prod => {
-      const { order: foundOrder, lead } = resolveOrderAndLead(prod);
-      const order = { ...foundOrder, mobile: foundOrder?.mobile || lead?.mobile || 'No contact phone',
-        order_id: foundOrder?.order_id || prod.order_id || prod.tracking_id || prod.production_id,
-        customer_name: prod.customer_name || lead?.customer_name || 'Client',
-        event_type: lead?.event_type || 'Event',
-        event_date: prod.event_date || lead?.event_date || '',
-        current_stage: prod.editing_status || 'Verified Footage'
-      };
+      const order = getRowOrderDetails(prod);
 
       // Event date matching (format is YYYY-MM-DD)
       const eventDate = order?.event_date || '';
@@ -2226,7 +2454,7 @@ Production Team`;
   // Report download utilities
   const downloadCSVReport = () => {
     const data = (filteredLeadsList || []).map(prod => {
-      const { order } = resolveOrderAndLead(prod);
+      const order = getRowOrderDetails(prod);
       return {
         'ORDER_ID': order?.order_id || '',
         'CUSTOMER_NAME': order?.customer_name || '',
@@ -2263,7 +2491,7 @@ Production Team`;
   const downloadExcelReport = () => {
     try {
       const data = (filteredLeadsList || []).map(prod => {
-        const { order } = resolveOrderAndLead(prod);
+        const order = getRowOrderDetails(prod);
         return {
           'ORDER ID': order?.order_id || '',
           'CUSTOMER NAME': order?.customer_name || '',
@@ -2355,7 +2583,7 @@ Production Team`;
         doc.setTextColor(31, 41, 55);
       }
       
-      const { order } = resolveOrderAndLead(prod);
+      const order = getRowOrderDetails(prod);
       
       const ordId = order?.order_id || 'N/A';
       const custName = order?.customer_name || 'N/A';
@@ -2386,7 +2614,7 @@ Production Team`;
     if (!printWindow) return;
     
     const rowsHtml = (filteredLeadsList || []).map(prod => {
-      const { order } = resolveOrderAndLead(prod);
+      const order = getRowOrderDetails(prod);
       return `
         <tr>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; font-family: monospace;">${order?.order_id || ''}</td>
@@ -3942,8 +4170,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     </thead>
                     <tbody className="divide-y divide-zinc-900">
                       {[...rawFootageLeads].sort((a, b) => compareRecordsByDate(a, b, 'latest')).map(prod => {
-                        const { order } = resolveOrderAndLead(prod);
-                        if (!order) return null;
+                        const order = getRowOrderDetails(prod);
+                        if (!order || !order.order_id) return null;
 
                         const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                         const op = operations?.find(o => o.order_id === order?.order_id);
@@ -3952,7 +4180,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         const editorsList = getAssignedEditorsList(prod);
 
                         const prodStatus = getProductionStatus(prod);
-                        const lead = leadsData?.find(l => l.lead_id === order?.lead_id);
+                        const lead = order.foundLead || leadsData?.find(l => l.lead_id === order?.lead_id);
 
                         return (
                           <tr key={prod.production_id} className="hover:bg-zinc-900/40 transition-all font-mono">
@@ -4091,14 +4319,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     ];
 
                     const filteredLeads = filteredLeadsList.filter(prod => {
-                      const { order: foundOrder, lead } = resolveOrderAndLead(prod);
-                      const order = { ...foundOrder, mobile: foundOrder?.mobile || lead?.mobile || 'No contact phone',
-                        order_id: prod.order_id || prod.tracking_id || prod.production_id,
-                        customer_name: prod.customer_name || lead?.customer_name || 'Client',
-                        event_type: lead?.event_type || 'Event',
-                        event_date: prod.event_date || lead?.event_date || '',
-                        current_stage: prod.editing_status || 'Verified Footage'
-                      };
+                      const order = getRowOrderDetails(prod);
                       
                       // For Production Staff, exclude Client Acceptance and Order Closed
                       const displayStatus = getAutomatedProductionStatus(prod);
@@ -4153,21 +4374,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     }
 
                     return [...(filteredLeads || [])].sort((a, b) => compareRecordsByDate(a, b, sortOrder)).map((prod, idx) => {
-                      const { order: foundOrder, lead: foundLead } = resolveOrderAndLead(prod);
-                      const order = { ...foundOrder, mobile: foundOrder?.mobile || foundLead?.mobile || 'No contact phone',
-                        order_id: prod.order_id || prod.tracking_id || prod.production_id,
-                        customer_name: prod.customer_name || foundLead?.customer_name || 'Client',
-                        event_type: foundLead?.event_type || 'Event',
-                        event_date: prod.event_date || foundLead?.event_date || '',
-                        current_stage: prod.editing_status || 'Verified Footage',
-                        quotation_amount: 0,
-                        lead_id: prod.lead_id || prod.tracking_id
-                      };
+                      const order = getRowOrderDetails(prod);
+                      const foundOrder = order.foundOrder;
+                      const foundLead = order.foundLead;
 
                       const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id || f.order_id === prod.tracking_id);
                       const priority = getProductionPriority(prod);
                       const status = prod.editing_status || 'Pending';
-                      const lead = leadsData?.find(l => l.lead_id === order?.lead_id);
+                      const lead = foundLead || leadsData?.find(l => l.lead_id === order?.lead_id);
                       const displayStatus = getAutomatedProductionStatus(prod);
                       const targetDeliveryDate = getTargetDeliveryDateFromAssignments(prod);
                       const daysRem = calculateDaysRemaining(targetDeliveryDate);
@@ -4296,7 +4510,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               setLeadClientReviewDate(toInputDateFormat((prod as any).client_review_upload_date || (crLog ? crLog.timestamp : null)));
                               setLeadClientApprovalDate(toInputDateFormat((prod as any).client_approval_date || (caLog ? caLog.timestamp : null)));
                             }}>{order?.customer_name}</div>
-                            <div className="text-[10px] text-zinc-500 mt-0.5 font-normal">{foundOrder?.mobile || lead?.mobile || 'No contact phone'}</div>
+                            <div className="text-[10px] text-zinc-500 mt-0.5 font-normal">{order?.mobile}</div>
                           </td>
 
                           {/* Event Type */}
@@ -5536,12 +5750,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       }
 
                       return (production || []).map(prod => {
-                        const rf = (rawFootage || []).find(f => f.tracking_id === prod.tracking_id);
-                        const order = rf ? (orders || []).find(o => o.order_id === rf.order_id) : null;
+                        const order = getRowOrderDetails(prod);
                         
-                        const customerName = order ? order?.customer_name : 'Unknown';
+                        const customerName = order?.customer_name || 'Client';
                         const editorName = prod.editor_assigned || 'Unassigned';
-                        const deliveryType = order ? order?.event_type : 'Cinematic Highlights';
+                        const deliveryType = order ? (order.event_type || (order as any).package_name) : 'Cinematic Highlights';
                         const targetDeliveryStr = prod.target_delivery_date || prod.expected_delivery_date || 'N/A';
                         const actualDeliveryStr = prod.delivery_date || prod.actual_delivery_date || 'Not Handed Over';
 
@@ -6971,10 +7184,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     // Build integrated roster rows for the Staff Roster table from assigned editors
                     const groupedRoster = new Map<string, any>();
                     [...(editorAssignments || [])].forEach(assign => {
-                      const correlatedProj = (production || []).find(p => p.production_id === assign.production_id);
-                      const { order } = resolveOrderAndLead(correlatedProj);
-                      const trackingId = correlatedProj?.tracking_id;
-                      const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' ? order?.order_id : (trackingId || 'N/A');
+                      const correlatedProj = (production || []).find(p => p.production_id === assign.production_id || p.tracking_id === assign.production_id || (p as any).order_id === assign.production_id || p.production_id === assign.order_id);
+                      const order = getRowOrderDetails(correlatedProj || { production_id: assign.production_id, order_id: assign.order_id });
+                      const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' && !order?.order_id.startsWith('TRK-') ? order?.order_id : (order?.order_id || correlatedProj?.tracking_id || 'N/A');
                       
                       const staffName = assign.staff_name || 'Unassigned';
                       const isCompleted = assign.status === 'Completed';
@@ -7803,7 +8015,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* 1. PROJECT DETAILS POPUP MODAL */}
       {selectedLeadProd && (() => {
-        const { order, lead } = resolveOrderAndLead(selectedLeadProd);
+        const order = getRowOrderDetails(selectedLeadProd);
+        const lead = order.foundLead;
         if (!order) return null;
 
         const projectLogs = (logs || []).filter(log => 
@@ -8820,9 +9033,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                 {/* FORM: Assign Editor */}
                 {workflowActionType === 'assign_editor' && activeWorkflowProd && (() => {
-                  const { order, lead } = resolveOrderAndLead(activeWorkflowProd);
-                  const orderIdDisplay = order?.order_id || (activeWorkflowProd as any).order_id || activeWorkflowProd.tracking_id;
-                  const customerNameDisplay = order?.customer_name || lead?.customer_name || activeWorkflowProd.customer_name || 'Client';
+                  const order = getRowOrderDetails(activeWorkflowProd);
+                  const orderIdDisplay = order?.order_id || activeWorkflowProd.tracking_id;
+                  const customerNameDisplay = order?.customer_name || 'Client';
 
                   return (
                     <form onSubmit={async (e) => {
@@ -10171,8 +10384,8 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   <h3 className="text-sm sm:text-base font-black text-white uppercase tracking-wider font-mono flex items-center gap-2">
                     <span>{assignedEditorsModalProd.production_id}</span>
                     {(() => {
-                      const { order, lead } = resolveOrderAndLead(assignedEditorsModalProd);
-                      const name = order?.customer_name || lead?.customer_name;
+                      const order = getRowOrderDetails(assignedEditorsModalProd);
+                      const name = order?.customer_name && order.customer_name !== 'Client' ? order.customer_name : '';
                       return name ? <span className="text-zinc-400 font-sans font-normal text-xs sm:text-sm">• {name}</span> : null;
                     })()}
                   </h3>
@@ -10202,8 +10415,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <tbody className="divide-y divide-zinc-900 text-zinc-300 font-sans">
                   {(() => {
                     const prod = assignedEditorsModalProd;
-                    const orderId = (prod as any).order_id || prod.tracking_id || prod.production_id;
-                    const { order, lead } = resolveOrderAndLead(prod);
+                    const order = getRowOrderDetails(prod);
+                    const orderId = order?.order_id || prod.tracking_id || prod.production_id;
+                    const lead = order.foundLead;
 
                     const eventsList = ((prod as any).events && Array.isArray((prod as any).events) && (prod as any).events.length > 0)
                       ? (prod as any).events

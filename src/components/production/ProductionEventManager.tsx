@@ -154,11 +154,15 @@ export const ProductionEventManager: React.FC = () => {
 
       const orderId =
         targetOrder?.order_id ||
-        targetLead?.lead_id ||
+        (targetLead?.order_id && !targetLead.order_id.startsWith('TRK-') ? targetLead.order_id : '') ||
+        (rfItem?.order_id && !rfItem.order_id.startsWith('TRK-') ? rfItem.order_id : '') ||
+        (prodItem?.order_id && !prodItem.order_id.startsWith('TRK-') ? prodItem.order_id : '') ||
+        (targetLead?.lead_id && !targetLead.lead_id.startsWith('TRK-') ? targetLead.lead_id : '') ||
+        (fiberLead?.order_id && !fiberLead.order_id.startsWith('TRK-') ? fiberLead.order_id : '') ||
+        (fiberLead?.lead_id && !fiberLead.lead_id.startsWith('TRK-') ? fiberLead.lead_id : '') ||
+        (lookupId && !lookupId.startsWith('TRK-') ? lookupId : '') ||
         prodItem?.order_id ||
         prodItem?.tracking_id ||
-        fiberLead?.order_id ||
-        fiberLead?.lead_id ||
         lookupId ||
         '';
 
