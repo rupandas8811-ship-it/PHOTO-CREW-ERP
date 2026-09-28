@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
-  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink
+  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink, ArrowUpDown
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment, TaskAssignmentDetail } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';
@@ -685,6 +685,67 @@ export const OperationsLeads: React.FC = () => {
   const [sortBy, setSortBy] = useState<'event_date' | 'customer_name' | 'status' | 'assignment_date' | 'created_at'>('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [sortDateOrder, setSortDateOrder] = useState<SortOrder>('latest');
+
+  // 3-State Column Header Sorting: Order ID, Event Date, Reporting Time
+  const [sortColumn, setSortColumn] = useState<'order_id' | 'event_date' | 'reporting_time' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const parseReportingTimeToMinutes = (timeStr?: string): number => {
+    if (!timeStr || typeof timeStr !== 'string' || !timeStr.trim()) return -1;
+    const t = timeStr.trim().toUpperCase();
+    const isPM = t.includes('PM');
+    const isAM = t.includes('AM');
+    const clean = t.replace(/(AM|PM)/g, '').trim();
+    const parts = clean.split(':');
+    if (parts.length >= 1) {
+      let h = parseInt(parts[0], 10) || 0;
+      const m = parseInt(parts[1] || '0', 10) || 0;
+      if (isPM && h < 12) h += 12;
+      if (isAM && h === 12) h = 0;
+      return h * 60 + m;
+    }
+    return -1;
+  };
+
+  const getOrderReportingTimeDetails = (ord: Order, op?: any, lead?: any): { timeStr: string; minutes: number } => {
+    const events = getOrderEventsList(ord, lead);
+    const timeStr = (
+      op?.reporting_time || 
+      ord.reporting_time || 
+      (ord as any).Reporting_time || 
+      events[0]?.reporting_time || 
+      events[0]?.event_start_time || 
+      events[0]?.event_time || 
+      ord.event_time || 
+      ''
+    ).trim();
+    const minutes = parseReportingTimeToMinutes(timeStr);
+    return { timeStr, minutes };
+  };
+
+  const getOrderPrimaryEventTimestamp = (ord: Order, lead?: any): number => {
+    const events = getOrderEventsList(ord, lead);
+    const sorted = sortEventsByDateAsc(events);
+    const ev = sorted[0];
+    const dateStr = ev?.event_date || ord.event_date || (lead as any)?.event_date || '';
+    const timeStr = ev?.event_start_time || ev?.event_time || ord.event_time || (lead as any)?.event_time || '';
+    return parseDateTimeToTimestamp(dateStr, timeStr);
+  };
+
+  const handleColumnSort = (column: 'order_id' | 'event_date' | 'reporting_time') => {
+    if (sortColumn !== column) {
+      // 1st CLICK: Ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    } else if (sortDirection === 'asc') {
+      // 2nd CLICK: Descending
+      setSortDirection('desc');
+    } else {
+      // 3rd CLICK: Reset / Default Order
+      setSortColumn(null);
+      setSortDirection('asc');
+    }
+  };
 
   // Dual Dropdown and Multi-Staff Assign State
   const [activeAssignments, setActiveAssignments] = useState<{ staff_role: string; staff_id: string; staff_name: string }[]>([]);
@@ -2207,61 +2268,68 @@ export const OperationsLeads: React.FC = () => {
     leads
   ]);
 
-  // Sorted list implementation
+  // Sorted list implementation with 3-state column sorting (Order ID, Event Date, Reporting Time)
   const sortedOrders = useMemo(() => {
     const list = [...filteredOrders];
-    list.sort((a, b) => {
-      if (sortBy === 'created_at') {
+
+    if (!sortColumn) {
+      return list.sort((a, b) => compareRecordsByDate(a, b, sortDateOrder));
+    }
+
+    return list.sort((a, b) => {
+      // 1. ORDER ID: Click 1 -> Ascending, Click 2 -> Descending, Click 3 -> Reset
+      if (sortColumn === 'order_id') {
+        const idA = String(a.order_id || '').trim();
+        const idB = String(b.order_id || '').trim();
+        if (idA && idB) {
+          const comp = compareAlphanumeric(idA, idB);
+          if (comp !== 0) {
+            return sortDirection === 'asc' ? comp : -comp;
+          }
+        } else if (idA) {
+          return sortDirection === 'asc' ? -1 : 1;
+        } else if (idB) {
+          return sortDirection === 'asc' ? 1 : -1;
+        }
         return compareRecordsByDate(a, b, sortDateOrder);
       }
-      
-      if (sortBy === 'event_date') {
+
+      // 2. EVENT DATE: Click 1 -> Oldest to Newest, Click 2 -> Newest to Oldest, Click 3 -> Reset
+      if (sortColumn === 'event_date') {
         const leadA = findLeadForOrder(a, leads || []);
-        const evsA = getOrderEventsList(a, leadA);
-        const sortedA = sortEventsByDateAsc(evsA);
-        const evA = sortedA[0];
-        const dateA = evA?.event_date || a.event_date || '';
-        const timeA = evA?.event_start_time || evA?.event_time || a.event_time || '';
-        const tsA = parseDateTimeToTimestamp(dateA, timeA);
-
         const leadB = findLeadForOrder(b, leads || []);
-        const evsB = getOrderEventsList(b, leadB);
-        const sortedB = sortEventsByDateAsc(evsB);
-        const evB = sortedB[0];
-        const dateB = evB?.event_date || b.event_date || '';
-        const timeB = evB?.event_start_time || evB?.event_time || b.event_time || '';
-        const tsB = parseDateTimeToTimestamp(dateB, timeB);
+        const tsA = getOrderPrimaryEventTimestamp(a, leadA);
+        const tsB = getOrderPrimaryEventTimestamp(b, leadB);
 
-        if (tsA !== tsB && tsA > 0 && tsB > 0) {
-          return sortOrder === 'asc' ? tsA - tsB : tsB - tsA;
+        if (tsA > 0 && tsB > 0 && tsA !== tsB) {
+          return sortDirection === 'asc' ? tsA - tsB : tsB - tsA;
         }
         if (tsA > 0) return -1;
         if (tsB > 0) return 1;
         return compareRecordsByDate(a, b, sortDateOrder);
       }
 
-      let valA: any = '';
-      let valB: any = '';
+      // 3. REPORTING TIME: Click 1 -> Earliest to Latest, Click 2 -> Latest to Earliest, Click 3 -> Reset
+      if (sortColumn === 'reporting_time') {
+        const opA = getOpDetails(a.order_id);
+        const opB = getOpDetails(b.order_id);
+        const leadA = findLeadForOrder(a, leads || []);
+        const leadB = findLeadForOrder(b, leads || []);
 
-      if (sortBy === 'customer_name') {
-        valA = a.customer_name.toLowerCase();
-        valB = b.customer_name.toLowerCase();
-      } else if (sortBy === 'status') {
-        valA = a.current_stage.toLowerCase();
-        valB = b.current_stage.toLowerCase();
-      } else if (sortBy === 'assignment_date') {
-        const assignsA = staffAssignments ? staffAssignments.filter(x => x.order_id === a.order_id) : [];
-        const assignsB = staffAssignments ? staffAssignments.filter(x => x.order_id === b.order_id) : [];
-        valA = assignsA.length > 0 ? assignsA[0].assignment_date : 'ZZZZ-ZZ-ZZ'; // place unassigned last
-        valB = assignsB.length > 0 ? assignsB[0].assignment_date : 'ZZZZ-ZZ-ZZ';
+        const repA = getOrderReportingTimeDetails(a, opA, leadA);
+        const repB = getOrderReportingTimeDetails(b, opB, leadB);
+
+        if (repA.minutes >= 0 && repB.minutes >= 0 && repA.minutes !== repB.minutes) {
+          return sortDirection === 'asc' ? repA.minutes - repB.minutes : repB.minutes - repA.minutes;
+        }
+        if (repA.minutes >= 0) return -1;
+        if (repB.minutes >= 0) return 1;
+        return compareRecordsByDate(a, b, sortDateOrder);
       }
 
-      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return compareRecordsByDate(a, b, sortDateOrder);
     });
-    return list;
-  }, [filteredOrders, sortBy, sortOrder, sortDateOrder, staffAssignments, leads]);
+  }, [filteredOrders, sortColumn, sortDirection, sortDateOrder, staffAssignments, leads, operations]);
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -3065,25 +3133,78 @@ export const OperationsLeads: React.FC = () => {
         <table className="w-full text-left border-collapse min-w-max">
           <thead>
             <tr className="border-b border-zinc-850 text-[10px] font-mono tracking-widest uppercase text-zinc-400 bg-zinc-950/70 select-none">
-              <th className="p-4 font-bold">Order ID</th>
-              <th 
-                onClick={() => toggleSort('customer_name')}
-                className="p-4 font-bold cursor-pointer hover:bg-zinc-800/40 hover:text-white transition-colors"
-                title="Click to Sort by Customer Name"
-              >
-                Customer Name {renderSortIndicator('customer_name')}
+              <th className="p-4">
+                <button
+                  type="button"
+                  onClick={() => handleColumnSort('order_id')}
+                  className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
+                  title={
+                    sortColumn === 'order_id'
+                      ? sortDirection === 'asc'
+                        ? 'Order ID: Ascending (Click for Descending)'
+                        : 'Order ID: Descending (Click for Reset / Default)'
+                      : 'Order ID: Click for Ascending'
+                  }
+                >
+                  <span>Order ID</span>
+                  <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'order_id' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                  {sortColumn === 'order_id' && (
+                    <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                      {sortDirection === 'asc' ? '▲' : '▼'}
+                    </span>
+                  )}
+                </button>
+              </th>
+              <th className="p-4 font-bold">
+                Customer Name
               </th>
               <th className="p-4 font-bold">Mobile Number</th>
               <th className="p-4 font-bold">Event Name</th>
-              <th 
-                onClick={() => toggleSort('event_date')}
-                className="p-4 font-bold cursor-pointer hover:bg-zinc-800/40 hover:text-white transition-colors"
-                title="Click to Sort by Event Date"
-              >
-                Event Date {renderSortIndicator('event_date')}
+              <th className="p-4">
+                <button
+                  type="button"
+                  onClick={() => handleColumnSort('event_date')}
+                  className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
+                  title={
+                    sortColumn === 'event_date'
+                      ? sortDirection === 'asc'
+                        ? 'Event Date: Oldest to Newest (Click for Newest to Oldest)'
+                        : 'Event Date: Newest to Oldest (Click for Reset / Default)'
+                      : 'Event Date: Click for Oldest to Newest'
+                  }
+                >
+                  <span>Event Date</span>
+                  <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'event_date' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                  {sortColumn === 'event_date' && (
+                    <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                      {sortDirection === 'asc' ? '▲' : '▼'}
+                    </span>
+                  )}
+                </button>
               </th>
               <th className="p-4 font-bold whitespace-nowrap">EVENT LOCATION</th>
-              <th className="p-4 font-bold">Reporting Time</th>
+              <th className="p-4">
+                <button
+                  type="button"
+                  onClick={() => handleColumnSort('reporting_time')}
+                  className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
+                  title={
+                    sortColumn === 'reporting_time'
+                      ? sortDirection === 'asc'
+                        ? 'Reporting Time: Earliest to Latest (Click for Latest to Earliest)'
+                        : 'Reporting Time: Latest to Earliest (Click for Reset / Default)'
+                      : 'Reporting Time: Click for Earliest to Latest'
+                  }
+                >
+                  <span>Reporting Time</span>
+                  <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'reporting_time' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                  {sortColumn === 'reporting_time' && (
+                    <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                      {sortDirection === 'asc' ? '▲' : '▼'}
+                    </span>
+                  )}
+                </button>
+              </th>
               <th className="p-4 font-bold">Assigned Team</th>
               <th className="p-4 font-bold">Current Stage</th>
               <th className="p-4 font-bold text-right text-zinc-400">Actions</th>

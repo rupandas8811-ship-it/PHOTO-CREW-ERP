@@ -17,12 +17,14 @@ import {
   TrendingUp,
   CreditCard,
   X,
-  RefreshCw
+  RefreshCw,
+  ArrowUpDown
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'motion/react';
 import { EVENT_TYPES } from '../../types';
 import { formatDateDDMMYY, formatTime12Hour, ensureModalScrolledToTop } from '../../utils';
+import { compareAlphanumeric } from '../ui/ListSortFilter';
 import { PaymentHistoryModal } from '../PaymentHistoryModal';
 import { UpdatePaymentModal } from './UpdatePaymentModal';
 import { supabaseClient } from '../../supabaseClient';
@@ -109,6 +111,25 @@ export const PendingPaymentsReport: React.FC = () => {
   const [searchOrderId, setSearchOrderId] = useState('');
   const [eventTypeFilter, setEventTypeFilter] = useState('All');
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
+
+  // 3-State Column Header Sorting: Days Overdue, Pending Amount, Paid Amount, Total Amount, Order ID, Overdue Since
+  const [sortColumn, setSortColumn] = useState<'days_overdue' | 'pending_amount' | 'paid_amount' | 'total_amount' | 'order_id' | 'overdue_since' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  const handleColumnSort = (column: 'days_overdue' | 'pending_amount' | 'paid_amount' | 'total_amount' | 'order_id' | 'overdue_since') => {
+    if (sortColumn !== column) {
+      // 1st click -> Ascending
+      setSortColumn(column);
+      setSortDirection('asc');
+    } else if (sortDirection === 'asc') {
+      // 2nd click -> Descending
+      setSortDirection('desc');
+    } else {
+      // 3rd click -> Reset / Original order
+      setSortColumn(null);
+      setSortDirection('asc');
+    }
+  };
 
   // Date Filter Dropdown Options: 'This Month' | 'Last Month' | 'Last 3 Months' | 'Custom Date Range' | 'All Time'
   const [dateFilterOption, setDateFilterOption] = useState<'This Month' | 'Last Month' | 'Last 3 Months' | 'Custom Date Range' | 'All Time'>('This Month');
@@ -799,9 +820,88 @@ export const PendingPaymentsReport: React.FC = () => {
       };
     }).filter(Boolean) as any[];
 
-    // Ensure newest Order ID / order creation sequence appears first (never sort by Event Date)
-    return result.sort(compareOrderRecords);
-  }, [allPendingRecords, activeEventDateRange, globalSearch, searchTerm, searchOrderId, eventTypeFilter, paymentStatusFilter, activeCardFilter]);
+    // 3-State Column Sorting for: Days Overdue, Pending Amount, Paid Amount, Total Amount, Order ID, Overdue Since
+    if (!sortColumn) {
+      return result.sort(compareOrderRecords);
+    }
+
+    return result.sort((a, b) => {
+      // 1. Days Overdue (Numeric)
+      if (sortColumn === 'days_overdue') {
+        const effA = a.effectiveEventDate || a.eventDate;
+        const daysA = a.paymentStatus === 'Fully Paid' ? 0 : getOverdueDays(effA, a.remainingAmount);
+        const effB = b.effectiveEventDate || b.eventDate;
+        const daysB = b.paymentStatus === 'Fully Paid' ? 0 : getOverdueDays(effB, b.remainingAmount);
+        if (daysA !== daysB) {
+          return sortDirection === 'asc' ? daysA - daysB : daysB - daysA;
+        }
+        return compareOrderRecords(a, b);
+      }
+
+      // 2. Pending Amount (Numeric)
+      if (sortColumn === 'pending_amount') {
+        const pendA = a.paymentStatus === 'Fully Paid' ? 0 : (Number(a.remainingAmount) || 0);
+        const pendB = b.paymentStatus === 'Fully Paid' ? 0 : (Number(b.remainingAmount) || 0);
+        if (pendA !== pendB) {
+          return sortDirection === 'asc' ? pendA - pendB : pendB - pendA;
+        }
+        return compareOrderRecords(a, b);
+      }
+
+      // 3. Paid Amount (Numeric)
+      if (sortColumn === 'paid_amount') {
+        const paidA = Number(a.totalPaidAmount) || 0;
+        const paidB = Number(b.totalPaidAmount) || 0;
+        if (paidA !== paidB) {
+          return sortDirection === 'asc' ? paidA - paidB : paidB - paidA;
+        }
+        return compareOrderRecords(a, b);
+      }
+
+      // 4. Total Amount (Numeric)
+      if (sortColumn === 'total_amount') {
+        const totA = Number(a.finalPackageAmount) || 0;
+        const totB = Number(b.finalPackageAmount) || 0;
+        if (totA !== totB) {
+          return sortDirection === 'asc' ? totA - totB : totB - totA;
+        }
+        return compareOrderRecords(a, b);
+      }
+
+      // 5. Order ID (Alphanumeric sequence)
+      if (sortColumn === 'order_id') {
+        const idA = String(a.orderId || '').trim();
+        const idB = String(b.orderId || '').trim();
+        if (idA && idB) {
+          const comp = compareAlphanumeric(idA, idB);
+          if (comp !== 0) {
+            return sortDirection === 'asc' ? comp : -comp;
+          }
+        } else if (idA) {
+          return sortDirection === 'asc' ? -1 : 1;
+        } else if (idB) {
+          return sortDirection === 'asc' ? 1 : -1;
+        }
+        return compareOrderRecords(a, b);
+      }
+
+      // 6. Overdue Since (Actual saved date)
+      if (sortColumn === 'overdue_since') {
+        const dStrA = a.paymentStatus === 'Fully Paid' ? '' : (a.effectiveEventDate || a.eventDate || '');
+        const dStrB = b.paymentStatus === 'Fully Paid' ? '' : (b.effectiveEventDate || b.eventDate || '');
+        const tsA = dStrA ? (Date.parse(normalizeToYYYYMMDD(dStrA)) || 0) : 0;
+        const tsB = dStrB ? (Date.parse(normalizeToYYYYMMDD(dStrB)) || 0) : 0;
+        if (tsA > 0 && tsB > 0 && tsA !== tsB) {
+          return sortDirection === 'asc' ? tsA - tsB : tsB - tsA;
+        }
+        if (tsA > 0) return -1;
+        if (tsB > 0) return 1;
+        return compareOrderRecords(a, b);
+      }
+
+      return compareOrderRecords(a, b);
+    });
+  }, [allPendingRecords, activeEventDateRange, globalSearch, searchTerm, searchOrderId, eventTypeFilter, paymentStatusFilter, activeCardFilter, sortColumn, sortDirection]);
 
   // Unique event types for dropdown - strictly sourced from Sales Step 2 EVENT_TYPES
   const uniqueEventTypes = useMemo(() => {
@@ -1487,17 +1587,157 @@ export const PendingPaymentsReport: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-max">
             <thead>
-              <tr className="border-b border-zinc-850 bg-zinc-900/30">
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-left">Order ID</th>
+              <tr className="border-b border-zinc-850 bg-zinc-900/30 select-none">
+                {/* 1. Order ID */}
+                <th className="px-4 py-3.5 text-left">
+                  <button
+                    type="button"
+                    onClick={() => handleColumnSort('order_id')}
+                    className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-black text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
+                    title={
+                      sortColumn === 'order_id'
+                        ? sortDirection === 'asc'
+                          ? 'Order ID: Ascending (Click for Descending)'
+                          : 'Order ID: Descending (Click for Reset / Default)'
+                        : 'Order ID: Click for Ascending'
+                    }
+                  >
+                    <span>Order ID</span>
+                    <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'order_id' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                    {sortColumn === 'order_id' && (
+                      <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                        {sortDirection === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-left">Client Name</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-left">Event Details</th>
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Total Amount</th>
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Paid Amount</th>
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-rose-450 font-mono text-right">Pending Amount</th>
+
+                {/* 2. Total Amount */}
+                <th className="px-4 py-3.5 text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleColumnSort('total_amount')}
+                    className="inline-flex items-center justify-end gap-1.5 uppercase font-mono tracking-wider text-[10px] font-black text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group w-full"
+                    title={
+                      sortColumn === 'total_amount'
+                        ? sortDirection === 'asc'
+                          ? 'Total Amount: Lowest to Highest (Click for Highest to Lowest)'
+                          : 'Total Amount: Highest to Lowest (Click for Reset / Default)'
+                        : 'Total Amount: Click for Lowest to Highest'
+                    }
+                  >
+                    <span>Total Amount</span>
+                    <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'total_amount' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                    {sortColumn === 'total_amount' && (
+                      <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                        {sortDirection === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+
+                {/* 3. Paid Amount */}
+                <th className="px-4 py-3.5 text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleColumnSort('paid_amount')}
+                    className="inline-flex items-center justify-end gap-1.5 uppercase font-mono tracking-wider text-[10px] font-black text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group w-full"
+                    title={
+                      sortColumn === 'paid_amount'
+                        ? sortDirection === 'asc'
+                          ? 'Paid Amount: Lowest to Highest (Click for Highest to Lowest)'
+                          : 'Paid Amount: Highest to Lowest (Click for Reset / Default)'
+                        : 'Paid Amount: Click for Lowest to Highest'
+                    }
+                  >
+                    <span>Paid Amount</span>
+                    <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'paid_amount' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                    {sortColumn === 'paid_amount' && (
+                      <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                        {sortDirection === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+
+                {/* 4. Pending Amount */}
+                <th className="px-4 py-3.5 text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleColumnSort('pending_amount')}
+                    className="inline-flex items-center justify-end gap-1.5 uppercase font-mono tracking-wider text-[10px] font-black text-rose-450 hover:text-white transition-colors cursor-pointer select-none group w-full"
+                    title={
+                      sortColumn === 'pending_amount'
+                        ? sortDirection === 'asc'
+                          ? 'Pending Amount: Lowest to Highest (Click for Highest to Lowest)'
+                          : 'Pending Amount: Highest to Lowest (Click for Reset / Default)'
+                        : 'Pending Amount: Click for Lowest to Highest'
+                    }
+                  >
+                    <span>Pending Amount</span>
+                    <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'pending_amount' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                    {sortColumn === 'pending_amount' && (
+                      <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                        {sortDirection === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Event Date</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-emerald-400 font-mono text-center">Completion Date</th>
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Overdue Since</th>
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Days Overdue</th>
+
+                {/* 5. Overdue Since */}
+                <th className="px-4 py-3.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => handleColumnSort('overdue_since')}
+                    className="inline-flex items-center justify-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-black text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group w-full"
+                    title={
+                      sortColumn === 'overdue_since'
+                        ? sortDirection === 'asc'
+                          ? 'Overdue Since: Oldest to Newest (Click for Newest to Oldest)'
+                          : 'Overdue Since: Newest to Oldest (Click for Reset / Default)'
+                        : 'Overdue Since: Click for Oldest to Newest'
+                    }
+                  >
+                    <span>Overdue Since</span>
+                    <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'overdue_since' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                    {sortColumn === 'overdue_since' && (
+                      <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                        {sortDirection === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+
+                {/* 6. Days Overdue */}
+                <th className="px-4 py-3.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => handleColumnSort('days_overdue')}
+                    className="inline-flex items-center justify-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-black text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group w-full"
+                    title={
+                      sortColumn === 'days_overdue'
+                        ? sortDirection === 'asc'
+                          ? 'Days Overdue: Lowest to Highest (Click for Highest to Lowest)'
+                          : 'Days Overdue: Highest to Lowest (Click for Reset / Default)'
+                        : 'Days Overdue: Click for Lowest to Highest'
+                    }
+                  >
+                    <span>Days Overdue</span>
+                    <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'days_overdue' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                    {sortColumn === 'days_overdue' && (
+                      <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                        {sortDirection === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                </th>
+
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Payment Status</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Project Status</th>
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Actions</th>
