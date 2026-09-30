@@ -6858,6 +6858,16 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       const rProd = await pushUpsert('production', newProd);
       if (!rProd?.success) {
         console.warn("[confirmRawFootageReceived] Production upsert warning:", rProd?.error);
+      } else {
+        setProduction(prev => {
+          const idx = prev.findIndex(p => p.production_id === newProd.production_id || p.tracking_id === actualTrackingId);
+          if (idx >= 0) {
+            const copy = [...prev];
+            copy[idx] = { ...copy[idx], ...newProd };
+            return copy;
+          }
+          return [newProd, ...prev];
+        });
       }
     } catch (prodErr) {
       console.warn("[confirmRawFootageReceived] Production upsert error:", prodErr);

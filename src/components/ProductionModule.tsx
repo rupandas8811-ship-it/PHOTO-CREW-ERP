@@ -2327,7 +2327,7 @@ Production Team`;
     const current = getProductionStatus(prod);
     const valid: string[] = [current]; // Keep current so the select lists it
     
-    if (current === 'Raw Footage Received') {
+    if (current === 'Raw Footage Received' || current === 'Verified Footage') {
       valid.push('Editor Assigned');
     } else if (current === 'Editor Assigned') {
       valid.push('Editing Started', 'Editing In Progress');
@@ -2351,6 +2351,9 @@ Production Team`;
   };
 
   const getDropdownOptions = (currentStatus: string): string[] => {
+    if (currentStatus === 'Raw Footage Received' || currentStatus === 'Verified Footage') {
+      return ['Editor Assigned', 'Editing Started', 'Editing In Progress'];
+    }
     if (currentStatus === 'Editor Assigned') {
       return ['Editing Started', 'Editing In Progress'];
     }
