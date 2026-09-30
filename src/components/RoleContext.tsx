@@ -6849,6 +6849,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       event_id: targetOrder?.event_type || 'Main Event',
       assigned_team: targetOrder?.assigned_team || 'Unassigned',
       final_consolidated_drive_link: resolvedLink,
+      proof_url: resolvedLink,
       current_status: prodEditingStatus,
       created_at: timestamp
     };
