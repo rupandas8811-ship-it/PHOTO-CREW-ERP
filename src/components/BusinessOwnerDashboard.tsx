@@ -54,6 +54,7 @@ import { Order, Lead, Production, Payment } from '../types';
 import { AssignedStaffDropdown } from './AssignedStaffDropdown';
 import { OwnerPasswordResetModule } from './OwnerPasswordResetModule';
 import { compareRecordsByDate } from './ui/ListSortFilter';
+import { getAllMatchingOrderIds } from './SalesUtils';
 
 interface BusinessOwnerDashboardProps {
   activeSection?: string;
@@ -3206,10 +3207,76 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
   // Combined detailed records
   const records = useMemo(() => {
-    return orders.map(o => {
-      const pay = payments.find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
+    const coveredOrderIds = new Set<string>();
+    orders.forEach(o => {
+      getAllMatchingOrderIds(o.order_id, o.lead_id, orders, leads).forEach(id => coveredOrderIds.add(id));
+    });
+
+    // Find any leads or payments with payment history that are not yet in orders table
+    const standalonePendingOrders: any[] = [];
+    (paymentHistory || []).forEach(h => {
+      const hid = String(h.order_id || '').trim();
+      if (!hid || coveredOrderIds.has(hid)) return;
+
+      const matchingLead = leads.find(l => {
+        const leadIds = getAllMatchingOrderIds(null, l.lead_id, orders, leads);
+        return leadIds.includes(hid);
+      });
+      const isAlreadyAdded = standalonePendingOrders.some(s => {
+        const sIds = getAllMatchingOrderIds(s.order_id, s.lead_id, orders, leads);
+        return sIds.includes(hid);
+      });
+      if (!isAlreadyAdded) {
+        standalonePendingOrders.push({
+          order_id: (matchingLead as any)?.order_id || hid,
+          lead_id: matchingLead?.lead_id || hid,
+          customer_name: matchingLead?.customer_name || 'Customer',
+          event_type: matchingLead?.event_type || 'Event Photography',
+          event_date: matchingLead?.event_date || (h.payment_date ? h.payment_date.split('T')[0] : ''),
+          quotation_amount: Number(matchingLead?.Final_Quotation_Amount) || Number(matchingLead?.budget) || Number(h.amount) || 0,
+          current_stage: 'Confirmed',
+          order_status: 'Confirmed',
+          created_at: h.created_at || new Date().toISOString()
+        });
+      }
+    });
+
+    // Also check payments table for any pending payments without order records
+    (payments || []).forEach(p => {
+      const pid = String(p.order_id || '').trim();
+      if (!pid || coveredOrderIds.has(pid)) return;
+      const isAlreadyAdded = standalonePendingOrders.some(s => {
+        const sIds = getAllMatchingOrderIds(s.order_id, s.lead_id, orders, leads);
+        return sIds.includes(pid);
+      });
+      if (!isAlreadyAdded) {
+        const matchingLead = leads.find(l => {
+          const leadIds = getAllMatchingOrderIds(null, l.lead_id, orders, leads);
+          return leadIds.includes(pid);
+        });
+        standalonePendingOrders.push({
+          order_id: (matchingLead as any)?.order_id || pid,
+          lead_id: matchingLead?.lead_id || pid,
+          customer_name: matchingLead?.customer_name || 'Customer',
+          event_type: matchingLead?.event_type || 'Event Photography',
+          event_date: matchingLead?.event_date || (p.payment_date ? p.payment_date.split('T')[0] : ''),
+          quotation_amount: Number(matchingLead?.Final_Quotation_Amount) || Number(matchingLead?.budget) || Number(p.quotation_amount) || 0,
+          current_stage: 'Confirmed',
+          order_status: 'Confirmed',
+          created_at: (p as any).created_at || new Date().toISOString()
+        });
+      }
+    });
+
+    const allOrderSource = [...orders, ...standalonePendingOrders];
+
+    return allOrderSource.map(o => {
+      const matchingIdsList = getAllMatchingOrderIds(o.order_id, o.lead_id, orders, leads);
+      const matchingIds = new Set(matchingIdsList);
+
+      const pay = payments.find(p => matchingIds.has(p.order_id) || (p.lead_id && matchingIds.has(p.lead_id)));
       const prod = production.find(p => p.tracking_id === o.lead_id || p.order_id === o.lead_id || p.tracking_id === o.order_id);
-      const ld = leads.find(l => l.lead_id === o.lead_id || l.lead_id === o.order_id);
+      const ld = leads.find(l => matchingIds.has(l.lead_id) || (l as any).order_id === o.order_id);
 
       // Extract all real event records for this order/lead
       const rawLeadEvents = ld?.events && Array.isArray(ld.events) && ld.events.length > 0
@@ -3231,22 +3298,50 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       const primaryEventDate = events[0]?.event_date || o.event_date || ld?.event_date || '';
       const primaryEventName = events[0]?.event_name || events[0]?.event_type || o.custom_event_name || o.event_type || 'Event Photography';
 
-      const approvedHistories = (paymentHistory || []).filter(h => 
-        (h.order_id === o.order_id || h.order_id === o.lead_id) && 
-        h.approval_status !== 'Rejected' &&
-        (h.approval_status === 'Approved' || (!h.notes || !h.notes.includes('Waiting for Approval')))
-      );
-      const historyApprovedSum = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
-
       let rejectedIds = new Set<string>();
       try {
         const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
         if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
       } catch (_) {}
 
-      const hasPendingApproval = (paymentHistory || []).some(h => {
-        const isThisOrder = (h.order_id === o.order_id || h.order_id === o.lead_id);
-        if (!isThisOrder) return false;
+      let approvedIds = new Set<string>();
+      try {
+        const approvedSaved = localStorage.getItem('approved_payment_history_ids');
+        if (approvedSaved) approvedIds = new Set(JSON.parse(approvedSaved));
+      } catch (_) {}
+
+      const approvedHistories = (paymentHistory || []).filter(h => {
+        const hOrderId = String(h.order_id || '').trim();
+        if (!matchingIds.has(hOrderId)) return false;
+        const histId = String(h.id || h.payment_history_id || '');
+        if (rejectedIds.has(histId)) return false;
+        const isExplicitlyRejected = h.approval_status === 'Rejected' || 
+          (typeof h.notes === 'string' && (
+            h.notes.includes('Rejected') || 
+            h.notes.includes('[REJECTED]') || 
+            h.notes.endsWith('- Rejected') || 
+            h.notes.toLowerCase().includes('rejected by business owner')
+          ));
+        if (isExplicitlyRejected) return false;
+
+        return (
+          h.approval_status === 'Approved' ||
+          approvedIds.has(histId) ||
+          (!h.notes || (!h.notes.includes('Waiting for Approval') && !h.notes.includes('Rejected')))
+        );
+      });
+      const historyApprovedSum = approvedHistories.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+
+      // Check localStorage pending approvals as well for instantaneous multi-tab sync
+      let localPendingList: any[] = [];
+      try {
+        const localSaved = localStorage.getItem('pending_payment_approvals');
+        if (localSaved) localPendingList = JSON.parse(localSaved) || [];
+      } catch (_) {}
+
+      const hasPendingInHistory = (paymentHistory || []).some(h => {
+        const hOrderId = String(h.order_id || '').trim();
+        if (!matchingIds.has(hOrderId)) return false;
         const histId = String(h.id || h.payment_history_id || '');
         if (rejectedIds.has(histId)) return false;
         const isExplicitlyRejected = h.approval_status === 'Rejected' || 
@@ -3262,7 +3357,20 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
           h.approval_status === 'Waiting for Approval' ||
           (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
         );
-      }) || (pay?.payment_status === 'Waiting for Approval');
+      });
+
+      const hasPendingInLocal = localPendingList.some((h: any) => {
+        const hOrderId = String(h.order_id || '').trim();
+        if (!matchingIds.has(hOrderId)) return false;
+        const histId = String(h.id || h.payment_history_id || '');
+        if (rejectedIds.has(histId)) return false;
+        return (
+          h.approval_status === 'Waiting for Approval' ||
+          (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
+        );
+      });
+
+      const hasPendingApproval = hasPendingInHistory || hasPendingInLocal || (pay?.payment_status === 'Waiting for Approval');
 
       const totalRevenue = o.quotation_amount || o.advance_received || 0;
       const paymentReceived = approvedHistories.length > 0
@@ -3274,7 +3382,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       const isClosed = o.current_stage === 'Order Closed' || o.current_stage === 'Closed' || prod?.editing_status === 'Order Closed';
 
       const paymentDate = pay?.payment_date || '-';
-      const paymentType = pay?.payment_type || pay?.Payment_type || (pay?.final_payment_received ? 'Final Payment' : pay?.advance_received ? 'Advance Payment' : 'Standard Payment');
+      const paymentType = pay?.payment_type || pay?.Payment_type || (pay?.final_payment_received ? 'Final Payment' : pay?.advance_received ? 'Advance Payment' : 'Event Date Payment');
       const transactionId = pay?.transaction_id || '-';
 
       const paymentStatus = hasPendingApproval ? 'Waiting for Approval' : (pay ? pay.payment_status : (outstanding <= 0 && totalRevenue > 0 ? 'Fully Paid' : (paymentReceived > 0 ? 'Partially Paid' : 'Pending')));
@@ -3339,6 +3447,15 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         } else {
           matchDate = matchingEvents.length > 0;
         }
+
+        // CRITICAL: Any record with payments waiting for approval MUST ALWAYS be visible for Business Owner approval
+        // and must NOT be excluded by date range filters!
+        if (r.hasPendingApproval) {
+          matchDate = true;
+          if (matchingEvents.length === 0) {
+            matchingEvents = r.events || [];
+          }
+        }
       }
 
       // 3. Tab filter
@@ -3380,10 +3497,10 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
       return baseFiltered;
     }
     if (selectedCard === 'summary_payment') {
-      return baseFiltered.filter(r => r.paymentReceived > 0);
+      return baseFiltered.filter(r => r.paymentReceived > 0 || r.hasPendingApproval);
     }
     if (selectedCard === 'summary_outstanding') {
-      return baseFiltered.filter(r => r.outstanding > 0);
+      return baseFiltered.filter(r => r.outstanding > 0 || r.hasPendingApproval);
     }
     if (selectedCard === 'summary_completed') {
       return baseFiltered.filter(r => r.isCompleted || r.isClosed);

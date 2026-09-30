@@ -11,6 +11,7 @@ import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
 import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
 import { EventCategoryCell } from './EventCategoryCell';
+import { EventLocationCell } from './EventLocationCell';
 import { EventCell } from './EventCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
@@ -35,6 +36,7 @@ import { AddressAutocomplete } from './AddressAutocomplete';
 import { TimePicker12Hour } from './TimePicker12Hour';
 import { jsPDF } from 'jspdf';
 import { SearchablePackageSelect } from './sales/SearchablePackageSelect';
+import { fetchAndResolveLatestPaymentData } from './SalesUtils';
 
 interface LocalEditableInputProps {
   value: string;
@@ -607,6 +609,87 @@ const generateQuotationPDF = (
   const wrapShootType = shootTypes.length > 0 
     ? shootTypes.map((st: string) => `• ${st}`) 
     : ['N/A'];  // Resolve dynamic services
+  // Helper to determine whether the lead/order is confirmed
+  const isConfirmed = Boolean(
+    lead?.is_order_confirmed ||
+    lead?.isOrderConfirmed ||
+    lead?.order_status === 'Confirmed' ||
+    lead?.order_status === 'Completed' ||
+    lead?.order_status === 'Paid' ||
+    lead?.order_status === 'Delivered' ||
+    lead?.order_status === 'Project Completed' ||
+    lead?.order_status === 'Closed' ||
+    lead?.status === 'Order Confirmed' ||
+    lead?.status === 'Booking Confirmed' ||
+    lead?.current_stage === 'Order Confirmed' ||
+    lead?.current_stage === 'Booking Confirmed' ||
+    lead?.booking_status === 'Confirmed' ||
+    lead?.booking_status === 'Order Confirmed' ||
+    (lead?.order_id && !String(lead.order_id).startsWith('DRAFT') && !String(lead.order_id).startsWith('TRK-') && String(lead.order_id).trim() !== '')
+  );
+
+  // Helper to fetch actual saved advance payment amount for this exact lead/order
+  const getAdvancePaymentAmount = (): number => {
+    if (!isConfirmed) return 0;
+    const candidates = [
+      lead?.advance_received,
+      lead?.advance_payment_received,
+      lead?.advance_collected,
+      lead?.advancePaid,
+      lead?.advance_amount,
+      lead?.advanceAmount,
+      lead?.advancePayment,
+      lead?.paid_advance
+    ];
+    for (const val of candidates) {
+      if (val !== undefined && val !== null && val !== '') {
+        const num = Number(val);
+        if (!Number.isNaN(num) && num > 0) {
+          return num;
+        }
+      }
+    }
+    return 0;
+  };
+
+  const advanceReceived = getAdvancePaymentAmount();
+
+  const rawBreakdown: { label: string; amount: number }[] = Array.isArray(lead?.payments_breakdown)
+    ? lead.payments_breakdown
+    : [];
+
+  const paymentRows: { label: string; amount: number }[] = [];
+  if (rawBreakdown.length > 0) {
+    rawBreakdown.forEach(p => {
+      if (p && Number(p.amount) > 0) {
+        paymentRows.push({
+          label: String(p.label || 'Payment'),
+          amount: Number(p.amount)
+        });
+      }
+    });
+  } else if (isConfirmed && advanceReceived > 0) {
+    paymentRows.push({
+      label: 'Advance Payment',
+      amount: advanceReceived
+    });
+  } else if (isConfirmed && lead?.total_paid_amount && Number(lead.total_paid_amount) > 0) {
+    paymentRows.push({
+      label: 'Amount Paid',
+      amount: Number(lead.total_paid_amount)
+    });
+  }
+
+  // If order is confirmed and no payments recorded yet, show Amount Paid: 0 so Pending Amount is clearly visible
+  if (paymentRows.length === 0 && isConfirmed) {
+    paymentRows.push({
+      label: 'Amount Paid',
+      amount: 0
+    });
+  }
+
+  const hasAdvance = paymentRows.length > 0;
+
   let services = [...quoteServices];
 
   if (!services || services.length === 0) {
@@ -847,7 +930,10 @@ const generateQuotationPDF = (
       simTable(additionalServices.length, false);
     }
 
-    const pricingH = 4.5 + cfg.pricingCardHeight;
+    const hasPaymentSection = paymentRows.length > 0;
+    const simNumRows = 3 + paymentRows.length + (hasPaymentSection ? 1 : 0);
+    const simCardHeight = hasPaymentSection ? (cfg.pricingCardHeight / 3) * simNumRows : cfg.pricingCardHeight;
+    const pricingH = 4.5 + simCardHeight;
     if (simY + pricingH > 275) {
       simY = 52;
       simPageCount++;
@@ -1485,7 +1571,10 @@ const generateQuotationPDF = (
   }
 
   // 5. PRICING SUMMARY CARD
-  const pricingCardTotalH = 4.5 + cfg.pricingCardHeight;
+  const hasPaymentSection = paymentRows.length > 0;
+  const numRows = 3 + paymentRows.length + (hasPaymentSection ? 1 : 0);
+  const cardHeight = hasPaymentSection ? (cfg.pricingCardHeight / 3) * numRows : cfg.pricingCardHeight;
+  const pricingCardTotalH = 4.5 + cardHeight;
   if (currentY + pricingCardTotalH > 275) {
     currentY = createNewPage();
   }
@@ -1497,15 +1586,17 @@ const generateQuotationPDF = (
   currentY += 4.5;
 
   doc.setFillColor(248, 250, 252);
-  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'F');
+  doc.rect(15, currentY, 180, cardHeight, 'F');
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.2);
-  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'D');
+  doc.rect(15, currentY, 180, cardHeight, 'D');
 
-  const pricingRowH = cfg.pricingCardHeight / 3;
-  doc.line(15, currentY + pricingRowH, 195, currentY + pricingRowH);
-  doc.line(15, currentY + (pricingRowH * 2), 195, currentY + (pricingRowH * 2));
-  doc.line(115, currentY, 115, currentY + cfg.pricingCardHeight);
+  const pricingRowH = cardHeight / numRows;
+
+  for (let r = 1; r < numRows; r++) {
+    doc.line(15, currentY + (pricingRowH * r), 195, currentY + (pricingRowH * r));
+  }
+  doc.line(115, currentY, 115, currentY + cardHeight);
 
   // Fetch saved / entered Final Quotation Amount from Sales Dashboard Section 2 / lead record
   const getSavedFinalAmount = () => {
@@ -1562,7 +1653,36 @@ const generateQuotationPDF = (
   doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
   doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right' });
 
-  currentY += cfg.pricingCardHeight + cfg.secSpacing;
+  if (hasPaymentSection) {
+    paymentRows.forEach((pRow, idx) => {
+      const rNum = 4 + idx;
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text(pRow.label, 19, currentY + (pricingRowH * rNum) - 2);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(16, 185, 129);
+      doc.text(pRow.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rNum) - 2, { align: 'right' });
+    });
+
+    const totalPaidSum = paymentRows.reduce((sum, p) => sum + p.amount, 0);
+    const resolvedPaid = (lead?.total_paid_amount !== undefined && !isNaN(Number(lead.total_paid_amount)) && Number(lead.total_paid_amount) > 0)
+      ? Number(lead.total_paid_amount)
+      : totalPaidSum;
+
+    const resolvedPending = Math.max(0, finalAmountSum - resolvedPaid);
+
+    const pendingRowIdx = 4 + paymentRows.length;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text('Pending Amount', 19, currentY + (pricingRowH * pendingRowIdx) - 2);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(resolvedPending === 0 ? 16 : 225, resolvedPending === 0 ? 185 : 29, resolvedPending === 0 ? 129 : 72);
+    doc.text(resolvedPending.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * pendingRowIdx) - 2, { align: 'right' });
+  }
+
+  currentY += cardHeight + cfg.secSpacing;
 
   // 6. PAYMENT DETAILS CARD (Completely hidden/removed as requested)
   // PAYMENT DETAILS section is hidden from the quotation PDF.
@@ -1742,7 +1862,8 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     getLeadCurrentStage,
     addNotification,
     users,
-    refreshData
+    refreshData,
+    paymentHistory
   } = useRole();
 
   const leads = currentRole === 'Sales Team' 
@@ -4188,9 +4309,137 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     const effectiveSalesMobile = getEffectiveSalesStaffMobile();
 
     const finalAmountVal = dynamicFinalAmt;
+    const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || '');
+    const activeLead = selectedLead || leads?.find((l: any) => l.lead_id === currentLeadId);
+    const linkedOrder = orders?.find((o: any) => currentLeadId && (o.lead_id === currentLeadId || o.order_id === currentLeadId));
+    const resolvedOrderId = selectedLead?.order_id || (selectedLead as any)?.Order_ID || linkedOrder?.order_id || (activeLead as any)?.order_id || wizardLeadData.order_id || '';
+    const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : payments?.find((p: any) => (resolvedOrderId && p.order_id === resolvedOrderId) || (currentLeadId && p.lead_id === currentLeadId));
+
+    const isOrderConfirmed = Boolean(
+      isLeadConfirmed ||
+      wizardLeadData.status === 'Order Confirmed' ||
+      salesStatus === 'Order Confirmed' ||
+      (activeLead && ['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(activeLead.status || '')) ||
+      (activeLead && (activeLead as any).current_status === 'Order Confirmed') ||
+      (activeLead && (activeLead as any).booking_status === 'Confirmed') ||
+      (linkedOrder && linkedOrder.status !== 'Cancelled') ||
+      (orders && orders.some((o: any) => (currentLeadId && o.lead_id === currentLeadId && o.status !== 'Cancelled') || (resolvedOrderId && o.order_id === resolvedOrderId && o.status !== 'Cancelled')))
+    );
+
+    let advanceAmt = 0;
+    const paymentsBreakdown: { label: string; amount: number }[] = [];
+
+    // Filter payment history from context and local pending
+    const matchOrderId = resolvedOrderId || linkedOrder?.order_id || '';
+    const matchLeadId = currentLeadId || '';
+
+    let localPending: any[] = [];
+    try {
+      const saved = localStorage.getItem('pending_payment_approvals');
+      if (saved) localPending = JSON.parse(saved) || [];
+    } catch (_) {}
+
+    let approvedIds = new Set<string>();
+    try {
+      const appSaved = localStorage.getItem('approved_payment_history_ids');
+      if (appSaved) approvedIds = new Set(JSON.parse(appSaved));
+    } catch (_) {}
+
+    let rejectedIds = new Set<string>();
+    try {
+      const rejSaved = localStorage.getItem('rejected_payment_history_ids');
+      if (rejSaved) rejectedIds = new Set(JSON.parse(rejSaved));
+    } catch (_) {}
+
+    const combinedHistMap = new Map<string, any>();
+    (paymentHistory || []).forEach((h: any) => {
+      const k = String(h.id || h.payment_history_id || '');
+      if (k) combinedHistMap.set(k, h);
+    });
+    localPending.forEach((h: any) => {
+      const k = String(h.id || h.payment_history_id || '');
+      if (k && !combinedHistMap.has(k)) combinedHistMap.set(k, h);
+    });
+
+    const validOrderHistories = Array.from(combinedHistMap.values()).filter((h: any) => {
+      const hid = String(h.order_id || '').trim();
+      if (!hid) return false;
+      const isMatch = (matchOrderId && hid === matchOrderId) || 
+                      (matchLeadId && (hid === matchLeadId || hid === `ORD-${matchLeadId}`));
+      if (!isMatch) return false;
+
+      const histId = String(h.id || h.payment_history_id || '');
+      const isRejected = h.approval_status === 'Rejected' || 
+        rejectedIds.has(histId) || 
+        (typeof h.notes === 'string' && (
+          h.notes.includes('Rejected') || 
+          h.notes.includes('[REJECTED]') || 
+          h.notes.endsWith('- Rejected') || 
+          h.notes.toLowerCase().includes('rejected by business owner')
+        ));
+      return !isRejected;
+    });
+
+    const advanceItems = validOrderHistories.filter((h: any) => {
+      const type = String(h.payment_type || h.Payment_type || '').trim().toLowerCase();
+      if (type === 'advance payment' || type === 'advance') return true;
+      if (!type && typeof h.notes === 'string' && h.notes.toLowerCase().includes('advance')) return true;
+      return false;
+    });
+
+    if (advanceItems.length > 0) {
+      advanceAmt = advanceItems.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+    } else if (isOrderConfirmed) {
+      if (linkedOrder && linkedOrder.advance_received !== undefined && Number(linkedOrder.advance_received) > 0) {
+        advanceAmt = Number(linkedOrder.advance_received);
+      } else if (linkedPayment && linkedPayment.advance_received !== undefined && Number(linkedPayment.advance_received) > 0 && linkedPayment.payment_status !== 'Rejected' && linkedPayment.payment_status !== 'Cancelled') {
+        advanceAmt = Number(linkedPayment.advance_received);
+      } else if (wizardLeadData.advance_received !== undefined && Number(wizardLeadData.advance_received) > 0) {
+        advanceAmt = Number(wizardLeadData.advance_received);
+      } else if (activeLead?.advance_collected !== undefined && Number(activeLead.advance_collected) > 0) {
+        advanceAmt = Number(activeLead.advance_collected);
+      } else if (selectedLead?.advance_received !== undefined && Number(selectedLead.advance_received) > 0) {
+        advanceAmt = Number(selectedLead.advance_received);
+      }
+    }
+
+    if (advanceAmt > 0) {
+      paymentsBreakdown.push({ label: 'Advance Payment', amount: advanceAmt });
+    }
+
+    const otherItems = validOrderHistories.filter((h: any) => !advanceItems.includes(h));
+    const otherMap = new Map<string, number>();
+    otherItems.forEach((h: any) => {
+      const rawType = String(h.payment_type || h.Payment_type || '').trim() || 'Payment';
+      let label = rawType;
+      if (rawType.toLowerCase().includes('shoot') || rawType.toLowerCase().includes('event')) {
+        label = 'Event Date Payment';
+      } else if (rawType.toLowerCase().includes('final')) {
+        label = 'Final Payment';
+      }
+      const amt = Number(h.amount) || 0;
+      if (amt > 0) {
+        otherMap.set(label, (otherMap.get(label) || 0) + amt);
+      }
+    });
+    otherMap.forEach((amt, lbl) => {
+      paymentsBreakdown.push({ label: lbl, amount: amt });
+    });
+
+    const totalPaidVal = paymentsBreakdown.reduce((sum, p) => sum + p.amount, 0);
+    const pendingAmountVal = Math.max(0, finalAmountVal - totalPaidVal);
+
     if (isEdit) {
       return {
         ...selectedLead,
+        order_id: resolvedOrderId || selectedLead?.order_id || '',
+        is_order_confirmed: isOrderConfirmed,
+        advance_received: advanceAmt,
+        advance_payment_received: advanceAmt,
+        advance_collected: advanceAmt,
+        payments_breakdown: paymentsBreakdown,
+        total_paid_amount: totalPaidVal,
+        pending_amount: pendingAmountVal,
         customer_name: wizardLeadData.customer_name,
         mobile: wizardLeadData.mobile,
         email: wizardLeadData.email,
@@ -4221,6 +4470,14 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       return {
         ...createForm,
         lead_id: createdLeadId || 'DRAFT-LEAD',
+        order_id: resolvedOrderId || '',
+        is_order_confirmed: isOrderConfirmed,
+        advance_received: advanceAmt,
+        advance_payment_received: advanceAmt,
+        advance_collected: advanceAmt,
+        payments_breakdown: paymentsBreakdown,
+        total_paid_amount: totalPaidVal,
+        pending_amount: pendingAmountVal,
         deliverables_description: selectedPkgs.map(p => pkgDeliverables[p.id] || p.deliverables || 'N/A').join('\n'),
         notes_special_customizations: selectedPkgs.map(p => pkgNotes[p.id] || '').join('\n'),
         Select_Package_Option: createForm.Select_Package_Option || selectedPkgIds[0] || '',
@@ -4519,6 +4776,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
       if (!salesStaffMobile || !salesStaffMobile.trim()) setSalesStaffMobile(effMobile);
 
       const leadObj = getLeadInfoForQuote(isEdit);
+
+      // Re-fetch latest payment data for exact order to guarantee fresh, non-stale payment info
+      try {
+        const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || createdLeadId || '');
+        const resolvedOrderId = leadObj.order_id || selectedLead?.order_id || '';
+        const paymentData = await fetchAndResolveLatestPaymentData(
+          currentLeadId,
+          resolvedOrderId,
+          paymentHistory,
+          allOrders,
+          allPayments,
+          allLeads
+        );
+        if (paymentData.exactOrderId && !leadObj.order_id) {
+          leadObj.order_id = paymentData.exactOrderId;
+        }
+        if (paymentData.hasAdvance || paymentData.advanceAmount > 0) {
+          leadObj.advance_received = paymentData.advanceAmount;
+          leadObj.advance_payment_received = paymentData.advanceAmount;
+          leadObj.advance_collected = paymentData.advanceAmount;
+          leadObj.is_order_confirmed = true;
+        }
+        if (paymentData.paymentsBreakdown && paymentData.paymentsBreakdown.length > 0) {
+          leadObj.payments_breakdown = paymentData.paymentsBreakdown;
+        }
+        leadObj.total_paid_amount = paymentData.totalPaidAmount;
+        leadObj.pending_amount = paymentData.pendingAmount;
+        if (paymentData.totalPaidAmount > 0) {
+          leadObj.is_order_confirmed = true;
+        }
+      } catch (pErr) {
+        console.warn("Could not re-fetch payment data for preview, proceeding:", pErr);
+      }
+
       const activePkgs = getSelectedPkgsInfo(isEdit);
 
       const missingFields = validateLeadForQuotation(leadObj, activePkgs);
@@ -4565,6 +4856,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     try {
       console.log("✔ Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
+
+      // Re-fetch latest payment data for exact order to guarantee fresh, non-stale payment info
+      try {
+        const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || createdLeadId || '');
+        const resolvedOrderId = leadObj.order_id || selectedLead?.order_id || '';
+        const paymentData = await fetchAndResolveLatestPaymentData(
+          currentLeadId,
+          resolvedOrderId,
+          paymentHistory,
+          allOrders,
+          allPayments,
+          allLeads
+        );
+        if (paymentData.exactOrderId && !leadObj.order_id) {
+          leadObj.order_id = paymentData.exactOrderId;
+        }
+        if (paymentData.hasAdvance || paymentData.advanceAmount > 0) {
+          leadObj.advance_received = paymentData.advanceAmount;
+          leadObj.advance_payment_received = paymentData.advanceAmount;
+          leadObj.advance_collected = paymentData.advanceAmount;
+          leadObj.is_order_confirmed = true;
+        }
+        if (paymentData.paymentsBreakdown && paymentData.paymentsBreakdown.length > 0) {
+          leadObj.payments_breakdown = paymentData.paymentsBreakdown;
+        }
+        leadObj.total_paid_amount = paymentData.totalPaidAmount;
+        leadObj.pending_amount = paymentData.pendingAmount;
+        if (paymentData.totalPaidAmount > 0) {
+          leadObj.is_order_confirmed = true;
+        }
+      } catch (pErr) {
+        console.warn("Could not re-fetch payment data for PDF download, proceeding:", pErr);
+      }
+
       const activePkgs = getSelectedPkgsInfo(isEdit);
       
       const doc = generateQuotationPDF(
@@ -4602,6 +4927,40 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     try {
       console.log("✔ Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
+
+      // Re-fetch latest payment data for exact order to guarantee fresh, non-stale payment info
+      try {
+        const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || createdLeadId || '');
+        const resolvedOrderId = leadObj.order_id || selectedLead?.order_id || '';
+        const paymentData = await fetchAndResolveLatestPaymentData(
+          currentLeadId,
+          resolvedOrderId,
+          paymentHistory,
+          allOrders,
+          allPayments,
+          allLeads
+        );
+        if (paymentData.exactOrderId && !leadObj.order_id) {
+          leadObj.order_id = paymentData.exactOrderId;
+        }
+        if (paymentData.hasAdvance || paymentData.advanceAmount > 0) {
+          leadObj.advance_received = paymentData.advanceAmount;
+          leadObj.advance_payment_received = paymentData.advanceAmount;
+          leadObj.advance_collected = paymentData.advanceAmount;
+          leadObj.is_order_confirmed = true;
+        }
+        if (paymentData.paymentsBreakdown && paymentData.paymentsBreakdown.length > 0) {
+          leadObj.payments_breakdown = paymentData.paymentsBreakdown;
+        }
+        leadObj.total_paid_amount = paymentData.totalPaidAmount;
+        leadObj.pending_amount = paymentData.pendingAmount;
+        if (paymentData.totalPaidAmount > 0) {
+          leadObj.is_order_confirmed = true;
+        }
+      } catch (pErr) {
+        console.warn("Could not re-fetch payment data for WhatsApp quote, proceeding:", pErr);
+      }
+
       const activePkgs = getSelectedPkgsInfo(isEdit);
       const finalAmt = dynamicFinalAmt;
 
@@ -11962,6 +12321,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                         <ArrowUpDown className="w-3 h-3 text-zinc-500" />
                       </div>
                     </th>
+                    <th className="p-3.5">Event Location</th>
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">Created Date</th>
                     <th className="p-3.5 text-right pr-5 w-[160px] min-w-max">Action</th>
@@ -12031,6 +12391,9 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
                             <EventCategoryCell lead={lead} orders={orders} filterEventDateOption={filterEventDateOption} />
+                          </td>
+                          <td className="p-3.5 text-zinc-300">
+                            <EventLocationCell lead={lead} orders={orders} filterEventDateOption={filterEventDateOption} />
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />

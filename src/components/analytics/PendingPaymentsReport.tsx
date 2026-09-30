@@ -1612,10 +1612,16 @@ export const PendingPaymentsReport: React.FC = () => {
                   </button>
                 </th>
 
+                {/* 2. Client Name */}
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-left">Client Name</th>
+
+                {/* 3. Event Details */}
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-left">Event Details</th>
 
-                {/* 2. Total Amount */}
+                {/* 4. Event Date */}
+                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Event Date</th>
+
+                {/* 5. Total Amount */}
                 <th className="px-4 py-3.5 text-right">
                   <button
                     type="button"
@@ -1639,7 +1645,7 @@ export const PendingPaymentsReport: React.FC = () => {
                   </button>
                 </th>
 
-                {/* 3. Paid Amount */}
+                {/* 6. Paid Amount */}
                 <th className="px-4 py-3.5 text-right">
                   <button
                     type="button"
@@ -1663,7 +1669,7 @@ export const PendingPaymentsReport: React.FC = () => {
                   </button>
                 </th>
 
-                {/* 4. Pending Amount */}
+                {/* 7. Pending Amount */}
                 <th className="px-4 py-3.5 text-right">
                   <button
                     type="button"
@@ -1687,10 +1693,7 @@ export const PendingPaymentsReport: React.FC = () => {
                   </button>
                 </th>
 
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Event Date</th>
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-emerald-400 font-mono text-center">Completion Date</th>
-
-                {/* 5. Overdue Since */}
+                {/* 8. Overdue Since */}
                 <th className="px-4 py-3.5 text-center">
                   <button
                     type="button"
@@ -1714,7 +1717,7 @@ export const PendingPaymentsReport: React.FC = () => {
                   </button>
                 </th>
 
-                {/* 6. Days Overdue */}
+                {/* 9. Days Overdue */}
                 <th className="px-4 py-3.5 text-center">
                   <button
                     type="button"
@@ -1738,15 +1741,20 @@ export const PendingPaymentsReport: React.FC = () => {
                   </button>
                 </th>
 
+                {/* 10. Payment Status */}
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Payment Status</th>
+
+                {/* 11. Project Status */}
                 <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-center">Project Status</th>
-                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Actions</th>
+
+                {/* 12. Action */}
+                <th className="px-4 py-3.5 text-[10px] uppercase font-black tracking-wider text-zinc-400 font-mono text-right">Action</th>
               </tr>
             </thead>
             <tbody>
               {filteredRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={13} className="text-center py-12 text-zinc-500 font-medium">
+                  <td colSpan={12} className="text-center py-12 text-zinc-500 font-medium">
                     <AlertTriangle className="w-8 h-8 text-zinc-750 mx-auto mb-2" />
                     <span>No payments fit the selected parameters.</span>
                   </td>
@@ -1762,18 +1770,18 @@ export const PendingPaymentsReport: React.FC = () => {
                     key={rec.lead.lead_id}
                     className="border-b border-zinc-850 hover:bg-zinc-900/10 transition-colors"
                   >
-                    {/* Order ID */}
+                    {/* 1. Order ID */}
                     <td className="px-4 py-4 text-xs font-mono font-medium text-zinc-300">
                       {rec.orderId}
                     </td>
 
-                    {/* Client Name */}
+                    {/* 2. Client Name */}
                     <td className="px-4 py-4 text-xs font-bold text-white">
                       {rec.customerName}
                       <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{rec.mobileNumber}</div>
                     </td>
 
-                    {/* Event Details */}
+                    {/* 3. Event Details */}
                     <td className="px-4 py-4 text-xs">
                       {rec.events && rec.events.length > 1 ? (
                         <div className="space-y-1">
@@ -1789,12 +1797,47 @@ export const PendingPaymentsReport: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Total Amount */}
+                    {/* 4. Event Date */}
+                    <td className="px-4 py-4 text-xs text-center font-mono text-zinc-300">
+                      {rec.events && rec.events.length > 1 ? (
+                        <div className="flex flex-col items-center gap-1">
+                          {rec.events.map((ev: any, idx: number) => {
+                            const d = ev.event_date || ev.event_start_date;
+                            const formatted = formatEventDate(d);
+                            const cleanEvDate = normalizeToYYYYMMDD(d);
+                            const isMatch = (activeEventDateRange.start || activeEventDateRange.end)
+                              ? (
+                                  (!activeEventDateRange.start || cleanEvDate >= activeEventDateRange.start) &&
+                                  (!activeEventDateRange.end || cleanEvDate <= activeEventDateRange.end)
+                                )
+                              : true;
+
+                            return (
+                              <span
+                                key={ev.id || `ev-dt-${idx}`}
+                                className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[11px] font-mono border ${
+                                  isMatch 
+                                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 font-semibold' 
+                                    : 'bg-zinc-900/90 border-zinc-800 text-zinc-400'
+                                }`}
+                                title={formatted}
+                              >
+                                <span>{formatted}</span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span className="font-mono text-zinc-300">{formattedEventDate}</span>
+                      )}
+                    </td>
+
+                    {/* 5. Total Amount */}
                     <td className="px-4 py-4 text-xs font-semibold text-zinc-300 text-right font-mono">
                       {formatPercentageOrINR(rec.finalPackageAmount)}
                     </td>
 
-                    {/* Paid Amount */}
+                    {/* 6. Paid Amount */}
                     <td className="px-4 py-4 text-xs text-right font-mono">
                       {rec.pendingApprovalAmount > 0 ? (
                         <div className="flex flex-col items-end">
@@ -1820,7 +1863,7 @@ export const PendingPaymentsReport: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Pending Amount */}
+                    {/* 7. Pending Amount */}
                     <td className="px-4 py-4 text-xs font-black text-right font-mono bg-zinc-900/20">
                       {rec.paymentStatus === 'Fully Paid' ? (
                         <span className="text-emerald-400 font-mono font-bold">₹0</span>
@@ -1829,55 +1872,12 @@ export const PendingPaymentsReport: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Event Date */}
-                    <td className="px-4 py-4 text-xs text-center font-mono text-zinc-300">
-                      {rec.events && rec.events.length > 1 ? (
-                        <div className="flex flex-col items-center gap-1">
-                          {rec.events.map((ev: any, idx: number) => {
-                            const d = ev.event_date || ev.event_start_date;
-                            const formatted = formatEventDate(d);
-                            const cleanEvDate = normalizeToYYYYMMDD(d);
-                            const isMatch = (activeEventDateRange.start || activeEventDateRange.end)
-                              ? (
-                                  (!activeEventDateRange.start || cleanEvDate >= activeEventDateRange.start) &&
-                                  (!activeEventDateRange.end || cleanEvDate <= activeEventDateRange.end)
-                                )
-                              : true;
-
-                            return (
-                              <span
-                                key={ev.id || `ev-dt-${idx}`}
-                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono border ${
-                                  isMatch 
-                                    ? 'bg-amber-500/10 border-amber-500/40 text-amber-300 font-semibold' 
-                                    : 'bg-zinc-900/90 border-zinc-800 text-zinc-400'
-                                }`}
-                                title={`${ev.event_name || ev.event_type || `Event ${idx + 1}`}: ${formatted}`}
-                              >
-                                <span className={`text-[10px] ${isMatch ? 'text-amber-400 font-bold' : 'text-indigo-400 font-semibold'}`}>
-                                  {ev.event_name || ev.event_type || `E${idx + 1}`}:
-                                </span>
-                                <span>{formatted}</span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <span className="font-mono text-zinc-300">{formattedEventDate}</span>
-                      )}
-                    </td>
-
-                    {/* Completion Date */}
-                    <td className="px-4 py-4 text-xs text-center font-mono text-emerald-400 font-semibold">
-                      {rec.paymentStatus === 'Fully Paid' ? (rec.paymentCompletionDate ? formatEventDate(rec.paymentCompletionDate) : 'Completed') : '-'}
-                    </td>
-
-                    {/* Overdue Since */}
+                    {/* 8. Overdue Since */}
                     <td className="px-4 py-4 text-xs text-center font-mono text-zinc-300">
                       {rec.paymentStatus === 'Fully Paid' ? '-' : (effectiveEventDate ? formattedEventDate : 'N/A')}
                     </td>
 
-                    {/* Days Overdue */}
+                    {/* 9. Days Overdue */}
                     <td className="px-4 py-4 text-xs text-center font-mono font-bold">
                       {rec.paymentStatus === 'Fully Paid' ? (
                         <span className="text-zinc-500">-</span>
@@ -1888,7 +1888,7 @@ export const PendingPaymentsReport: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Payment Status Label */}
+                    {/* 10. Payment Status */}
                     <td className="px-4 py-4 text-xs text-center">
                       {rec.paymentStatus === 'Fully Paid' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -1905,14 +1905,14 @@ export const PendingPaymentsReport: React.FC = () => {
                       )}
                     </td>
 
-                    {/* Project Stage */}
+                    {/* 11. Project Status */}
                     <td className="px-4 py-4 text-xs text-center">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-900 text-zinc-300 border border-zinc-800">
                         {rec.currentProjectStatus}
                       </span>
                     </td>
                     
-                    {/* Actions */}
+                    {/* 12. Action */}
                     <td className="px-4 py-4 text-xs text-right">
                       <div className="flex justify-end gap-2">
                         <button 

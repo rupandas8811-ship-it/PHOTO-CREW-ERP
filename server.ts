@@ -26,7 +26,7 @@ if (!SUPABASE_SERVICE_ROLE_KEY) {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // Health check endpoint for Cloud Run and load balancers
   app.get('/api/health', (req, res) => {
@@ -419,6 +419,23 @@ async function startServer() {
         }
       }
 
+      if (clone.assignment_status) {
+        const allowedAssignmentStatuses = new Set([
+          'Assigned', 'Completed', 'Event Started', 'Event Completed', 'Project Completed', 'Cancelled', 'Pending', 'In Progress', 'Rejected'
+        ]);
+        if (!allowedAssignmentStatuses.has(clone.assignment_status)) {
+          if (['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Delivered', 'Project Delivered', 'Closed', 'Order Closed'].includes(clone.assignment_status)) {
+            clone.assignment_status = 'Completed';
+          } else if (['Event Ended', 'Event End'].includes(clone.assignment_status)) {
+            clone.assignment_status = 'Event Completed';
+          } else if (['Event Started', 'Event Start'].includes(clone.assignment_status)) {
+            clone.assignment_status = 'Event Started';
+          } else {
+            clone.assignment_status = 'Assigned';
+          }
+        }
+      }
+
       for (const k of Object.keys(clone)) {
         if (!validCols.has(k)) {
           delete clone[k];
@@ -491,22 +508,23 @@ async function startServer() {
         'id', 'order_id', 'amount', 'payment_date', 'transaction_id',
         'payment_mode', 'payment_type', 'updated_by', 'notes', 'created_at', 'approval_status'
       ]);
-      if (clone.approval_status) {
-        const currentNotes = clone.notes || '';
-        if (clone.approval_status === 'Waiting for Approval') {
-          const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
-          clone.notes = stripped ? `${stripped} - Waiting for Approval` : 'Waiting for Approval';
-        } else if (clone.approval_status === 'Approved') {
-          const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
-          clone.notes = stripped ? `${stripped} - Approved` : 'Approved by Business Owner';
-        } else if (clone.approval_status === 'Rejected') {
-          const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
-          clone.notes = stripped ? `${stripped} - Rejected` : 'Rejected by Business Owner';
-        }
+      if (!clone.approval_status) {
+        clone.approval_status = 'Waiting for Approval';
+      }
+      const currentNotes = clone.notes || '';
+      if (clone.approval_status === 'Waiting for Approval') {
+        const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
+        clone.notes = stripped ? `${stripped} - Waiting for Approval` : 'Waiting for Approval';
+      } else if (clone.approval_status === 'Approved') {
+        const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
+        clone.notes = stripped ? `${stripped} - Approved` : 'Approved by Business Owner';
+      } else if (clone.approval_status === 'Rejected') {
+        const stripped = currentNotes.replace(/ - Waiting for Approval/g, '').replace(/Waiting for Approval/g, '').replace(/ - Approved/g, '').replace(/Approved by Business Owner/g, '').replace(/ - Rejected/g, '').replace(/Rejected by Business Owner/g, '').trim();
+        clone.notes = stripped ? `${stripped} - Rejected` : 'Rejected by Business Owner';
       }
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (clone.id && !uuidRegex.test(clone.id)) {
-        delete clone.id;
+      if (!clone.id || !uuidRegex.test(clone.id)) {
+        clone.id = crypto.randomUUID();
       }
       for (const k of Object.keys(clone)) {
         if (!validCols.has(k)) {
@@ -735,17 +753,11 @@ async function startServer() {
             (payload.transaction_id && r.transaction_id && r.transaction_id === payload.transaction_id) ||
             (payload.id && r.id === payload.id)
           ) || rows.find((r: any) => 
-            (Number(payload.amount) && Number(r.amount) === Number(payload.amount) && payload.payment_type && r.payment_type === payload.payment_type)
-          ) || rows.find((r: any) => 
-            (r.notes && r.notes.includes('Waiting for Approval'))
-          );
+            (payload.transaction_id && r.transaction_id && String(r.transaction_id).trim() === String(payload.transaction_id).trim())
+          ) || (matchVal ? rows.find((r: any) => r.id === matchVal || r.transaction_id === matchVal) : null);
           if (found) {
             matchVal = found.id;
-          } else {
-            return { success: true, data: [{ ...payload, id: matchVal }] };
           }
-        } else {
-          return { success: true, data: [{ ...payload, id: matchVal }] };
         }
       }
     }
@@ -1093,9 +1105,9 @@ async function startServer() {
         
         if (existingLead && existingLead.quotation_locked === true) {
           const keys = Object.keys(updates);
-          // Only allow update if it explicitly modifies quotation_locked or if it's updating lead_owner/assignee (not CRM data)
-          const isLockAction = keys.includes('quotation_locked');
-          if (!isLockAction) {
+          // Only allow update if it explicitly modifies quotation_locked or if it's updating status/lifecycle/assignee (not CRM quotation pricing)
+          const isAllowedAction = keys.includes('quotation_locked') || keys.includes('status') || keys.includes('current_status') || keys.includes('updated_by') || keys.includes('updated_at');
+          if (!isAllowedAction) {
             console.warn(`[Server DB Update] Blocked update to locked lead ${matchValue}`);
             return res.status(403).json({ success: false, error: 'Lead CRM is locked. Cannot be updated.' });
           }
@@ -2022,8 +2034,12 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
+  // Vite middleware for development vs static files for production
+  const distPath = path.join(process.cwd(), 'dist');
+  const hasDist = fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html'));
+  const isProduction = process.env.NODE_ENV === 'production' || hasDist;
+
+  if (!isProduction) {
     console.log('[Server] Mounting Vite development middleware...');
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
@@ -2033,7 +2049,6 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     console.log('[Server] Serving production static assets from dist...');
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -2041,7 +2056,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

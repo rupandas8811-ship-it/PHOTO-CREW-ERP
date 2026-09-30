@@ -5,7 +5,7 @@ import { INITIAL_PACKAGES } from '../data/initialPackages';
 export { INITIAL_PACKAGES };
 
 import { supabaseClient, updateDiagnosticMetric } from '../supabaseClient';
-import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers, checkGlobalMobileUnique, normalizeMobileNumber, saveCustomCategoryToStorage, getStoredCustomCategories } from '../utils';
+import { serializeLeadEvents, deserializeLeadEvents, cleanPhone, cleanEmail, parseDeliverablesWithQty, parseTeamMembers, checkGlobalMobileUnique, normalizeMobileNumber, saveCustomCategoryToStorage, getStoredCustomCategories, getAllMatchingOrderIds } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { executeSaveStaffAssignments } from '../services/operationsAssignmentService';
 
@@ -1360,7 +1360,9 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // while honoring the authoritative production table status if present
     return list.map(o => {
       const parentLead = leads.find(l => l.lead_id === o.lead_id);
-      let effectiveStage = parentLead?.status || o.current_stage;
+      let effectiveStage = (o.current_stage === 'Verified Footage' || parentLead?.status === 'Verified Footage' || parentLead?.current_status === 'Verified Footage')
+        ? 'Verified Footage'
+        : (parentLead?.status || o.current_stage);
 
       const matchingProds = production.filter(p => p.order_id === o.order_id || p.tracking_id === o.order_id || (p as any).lead_id === o.lead_id || p.tracking_id === o.lead_id);
       const latestHist = getLatestHistoryStatus(o.order_id, o.lead_id);
@@ -2091,6 +2093,23 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
           cloned[vCol] = cloned[vCol].substring(0, 50);
         }
       }
+
+      if (cloned.assignment_status) {
+        const allowedAssignmentStatuses = new Set([
+          'Assigned', 'Completed', 'Event Started', 'Event Completed', 'Project Completed', 'Cancelled', 'Pending', 'In Progress', 'Rejected'
+        ]);
+        if (!allowedAssignmentStatuses.has(cloned.assignment_status)) {
+          if (['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Delivered', 'Project Delivered', 'Closed', 'Order Closed'].includes(cloned.assignment_status)) {
+            cloned.assignment_status = 'Completed';
+          } else if (['Event Ended', 'Event End'].includes(cloned.assignment_status)) {
+            cloned.assignment_status = 'Event Completed';
+          } else if (['Event Started', 'Event Start'].includes(cloned.assignment_status)) {
+            cloned.assignment_status = 'Event Started';
+          } else {
+            cloned.assignment_status = 'Assigned';
+          }
+        }
+      }
     }
 
     const validCols = allowedColumns[table];
@@ -2637,12 +2656,38 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                 return updated;
               });
             }
+            if (table === 'orders') {
+              setOrders(prev => {
+                const updated = prev.map(o => (matchColumn === 'order_id' ? o.order_id === finalMatchValue : false) ? {
+                  ...o,
+                  ...updates,
+                  ...sanitized
+                } : o);
+                try {
+                  localStorage.setItem('erp_orders', JSON.stringify(updated));
+                } catch (_) {}
+                return updated;
+              });
+            }
             if (table === 'leads') {
               const leadId = finalMatchValue;
               const prevLead = leads.find(l => l.lead_id === leadId);
               const oldStatus = prevLead ? (prevLead.current_status || prevLead.status || 'New Lead') : 'New Lead';
               const anyStatus = sanitized.status || sanitized.current_status || updates.status || updates.current_status;
               
+              setLeads(prev => {
+                const updated = prev.map(l => (matchColumn === 'lead_id' ? l.lead_id === finalMatchValue : false) ? {
+                  ...l,
+                  ...updates,
+                  ...sanitized,
+                  ...(anyStatus ? { status: anyStatus, current_status: anyStatus } : {})
+                } : l);
+                try {
+                  localStorage.setItem('erp_leads', JSON.stringify(updated));
+                } catch (_) {}
+                return updated;
+              });
+
               if (anyStatus && anyStatus !== oldStatus) {
                 const timestamp = new Date().toISOString();
                 const linkedOrder = orders.find(o => o.lead_id === leadId);
@@ -2659,7 +2704,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
                   remarks: sanitized.remarks || updates.remarks || ''
                 };
                 
-                await pushInsert('lead_status_history', historyPayload);
+                pushInsert('lead_status_history', historyPayload).catch(e => console.warn("Failed to insert status history:", e));
               }
             }
 
@@ -2934,7 +2979,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           if (resJson && resJson.success) {
             updateDiagnosticMetric('insert', 'ok');
             broadcastSyncPing();
-            return { success: true };
+            return { success: true, data: resJson.data };
           } else {
             console.warn(`[pushUpsert Proxy WARN] server returned success=false for ${table}`, resJson?.error);
             return { success: false, error: resJson?.error || "Server validation failed" };
@@ -5442,8 +5487,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // Persist advance payment in payment history with Waiting for Approval
     if (advanceReceived > 0) {
+      const newHistId = generateUUID();
       const newHistoryItem = {
-        id: generateUUID(),
+        id: newHistId,
         order_id: masterOrderId,
         amount: advanceReceived,
         payment_date: new Date().toISOString(),
@@ -5454,14 +5500,41 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         notes: (notes && notes.trim() ? notes.trim() + ' - ' : '') + 'Initial advance payment on order confirmation - Waiting for Approval',
         approval_status: 'Waiting for Approval'
       };
-      await pushInsert('payment_history', newHistoryItem);
-      setPaymentHistory(prev => [newHistoryItem, ...prev]);
+
+      const resHist = await pushInsert('payment_history', newHistoryItem);
+      if (!resHist?.success && supabaseClient) {
+        await supabaseClient.from('payment_history').upsert(newHistoryItem, { onConflict: 'id' });
+      }
+
+      // Verify in Supabase
+      if (supabaseClient) {
+        const { data: verifiedHist, error: vErr } = await supabaseClient
+          .from('payment_history')
+          .select('*')
+          .eq('id', newHistId)
+          .maybeSingle();
+        if (!verifiedHist || vErr) {
+          await supabaseClient.from('payment_history').upsert(newHistoryItem, { onConflict: 'id' });
+        }
+        const { data: freshHistory } = await supabaseClient
+          .from('payment_history')
+          .select('*')
+          .order('payment_date', { ascending: false });
+        if (freshHistory && Array.isArray(freshHistory)) {
+          setPaymentHistory(freshHistory);
+        } else {
+          setPaymentHistory(prev => [newHistoryItem, ...prev]);
+        }
+      } else {
+        setPaymentHistory(prev => [newHistoryItem, ...prev]);
+      }
 
       try {
         const saved = localStorage.getItem('pending_payment_approvals');
         const parsed = saved ? JSON.parse(saved) : [];
-        parsed.unshift(newHistoryItem);
-        localStorage.setItem('pending_payment_approvals', JSON.stringify(parsed));
+        const filtered = (Array.isArray(parsed) ? parsed : []).filter((p: any) => p.id !== newHistId);
+        filtered.unshift(newHistoryItem);
+        localStorage.setItem('pending_payment_approvals', JSON.stringify(filtered));
       } catch (_) {}
     }
 
@@ -6512,26 +6585,167 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     additionalReceived?: number,
     transactionId?: string
   ) => {
-    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId);
-    if (!targetOrder) return;
-    const previousStage = targetOrder.current_stage;
-    const targetStage: CurrentStage = 'Verified Footage';
+    // 1. Identify target order and corresponding lead with complete precision
+    const targetOrder = augmentedOrders.find((o) => o.order_id === orderId || o.lead_id === orderId) || orders.find((o) => o.order_id === orderId || o.lead_id === orderId);
+    
+    let matchedLead = leads.find((l) => 
+      (targetOrder?.lead_id && l.lead_id === targetOrder.lead_id) ||
+      l.lead_id === orderId ||
+      l.order_id === orderId ||
+      (targetOrder && targetOrder.customer_name && targetOrder.mobile && l.customer_name === targetOrder.customer_name && l.mobile === targetOrder.mobile)
+    );
 
-    const resolvedLink = footageLink || `s3://photocrew-vault-production/2026/${orderId}-shoot/raw/`;
-    const timestamp = new Date().toISOString();
-
-    const rOrd = await pushUpdate('orders', 'order_id', orderId, { 
-      current_stage: targetStage,
-      updated_by: currentUserName,
-      updated_at: timestamp
-    });
-    if (!rOrd?.success) {
-      throw new Error("Failed to update order stage: " + rOrd?.error);
+    if (!matchedLead && orderId.startsWith('OR')) {
+      const numPart = orderId.replace(/\D/g, '');
+      if (numPart) {
+        matchedLead = leads.find(l => l.lead_id.replace(/\D/g, '') === numPart || l.lead_id === `LD${numPart.padStart(3, '0')}`);
+      }
     }
 
-    // Handle Payment Capture if provided
-    if (paymentCollectionStatus) {
-      const existingPayment = augmentedPayments.find(p => p.order_id === orderId);
+    const effOrderId = targetOrder?.order_id || (orderId.startsWith('OR') ? orderId : (matchedLead ? (matchedLead.lead_id.startsWith('LD') ? `OR${matchedLead.lead_id.replace(/\D/g, '').padStart(3, '0')}` : matchedLead.lead_id) : orderId));
+    const effLeadId = targetOrder?.lead_id || matchedLead?.lead_id || (orderId.startsWith('LD') ? orderId : (matchedLead ? matchedLead.lead_id : (orderId.startsWith('OR') ? `LD${orderId.replace(/\D/g, '').padStart(3, '0')}` : undefined)));
+    const previousStage = targetOrder?.current_stage || matchedLead?.current_status || matchedLead?.status || 'Footage Handover';
+    const targetStage: CurrentStage = 'Verified Footage';
+
+    const resolvedLink = (footageLink && footageLink.trim()) ? footageLink.trim() : `s3://photocrew-vault-production/2026/${effOrderId}-shoot/raw/`;
+    const timestamp = new Date().toISOString();
+
+    // 2. Save raw footage consolidated link record in DB first
+    let existingRf = rawFootage.find(f => f.order_id === effOrderId || (effLeadId && f.order_id === effLeadId));
+    let trackingId = existingRf?.tracking_id || `TRK-${Math.floor(2012 + Math.random() * 850)}`;
+    const todayYyyyMmDd = timestamp.split('T')[0];
+
+    const finalRf: RawFootage = {
+      tracking_id: trackingId,
+      order_id: effOrderId,
+      event_completed_date: existingRf?.event_completed_date || todayYyyyMmDd,
+      raw_received: true,
+      server_path: resolvedLink,
+      drive_link: resolvedLink,
+      uploaded_by: currentUserName || 'Operations Team',
+      uploaded_date: timestamp,
+      status: 'Received',
+      storage_type: storageType || 'Google Drive',
+      upload_notes: uploadNotes || '',
+    };
+
+    const rRf = await pushUpsert('raw_footage', finalRf);
+    if (!rRf?.success) {
+      console.error("[confirmRawFootageReceived] Failed to save raw footage record:", rRf?.error);
+      throw new Error(`Failed to save raw footage record: ${rRf?.error || 'Database save failed'}`);
+    }
+    const actualTrackingId = (rRf as any)?.data?.[0]?.tracking_id || existingRf?.tracking_id || trackingId;
+
+    // 3. Immediately update orders table in Supabase to 'Verified Footage'
+    const orderUpdates = { 
+      current_stage: targetStage,
+      order_status: 'Confirmed',
+      updated_by: currentUserName || 'Operations Team',
+      updated_at: timestamp
+    };
+    const rOrd = await pushUpdate('orders', 'order_id', effOrderId, orderUpdates);
+    
+    // Ensure order exists in Supabase DB even if it was originally synthesized from leads
+    const orderAlreadyInDb = orders.some(o => o.order_id === effOrderId);
+    if (!rOrd?.success || !orderAlreadyInDb) {
+      const fullOrderRecord = {
+        order_id: effOrderId,
+        lead_id: effLeadId || null,
+        customer_name: targetOrder?.customer_name || matchedLead?.customer_name || 'Client',
+        mobile: targetOrder?.mobile || matchedLead?.mobile || '',
+        event_type: targetOrder?.event_type || matchedLead?.event_type || 'Main Event',
+        event_date: targetOrder?.event_date || matchedLead?.event_date || timestamp.split('T')[0],
+        current_stage: targetStage,
+        order_status: 'Confirmed',
+        quotation_amount: targetOrder?.quotation_amount || matchedLead?.budget || 0,
+        sales_person: targetOrder?.sales_person || matchedLead?.sales_person || 'Sales Team',
+        created_at: targetOrder?.created_at || timestamp,
+        updated_by: currentUserName || 'Operations Team',
+        updated_at: timestamp
+      };
+      const rUpsertOrder = await pushUpsert('orders', fullOrderRecord);
+      if (!rUpsertOrder?.success) {
+        console.warn("[confirmRawFootageReceived] Order upsert warning:", rUpsertOrder?.error);
+      }
+    }
+    if (effLeadId) {
+      await pushUpdate('orders', 'lead_id', effLeadId, orderUpdates).catch(() => {});
+    }
+
+    // 4. Immediately update leads table in Supabase to 'Verified Footage'
+    if (effLeadId) {
+      const rLead = await pushUpdate('leads', 'lead_id', effLeadId, { 
+        status: targetStage,
+        current_status: targetStage,
+        updated_by: currentUserName || 'Operations Team',
+        updated_at: timestamp
+      });
+      if (!rLead?.success) {
+        console.error("[confirmRawFootageReceived] Failed to update leads table:", rLead?.error);
+        throw new Error(`Failed to update lead status to Verified Footage: ${rLead?.error || 'Database update failed'}`);
+      }
+    }
+
+    // 5. Update operations record in Supabase with event_status: 'Verified Footage' and final drive link
+    const opUpdates = { 
+      event_status: targetStage,
+      Upload_Notes_Remarks: uploadNotes || '',
+      upload_notes_remarks: uploadNotes || '',
+      Raw_Footage_Drive_Link: resolvedLink,
+      raw_footage_drive_link: resolvedLink,
+      Consolidated_Drive_Link: resolvedLink,
+      consolidated_drive_link: resolvedLink,
+      updated_by: currentUserName || 'Operations Team',
+      updated_at: timestamp
+    };
+    const rOp = await pushUpdate('operations', 'order_id', effOrderId, opUpdates);
+    if (!rOp?.success) {
+      console.warn("[confirmRawFootageReceived] Operations update warning:", rOp?.error);
+      await pushUpsert('operations', {
+        operation_id: `OP-${effOrderId}`,
+        order_id: effOrderId,
+        photographer_assigned: 'Unassigned',
+        videographer_assigned: 'Unassigned',
+        drone_operator_assigned: 'Unassigned',
+        assistant_assigned: 'Unassigned',
+        equipment_kit: '',
+        reporting_time: '08:00',
+        ...opUpdates
+      }).catch(e => console.warn("Failed to upsert operations record:", e));
+    }
+
+    // 6. Update staff assignments in DB to Completed & Verified Footage
+    await pushUpdate('staff_assignments', 'order_id', effOrderId, {
+      task_status: targetStage,
+      assignment_status: 'Completed',
+      raw_footage_link: resolvedLink,
+      updated_by: currentUserName || 'Operations Team',
+      updated_at: timestamp
+    }).catch(e => console.warn("Failed to update staff assignments by order_id:", e));
+
+    if (effLeadId) {
+      await pushUpdate('staff_assignments', 'lead_id', effLeadId, {
+        task_status: targetStage,
+        assignment_status: 'Completed',
+        raw_footage_link: resolvedLink,
+        updated_by: currentUserName || 'Operations Team',
+        updated_at: timestamp
+      }).catch(e => console.warn("Failed to update staff assignments by lead_id:", e));
+    }
+
+    // 7. Update lead_events proof_type to 'Verified Footage' if events exist
+    if (effLeadId) {
+      try {
+        await pushUpdate('lead_events', 'lead_id', effLeadId, {
+          proof_type: targetStage,
+          updated_at: timestamp
+        });
+      } catch (_) {}
+    }
+
+    // 8. Handle Payment Capture if provided
+    if (paymentCollectionStatus && targetOrder) {
+      const existingPayment = augmentedPayments.find(p => p.order_id === effOrderId);
       const totalAmount = targetOrder.quotation_amount || 0;
       const advanceAmount = targetOrder.advance_received || 0;
       const finalReceived = additionalReceived || 0;
@@ -6546,13 +6760,13 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         payStatus = 'Partially Paid';
       } else if (paymentCollectionStatus === 'Payment Pending') {
         payStatus = 'Pending';
-        balanceDue = totalAmount - advanceAmount; // no additional received
+        balanceDue = totalAmount - advanceAmount;
       }
 
       const payId = existingPayment?.payment_id || `PAY-${Math.floor(3000 + Math.random() * 1000)}`;
       const updatedPayment: Payment = {
         payment_id: payId,
-        order_id: orderId,
+        order_id: effOrderId,
         quotation_amount: totalAmount,
         advance_received: advanceAmount,
         final_payment_received: paymentCollectionStatus === 'Full Payment Received' ? (totalAmount - advanceAmount) : finalReceived,
@@ -6567,129 +6781,55 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if (existingPayment) {
         const rPay = await pushUpdate('payments', 'payment_id', payId, updatedPayment);
         if (!rPay?.success) {
-          throw new Error("Failed to update payment details: " + rPay?.error);
+          console.warn("Failed to update payment details: " + rPay?.error);
         }
       } else {
         const rPay = await pushInsert('payments', updatedPayment);
         if (!rPay?.success) {
-          throw new Error("Failed to insert payment details: " + rPay?.error);
+          console.warn("Failed to insert payment details: " + rPay?.error);
         }
       }
     }
 
-    const rLead = await pushUpdate('leads', 'lead_id', targetOrder.lead_id, { 
-      status: targetStage,
-      current_status: targetStage,
-      updated_by: currentUserName,
-      updated_at: timestamp
-    });
-    if (!rLead?.success) {
-      throw new Error("Failed to update lead status: " + rLead?.error);
-    }
-
-    // Also update event_status of corresponding Operations record to 'Completed' (which satisfies DB constraint ('Assigned', 'Completed')) if exists, and store raw footage upload notes/remarks and final consolidated link.
-    await pushUpdate('operations', 'order_id', orderId, { 
-      event_status: 'Completed',
-      Upload_Notes_Remarks: uploadNotes || '',
-      upload_notes_remarks: uploadNotes || '',
-      Raw_Footage_Drive_Link: footageLink || '',
-      raw_footage_drive_link: footageLink || '',
-      Consolidated_Drive_Link: footageLink || '',
-      consolidated_drive_link: footageLink || ''
-    });
-
-    // Directly update local state for operations
-    setOperations(prev => {
-      let found = false;
-      const updated = prev.map(op => {
-        if (op.order_id === orderId) {
-          found = true;
-          return {
-            ...op,
-            event_status: 'Completed',
-            Upload_Notes_Remarks: uploadNotes || '',
-            upload_notes_remarks: uploadNotes || '',
-            Raw_Footage_Drive_Link: footageLink || op.raw_footage_drive_link || '',
-            raw_footage_drive_link: footageLink || op.raw_footage_drive_link || '',
-            Consolidated_Drive_Link: footageLink || (op as any).Consolidated_Drive_Link || '',
-            consolidated_drive_link: footageLink || op.consolidated_drive_link || ''
-          };
-        }
-        return op;
-      });
-      if (!found) {
-        return [...updated, {
-          operation_id: `OP-${orderId}`,
-          order_id: orderId,
-          photographer_assigned: 'Unassigned',
-          videographer_assigned: 'Unassigned',
-          drone_operator_assigned: 'Unassigned',
-          assistant_assigned: 'Unassigned',
-          equipment_kit: '',
-          reporting_time: '08:00',
-          event_status: 'Completed',
-          updated_by: currentUserName || 'Operations Team',
-          Upload_Notes_Remarks: uploadNotes || '',
-          upload_notes_remarks: uploadNotes || '',
-          Raw_Footage_Drive_Link: footageLink || '',
-          raw_footage_drive_link: footageLink || '',
-          Consolidated_Drive_Link: footageLink || '',
-          consolidated_drive_link: footageLink || ''
-        }];
-      }
+    // 9. Record status history & equipment history
+    const newHist = {
+      lead_id: effLeadId || effOrderId,
+      order_id: effOrderId,
+      old_status: previousStage,
+      new_status: targetStage,
+      changed_by: currentUserName || 'Operations Team',
+      changed_by_role: 'Operations Team',
+      remarks: `Verified footage with consolidated link: ${resolvedLink}`,
+      created_at: timestamp
+    };
+    setStatusHistory(prev => {
+      const updated = [...prev, newHist];
+      try { localStorage.setItem('erp_status_history', JSON.stringify(updated)); } catch (_) {}
       return updated;
     });
+    try { await pushInsert('lead_status_history', newHist); } catch (_) {}
 
-    let existingRf = rawFootage.find(f => f.order_id === orderId);
-    let trackingId = existingRf?.tracking_id || `TRK-${Math.floor(2012 + Math.random() * 850)}`;
-
-    const todayYyyyMmDd = timestamp.split('T')[0];
-
-    const finalRf: RawFootage = {
-      tracking_id: trackingId,
-      order_id: orderId,
-      event_completed_date: existingRf?.event_completed_date || todayYyyyMmDd,
-      raw_received: true,
-      server_path: resolvedLink,
-      uploaded_by: currentUserName,
-      uploaded_date: timestamp,
-      status: 'Received',
-      storage_type: storageType || 'Google Drive',
-      upload_notes: uploadNotes || '',
+    const newEquipmentHist = {
+      lead_id: effLeadId || effOrderId,
+      order_id: effOrderId,
+      equipment_name: 'Raw Footage Verification',
+      equipment_status: 'Verified Footage',
+      returned_by: currentUserName || 'Operations Team',
+      returned_at: timestamp,
+      remarks: JSON.stringify({
+        raw_footage_link: resolvedLink,
+        current_status: 'Verified Footage',
+        proof_type: 'Verified Footage',
+        uploaded_by: currentUserName || 'Operations Team'
+      }),
+      created_at: timestamp
     };
+    try { await pushInsert('lead_equipment_history', newEquipmentHist); } catch (_) {}
+    setLeadEquipmentHistory(prev => [newEquipmentHist, ...prev]);
 
-    const rRf = await pushUpsert('raw_footage', finalRf);
-    if (!rRf?.success) {
-      throw new Error("Failed to save raw footage record: " + (rRf?.error || "Unknown error"));
-    }
-
-    setRawFootage(prev => {
-      const idx = prev.findIndex(f => f.order_id === orderId || f.tracking_id === trackingId);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = finalRf;
-        return copy;
-      }
-      return [finalRf, ...prev];
-    });
-
-    // Ensure production entry exists or update it
-    let existingProd = augmentedProduction.find(p => p.tracking_id === trackingId || p.tracking_id === orderId);
+    // 10. Ensure production entry exists or update it
+    let existingProd = augmentedProduction.find(p => p.tracking_id === actualTrackingId || p.tracking_id === effOrderId || p.order_id === effOrderId);
     let pId = existingProd?.production_id || `PRD-${Math.floor(4012 + Math.random() * 850)}`;
-    
-    const targetLead = leads.find(l => l.lead_id === targetOrder?.lead_id);
-
-    let eventNames = '';
-    let eventDates = '';
-    let eventTypes = '';
-    if (targetLead?.events) {
-       eventNames = targetLead.events.map((e:any) => e.event_name).filter(Boolean).join(', ');
-       eventDates = targetLead.events.map((e:any) => e.event_date).filter(Boolean).join(', ');
-       eventTypes = targetLead.events.map((e:any) => e.event_type).filter(Boolean).join(', ');
-    } else {
-       eventDates = targetOrder?.event_date || '';
-       eventTypes = targetOrder?.event_type || '';
-    }
 
     const prodEditingStatus = (existingProd?.editing_status && !['Footage Handover', 'Raw Footage Received', 'Pending'].includes(existingProd.editing_status))
       ? existingProd.editing_status
@@ -6697,40 +6837,103 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     const newProd: any = {
       production_id: pId,
-      tracking_id: trackingId,
+      tracking_id: actualTrackingId,
       editor_assigned: existingProd?.editor_assigned || 'Unassigned',
       raw_footage_location: resolvedLink,
       editing_status: prodEditingStatus,
       production_status: prodEditingStatus,
       remarks: `Raw footage received via ${storageType || 'Google Drive'}. ${uploadNotes || ''}`,
-      order_id: orderId,
-      lead_id: targetOrder?.lead_id || '',
-      customer_name: targetOrder?.customer_name || targetLead?.Customer_Name || '',
-      customer_mobile: targetLead?.Customer_Mobile || (targetOrder as any)?.customer_mobile || '',
-      whatsapp_number: targetLead?.WhatsApp_Number || (targetOrder as any)?.whatsapp_number || '',
-      event_names: eventNames,
-      event_dates: eventDates,
-      event_types: eventTypes,
-      team_members: typeof targetLead?.Team_Members === 'string' ? targetLead.Team_Members : JSON.stringify(targetLead?.Team_Members || []),
-      deliverables: typeof targetLead?.Deliverables === 'string' ? targetLead.Deliverables : JSON.stringify(targetLead?.Deliverables || []),
-      event_id: targetOrder?.event_type || '',
+      order_id: effOrderId,
+      lead_id: effLeadId || targetOrder?.lead_id || '',
+      customer_name: targetOrder?.customer_name || matchedLead?.customer_name || 'Client',
+      event_id: targetOrder?.event_type || 'Main Event',
       assigned_team: targetOrder?.assigned_team || 'Unassigned',
       final_consolidated_drive_link: resolvedLink,
-      sales_staff: targetOrder?.created_by || targetLead?.Sales_Staff || '',
-      operations_staff: currentUserName,
-      created_date: timestamp.split('T')[0],
-      created_time: timestamp.split('T')[1].split('.')[0],
       current_status: prodEditingStatus,
       created_at: timestamp
     };
 
-    const rProd = await pushUpsert('production', newProd);
-    if (!rProd?.success) {
-      throw new Error("Failed to insert production data: " + (rProd?.error || "Unknown error"));
+    try {
+      const rProd = await pushUpsert('production', newProd);
+      if (!rProd?.success) {
+        console.warn("[confirmRawFootageReceived] Production upsert warning:", rProd?.error);
+      }
+    } catch (prodErr) {
+      console.warn("[confirmRawFootageReceived] Production upsert error:", prodErr);
     }
 
+    // 11. Directly update local state for immediate reactivity (no page refresh required)
+    setOrders(prev => {
+      const updated = prev.map(o => (o.order_id === effOrderId || (effLeadId && (o.lead_id === effLeadId || o.order_id === effLeadId))) ? { ...o, current_stage: targetStage, order_status: 'Confirmed' } : o);
+      try { localStorage.setItem('erp_orders', JSON.stringify(updated)); } catch (_) {}
+      return updated;
+    });
+    if (effLeadId) {
+      setLeads(prev => {
+        const updated = prev.map(l => (l.lead_id === effLeadId || l.order_id === effOrderId) ? { ...l, status: targetStage, current_status: targetStage } : l);
+        try { localStorage.setItem('erp_leads', JSON.stringify(updated)); } catch (_) {}
+        return updated;
+      });
+    }
+    setStaffAssignments(prev => {
+      const updated = prev.map(sa => (sa.order_id === effOrderId || (effLeadId && sa.lead_id === effLeadId)) ? { ...sa, task_status: 'Verified Footage', assignment_status: 'Completed', raw_footage_link: sa.raw_footage_link || resolvedLink } : sa);
+      try { localStorage.setItem('erp_staff_assignments', JSON.stringify(updated)); } catch (_) {}
+      return updated;
+    });
+
+    setOperations(prev => {
+      let found = false;
+      const updated = prev.map(op => {
+        if (op.order_id === effOrderId) {
+          found = true;
+          return {
+            ...op,
+            event_status: 'Verified Footage',
+            Upload_Notes_Remarks: uploadNotes || '',
+            upload_notes_remarks: uploadNotes || '',
+            Raw_Footage_Drive_Link: resolvedLink,
+            raw_footage_drive_link: resolvedLink,
+            Consolidated_Drive_Link: resolvedLink,
+            consolidated_drive_link: resolvedLink
+          };
+        }
+        return op;
+      });
+      if (!found) {
+        return [...updated, {
+          operation_id: `OP-${effOrderId}`,
+          order_id: effOrderId,
+          photographer_assigned: 'Unassigned',
+          videographer_assigned: 'Unassigned',
+          drone_operator_assigned: 'Unassigned',
+          assistant_assigned: 'Unassigned',
+          equipment_kit: '',
+          reporting_time: '08:00',
+          event_status: 'Verified Footage',
+          updated_by: currentUserName || 'Operations Team',
+          Upload_Notes_Remarks: uploadNotes || '',
+          upload_notes_remarks: uploadNotes || '',
+          Raw_Footage_Drive_Link: resolvedLink,
+          raw_footage_drive_link: resolvedLink,
+          Consolidated_Drive_Link: resolvedLink,
+          consolidated_drive_link: resolvedLink
+        }];
+      }
+      return updated;
+    });
+
+    setRawFootage(prev => {
+      const idx = prev.findIndex(f => f.order_id === effOrderId || f.tracking_id === actualTrackingId);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = { ...finalRf, tracking_id: actualTrackingId };
+        return copy;
+      }
+      return [{ ...finalRf, tracking_id: actualTrackingId }, ...prev];
+    });
+
     setProduction(prev => {
-      const idx = prev.findIndex(p => p.tracking_id === trackingId || p.production_id === pId);
+      const idx = prev.findIndex(p => p.tracking_id === actualTrackingId || p.production_id === pId);
       if (idx >= 0) {
         const copy = [...prev];
         copy[idx] = { ...copy[idx], ...newProd };
@@ -6741,17 +6944,20 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     addNotification({
       user_id: 'All',
-      project_id: orderId,
+      project_id: effOrderId,
       task_id: 'Editing',
       notification_type: 'Task Assigned',
       title: 'New Raw Footage Received',
-      message: `Raw footage for "${targetOrder.package_name || 'Shoot'}" (Order: ${orderId}) has been received and verified. Storage Type: ${storageType || 'Google Drive'}. Ready for editing!`,
+      message: `Raw footage for "${targetOrder?.package_name || 'Shoot'}" (Order: ${effOrderId}) has been received and verified. Storage Type: ${storageType || 'Google Drive'}. Ready for editing!`,
       recipient_role: 'Production Team'
     });
 
-    //  // Disabled to prevent full reload
+    logActivity(`Raw Footage Received and Confirmed in system for Order: ${effOrderId}. Drive Link: ${resolvedLink}. Storage: ${storageType || 'Google Drive'}`, 'Operations', effOrderId, previousStage, targetStage);
 
-    logActivity(`Raw Footage Received and Confirmed in system for Order: ${orderId}. Drive Link: ${resolvedLink}. Storage: ${storageType || 'Google Drive'}`, 'Operations', orderId, previousStage, targetStage);
+    // Broadcast synchronization events
+    window.dispatchEvent(new CustomEvent('staff_status_updated'));
+    window.dispatchEvent(new CustomEvent('order_status_updated', { detail: { orderId: effOrderId, leadId: effLeadId, status: 'Verified Footage' } }));
+    broadcastSyncPing();
   };
 
   const updateOrderStage = async (orderId: string, stage: CurrentStage) => {
@@ -7026,22 +7232,64 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     paymentNotes?: string,
     paymentType?: string
   ) => {
-    const targetPayment = augmentedPayments.find((p) => p.order_id === orderId || p.lead_id === orderId) || payments.find(p => p.order_id === orderId || p.lead_id === orderId);
+    const cleanOrderId = String(orderId || '').trim();
+    if (!cleanOrderId) throw new Error("Order ID is required to record payment.");
 
     const actualAmountReceived = Number(amountReceived) || 0;
+    if (actualAmountReceived <= 0) throw new Error("Payment amount must be greater than zero.");
+
+    // Resolve linked order to ensure accurate canonical Order ID mapping across all prefix aliases
+    const matchingIdsList = getAllMatchingOrderIds(cleanOrderId, null, orders, leads);
+    const matchingIdsSet = new Set(matchingIdsList);
+
+    const linkedOrder = orders.find(o => 
+      matchingIdsSet.has(o.order_id) || (o.lead_id && matchingIdsSet.has(o.lead_id))
+    );
+    const resolvedOrderId = linkedOrder?.order_id || cleanOrderId;
+    const resolvedLeadId = linkedOrder?.lead_id || (cleanOrderId.startsWith('LD') ? cleanOrderId : undefined);
+
+    const allResolvedIds = new Set(getAllMatchingOrderIds(resolvedOrderId, resolvedLeadId, orders, leads));
+
+    let targetPayment = augmentedPayments.find((p) => 
+      allResolvedIds.has(p.order_id) || (p.lead_id && allResolvedIds.has(p.lead_id))
+    ) || payments.find(p => 
+      allResolvedIds.has(p.order_id) || (p.lead_id && allResolvedIds.has(p.lead_id))
+    );
+
     const resolvedProofUrl = proofUrl || 'https://photocrew-receipts.s3.amazonaws.com/rec-custom.pdf';
-    const finalPaymentType = paymentType || (targetPayment as any)?.Payment_type || targetPayment?.payment_type || 'Shoot Time Payment';
+    const finalPaymentType = paymentType || (targetPayment as any)?.Payment_type || targetPayment?.payment_type || 'Event Date Payment';
     const cleanTxnId = (transactionId && typeof transactionId === 'string' && transactionId.trim() !== '' && transactionId.trim() !== 'N/A' && transactionId.trim() !== 'null' && transactionId.trim() !== 'NULL') ? transactionId.trim() : null;
     const resolvedTxnId = cleanTxnId !== null ? cleanTxnId : (targetPayment?.transaction_id || undefined);
 
+    const resolvedPaymentDate = paymentDate 
+      ? (paymentDate.includes('T') ? paymentDate : `${paymentDate}T${new Date().toTimeString().split(' ')[0]}`) 
+      : new Date().toISOString();
+
+    // 1. Ensure payments table has an entry with 'Waiting for Approval'
     if (targetPayment) {
       const rPay = await pushUpdate('payments', 'payment_id', targetPayment.payment_id, {
         payment_status: 'Waiting for Approval',
         transaction_id: resolvedTxnId,
-        payment_type: finalPaymentType
+        payment_type: finalPaymentType,
+        Payment_type: finalPaymentType
       });
       if (!rPay?.success) {
-        console.warn("Warning updating payment in database:", rPay?.error);
+        console.warn("[recordPayment] Warning updating payment in database:", rPay?.error);
+      }
+
+      if (supabaseClient) {
+        try {
+          await supabaseClient
+            .from('payments')
+            .update({
+              payment_status: 'Waiting for Approval',
+              transaction_id: resolvedTxnId,
+              payment_type: finalPaymentType,
+              Payment_type: finalPaymentType,
+              updated_at: new Date().toISOString()
+            })
+            .eq('payment_id', targetPayment.payment_id);
+        } catch (_) {}
       }
 
       setPayments(prev => {
@@ -7058,18 +7306,44 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         }
         return [...prev, updatedPayment];
       });
+    } else {
+      const newPayId = `PAY-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 10000)}`;
+      const newPaymentRecord: Payment = {
+        payment_id: newPayId,
+        order_id: resolvedOrderId,
+        quotation_amount: linkedOrder?.quotation_amount || actualAmountReceived,
+        advance_received: 0,
+        balance_due: Math.max(0, (linkedOrder?.quotation_amount || actualAmountReceived) - actualAmountReceived),
+        final_payment_received: 0,
+        payment_date: resolvedPaymentDate.split('T')[0],
+        payment_status: 'Waiting for Approval',
+        transaction_id: resolvedTxnId,
+        payment_type: finalPaymentType,
+        Payment_type: finalPaymentType
+      };
+      await pushInsert('payments', newPaymentRecord);
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from('payments').upsert(newPaymentRecord, { onConflict: 'payment_id' });
+        } catch (_) {}
+      }
+      setPayments(prev => [...prev, newPaymentRecord]);
     }
 
-    const resolvedPaymentDate = paymentDate 
-      ? (paymentDate.includes('T') ? paymentDate : `${paymentDate}T${new Date().toTimeString().split(' ')[0]}`) 
-      : new Date().toISOString();
+    // 2. Build individual payment history transaction record
+    // Check if the same payment already has an approval record (avoiding duplicates)
+    const existingHist = cleanTxnId ? (paymentHistory || []).find(h => 
+      allResolvedIds.has(String(h.order_id || '').trim()) && 
+      h.transaction_id && String(h.transaction_id).trim() === cleanTxnId
+    ) : null;
 
     const userNote = (paymentNotes && paymentNotes.trim()) ? paymentNotes.trim() : 'Recorded by Sales';
     const noteWithApprovalStatus = `${userNote} - Waiting for Approval`;
+    const histIdToUse = existingHist ? (existingHist.id || existingHist.payment_history_id) : generateUUID();
 
-    const newHistoryItem = {
-      id: generateUUID(),
-      order_id: orderId,
+    const historyItemPayload = {
+      id: histIdToUse,
+      order_id: resolvedOrderId,
       amount: actualAmountReceived,
       payment_date: resolvedPaymentDate,
       transaction_id: cleanTxnId || null,
@@ -7080,21 +7354,96 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       approval_status: 'Waiting for Approval'
     };
 
-    await pushInsert('payment_history', newHistoryItem);
-    setPaymentHistory(prev => [newHistoryItem, ...prev]);
+    // 3. Save to database with self-healing proxy and direct verification
+    let savedSuccessfully = false;
+    if (existingHist) {
+      const updRes = await pushUpdate('payment_history', 'id', histIdToUse, historyItemPayload);
+      if (updRes?.success) savedSuccessfully = true;
+    } else {
+      const historySaveRes = await pushInsert('payment_history', historyItemPayload);
+      if (historySaveRes?.success) savedSuccessfully = true;
+    }
 
+    if (supabaseClient) {
+      const { data: verifiedHist, error: verifyErr } = await supabaseClient
+        .from('payment_history')
+        .select('*')
+        .eq('id', histIdToUse)
+        .maybeSingle();
+
+      if (verifiedHist && !verifyErr) {
+        savedSuccessfully = true;
+      } else {
+        // Direct upsert to ensure database persistence
+        const { data: directData, error: directErr } = await supabaseClient
+          .from('payment_history')
+          .upsert(historyItemPayload, { onConflict: 'id' })
+          .select();
+        if (directErr) {
+          throw new Error("Database save failed: " + directErr.message);
+        }
+        if (directData && directData.length > 0) {
+          savedSuccessfully = true;
+        }
+      }
+    }
+
+    if (!savedSuccessfully) {
+      throw new Error("Failed to save and verify payment in database. Please try again.");
+    }
+
+    // 4. Update local state and re-fetch authoritative records from database
+    if (supabaseClient) {
+      const { data: freshHistory } = await supabaseClient
+        .from('payment_history')
+        .select('*')
+        .order('payment_date', { ascending: false });
+      if (freshHistory && Array.isArray(freshHistory)) {
+        setPaymentHistory(freshHistory);
+      } else {
+        setPaymentHistory(prev => {
+          const filtered = prev.filter(h => h.id !== histIdToUse && h.payment_history_id !== histIdToUse);
+          return [historyItemPayload, ...filtered];
+        });
+      }
+
+      const { data: freshPayments } = await supabaseClient
+        .from('payments')
+        .select('*');
+      if (freshPayments && Array.isArray(freshPayments)) {
+        setPayments(freshPayments);
+      }
+    } else {
+      setPaymentHistory(prev => {
+        const filtered = prev.filter(h => h.id !== histIdToUse && h.payment_history_id !== histIdToUse);
+        return [historyItemPayload, ...filtered];
+      });
+    }
+
+    // 5. Update local storage for immediate multi-tab sync
     try {
       const saved = localStorage.getItem('pending_payment_approvals');
       const parsed = saved ? JSON.parse(saved) : [];
-      parsed.unshift(newHistoryItem);
-      localStorage.setItem('pending_payment_approvals', JSON.stringify(parsed));
+      const filtered = (Array.isArray(parsed) ? parsed : []).filter((p: any) => p.id !== histIdToUse && p.payment_history_id !== histIdToUse);
+      filtered.unshift(historyItemPayload);
+      localStorage.setItem('pending_payment_approvals', JSON.stringify(filtered));
+
+      // Remove from rejected if it was previously rejected
+      const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+      if (rejectedSaved) {
+        const rejectedSet = new Set(JSON.parse(rejectedSaved));
+        rejectedSet.delete(histIdToUse);
+        localStorage.setItem('rejected_payment_history_ids', JSON.stringify(Array.from(rejectedSet)));
+      }
     } catch (_) {}
 
-    logActivity(`Submitted payment of ₹${actualAmountReceived} for Order ${orderId} - Waiting for Approval`, 'Finance', orderId);
+    logActivity(`Submitted payment of ₹${actualAmountReceived} for Order ${resolvedOrderId} - Waiting for Approval`, 'Finance', resolvedOrderId);
+
+    broadcastSyncPing();
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('payment-updated', { detail: { orderId } }));
-      window.dispatchEvent(new CustomEvent('refresh-pending-payments', { detail: { orderId } }));
+      window.dispatchEvent(new CustomEvent('payment-updated', { detail: { orderId: resolvedOrderId } }));
+      window.dispatchEvent(new CustomEvent('refresh-pending-payments', { detail: { orderId: resolvedOrderId } }));
     }
   };
 
@@ -7112,6 +7461,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     const resolvedOrderId = orderId || targetHistory?.order_id || '';
+    const allResolvedIds = new Set(getAllMatchingOrderIds(resolvedOrderId, targetHistory?.order_id, orders, leads));
 
     const rawNotes = (targetHistory?.notes || '')
       .replace(/ - Waiting for Approval/g, '')
@@ -7196,8 +7546,8 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
 
     // 6. Recalculate parent order and payment status
     const amountToApply = Number(targetHistory?.amount) || 0;
-    const targetPayment = augmentedPayments.find(p => p.order_id === resolvedOrderId || p.lead_id === resolvedOrderId) || payments.find(p => p.order_id === resolvedOrderId || p.lead_id === resolvedOrderId);
-    const targetOrder = augmentedOrders.find(o => o.order_id === resolvedOrderId || o.lead_id === resolvedOrderId) || orders.find(o => o.order_id === resolvedOrderId || o.lead_id === resolvedOrderId);
+    const targetPayment = augmentedPayments.find(p => allResolvedIds.has(p.order_id) || (p.lead_id && allResolvedIds.has(p.lead_id))) || payments.find(p => allResolvedIds.has(p.order_id) || (p.lead_id && allResolvedIds.has(p.lead_id)));
+    const targetOrder = augmentedOrders.find(o => allResolvedIds.has(o.order_id) || (o.lead_id && allResolvedIds.has(o.lead_id))) || orders.find(o => allResolvedIds.has(o.order_id) || (o.lead_id && allResolvedIds.has(o.lead_id)));
 
     const updatedHistoryList = paymentHistory.map(h => 
       (h.id === historyId || h.payment_history_id === historyId || String(h.id) === String(historyId)) 
@@ -7206,14 +7556,14 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     );
 
     const remainingPending = updatedHistoryList.some(h => 
-      (h.order_id === resolvedOrderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
+      allResolvedIds.has(String(h.order_id || '').trim()) && 
       (String(h.id) !== String(historyId) && String(h.payment_history_id) !== String(historyId)) && 
       h.approval_status !== 'Rejected' &&
       (h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval')))
     );
 
     const approvedHistories = updatedHistoryList.filter(h => 
-      (h.order_id === resolvedOrderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
+      allResolvedIds.has(String(h.order_id || '').trim()) && 
       h.approval_status !== 'Rejected' && 
       (h.approval_status === 'Approved' || (!h.notes || (!h.notes.includes('Waiting for Approval') && !h.notes.includes('Rejected'))))
     );
@@ -7286,6 +7636,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
     }
 
     const resolvedOrderId = orderId || targetHistory?.order_id || '';
+    const allResolvedIds = new Set(getAllMatchingOrderIds(resolvedOrderId, targetHistory?.order_id, orders, leads));
 
     // Strip previous status tags and append - Rejected
     const rawNotes = (targetHistory?.notes || '')
@@ -7341,6 +7692,15 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
       if (targetHistory?.payment_history_id) rejectedSet.add(targetHistory.payment_history_id);
       if (targetHistory?.id) rejectedSet.add(targetHistory.id);
       localStorage.setItem('rejected_payment_history_ids', JSON.stringify(Array.from(rejectedSet)));
+
+      const approvedSaved = localStorage.getItem('approved_payment_history_ids');
+      if (approvedSaved) {
+        const approvedSet = new Set(JSON.parse(approvedSaved));
+        approvedSet.delete(historyId);
+        if (targetHistory?.payment_history_id) approvedSet.delete(targetHistory.payment_history_id);
+        if (targetHistory?.id) approvedSet.delete(targetHistory.id);
+        localStorage.setItem('approved_payment_history_ids', JSON.stringify(Array.from(approvedSet)));
+      }
     } catch (_) {}
 
     // 5. Recalculate parent order and payment status
@@ -7350,18 +7710,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         : h
     );
 
-    const targetPayment = augmentedPayments.find(p => p.order_id === resolvedOrderId || p.lead_id === resolvedOrderId) || payments.find(p => p.order_id === resolvedOrderId || p.lead_id === resolvedOrderId);
-    const targetOrder = augmentedOrders.find(o => o.order_id === resolvedOrderId || o.lead_id === resolvedOrderId) || orders.find(o => o.order_id === resolvedOrderId || o.lead_id === resolvedOrderId);
+    const targetPayment = augmentedPayments.find(p => allResolvedIds.has(p.order_id) || (p.lead_id && allResolvedIds.has(p.lead_id))) || payments.find(p => allResolvedIds.has(p.order_id) || (p.lead_id && allResolvedIds.has(p.lead_id)));
+    const targetOrder = augmentedOrders.find(o => allResolvedIds.has(o.order_id) || (o.lead_id && allResolvedIds.has(o.lead_id))) || orders.find(o => allResolvedIds.has(o.order_id) || (o.lead_id && allResolvedIds.has(o.lead_id)));
 
     const remainingPending = updatedHistoryList.some(h => 
-      (h.order_id === resolvedOrderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
+      allResolvedIds.has(String(h.order_id || '').trim()) && 
       (h.id !== historyId && h.payment_history_id !== historyId && String(h.id) !== String(historyId)) && 
       h.approval_status !== 'Rejected' &&
       (h.approval_status === 'Waiting for Approval' || (h.notes && h.notes.includes('Waiting for Approval')))
     );
 
     const approvedHistories = updatedHistoryList.filter(h => 
-      (h.order_id === resolvedOrderId || (targetOrder && h.order_id === targetOrder.lead_id)) && 
+      allResolvedIds.has(String(h.order_id || '').trim()) && 
       h.approval_status !== 'Rejected' && 
       (h.approval_status === 'Approved' || (!h.notes || (!h.notes.includes('Waiting for Approval') && !h.notes.includes('Rejected'))))
     );

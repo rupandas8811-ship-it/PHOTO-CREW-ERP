@@ -5,6 +5,7 @@ import { formatINR, formatDateDDMMYY, formatTime12Hour, formatDateTime, triggerA
 import { Order, Payment, Lead } from '../types';
 import { supabaseClient } from '../supabaseClient';
 import { useRole } from './RoleContext';
+import { getAllMatchingOrderIds } from './SalesUtils';
 
 export interface PaymentHistoryModalProps {
   isOpen: boolean;
@@ -29,19 +30,21 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
   const [isApprovingId, setIsApprovingId] = useState<string | null>(null);
 
   const orderId = order?.orderId || order?.order_id || '';
-  const leadId = order?.leadId || order?.lead_id || '';
-  const primaryOrderId = orderId || orders.find(o => leadId && o.lead_id === leadId)?.order_id || '';
+  const leadId = order?.leadId || order?.lead_id || (order?.lead && order.lead.lead_id) || '';
+  const matchingOrderIds = getAllMatchingOrderIds(orderId, leadId, orders, leads);
+  const primaryOrderId = orderId || orders.find(o => leadId && o.lead_id === leadId)?.order_id || matchingOrderIds.find(id => id.startsWith('OR')) || orderId || '';
 
   const refreshHistory = async () => {
-    if (!primaryOrderId) return;
+    if (matchingOrderIds.length === 0) return;
     setIsLoading(true);
     try {
       let dbData: any[] = [];
       if (supabaseClient) {
+        const orClauses = matchingOrderIds.map(id => `order_id.eq.${id}`);
         const { data, error } = await supabaseClient
           .from('payment_history')
           .select('*')
-          .eq('order_id', primaryOrderId)
+          .or(orClauses.join(','))
           .order('payment_date', { ascending: false });
         
         if (!error && data) {
@@ -49,17 +52,19 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         }
       }
 
-      const contextItems = (contextPaymentHistory || []).filter(
-        h => h.order_id === primaryOrderId || (leadId && h.order_id === leadId)
-      );
+      const contextItems = (contextPaymentHistory || []).filter(h => {
+        const hid = String(h.order_id || '').trim();
+        return matchingOrderIds.includes(hid);
+      });
 
       let localPending: any[] = [];
       try {
         const saved = localStorage.getItem('pending_payment_approvals');
         if (saved) {
-          localPending = (JSON.parse(saved) || []).filter(
-            (h: any) => h.order_id === primaryOrderId || (leadId && h.order_id === leadId)
-          );
+          localPending = (JSON.parse(saved) || []).filter((h: any) => {
+            const hid = String(h.order_id || '').trim();
+            return matchingOrderIds.includes(hid);
+          });
         }
       } catch (_) {}
 
@@ -96,26 +101,23 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
         const isExplicitlyRejected = h.approval_status === 'Rejected' || 
           rejectedIds.has(histId) ||
           (typeof h.notes === 'string' && (
-            h.notes.includes('Rejected') || 
-            h.notes.includes('[REJECTED]') || 
             h.notes.endsWith('- Rejected') || 
             h.notes.toLowerCase().includes('rejected by business owner')
           ));
 
         const isExplicitlyApproved = !isExplicitlyRejected && (
-          h.approval_status === 'Approved' ||
+          (h.approval_status === 'Approved' && h.approval_status !== 'Waiting for Approval') ||
           approvedIds.has(histId) ||
           (typeof h.notes === 'string' && (
-            h.notes.includes('Approved') ||
-            h.notes.includes('[APPROVED]') ||
-            h.notes.endsWith('- Approved') ||
+            h.notes.endsWith('- Approved') || 
             h.notes.toLowerCase().includes('approved by business owner')
-          ))
+          ) && !h.notes.includes('Waiting for Approval'))
         );
 
         const isPending = !isExplicitlyRejected && !isExplicitlyApproved && (
           h.approval_status === 'Waiting for Approval' || 
-          (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
+          (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval')) ||
+          !h.approval_status
         );
 
         return {
@@ -123,6 +125,27 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
           approval_status: isExplicitlyRejected ? 'Rejected' : (isPending ? 'Waiting for Approval' : 'Approved')
         };
       });
+
+      if (parsed.length === 0) {
+        const paymentObj = (payments || []).find(p => matchingOrderIds.includes(String(p.order_id || '').trim()) || (p.lead_id && matchingOrderIds.includes(String(p.lead_id || '').trim())));
+        if (paymentObj && (paymentObj.payment_status === 'Waiting for Approval' || Number(paymentObj.advance_received) > 0 || Number(paymentObj.final_payment_received) > 0)) {
+          const fallbackAmt = (Number(paymentObj.advance_received) || 0) + (Number(paymentObj.final_payment_received) || 0) || Number(paymentObj.quotation_amount) || 0;
+          if (fallbackAmt > 0) {
+            parsed.push({
+              id: paymentObj.payment_id || `PAY-${primaryOrderId}`,
+              order_id: primaryOrderId,
+              amount: fallbackAmt,
+              payment_date: paymentObj.payment_date || new Date().toISOString(),
+              transaction_id: paymentObj.transaction_id || null,
+              payment_mode: 'UPI',
+              payment_type: (paymentObj as any).Payment_type || paymentObj.payment_type || 'Advance Payment',
+              updated_by: 'Sales',
+              notes: paymentObj.payment_status === 'Waiting for Approval' ? 'Payment recorded - Waiting for Approval' : 'Approved payment',
+              approval_status: paymentObj.payment_status === 'Waiting for Approval' ? 'Waiting for Approval' : 'Approved'
+            });
+          }
+        }
+      }
 
       parsed.sort((a, b) => new Date(b.payment_date || b.created_at || 0).getTime() - new Date(a.payment_date || a.created_at || 0).getTime());
       setHistoryList(parsed);
@@ -394,7 +417,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               {isPending ? (
                                 <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-[9px] font-bold text-amber-400 animate-pulse inline-flex items-center gap-1 w-fit">
                                   <Clock className="w-3 h-3" />
-                                  Pending Approval
+                                  Waiting for Approval
                                 </span>
                               ) : h.approval_status === 'Rejected' ? (
                                 <span className="px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/30 text-[9px] font-bold text-rose-400 inline-flex items-center gap-1 w-fit">
@@ -409,7 +432,7 @@ export const PaymentHistoryModal: React.FC<PaymentHistoryModalProps> = ({
                               )}
                             </td>
                             <td className="p-3 pr-4 text-center whitespace-nowrap">
-                              {isPending && (currentRole === 'Business Owner' || !currentRole || currentRole === 'Super Admin') ? (
+                              {isPending && (currentRole === 'Business Owner' || !currentRole || currentRole === 'Super Admin' || String(currentRole || '').toLowerCase().includes('owner')) ? (
                                 <div className="flex items-center justify-center gap-1.5">
                                   <button
                                     type="button"

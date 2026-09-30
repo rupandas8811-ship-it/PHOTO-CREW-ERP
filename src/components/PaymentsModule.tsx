@@ -237,8 +237,9 @@ export const PaymentsModule: React.FC = () => {
                         className="w-full bg-zinc-950 border border-zinc-850 rounded-xl py-3 px-4 text-xs text-zinc-100 font-mono focus:outline-none focus:ring-1 focus:ring-rose-500 font-bold"
                       >
                         <option value="">-- Select Payment Type * --</option>
-                        <option value="Shoot Time Payment">Shoot Time Payment</option>
                         <option value="Advance Payment">Advance Payment</option>
+                        <option value="Event Date Payment">Event Date Payment</option>
+                        <option value="Shoot Time Payment">Shoot Time Payment</option>
                         <option value="Final Payment">Final Payment</option>
                       </select>
                     </div>

@@ -9,6 +9,116 @@ import { Equipment } from '../../types';
 import { supabaseClient } from '../../supabaseClient';
 
 import { formatTime12Hour, formatDateDDMMYY } from "../../utils";
+
+const toCalendarDateString = (dateVal?: string | null | Date): string | null => {
+  if (!dateVal && (dateVal as any) !== 0) return null;
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return null;
+    const y = dateVal.getFullYear();
+    const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+    const d = String(dateVal.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  let str = String(dateVal).trim();
+  if (!str || str === '—' || str === '-' || str === 'N/A' || str === 'null' || str === 'undefined') return null;
+
+  // Clean day of week prefixes and ordinal numbers (e.g. "Wed, 30th Sep 2026" -> "30 Sep 2026")
+  str = str.replace(/^(?:sun|mon|tue|wed|thu|fri|sat)[a-z]*[\s,]+/i, '');
+  str = str.replace(/(\d+)(?:st|nd|rd|th)/gi, '$1');
+
+  const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (ymdMatch) {
+    return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
+  }
+
+  const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (dmyMatch) {
+    const n1 = parseInt(dmyMatch[1], 10);
+    const n2 = parseInt(dmyMatch[2], 10);
+    const y = dmyMatch[3];
+    if (n2 > 12 && n1 <= 12) {
+      return `${y}-${String(n1).padStart(2, '0')}-${String(n2).padStart(2, '0')}`;
+    }
+    return `${y}-${String(n2).padStart(2, '0')}-${String(n1).padStart(2, '0')}`;
+  }
+
+  const dmyShortMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$/);
+  if (dmyShortMatch) {
+    let y = parseInt(dmyShortMatch[3], 10);
+    y = y < 100 ? 2000 + y : y;
+    return `${y}-${dmyShortMatch[2].padStart(2, '0')}-${dmyShortMatch[1].padStart(2, '0')}`;
+  }
+
+  const dMmmYMatch = str.match(/^(\d{1,2})[\s\-\/\.]*([a-zA-Z]{3,9})[\s\-\/\.,]*(\d{2,4})/);
+  if (dMmmYMatch) {
+    const d = dMmmYMatch[1].padStart(2, '0');
+    const mStr = dMmmYMatch[2].toLowerCase().slice(0, 3);
+    const mIdx = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(mStr);
+    if (mIdx !== -1) {
+      const m = String(mIdx + 1).padStart(2, '0');
+      let y = parseInt(dMmmYMatch[3], 10);
+      if (y < 100) y += 2000;
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  const mmmDYMatch = str.match(/^([a-zA-Z]{3,9})[\s\-\/\.]*(\d{1,2})[\s\-\/\.,]*(\d{2,4})/);
+  if (mmmDYMatch) {
+    const mStr = mmmDYMatch[1].toLowerCase().slice(0, 3);
+    const mIdx = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(mStr);
+    if (mIdx !== -1) {
+      const m = String(mIdx + 1).padStart(2, '0');
+      const d = mmmDYMatch[2].padStart(2, '0');
+      let y = parseInt(mmmDYMatch[3], 10);
+      if (y < 100) y += 2000;
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) {
+    const y = fallback.getFullYear();
+    const m = String(fallback.getMonth() + 1).padStart(2, '0');
+    const d = String(fallback.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return null;
+};
+
+const getTodayDateString = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+// Helper to accurately extract or infer category from equipment
+const getEquipmentCategory = (eq: any): string => {
+  if (!eq) return 'Other';
+  const raw = eq.equipment_type || eq.category || eq.Equipment_Category || eq.equipment_category;
+  if (typeof raw === 'string' && raw.trim()) {
+    const trimmed = raw.trim();
+    if (trimmed.toLowerCase() === 'audio equipment') return 'Audio';
+    if (trimmed.toLowerCase() === 'memory cards' || trimmed.toLowerCase() === 'memory card') return 'Memory Card';
+    if (trimmed.toLowerCase() === 'batteries' || trimmed.toLowerCase() === 'battery') return 'Battery';
+    if (trimmed.toLowerCase() === 'light' || trimmed.toLowerCase() === 'lights') return 'Lighting';
+    return trimmed;
+  }
+  const name = (eq.equipment_name || eq.name || '').toLowerCase();
+  if (name.includes('camera') || name.includes('fx3') || name.includes('a7') || name.includes('eos') || name.includes('cinema body') || name.includes('red') || name.includes('lumix')) return 'Camera';
+  if (name.includes('lens') || name.includes('mm') || name.includes('f/') || name.includes('prime') || name.includes('zoom')) return 'Lens';
+  if (name.includes('light') || name.includes('godox') || name.includes('aputure') || name.includes('softbox') || name.includes('flash')) return 'Lighting';
+  if (name.includes('audio') || name.includes('mic') || name.includes('rode') || name.includes('dji mic') || name.includes('receiver') || name.includes('transmitter')) return 'Audio';
+  if (name.includes('tripod') || name.includes('monopod') || name.includes('stand')) return 'Tripod';
+  if (name.includes('gimbal') || name.includes('ronin') || name.includes('stabilizer') || name.includes('rs3') || name.includes('rs2')) return 'Gimbal';
+  if (name.includes('card') || name.includes('sd ') || name.includes('cfexpress') || name.includes('memory')) return 'Memory Card';
+  if (name.includes('battery') || name.includes('batteries') || name.includes('v-mount') || name.includes('power')) return 'Battery';
+  if (name.includes('drone') || name.includes('mavic') || name.includes('mini 4') || name.includes('inspire')) return 'Drone';
+  return 'Other';
+};
+
 // Helper to parse equipment notes containing structured metadata
 interface EquipmentMetadata {
   condition: string;
@@ -87,6 +197,8 @@ export const EquipmentManagement: React.FC = () => {
   const [busyEquipment, setBusyEquipment] = useState<{ equipment: Equipment; tasks: ActiveEquipmentTask[] } | null>(null);
   
   // Search, filter, and sort states
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString());
+  const [selectedCategoryView, setSelectedCategoryView] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
@@ -286,25 +398,126 @@ export const EquipmentManagement: React.FC = () => {
     return Array.from(new Set(equipment.map(e => e.brand).filter(Boolean)));
   }, [equipment]);
 
-  // Helper to accurately resolve active tasks for a specific equipment record
-  const getActiveTasksForEquipment = (eq: Equipment): ActiveEquipmentTask[] => {
-    if (!eq) return [];
-    const eqId = (eq.equipment_id || '').trim().toLowerCase();
-    const eqName = (eq.equipment_name || '').trim().toLowerCase();
-    const brand = (eq.brand || '').trim().toLowerCase();
-    const model = (eq.model || '').trim().toLowerCase();
-    const fullName = `${brand} ${model}`.trim().toLowerCase();
+  const uniqueCategories = useMemo(() => {
+    const fromEq = equipment.map(e => getEquipmentCategory(e)).filter(Boolean);
+    const defaults = ['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Lighting', 'Audio', 'Memory Cards', 'Batteries', 'Other'];
+    return Array.from(new Set([...fromEq, ...defaults])).filter(Boolean).sort();
+  }, [equipment]);
 
-    // Matching helper
-    const matchesEquipment = (raw: string): boolean => {
-      if (!raw) return false;
-      const clean = raw.trim().toLowerCase();
-      if (eqId && clean === eqId) return true;
-      if (eqName && (clean === eqName || clean.includes(eqName) || eqName.includes(clean))) return true;
-      if (fullName && clean === fullName) return true;
-      if (model && model.length > 2 && clean.includes(model)) return true;
-      return false;
-    };
+  // Helper to parse equipment from various data sources (array, comma-separated, JSON, or mobiles string)
+  const parseEquipmentList = (raw: any): string[] => {
+    if (!raw) return [];
+    const list: string[] = [];
+    if (Array.isArray(raw)) {
+      raw.forEach(item => {
+        if (typeof item === 'string' && item.trim()) list.push(item.trim());
+        else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
+          list.push(String(item.equipment_name || item.name).trim());
+        }
+      });
+    } else if (typeof raw === 'string') {
+      const trimmed = raw.trim();
+      if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed === 'none' || trimmed === 'null' || trimmed === 'undefined') return [];
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(item => {
+              if (typeof item === 'string' && item.trim()) list.push(item.trim());
+              else if (item && typeof item === 'object' && (item.equipment_name || item.name)) {
+                list.push(String(item.equipment_name || item.name).trim());
+              }
+            });
+          } else if (typeof parsed === 'string' && parsed.trim()) {
+            list.push(parsed.trim());
+          }
+        } catch {
+          trimmed.split(',').forEach(s => { if (s.trim()) list.push(s.trim()); });
+        }
+      } else {
+        trimmed.split(',').forEach(s => { if (s.trim()) list.push(s.trim()); });
+      }
+    }
+    return list.filter(item => {
+      const l = item.toLowerCase();
+      return l !== 'none' && l !== 'null' && l !== 'undefined' && l !== 'not assigned' && l !== '—' && l !== '-';
+    });
+  };
+
+  // Helper to extract equipment encoded in assigned_staff_mobiles (e.g. from Assign Staff modal)
+  const extractEquipmentFromStaffMobiles = (mobilesRaw?: string): string[] => {
+    if (!mobilesRaw || typeof mobilesRaw !== 'string') return [];
+    const list: string[] = [];
+    if (mobilesRaw.includes(' || EQUIPMENT: JSON:')) {
+      try {
+        const parts = mobilesRaw.split(' || EQUIPMENT: JSON:');
+        const parsed = JSON.parse(parts[1]);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((slot: any) => {
+            if (Array.isArray(slot)) {
+              slot.forEach((eq: any) => { if (typeof eq === 'string' && eq.trim()) list.push(eq.trim()); });
+            } else if (typeof slot === 'string' && slot.trim()) {
+              list.push(slot.trim());
+            }
+          });
+        }
+      } catch (_) {}
+    } else if (mobilesRaw.includes(' || EQUIPMENT: ')) {
+      const parts = mobilesRaw.split(' || EQUIPMENT: ');
+      if (parts[1]) {
+        parts[1].split(',').forEach((s: string) => { if (s.trim()) list.push(s.trim()); });
+      }
+    }
+    return list.filter(item => {
+      const l = item.toLowerCase();
+      return l !== 'none' && l !== 'null' && l !== 'undefined' && l !== 'not assigned' && l !== '—' && l !== '-';
+    });
+  };
+
+  // Helper to infer brand from equipment name
+  const inferBrand = (name: string): string => {
+    const l = name.toLowerCase();
+    if (l.includes('sony')) return 'Sony';
+    if (l.includes('canon')) return 'Canon';
+    if (l.includes('nikon')) return 'Nikon';
+    if (l.includes('fujifilm') || l.includes('fuji')) return 'Fujifilm';
+    if (l.includes('panasonic') || l.includes('lumix')) return 'Panasonic';
+    if (l.includes('dji')) return 'DJI';
+    if (l.includes('godox')) return 'Godox';
+    if (l.includes('aputure') || l.includes('amaran')) return 'Aputure';
+    if (l.includes('rode')) return 'Rode';
+    if (l.includes('sennheiser')) return 'Sennheiser';
+    if (l.includes('blackmagic')) return 'Blackmagic';
+    if (l.includes('sandisk')) return 'SanDisk';
+    if (l.includes('manfrotto')) return 'Manfrotto';
+    return 'Studio Gear';
+  };
+
+  // Helper to test if an event date matches the target calendar date
+  const isDateMatch = (dateVal: any, targetCalDate: string, endDateVal?: any): boolean => {
+    if (!dateVal || !targetCalDate) return false;
+    const calDate = toCalendarDateString(dateVal);
+    if (calDate === targetCalDate) return true;
+    if (endDateVal) {
+      const endCal = toCalendarDateString(endDateVal);
+      if (calDate && endCal && targetCalDate >= calDate && targetCalDate <= endCal) return true;
+    }
+    const str = String(dateVal);
+    if (str.includes(' - ') || str.includes(' to ') || str.includes('–')) {
+      const parts = str.split(/\s*[-–]|to\s*/);
+      if (parts.length >= 2) {
+        const d1 = toCalendarDateString(parts[0]);
+        const d2 = toCalendarDateString(parts[1]);
+        if (d1 && d2 && targetCalDate >= d1 && targetCalDate <= d2) return true;
+      }
+    }
+    return false;
+  };
+
+  // 1. Process all equipment with dynamic active tasks and status calculated for selectedDate
+  const allEquipmentWithStatus = useMemo(() => {
+    const targetCalendarDate = toCalendarDateString(selectedDate) || selectedDate;
+    const normalize = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
     const completedStages = [
       'cancelled', 'canceled', 'completed', 'event completed', 'event ended',
@@ -313,96 +526,204 @@ export const EquipmentManagement: React.FC = () => {
     ];
 
     // Helper to check if equipment was returned for an order / lead
-    const isReturnedForOrder = (ordId?: string, ldId?: string): boolean => {
+    const isReturnedForOrder = (ordId?: string, ldId?: string, eqNameToCheck?: string): boolean => {
       if (!ordId && !ldId) return false;
+      const normCheck = eqNameToCheck ? normalize(eqNameToCheck) : '';
       
-      // 1. Check in leadEquipmentHistory
       const hasHistoryReturn = (leadEquipmentHistory || []).some(h => {
         const orderMatch = (ordId && h.order_id === ordId) || (ldId && h.lead_id === ldId);
         if (!orderMatch) return false;
-        const nameMatch = matchesEquipment(h.equipment_name) || 
-                          h.equipment_name === 'Equipment Handover Photo Proof' ||
-                          h.equipment_name === 'Asset Return Photo Proof' ||
-                          h.equipment_status === 'Equipment Handover Completed';
+        const nameMatch = !normCheck || normalize(h.equipment_name).includes(normCheck) || normCheck.includes(normalize(h.equipment_name));
         const isRet = h.equipment_status === 'Equipment Handover Completed' || 
                       h.equipment_status === 'Returned' || 
-                      Boolean(h.returned_at && (h.equipment_status?.toLowerCase().includes('handover') || h.equipment_status?.toLowerCase().includes('return')));
+                      Boolean(h.returned_at);
         return nameMatch && isRet;
       });
       if (hasHistoryReturn) return true;
 
-      // 2. Check in equipmentHandovers
       const hasHandoverReturn = (equipmentHandovers || []).some(eh => {
         const orderMatch = (ordId && eh.order_id === ordId) || (ldId && eh.order_id === ldId);
-        return orderMatch && eh.return_status === 'Returned' && matchesEquipment(eh.equipment_name);
+        if (!orderMatch) return false;
+        const nameMatch = !normCheck || normalize(eh.equipment_name).includes(normCheck) || normCheck.includes(normalize(eh.equipment_name));
+        return eh.return_status === 'Returned' && nameMatch;
       });
       if (hasHandoverReturn) return true;
 
-      // 3. Check in operations
       const matchingOp = (operations || []).find(o => (ordId && o.order_id === ordId) || (ldId && o.order_id === ldId));
       if (matchingOp && ['equipment handover completed', 'returned', 'equipment returned'].includes((matchingOp.equipment_status || '').toLowerCase())) {
         return true;
       }
-
       return false;
     };
 
-    const tasks: ActiveEquipmentTask[] = [];
-    const seenOrderKeys = new Set<string>();
+    // STEP 1: Find ALL events on the selected date and extract their assigned equipment
+    interface AssignedGearRecord {
+      equipmentName: string;
+      eventName: string;
+      eventDate: string;
+      eventTime: string;
+      assignedStaff: string;
+      orderId: string;
+      leadId?: string;
+      taskStatus: string;
+      source: string;
+      taskId: string;
+    }
 
-    // 1. Check staffAssignments
+    const assignedGearList: AssignedGearRecord[] = [];
+    const seenAssignedKeys = new Set<string>();
+
+    const recordAssignedGear = (gear: AssignedGearRecord) => {
+      const key = `${gear.orderId}_${gear.eventName}_${gear.equipmentName}_${gear.assignedStaff}`.toLowerCase();
+      if (seenAssignedKeys.has(key)) return;
+      seenAssignedKeys.add(key);
+      assignedGearList.push(gear);
+    };
+
+    // 1A. Scan staffAssignments
     (staffAssignments || []).forEach(sa => {
       const assignStatus = (sa.assignment_status || '').toLowerCase();
       const taskStatus = ((sa as any).task_status || '').toLowerCase();
       if (completedStages.includes(assignStatus) || completedStages.includes(taskStatus)) return;
 
-      const relatedOrder = orders?.find(o => o.order_id === sa.order_id);
-      const relatedLead = leads?.find(l => l.lead_id === (relatedOrder?.lead_id || sa.order_id) || l.lead_id === (sa as any).lead_id);
-      
-      // If order or lead is completed / closed / cancelled / lost
+      const relatedOrder = orders?.find(o => o.order_id === sa.order_id || o.lead_id === sa.order_id);
+      const relatedLead = leads?.find(l => l.lead_id === (relatedOrder?.lead_id || sa.order_id) || l.lead_id === (sa as any).lead_id || l.order_id === sa.order_id);
+
       if (relatedOrder && completedStages.includes((relatedOrder.current_stage || '').toLowerCase())) return;
       if (relatedLead && completedStages.includes((relatedLead.status || relatedLead.current_status || '').toLowerCase())) return;
 
       const op = operations?.find(o => o.order_id === (sa.order_id || relatedOrder?.order_id));
       if (op && completedStages.includes((op.event_status || '').toLowerCase())) return;
 
-      // Check if equipment was returned
-      if (isReturnedForOrder(sa.order_id, relatedOrder?.lead_id || relatedLead?.lead_id)) return;
-
-      // Check if equipment is in this assignment
-      let saEqList: string[] = [];
-      if (Array.isArray(sa.equipment)) {
-        saEqList = sa.equipment;
-      } else if (typeof sa.equipment === 'string') {
-        try {
-          const parsed = JSON.parse(sa.equipment);
-          saEqList = Array.isArray(parsed) ? parsed : [sa.equipment];
-        } catch {
-          saEqList = (sa.equipment as string).split(',').map((s: string) => s.trim()).filter(Boolean);
+      // Extract events from related containers to check event date
+      const containerEvents: any[] = [];
+      const pushContainerEvents = (container: any) => {
+        if (!container?.events) return;
+        let evs = container.events;
+        if (typeof evs === 'string') {
+          try { evs = JSON.parse(evs); } catch (_) {}
         }
-      }
+        if (Array.isArray(evs)) {
+          evs.forEach(e => { if (e && typeof e === 'object') containerEvents.push(e); });
+        }
+      };
+      pushContainerEvents(relatedLead);
+      pushContainerEvents(relatedOrder);
 
-      const isAssigned = saEqList.some(item => matchesEquipment(item));
-      if (!isAssigned) return;
+      const matchedEv = containerEvents.find(e => 
+        (sa.event_id && (String(e.id) === String(sa.event_id) || String(e.event_id) === String(sa.event_id))) ||
+        (sa.event_name && (e.event_name || '').trim().toLowerCase() === (sa.event_name || '').trim().toLowerCase())
+      ) || (containerEvents.length === 1 ? containerEvents[0] : null);
 
-      const taskKey = `${sa.order_id}_${sa.event_name || sa.event_id || 'ev'}_${sa.staff_name}`;
-      if (seenOrderKeys.has(taskKey)) return;
-      seenOrderKeys.add(taskKey);
+      const resolvedEventDate = matchedEv?.event_date || matchedEv?.Reporting_date || matchedEv?.reporting_date || 
+                                sa.assignment_date || sa.event_date || (sa as any).Reporting_date || (sa as any).reporting_date || 
+                                relatedOrder?.event_date || relatedLead?.event_date;
 
-      tasks.push({
-        id: sa.assignment_id || taskKey,
-        orderId: sa.order_id,
-        leadId: relatedOrder?.lead_id || relatedLead?.lead_id,
-        eventName: sa.event_name || relatedOrder?.custom_event_name || relatedOrder?.event_type || relatedLead?.custom_event_name || relatedLead?.event_type || 'Event Shoot',
-        eventDate: relatedOrder?.event_date || relatedLead?.event_date || 'N/A',
-        eventTime: relatedOrder?.event_time || relatedLead?.event_time || 'N/A',
-        assignedStaff: sa.staff_name || 'Staff Member',
-        taskStatus: (sa as any).task_status || sa.assignment_status || 'In Progress',
-        source: 'Staff Assignment'
+      const isDateMatched = isDateMatch(resolvedEventDate, targetCalendarDate, matchedEv?.Event_End_Date || matchedEv?.event_end_date);
+      if (!isDateMatched) return;
+
+      // Collect equipment items for this assignment
+      const eqItems = [
+        ...parseEquipmentList(sa.equipment),
+        ...parseEquipmentList(sa.assigned_equipment),
+        ...parseEquipmentList((sa as any).equipment_details)
+      ];
+
+      const resolvedEventName = matchedEv?.event_name || sa.event_name || relatedOrder?.custom_event_name || relatedOrder?.event_type || relatedLead?.custom_event_name || relatedLead?.event_type || 'Event Shoot';
+      const resolvedEventTime = matchedEv?.reporting_time || matchedEv?.event_start_time || sa.reporting_time || (sa as any).event_start_time || relatedOrder?.event_time || relatedLead?.event_time || 'N/A';
+
+      eqItems.forEach(eqName => {
+        if (isReturnedForOrder(sa.order_id, relatedLead?.lead_id || relatedOrder?.lead_id, eqName)) return;
+        recordAssignedGear({
+          equipmentName: eqName,
+          eventName: resolvedEventName,
+          eventDate: resolvedEventDate || targetCalendarDate,
+          eventTime: resolvedEventTime,
+          assignedStaff: sa.staff_name || 'Assigned Staff',
+          orderId: sa.order_id,
+          leadId: relatedLead?.lead_id || relatedOrder?.lead_id,
+          taskStatus: (sa as any).task_status || sa.assignment_status || 'Assigned',
+          source: 'Staff Assignment',
+          taskId: sa.assignment_id || `${sa.order_id}_${eqName}`
+        });
       });
     });
 
-    // 2. Check operations equipment_kit
+    // 1B. Scan orders & leads events
+    const scanContainerEvents = (container: any, sourceLabel: string) => {
+      if (!container) return;
+      if (completedStages.includes((container.current_stage || container.status || container.current_status || '').toLowerCase())) return;
+
+      const ordId = container.order_id || container.lead_id;
+      const ldId = container.lead_id || container.order_id;
+
+      let evs = container.events;
+      if (typeof evs === 'string') {
+        try { evs = JSON.parse(evs); } catch (_) {}
+      }
+
+      if (Array.isArray(evs) && evs.length > 0) {
+        evs.forEach((ev: any) => {
+          if (!ev || typeof ev !== 'object') return;
+          const evDate = ev.event_date || ev.Reporting_date || ev.reporting_date || ev.event_start_date || container.event_date;
+          if (!isDateMatch(evDate, targetCalendarDate, ev.Event_End_Date || ev.event_end_date)) return;
+
+          const evGear = [
+            ...parseEquipmentList(ev.assigned_equipment),
+            ...parseEquipmentList(ev.equipment),
+            ...parseEquipmentList(ev.equipment_kit),
+            ...extractEquipmentFromStaffMobiles(ev.assigned_staff_mobiles)
+          ];
+
+          const evName = ev.event_name || ev.custom_event_name || ev.event_type || container.custom_event_name || container.event_type || 'Event Shoot';
+          const evTime = ev.reporting_time || ev.event_start_time || ev.event_time || container.event_time || 'N/A';
+          const evStaff = ev.assigned_staff_names || 'Assigned Crew';
+
+          evGear.forEach(gearName => {
+            if (isReturnedForOrder(ordId, ldId, gearName)) return;
+            recordAssignedGear({
+              equipmentName: gearName,
+              eventName: evName,
+              eventDate: evDate || targetCalendarDate,
+              eventTime: evTime,
+              assignedStaff: evStaff,
+              orderId: ordId,
+              leadId: ldId,
+              taskStatus: 'Assigned',
+              source: sourceLabel,
+              taskId: `${ordId}_${ev.id || 'ev'}_${gearName}`
+            });
+          });
+        });
+      }
+
+      // Also check top-level container event date
+      if (isDateMatch(container.event_date || container.Reporting_date, targetCalendarDate, container.event_end_date)) {
+        const topGear = parseEquipmentList(container.assigned_equipment);
+        const evName = container.custom_event_name || container.event_type || 'Event Shoot';
+        const evTime = container.event_time || 'N/A';
+        topGear.forEach(gearName => {
+          if (isReturnedForOrder(ordId, ldId, gearName)) return;
+          recordAssignedGear({
+            equipmentName: gearName,
+            eventName: evName,
+            eventDate: container.event_date || targetCalendarDate,
+            eventTime: evTime,
+            assignedStaff: 'Assigned Crew',
+            orderId: ordId,
+            leadId: ldId,
+            taskStatus: 'Assigned',
+            source: `${sourceLabel} Direct`,
+            taskId: `${ordId}_top_${gearName}`
+          });
+        });
+      }
+    };
+
+    (orders || []).forEach(o => scanContainerEvents(o, 'Order Event'));
+    (leads || []).forEach(l => scanContainerEvents(l, 'Lead Event'));
+
+    // 1C. Scan operations equipment_kit
     (operations || []).forEach(op => {
       if (!op.equipment_kit || !op.equipment_kit.trim()) return;
       if (completedStages.includes((op.event_status || '').toLowerCase())) return;
@@ -410,80 +731,105 @@ export const EquipmentManagement: React.FC = () => {
 
       const relatedOrder = orders?.find(o => o.order_id === op.order_id);
       const relatedLead = leads?.find(l => l.lead_id === (relatedOrder?.lead_id || op.order_id));
-
       if (relatedOrder && completedStages.includes((relatedOrder.current_stage || '').toLowerCase())) return;
       if (relatedLead && completedStages.includes((relatedLead.status || relatedLead.current_status || '').toLowerCase())) return;
 
-      if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id || relatedLead?.lead_id)) return;
+      const resolvedOpDate = op.event_date || relatedOrder?.event_date || relatedLead?.event_date;
+      if (!isDateMatch(resolvedOpDate, targetCalendarDate)) return;
 
-      const opKits = op.equipment_kit.split(',').map((s: string) => s.trim()).filter(Boolean);
-      const match = opKits.some(item => matchesEquipment(item));
-      if (!match) return;
+      const opKits = parseEquipmentList(op.equipment_kit);
+      const evName = op.event_name || relatedOrder?.custom_event_name || relatedOrder?.event_type || 'Production Shoot';
+      const evTime = relatedOrder?.event_time || relatedLead?.event_time || 'N/A';
+      const opStaff = op.photographer_assigned || op.videographer_assigned || op.drone_operator_assigned || 'Production Crew';
 
-      const taskKey = `${op.order_id}_op_${op.operations_id || 'op'}`;
-      // If we already counted staff assignments for this order, don't duplicate
-      const alreadyHasOrderTask = tasks.some(t => t.orderId === op.order_id);
-      if (alreadyHasOrderTask || seenOrderKeys.has(taskKey)) return;
-      seenOrderKeys.add(taskKey);
-
-      tasks.push({
-        id: op.operations_id || taskKey,
-        orderId: op.order_id,
-        leadId: relatedOrder?.lead_id || relatedLead?.lead_id,
-        eventName: relatedOrder?.custom_event_name || relatedOrder?.event_type || relatedLead?.custom_event_name || relatedLead?.event_type || 'Production Shoot',
-        eventDate: relatedOrder?.event_date || relatedLead?.event_date || 'N/A',
-        eventTime: relatedOrder?.event_time || relatedLead?.event_time || 'N/A',
-        assignedStaff: op.photographer_assigned || op.videographer_assigned || op.drone_operator_assigned || 'Production Crew',
-        taskStatus: op.event_status || 'Operations Assigned',
-        source: 'Operations Kit'
+      opKits.forEach(gearName => {
+        if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id || relatedLead?.lead_id, gearName)) return;
+        recordAssignedGear({
+          equipmentName: gearName,
+          eventName: evName,
+          eventDate: resolvedOpDate || targetCalendarDate,
+          eventTime: evTime,
+          assignedStaff: opStaff,
+          orderId: op.order_id,
+          leadId: relatedOrder?.lead_id || relatedLead?.lead_id,
+          taskStatus: op.event_status || 'Operations Assigned',
+          source: 'Operations Kit',
+          taskId: `${op.order_id}_op_${gearName}`
+        });
       });
     });
 
-    // 3. Check leadEquipmentHistory (for active unreturned checkouts)
+    // 1D. Scan leadEquipmentHistory
     (leadEquipmentHistory || []).forEach(h => {
       if (h.returned_at || h.equipment_status === 'Returned' || h.equipment_status === 'Equipment Handover Completed') return;
-      if (!matchesEquipment(h.equipment_name)) return;
+      const histDate = h.event_date || h.checkout_date;
+      if (!isDateMatch(histDate, targetCalendarDate)) return;
 
-      const relatedOrder = orders?.find(o => o.order_id === h.order_id || o.lead_id === h.lead_id);
-      const relatedLead = leads?.find(l => l.lead_id === (h.lead_id || relatedOrder?.lead_id || h.order_id));
-
-      if (relatedOrder && completedStages.includes((relatedOrder.current_stage || '').toLowerCase())) return;
-      if (relatedLead && completedStages.includes((relatedLead.status || relatedLead.current_status || '').toLowerCase())) return;
-
-      const ordId = h.order_id || relatedOrder?.order_id || h.lead_id;
-      if (!ordId) return;
-
-      const alreadyHasOrderTask = tasks.some(t => t.orderId === ordId);
-      if (alreadyHasOrderTask) return;
-
-      const taskKey = `${ordId}_hist_${h.id || h.equipment_name}`;
-      if (seenOrderKeys.has(taskKey)) return;
-      seenOrderKeys.add(taskKey);
-
-      tasks.push({
-        id: h.id || taskKey,
-        orderId: ordId,
-        leadId: h.lead_id || relatedOrder?.lead_id,
-        eventName: relatedOrder?.custom_event_name || relatedOrder?.event_type || relatedLead?.custom_event_name || relatedLead?.event_type || 'Event Assignment',
-        eventDate: relatedOrder?.event_date || relatedLead?.event_date || 'N/A',
-        eventTime: relatedOrder?.event_time || relatedLead?.event_time || 'N/A',
+      const ordId = h.order_id || h.lead_id || 'HIST';
+      recordAssignedGear({
+        equipmentName: h.equipment_name,
+        eventName: h.event_name || 'Event Assignment',
+        eventDate: histDate || targetCalendarDate,
+        eventTime: 'N/A',
         assignedStaff: h.returned_by || 'Assigned Crew',
+        orderId: ordId,
+        leadId: h.lead_id,
         taskStatus: h.equipment_status || 'In Use',
-        source: 'Equipment History'
+        source: 'Equipment History',
+        taskId: `${ordId}_hist_${h.id || h.equipment_name}`
       });
     });
 
-    return tasks;
-  };
+    // STEP 2: Map over existing equipment and match against assigned gear for targetCalendarDate
+    const matchedAssignedGearIndices = new Set<number>();
 
-  // Combined search, filtering, and sorting logic with dynamic Task Count and Status
-  const filteredAndSortedEquipment = useMemo(() => {
-    let result = equipment.map(item => {
+    const processedEquipment = equipment.map(item => {
       const meta = parseEquipmentNotes(item.notes);
-      const activeTasks = getActiveTasksForEquipment(item);
-      const activeTaskCount = activeTasks.length;
-      
-      // Calculate dynamic status purely based on real active tasks
+      const eqId = (item.equipment_id || '').trim().toLowerCase();
+      const eqName = (item.equipment_name || '').trim().toLowerCase();
+      const brand = (item.brand || '').trim().toLowerCase();
+      const model = (item.model || '').trim().toLowerCase();
+      const serial = (item.serial_number || '').trim().toLowerCase();
+      const fullName = `${brand} ${model}`.trim().toLowerCase();
+
+      const normEqName = normalize(eqName);
+      const normFullName = normalize(fullName);
+      const normModel = model ? normalize(model) : '';
+
+      const matchesItem = (rawStr: string): boolean => {
+        if (!rawStr) return false;
+        const clean = rawStr.trim().toLowerCase();
+        if (!clean) return false;
+        const normClean = normalize(clean);
+
+        if (eqId && clean === eqId) return true;
+        if (serial && clean === serial) return true;
+        if (clean === eqName || (normEqName && normClean === normEqName)) return true;
+        if (fullName && (clean === fullName || (normFullName && normClean === normFullName))) return true;
+        if (normEqName.length >= 3 && (normClean.includes(normEqName) || normEqName.includes(normClean))) return true;
+        if (normModel.length >= 3 && (normClean.includes(normModel) || normModel.includes(normClean))) return true;
+        return false;
+      };
+
+      const matchedTasks: ActiveEquipmentTask[] = [];
+      assignedGearList.forEach((gear, gIdx) => {
+        if (matchesItem(gear.equipmentName)) {
+          matchedAssignedGearIndices.add(gIdx);
+          matchedTasks.push({
+            id: gear.taskId,
+            orderId: gear.orderId,
+            leadId: gear.leadId,
+            eventName: gear.eventName,
+            eventDate: gear.eventDate,
+            eventTime: gear.eventTime,
+            assignedStaff: gear.assignedStaff,
+            taskStatus: gear.taskStatus,
+            source: gear.source
+          });
+        }
+      });
+
+      const activeTaskCount = matchedTasks.length;
       let dynamicStatus = 'Available';
       if (['Under Maintenance', 'Maintenance', 'Damaged', 'Inactive'].includes(item.status)) {
         dynamicStatus = item.status;
@@ -493,15 +839,115 @@ export const EquipmentManagement: React.FC = () => {
         dynamicStatus = 'Available';
       }
 
+      const categoryName = getEquipmentCategory(item);
+
       return {
         ...item,
         parsedMeta: meta,
-        activeTasks,
+        activeTasks: matchedTasks,
         activeTaskCount,
         dynamicStatus,
+        categoryName,
         assigned_quantity: item.quantity - (item.available_quantity ?? item.quantity)
       };
     });
+
+    // STEP 3: If any equipment was assigned to an event on this date but was not in the equipment table,
+    // synthesize an entry so that assigned equipment ALWAYS appears as BUSY against that event.
+    const synthesizedItems: any[] = [];
+    assignedGearList.forEach((gear, gIdx) => {
+      if (!matchedAssignedGearIndices.has(gIdx)) {
+        const inferredType = getEquipmentCategory({ equipment_name: gear.equipmentName });
+        const inferredBrandName = inferBrand(gear.equipmentName);
+        const synthId = `EQ-EV-${normalize(gear.equipmentName).slice(0, 12)}_${gIdx}`;
+
+        synthesizedItems.push({
+          equipment_id: synthId,
+          equipment_name: gear.equipmentName,
+          brand: inferredBrandName,
+          model: '',
+          serial_number: '',
+          equipment_type: inferredType,
+          categoryName: inferredType,
+          quantity: 1,
+          available_quantity: 0,
+          status: 'Busy',
+          dynamicStatus: 'Busy',
+          purchase_date: targetCalendarDate,
+          purchase_price: 0,
+          storage_location: 'In Field / Event',
+          notes: `Assigned for ${gear.eventName} (${gear.assignedStaff})`,
+          created_at: new Date().toISOString(),
+          parsedMeta: { condition: 'Good', assignedStaff: gear.assignedStaff, notes: `Assigned for ${gear.eventName}` },
+          activeTasks: [{
+            id: gear.taskId,
+            orderId: gear.orderId,
+            leadId: gear.leadId,
+            eventName: gear.eventName,
+            eventDate: gear.eventDate,
+            eventTime: gear.eventTime,
+            assignedStaff: gear.assignedStaff,
+            taskStatus: gear.taskStatus,
+            source: gear.source
+          }],
+          activeTaskCount: 1,
+          assigned_quantity: 1
+        });
+      }
+    });
+
+    return [...processedEquipment, ...synthesizedItems];
+  }, [equipment, selectedDate, staffAssignments, operations, leadEquipmentHistory, equipmentHandovers, orders, leads]);
+
+  // 2. Compute Category-first Summary Table Data based on actual equipment records
+  const categoriesSummary = useMemo(() => {
+    const catMap = new Map<string, {
+      category: string;
+      totalUnits: number;
+      availableCount: number;
+      assignedCount: number;
+      maintenanceCount: number;
+    }>();
+
+    allEquipmentWithStatus.forEach(item => {
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const match = 
+          item.equipment_name.toLowerCase().includes(query) ||
+          item.categoryName.toLowerCase().includes(query) ||
+          item.brand.toLowerCase().includes(query) ||
+          (item.model && item.model.toLowerCase().includes(query)) ||
+          (item.serial_number && item.serial_number.toLowerCase().includes(query));
+        if (!match) return;
+      }
+
+      const cat = item.categoryName || 'Other';
+      if (!catMap.has(cat)) {
+        catMap.set(cat, {
+          category: cat,
+          totalUnits: 0,
+          availableCount: 0,
+          assignedCount: 0,
+          maintenanceCount: 0
+        });
+      }
+      const entry = catMap.get(cat)!;
+      entry.totalUnits += (item.quantity || 1);
+      if (item.dynamicStatus === 'Busy') {
+        entry.assignedCount += (item.quantity || 1);
+      } else if (item.dynamicStatus === 'Available') {
+        entry.availableCount += (item.quantity || 1);
+      } else {
+        entry.maintenanceCount += (item.quantity || 1);
+      }
+    });
+
+    return Array.from(catMap.values()).sort((a, b) => a.category.localeCompare(b.category));
+  }, [allEquipmentWithStatus, searchQuery]);
+
+  // Filtered and sorted equipment list for the selected event date
+  const filteredAndSortedEquipment = useMemo(() => {
+    let result = allEquipmentWithStatus;
 
     // 1. Search filter
     if (searchQuery.trim()) {
@@ -510,24 +956,30 @@ export const EquipmentManagement: React.FC = () => {
         return (
           eq.equipment_id.toLowerCase().includes(query) ||
           eq.equipment_name.toLowerCase().includes(query) ||
-          eq.equipment_type.toLowerCase().includes(query) ||
+          eq.categoryName.toLowerCase().includes(query) ||
           eq.brand.toLowerCase().includes(query) ||
-          eq.model.toLowerCase().includes(query) ||
+          (eq.model && eq.model.toLowerCase().includes(query)) ||
           (eq.serial_number && eq.serial_number.toLowerCase().includes(query)) ||
           eq.dynamicStatus.toLowerCase().includes(query) ||
           eq.status.toLowerCase().includes(query) ||
           (eq.storage_location && eq.storage_location.toLowerCase().includes(query)) ||
           eq.parsedMeta.condition.toLowerCase().includes(query) ||
           eq.parsedMeta.assignedStaff.toLowerCase().includes(query) ||
-          eq.parsedMeta.notes.toLowerCase().includes(query)
+          eq.parsedMeta.notes.toLowerCase().includes(query) ||
+          eq.activeTasks.some(t => t.eventName.toLowerCase().includes(query) || t.assignedStaff.toLowerCase().includes(query))
         );
       });
     }
 
-    // 2. Attribute filters
-    if (filters.type !== 'All') {
-      result = result.filter(eq => eq.equipment_type === filters.type || (eq as any).Equipment_Category === filters.type);
+    // 2. Category filter
+    const activeCategory = filters.type;
+    if (activeCategory && activeCategory !== 'All') {
+      result = result.filter(eq => 
+        eq.categoryName.toLowerCase() === activeCategory.toLowerCase()
+      );
     }
+
+    // 3. Status filter
     if (filters.status !== 'All') {
       result = result.filter(eq => {
         if (filters.status === 'Available') return eq.dynamicStatus === 'Available';
@@ -537,14 +989,18 @@ export const EquipmentManagement: React.FC = () => {
         return eq.dynamicStatus === filters.status || eq.status === filters.status;
       });
     }
+
+    // 4. Brand filter
     if (filters.brand !== 'All') {
       result = result.filter(eq => eq.brand === filters.brand);
     }
+
+    // 5. Condition filter
     if (filters.condition !== 'All') {
       result = result.filter(eq => eq.parsedMeta.condition === filters.condition);
     }
 
-    // 3. Sorting logic
+    // 6. Sorting logic
     result.sort((a, b) => {
       switch (sortBy) {
         case 'name-asc':
@@ -569,42 +1025,53 @@ export const EquipmentManagement: React.FC = () => {
     });
 
     return result;
-  }, [equipment, searchQuery, filters, sortBy, staffAssignments, operations, leadEquipmentHistory, equipmentHandovers, orders, leads]);
+  }, [allEquipmentWithStatus, searchQuery, filters, sortBy]);
 
-  // Overall metrics calculated from real equipment state
+  // Overall metrics calculated dynamically from allEquipmentWithStatus for selected date
   const metrics = useMemo(() => {
     let totalUnits = 0;
     let availableCount = 0;
     let busyCount = 0;
     let maintenanceCount = 0;
 
-    equipment.forEach(item => {
-      totalUnits += item.quantity || 1;
-      const tasks = getActiveTasksForEquipment(item);
-      if (['Under Maintenance', 'Maintenance', 'Damaged'].includes(item.status)) {
-        maintenanceCount += 1;
-      } else if (tasks.length > 0) {
-        busyCount += 1;
+    allEquipmentWithStatus.forEach(item => {
+      const qty = item.quantity || 1;
+      totalUnits += qty;
+      if (['Under Maintenance', 'Maintenance', 'Damaged', 'Inactive'].includes(item.dynamicStatus)) {
+        maintenanceCount += qty;
+      } else if (item.dynamicStatus === 'Busy') {
+        busyCount += qty;
       } else {
-        availableCount += 1;
+        availableCount += qty;
       }
     });
 
     return { totalUnits, availableCount, busyCount, maintenanceCount };
-  }, [equipment, staffAssignments, operations, leadEquipmentHistory, equipmentHandovers, orders, leads]);
+  }, [allEquipmentWithStatus]);
 
   // Reset pagination to page 1 on search or filter updates
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filters, sortBy]);
+  }, [searchQuery, filters, sortBy, selectedDate]);
 
-  // Paginated chunk calculation
+  // Paginated categories calculation
+  const paginatedCategories = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return categoriesSummary.slice(startIndex, startIndex + pageSize);
+  }, [categoriesSummary, currentPage, pageSize]);
+
+  // Paginated equipment calculation
   const paginatedEquipment = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     return filteredAndSortedEquipment.slice(startIndex, startIndex + pageSize);
   }, [filteredAndSortedEquipment, currentPage, pageSize]);
 
-  const totalPages = Math.ceil(filteredAndSortedEquipment.length / pageSize) || 1;
+  const totalPages = useMemo(() => {
+    if (!selectedCategoryView) {
+      return Math.ceil(categoriesSummary.length / pageSize) || 1;
+    }
+    return Math.ceil(filteredAndSortedEquipment.length / pageSize) || 1;
+  }, [selectedCategoryView, categoriesSummary.length, filteredAndSortedEquipment.length, pageSize]);
 
   return (
     <div className="space-y-6 font-sans relative">
@@ -624,7 +1091,23 @@ export const EquipmentManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Dashboard Metrics Header */}
+      {/* Dashboard Metrics Header with Date Filter */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-2">
+        <h2 className="text-xs font-mono font-black uppercase text-zinc-500">
+          Inventory Status for: <span className="text-zinc-200">{formatDateDDMMYY(selectedDate)}</span>
+        </h2>
+        <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-850 rounded-xl px-3 py-1.5 shadow-sm">
+          <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+          <span className="text-[10px] font-mono font-bold uppercase text-zinc-400">Assignment / Event Date:</span>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500 cursor-pointer"
+            title="Select Assignment / Event Date"
+          />
+        </div>
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { 
@@ -717,13 +1200,26 @@ export const EquipmentManagement: React.FC = () => {
                 <span className="text-[10px] text-zinc-400 font-mono">Filters:</span>
               </div>
 
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
+                title="Select Assignment/Event Date"
+              />
+
               <select
-                value={filters.type}
-                onChange={(e) => setFilters({...filters, type: e.target.value})}
+                value={selectedCategoryView || filters.type}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFilters({...filters, type: val});
+                  setSelectedCategoryView(val === 'All' ? null : val);
+                  setCurrentPage(1);
+                }}
                 className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
               >
                 <option value="All">All Categories</option>
-                {['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Light', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'].map(t => (
+                {uniqueCategories.map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
@@ -911,155 +1407,299 @@ export const EquipmentManagement: React.FC = () => {
 
         {/* Inventory View */}
         <div className="bg-zinc-900/40 border border-zinc-850 rounded-2xl overflow-hidden shadow-xl">
-          <div className="p-4 border-b border-zinc-850 bg-zinc-950/70 flex items-center justify-between">
-            <h3 className="text-[10px] font-mono font-black text-zinc-300 uppercase tracking-widest flex items-center gap-1.5">
-              <ClipboardList className="w-4 h-4 text-amber-500" />
-              <span>ACTIVE CORE INVENTORY REGISTRY ({filteredAndSortedEquipment.length} items)</span>
-            </h3>
+          {/* Header Banner */}
+          <div className="p-4 border-b border-zinc-850 bg-zinc-950/70 flex flex-wrap items-center justify-between gap-2">
+            {selectedCategoryView ? (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategoryView(null);
+                    setFilters(prev => ({ ...prev, type: 'All' }));
+                    setCurrentPage(1);
+                  }}
+                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-zinc-300 hover:text-white transition-all cursor-pointer flex items-center gap-1.5 text-xs font-mono font-bold"
+                  title="Return to category list"
+                >
+                  <ChevronLeft className="w-4 h-4 text-amber-500" />
+                  <span>Back to Categories</span>
+                </button>
+                <span className="text-zinc-600 font-mono">/</span>
+                <h3 className="text-xs font-mono font-black text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-amber-500" />
+                  <span>{selectedCategoryView} ({filteredAndSortedEquipment.length} ITEMS)</span>
+                </h3>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-amber-500" />
+                <h3 className="text-[10px] font-mono font-black text-zinc-300 uppercase tracking-widest">
+                  EQUIPMENT CATEGORIES ({categoriesSummary.length} CATEGORIES)
+                </h3>
+              </div>
+            )}
+
+            {selectedCategoryView ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedCategoryView(null);
+                  setFilters(prev => ({ ...prev, type: 'All' }));
+                  setCurrentPage(1);
+                }}
+                className="text-xs font-mono text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
+              >
+                ✕ Close Category View
+              </button>
+            ) : (
+              <span className="text-[11px] font-mono text-zinc-500">
+                Click any category row or &quot;View&quot; to inspect all equipment
+              </span>
+            )}
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-max">
-              <thead>
-                <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/40">
-                  <th className="p-3.5">S.NO.</th>
-                  <th className="p-3.5">Equipment</th>
-                  <th className="p-3.5">Brand</th>
-                  <th className="p-3.5">Category</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5 text-center">Task</th>
-                  <th className="p-3.5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-850/60 text-xs text-zinc-300">
-                {paginatedEquipment.length > 0 ? (
-                  paginatedEquipment.map((eq, idx) => {
-                    return (
+            {!selectedCategoryView ? (
+              /* CATEGORY-FIRST TABLE VIEW */
+              <table className="w-full text-left border-collapse min-w-max">
+                <thead>
+                  <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/40">
+                    <th className="p-3.5">Category</th>
+                    <th className="p-3.5 text-center">Total Equipment</th>
+                    <th className="p-3.5 text-center">Available</th>
+                    <th className="p-3.5 text-center">Assigned</th>
+                    <th className="p-3.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-850/60 text-xs text-zinc-300">
+                  {paginatedCategories.length > 0 ? (
+                    paginatedCategories.map((cat) => (
                       <tr 
-                        key={eq.equipment_id} 
-                        onClick={() => setSelectedEq(eq)}
-                        className="hover:bg-zinc-950/30 transition-all cursor-pointer group"
+                        key={cat.category} 
+                        onClick={() => {
+                          setSelectedCategoryView(cat.category);
+                          setFilters(prev => ({ ...prev, type: cat.category }));
+                          setCurrentPage(1);
+                        }}
+                        className="hover:bg-zinc-950/40 transition-all cursor-pointer group"
                       >
-                        {/* S.NO. */}
-                        <td className="p-3.5 text-zinc-500 font-mono text-center">
-                          {(currentPage - 1) * pageSize + idx + 1}
-                        </td>
-
-                        {/* Equipment Name & Serial */}
-                        <td className="p-3.5">
-                          <div className="font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">{eq.equipment_name}</div>
-                          {eq.model && <div className="text-[10px] text-zinc-400 font-mono mt-0.5">Model: <span className="text-zinc-300">{eq.model}</span></div>}
-                          {eq.serial_number && <div className="text-[9px] text-zinc-500 font-bold uppercase font-mono">S/N: {eq.serial_number}</div>}
-                        </td>
-
-                        {/* Brand */}
-                        <td className="p-3.5 font-mono text-zinc-300 font-medium">
-                          {eq.brand || '—'}
-                        </td>
-
                         {/* Category */}
-                        <td className="p-3.5 font-mono text-zinc-400 text-[11px]">
-                          {eq.equipment_type || (eq as any).Equipment_Category || '—'}
+                        <td className="p-3.5 font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 group-hover:bg-amber-500/20 transition-all shrink-0">
+                              <Package className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">{cat.category}</div>
+                              <div className="text-[10px] font-mono text-zinc-500">Click to view all {cat.category.toLowerCase()} units</div>
+                            </div>
+                          </div>
                         </td>
 
-                        {/* Status */}
-                        <td className="p-3.5" onClick={(e) => e.stopPropagation()}>
-                          {eq.dynamicStatus === 'Busy' ? (
+                        {/* Total Equipment */}
+                        <td className="p-3.5 text-center font-mono font-bold text-zinc-200 text-sm">
+                          {cat.totalUnits}
+                        </td>
+
+                        {/* Available */}
+                        <td className="p-3.5 text-center">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-bold uppercase border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                            {cat.availableCount}
+                          </span>
+                        </td>
+
+                        {/* Assigned */}
+                        <td className="p-3.5 text-center">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-bold uppercase border ${
+                            cat.assignedCount > 0 
+                              ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' 
+                              : 'bg-zinc-850/60 text-zinc-400 border-zinc-750'
+                          }`}>
+                            {cat.assignedCount > 0 && <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse" />}
+                            {cat.assignedCount}
+                          </span>
+                        </td>
+
+                        {/* Action */}
+                        <td className="p-3.5 text-right">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCategoryView(cat.category);
+                              setFilters(prev => ({ ...prev, type: cat.category }));
+                              setCurrentPage(1);
+                            }}
+                            className="px-3.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl text-xs font-mono font-bold transition-all cursor-pointer inline-flex items-center gap-1.5 hover:gap-2 shadow-sm"
+                          >
+                            <span>View</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="p-10 text-center text-zinc-500 italic font-mono">
+                        No equipment categories found matching criteria.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              /* CATEGORY DRILL-DOWN: ALL EQUIPMENT IN SELECTED CATEGORY */
+              <table className="w-full text-left border-collapse min-w-max">
+                <thead>
+                  <tr className="border-b border-zinc-850 text-[10px] font-mono uppercase text-zinc-400 bg-zinc-950/40">
+                    <th className="p-3.5">S.NO.</th>
+                    <th className="p-3.5">Equipment</th>
+                    <th className="p-3.5">Brand</th>
+                    <th className="p-3.5">Category</th>
+                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5 text-center">Task</th>
+                    <th className="p-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-850/60 text-xs text-zinc-300">
+                  {paginatedEquipment.length > 0 ? (
+                    paginatedEquipment.map((eq, idx) => {
+                      return (
+                        <tr 
+                          key={eq.equipment_id} 
+                          onClick={() => setSelectedEq(eq)}
+                          className="hover:bg-zinc-950/30 transition-all cursor-pointer group"
+                        >
+                          {/* S.NO. */}
+                          <td className="p-3.5 text-zinc-500 font-mono text-center">
+                            {(currentPage - 1) * pageSize + idx + 1}
+                          </td>
+
+                          {/* Equipment Name & Serial */}
+                          <td className="p-3.5">
+                            <div className="font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">{eq.equipment_name}</div>
+                            {eq.model && <div className="text-[10px] text-zinc-400 font-mono mt-0.5">Model: <span className="text-zinc-300">{eq.model}</span></div>}
+                            {eq.serial_number && <div className="text-[9px] text-zinc-500 font-bold uppercase font-mono">S/N: {eq.serial_number}</div>}
+                          </td>
+
+                          {/* Brand */}
+                          <td className="p-3.5 font-mono text-zinc-300 font-medium">
+                            {eq.brand || '—'}
+                          </td>
+
+                          {/* Category */}
+                          <td className="p-3.5 font-mono text-zinc-400 text-[11px]">
+                            {eq.categoryName}
+                          </td>
+
+                          {/* Status */}
+                          <td className="p-3.5" onClick={(e) => e.stopPropagation()}>
+                            {eq.dynamicStatus === 'Busy' ? (
+                              <button
+                                type="button"
+                                onClick={() => setBusyEquipment({ equipment: eq, tasks: eq.activeTasks })}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-sky-500/10 text-sky-400 border-sky-500/20 hover:bg-sky-500/25 hover:text-sky-300 transition-all cursor-pointer"
+                                title="Click to view active task assignments"
+                              >
+                                <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse" />
+                                Busy
+                              </button>
+                            ) : eq.dynamicStatus === 'Available' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                                Available
+                              </span>
+                            ) : eq.dynamicStatus === 'Under Maintenance' || eq.dynamicStatus === 'Maintenance' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                                {eq.dynamicStatus}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-rose-500/10 text-rose-400 border-rose-500/20">
+                                <span className="w-1.5 h-1.5 bg-rose-400 rounded-full" />
+                                {eq.dynamicStatus}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Task Count Column */}
+                          <td className="p-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
                               onClick={() => setBusyEquipment({ equipment: eq, tasks: eq.activeTasks })}
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-sky-500/10 text-sky-400 border-sky-500/20 hover:bg-sky-500/25 hover:text-sky-300 transition-all cursor-pointer"
-                              title="Click to view active task assignments"
+                              className={`inline-flex items-center justify-center min-w-[28px] px-2.5 py-1 rounded-full text-[11px] font-mono font-bold border transition-all cursor-pointer ${
+                                eq.activeTaskCount > 0
+                                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25 hover:scale-105 shadow-sm'
+                                  : 'bg-zinc-850/60 text-zinc-400 border-zinc-750 hover:bg-zinc-800 hover:text-zinc-300'
+                              }`}
+                              title={eq.activeTaskCount > 0 ? `Click to view ${eq.activeTaskCount} active task(s)` : 'No active tasks (Click to inspect)'}
                             >
-                              <span className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-pulse" />
-                              Busy
+                              {eq.activeTaskCount}
                             </button>
-                          ) : eq.dynamicStatus === 'Available' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                              Available
-                            </span>
-                          ) : eq.dynamicStatus === 'Under Maintenance' || eq.dynamicStatus === 'Maintenance' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-amber-500/10 text-amber-400 border-amber-500/20">
-                              <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
-                              {eq.dynamicStatus}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold uppercase border bg-rose-500/10 text-rose-400 border-rose-500/20">
-                              <span className="w-1.5 h-1.5 bg-rose-400 rounded-full" />
-                              {eq.dynamicStatus}
-                            </span>
-                          )}
-                        </td>
+                          </td>
 
-                        {/* Task Count Column */}
-                        <td className="p-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            type="button"
-                            onClick={() => setBusyEquipment({ equipment: eq, tasks: eq.activeTasks })}
-                            className={`inline-flex items-center justify-center min-w-[28px] px-2.5 py-1 rounded-full text-[11px] font-mono font-bold border transition-all cursor-pointer ${
-                              eq.activeTaskCount > 0
-                                ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 hover:bg-amber-500/25 hover:scale-105 shadow-sm'
-                                : 'bg-zinc-850/60 text-zinc-400 border-zinc-750 hover:bg-zinc-800 hover:text-zinc-300'
-                            }`}
-                            title={eq.activeTaskCount > 0 ? `Click to view ${eq.activeTaskCount} active task(s)` : 'No active tasks (Click to inspect)'}
-                          >
-                            {eq.activeTaskCount}
-                          </button>
-                        </td>
-
-                        {/* Actions */}
-                        <td className="p-3.5 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedEq(eq);
-                              }}
-                              className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800 cursor-pointer"
-                              title="View Details"
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </button>
-                            {canEdit && (
-                              <>
-                                <button
-                                  onClick={(e) => handleSelectEdit(eq, e)}
-                                  className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800 cursor-pointer"
-                                  title="Edit Item Details"
-                                >
-                                  <Edit3 className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  onClick={(e) => handleDelete(eq.equipment_id, eq.equipment_name, e)}
-                                  className="p-1.5 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 rounded transition-all cursor-pointer"
-                                  title="De-register Equipment"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="p-10 text-center text-zinc-500 italic font-mono">
-                      No equipment matching your search or filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                          {/* Actions */}
+                          <td className="p-3.5 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedEq(eq);
+                                }}
+                                className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800 cursor-pointer"
+                                title="View Details"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              {canEdit && (
+                                <>
+                                  <button
+                                    onClick={(e) => handleSelectEdit(eq, e)}
+                                    className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800 cursor-pointer"
+                                    title="Edit Item Details"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => handleDelete(eq.equipment_id, eq.equipment_name, e)}
+                                    className="p-1.5 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 rounded transition-all cursor-pointer"
+                                    title="De-register Equipment"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="p-10 text-center text-zinc-500 italic font-mono">
+                        No equipment found in category &quot;{selectedCategoryView}&quot; matching your search or filters.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Interactive Pagination footer */}
           <div className="p-4 border-t border-zinc-850/60 bg-zinc-950/30 flex flex-col sm:flex-row gap-3 items-center justify-between text-xs font-mono">
             <div className="flex items-center gap-4">
               <span className="text-zinc-500">
-                Showing {filteredAndSortedEquipment.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, filteredAndSortedEquipment.length)} of {filteredAndSortedEquipment.length} items
+                {selectedCategoryView ? (
+                  <>
+                    Showing {filteredAndSortedEquipment.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, filteredAndSortedEquipment.length)} of {filteredAndSortedEquipment.length} items in &quot;{selectedCategoryView}&quot;
+                  </>
+                ) : (
+                  <>
+                    Showing {categoriesSummary.length > 0 ? (currentPage - 1) * pageSize + 1 : 0} to {Math.min(currentPage * pageSize, categoriesSummary.length)} of {categoriesSummary.length} categories ({allEquipmentWithStatus.length} total units)
+                  </>
+                )}
               </span>
               <div className="flex items-center gap-1.5">
                 <span className="text-zinc-600">Per Page:</span>

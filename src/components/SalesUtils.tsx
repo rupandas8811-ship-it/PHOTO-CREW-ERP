@@ -1262,6 +1262,88 @@ export const generateQuotationPDF = (
   };
 
   const targetBasePrice = getPackageBasePrice();
+
+  // Helper to determine whether the lead/order is confirmed
+  const isConfirmed = Boolean(
+    lead?.is_order_confirmed ||
+    lead?.isOrderConfirmed ||
+    lead?.order_status === 'Confirmed' ||
+    lead?.order_status === 'Completed' ||
+    lead?.order_status === 'Paid' ||
+    lead?.order_status === 'Delivered' ||
+    lead?.order_status === 'Project Completed' ||
+    lead?.order_status === 'Closed' ||
+    lead?.status === 'Order Confirmed' ||
+    lead?.status === 'Booking Confirmed' ||
+    lead?.current_stage === 'Order Confirmed' ||
+    lead?.current_stage === 'Booking Confirmed' ||
+    lead?.booking_status === 'Confirmed' ||
+    lead?.booking_status === 'Order Confirmed' ||
+    (lead?.order_id && !String(lead.order_id).startsWith('DRAFT') && !String(lead.order_id).startsWith('TRK-') && String(lead.order_id).trim() !== '')
+  );
+
+  // Helper to fetch actual saved advance payment amount for this exact lead/order
+  const getAdvancePaymentAmount = (): number => {
+    if (!isConfirmed) return 0;
+    const candidates = [
+      lead?.advance_received,
+      lead?.advance_payment_received,
+      lead?.advance_collected,
+      lead?.advancePaid,
+      lead?.advance_amount,
+      lead?.advanceAmount,
+      lead?.advancePayment,
+      lead?.paid_advance
+    ];
+    for (const val of candidates) {
+      if (val !== undefined && val !== null && val !== '') {
+        const num = Number(val);
+        if (!Number.isNaN(num) && num > 0) {
+          return num;
+        }
+      }
+    }
+    return 0;
+  };
+
+  const advanceReceived = getAdvancePaymentAmount();
+
+  const rawBreakdown: { label: string; amount: number }[] = Array.isArray(lead?.payments_breakdown)
+    ? lead.payments_breakdown
+    : [];
+
+  const paymentRows: { label: string; amount: number }[] = [];
+  if (rawBreakdown.length > 0) {
+    rawBreakdown.forEach(p => {
+      if (p && Number(p.amount) > 0) {
+        paymentRows.push({
+          label: String(p.label || 'Payment'),
+          amount: Number(p.amount)
+        });
+      }
+    });
+  } else if (isConfirmed && advanceReceived > 0) {
+    paymentRows.push({
+      label: 'Advance Payment',
+      amount: advanceReceived
+    });
+  } else if (isConfirmed && lead?.total_paid_amount && Number(lead.total_paid_amount) > 0) {
+    paymentRows.push({
+      label: 'Amount Paid',
+      amount: Number(lead.total_paid_amount)
+    });
+  }
+
+  // If order is confirmed and no payments recorded yet, show Amount Paid: 0 so Pending Amount is clearly visible
+  if (paymentRows.length === 0 && isConfirmed) {
+    paymentRows.push({
+      label: 'Amount Paid',
+      amount: 0
+    });
+  }
+
+  const hasAdvance = paymentRows.length > 0;
+
   let services = [...quoteServices];
 
   if (!services || services.length === 0) {
@@ -1511,7 +1593,10 @@ export const generateQuotationPDF = (
       simTable(additionalServices.length, false);
     }
 
-    const pricingH = 4.5 + cfg.pricingCardHeight;
+    const hasPaymentSection = paymentRows.length > 0;
+    const simNumRows = 3 + paymentRows.length + (hasPaymentSection ? 1 : 0);
+    const simCardHeight = hasPaymentSection ? (cfg.pricingCardHeight / 3) * simNumRows : cfg.pricingCardHeight;
+    const pricingH = 4.5 + simCardHeight;
     if (simY + pricingH > 275) {
       simY = 52;
       simPageCount++;
@@ -2150,7 +2235,10 @@ export const generateQuotationPDF = (
   }
 
   // 5. PRICING SUMMARY CARD
-  const pricingCardTotalH = 4.5 + cfg.pricingCardHeight;
+  const hasPaymentSection = paymentRows.length > 0;
+  const numRows = 3 + paymentRows.length + (hasPaymentSection ? 1 : 0);
+  const cardHeight = hasPaymentSection ? (cfg.pricingCardHeight / 3) * numRows : cfg.pricingCardHeight;
+  const pricingCardTotalH = 4.5 + cardHeight;
   if (currentY + pricingCardTotalH > 275) {
     currentY = createNewPage();
   }
@@ -2162,15 +2250,17 @@ export const generateQuotationPDF = (
   currentY += 4.5;
 
   doc.setFillColor(248, 250, 252);
-  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'F');
+  doc.rect(15, currentY, 180, cardHeight, 'F');
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.2);
-  doc.rect(15, currentY, 180, cfg.pricingCardHeight, 'D');
+  doc.rect(15, currentY, 180, cardHeight, 'D');
 
-  const pricingRowH = cfg.pricingCardHeight / 3;
-  doc.line(15, currentY + pricingRowH, 195, currentY + pricingRowH);
-  doc.line(15, currentY + (pricingRowH * 2), 195, currentY + (pricingRowH * 2));
-  doc.line(115, currentY, 115, currentY + cfg.pricingCardHeight);
+  const pricingRowH = cardHeight / numRows;
+
+  for (let r = 1; r < numRows; r++) {
+    doc.line(15, currentY + (pricingRowH * r), 195, currentY + (pricingRowH * r));
+  }
+  doc.line(115, currentY, 115, currentY + cardHeight);
 
   // Fetch saved / entered Final Quotation Amount from Sales Dashboard Section 2 / lead record
   const getSavedFinalAmount = () => {
@@ -2223,7 +2313,36 @@ export const generateQuotationPDF = (
   doc.setTextColor(goldColor[0], goldColor[1], goldColor[2]);
   doc.text(finalAmountSum.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * 3) - 2, { align: 'right' });
 
-  currentY += cfg.pricingCardHeight + cfg.secSpacing;
+  if (hasPaymentSection) {
+    paymentRows.forEach((pRow, idx) => {
+      const rNum = 4 + idx;
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text(pRow.label, 19, currentY + (pricingRowH * rNum) - 2);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(16, 185, 129);
+      doc.text(pRow.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * rNum) - 2, { align: 'right' });
+    });
+
+    const totalPaidSum = paymentRows.reduce((sum, p) => sum + p.amount, 0);
+    const resolvedPaid = (lead?.total_paid_amount !== undefined && !isNaN(Number(lead.total_paid_amount)) && Number(lead.total_paid_amount) > 0)
+      ? Number(lead.total_paid_amount)
+      : totalPaidSum;
+
+    const resolvedPending = Math.max(0, finalAmountSum - resolvedPaid);
+
+    const pendingRowIdx = 4 + paymentRows.length;
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 23, 42);
+    doc.text('Pending Amount', 19, currentY + (pricingRowH * pendingRowIdx) - 2);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(resolvedPending === 0 ? 16 : 225, resolvedPending === 0 ? 185 : 29, resolvedPending === 0 ? 129 : 72);
+    doc.text(resolvedPending.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), 191, currentY + (pricingRowH * pendingRowIdx) - 2, { align: 'right' });
+  }
+
+  currentY += cardHeight + cfg.secSpacing;
 
   // 6. PAYMENT DETAILS CARD (Completely hidden/removed as requested)
   // PAYMENT DETAILS section is hidden from the quotation PDF.
@@ -2498,6 +2617,295 @@ export const resolveSavedQuotationAmount = async (
   return getSyncSavedQuotationAmount(null, targetLeadId, targetOrderId, allQuotations, allLeads, allOrders);
 };
 
+export interface ResolvedPaymentData {
+  exactOrderId: string;
+  advanceAmount: number;
+  totalPaidAmount: number;
+  pendingAmount: number;
+  quotationAmount?: number;
+  paymentsBreakdown: { label: string; amount: number }[];
+  hasAdvance: boolean;
+}
+
+/**
+ * Robustly fetches and resolves latest verified payment data for an exact Order ID / Lead ID.
+ * Follows payment rules: filters out rejected payments, recognizes 'Advance Payment' type,
+ * and maintains proper payment breakdowns without combining distinct payment types.
+ */
+export const fetchAndResolveLatestPaymentData = async (
+  targetLeadId?: string | null,
+  targetOrderId?: string | null,
+  contextPaymentHistory?: any[],
+  allOrders?: any[],
+  allPayments?: any[],
+  allLeads?: any[]
+): Promise<ResolvedPaymentData> => {
+  let exactOrderId = (targetOrderId && String(targetOrderId).trim() !== '' && !String(targetOrderId).startsWith('DRAFT'))
+    ? String(targetOrderId).trim()
+    : '';
+
+  const cleanLeadId = (targetLeadId && String(targetLeadId).trim() !== '' && !String(targetLeadId).startsWith('DRAFT'))
+    ? String(targetLeadId).trim()
+    : '';
+
+  // 1. Resolve exact Order ID from Orders (Supabase + Context)
+  if (!exactOrderId && cleanLeadId) {
+    const memOrder = (allOrders || []).find((o: any) => o.lead_id === cleanLeadId || o.order_id === cleanLeadId);
+    if (memOrder?.order_id) {
+      exactOrderId = String(memOrder.order_id).trim();
+    }
+  }
+
+  if (supabaseClient) {
+    try {
+      if (!exactOrderId && cleanLeadId) {
+        const { data: dbOrders } = await supabaseClient
+          .from('orders')
+          .select('order_id, lead_id, status, advance_received, advance_payment')
+          .or(`lead_id.eq.${cleanLeadId},order_id.eq.${cleanLeadId}`);
+        if (dbOrders && Array.isArray(dbOrders) && dbOrders.length > 0) {
+          const activeOrder = dbOrders.find((o: any) => o.status !== 'Cancelled') || dbOrders[0];
+          if (activeOrder?.order_id) {
+            exactOrderId = String(activeOrder.order_id).trim();
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[fetchAndResolveLatestPaymentData] Error resolving order_id:', err);
+    }
+  }
+
+  // 2. Fetch latest payment_history directly from Supabase for this exact Order ID / Lead ID
+  const allPossibleIds = getAllMatchingOrderIds(exactOrderId || targetOrderId, cleanLeadId);
+  let dbHistories: any[] = [];
+  if (supabaseClient && allPossibleIds.length > 0) {
+    try {
+      const orClauses = allPossibleIds.map(id => `order_id.eq.${id}`);
+      const { data, error } = await supabaseClient
+        .from('payment_history')
+        .select('*')
+        .or(orClauses.join(','));
+      if (!error && Array.isArray(data)) {
+        dbHistories = data;
+      }
+    } catch (err) {
+      console.warn('[fetchAndResolveLatestPaymentData] Error fetching payment_history:', err);
+    }
+  }
+
+  // 3. LocalStorage pending approvals & status sets
+  let localPending: any[] = [];
+  try {
+    const saved = localStorage.getItem('pending_payment_approvals');
+    if (saved) {
+      const parsed = JSON.parse(saved) || [];
+      localPending = parsed.filter((h: any) => {
+        const hid = String(h.order_id || '').trim();
+        return allPossibleIds.includes(hid);
+      });
+    }
+    if (exactOrderId) {
+      const ordSaved = localStorage.getItem(`payment_history_${exactOrderId}`);
+      if (ordSaved) {
+        const parsed = JSON.parse(ordSaved) || [];
+        if (Array.isArray(parsed)) {
+          parsed.forEach((h: any) => {
+            const hid = String(h.order_id || '').trim();
+            if (allPossibleIds.includes(hid)) {
+              localPending.push(h);
+            }
+          });
+        }
+      }
+    }
+    if (cleanLeadId) {
+      const leadSaved = localStorage.getItem(`payment_history_${cleanLeadId}`);
+      if (leadSaved) {
+        const parsed = JSON.parse(leadSaved) || [];
+        if (Array.isArray(parsed)) {
+          parsed.forEach((h: any) => {
+            const hid = String(h.order_id || '').trim();
+            if (allPossibleIds.includes(hid)) {
+              localPending.push(h);
+            }
+          });
+        }
+      }
+    }
+  } catch (_) {}
+
+  let approvedIds = new Set<string>();
+  try {
+    const approvedSaved = localStorage.getItem('approved_payment_history_ids');
+    if (approvedSaved) approvedIds = new Set(JSON.parse(approvedSaved));
+  } catch (_) {}
+
+  let rejectedIds = new Set<string>();
+  try {
+    const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+    if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
+  } catch (_) {}
+
+  // 4. Merge payment history sources into single deduplicated map
+  const combinedMap = new Map<string, any>();
+  dbHistories.forEach(item => {
+    const key = String(item.id || item.payment_history_id || '');
+    if (key) combinedMap.set(key, item);
+  });
+  (contextPaymentHistory || []).forEach(item => {
+    const key = String(item.id || item.payment_history_id || '');
+    if (key) combinedMap.set(key, { ...combinedMap.get(key), ...item });
+  });
+  localPending.forEach(item => {
+    const key = String(item.id || item.payment_history_id || '');
+    if (key && !combinedMap.has(key)) combinedMap.set(key, item);
+  });
+
+  // 5. Filter out rejected payments and ensure association with exact Order ID
+  const validHistories = Array.from(combinedMap.values()).filter(h => {
+    const hid = String(h.order_id || '').trim();
+    if (!hid) return false;
+    const isMatch = allPossibleIds.includes(hid);
+    if (!isMatch) return false;
+
+    const histId = String(h.id || h.payment_history_id || '');
+    const isExplicitlyRejected = h.approval_status === 'Rejected' ||
+      rejectedIds.has(histId) ||
+      (typeof h.notes === 'string' && (
+        h.notes.includes('Rejected') ||
+        h.notes.includes('[REJECTED]') ||
+        h.notes.endsWith('- Rejected') ||
+        h.notes.toLowerCase().includes('rejected by business owner')
+      ));
+
+    return !isExplicitlyRejected;
+  });
+
+  // 6. Identify payments by Payment Type
+  const advanceTransactions = validHistories.filter(h => {
+    const type = String(h.payment_type || h.Payment_type || '').trim().toLowerCase();
+    if (type === 'advance payment' || type === 'advance') return true;
+    if (!type && typeof h.notes === 'string' && h.notes.toLowerCase().includes('advance')) return true;
+    return false;
+  });
+
+  let advanceAmount = advanceTransactions.reduce((sum, h) => sum + (Number(h.amount) || 0), 0);
+
+  // Fallback to order or payment record if no payment_history rows exist
+  if (advanceAmount === 0) {
+    const targetOrder = (allOrders || []).find((o: any) =>
+      (exactOrderId && o.order_id === exactOrderId) ||
+      (cleanLeadId && o.lead_id === cleanLeadId)
+    );
+    const targetPayment = (allPayments || []).find((p: any) =>
+      (exactOrderId && p.order_id === exactOrderId) ||
+      (cleanLeadId && p.lead_id === cleanLeadId)
+    );
+
+    if (targetOrder?.advance_received !== undefined && Number(targetOrder.advance_received) > 0) {
+      advanceAmount = Number(targetOrder.advance_received);
+    } else if (targetOrder?.advance_payment !== undefined && Number(targetOrder.advance_payment) > 0) {
+      advanceAmount = Number(targetOrder.advance_payment);
+    } else if (targetPayment?.advance_received !== undefined && Number(targetPayment.advance_received) > 0 && targetPayment.payment_status !== 'Rejected' && targetPayment.payment_status !== 'Cancelled') {
+      advanceAmount = Number(targetPayment.advance_received);
+    }
+  }
+
+  // 7. Group other non-advance payments (e.g. Shoot Time / Event Date Payment, Final Payment)
+  const otherTransactions = validHistories.filter(h => !advanceTransactions.includes(h));
+  const otherGroups = new Map<string, number>();
+
+  otherTransactions.forEach(h => {
+    const rawType = String(h.payment_type || h.Payment_type || '').trim() || 'Payment';
+    let label = rawType;
+    if (rawType.toLowerCase().includes('shoot') || rawType.toLowerCase().includes('event')) {
+      label = 'Event Date Payment';
+    } else if (rawType.toLowerCase().includes('final')) {
+      label = 'Final Payment';
+    }
+    const amt = Number(h.amount) || 0;
+    if (amt > 0) {
+      otherGroups.set(label, (otherGroups.get(label) || 0) + amt);
+    }
+  });
+
+  const paymentsBreakdown: { label: string; amount: number }[] = [];
+  if (advanceAmount > 0) {
+    paymentsBreakdown.push({ label: 'Advance Payment', amount: advanceAmount });
+  }
+  otherGroups.forEach((amount, label) => {
+    paymentsBreakdown.push({ label, amount });
+  });
+
+  // 8. Calculate total paid amount (Approved + Waiting for Approval, excluding Rejected)
+  const approvedHistories = validHistories.filter(h => h.approval_status === 'Approved');
+  const pendingApprovalHistories = validHistories.filter(h => h.approval_status === 'Waiting for Approval');
+
+  let approvedAmount = approvedHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+  let pendingApprovalAmount = pendingApprovalHistories.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+
+  let totalPaidAmount = approvedAmount + pendingApprovalAmount;
+
+  // Fallback if no payment_history rows exist
+  if (validHistories.length === 0) {
+    const targetOrder = (allOrders || []).find((o: any) =>
+      (exactOrderId && o.order_id === exactOrderId) ||
+      (cleanLeadId && o.lead_id === cleanLeadId)
+    );
+    const targetPayment = (allPayments || []).find((p: any) =>
+      (exactOrderId && p.order_id === exactOrderId) ||
+      (cleanLeadId && p.lead_id === cleanLeadId)
+    );
+
+    if (targetPayment) {
+      if (targetPayment.payment_status === 'Waiting for Approval') {
+        pendingApprovalAmount = (Number(targetPayment.advance_received) || 0) + (Number(targetPayment.final_payment_received) || 0) + (Number(targetPayment.additional_received) || 0);
+      } else if (targetPayment.payment_status !== 'Rejected' && targetPayment.payment_status !== 'Cancelled') {
+        approvedAmount = (Number(targetPayment.advance_received) || 0) + (Number(targetPayment.final_payment_received) || 0) + (Number(targetPayment.additional_received) || 0);
+      }
+      totalPaidAmount = approvedAmount + pendingApprovalAmount;
+    }
+
+    if (totalPaidAmount === 0 && targetOrder) {
+      const adv = Number(targetOrder.advance_received || targetOrder.advance_payment || 0);
+      if (adv > 0) {
+        totalPaidAmount = adv;
+      }
+    }
+  }
+
+  if (advanceAmount > totalPaidAmount) {
+    totalPaidAmount = advanceAmount;
+  }
+
+  // Resolve latest quotation amount
+  let quotationAmount = 0;
+  try {
+    const qAmt = await resolveSavedQuotationAmount(cleanLeadId, exactOrderId, undefined, allLeads, allOrders);
+    if (qAmt && qAmt > 0) {
+      quotationAmount = qAmt;
+    }
+  } catch (_) {}
+
+  if (quotationAmount === 0) {
+    const targetLead = (allLeads || []).find((l: any) => l.lead_id === cleanLeadId);
+    const targetOrder = (allOrders || []).find((o: any) => (exactOrderId && o.order_id === exactOrderId) || (cleanLeadId && o.lead_id === cleanLeadId));
+    quotationAmount = Number(targetOrder?.quotation_amount || targetLead?.Final_Quotation_Amount || targetLead?.final_quotation_amount || targetLead?.final_amount || targetLead?.budget || 0);
+  }
+
+  const pendingAmount = Math.max(0, quotationAmount - totalPaidAmount);
+
+  return {
+    exactOrderId,
+    advanceAmount,
+    totalPaidAmount,
+    pendingAmount,
+    quotationAmount,
+    paymentsBreakdown,
+    hasAdvance: totalPaidAmount > 0 || advanceAmount > 0
+  };
+};
+
 /**
  * Safely parses date string into { year, month, day }
  */
@@ -2642,5 +3050,138 @@ export const checkIsLeadCrmLocked = (lead: any, eventsList?: any[]): boolean => 
   if (validEvents.length === 0) return false;
 
   return validEvents.every((ev: any) => checkIsEventEnded(ev));
+};
+
+/**
+ * Resolves all canonical and formatted variations of Order ID and Lead ID
+ * to ensure bulletproof relational querying and payment association.
+ */
+export const getAllMatchingOrderIds = (
+  orderId?: string | null,
+  leadId?: string | null,
+  orders: any[] = [],
+  leads: any[] = []
+): string[] => {
+  const set = new Set<string>();
+  const addVariant = (id?: any) => {
+    if (!id || typeof id !== 'string') return;
+    const clean = id.trim();
+    if (!clean) return;
+    set.add(clean);
+    set.add(clean.toUpperCase());
+    set.add(clean.toLowerCase());
+
+    const noOrd = clean.replace(/^ORD-?/i, '');
+    const noOr = clean.replace(/^OR-?/i, '');
+    const noLd = clean.replace(/^LD-?/i, '');
+    const noPrefix = clean.replace(/^(?:ORD|OR|LD)-?/i, '');
+
+    if (noOrd) {
+      set.add(noOrd);
+      set.add(`ORD-${noOrd}`);
+      set.add(`ORD${noOrd}`);
+    }
+    if (noOr) {
+      set.add(noOr);
+      set.add(`OR-${noOr}`);
+      set.add(`OR${noOr}`);
+      set.add(`ORD-${noOr}`);
+    }
+    if (noLd) {
+      set.add(noLd);
+      set.add(`LD-${noLd}`);
+      set.add(`LD${noLd}`);
+      set.add(`ORD-${noLd}`);
+    }
+    if (noPrefix) {
+      set.add(noPrefix);
+      set.add(`OR-${noPrefix}`);
+      set.add(`OR${noPrefix}`);
+      set.add(`ORD-${noPrefix}`);
+    }
+
+    // Number extraction for zero-padding variations (e.g. 64 -> OR064, OR0064, ORD-0064)
+    const numMatch = clean.match(/\d+/);
+    if (numMatch) {
+      const num = parseInt(numMatch[0], 10);
+      if (!isNaN(num)) {
+        const p2 = String(num).padStart(2, '0');
+        const p3 = String(num).padStart(3, '0');
+        const p4 = String(num).padStart(4, '0');
+        const isLead = clean.toUpperCase().includes('LD');
+        
+        if (!isLead) {
+          set.add(`OR${num}`);
+          set.add(`OR${p2}`);
+          set.add(`OR${p3}`);
+          set.add(`OR${p4}`);
+          set.add(`OR-${num}`);
+          set.add(`OR-${p2}`);
+          set.add(`OR-${p3}`);
+          set.add(`OR-${p4}`);
+          set.add(`ORD-${num}`);
+          set.add(`ORD-${p2}`);
+          set.add(`ORD-${p3}`);
+          set.add(`ORD-${p4}`);
+          set.add(`ORD-OR${p3}`);
+          set.add(`ORD-OR${p4}`);
+          set.add(`ORDER-${num}`);
+          set.add(`ORDER-${p3}`);
+          set.add(`ORDER-${p4}`);
+        } else {
+          set.add(`LD${num}`);
+          set.add(`LD${p2}`);
+          set.add(`LD${p3}`);
+          set.add(`LD${p4}`);
+          set.add(`LD-${num}`);
+          set.add(`LD-${p2}`);
+          set.add(`LD-${p3}`);
+          set.add(`LD-${p4}`);
+          set.add(`ORD-LD${p3}`);
+          set.add(`ORD-LD${p4}`);
+          set.add(`ORD-${p3}`);
+        }
+      }
+    }
+  };
+
+  addVariant(orderId);
+  addVariant(leadId);
+
+  // Look up matching order in orders array
+  const cleanO = String(orderId || '').trim();
+  const cleanL = String(leadId || '').trim();
+  const linkedOrder = (orders || []).find((o: any) => {
+    if (!o) return false;
+    if (cleanO && (o.order_id === cleanO || o.lead_id === cleanO)) return true;
+    if (cleanL && (o.lead_id === cleanL || o.order_id === cleanL)) return true;
+    const oId = String(o.order_id || '');
+    const lId = String(o.lead_id || '');
+    if (set.has(oId) || set.has(lId)) return true;
+    return false;
+  });
+
+  if (linkedOrder) {
+    addVariant(linkedOrder.order_id);
+    addVariant(linkedOrder.lead_id);
+  }
+
+  // Look up matching lead in leads array
+  const linkedLead = (leads || []).find((l: any) => {
+    if (!l) return false;
+    if (cleanL && l.lead_id === cleanL) return true;
+    if (cleanO && (l.lead_id === cleanO || (l as any).order_id === cleanO)) return true;
+    const lId = String(l.lead_id || '');
+    const loId = String((l as any).order_id || '');
+    if (set.has(lId) || (loId && set.has(loId))) return true;
+    return false;
+  });
+
+  if (linkedLead) {
+    addVariant(linkedLead.lead_id);
+    addVariant((linkedLead as any).order_id);
+  }
+
+  return Array.from(set).filter(Boolean);
 };
 

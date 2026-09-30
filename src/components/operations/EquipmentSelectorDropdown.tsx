@@ -387,9 +387,6 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 border border-zinc-700/60 hidden sm:inline-block">
-            {counts.all} Total
-          </span>
           <button
             type="button"
             className={`p-1 rounded-md text-zinc-400 hover:text-zinc-200 transition-transform duration-150 ${

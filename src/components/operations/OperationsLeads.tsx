@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
-  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink, ArrowUpDown
+  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink, ArrowUpDown, Layers
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment, TaskAssignmentDetail } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';
@@ -616,17 +616,18 @@ export const OperationsLeads: React.FC = () => {
   } | null>(null);
   const [imagePreviewModal, setImagePreviewModal] = useState<{ url: string, date: string, time: string, staffName: string, stage: string } | null>(null);
   const [viewingLocationsModal, setViewingLocationsModal] = useState<{ orderId: string; customerName?: string; events: any[] } | null>(null);
+  const [viewingEventCategoriesModal, setViewingEventCategoriesModal] = useState<{ orderId: string; customerName?: string; events: any[] } | null>(null);
   const [viewingDatesModal, setViewingDatesModal] = useState<{ orderId: string; customerName?: string; events: any[] } | null>(null);
 
   useEffect(() => {
-    if (viewingLocationsModal || viewingDatesModal) {
+    if (viewingLocationsModal || viewingDatesModal || viewingEventCategoriesModal) {
       const originalOverflow = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => {
         document.body.style.overflow = originalOverflow;
       };
     }
-  }, [viewingLocationsModal, viewingDatesModal]);
+  }, [viewingLocationsModal, viewingDatesModal, viewingEventCategoriesModal]);
   const [activeMenuItems, setActiveMenuItems] = useState<{ label: string; onClick: () => void }[]>([]);
   const [menuCoords, setMenuCoords] = useState<{ left: number, top: number, width: number, maxHeight: number, openUpward: boolean }>({ left: 0, top: 0, width: 220, maxHeight: 280, openUpward: false });
 
@@ -2103,13 +2104,14 @@ export const OperationsLeads: React.FC = () => {
     return false;
   };
 
-  // Filter orders to show confirmed ones for Operations (excluding Verified Footage from active view)
+  // Filter orders to show confirmed ones for Operations
   const allowedStages = [
     'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned',
     'Assigned Crew', 'Staff Assigned', 'Event Scheduled',
     'Event Started', 'Event Start',
     'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
     'Footage Handover', 'Equipment Handover',
+    'Verified Footage', 'Footage Handover Verified',
     'Event Cancelled',
     'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
     'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review',
@@ -2117,8 +2119,6 @@ export const OperationsLeads: React.FC = () => {
     'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed', 'Order Closed'
   ];
   const operationsOrders = orders.filter(o => {
-    // Moved isVerifiedFootageOrder exclusion to filteredOrders for active view only
-
     if (!allowedStages.includes(o.current_stage)) return false;
     if (currentRole === 'Operation Staff') {
       const staffName = currentUserName || '';
@@ -2190,8 +2190,7 @@ export const OperationsLeads: React.FC = () => {
 
       // 1. Status Dropdown filter
       if (statusFilter === 'All') {
-        // Exclude records whose current status is Verified Footage (or beyond) from Operations active list/view only when no specific date filter is selected
-        if (dateFilter === 'All' && isVerifiedFootageOrder(o)) return false;
+        // Show all active operations orders
       } else {
         const isStaffAssigned = staffAssignments ? staffAssignments.some(x => x.order_id === o.order_id) : false;
         const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
@@ -2208,7 +2207,7 @@ export const OperationsLeads: React.FC = () => {
         if (statusFilter === 'Event Started' && !['Event Started', 'Event Start'].includes(stageNorm)) return false;
         if (statusFilter === 'Event Ended' && !['Event Ended', 'Event End', 'Event Completed', 'Event Complete'].includes(stageNorm)) return false;
         if (statusFilter === 'Footage Handover' && !['Footage Handover', 'Equipment Handover'].includes(stageNorm)) return false;
-        if (statusFilter === 'Verified Footage' && !isVerifiedFootageOrder(o)) return false;
+        if (statusFilter === 'Verified Footage' && !(stageNorm === 'Verified Footage' || stageNorm === 'Footage Handover Verified' || isVerifiedFootageOrder(o))) return false;
         if (statusFilter === 'Event Completed' && !['Event Completed', 'Event Complete', 'Event Ended', 'Event End'].includes(stageNorm)) return false;
         if (statusFilter === 'Raw Footage Received' && !['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified'].includes(stageNorm)) return false;
 
@@ -2333,17 +2332,44 @@ export const OperationsLeads: React.FC = () => {
 
   useEffect(() => {
     const handler = (e: any) => {
-      if (e.detail.role === 'operations') {
-        const order = orders.find(o => o.order_id === e.detail.orderId);
+      if (e.detail?.role === 'operations') {
+        const targetId = e.detail.orderId || e.detail.leadId;
+        let order = orders.find(o => 
+          (targetId && (o.order_id === targetId || o.lead_id === targetId)) ||
+          (e.detail.orderId && (o.order_id === e.detail.orderId || o.lead_id === e.detail.orderId)) ||
+          (e.detail.leadId && (o.order_id === e.detail.leadId || o.lead_id === e.detail.leadId))
+        );
+        if (!order && targetId) {
+          const lead = leads?.find(l => l.lead_id === targetId || l.order_id === targetId);
+          if (lead) {
+            order = {
+              order_id: lead.order_id || targetId,
+              lead_id: lead.lead_id,
+              customer_name: lead.customer_name || '',
+              mobile: lead.mobile || lead.whatsapp_number || '',
+              event_type: lead.custom_event_name || lead.event_type || 'Event Shoot',
+              event_date: lead.event_date || lead.Reporting_date || '',
+              event_time: lead.event_start_time || '',
+              current_stage: (lead.status as any) || 'Order Confirmed',
+              quotation_amount: lead.quotation_amount || 0,
+              advance_received: lead.advance_received || 0,
+              balance_amount: (lead.quotation_amount || 0) - (lead.advance_received || 0),
+              created_at: lead.created_at || new Date().toISOString()
+            };
+          }
+        }
         if (order) {
-          // Switch to list view if needed (assuming OperationsLeads is already the active subtab when this is called)
           startAssigning(order);
         }
       }
     };
+    window.addEventListener('calendar-action-click', handler);
     window.addEventListener('calendar-action-click-deferred', handler);
-    return () => window.removeEventListener('calendar-action-click-deferred', handler);
-  }, [orders]);
+    return () => {
+      window.removeEventListener('calendar-action-click', handler);
+      window.removeEventListener('calendar-action-click-deferred', handler);
+    };
+  }, [orders, leads, rawFootage, staffAssignments, operations, staff, leadPackages]);
   
   const startAssigning = (order: Order) => {
     setAssignValidationError(null);
@@ -3159,30 +3185,8 @@ export const OperationsLeads: React.FC = () => {
                 Customer Name
               </th>
               <th className="p-4 font-bold">Mobile Number</th>
-              <th className="p-4 font-bold">Event Name</th>
-              <th className="p-4">
-                <button
-                  type="button"
-                  onClick={() => handleColumnSort('event_date')}
-                  className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
-                  title={
-                    sortColumn === 'event_date'
-                      ? sortDirection === 'asc'
-                        ? 'Event Date: Oldest to Newest (Click for Newest to Oldest)'
-                        : 'Event Date: Newest to Oldest (Click for Reset / Default)'
-                      : 'Event Date: Click for Oldest to Newest'
-                  }
-                >
-                  <span>Event Date</span>
-                  <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'event_date' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                  {sortColumn === 'event_date' && (
-                    <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
-                      {sortDirection === 'asc' ? '▲' : '▼'}
-                    </span>
-                  )}
-                </button>
-              </th>
-              <th className="p-4 font-bold whitespace-nowrap">EVENT LOCATION</th>
+              <th className="p-4 font-bold">Event Category</th>
+              <th className="p-4 font-bold">Event Location</th>
               <th className="p-4">
                 <button
                   type="button"
@@ -3282,8 +3286,12 @@ export const OperationsLeads: React.FC = () => {
                 const lead = findLeadForOrder(ord, leads || []);
                 const assignedStaffDetails = getAssignedStaffDetailsForOrder(ord);
                 const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
-                const baseStage = ord.current_stage || (lead ? getLeadCurrentStatus(lead) : 'Order Confirmed');
-                const currentStage = getCalculatedOrderStage(baseStage, staffStatuses);
+                const isOrdVerified = ord.current_stage === 'Verified Footage' ||
+                  lead?.status === 'Verified Footage' ||
+                  lead?.current_status === 'Verified Footage' ||
+                  getOpDetails(ord.order_id)?.event_status === 'Verified Footage';
+                const baseStage = isOrdVerified ? 'Verified Footage' : (ord.current_stage || (lead ? getLeadCurrentStatus(lead) : 'Order Confirmed'));
+                const currentStage = isOrdVerified ? 'Verified Footage' : getCalculatedOrderStage(baseStage, staffStatuses);
                 const isLocked = currentStage === 'Raw Footage Received';
 
                 // Extract exact event list for this specific order/lead, filtering by dateFilter if active
@@ -3312,106 +3320,126 @@ export const OperationsLeads: React.FC = () => {
                       )}
                     </td>
                     <td className="p-4 text-zinc-300 font-sans">
-                      <UnifiedEventDropdownCell lead={lead ? { ...lead, events: orderEvents } : { ...ord, events: orderEvents }} />
-                      {isCompletedEvent(ord) && (
-                        <div className="text-[10px] text-emerald-400 mt-1 font-sans font-medium">
-                          Done: {getCompletionDate(ord)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-4 font-mono text-zinc-300 text-xs">
                       {(() => {
-                        const sortedDateEvents = sortEventsByDateAsc(orderEvents);
-                        const primaryDate = sortedDateEvents[0]?.event_date ? (formatDateDDMMYY(sortedDateEvents[0].event_date) || sortedDateEvents[0].event_date) : '';
-                        if (sortedDateEvents.length <= 1) {
-                          return (
-                            <div className="font-mono text-zinc-200 text-xs whitespace-nowrap">
-                              {primaryDate || <span className="text-zinc-600 italic">—</span>}
-                            </div>
-                          );
-                        }
+                        const sorted = sortEventsByDateAsc(orderEvents);
+                        const mostRecent = sorted[0];
+                        if (!mostRecent) return <span className="text-zinc-600 italic">—</span>;
+                        const typeName = mostRecent.event_type || mostRecent.event_name || 'Event';
+                        const hasMultiple = sorted.length > 1;
+                        const count = sorted.length - 1;
+
                         return (
-                          <div className="max-w-[130px]">
-                            <div 
-                              onClick={() => setViewingDatesModal({ orderId: ord.order_id, customerName: ord.customer_name, events: sortedDateEvents })}
-                              className="font-mono text-zinc-200 text-xs whitespace-nowrap cursor-pointer hover:text-indigo-300 transition-colors"
-                              title="Click to view all event dates in ascending order"
-                            >
-                              {primaryDate || <span className="text-zinc-600 italic">—</span>}
-                            </div>
-                            <div className="mt-0.5">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setViewingDatesModal({ orderId: ord.order_id, customerName: ord.customer_name, events: sortedDateEvents });
-                                }}
-                                className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 hover:border-indigo-500/50 transition-colors cursor-pointer"
-                                title="Click to view all event dates in ascending order"
-                              >
-                                +{sortedDateEvents.length - 1}
-                              </button>
-                            </div>
+                          <div
+                            role={hasMultiple ? "button" : undefined}
+                            tabIndex={hasMultiple ? 0 : undefined}
+                            onClick={() => {
+                              if (hasMultiple) {
+                                setViewingEventCategoriesModal({
+                                  orderId: ord.order_id,
+                                  customerName: ord.customer_name,
+                                  events: sorted
+                                });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (hasMultiple && (e.key === 'Enter' || e.key === ' ')) {
+                                e.preventDefault();
+                                setViewingEventCategoriesModal({
+                                  orderId: ord.order_id,
+                                  customerName: ord.customer_name,
+                                  events: sorted
+                                });
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1.5 ${hasMultiple ? 'cursor-pointer group hover:text-indigo-300 transition-colors' : ''}`}
+                            title={hasMultiple ? `Click to view all ${sorted.length} event types` : typeName}
+                          >
+                            <span className="font-semibold text-white group-hover:text-indigo-300 transition-colors">
+                              {typeName}
+                            </span>
+                            {hasMultiple && (
+                              <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 group-hover:bg-indigo-500/30 group-hover:border-indigo-500/50 transition-colors shrink-0">
+                                +{count}
+                              </span>
+                            )}
                           </div>
                         );
                       })()}
                     </td>
-                    <td className="p-4 text-zinc-300 text-xs">
+                    <td className="p-4 font-mono text-zinc-300 text-xs">
                       {(() => {
-                        const loc = orderEvents[0]?.event_location || '';
-                        const renderCellLoc = (val: string) => {
-                          if (!val || !val.trim()) {
-                            return <span className="text-zinc-600 italic">—</span>;
-                          }
-                          if (isLocationUrl(val)) {
-                            return (
+                        const sorted = sortEventsByDateAsc(orderEvents);
+                        const mostRecent = sorted[0];
+                        if (!mostRecent) return <span className="text-zinc-600 italic">—</span>;
+                        const loc = (mostRecent.event_location || '').trim();
+                        const hasMultiple = sorted.length > 1;
+                        const count = sorted.length - 1;
+
+                        if (!loc && !hasMultiple) {
+                          return <span className="text-zinc-600 italic">—</span>;
+                        }
+
+                        const isLink = isLocationUrl(loc);
+                        const displayLoc = loc || (hasMultiple ? 'Multiple Locations' : '—');
+
+                        return (
+                          <div
+                            role={hasMultiple || loc ? "button" : undefined}
+                            tabIndex={hasMultiple || loc ? 0 : undefined}
+                            onClick={() => {
+                              if (hasMultiple || (loc && !isLink)) {
+                                setViewingLocationsModal({
+                                  orderId: ord.order_id,
+                                  customerName: ord.customer_name,
+                                  events: sorted
+                                });
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if ((hasMultiple || (loc && !isLink)) && (e.key === 'Enter' || e.key === ' ')) {
+                                e.preventDefault();
+                                setViewingLocationsModal({
+                                  orderId: ord.order_id,
+                                  customerName: ord.customer_name,
+                                  events: sorted
+                                });
+                              }
+                            }}
+                            className={`inline-flex items-center gap-1.5 ${hasMultiple || (loc && !isLink) ? 'cursor-pointer group hover:text-indigo-300 transition-colors' : ''}`}
+                            title={hasMultiple ? `Click to view all ${sorted.length} event locations` : loc}
+                          >
+                            {isLink ? (
                               <a
-                                href={getLocationUrlHref(val)}
+                                href={getLocationUrlHref(loc)}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  if (hasMultiple) {
+                                    e.preventDefault();
+                                    setViewingLocationsModal({
+                                      orderId: ord.order_id,
+                                      customerName: ord.customer_name,
+                                      events: sorted
+                                    });
+                                  } else {
+                                    e.stopPropagation();
+                                  }
+                                }}
                                 className="text-indigo-400 hover:text-indigo-300 underline font-sans text-xs max-w-[150px] truncate block font-medium transition-colors"
-                                title={val}
+                                title={loc}
                               >
                                 [Open Location Link]
                               </a>
-                            );
-                          }
-                          return (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setViewingLocationsModal({ orderId: ord.order_id, customerName: ord.customer_name, events: orderEvents });
-                              }}
-                              className="text-indigo-400 hover:text-indigo-300 underline font-sans text-xs cursor-pointer text-left font-medium transition-colors"
-                              title="Click to view full address"
-                            >
-                              View Address
-                            </button>
-                          );
-                        };
-
-                        if (orderEvents.length <= 1) {
-                          return renderCellLoc(loc);
-                        }
-
-                        return (
-                          <div className="max-w-[150px]">
-                            {renderCellLoc(loc)}
-                            <div className="mt-0.5">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setViewingLocationsModal({ orderId: ord.order_id, customerName: ord.customer_name, events: orderEvents });
-                                }}
-                                className="inline-block px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/30 hover:border-indigo-500/50 transition-colors cursor-pointer"
-                                title="Click to view all event locations"
-                              >
-                                +{orderEvents.length - 1}
-                              </button>
-                            </div>
+                            ) : (
+                              <span className="text-zinc-200 group-hover:text-indigo-300 transition-colors truncate max-w-[180px]">
+                                {displayLoc}
+                              </span>
+                            )}
+                            {hasMultiple && (
+                              <span className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 group-hover:bg-indigo-500/30 group-hover:border-indigo-500/50 transition-colors shrink-0">
+                                +{count}
+                              </span>
+                            )}
                           </div>
                         );
                       })()}
@@ -3431,7 +3459,9 @@ export const OperationsLeads: React.FC = () => {
                             👥 {assignedStaffNames.length}
                           </button>
                         ) : (
-                          <span className="text-zinc-500 font-mono text-[10.5px]">✅ Unassigned</span>
+                          <span className="text-red-400 font-mono text-[11px] font-medium inline-flex items-center gap-1">
+                            <span>❌</span> Unassigned
+                          </span>
                         );
                       })()}
                     </td>
@@ -3712,7 +3742,7 @@ export const OperationsLeads: React.FC = () => {
       </div>    </div>
 
       {/* Slide-over or Inline modal for Crew and Equipment Assignment */}
-      {assigningOrderId && (
+      {assigningOrderId && createPortal(
         <div 
           className="fixed inset-0 bg-zinc-950 z-[150] flex flex-col w-full h-[100dvh] overflow-hidden overscroll-none animate-in slide-in-from-bottom-4 fade-in duration-200"
           onClick={(e) => {
@@ -3802,29 +3832,6 @@ export const OperationsLeads: React.FC = () => {
                           <span className="font-sans text-zinc-200 font-medium block">
                             {parentLeadInstance?.email || 'N/A'}
                           </span>
-                        </div>
-                        <div className="col-span-1 sm:col-span-2 md:col-span-4">
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Event Address</span>
-                          <span className="text-zinc-200 font-sans text-[11px] block leading-tight">
-                            {parentLeadInstance?.event_location || activeOrderInstance?.event_location || parentLeadInstance?.address || 'N/A'}
-                          </span>
-                        </div>
-                        <div className="col-span-1 sm:col-span-2 md:col-span-4">
-                          <span className="text-[10px] text-zinc-505 block uppercase font-mono">Google Maps Location Link</span>
-                          {googleMapsLocationLink ? (
-                            <a 
-                              href={googleMapsLocationLink} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline mt-0.5"
-                            >
-                              {googleMapsLocationLink}
-                            </a>
-                          ) : (
-                            <span className="text-zinc-500 font-sans text-[11px] block mt-0.5">
-                              No Google Maps Location Available.
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -3950,27 +3957,6 @@ export const OperationsLeads: React.FC = () => {
                             </span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Date</span>
-                            <span className="text-zinc-200 text-[11px] font-mono block">
-                              {formatDateDDMMYY(ev.event_date) || 'N/A'}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Time</span>
-                            <span className="text-zinc-200 text-[11px] font-mono block">
-                              {formatTime12Hour(ev.event_start_time) || 'N/A'} {ev.event_end_time ? `- ${formatTime12Hour(ev.event_end_time)}` : ''}
-                            </span>
-                          </div>
-                          {/* Shoot Type Hidden as requested */}
-                          {false && (
-                          <div>
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Shoot Type</span>
-                            <span className="text-zinc-350 font-medium uppercase text-[11px] block">
-                              {ev.event_shoot_type || 'N/A'}
-                            </span>
-                          </div>
-                          )}
-                          <div>
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Reporting Date</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">{formatDateDDMMYY(allocation.reporting_date || ev.reporting_date || ev.event_date) || 'N/A'}</span>
                           </div>
@@ -3982,19 +3968,34 @@ export const OperationsLeads: React.FC = () => {
                             <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Guest Pax</span>
                             <span className="text-zinc-200 text-[11px] font-mono block">{ev.guest_pax || 'N/A'}</span>
                           </div>
-                          {/* Staff Pax Hidden as requested */}
-                          {false && (
-                          <div>
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Staff Pax</span>
-                            <span className="text-zinc-200 text-[11px] font-mono block">{ev.staff_pax || 'N/A'}</span>
-                          </div>
-                          )}
                           <div className="col-span-1 sm:col-span-2 lg:col-span-4">
-                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Venue / Location</span>
+                            <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Event Address</span>
                             <span className="text-zinc-200 text-[11px] font-sans block leading-tight">
-                              {ev.event_location || parentLeadInstance?.event_location || 'N/A'}
+                              {ev.event_location || ev.event_address || parentLeadInstance?.event_location || parentLeadInstance?.address || activeOrderInstance?.event_location || 'N/A'}
                             </span>
                           </div>
+                          {(() => {
+                            const evMapLink = ev.google_maps_link || ev.map_location_link || ev.google_maps_location_link || googleMapsLocationLink || parentLeadInstance?.google_maps_link;
+                            return (
+                              <div className="col-span-1 sm:col-span-2 lg:col-span-4">
+                                <span className="text-[10px] text-zinc-505 block uppercase font-mono mb-1">Google Maps Location Link</span>
+                                {evMapLink ? (
+                                  <a 
+                                    href={evMapLink} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-blue-400 hover:text-blue-300 font-sans text-[11px] break-all block underline mt-0.5"
+                                  >
+                                    {evMapLink}
+                                  </a>
+                                ) : (
+                                  <span className="text-zinc-500 font-sans text-[11px] block mt-0.5">
+                                    No Google Maps Location Available.
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                       {/* 3. Team Members Included & Staff Assignment */}
@@ -4149,15 +4150,6 @@ export const OperationsLeads: React.FC = () => {
                                         Required: {task.targetQty}
                                       </span>
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${
-                                        assignedCount >= task.targetQty 
-                                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                      }`}>
-                                        {assignedCount} / {task.targetQty} Assigned
-                                      </span>
-                                    </div>
                                   </div>
 
                                   {/* Staff Rows under Task */}
@@ -4174,11 +4166,6 @@ export const OperationsLeads: React.FC = () => {
                                             {targetQty > 1 && (
                                               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-sky-400 font-bold border border-zinc-700/60 shrink-0">
                                                 Task/Slot {slot.slot_number || (slotIdx + 1)}
-                                              </span>
-                                            )}
-                                            {slot.staff_name && (
-                                              <span className="text-[10px] font-sans text-zinc-400">
-                                                Assigned: <span className="text-emerald-400 font-semibold">{slot.staff_name}</span>
                                               </span>
                                             )}
                                             {isTaskStarted && (
@@ -4315,7 +4302,7 @@ export const OperationsLeads: React.FC = () => {
                                                         const isBusy = isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '');
                                                         return (
                                                           <option key={st.staff_id} value={st.name}>
-                                                            {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                                            {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'}
                                                           </option>
                                                         );
                                                       })}
@@ -4681,7 +4668,7 @@ export const OperationsLeads: React.FC = () => {
                                                             const isBusy = isStaffBusyOnDate(st.name, ev.event_date || '', activeOrderInstance?.order_id || '');
                                                             return (
                                                               <option key={st.staff_id} value={st.name}>
-                                                                {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'} - {st.role}
+                                                                {st.name} {isBusy ? '🔴 Busy' : '🟢 Available'}
                                                               </option>
                                                             );
                                                           })}
@@ -5025,7 +5012,7 @@ export const OperationsLeads: React.FC = () => {
             </form>
           </div>
         </div>
-      )}
+      , document.body)}
 
 
       {/* Equipment Status Modal */}
@@ -5532,16 +5519,6 @@ export const OperationsLeads: React.FC = () => {
                     setIsSaving(true);
                     const timestamp = new Date().toISOString();
 
-                    // Save Consolidated Link & update operation status
-                    await pushUpdate('operations', 'order_id', receivingFootageOrderId, {
-                      consolidated_drive_link: consolidatedDriveLink,
-                      Consolidated_Drive_Link: consolidatedDriveLink,
-                      raw_footage_drive_link: consolidatedDriveLink,
-                      event_status: 'Verified Footage',
-                      remarks: `Verified by ${currentUserName || 'Operations Manager'} on ${formatDateDDMMYY(new Date())}`,
-                      updated_by: currentUserName || 'Operations Manager'
-                    });
-
                     // Call confirmRawFootageReceived to move to Verified Footage and Production
                     await confirmRawFootageReceived(
                       receivingFootageOrderId,
@@ -5552,21 +5529,6 @@ export const OperationsLeads: React.FC = () => {
                       undefined,
                       undefined
                     );
-
-                    // Also explicitly update orders and leads
-                    await pushUpdate('orders', 'order_id', receivingFootageOrderId, {
-                      current_stage: 'Verified Footage',
-                      updated_by: currentUserName || 'Operations Manager',
-                      updated_at: timestamp
-                    });
-
-                    if (currentOrder?.lead_id) {
-                      await updateLead(currentOrder.lead_id, {
-                        status: 'Verified Footage' as any,
-                        current_status: 'Verified Footage' as any,
-                        updated_by: currentUserName || 'Operations Manager'
-                      });
-                    }
 
                     setReceivingFootageOrderId(null);
                     setConsolidatedDriveLink('');
@@ -6575,6 +6537,73 @@ export const OperationsLeads: React.FC = () => {
           </div>
         </div>
       , document.body)}
+
+      {/* Event Categories / Types Modal */}
+      {viewingEventCategoriesModal && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[2147483647] flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setViewingEventCategoriesModal(null)}
+        >
+          <div 
+            className="bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 sm:p-5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950/70">
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white font-sans flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-indigo-400" /> Event Types
+                </h3>
+                <div className="text-xs text-zinc-400 font-mono mt-1 flex items-center gap-2 flex-wrap">
+                  <span className="text-indigo-400 font-bold bg-indigo-950/60 px-2 py-0.5 rounded border border-indigo-800/60">
+                    {viewingEventCategoriesModal.orderId}
+                  </span>
+                  {viewingEventCategoriesModal.customerName && (
+                    <span className="text-zinc-300">• {viewingEventCategoriesModal.customerName}</span>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingEventCategoriesModal(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 max-h-[60vh]">
+              {sortEventsByDateAsc(viewingEventCategoriesModal.events).map((ev: any, idx: number) => {
+                const typeName = (ev.event_type || ev.event_name || `Event ${idx + 1}`).trim();
+                return (
+                  <div 
+                    key={ev.id || `${viewingEventCategoriesModal.orderId}_ev_${idx + 1}`}
+                    className="p-3 bg-zinc-950/60 border border-zinc-800/80 rounded-xl flex items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 shrink-0" />
+                      <span className="text-xs font-bold text-zinc-100 font-sans truncate">
+                        {typeName}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 sm:p-4 border-t border-zinc-800 bg-zinc-950/60 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setViewingEventCategoriesModal(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Event Locations Modal */}
       {viewingLocationsModal && createPortal(

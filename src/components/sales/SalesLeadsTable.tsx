@@ -8,6 +8,7 @@ import { StatusText } from '../ui/StatusText';
 import { EventDropdownCell } from '../EventDropdownCell';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { EventCategoryCell } from '../EventCategoryCell';
+import { EventLocationCell } from '../EventLocationCell';
 import { EventCell } from '../EventCell';
 import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
@@ -870,6 +871,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                         <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'event_date' ? 'text-sky-400' : 'text-zinc-500 group-hover:text-zinc-300'}`} />
                       </button>
                     </th>
+                    <th className="p-3.5">Event Location</th>
                     <th className="p-3.5">Current Status</th>
                     <th className="p-3.5">
                       <button
@@ -929,6 +931,9 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                           </td>
                           <td className="p-3.5 text-zinc-300 font-sans">
                             <EventCategoryCell lead={lead} orders={safeOrders} filterEventDateOption={filterEventDateOption} />
+                          </td>
+                          <td className="p-3.5 text-zinc-300">
+                            <EventLocationCell lead={lead} orders={safeOrders} filterEventDateOption={filterEventDateOption} />
                           </td>
                           <td className="p-3.5">
                             <StatusText status={leadStatus} />

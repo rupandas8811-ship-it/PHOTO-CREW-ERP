@@ -290,8 +290,9 @@ export const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                   required
                 >
                   <option value="">-- Select Payment Type * --</option>
-                  <option value="Shoot Time Payment">Shoot Time Payment</option>
                   <option value="Advance Payment">Advance Payment</option>
+                  <option value="Event Date Payment">Event Date Payment</option>
+                  <option value="Shoot Time Payment">Shoot Time Payment</option>
                   <option value="Final Payment">Final Payment</option>
                 </select>
               </div>

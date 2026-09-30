@@ -310,6 +310,152 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
     setExpandedLeads(newSet);
   };
   const [teamPopupEvent, setTeamPopupEvent] = useState<any>(null);
+
+  const getOrderId = (orderId?: string, leadId?: string, ev?: any): string => {
+    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
+    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
+    const prodRecord = production?.find(p => (orderId && (p.order_id === orderId || p.tracking_id === orderId)) || (leadId && (p.lead_id === leadId || p.tracking_id === leadId)));
+
+    return linkedOrder?.order_id || prodRecord?.order_id || ev?.orderId || ev?.raw?.order_id || ev?.raw?.tracking_id || leadObj?.order_id || leadObj?.lead_id || orderId || leadId || '—';
+  };
+
+  const getEventName = (orderId?: string, leadId?: string, ev?: any): string => {
+    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
+    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
+
+    return (
+      ev?.eventName || 
+      ev?.raw?.event_name || 
+      ev?.raw?.custom_event_name || 
+      leadObj?.custom_event_name || 
+      (leadObj?.events && leadObj?.events[0]?.event_name) || 
+      linkedOrder?.event_type || 
+      ev?.eventType || 
+      'Event Shoot'
+    );
+  };
+
+  const getClientName = (orderId?: string, leadId?: string, ev?: any): string => {
+    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
+    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
+
+    return ev?.customerName || ev?.raw?.customer_name || linkedOrder?.client_name || leadObj?.customer_name || '—';
+  };
+
+  const getSalesCrew = (orderId?: string, leadId?: string, ev?: any): string => {
+    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
+    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
+
+    const rawCrew =
+      ev?.salesCrew ||
+      ev?.raw?.salesCrew ||
+      ev?.raw?.sales_crew ||
+      leadObj?.sales_person ||
+      leadObj?.sales_staff_name ||
+      linkedOrder?.sales_person ||
+      linkedOrder?.sales_staff_name ||
+      ev?.raw?.sales_person ||
+      ev?.raw?.sales_staff_name;
+
+    if (!rawCrew || rawCrew === '—' || rawCrew === 'N/A' || rawCrew === 'none' || rawCrew === 'null' || String(rawCrew).trim() === '') {
+      return 'Unassigned';
+    }
+    return String(rawCrew).trim();
+  };
+
+  const getReportingTime = (orderId?: string, leadId?: string, ev?: any): string => {
+    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
+    const op = operations?.find(o => (orderId && (o.order_id === orderId || o.lead_id === orderId)) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
+    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
+
+    const rawTime =
+      ev?.reportingTime ||
+      ev?.raw?.reporting_time ||
+      op?.reporting_time ||
+      linkedOrder?.reporting_time ||
+      leadObj?.reporting_time ||
+      ev?.eventTime ||
+      ev?.raw?.event_start_time ||
+      linkedOrder?.event_start_time ||
+      '08:00 AM';
+
+    if (!rawTime || rawTime === '—' || rawTime === 'N/A') return '08:00 AM';
+    return formatTime12Hour(rawTime);
+  };
+
+  const getOperationsActionDetails = (orderId?: string, leadId?: string, ev?: any) => {
+    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
+    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
+    const op = operations?.find(o => (orderId && (o.order_id === orderId || o.lead_id === orderId)) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
+    const prodRecord = production?.find(p => (orderId && (p.order_id === orderId || p.tracking_id === orderId)) || (leadId && (p.lead_id === leadId || p.tracking_id === leadId)));
+
+    const effOrderId = linkedOrder?.order_id || op?.order_id || prodRecord?.order_id || orderId || leadId || '—';
+    const effLeadId = leadObj?.lead_id || linkedOrder?.lead_id || leadId;
+
+    const currentStage = linkedOrder?.current_stage || prodRecord?.editing_status || prodRecord?.production_status || leadObj?.status || ev?.currentStage || 'Order Confirmed';
+
+    // Check if crew/staff is assigned
+    const assigns = (staffAssignments || []).filter(sa =>
+      ((effOrderId && (sa.order_id === effOrderId || sa.lead_id === effOrderId)) ||
+       (effLeadId && (sa.order_id === effLeadId || sa.lead_id === effLeadId))) &&
+      sa.assignment_status !== 'Cancelled' && sa.assignment_status !== 'Rejected'
+    );
+    const hasCrewAssigned = assigns.length > 0 || Boolean(op?.photographer_assigned || op?.videographer_assigned || op?.staff_assigned);
+
+    // Check if editor is assigned
+    const editorAssigns = (editorAssignments || []).filter(ea =>
+      (effOrderId && (ea.order_id === effOrderId || ea.lead_id === effOrderId)) ||
+      (effLeadId && (ea.lead_id === effLeadId || ea.lead_id === effLeadId))
+    );
+    const hasEditorAssigned = Boolean(prodRecord?.editor_assigned || prodRecord?.editor_name || editorAssigns.length > 0);
+
+    // Check if it's in editor / footage handover / production stage
+    const isEditorStage =
+      currentStage === 'Footage Handover' ||
+      currentStage === 'Raw Footage Received' ||
+      currentStage === 'Verified Footage' ||
+      currentStage === 'Editing' ||
+      currentStage === 'Editing In Progress' ||
+      currentStage === 'Under Review' ||
+      currentStage === 'Production' ||
+      Boolean(prodRecord);
+
+    let label = 'Assign';
+    if (role === 'production') {
+      label = hasEditorAssigned ? 'Reassign Editor' : 'Assign Editor';
+    } else {
+      label = 'Assign';
+    }
+
+    return { label, effOrderId, effLeadId, isEditorStage, hasCrewAssigned, hasEditorAssigned };
+  };
+
+  const handleCalendarRowAction = (targetOrderId: string, targetLeadId?: string, actionLabel: string = 'Assign') => {
+    setShowSelectedDateModal(false);
+    setPopupDate(null);
+    setPopupLeadId(null);
+
+    const targetRole = role === 'production' ? 'production' : 'operations';
+
+    window.dispatchEvent(
+      new CustomEvent("calendar-action-click", {
+        detail: {
+          leadId: targetLeadId || targetOrderId,
+          role: targetRole,
+          orderId: targetOrderId
+        }
+      })
+    );
+    window.dispatchEvent(
+      new CustomEvent("calendar-action-click-deferred", {
+        detail: {
+          leadId: targetLeadId || targetOrderId,
+          role: targetRole,
+          orderId: targetOrderId
+        }
+      })
+    );
+  };
   
   const todayStr = systemTodayStr; // Anchor date for relative analysis
 
@@ -1392,13 +1538,14 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
                         <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
                       </>
-                    ) : role === 'production' ? (
+                    ) : (role === 'operations' || role === 'production') ? (
                       <>
-                        <th className="p-3 text-amber-400">ORDER ID</th>
-                        <th className="p-3">CUSTOMER NAME</th>
-                        <th className="p-3">ASSIGNED DATE</th>
-                        <th className="p-3 text-pink-400">TARGET DELIVERY DATE</th>
-                        <th className="p-3">CURRENT STATUS</th>
+                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Client Name</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Reporting Time</th>
+                        <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
                       </>
                     ) : (
                       <>
@@ -1506,32 +1653,51 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                       );
                     }
 
-                    if (role === 'production') {
-                      const leadId = ev.raw?.lead_id || ev.orderId;
-                      const leadObj = leads.find(l => l.lead_id === leadId);
-                      const linkedOrder = orders.find(o => o.lead_id === leadId || o.order_id === ev.orderId);
-                      const prodRecord = production?.find(p => p.tracking_id === leadId || p.order_id === leadId || p.tracking_id === ev.orderId || (p as any).order_id === ev.orderId);
-                      
-                      const oId = linkedOrder?.order_id || prodRecord?.order_id || ev.orderId || leadId || '—';
-                      const cName = leadObj?.customer_name || linkedOrder?.client_name || ev.customerName || '—';
-                      const aDate = getProductionAssignedDate(oId, leadId, prodRecord, editorAssignments);
-                      const tDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || leadObj?.delivery_target_date || ev.targetDeliveryDate);
-                      const cStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || leadObj?.status || ev.currentStage || 'Active';
+                    if (role === 'operations' || role === 'production') {
+                      const orderDisplayId = getOrderId(ev.orderId, ev.raw?.lead_id, ev);
+                      const evName = getEventName(ev.orderId, ev.raw?.lead_id, ev);
+                      const clientName = getClientName(ev.orderId, ev.raw?.lead_id, ev);
+                      const salesCrew = getSalesCrew(ev.orderId, ev.raw?.lead_id, ev);
+                      const repTime = getReportingTime(ev.orderId, ev.raw?.lead_id, ev);
+                      const { label: actionLabel, effLeadId } = getOperationsActionDetails(ev.orderId, ev.raw?.lead_id, ev);
 
                       return (
-                        <tr 
-                          key={ev.id || idx} 
-                          onClick={() => setPopupLeadId(leadId)}
-                          className="hover:bg-zinc-900/50 text-zinc-300 transition-colors cursor-pointer"
-                        >
-                          <td className="p-3 font-mono text-amber-400 font-bold">{oId}</td>
-                          <td className="p-3 font-bold text-white">{cName}</td>
-                          <td className="p-3 font-mono text-zinc-300">{aDate}</td>
-                          <td className="p-3 font-mono text-pink-400 font-bold">{tDate}</td>
-                          <td className="p-3">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 inline-block">
-                              {cStatus}
+                        <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
+                          <td className="p-3.5 pl-4 align-middle min-w-[130px]">
+                            <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
+                              {orderDisplayId}
                             </span>
+                          </td>
+                          <td className="p-3.5 align-middle min-w-[180px]">
+                            <div className="font-bold text-white text-xs leading-snug">
+                              {evName}
+                            </div>
+                          </td>
+                          <td className="p-3.5 align-middle min-w-[180px]">
+                            <div className="font-bold text-zinc-100 text-xs leading-snug">
+                              {clientName}
+                            </div>
+                          </td>
+                          <td className="p-3.5 align-middle min-w-[160px]">
+                            <div className="text-zinc-200 text-xs leading-relaxed">
+                              <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
+                                {salesCrew}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
+                            <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                              {repTime}
+                            </span>
+                          </td>
+                          <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
+                            <button
+                              type="button"
+                              onClick={() => handleCalendarRowAction(orderDisplayId, effLeadId, actionLabel)}
+                              className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                            >
+                              {actionLabel}
+                            </button>
                           </td>
                         </tr>
                       );
@@ -2214,13 +2380,14 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                         <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
                         <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
                       </>
-                    ) : role === 'production' ? (
+                    ) : (role === 'operations' || role === 'production') ? (
                       <>
-                        <th className="p-3.5 pl-5 text-amber-400">ORDER ID</th>
-                        <th className="p-3.5">CUSTOMER NAME</th>
-                        <th className="p-3.5">ASSIGNED DATE</th>
-                        <th className="p-3.5 text-pink-400">TARGET DELIVERY DATE</th>
-                        <th className="p-3.5 pr-5">CURRENT STATUS</th>
+                        <th className="p-3.5 pl-5 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Client Name</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
+                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Reporting Time</th>
+                        <th className="p-3.5 pr-5 text-center whitespace-nowrap min-w-[110px]">Action</th>
                       </>
                     ) : (
                       <>
@@ -2345,6 +2512,73 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                 className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
                               >
                                 Details
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    }
+
+                    if (role === 'operations' || role === 'production') {
+                      let evsToShow: CalendarEvent[] = [];
+                      if (popupLeadId) {
+                        evsToShow = filteredEvents.filter(e => (e.raw?.lead_id === popupLeadId || e.orderId === popupLeadId || e.raw?.order_id === popupLeadId));
+                      } else if (popupDate) {
+                        evsToShow = filteredEvents.filter(e => e.date === popupDate && e.sourceType !== 'memo');
+                      }
+
+                      if (evsToShow.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
+                          </tr>
+                        );
+                      }
+
+                      return evsToShow.map((ev, idx) => {
+                        const orderDisplayId = getOrderId(ev.orderId, ev.raw?.lead_id, ev);
+                        const evName = getEventName(ev.orderId, ev.raw?.lead_id, ev);
+                        const clientName = getClientName(ev.orderId, ev.raw?.lead_id, ev);
+                        const salesCrew = getSalesCrew(ev.orderId, ev.raw?.lead_id, ev);
+                        const repTime = getReportingTime(ev.orderId, ev.raw?.lead_id, ev);
+                        const { label: actionLabel, effLeadId } = getOperationsActionDetails(ev.orderId, ev.raw?.lead_id, ev);
+
+                        return (
+                          <tr key={ev.id || idx} className="hover:bg-zinc-900/30 text-zinc-300 transition-all select-text">
+                            <td className="p-3.5 pl-5 align-middle min-w-[130px]">
+                              <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
+                                {orderDisplayId}
+                              </span>
+                            </td>
+                            <td className="p-3.5 align-middle min-w-[180px]">
+                              <div className="font-bold text-white text-xs leading-snug">
+                                {evName}
+                              </div>
+                            </td>
+                            <td className="p-3.5 align-middle min-w-[180px]">
+                              <div className="font-bold text-zinc-100 text-xs leading-snug">
+                                {clientName}
+                              </div>
+                            </td>
+                            <td className="p-3.5 align-middle min-w-[160px]">
+                              <div className="text-zinc-200 text-xs leading-relaxed">
+                                <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
+                                  {salesCrew}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
+                              <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                                {repTime}
+                              </span>
+                            </td>
+                            <td className="p-3.5 pr-5 align-middle text-center whitespace-nowrap min-w-[110px]">
+                              <button
+                                type="button"
+                                onClick={() => handleCalendarRowAction(orderDisplayId, effLeadId, actionLabel)}
+                                className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                              >
+                                {actionLabel}
                               </button>
                             </td>
                           </tr>
@@ -2584,6 +2818,15 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                               <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
                               <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
                             </>
+                          ) : (role === 'operations' || role === 'production') ? (
+                            <>
+                              <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Client Name</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Reporting Time</th>
+                              <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
+                            </>
                           ) : (
                             <>
                               <th className="p-3.5 pl-4">Order ID</th>
@@ -2714,6 +2957,70 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelect
                                     className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
                                   >
                                     Details
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          if (role === 'operations' || role === 'production') {
+                            const orderDisplayId = getOrderId(ev.orderId, ev.raw?.lead_id, ev);
+                            const evName = getEventName(ev.orderId, ev.raw?.lead_id, ev);
+                            const clientName = getClientName(ev.orderId, ev.raw?.lead_id, ev);
+                            const salesCrew = getSalesCrew(ev.orderId, ev.raw?.lead_id, ev);
+                            const repTime = getReportingTime(ev.orderId, ev.raw?.lead_id, ev);
+                            const { label: actionLabel, effLeadId } = getOperationsActionDetails(ev.orderId, ev.raw?.lead_id, ev);
+
+                            return (
+                              <tr 
+                                key={ev.id || idx}
+                                className="bg-zinc-950/30 hover:bg-zinc-900/40 transition-colors select-text"
+                              >
+                                {/* 1. Order ID */}
+                                <td className="p-3.5 pl-4 align-middle min-w-[130px]">
+                                  <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
+                                    {orderDisplayId}
+                                  </span>
+                                </td>
+
+                                {/* 2. Event Name */}
+                                <td className="p-3.5 align-middle min-w-[180px]">
+                                  <div className="font-bold text-white text-xs leading-snug">
+                                    {evName}
+                                  </div>
+                                </td>
+
+                                {/* 3. Client Name */}
+                                <td className="p-3.5 align-middle min-w-[180px]">
+                                  <div className="font-bold text-zinc-100 text-xs leading-snug">
+                                    {clientName}
+                                  </div>
+                                </td>
+
+                                {/* 4. Sales Crew */}
+                                <td className="p-3.5 align-middle min-w-[160px]">
+                                  <div className="text-zinc-200 text-xs leading-relaxed">
+                                    <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
+                                      {salesCrew}
+                                    </span>
+                                  </div>
+                                </td>
+
+                                {/* 5. Reporting Time */}
+                                <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
+                                  <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
+                                    {repTime}
+                                  </span>
+                                </td>
+
+                                {/* 6. Action */}
+                                <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCalendarRowAction(orderDisplayId, effLeadId, actionLabel)}
+                                    className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                                  >
+                                    {actionLabel}
                                   </button>
                                 </td>
                               </tr>

@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { Calendar, Layers, X } from 'lucide-react';
 import { Lead } from '../types';
+import { deserializeLeadEvents } from '../utils';
 
 export interface EventCategoryCellProps {
   lead: Lead;
@@ -34,7 +35,7 @@ export const getEventCategoryDateTimeTimestamp = (dateStr: string, timeStr?: str
     const parts = s.split(/[-/]/);
     year = parseInt(parts[0], 10);
     month = parseInt(parts[1], 10) - 1;
-    day = parseInt(parts[2], 10);
+    year = parseInt(parts[2], 10);
   } else {
     const d = new Date(s);
     if (!isNaN(d.getTime())) {
@@ -81,7 +82,7 @@ export const formatCategoryDisplayDate = (dateStr: string): string => {
     const parts = s.split(/[-/]/);
     year = parseInt(parts[0], 10);
     month = parseInt(parts[1], 10) - 1;
-    day = parseInt(parts[2], 10);
+    year = parseInt(parts[2], 10);
   } else {
     const d = new Date(s);
     if (isNaN(d.getTime())) return dateStr;
@@ -103,11 +104,24 @@ export const getSortedEventsForCategory = (lead: Lead, orders?: any[]): Category
     ((lead as any).orders && (o.order_id === (lead as any).orders || o.lead_id === (lead as any).orders))
   );
 
-  const rawEventsList = (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
-    ? lead.events
-    : (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0)
-      ? linkedOrder.events
-      : [];
+  let rawEventsList: any[] = [];
+  if (lead?.events && Array.isArray(lead.events) && lead.events.length > 0) {
+    rawEventsList = lead.events;
+  } else if (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0) {
+    rawEventsList = linkedOrder.events;
+  } else if (typeof lead?.events === 'string') {
+    try {
+      const parsed = JSON.parse(lead.events);
+      if (Array.isArray(parsed)) rawEventsList = parsed;
+    } catch (e) {}
+  }
+
+  if (rawEventsList.length === 0 && lead?.notes_special_customizations) {
+    rawEventsList = deserializeLeadEvents(lead.notes_special_customizations).events;
+  }
+  if (rawEventsList.length === 0 && (linkedOrder as any)?.notes_special_customizations) {
+    rawEventsList = deserializeLeadEvents((linkedOrder as any).notes_special_customizations).events;
+  }
 
   if (rawEventsList.length > 0) {
     const list: CategoryEventItem[] = rawEventsList.map((ev: any, idx: number) => {
@@ -289,31 +303,32 @@ export const EventCategoryCell: React.FC<EventCategoryCellProps> = ({ lead, orde
   }
 
   return (
-    <div className="relative inline-flex items-start">
-      <button
-        ref={buttonRef}
-        type="button"
-        id={`btn_event_category_${lead.lead_id}`}
-        onClick={handleToggle}
-        className={`group flex flex-col items-start gap-0.5 p-1.5 px-2 rounded-lg border text-left transition-all cursor-pointer select-none ${
-          isOpen
-            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 ring-1 ring-amber-500/30'
-            : 'bg-zinc-900/40 hover:bg-zinc-850 text-zinc-200 border-zinc-800 hover:border-amber-500/40'
-        }`}
-        title={`Click to view all ${events.length} event types for Order ${displayOrderId}`}
-      >
-        <div className="flex items-center gap-1.5">
-          <span className="font-semibold text-xs text-white group-hover:text-amber-300 transition-colors leading-snug truncate max-w-[130px]">
-            {displayedType}
-          </span>
-          <span className="inline-flex items-center justify-center px-1.5 py-0.2 text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full group-hover:bg-amber-500 group-hover:text-zinc-950 transition-colors shrink-0">
-            +{additionalCount}
-          </span>
-        </div>
-        <span className="text-zinc-400 font-mono text-[11px] leading-tight">
-          {formatCategoryDisplayDate(displayedDate)}
+    <div className="flex flex-col items-start gap-0.5 text-left select-text">
+      <div className="flex items-center gap-1.5">
+        <span 
+          className="text-zinc-100 font-semibold text-xs leading-snug truncate max-w-[130px]"
+          title={displayedType}
+        >
+          {displayedType}
         </span>
-      </button>
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={handleToggle}
+          className={`inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-mono font-bold border rounded-md transition-all shrink-0 cursor-pointer shadow-sm ${
+            isOpen
+              ? 'bg-amber-500 text-zinc-950 border-amber-400 ring-1 ring-amber-400/50'
+              : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500 hover:text-zinc-950 hover:border-amber-400'
+          }`}
+          title={`Click +${additionalCount} to view all ${events.length} event types for Order ${displayOrderId}`}
+        >
+          +{additionalCount}
+        </button>
+      </div>
+
+      <span className="text-zinc-400 font-mono text-[11px] leading-tight">
+        {formatCategoryDisplayDate(displayedDate)}
+      </span>
 
       {isOpen && coords && createPortal(
         <div

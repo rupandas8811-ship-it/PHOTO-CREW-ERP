@@ -245,7 +245,9 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
       )}
       {/* Render sub-modules based on selection state */}
       <div className="w-full">
-        {activeSubTab === 'operations_leads' && <OperationsLeads />}
+        <div className={activeSubTab === 'operations_leads' ? '' : 'hidden'}>
+           <OperationsLeads />
+        </div>
         {activeSubTab === 'operations_calendar' && <OperationsCalendar />}
         {activeSubTab === 'equipment_management' && <EquipmentManagement />}
         {activeSubTab === 'operations_staff' && <OperationsStaffManagement />}

@@ -7,7 +7,7 @@ import { supabaseClient } from '../../supabaseClient';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../../types';
 import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, getStoredCustomCategories, saveCustomCategoryToStorage } from '../../utils';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, normalizeCrmArray, checkIsEventEnded, checkIsLeadCrmLocked } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, fetchAndResolveLatestPaymentData, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, normalizeCrmArray, checkIsEventEnded, checkIsLeadCrmLocked } from '../SalesUtils';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
 import { StatusText } from '../ui/StatusText';
 import { EventDropdownCell } from '../EventDropdownCell';
@@ -1650,9 +1650,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 for (const pay of linkedPayments) {
                   const actualPaid = (Number(pay.advance_received) || 0) + (Number(pay.final_payment_received) || 0) + (Number(pay.additional_received) || 0);
                   const newBalanceDue = Math.max(0, cleanFinalAmt - actualPaid);
-                  const newStatus = (newBalanceDue <= 0 && cleanFinalAmt > 0) 
-                    ? 'Fully Paid' 
-                    : (actualPaid > 0 ? 'Partially Paid' : (pay.payment_status || 'Pending'));
+                  const newStatus = (pay.payment_status === 'Waiting for Approval')
+                    ? 'Waiting for Approval'
+                    : (newBalanceDue <= 0 && cleanFinalAmt > 0) 
+                      ? 'Fully Paid' 
+                      : (actualPaid > 0 ? 'Partially Paid' : (pay.payment_status || 'Pending'));
 
                   await supabaseClient
                     .from('payments')
@@ -2547,9 +2549,137 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     );
     const finalAmountVal = dynamicFinalAmt || Math.max(0, explicitPkgCost - Number(quoteDiscount || 0) + Number(quoteAdditional || 0));
 
+    const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || '');
+    const activeLead = selectedLead || leads?.find((l: any) => l.lead_id === currentLeadId);
+    const linkedOrder = orders?.find((o: any) => currentLeadId && (o.lead_id === currentLeadId || o.order_id === currentLeadId));
+    const resolvedOrderId = selectedLead?.order_id || (selectedLead as any)?.Order_ID || linkedOrder?.order_id || (activeLead as any)?.order_id || wizardLeadData.order_id || '';
+    const linkedPayment = linkedOrder ? payments?.find((p: any) => p.order_id === linkedOrder.order_id) : payments?.find((p: any) => (resolvedOrderId && p.order_id === resolvedOrderId) || (currentLeadId && p.lead_id === currentLeadId));
+
+    const isOrderConfirmed = Boolean(
+      isLeadConfirmed ||
+      wizardLeadData.status === 'Order Confirmed' ||
+      salesStatus === 'Order Confirmed' ||
+      (activeLead && ['Order Confirmed', 'Event Scheduled', 'Event Started', 'Event Completed', 'Closed'].includes(activeLead.status || '')) ||
+      (activeLead && (activeLead as any).current_status === 'Order Confirmed') ||
+      (activeLead && (activeLead as any).booking_status === 'Confirmed') ||
+      (linkedOrder && linkedOrder.status !== 'Cancelled') ||
+      (orders && orders.some((o: any) => (currentLeadId && o.lead_id === currentLeadId && o.status !== 'Cancelled') || (resolvedOrderId && o.order_id === resolvedOrderId && o.status !== 'Cancelled')))
+    );
+
+    let advanceAmt = 0;
+    const paymentsBreakdown: { label: string; amount: number }[] = [];
+
+    // Filter payment history from context and local pending
+    const matchOrderId = resolvedOrderId || linkedOrder?.order_id || '';
+    const matchLeadId = currentLeadId || '';
+
+    let localPending: any[] = [];
+    try {
+      const saved = localStorage.getItem('pending_payment_approvals');
+      if (saved) localPending = JSON.parse(saved) || [];
+    } catch (_) {}
+
+    let approvedIds = new Set<string>();
+    try {
+      const appSaved = localStorage.getItem('approved_payment_history_ids');
+      if (appSaved) approvedIds = new Set(JSON.parse(appSaved));
+    } catch (_) {}
+
+    let rejectedIds = new Set<string>();
+    try {
+      const rejSaved = localStorage.getItem('rejected_payment_history_ids');
+      if (rejSaved) rejectedIds = new Set(JSON.parse(rejSaved));
+    } catch (_) {}
+
+    const combinedHistMap = new Map<string, any>();
+    (paymentHistory || []).forEach((h: any) => {
+      const k = String(h.id || h.payment_history_id || '');
+      if (k) combinedHistMap.set(k, h);
+    });
+    localPending.forEach((h: any) => {
+      const k = String(h.id || h.payment_history_id || '');
+      if (k && !combinedHistMap.has(k)) combinedHistMap.set(k, h);
+    });
+
+    const validOrderHistories = Array.from(combinedHistMap.values()).filter((h: any) => {
+      const hid = String(h.order_id || '').trim();
+      if (!hid) return false;
+      const isMatch = (matchOrderId && hid === matchOrderId) || 
+                      (matchLeadId && (hid === matchLeadId || hid === `ORD-${matchLeadId}`));
+      if (!isMatch) return false;
+
+      const histId = String(h.id || h.payment_history_id || '');
+      const isRejected = h.approval_status === 'Rejected' || 
+        rejectedIds.has(histId) || 
+        (typeof h.notes === 'string' && (
+          h.notes.includes('Rejected') || 
+          h.notes.includes('[REJECTED]') || 
+          h.notes.endsWith('- Rejected') || 
+          h.notes.toLowerCase().includes('rejected by business owner')
+        ));
+      return !isRejected;
+    });
+
+    const advanceItems = validOrderHistories.filter((h: any) => {
+      const type = String(h.payment_type || h.Payment_type || '').trim().toLowerCase();
+      if (type === 'advance payment' || type === 'advance') return true;
+      if (!type && typeof h.notes === 'string' && h.notes.toLowerCase().includes('advance')) return true;
+      return false;
+    });
+
+    if (advanceItems.length > 0) {
+      advanceAmt = advanceItems.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+    } else if (isOrderConfirmed) {
+      if (linkedOrder && linkedOrder.advance_received !== undefined && Number(linkedOrder.advance_received) > 0) {
+        advanceAmt = Number(linkedOrder.advance_received);
+      } else if (linkedPayment && linkedPayment.advance_received !== undefined && Number(linkedPayment.advance_received) > 0 && linkedPayment.payment_status !== 'Rejected' && linkedPayment.payment_status !== 'Cancelled') {
+        advanceAmt = Number(linkedPayment.advance_received);
+      } else if (wizardLeadData.advance_received !== undefined && Number(wizardLeadData.advance_received) > 0) {
+        advanceAmt = Number(wizardLeadData.advance_received);
+      } else if (activeLead?.advance_collected !== undefined && Number(activeLead.advance_collected) > 0) {
+        advanceAmt = Number(activeLead.advance_collected);
+      } else if (selectedLead?.advance_received !== undefined && Number(selectedLead.advance_received) > 0) {
+        advanceAmt = Number(selectedLead.advance_received);
+      }
+    }
+
+    if (advanceAmt > 0) {
+      paymentsBreakdown.push({ label: 'Advance Payment', amount: advanceAmt });
+    }
+
+    const otherItems = validOrderHistories.filter((h: any) => !advanceItems.includes(h));
+    const otherMap = new Map<string, number>();
+    otherItems.forEach((h: any) => {
+      const rawType = String(h.payment_type || h.Payment_type || '').trim() || 'Payment';
+      let label = rawType;
+      if (rawType.toLowerCase().includes('shoot') || rawType.toLowerCase().includes('event')) {
+        label = 'Event Date Payment';
+      } else if (rawType.toLowerCase().includes('final')) {
+        label = 'Final Payment';
+      }
+      const amt = Number(h.amount) || 0;
+      if (amt > 0) {
+        otherMap.set(label, (otherMap.get(label) || 0) + amt);
+      }
+    });
+    otherMap.forEach((amt, lbl) => {
+      paymentsBreakdown.push({ label: lbl, amount: amt });
+    });
+
+    const totalPaidVal = paymentsBreakdown.reduce((sum, p) => sum + p.amount, 0);
+    const pendingAmountVal = Math.max(0, finalAmountVal - totalPaidVal);
+
     if (isEdit) {
       return {
         ...selectedLead,
+        order_id: resolvedOrderId || selectedLead?.order_id || '',
+        is_order_confirmed: isOrderConfirmed,
+        advance_received: advanceAmt,
+        advance_payment_received: advanceAmt,
+        advance_collected: advanceAmt,
+        payments_breakdown: paymentsBreakdown,
+        total_paid_amount: totalPaidVal,
+        pending_amount: pendingAmountVal,
         customer_name: wizardLeadData.customer_name,
         mobile: wizardLeadData.mobile,
         email: wizardLeadData.email,
@@ -2586,6 +2716,14 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       return {
         ...createForm,
         lead_id: createdLeadId || 'DRAFT-LEAD',
+        order_id: resolvedOrderId || '',
+        is_order_confirmed: isOrderConfirmed,
+        advance_received: advanceAmt,
+        advance_payment_received: advanceAmt,
+        advance_collected: advanceAmt,
+        payments_breakdown: paymentsBreakdown,
+        total_paid_amount: totalPaidVal,
+        pending_amount: pendingAmountVal,
         package_price: explicitPkgCost,
         package_cost: explicitPkgCost,
         Quotation_Discount: Number(quoteDiscount || 0),
@@ -2890,6 +3028,40 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       if (!salesStaffMobile || !salesStaffMobile.trim()) setSalesStaffMobile(effMobile);
 
       const leadObj = getLeadInfoForQuote(isEdit);
+
+      // Re-fetch latest payment data for exact order to guarantee fresh, non-stale payment info
+      try {
+        const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || createdLeadId || '');
+        const resolvedOrderId = leadObj.order_id || selectedLead?.order_id || '';
+        const paymentData = await fetchAndResolveLatestPaymentData(
+          currentLeadId,
+          resolvedOrderId,
+          paymentHistory,
+          allOrders,
+          allPayments,
+          allLeads
+        );
+        if (paymentData.exactOrderId && !leadObj.order_id) {
+          leadObj.order_id = paymentData.exactOrderId;
+        }
+        if (paymentData.hasAdvance || paymentData.advanceAmount > 0) {
+          leadObj.advance_received = paymentData.advanceAmount;
+          leadObj.advance_payment_received = paymentData.advanceAmount;
+          leadObj.advance_collected = paymentData.advanceAmount;
+          leadObj.is_order_confirmed = true;
+        }
+        if (paymentData.paymentsBreakdown && paymentData.paymentsBreakdown.length > 0) {
+          leadObj.payments_breakdown = paymentData.paymentsBreakdown;
+        }
+        leadObj.total_paid_amount = paymentData.totalPaidAmount;
+        leadObj.pending_amount = paymentData.pendingAmount;
+        if (paymentData.totalPaidAmount > 0) {
+          leadObj.is_order_confirmed = true;
+        }
+      } catch (pErr) {
+        console.warn("Could not re-fetch payment data for preview, proceeding:", pErr);
+      }
+
       const activePkgs = getSelectedPkgsInfo(isEdit);
 
       const missingFields = validateLeadForQuotation(leadObj, activePkgs);
@@ -2936,6 +3108,40 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     try {
       console.log("✔ Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
+
+      // Re-fetch latest payment data for exact order to guarantee fresh, non-stale payment info
+      try {
+        const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || createdLeadId || '');
+        const resolvedOrderId = leadObj.order_id || selectedLead?.order_id || '';
+        const paymentData = await fetchAndResolveLatestPaymentData(
+          currentLeadId,
+          resolvedOrderId,
+          paymentHistory,
+          allOrders,
+          allPayments,
+          allLeads
+        );
+        if (paymentData.exactOrderId && !leadObj.order_id) {
+          leadObj.order_id = paymentData.exactOrderId;
+        }
+        if (paymentData.hasAdvance || paymentData.advanceAmount > 0) {
+          leadObj.advance_received = paymentData.advanceAmount;
+          leadObj.advance_payment_received = paymentData.advanceAmount;
+          leadObj.advance_collected = paymentData.advanceAmount;
+          leadObj.is_order_confirmed = true;
+        }
+        if (paymentData.paymentsBreakdown && paymentData.paymentsBreakdown.length > 0) {
+          leadObj.payments_breakdown = paymentData.paymentsBreakdown;
+        }
+        leadObj.total_paid_amount = paymentData.totalPaidAmount;
+        leadObj.pending_amount = paymentData.pendingAmount;
+        if (paymentData.totalPaidAmount > 0) {
+          leadObj.is_order_confirmed = true;
+        }
+      } catch (pErr) {
+        console.warn("Could not re-fetch payment data for PDF download, proceeding:", pErr);
+      }
+
       const activePkgs = getSelectedPkgsInfo(isEdit);
       
       const doc = generateQuotationPDF(
@@ -2973,6 +3179,40 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     try {
       console.log("✔ Generating PDF...");
       const leadObj = getLeadInfoForQuote(isEdit);
+
+      // Re-fetch latest payment data for exact order to guarantee fresh, non-stale payment info
+      try {
+        const currentLeadId = isEdit ? (selectedLead?.lead_id || wizardLeadData.lead_id) : (selectedLead?.lead_id || createForm.lead_id || createdLeadId || '');
+        const resolvedOrderId = leadObj.order_id || selectedLead?.order_id || '';
+        const paymentData = await fetchAndResolveLatestPaymentData(
+          currentLeadId,
+          resolvedOrderId,
+          paymentHistory,
+          allOrders,
+          allPayments,
+          allLeads
+        );
+        if (paymentData.exactOrderId && !leadObj.order_id) {
+          leadObj.order_id = paymentData.exactOrderId;
+        }
+        if (paymentData.hasAdvance || paymentData.advanceAmount > 0) {
+          leadObj.advance_received = paymentData.advanceAmount;
+          leadObj.advance_payment_received = paymentData.advanceAmount;
+          leadObj.advance_collected = paymentData.advanceAmount;
+          leadObj.is_order_confirmed = true;
+        }
+        if (paymentData.paymentsBreakdown && paymentData.paymentsBreakdown.length > 0) {
+          leadObj.payments_breakdown = paymentData.paymentsBreakdown;
+        }
+        leadObj.total_paid_amount = paymentData.totalPaidAmount;
+        leadObj.pending_amount = paymentData.pendingAmount;
+        if (paymentData.totalPaidAmount > 0) {
+          leadObj.is_order_confirmed = true;
+        }
+      } catch (pErr) {
+        console.warn("Could not re-fetch payment data for WhatsApp quote, proceeding:", pErr);
+      }
+
       const activePkgs = getSelectedPkgsInfo(isEdit);
       const finalAmt = dynamicFinalAmt;
 
@@ -5349,9 +5589,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
                 for (const pay of linkedPayments) {
                   const actualPaid = (Number(pay.advance_received) || 0) + (Number(pay.final_payment_received) || 0) + (Number(pay.additional_received) || 0);
                   const newBalanceDue = Math.max(0, cleanFinalAmt - actualPaid);
-                  const newStatus = (newBalanceDue <= 0 && cleanFinalAmt > 0) 
-                    ? 'Fully Paid' 
-                    : (actualPaid > 0 ? 'Partially Paid' : (pay.payment_status || 'Pending'));
+                  const newStatus = (pay.payment_status === 'Waiting for Approval')
+                    ? 'Waiting for Approval'
+                    : (newBalanceDue <= 0 && cleanFinalAmt > 0) 
+                      ? 'Fully Paid' 
+                      : (actualPaid > 0 ? 'Partially Paid' : (pay.payment_status || 'Pending'));
 
                   await supabaseClient
                     .from('payments')

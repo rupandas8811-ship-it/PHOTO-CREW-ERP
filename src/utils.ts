@@ -2610,6 +2610,65 @@ export function getEventTeamMemberStaffMapping(params: {
   return groups;
 }
 
+export function getEventDeliverables(order: any, lead: any, eventId: string, eventName: string): string[] {
+  const raw = order?.deliverables || lead?.deliverables || order?.deliverables_description || lead?.deliverables_description || order?.editable_deliverables || lead?.editable_deliverables;
+  if (!raw) return [];
+
+  const parseObj = (obj: any): string[] => {
+    if (Array.isArray(obj)) {
+      const matchedEv = obj.find((item: any) => {
+        if (!item || typeof item !== 'object') return false;
+        const idMatch = item.event_id && (item.event_id === eventId || item.event_id.includes(eventId));
+        const nameMatch = item.event_name && eventName && item.event_name.trim().toLowerCase() === eventName.trim().toLowerCase();
+        return idMatch || nameMatch;
+      });
+
+      if (matchedEv && Array.isArray(matchedEv.deliverables)) {
+        return matchedEv.deliverables.map((d: any) => {
+          if (!d) return '';
+          if (typeof d === 'string') return d;
+          if (d.name) return `${d.name}${d.qty ? ` × ${d.qty}` : ''}`;
+          return '';
+        }).filter(Boolean);
+      }
+
+      const isEventArray = obj.some((item: any) => item && typeof item === 'object' && (item.event_id || item.event_name));
+      if (!isEventArray) {
+        return obj.map(String).filter(Boolean);
+      }
+      return [];
+    }
+
+    if (typeof obj === 'object') {
+      for (const [key, val] of Object.entries(obj)) {
+        if (key === eventId || (eventName && key.toLowerCase() === eventName.toLowerCase())) {
+          if (Array.isArray(val)) return val.map(String).filter(Boolean);
+          if (typeof val === 'string') return [val];
+        }
+      }
+    }
+    return [];
+  };
+
+  if (typeof raw === 'object') {
+    return parseObj(raw);
+  }
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        return parseObj(parsed);
+      } catch (e) {
+        return [];
+      }
+    }
+  }
+
+  return [];
+}
+
 export function generateWhatsAppAssignmentMessage(params: {
   order: any;
   lead?: any;
@@ -2624,73 +2683,182 @@ export function generateWhatsAppAssignmentMessage(params: {
   const { order, lead, targetStaffName } = params;
   const groups = getEventTeamMemberStaffMapping(params);
 
-  const orderId = order?.order_id || lead?.lead_id || 'N/A';
+  // Filter groups so each staff member receives ONLY the events they are assigned to
+  let filteredGroups = groups;
+  if (targetStaffName && targetStaffName.trim()) {
+    const targetNameLower = targetStaffName.trim().toLowerCase();
+    filteredGroups = groups.filter(group => {
+      // 1. Check in group mappings
+      const inMappings = group.mappings.some(m => 
+        m.assignedStaffName && 
+        m.assignedStaffName.trim().toLowerCase() === targetNameLower
+      );
+      if (inMappings) return true;
+
+      // 2. Check modalEventAllocations for this event
+      if (params.modalEventAllocations && params.modalEventAllocations[group.eventId]?.staff) {
+        const inModal = params.modalEventAllocations[group.eventId].staff.some((s: any) => 
+          (s.staff_name || s.name || '').trim().toLowerCase() === targetNameLower
+        );
+        if (inModal) return true;
+      }
+
+      // 3. Check finalAssignments for this event
+      if (params.finalAssignments && params.finalAssignments.length > 0) {
+        const inFinal = params.finalAssignments.some((a: any) => {
+          const isEvMatch = a.event_id 
+            ? (a.event_id === group.eventId || a.event_id.includes(group.eventId)) 
+            : (groups.length === 1 || (a.event_name && a.event_name.toLowerCase() === group.eventName.toLowerCase()));
+          return isEvMatch && (a.staff_name || '').trim().toLowerCase() === targetNameLower;
+        });
+        if (inFinal) return true;
+      }
+
+      // 4. Check staffAssignments from database
+      if (params.staffAssignments && params.staffAssignments.length > 0) {
+        const orderIdToMatch = order?.order_id || lead?.lead_id;
+        const inSa = params.staffAssignments.some((sa: any) => {
+          if (sa.order_id !== orderIdToMatch && sa.order_id !== order?.order_id && sa.order_id !== lead?.lead_id) return false;
+          if (sa.assignment_status === 'Cancelled') return false;
+          const isEvMatch = sa.event_id 
+            ? (sa.event_id === group.eventId || sa.event_id.includes(group.eventId)) 
+            : (groups.length === 1 || (sa.event_name && sa.event_name.toLowerCase() === group.eventName.toLowerCase()));
+          return isEvMatch && (sa.staff_name || '').trim().toLowerCase() === targetNameLower;
+        });
+        if (inSa) return true;
+      }
+
+      return false;
+    });
+  }
+
+  // Fallback: if filtering resulted in 0 groups (e.g. general assignment), fallback to all groups
+  if (filteredGroups.length === 0) {
+    filteredGroups = groups;
+  }
+
   const customerName = order?.customer_name || lead?.customer_name || 'Valued Customer';
   const phone = order?.mobile || lead?.mobile || '';
 
-  let msg = `Order ID: ${orderId}\n`;
-  msg += `Customer Name: ${customerName}\n`;
+  let msg = 'Operations Team\n\n';
+  msg += `Customer: ${customerName}\n`;
   if (phone) {
-    msg += `Phone Number: ${phone}\n`;
+    msg += `Mobile: ${phone}\n`;
   }
   msg += `\n`;
 
-  const totalGroups = groups.length;
+  const totalGroups = filteredGroups.length;
 
-  groups.forEach((group, idx) => {
+  filteredGroups.forEach((group, idx) => {
     if (totalGroups > 1) {
-      msg += `Event ${idx + 1} — ${group.eventName}\n`;
+      msg += `Event ${idx + 1}: ${group.eventName}\n\n`;
     } else {
-      msg += `Event Name: ${group.eventName}\n`;
-      msg += `Event Type: ${group.eventType}\n`;
+      msg += `Event: ${group.eventName}\n\n`;
     }
 
-    if (group.eventDate && group.eventDate !== 'N/A') {
-      msg += `Event Date: ${group.eventDate}\n`;
-    }
-    if (group.eventStartTime && group.eventStartTime !== 'N/A') {
-      msg += `Event Time: ${group.eventStartTime}\n`;
-    }
-    if (group.reportingDate && group.reportingDate !== 'N/A' && group.reportingDate !== group.eventDate) {
-      msg += `Reporting Date: ${group.reportingDate}\n`;
+    const repDate = (group.reportingDate && group.reportingDate !== 'N/A') ? group.reportingDate : (group.eventDate && group.eventDate !== 'N/A' ? group.eventDate : '');
+    if (repDate) {
+      msg += `Reporting Date: ${repDate}\n`;
     }
     if (group.reportingTime && group.reportingTime !== 'N/A') {
       msg += `Reporting Time: ${group.reportingTime}\n`;
     }
+    msg += `\n`;
+
     if (group.location && group.location !== 'N/A' && group.location.trim() !== '') {
-      msg += `Event Location (Venue Address): ${group.location}\n`;
+      msg += `Event Location: ${group.location.trim()}\n`;
     }
-    if (group.googleMapsLink && group.googleMapsLink !== 'N/A') {
-      msg += `Google Maps: ${group.googleMapsLink}\n`;
+    if (group.googleMapsLink && group.googleMapsLink !== 'N/A' && group.googleMapsLink.trim() !== '') {
+      msg += `Google Maps: ${group.googleMapsLink.trim()}\n`;
     }
+    msg += `\n`;
 
-    msg += `\nTeam Members Included:\n`;
-    if (group.mappings.length > 0) {
-      group.mappings.forEach(m => {
-        msg += `• ${m.teamMemberRole} — ${m.assignedStaffName}\n`;
+    // Collect distinct assigned Operations team members for THIS event with their assigned roles
+    const eventStaffMap = new Map<string, string>(); // staffName -> assignedRole
+    
+    // 1. From finalAssignments for this event (highest priority from modal assignment)
+    if (params.finalAssignments && params.finalAssignments.length > 0) {
+      params.finalAssignments.forEach((a: any) => {
+        const isEvMatch = a.event_id 
+          ? (a.event_id === group.eventId || a.event_id.includes(group.eventId)) 
+          : (groups.length === 1 || (a.event_name && a.event_name.toLowerCase() === group.eventName.toLowerCase()));
+        if (isEvMatch && a.staff_name && a.staff_name.trim()) {
+          const sName = a.staff_name.trim();
+          const sLower = sName.toLowerCase();
+          if (sLower !== 'unassigned' && sLower !== 'none' && sLower !== 'pending' && sLower !== 'tbd') {
+            const role = (a.staff_role || a.assigned_task || '').trim() || 'Operations Staff';
+            eventStaffMap.set(sName, role);
+          }
+        }
       });
-    } else {
-      msg += `• Team details will be updated shortly\n`;
     }
 
-    // Equipment assigned to targetStaffName or overall in this event
-    if (targetStaffName) {
-      const myMappings = group.mappings.filter(m => m.assignedStaffName.toLowerCase() === targetStaffName.toLowerCase());
-      const myEq = Array.from(new Set(myMappings.flatMap(m => m.equipment || []))).filter(Boolean);
-      if (myEq.length > 0) {
-        msg += `\nAssigned Equipment:\n`;
-        myEq.forEach(eq => {
-          msg += `- ${eq}\n`;
-        });
+    // 2. From modalEventAllocations for this event
+    if (params.modalEventAllocations && params.modalEventAllocations[group.eventId]?.staff) {
+      params.modalEventAllocations[group.eventId].staff.forEach((s: any) => {
+        const sName = (s.staff_name || s.name || '').trim();
+        const sLower = sName.toLowerCase();
+        if (sName && sLower !== 'unassigned' && sLower !== 'none' && sLower !== 'pending' && sLower !== 'tbd') {
+          if (!eventStaffMap.has(sName)) {
+            const role = (s.staff_role || s.role || '').trim() || 'Operations Staff';
+            eventStaffMap.set(sName, role);
+          }
+        }
+      });
+    }
+
+    // 3. From staffAssignments in db for this event
+    if (params.staffAssignments && params.staffAssignments.length > 0) {
+      const orderIdToMatch = order?.order_id || lead?.lead_id;
+      params.staffAssignments.forEach((sa: any) => {
+        if (sa.order_id === orderIdToMatch || sa.order_id === order?.order_id || sa.order_id === lead?.lead_id) {
+          if (sa.assignment_status !== 'Cancelled') {
+            const isEvMatch = sa.event_id 
+              ? (sa.event_id === group.eventId || sa.event_id.includes(group.eventId)) 
+              : (groups.length === 1 || (sa.event_name && sa.event_name.toLowerCase() === group.eventName.toLowerCase()));
+            if (isEvMatch && sa.staff_name && sa.staff_name.trim()) {
+              const sName = sa.staff_name.trim();
+              const sLower = sName.toLowerCase();
+              if (sLower !== 'unassigned' && sLower !== 'none' && sLower !== 'pending' && sLower !== 'tbd') {
+                if (!eventStaffMap.has(sName)) {
+                  const role = (sa.staff_role || sa.role || '').trim() || 'Operations Staff';
+                  eventStaffMap.set(sName, role);
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // 4. From group mappings
+    group.mappings.forEach(m => {
+      if (m.assignedStaffName && m.assignedStaffName.trim()) {
+        const sName = m.assignedStaffName.trim();
+        const lower = sName.toLowerCase();
+        if (lower !== 'unassigned' && lower !== 'none' && lower !== 'pending' && lower !== 'tbd') {
+          if (!eventStaffMap.has(sName)) {
+            const role = (m.assignedStaffRole || m.teamMemberRole || '').trim() || 'Operations Staff';
+            eventStaffMap.set(sName, role);
+          }
+        }
       }
-    } else {
-      const allEq = Array.from(new Set(group.mappings.flatMap(m => m.equipment || []))).filter(Boolean);
-      if (allEq.length > 0) {
-        msg += `\nAssigned Equipment:\n`;
-        allEq.forEach(eq => {
-          msg += `- ${eq}\n`;
-        });
+    });
+
+    // If targetStaffName is specified but has no role yet, look up their role
+    if (targetStaffName && targetStaffName.trim()) {
+      const tName = targetStaffName.trim();
+      if (!eventStaffMap.has(tName)) {
+        const stObj = params.staffList?.find(s => s.name?.toLowerCase() === tName.toLowerCase());
+        eventStaffMap.set(tName, stObj?.role || 'Operations Staff');
       }
+    }
+
+    if (eventStaffMap.size > 0) {
+      msg += `Team Members Included:\n`;
+      eventStaffMap.forEach((role, name) => {
+        msg += `- ${name} — ${role}\n`;
+      });
     }
 
     if (idx < totalGroups - 1) {
@@ -2879,4 +3047,122 @@ export function saveCustomCategoryToStorage(catName: string): void {
     window.dispatchEvent(new CustomEvent('custom-category-updated', { detail: clean }));
   } catch (_) {}
 }
+
+/**
+ * Resolves all canonical and formatted variations of Order ID and Lead ID
+ * to ensure bulletproof relational querying, payment association, and approval mapping.
+ */
+export const getAllMatchingOrderIds = (
+  orderId?: string | null,
+  leadId?: string | null,
+  orders: any[] = [],
+  leads: any[] = []
+): string[] => {
+  const set = new Set<string>();
+  const addVariant = (id?: any) => {
+    if (!id || typeof id !== 'string') return;
+    const clean = id.trim();
+    if (!clean) return;
+    set.add(clean);
+    set.add(clean.toUpperCase());
+    set.add(clean.toLowerCase());
+
+    const noOrd = clean.replace(/^ORD-?/i, '');
+    const noOr = clean.replace(/^OR-?/i, '');
+    const noLd = clean.replace(/^LD-?/i, '');
+    const noPrefix = clean.replace(/^(?:ORD|OR|LD)-?/i, '');
+
+    if (noOrd) {
+      set.add(noOrd);
+      set.add(`ORD-${noOrd}`);
+      set.add(`ORD${noOrd}`);
+    }
+    if (noOr) {
+      set.add(noOr);
+      set.add(`OR-${noOr}`);
+      set.add(`OR${noOr}`);
+      set.add(`ORD-${noOr}`);
+    }
+    if (noLd) {
+      set.add(noLd);
+      set.add(`LD-${noLd}`);
+      set.add(`LD${noLd}`);
+      set.add(`ORD-${noLd}`);
+    }
+    if (noPrefix) {
+      set.add(noPrefix);
+      set.add(`OR-${noPrefix}`);
+      set.add(`OR${noPrefix}`);
+      set.add(`ORD-${noPrefix}`);
+    }
+
+    // Number extraction for zero-padding variations (e.g. 64 -> OR064, OR0064, ORD-0064)
+    const numMatch = clean.match(/\d+/);
+    if (numMatch) {
+      const num = parseInt(numMatch[0], 10);
+      if (!isNaN(num)) {
+        const p2 = String(num).padStart(2, '0');
+        const p3 = String(num).padStart(3, '0');
+        const p4 = String(num).padStart(4, '0');
+        const isLead = clean.toUpperCase().includes('LD');
+        
+        if (!isLead) {
+          set.add(`OR${num}`);
+          set.add(`OR${p2}`);
+          set.add(`OR${p3}`);
+          set.add(`OR${p4}`);
+          set.add(`OR-${num}`);
+          set.add(`OR-${p2}`);
+          set.add(`OR-${p3}`);
+          set.add(`OR-${p4}`);
+          set.add(`ORD-${num}`);
+          set.add(`ORD-${p2}`);
+          set.add(`ORD-${p3}`);
+          set.add(`ORD-${p4}`);
+          set.add(`ORD-OR${p3}`);
+          set.add(`ORD-OR${p4}`);
+          set.add(`ORDER-${num}`);
+          set.add(`ORDER-${p3}`);
+          set.add(`ORDER-${p4}`);
+        } else {
+          set.add(`LD${num}`);
+          set.add(`LD${p2}`);
+          set.add(`LD${p3}`);
+          set.add(`LD${p4}`);
+          set.add(`LD-${num}`);
+          set.add(`LD-${p2}`);
+          set.add(`LD-${p3}`);
+          set.add(`LD-${p4}`);
+          set.add(`ORD-LD${p3}`);
+          set.add(`ORD-LD${p4}`);
+        }
+      }
+    }
+  };
+
+  addVariant(orderId);
+  addVariant(leadId);
+
+  // Cross-reference with orders list
+  const linkedOrder = orders.find(o => 
+    (orderId && (o.order_id === orderId || o.lead_id === orderId)) ||
+    (leadId && (o.lead_id === leadId || o.order_id === leadId))
+  );
+  if (linkedOrder) {
+    addVariant(linkedOrder.order_id);
+    addVariant(linkedOrder.lead_id);
+  }
+
+  // Cross-reference with leads list
+  const linkedLead = leads.find(l => 
+    (leadId && (l.lead_id === leadId || (l as any).order_id === leadId)) ||
+    (orderId && ((l as any).order_id === orderId || l.lead_id === orderId))
+  );
+  if (linkedLead) {
+    addVariant(linkedLead.lead_id);
+    addVariant((linkedLead as any).order_id);
+  }
+
+  return Array.from(set);
+};
 

@@ -31,7 +31,7 @@ import {
   OwnerStaffPerformanceReport
 } from './components/OwnerModule';
 import { AppLogo } from './components/AppLogo';
-import { initGlobalModalViewportHandler } from './utils';
+import { initGlobalModalViewportHandler, getAllMatchingOrderIds } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Briefcase, Camera, Video, Landmark, Shield, Users, Search, Info, Target, Sparkles, Menu, RefreshCw, Activity, Bell,
@@ -176,7 +176,9 @@ const MainAppContent: React.FC = () => {
   }, [currentRole, orders, production, unlockRequests]);
 
   const pendingPaymentApprovalCount = useMemo(() => {
-    if (currentRole !== 'Business Owner' || !orders) return 0;
+    if (currentRole !== 'Business Owner' && currentRole !== 'Super Admin' && !String(currentRole || '').toLowerCase().includes('owner')) {
+      return 0;
+    }
 
     let rejectedIds = new Set<string>();
     try {
@@ -184,32 +186,39 @@ const MainAppContent: React.FC = () => {
       if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
     } catch (_) {}
 
-    // Count distinct orders that have pending payment approval, exactly matching Revenue Summary records
-    return orders.filter(o => {
-      const pay = (payments || []).find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
-      
-      const hasHistPending = (paymentHistory || []).some(h => {
-        const isThisOrder = (h.order_id === o.order_id || h.order_id === o.lead_id);
-        if (!isThisOrder) return false;
-        const histId = String(h.id || h.payment_history_id || '');
-        if (rejectedIds.has(histId)) return false;
-        const isExplicitlyRejected = h.approval_status === 'Rejected' || 
-          (typeof h.notes === 'string' && (
-            h.notes.includes('Rejected') || 
-            h.notes.includes('[REJECTED]') || 
-            h.notes.endsWith('- Rejected') || 
-            h.notes.toLowerCase().includes('rejected by business owner')
-          ));
-        if (isExplicitlyRejected) return false;
+    const pendingOrderIds = new Set<string>();
 
-        return (
-          h.approval_status === 'Waiting for Approval' ||
-          (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'))
-        );
-      });
+    (paymentHistory || []).forEach(h => {
+      const histId = String(h.id || h.payment_history_id || '');
+      if (rejectedIds.has(histId)) return;
+      const isExplicitlyRejected = h.approval_status === 'Rejected' || 
+        (typeof h.notes === 'string' && (
+          h.notes.includes('Rejected') || 
+          h.notes.includes('[REJECTED]') || 
+          h.notes.endsWith('- Rejected') || 
+          h.notes.toLowerCase().includes('rejected by business owner')
+        ));
+      if (isExplicitlyRejected) return;
 
-      return hasHistPending || (pay?.payment_status === 'Waiting for Approval');
-    }).length;
+      const isPending = h.approval_status === 'Waiting for Approval' ||
+        (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'));
+
+      if (isPending && h.order_id) {
+        const canonical = String(h.order_id).trim();
+        const matched = orders.find(o => getAllMatchingOrderIds(o.order_id, o.lead_id, orders).includes(canonical));
+        pendingOrderIds.add(matched ? matched.order_id : canonical);
+      }
+    });
+
+    (payments || []).forEach(p => {
+      if (p.payment_status === 'Waiting for Approval' && p.order_id) {
+        const canonical = String(p.order_id).trim();
+        const matched = orders.find(o => getAllMatchingOrderIds(o.order_id, o.lead_id, orders).includes(canonical));
+        pendingOrderIds.add(matched ? matched.order_id : canonical);
+      }
+    });
+
+    return pendingOrderIds.size;
   }, [currentRole, orders, paymentHistory, payments]);
 
   const [showInitialLoader, setShowInitialLoader] = useState(() => {
