@@ -23,6 +23,7 @@ export const OperationsStaffManagement: React.FC = () => {
   const [newSkill, setNewSkill] = useState('');
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [currentStaffPassword, setCurrentStaffPassword] = useState('');
   const [openSkillsStaffId, setOpenSkillsStaffId] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
 
@@ -48,6 +49,24 @@ export const OperationsStaffManagement: React.FC = () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
+
+  // Ensure current staff password remains in sync with users list
+  useEffect(() => {
+    if (editingId && showStaffModal) {
+      const activeStaff = staff.find((s: any) => s.staff_id === editingId) || 
+                          productionStaff.find((s: any) => s.staff_id === editingId);
+      if (activeStaff) {
+        const pwd = getStaffCurrentPassword(activeStaff, users);
+        if (pwd) {
+          setCurrentStaffPassword(pwd);
+        } else {
+          fetchStaffCurrentPassword(activeStaff, users).then(livePwd => {
+            if (livePwd) setCurrentStaffPassword(livePwd);
+          }).catch(() => {});
+        }
+      }
+    }
+  }, [editingId, showStaffModal, staff, productionStaff, users]);
 
   // Helper to extract staff-specific skills list
   const getStaffSkillsList = (st: Staff): string[] => {
@@ -105,6 +124,16 @@ export const OperationsStaffManagement: React.FC = () => {
     setShowStaffModal(true);
     setShowPassword(false);
     setFormError('');
+
+    // Retrieve and show current password
+    const pwd = getStaffCurrentPassword(st, users);
+    setCurrentStaffPassword(pwd || '');
+    if (!pwd) {
+      fetchStaffCurrentPassword(st, users).then(livePwd => {
+        if (livePwd) setCurrentStaffPassword(livePwd);
+      }).catch(() => {});
+    }
+
     setForm({
       name: st.name,
       role: st.role,
@@ -130,6 +159,7 @@ export const OperationsStaffManagement: React.FC = () => {
     setEditingId(null);
     setShowStaffModal(false);
     setShowPassword(false);
+    setCurrentStaffPassword('');
     setFormError('');
     setForm({
       name: '',
@@ -254,13 +284,20 @@ export const OperationsStaffManagement: React.FC = () => {
               .from('users')
               .select('id')
               .or(matchConditions.join(','))
-              .eq('role', 'Operation Staff')
               .limit(1);
               
             if (matchedUsers && matchedUsers.length > 0) {
               targetUserId = matchedUsers[0].id;
             }
           }
+        }
+
+        if (!targetUserId && users && users.length > 0) {
+          const u = users.find((x: any) => 
+            (originalStaff?.email && x.email?.toLowerCase() === originalStaff.email.toLowerCase()) ||
+            (originalStaff?.mobile && x.mobile && String(x.mobile).replace(/\D/g, '') === String(originalStaff.mobile).replace(/\D/g, ''))
+          );
+          if (u?.id) targetUserId = u.id;
         }
 
         if (cleanPwd) {
@@ -271,6 +308,7 @@ export const OperationsStaffManagement: React.FC = () => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 auth_id: targetUserId,
+                staff_id: editingId,
                 email: targetEmail,
                 mobile: originalStaff?.mobile || form.mobile,
                 password: cleanPwd,
@@ -287,6 +325,8 @@ export const OperationsStaffManagement: React.FC = () => {
                 setIsSaving(false);
                 return;
               }
+            } else {
+              setCurrentStaffPassword(cleanPwd);
             }
           } catch (authErr: any) {
             console.warn("Auth update warning:", authErr);
@@ -504,17 +544,15 @@ export const OperationsStaffManagement: React.FC = () => {
 
             activeBookings.push({
               id: `event-${ev.id}-${staffName}`,
+              orderId: order?.order_id || lead.order_id || lead.lead_id || '—',
+              leadId: lead.lead_id,
               eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
               clientName: lead.customer_name || order?.customer_name || 'N/A',
               shootType: ev.event_shoot_type || lead.shoot_type || 'N/A',
               assignedRole: assignedRole,
-              eventDate: ev.event_date || 'N/A',
-              eventStartTime: ev.event_start_time || 'N/A',
-              eventEndTime: ev.event_end_time || 'N/A',
-              reportingDate: ev.reporting_date || ev.event_date || 'N/A',
-              reportingTime: ev.reporting_time || 'N/A',
+              reportingDate: ev.Reporting_date || ev.reporting_date || lead.Reporting_date || lead.reporting_date || '—',
+              reportingTime: ev.reporting_time || (ev as any).Reporting_time || lead.reporting_time || '—',
               venue: ev.event_location || lead.event_location || 'N/A',
-              googleMapsLink: ev.google_maps_link || 'N/A',
               leadStatus: lead.status,
               equipmentAssigned: equipmentAssigned,
               coordinator: lead.sales_person || lead.created_by || 'Operations Team',
@@ -562,17 +600,15 @@ export const OperationsStaffManagement: React.FC = () => {
 
           activeBookings.push({
             id: `order-${lead.lead_id}-${staffName}`,
+            orderId: order?.order_id || lead.order_id || lead.lead_id || '—',
+            leadId: lead.lead_id,
             eventName: lead.custom_event_name || order?.event_type || lead.event_type || 'N/A',
             clientName: lead.customer_name || order?.customer_name || 'N/A',
             shootType: lead.shoot_type || order?.shoot_type || 'N/A',
             assignedRole: assignedRole,
-            eventDate: lead.event_date || order?.event_date || 'N/A',
-            eventStartTime: lead.event_time || order?.event_time || 'N/A',
-            eventEndTime: 'N/A',
-            reportingDate: lead.Reporting_date || lead.event_date || 'N/A',
-            reportingTime: lead.reporting_time || op?.reporting_time || 'N/A',
+            reportingDate: lead.Reporting_date || lead.reporting_date || '—',
+            reportingTime: lead.reporting_time || (lead as any).Reporting_time || op?.reporting_time || '—',
             venue: lead.event_location || order?.event_location || 'N/A',
-            googleMapsLink: (lead as any).google_maps_link || 'N/A',
             leadStatus: lead.status,
             equipmentAssigned: op?.equipment_kit || 'None',
             coordinator: lead.sales_person || lead.created_by || 'Operations Team',
@@ -584,12 +620,12 @@ export const OperationsStaffManagement: React.FC = () => {
     });
 
     activeBookings.sort((a, b) => {
-      const dateA = a.eventDate !== 'N/A' ? a.eventDate : a.reportingDate;
-      const timeA = a.eventStartTime !== 'N/A' ? a.eventStartTime : a.reportingTime;
+      const dateA = a.reportingDate !== '—' && a.reportingDate !== 'N/A' ? a.reportingDate : '';
+      const timeA = a.reportingTime !== '—' && a.reportingTime !== 'N/A' ? a.reportingTime : '';
       const tsA = parseDateTimeToTimestamp(dateA, timeA);
 
-      const dateB = b.eventDate !== 'N/A' ? b.eventDate : b.reportingDate;
-      const timeB = b.eventStartTime !== 'N/A' ? b.eventStartTime : b.reportingTime;
+      const dateB = b.reportingDate !== '—' && b.reportingDate !== 'N/A' ? b.reportingDate : '';
+      const timeB = b.reportingTime !== '—' && b.reportingTime !== 'N/A' ? b.reportingTime : '';
       const tsB = parseDateTimeToTimestamp(dateB, timeB);
 
       if (tsA !== tsB && tsA > 0 && tsB > 0) return tsB - tsA;
@@ -712,6 +748,11 @@ export const OperationsStaffManagement: React.FC = () => {
                   )}
                 </button>
               </div>
+              {editingId && (
+                <div className="mt-1.5 text-xs text-zinc-400 font-mono">
+                  Current Password: <span className="text-white font-medium select-all font-mono">{currentStaffPassword || '********'}</span>
+                </div>
+              )}
             </div>
             <div className="min-w-0">
               <label className="block text-[11px] font-mono font-extrabold uppercase text-zinc-450 mb-1">
@@ -1138,73 +1179,80 @@ export const OperationsStaffManagement: React.FC = () => {
                       <table className="w-full text-left border-collapse min-w-max text-xs">
                         <thead>
                           <tr className="border-b border-zinc-850 bg-zinc-950/60 font-mono text-[10px] uppercase text-zinc-400">
-                            <th className="p-3.5 font-bold">Event Name</th>
-                            <th className="p-3.5 font-bold">Client Name</th>
-                            <th className="p-3.5 font-bold">Shoot Type</th>
-                            <th className="p-3.5 font-bold">Assigned Role</th>
-                            <th className="p-3.5 font-bold">Event Date</th>
-                            <th className="p-3.5 font-bold">Event Start Time</th>
-                            <th className="p-3.5 font-bold">Event End Time</th>
-                            <th className="p-3.5 font-bold">Reporting Date</th>
-                            <th className="p-3.5 font-bold">Reporting Time</th>
-                            <th className="p-3.5 font-bold">Venue / Event Location</th>
-                            <th className="p-3.5 font-bold">Google Maps Link</th>
-                            <th className="p-3.5 font-bold">Lead Status</th>
-                            <th className="p-3.5 font-bold">Equipment Assigned</th>
-                            <th className="p-3.5 font-bold">Operations Coordinator</th>
-                            <th className="p-3.5 font-bold">Current Event Status</th>
-                            <th className="p-3.5 font-bold">Booking Status</th>
+                            <th className="p-3.5 pl-4 font-bold min-w-[120px]">Order ID</th>
+                            <th className="p-3.5 font-bold min-w-[160px]">Customer Name</th>
+                            <th className="p-3.5 font-bold min-w-[140px]">Event Type</th>
+                            <th className="p-3.5 font-bold min-w-[130px]">Reporting Date</th>
+                            <th className="p-3.5 font-bold min-w-[120px]">Reporting Time</th>
+                            <th className="p-3.5 font-bold min-w-[180px]">Location</th>
+                            <th className="p-3.5 font-bold min-w-[140px]">Assigned Role</th>
+                            <th className="p-3.5 font-bold min-w-[180px]">Equipment Details</th>
+                            <th className="p-3.5 font-bold min-w-[120px]">Status</th>
+                            <th className="p-3.5 pr-4 font-bold text-center min-w-[120px]">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-850/60 text-zinc-300">
                           {filtered.map((b) => (
-                            <tr key={b.id} className="hover:bg-zinc-900/20 transition-all">
-                              <td className="p-3.5 font-bold text-zinc-100">{b.eventName}</td>
-                              <td className="p-3.5 text-zinc-300">{b.clientName}</td>
-                              <td className="p-3.5 text-zinc-300 font-mono text-[11px]">{b.shootType}</td>
-                              <td className="p-3.5 text-indigo-400 font-mono font-bold text-[11px]">{b.assignedRole}</td>
-                              <td className="p-3.5 font-mono text-zinc-300 font-medium">{b.eventDate}</td>
-                              <td className="p-3.5 font-mono text-zinc-400">{b.eventStartTime}</td>
-                              <td className="p-3.5 font-mono text-zinc-400">{b.eventEndTime}</td>
-                              <td className="p-3.5 font-mono text-zinc-400">{b.reportingDate}</td>
-                              <td className="p-3.5 font-mono text-zinc-400">{b.reportingTime}</td>
-                              <td className="p-3.5 text-zinc-300 max-w-xs truncate" title={b.venue}>
-                                {b.venue}
+                            <tr key={b.id} className="hover:bg-zinc-900/20 transition-all select-text">
+                              {/* 1. Order ID */}
+                              <td className="p-3.5 pl-4 font-mono font-bold text-amber-400 text-xs whitespace-nowrap">
+                                {b.orderId || b.id || '—'}
                               </td>
-                              <td className="p-3.5">
-                                {b.googleMapsLink && b.googleMapsLink !== 'N/A' ? (
-                                  <a 
-                                    href={b.googleMapsLink} 
-                                    target="_blank" 
-                                    referrerPolicy="no-referrer"
-                                    rel="noopener noreferrer" 
-                                    className="text-amber-500 hover:underline font-mono text-[11px] font-bold"
-                                  >
-                                    Maps ↗
-                                  </a>
-                                ) : (
-                                  <span className="text-zinc-650 font-mono">N/A</span>
-                                )}
+
+                              {/* 2. Customer Name */}
+                              <td className="p-3.5 font-bold text-zinc-100 text-xs">
+                                {b.clientName}
                               </td>
-                              <td className="p-3.5">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-zinc-900 text-zinc-450 border border-zinc-800">
-                                  {b.leadStatus}
-                                </span>
+
+                              {/* 3. Event Type */}
+                              <td className="p-3.5 text-zinc-300 font-mono text-[11px]">
+                                {b.eventName || b.shootType}
                               </td>
-                              <td className="p-3.5 font-mono text-amber-400 font-bold text-[11px]">{b.equipmentAssigned}</td>
-                              <td className="p-3.5 text-zinc-300">{b.coordinator}</td>
-                              <td className="p-3.5">
+
+                              {/* 4. Reporting Date */}
+                              <td className="p-3.5 font-mono text-zinc-300 whitespace-nowrap font-medium text-xs">
+                                {b.reportingDate && b.reportingDate !== '—' && b.reportingDate !== 'N/A'
+                                  ? formatDateDDMMYY(b.reportingDate) || b.reportingDate
+                                  : '—'}
+                              </td>
+
+                              {/* 5. Reporting Time */}
+                              <td className="p-3.5 font-mono text-zinc-400 whitespace-nowrap text-xs">
+                                {b.reportingTime && b.reportingTime !== '—' && b.reportingTime !== 'N/A'
+                                  ? formatTime12Hour(b.reportingTime) || b.reportingTime
+                                  : '—'}
+                              </td>
+
+                              {/* 6. Location */}
+                              <td className="p-3.5 text-zinc-300 max-w-xs break-words text-xs" title={b.venue}>
+                                {b.venue || '—'}
+                              </td>
+
+                              {/* 7. Assigned Role */}
+                              <td className="p-3.5 text-indigo-400 font-mono font-bold text-[11px] whitespace-nowrap">
+                                {b.assignedRole}
+                              </td>
+
+                              {/* 8. Equipment Details */}
+                              <td className="p-3.5 font-mono text-amber-400 font-bold text-[11px] max-w-xs break-words">
+                                {b.equipmentAssigned || 'None'}
+                              </td>
+
+                              {/* 9. Status */}
+                              <td className="p-3.5 whitespace-nowrap">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
-                                  b.eventStatus.toLowerCase() === 'completed' || b.eventStatus.toLowerCase() === 'event completed'
+                                  (b.eventStatus || '').toLowerCase() === 'completed' || (b.eventStatus || '').toLowerCase() === 'event completed'
                                     ? 'bg-emerald-500/10 text-emerald-450 border-emerald-500/20'
                                     : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
                                 }`}>
-                                  {b.eventStatus}
+                                  {b.eventStatus || b.bookingStatus || b.leadStatus || 'Active'}
                                 </span>
                               </td>
-                              <td className="p-3.5">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-zinc-900 text-zinc-300 border border-zinc-800">
-                                  {b.bookingStatus}
+
+                              {/* 10. Actions */}
+                              <td className="p-3.5 pr-4 text-center whitespace-nowrap">
+                                <span className="px-2.5 py-1 rounded-lg bg-zinc-850 text-zinc-400 font-mono text-[10px] font-bold border border-zinc-800">
+                                  {b.bookingStatus || 'Assigned'}
                                 </span>
                               </td>
                             </tr>

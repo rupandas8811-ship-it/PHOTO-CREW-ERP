@@ -13,15 +13,51 @@ export interface EventCategoryCellProps {
 export interface CategoryEventItem {
   id: string;
   eventType: string;
+  secondaryValue: string;
   eventName: string;
   eventDate: string;
   eventTime: string;
   timestamp: number;
 }
 
+/**
+ * Strips null, undefined, "undefined", "null", "N/A", "—" and cleans string.
+ * Guarantees that the literal text "undefined" is NEVER returned.
+ */
+export const cleanText = (str?: any): string => {
+  if (str === null || str === undefined) return '';
+  const s = String(str).trim();
+  if (
+    !s ||
+    s.toLowerCase() === 'undefined' ||
+    s.toLowerCase() === 'null' ||
+    s.toLowerCase() === 'n/a' ||
+    s.toLowerCase() === 'na' ||
+    s.toLowerCase() === '—' ||
+    s.toLowerCase() === '-' ||
+    s.toLowerCase() === 'none'
+  ) {
+    return '';
+  }
+  // Strip out any accidental "undefined" or "null" substring
+  const cleaned = s.replace(/\bundefined\b/gi, '').replace(/\bnull\b/gi, '').trim();
+  if (
+    !cleaned ||
+    cleaned.toLowerCase() === 'n/a' ||
+    cleaned.toLowerCase() === 'na' ||
+    cleaned.toLowerCase() === '—' ||
+    cleaned.toLowerCase() === '-' ||
+    cleaned.toLowerCase() === 'none'
+  ) {
+    return '';
+  }
+  return cleaned;
+};
+
 export const getEventCategoryDateTimeTimestamp = (dateStr: string, timeStr?: string): number => {
-  if (!dateStr || !dateStr.trim()) return 0;
-  const s = dateStr.trim();
+  const cleanDate = cleanText(dateStr);
+  if (!cleanDate) return 0;
+  const s = cleanDate;
   let year = 1970;
   let month = 0;
   let day = 1;
@@ -35,7 +71,7 @@ export const getEventCategoryDateTimeTimestamp = (dateStr: string, timeStr?: str
     const parts = s.split(/[-/]/);
     year = parseInt(parts[0], 10);
     month = parseInt(parts[1], 10) - 1;
-    year = parseInt(parts[2], 10);
+    day = parseInt(parts[2], 10);
   } else {
     const d = new Date(s);
     if (!isNaN(d.getTime())) {
@@ -47,8 +83,9 @@ export const getEventCategoryDateTimeTimestamp = (dateStr: string, timeStr?: str
 
   let hours = 0;
   let minutes = 0;
-  if (timeStr && timeStr.trim()) {
-    const t = timeStr.trim().toUpperCase();
+  const cleanTimeStr = cleanText(timeStr);
+  if (cleanTimeStr) {
+    const t = cleanTimeStr.toUpperCase();
     const isPM = t.includes('PM');
     const isAM = t.includes('AM');
     const cleanTime = t.replace(/(AM|PM)/g, '').trim();
@@ -67,33 +104,86 @@ export const getEventCategoryDateTimeTimestamp = (dateStr: string, timeStr?: str
   return isNaN(combinedDate.getTime()) ? 0 : combinedDate.getTime();
 };
 
-export const formatCategoryDisplayDate = (dateStr: string): string => {
-  if (!dateStr || !dateStr.trim() || dateStr === '—') return '—';
-  const s = dateStr.trim();
+/**
+ * Formats date into clean "MMM D" (e.g. "Oct 3").
+ * If the date is missing, null, undefined, or invalid, returns empty string "".
+ * NEVER returns "undefined", "null", "N/A", or "—".
+ */
+export const formatCategoryDisplayDate = (dateStr?: any): string => {
+  if (dateStr === null || dateStr === undefined) return '';
+  const clean = cleanText(dateStr);
+  if (!clean) return '';
+
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
-  let year: number, month: number, day: number;
-  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(s)) {
-    const parts = s.split(/[-/]/);
+  let month: number | null = null;
+  let day: number | null = null;
+
+  // DD-MM-YYYY or DD/MM/YYYY
+  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(clean)) {
+    const parts = clean.split(/[-/]/);
     day = parseInt(parts[0], 10);
     month = parseInt(parts[1], 10) - 1;
-    year = parseInt(parts[2], 10);
-  } else if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(s)) {
-    const parts = s.split(/[-/]/);
-    year = parseInt(parts[0], 10);
+  }
+  // YYYY-MM-DD or YYYY/MM/DD
+  else if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(clean)) {
+    const parts = clean.split(/[-/]/);
+    day = parseInt(parts[2], 10);
     month = parseInt(parts[1], 10) - 1;
-    year = parseInt(parts[2], 10);
-  } else {
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return dateStr;
-    year = d.getFullYear();
-    month = d.getMonth();
-    day = d.getDate();
+  }
+  // Check if already in Month Day format, e.g. "Oct 3" or "Oct 03"
+  else if (/^([a-zA-Z]{3,9})\s+(\d{1,2})$/i.test(clean)) {
+    const m = clean.match(/^([a-zA-Z]{3,9})\s+(\d{1,2})$/i);
+    if (m) {
+      const mStr = m[1].toLowerCase().slice(0, 3);
+      const mIdx = months.findIndex(mo => mo.toLowerCase() === mStr);
+      if (mIdx !== -1) {
+        month = mIdx;
+        day = parseInt(m[2], 10);
+      }
+    }
+  }
+  // Try parsing with standard Date
+  else {
+    const d = new Date(clean);
+    if (!isNaN(d.getTime())) {
+      month = d.getMonth();
+      day = d.getDate();
+    }
   }
 
-  const dayStr = day < 10 ? `0${day}` : `${day}`;
-  const monthStr = months[month] || '';
-  return `${dayStr} ${monthStr} ${year}`;
+  if (month !== null && day !== null && month >= 0 && month < 12 && !isNaN(day)) {
+    const monthStr = months[month] || '';
+    return `${monthStr} ${day}`;
+  }
+
+  // Fallback: If not parsed into month/day, ensure it has NO "undefined" or "null"
+  return cleanText(clean);
+};
+
+const extractEventInfo = (ev: any, lead: Lead, idx: number, linkedOrder?: any): CategoryEventItem => {
+  // 1. Resolve Category / Event Type only (never use Event Name for category)
+  const rawType = ev?.event_type || ev?.event_category || ev?.eventType || ev?.custom_event_type || lead?.event_type || lead?.custom_event_type || linkedOrder?.event_type || 'Event';
+  const cleanType = cleanText(rawType) || 'Event';
+
+  // 2. Resolve Date & Time
+  const rawDate = ev?.event_date || ev?.Event_Date || ev?.date || lead?.event_date || linkedOrder?.event_date || '';
+  const cleanDate = cleanText(rawDate);
+
+  const rawTime = ev?.event_start_time || ev?.event_time || ev?.Event_Start_Time || ev?.time || lead?.event_time || linkedOrder?.event_time || '';
+  const cleanTime = cleanText(rawTime);
+
+  const timestamp = getEventCategoryDateTimeTimestamp(cleanDate, cleanTime);
+
+  return {
+    id: ev?.id || ev?.event_id || `evt-${idx}`,
+    eventType: cleanType,
+    secondaryValue: '',
+    eventName: cleanType,
+    eventDate: cleanDate,
+    eventTime: cleanTime,
+    timestamp
+  };
 };
 
 export const getSortedEventsForCategory = (lead: Lead, orders?: any[]): CategoryEventItem[] => {
@@ -124,22 +214,9 @@ export const getSortedEventsForCategory = (lead: Lead, orders?: any[]): Category
   }
 
   if (rawEventsList.length > 0) {
-    const list: CategoryEventItem[] = rawEventsList.map((ev: any, idx: number) => {
-      const type = (ev.event_type || ev.event_category || ev.eventType || ev.custom_event_type || ev.custom_event_name || ev.event_name || lead.event_type || 'Event').trim();
-      const name = (ev.event_name || ev.custom_event_name || ev.event_type || `Event ${idx + 1}`).trim();
-      const dateStr = (ev.event_date || ev.Event_Date || ev.date || lead.event_date || '').trim();
-      const timeStr = (ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || lead.event_time || '').trim();
-      const timestamp = getEventCategoryDateTimeTimestamp(dateStr, timeStr);
-
-      return {
-        id: ev.id || ev.event_id || `evt-${idx}`,
-        eventType: type || 'Event',
-        eventName: name || 'Event',
-        eventDate: dateStr,
-        eventTime: timeStr,
-        timestamp
-      };
-    });
+    const list: CategoryEventItem[] = rawEventsList.map((ev: any, idx: number) => 
+      extractEventInfo(ev, lead, idx, linkedOrder)
+    );
 
     // Sort by MOST RECENT event date + time FIRST (descending timestamp: latest/furthest first)
     list.sort((a, b) => {
@@ -155,20 +232,7 @@ export const getSortedEventsForCategory = (lead: Lead, orders?: any[]): Category
   }
 
   // Single fallback event
-  const singleType = (lead.event_type || lead.custom_event_type || linkedOrder?.event_type || 'Event').trim();
-  const singleName = (lead.event_name || lead.custom_event_name || lead.event_type || 'Event').trim();
-  const singleDate = (lead.event_date || linkedOrder?.event_date || '').trim();
-  const singleTime = (lead.event_time || linkedOrder?.event_time || '').trim();
-  const timestamp = getEventCategoryDateTimeTimestamp(singleDate, singleTime);
-
-  return [{
-    id: lead.event_id || lead.lead_id || 'evt-0',
-    eventType: singleType || 'Event',
-    eventName: singleName || 'Event',
-    eventDate: singleDate,
-    eventTime: singleTime,
-    timestamp
-  }];
+  return [extractEventInfo(null, lead, 0, linkedOrder)];
 };
 
 export const EventCategoryCell: React.FC<EventCategoryCellProps> = ({ lead, orders, filterEventDateOption }) => {
@@ -193,9 +257,13 @@ export const EventCategoryCell: React.FC<EventCategoryCellProps> = ({ lead, orde
   const targetIndex = (filterEventDateOption === 'last_event' && events.length >= 2) ? 1 : 0;
   const targetEvent = events[targetIndex] || events[0];
 
-  const displayedType = targetEvent?.eventType || 'Event';
-  const displayedDate = targetEvent?.eventDate || '';
+  const displayedType = cleanText(targetEvent?.eventType) || 'Event';
+  const formattedDate = formatCategoryDisplayDate(targetEvent?.eventDate);
+
   const additionalCount = events.length > 1 ? events.length - 1 : 0;
+
+  // Below the Event Category, show ONLY the Event Date. Remove Event Name completely from this column.
+  const subLineText = cleanText(formattedDate);
 
   const linkedOrder = orders?.find((o: any) => 
     o.lead_id === lead.lead_id || 
@@ -203,7 +271,7 @@ export const EventCategoryCell: React.FC<EventCategoryCellProps> = ({ lead, orde
     (lead.order_id && (o.order_id === lead.order_id || o.lead_id === lead.order_id)) ||
     ((lead as any).orders && (o.order_id === (lead as any).orders || o.lead_id === (lead as any).orders))
   );
-  const displayOrderId = linkedOrder?.order_id || lead.order_id || (lead as any).orders || lead.lead_id || 'N/A';
+  const displayOrderId = cleanText(linkedOrder?.order_id || lead.order_id || (lead as any).orders || lead.lead_id) || 'N/A';
 
   const updatePosition = () => {
     if (!buttonRef.current) return;
@@ -286,28 +354,30 @@ export const EventCategoryCell: React.FC<EventCategoryCellProps> = ({ lead, orde
     };
   }, [isOpen]);
 
+  const cellTitle = subLineText ? `${displayedType} — ${subLineText}` : displayedType;
+
   if (additionalCount === 0) {
     return (
-      <div className="flex flex-col items-start gap-0.5 text-left select-text">
+      <div className="flex flex-col items-start gap-0.5 text-left select-text" title={cellTitle}>
         <span 
           className="text-zinc-100 font-semibold text-xs leading-snug truncate max-w-[140px]"
-          title={displayedType}
         >
           {displayedType}
         </span>
-        <span className="text-zinc-400 font-mono text-[11px] leading-tight">
-          {formatCategoryDisplayDate(displayedDate)}
-        </span>
+        {subLineText ? (
+          <span className="text-zinc-400 font-mono text-[11px] leading-tight truncate max-w-[140px]">
+            {subLineText}
+          </span>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-start gap-0.5 text-left select-text">
+    <div className="flex flex-col items-start gap-0.5 text-left select-text" title={cellTitle}>
       <div className="flex items-center gap-1.5">
         <span 
           className="text-zinc-100 font-semibold text-xs leading-snug truncate max-w-[130px]"
-          title={displayedType}
         >
           {displayedType}
         </span>
@@ -326,9 +396,11 @@ export const EventCategoryCell: React.FC<EventCategoryCellProps> = ({ lead, orde
         </button>
       </div>
 
-      <span className="text-zinc-400 font-mono text-[11px] leading-tight">
-        {formatCategoryDisplayDate(displayedDate)}
-      </span>
+      {subLineText ? (
+        <span className="text-zinc-400 font-mono text-[11px] leading-tight truncate max-w-[130px]">
+          {subLineText}
+        </span>
+      ) : null}
 
       {isOpen && coords && createPortal(
         <div
@@ -365,7 +437,9 @@ export const EventCategoryCell: React.FC<EventCategoryCellProps> = ({ lead, orde
           {/* List of exact saved Event Types in date sequence */}
           <div className="p-2 space-y-2 overflow-y-auto max-h-[260px]">
             {events.map((ev, idx) => {
-              const formattedDate = formatCategoryDisplayDate(ev.eventDate);
+              const evType = cleanText(ev.eventType) || 'Event';
+              const evDate = formatCategoryDisplayDate(ev.eventDate);
+
               return (
                 <div
                   key={ev.id || idx}
@@ -376,16 +450,16 @@ export const EventCategoryCell: React.FC<EventCategoryCellProps> = ({ lead, orde
                       {idx + 1}
                     </span>
                     <p className="text-xs font-bold text-white leading-snug">
-                      {ev.eventType}
+                      {evType}
                     </p>
                   </div>
 
-                  {formattedDate !== '—' && (
+                  {evDate ? (
                     <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-300 pl-6">
                       <Calendar className="w-3 h-3 text-amber-400/80 shrink-0" />
-                      <span>{formattedDate}</span>
+                      <span>{evDate}</span>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               );
             })}

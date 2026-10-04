@@ -31,10 +31,10 @@ import {
   OwnerStaffPerformanceReport
 } from './components/OwnerModule';
 import { AppLogo } from './components/AppLogo';
-import { initGlobalModalViewportHandler, getAllMatchingOrderIds } from './utils';
+import { initGlobalModalViewportHandler, getAllMatchingOrderIds, calculateStaffActiveBookingsCount } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Briefcase, Camera, Video, Landmark, Shield, Users, Search, Info, Target, Sparkles, Menu, RefreshCw, Activity, Bell,
+  Briefcase, Camera, Video, Landmark, Shield, Users, User, Search, Info, Target, Sparkles, Menu, RefreshCw, Activity, Bell,
   UserPlus, Truck, Layers, CheckSquare, Clock, Play, BarChart3, LogOut, Calendar, TrendingUp, DollarSign, FileText, Package,
   LayoutDashboard, ShieldCheck
 } from 'lucide-react';
@@ -64,6 +64,10 @@ const MainAppContent: React.FC = () => {
   const { 
     currentUser, 
     currentRole, 
+    staff = [],
+    staffAssignments = [],
+    leads = [],
+    operations = [],
     resetAllData, 
     refreshData, 
     notifications, 
@@ -524,7 +528,23 @@ const MainAppContent: React.FC = () => {
   const writeStatus = getWriteStatus();
 
   // Helper to render sidebar items to avoid visual design duplication
-  const renderSidebarContent = () => (
+  const renderSidebarContent = () => {
+    const loggedInStaffMember = (staff || []).find((s: any) => 
+      (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) || 
+      (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+    const staffDisplayName = loggedInStaffMember?.name || currentUser?.name || currentUser?.email || 'Staff';
+    const staffDisplayMobile = loggedInStaffMember?.mobile || currentUser?.mobile || '';
+    const assignedTasksCount = calculateStaffActiveBookingsCount(
+      staffDisplayName,
+      staffAssignments,
+      leads,
+      orders,
+      operations
+    );
+
+    return (
     <aside className="w-full space-y-4">
       {/* Sidebar Brand Logo Header */}
       <div className="p-3 flex flex-col items-center justify-center relative border-b border-zinc-900/40 pb-5">
@@ -541,7 +561,7 @@ const MainAppContent: React.FC = () => {
       </div>
 
       {(currentRole === 'Operation Staff' || currentRole === 'Production Staff') ? (
-        <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative animate-in fade-in duration-300">
+        <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-3.5 shadow-xl relative animate-in fade-in duration-300">
           <div className="flex items-center justify-between pb-1 border-b border-zinc-850">
             <h3 className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-zinc-400 font-mono flex items-center gap-1.5">
               <Briefcase className="w-3.5 h-3.5 text-amber-500" />
@@ -549,6 +569,21 @@ const MainAppContent: React.FC = () => {
             </h3>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
+
+          {/* User Name on Side Menu */}
+          <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-3 flex items-center gap-3 shadow-inner">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 font-mono font-bold">
+              <User className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <span className="text-[9px] font-mono text-zinc-500 uppercase block font-semibold leading-tight">Logged in as</span>
+              <span className="text-xs font-bold text-amber-400 font-mono block truncate mt-0.5">{staffDisplayName}</span>
+              {staffDisplayMobile && (
+                <span className="text-[10px] font-mono text-zinc-400 block truncate leading-tight mt-0.5">({staffDisplayMobile})</span>
+              )}
+            </div>
+          </div>
+
           <nav className="space-y-1.5">
             <button
               onClick={() => handleTabSelect('staff_dashboard')}
@@ -565,6 +600,58 @@ const MainAppContent: React.FC = () => {
               <ChevronRightIcon active={activeTab === 'staff_dashboard'} />
             </button>
           </nav>
+
+          {/* Operations Staff & Active Tasks cards inside the side menu underneath menu items */}
+          <div className="pt-2 border-t border-zinc-850/80 space-y-2">
+            <div className="text-[9px] font-mono uppercase tracking-[0.15em] text-zinc-500 font-extrabold px-1">
+              Terminal Access & Activity
+            </div>
+
+            {/* Role Card */}
+            <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-3 flex items-center justify-between gap-3 shadow-inner">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase block font-semibold leading-none">Role</span>
+                  <span className="text-xs font-bold text-white font-mono block mt-1 tracking-wide">
+                    {currentRole}
+                  </span>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
+                Active
+              </span>
+            </div>
+
+            {/* Active Tasks Card */}
+            <button
+              onClick={() => {
+                handleTabSelect('staff_dashboard');
+                if (window.innerWidth < 1024) setSidebarOpen(false);
+              }}
+              className="w-full bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-amber-500/30 rounded-xl p-3 flex items-center justify-between gap-3 shadow-inner transition-all text-left cursor-pointer group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
+                  <CheckSquare className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[9px] font-mono text-zinc-500 uppercase block font-semibold leading-none">Active Tasks</span>
+                  <span className="text-xs font-bold text-zinc-200 group-hover:text-white font-mono block mt-1">
+                    Assigned Orders
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 shrink-0 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs font-black text-amber-400 font-mono">
+                  {assignedTasksCount} Active
+                </span>
+              </div>
+            </button>
+          </div>
         </div>
       ) : activeTab === 'operations' || currentRole === 'Operations Team' ? (
         <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative animate-in fade-in duration-300">
@@ -916,7 +1003,8 @@ const MainAppContent: React.FC = () => {
         </div>
       )}
     </aside>
-  );
+    );
+  };
 
   return (
     <>

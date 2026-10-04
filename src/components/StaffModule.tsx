@@ -143,7 +143,7 @@ const StaffActionDropdown: React.FC<{
 
   // Add Note option
   actionOptions.push({
-    label: 'Add Note',
+    label: 'VIEW/ADD NOTE',
     onClick: () => {
       onAddNote();
       setIsOpen(false);
@@ -592,18 +592,9 @@ const StaffEventDetailsCell = ({ b }: { b: any }) => {
   return (
     <div className="relative">
       <div className="font-bold text-zinc-100">{b.eventName}</div>
-      <div className="text-[11px] text-zinc-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
-        <span>{formatDateDDMMYY(b.eventDate)}</span>
-        {b.eventStartTime && b.eventStartTime !== 'N/A' && (
-          <>
-            <span className="text-zinc-600">•</span>
-            <span className="text-zinc-400">{formatTime12Hour(b.eventStartTime)}</span>
-          </>
-        )}
-      </div>
     </div>
   );
-}
+};
 
 const StaffEquipmentDetailsCell = ({ b, proofStatus }: { b: any, proofStatus: any }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -1004,6 +995,11 @@ export const StaffModule: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Calendar View & Navigation state
+  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [calendarModalEvents, setCalendarModalEvents] = useState<any[]>([]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -1178,8 +1174,8 @@ export const StaffModule: React.FC = () => {
           eventStartTime: ev?.event_start_time || lead?.event_time || 'N/A',
           eventEndDate: ev?.event_end_date || ev?.event_date || lead?.event_date || 'N/A',
           eventEndTime: ev?.event_end_time || 'N/A',
-          reportingDate: ev?.reporting_date || ev?.event_date || lead?.Reporting_date || lead?.event_date || 'N/A',
-          reportingTime: ev?.reporting_time || lead?.reporting_time || 'N/A',
+          reportingDate: ev?.Reporting_date || ev?.reporting_date || (sa as any)?.Reporting_date || (sa as any)?.reporting_date || lead?.Reporting_date || lead?.reporting_date || 'N/A',
+          reportingTime: ev?.reporting_time || ev?.Reporting_time || (sa as any)?.reporting_time || (sa as any)?.Reporting_time || op?.reporting_time || lead?.reporting_time || 'N/A',
           venue: ev?.event_location || lead?.event_location || 'N/A',
           googleMapsLink: ev?.google_maps_link || 'N/A',
           guestPax: ev?.guest_pax || (lead as any)?.guest_pax || 'N/A',
@@ -1272,6 +1268,8 @@ export const StaffModule: React.FC = () => {
                 leadId: lead.lead_id,
                 eventId: ev.id || 'ev',
                 eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
+                staffName: staffName,
+                assignedStaff: staffName,
                 customerName: lead.customer_name || order?.customer_name || 'N/A',
                 customerMobile: lead.mobile || order?.mobile || 'N/A',
                 customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
@@ -1282,8 +1280,8 @@ export const StaffModule: React.FC = () => {
                 eventStartTime: ev.event_start_time || lead.event_time || 'N/A',
                 eventEndDate: ev.event_end_date || ev.event_date || lead.event_date || 'N/A',
                 eventEndTime: ev.event_end_time || 'N/A',
-                reportingDate: ev.reporting_date || ev.event_date || lead.Reporting_date || lead.event_date || 'N/A',
-                reportingTime: ev.reporting_time || lead.reporting_time || 'N/A',
+                reportingDate: ev.Reporting_date || ev.reporting_date || lead.Reporting_date || lead.reporting_date || '—',
+                reportingTime: ev.reporting_time || ev.Reporting_time || lead.reporting_time || '—',
                 venue: ev.event_location || lead.event_location || 'N/A',
                 googleMapsLink: ev.google_maps_link || ((lead.events && lead.events.length === 1) ? (lead.google_maps_link || 'N/A') : 'N/A'),
                 guestPax: ev.guest_pax || (lead as any).guest_pax || 'N/A',
@@ -1365,6 +1363,8 @@ export const StaffModule: React.FC = () => {
               leadId: lead.lead_id,
               eventId: 'gen',
               eventName: lead.event_name || lead.shoot_type || 'General Event',
+              staffName: staffName,
+              assignedStaff: staffName,
               customerName: lead.customer_name || order?.customer_name || 'N/A',
               customerMobile: lead.mobile || order?.mobile || 'N/A',
               customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
@@ -1375,8 +1375,8 @@ export const StaffModule: React.FC = () => {
               eventStartTime: lead.event_time || 'N/A',
               eventEndDate: lead.event_end_date || lead.event_date || 'N/A',
               eventEndTime: lead.event_end_time || 'N/A',
-              reportingDate: lead.Reporting_date || lead.event_date || 'N/A',
-              reportingTime: lead.reporting_time || 'N/A',
+              reportingDate: lead.Reporting_date || lead.reporting_date || '—',
+              reportingTime: lead.reporting_time || (lead as any).Reporting_time || '—',
               venue: lead.event_location || 'N/A',
               googleMapsLink: lead.google_maps_link || 'N/A',
               guestPax: (lead as any).guest_pax || 'N/A',
@@ -1511,6 +1511,7 @@ export const StaffModule: React.FC = () => {
   const closePhotoModal = () => {
     setPhotoModalData(null);
     setModalPhotos({});
+    setModalPhotoTimestamps({});
     setModalRawFootageLink('');
     setSubmitError(null);
     setIsSubmitting(false);
@@ -1899,9 +1900,7 @@ export const StaffModule: React.FC = () => {
         setIsSubmitting(true);
         const timestamp = new Date().toISOString();
 
-        // BOTH IMAGES PRESENT or EVENT START IMAGE
-        if ((hasEquipment && hasAssetColl && hasEventStart) || (!hasEquipment && hasEventStart)) {
-          const allProofsToSave: EquipmentProofItem[] = [];
+        const allProofsToSave: EquipmentProofItem[] = [];
 
           // A. Save / verify Asset Images
           for (const itemKey of assetKeys) {
@@ -2208,7 +2207,6 @@ export const StaffModule: React.FC = () => {
           } catch (e) {
             console.warn('refreshData error ignored:', e);
           }
-        }
       } catch (error: any) {
         console.error('Error updating Event Start status:', error);
         setSubmitError({
@@ -2800,10 +2798,6 @@ export const StaffModule: React.FC = () => {
       document.body.style.overflow = '';
     }
   };
-  // Calendar View & Navigation state
-  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks'>('calendar');
-  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
-  const [calendarModalEvents, setCalendarModalEvents] = useState<any[]>([]);
 
   const handlePrevMonth = () => {
     setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
@@ -2888,23 +2882,6 @@ export const StaffModule: React.FC = () => {
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-950 border border-zinc-800 rounded-2xl md:rounded-3xl p-3.5 sm:p-5 md:p-6 flex flex-row justify-between items-center gap-2 md:gap-4 shadow-xl">
-        <div className="min-w-0 flex-1">
-          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 sm:px-3 sm:py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider mb-1 sm:mb-2">
-            <User className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" /> Operative Portal
-          </div>
-          <h2 className="text-base sm:text-xl md:text-3xl font-black text-white uppercase tracking-tight leading-tight">Operation Staff Dashboard</h2>
-          <p className="text-zinc-400 font-mono text-[10px] sm:text-xs mt-0.5 sm:mt-1 truncate">Logged in as: <span className="text-amber-400 font-bold">{staffName}</span> {staffMobile && `(${staffMobile})`}</p>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          <div className="bg-zinc-800/80 border border-zinc-700/60 rounded-xl md:rounded-2xl px-2.5 py-1 sm:px-4 sm:py-2 text-right">
-            <span className="text-[9px] sm:text-[10px] font-mono text-zinc-400 uppercase block leading-none">Assigned Tasks</span>
-            <span className="text-xs sm:text-base md:text-xl font-black text-white leading-tight block mt-0.5">{activeBookings.length} Active</span>
-          </div>
-        </div>
-      </div>
-
       {/* Navigation View Switcher */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 md:gap-4 bg-zinc-900/90 border border-zinc-800 p-1.5 md:p-2 rounded-xl md:rounded-2xl shadow-lg">
         <div className="grid grid-cols-2 gap-1.5 sm:flex sm:items-center sm:gap-2 w-full sm:w-auto">
@@ -2917,7 +2894,10 @@ export const StaffModule: React.FC = () => {
             }`}
           >
             <Calendar className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
-            <span className="truncate">My Event Calendar</span>
+            <span className="whitespace-nowrap">
+              <span className="hidden sm:inline">My Event Calendar</span>
+              <span className="sm:hidden">Calendar</span>
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('tasks')}
@@ -2928,7 +2908,10 @@ export const StaffModule: React.FC = () => {
             }`}
           >
             <Briefcase className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
-            <span className="truncate">Assigned Orders List ({activeBookings.length})</span>
+            <span className="whitespace-nowrap">
+              <span className="hidden sm:inline">Assigned Orders List</span>
+              <span className="sm:hidden">Assigned Orders</span> ({activeBookings.length})
+            </span>
           </button>
         </div>
 
@@ -2941,34 +2924,39 @@ export const StaffModule: React.FC = () => {
       {activeTab === 'calendar' && (
         <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl p-3.5 sm:p-5 md:p-6 space-y-4 md:space-y-6">
           {/* Calendar Header Navigation */}
-          <div className="flex justify-end items-center gap-2.5 md:gap-4 border-b border-zinc-800 pb-3 md:pb-5">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+            <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-900 rounded-xl px-3 py-2 select-none shadow-sm flex-1 sm:flex-none">
               <button
-                onClick={handleToday}
-                className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-bold font-mono rounded-xl border border-zinc-700 transition-colors"
+                type="button"
+                onClick={handlePrevMonth}
+                className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-all cursor-pointer active:scale-90 shrink-0"
+                aria-label="Previous Month"
               >
-                Today
+                <ChevronLeft className="w-4 h-4" />
               </button>
-              <div className="flex items-center gap-1 bg-zinc-950 border border-zinc-800 rounded-xl p-1">
-                <button
-                  onClick={handlePrevMonth}
-                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-                  title="Previous Month"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-sm font-extrabold text-white font-mono px-3">
-                  {monthName} {year}
-                </span>
-                <button
-                  onClick={handleNextMonth}
-                  className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition-colors"
-                  title="Next Month"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+              
+              <h2 className="text-sm font-mono font-bold tracking-wider text-center flex-1 px-3 whitespace-nowrap">
+                <span className="text-yellow-500 font-extrabold">{monthName}</span>
+                <span className="text-zinc-200 font-medium ml-1.5">{year}</span>
+              </h2>
+
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-all cursor-pointer active:scale-90 shrink-0"
+                aria-label="Next Month"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
+
+            <button
+              type="button"
+              onClick={handleToday}
+              className="px-4 py-2.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 rounded-xl text-xs font-mono font-bold text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm shrink-0 whitespace-nowrap h-10 flex items-center justify-center"
+            >
+              Today
+            </button>
           </div>
 
           {/* Days of week header */}
@@ -3022,11 +3010,11 @@ export const StaffModule: React.FC = () => {
                   {cell.isCurrentMonth && hasEvents && (
                     <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0">
                       {cell.events.map((ev, eIdx) => {
-                        const displayName = ev.eventName || ev.orderId || 'Event';
+                        const displayName = ev.customerName || ev.client_name || 'Client';
                         return (
                           <div
                             key={`${ev.key || 'ev'}_${eIdx}`}
-                            className="w-full truncate text-[8px] sm:text-[9px] leading-tight px-1 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 font-medium text-left"
+                            className="w-full truncate text-[8px] sm:text-[9px] leading-tight px-1 py-0.5 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 font-medium text-left cursor-pointer hover:text-white hover:border-zinc-700"
                             title={displayName}
                           >
                             {displayName}
@@ -3047,7 +3035,7 @@ export const StaffModule: React.FC = () => {
               onClick={() => setCalendarModalDate(null)}
             >
               <div 
-                className="bg-zinc-900 border border-zinc-800 w-full max-w-4xl rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
+                className="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between p-4 md:p-6 border-b border-zinc-800/80 shrink-0">
@@ -3056,12 +3044,12 @@ export const StaffModule: React.FC = () => {
                       EVENT DETAILS
                     </span>
                     <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5">
-                      {calendarModalDate}
+                      {formatDateDDMMYY(calendarModalDate) || calendarModalDate}
                     </h4>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono text-zinc-400">
-                      {calendarModalEvents.length} Event(s) Scheduled
+                    <span className="text-xs font-mono font-bold px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg select-none">
+                      {calendarModalEvents.length} {calendarModalEvents.length === 1 ? 'EVENT' : 'EVENTS'}
                     </span>
                     <button
                       onClick={() => setCalendarModalDate(null)}
@@ -3072,55 +3060,301 @@ export const StaffModule: React.FC = () => {
                   </div>
                 </div>
                 
-                <div className="p-4 md:p-6 overflow-y-auto">
+                <div className="p-4 md:p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
                   {calendarModalEvents.length === 0 ? (
                     <div className="p-6 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
                       No events assigned on {calendarModalDate}.
                     </div>
                   ) : (
-                    <div className="space-y-3">
-                      <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
-                        <table className="w-full text-left border-collapse min-w-[700px]">
+                    <div className="space-y-4">
+                      {/* DESKTOP & TABLET: Full Table View */}
+                      <div className="hidden md:block overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
+                        <table className="w-full text-left border-collapse min-w-[900px]">
                           <thead>
-                            <tr className="border-b border-zinc-800 bg-zinc-950/90 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
-                              <th className="p-3.5 pl-4">Event Name</th>
-                              <th className="p-3.5">Event Date</th>
-                              <th className="p-3.5">Event Time</th>
-                              <th className="p-3.5">Customer</th>
-                              <th className="p-3.5">Status</th>
-                              <th className="p-3.5 pr-4">Target Delivery Date</th>
+                            <tr className="border-b border-zinc-850 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
+                              <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[120px]">Order ID</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[170px]">Customer Name</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[150px]">Event Type</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Reporting Date</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[120px]">Reporting Time</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[170px]">Location</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[150px]">Assigned Role</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Equipment Details</th>
+                              <th className="p-3.5 text-left whitespace-nowrap min-w-[120px]">Status</th>
+                              <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[130px]">Actions</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-800/60 text-xs font-sans">
-                            {calendarModalEvents.map((ev, idx) => (
-                              <tr key={`${ev.key || 'calev'}_${idx}`} className="bg-zinc-950/30 select-text hover:bg-zinc-900/40 transition-colors">
-                                <td className="p-3.5 pl-4 font-bold text-zinc-100">
-                                  {ev.eventName || 'Photography Event'}
-                                </td>
-                                <td className="p-3.5 font-mono text-zinc-300">
-                                  {formatDateDMY(ev.eventDate || calendarModalDate)}
-                                </td>
-                                <td className="p-3.5 font-mono text-zinc-300">
-                                  {formatTime12Hour(ev.eventStartTime || '10:00 AM')}
-                                </td>
-                                <td className="p-3.5 text-zinc-200 font-medium">
-                                  {ev.customerName || '—'}
-                                </td>
-                                <td className="p-3.5">
-                                  <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
-                                    {ev.status || 'Active'}
-                                  </span>
-                                </td>
-                                <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
-                                  {formatDateDMY(ev.targetDeliveryDate || ev.delivery_target_date || '—')}
-                                </td>
-                              </tr>
-                            ))}
+                          <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
+                            {calendarModalEvents.map((ev, idx) => {
+                              const orderDisplayId = ev.orderId || ev.leadId || '—';
+                              const custName = ev.customerName || '—';
+                              const evType = ev.eventName || ev.shootType || 'Event';
+                              const repDate = ev.reportingDate && ev.reportingDate !== 'N/A' && ev.reportingDate !== '—'
+                                ? formatDateDDMMYY(ev.reportingDate) || ev.reportingDate
+                                : '—';
+                              const repTime = ev.reportingTime && ev.reportingTime !== 'N/A' && ev.reportingTime !== '—'
+                                ? formatTime12Hour(ev.reportingTime) || ev.reportingTime
+                                : '—';
+                              const locationVal = ev.location || ev.venue || ev.eventLocation || '—';
+                              const assignedRole = ev.assignedRole || 'Not assigned';
+                              const eqList = Array.isArray(ev.equipmentItems) ? ev.equipmentItems : [];
+                              const status = ev.taskStatus || ev.status || 'Confirmed';
+
+                              return (
+                                <tr key={`dt_${ev.key || 'calev'}_${idx}`} className="bg-zinc-950/30 hover:bg-zinc-900/40 transition-colors select-text">
+                                  {/* 1. Order ID */}
+                                  <td className="p-3.5 pl-4 align-middle min-w-[120px]">
+                                    <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
+                                      {orderDisplayId}
+                                    </span>
+                                  </td>
+
+                                  {/* 2. Customer Name */}
+                                  <td className="p-3.5 align-middle min-w-[170px]">
+                                    <div className="font-bold text-white text-xs leading-snug break-words max-w-[220px]">
+                                      {custName}
+                                    </div>
+                                  </td>
+
+                                  {/* 3. Event Type */}
+                                  <td className="p-3.5 align-middle min-w-[150px]">
+                                    <div className="text-zinc-200 text-xs leading-snug">
+                                      {evType}
+                                    </div>
+                                  </td>
+
+                                  {/* 4. Reporting Date */}
+                                  <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
+                                    <span className="font-mono text-zinc-200 text-xs font-medium">
+                                      {repDate}
+                                    </span>
+                                  </td>
+
+                                  {/* 5. Reporting Time */}
+                                  <td className="p-3.5 align-middle whitespace-nowrap min-w-[120px]">
+                                    <span className="font-mono text-zinc-200 text-xs font-medium">
+                                      {repTime}
+                                    </span>
+                                  </td>
+
+                                  {/* 6. Location */}
+                                  <td className="p-3.5 align-middle min-w-[170px]">
+                                    <div className="text-zinc-200 text-xs leading-snug break-words max-w-[220px]">
+                                      {locationVal}
+                                    </div>
+                                  </td>
+
+                                  {/* 7. Assigned Role */}
+                                  <td className="p-3.5 align-middle min-w-[150px]">
+                                    <div className="text-zinc-200 text-xs leading-snug">
+                                      {assignedRole}
+                                    </div>
+                                  </td>
+
+                                  {/* 8. Equipment Details */}
+                                  <td className="p-3.5 align-middle min-w-[180px]">
+                                    {eqList.length > 0 ? (
+                                      <div className="space-y-0.5 text-xs text-zinc-200 font-medium">
+                                        {eqList.map((eq: any, i: number) => {
+                                          const name = typeof eq === 'string' ? eq : (eq.name || eq.equipment_name || 'Equipment');
+                                          return <div key={i} className="break-words">{name}</div>;
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <span className="text-zinc-500 italic text-xs">No equipment assigned</span>
+                                    )}
+                                  </td>
+
+                                  {/* 9. Status */}
+                                  <td className="p-3.5 align-middle min-w-[120px]">
+                                    <span className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 leading-tight text-center">
+                                      {status}
+                                    </span>
+                                  </td>
+
+                                  {/* 10. Actions */}
+                                  <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[130px]">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCalendarModalDate(null);
+                                        setSelectedBookingDetails(ev);
+                                      }}
+                                      className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs font-mono rounded-xl transition cursor-pointer shadow-sm"
+                                    >
+                                      Details
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
+
+                      {/* MOBILE: Stacked Responsive Table / Card Layout */}
+                      <div className="block md:hidden space-y-4">
+                        {calendarModalEvents.map((ev, idx) => {
+                          const orderDisplayId = ev.orderId || ev.leadId || '—';
+                          const custName = ev.customerName || '—';
+                          const evType = ev.eventName || ev.shootType || 'Event';
+                          const repDate = ev.reportingDate && ev.reportingDate !== 'N/A' && ev.reportingDate !== '—'
+                            ? formatDateDDMMYY(ev.reportingDate) || ev.reportingDate
+                            : '—';
+                          const repTime = ev.reportingTime && ev.reportingTime !== 'N/A' && ev.reportingTime !== '—'
+                            ? formatTime12Hour(ev.reportingTime) || ev.reportingTime
+                            : '—';
+                          const locationVal = ev.location || ev.venue || ev.eventLocation || '—';
+                          const assignedRole = ev.assignedRole || 'Not assigned';
+                          const eqList = Array.isArray(ev.equipmentItems) ? ev.equipmentItems : [];
+                          const status = ev.taskStatus || ev.status || 'Confirmed';
+
+                          return (
+                            <div key={`mb_${ev.key || 'calev'}_${idx}`} className="w-full bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-lg">
+                              {/* 1. Order ID */}
+                              <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2.5">
+                                <div>
+                                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                    Order ID
+                                  </span>
+                                  <span className="font-mono text-amber-400 font-bold text-sm break-all">
+                                    {orderDisplayId}
+                                  </span>
+                                </div>
+                                <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 shrink-0">
+                                  {status}
+                                </span>
+                              </div>
+
+                              {/* 2. Customer Name */}
+                              <div>
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                  Customer Name
+                                </span>
+                                <div className="font-bold text-white text-sm mt-0.5 break-words">
+                                  {custName}
+                                </div>
+                              </div>
+
+                              {/* 3. Event Type */}
+                              <div>
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                  Event Type
+                                </span>
+                                <div className="text-zinc-200 text-xs mt-0.5 font-medium">
+                                  {evType}
+                                </div>
+                              </div>
+
+                              {/* 4 & 5. Reporting Date & Time */}
+                              <div className="grid grid-cols-2 gap-3 bg-zinc-900/60 p-3 rounded-xl border border-zinc-850">
+                                <div>
+                                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                    Reporting Date
+                                  </span>
+                                  <span className="font-mono text-zinc-200 text-xs font-semibold mt-0.5 block">
+                                    {repDate}
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                    Reporting Time
+                                  </span>
+                                  <span className="font-mono text-zinc-200 text-xs font-semibold mt-0.5 block">
+                                    {repTime}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* 6. Location */}
+                              <div>
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                  Location
+                                </span>
+                                <div className="text-zinc-200 text-xs mt-0.5 font-medium break-words">
+                                  {locationVal}
+                                </div>
+                              </div>
+
+                              {/* 7. Assigned Role */}
+                              <div>
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                  Assigned Role
+                                </span>
+                                <div className="text-zinc-200 text-xs mt-0.5 font-medium">
+                                  {assignedRole}
+                                </div>
+                              </div>
+
+                              {/* 7. Equipment Details */}
+                              <div>
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                  Equipment Details
+                                </span>
+                                {eqList.length > 0 ? (
+                                  <div className="mt-1 space-y-1 text-xs text-zinc-200 font-medium">
+                                    {eqList.map((eq: any, i: number) => {
+                                      const name = typeof eq === 'string' ? eq : (eq.name || eq.equipment_name || 'Equipment');
+                                      return (
+                                        <div key={i} className="break-words bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-800/80">
+                                          {name}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : (
+                                  <div className="text-xs text-zinc-500 italic mt-0.5">
+                                    No equipment assigned
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* 8. Status */}
+                              <div>
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                                  Status
+                                </span>
+                                <div className="mt-1">
+                                  <span className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
+                                    {status}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* 9. Actions */}
+                              <div className="pt-3 border-t border-zinc-850">
+                                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block mb-2">
+                                  Actions
+                                </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCalendarModalDate(null);
+                                      setSelectedBookingDetails(ev);
+                                    }}
+                                    className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs font-mono rounded-xl transition cursor-pointer shadow-sm text-center"
+                                  >
+                                    View Task Details
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 border-t border-zinc-800/80 flex justify-end shrink-0">
+                  <button
+                    onClick={() => setCalendarModalDate(null)}
+                    className="px-4 py-2 rounded-xl bg-zinc-800 text-xs font-bold text-zinc-300 hover:text-white cursor-pointer transition-colors"
+                  >
+                    Close
+                  </button>
                 </div>
               </div>
             </div>,
@@ -3160,7 +3394,7 @@ export const StaffModule: React.FC = () => {
                   <tr className="bg-zinc-950/60 border-b border-zinc-800 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                     <th className="py-4 px-6">Order ID</th>
                     <th className="py-4 px-6">Customer Name</th>
-                    <th className="py-4 px-6">Event Name & Shoot</th>
+                    <th className="py-4 px-6">Event Name</th>
                     <th className="py-4 px-6 whitespace-nowrap">Reporting Date & Time</th>
                     <th className="py-4 px-6">Assigned Role</th>
                     <th className="py-4 px-6">Equipment Status</th>
@@ -3448,7 +3682,7 @@ export const StaffModule: React.FC = () => {
                             <input
                               type="file"
                               accept="image/*"
-                              
+                              capture="environment"
                               onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
                               className="hidden"
                             />
@@ -3466,7 +3700,7 @@ export const StaffModule: React.FC = () => {
                           <input
                             type="file"
                             accept="image/*"
-                            
+                            capture="environment"
                             onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => handlePhotoCapture(item.name, e)}
                             className="hidden"
                           />

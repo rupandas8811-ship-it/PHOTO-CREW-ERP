@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useRole } from '../RoleContext';
 import { 
-  Camera, Package, PlusCircle, Wrench, Edit3, Trash2, Calendar, 
+  Camera, Package, PlusCircle, Wrench, Edit3, Calendar, 
   ClipboardList, Search, Filter, X, ChevronLeft, ChevronRight, 
   Eye, CheckCircle2, AlertTriangle, Info, User, HelpCircle, MapPin, Tag
 } from 'lucide-react';
 import { Equipment } from '../../types';
 import { supabaseClient } from '../../supabaseClient';
 
-import { formatTime12Hour, formatDateDDMMYY } from "../../utils";
+import { formatTime12Hour, formatDateDDMMYY, getStoredEquipmentCategories, saveEquipmentCategoryToStorage } from "../../utils";
 
 const toCalendarDateString = (dateVal?: string | null | Date): string | null => {
   if (!dateVal && (dateVal as any) !== 0) return null;
@@ -229,6 +229,27 @@ export const EquipmentManagement: React.FC = () => {
     }
   }, [toast]);
 
+  // Category management states
+  const [customCategories, setCustomCategories] = useState<string[]>(() => getStoredEquipmentCategories());
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryError, setNewCategoryError] = useState('');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+
+  useEffect(() => {
+    const handleCategoryUpdate = (e: any) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        setCustomCategories(e.detail);
+      } else {
+        setCustomCategories(getStoredEquipmentCategories());
+      }
+    };
+    window.addEventListener('equipment-categories-updated', handleCategoryUpdate);
+    return () => {
+      window.removeEventListener('equipment-categories-updated', handleCategoryUpdate);
+    };
+  }, []);
+
   // Form states
   const [showGearForm, setShowGearForm] = useState(false);
   const [formErrors, setFormErrors] = useState<string[]>([]);
@@ -240,7 +261,7 @@ export const EquipmentManagement: React.FC = () => {
   });
 
   useEffect(() => {
-    if (showGearForm || selectedEq || busyEquipment) {
+    if (showGearForm || selectedEq || busyEquipment || showAddCategoryModal) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -248,7 +269,7 @@ export const EquipmentManagement: React.FC = () => {
     return () => {
       document.body.style.overflow = '';
     };
-  }, [showGearForm, selectedEq, busyEquipment]);
+  }, [showGearForm, selectedEq, busyEquipment, showAddCategoryModal]);
 
   // Handle selecting an item for editing
   const handleSelectEdit = (eq: Equipment, e?: React.MouseEvent) => {
@@ -376,33 +397,57 @@ export const EquipmentManagement: React.FC = () => {
     }
   };
 
-  // Item deletion
-  const handleDelete = async (id: string, name: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!canEdit) return;
-    if (confirm(`Are you sure you want to securely de-register "${name}"?`)) {
-      try {
-        await deleteEquipment(id);
-        showToast('success', 'Equipment dropped from active registry.');
-        if (selectedEq?.equipment_id === id) {
-          setSelectedEq(null);
-        }
-      } catch (err: any) {
-        showToast('error', err.message || 'Failed to delete equipment.');
-      }
-    }
-  };
-
   // Get active distinct lists for filters
   const uniqueBrands = useMemo(() => {
     return Array.from(new Set(equipment.map(e => e.brand).filter(Boolean)));
   }, [equipment]);
 
+  const allEquipmentCategories = useMemo(() => {
+    const defaults = ['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Light', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'];
+    const fromEq = equipment.map(e => getEquipmentCategory(e)).filter(Boolean);
+    return Array.from(new Set([...defaults, ...fromEq, ...customCategories])).filter(Boolean);
+  }, [equipment, customCategories]);
+
   const uniqueCategories = useMemo(() => {
     const fromEq = equipment.map(e => getEquipmentCategory(e)).filter(Boolean);
-    const defaults = ['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Lighting', 'Audio', 'Memory Cards', 'Batteries', 'Other'];
-    return Array.from(new Set([...fromEq, ...defaults])).filter(Boolean).sort();
-  }, [equipment]);
+    const defaults = ['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Lighting', 'Light', 'Audio', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'];
+    return Array.from(new Set([...fromEq, ...defaults, ...customCategories])).filter(Boolean).sort();
+  }, [equipment, customCategories]);
+
+  const handleSaveNewCategory = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) {
+      setNewCategoryError('Category Name is required.');
+      return;
+    }
+
+    const alreadyExists = allEquipmentCategories.some(
+      c => c.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (alreadyExists) {
+      setNewCategoryError(`Category "${trimmed}" already exists.`);
+      return;
+    }
+
+    setIsSavingCategory(true);
+    try {
+      const updated = saveEquipmentCategoryToStorage(trimmed);
+      setCustomCategories(updated);
+      setForm(prev => ({
+        ...prev,
+        equipment_type: trimmed
+      }));
+      showToast('success', `Equipment category "${trimmed}" added successfully.`);
+      setNewCategoryName('');
+      setNewCategoryError('');
+      setShowAddCategoryModal(false);
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to save category.');
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
 
   // Helper to parse equipment from various data sources (array, comma-separated, JSON, or mobiles string)
   const parseEquipmentList = (raw: any): string[] => {
@@ -1167,6 +1212,20 @@ export const EquipmentManagement: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto">
             <button
               type="button"
+              id="btn_add_equipment_category"
+              onClick={() => {
+                setNewCategoryName('');
+                setNewCategoryError('');
+                setShowAddCategoryModal(true);
+              }}
+              className="px-3.5 py-2.5 rounded-xl border border-zinc-750 hover:border-amber-500/50 text-[10px] sm:text-xs font-bold font-mono flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-zinc-900 hover:bg-zinc-850 text-zinc-200 hover:text-white shrink-0 w-full sm:w-auto shadow-sm"
+              title="Add a new equipment category"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>Add Equipment Category</span>
+            </button>
+            <button
+              type="button"
               onClick={() => { setEditingId(null); setShowGearForm(true); }}
               className="px-3.5 py-2.5 rounded-xl border text-[10px] sm:text-xs font-bold font-mono flex items-center justify-center gap-2 transition-all cursor-pointer bg-amber-500 hover:bg-amber-600 text-black shrink-0 w-full sm:w-auto"
             >
@@ -1283,124 +1342,237 @@ export const EquipmentManagement: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 gap-6 items-start">
+        {/* Add Equipment Category Modal */}
+        {showAddCategoryModal && (
+          <div 
+            className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-150"
+            onClick={() => {
+              setShowAddCategoryModal(false);
+              setNewCategoryError('');
+              setNewCategoryName('');
+            }}
+          >
+            <div 
+              className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 shadow-2xl w-full max-w-md relative flex flex-col gap-4 text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                <div className="flex items-center gap-2">
+                  <PlusCircle className="w-4 h-4 text-amber-500" />
+                  <h3 className="text-xs font-mono font-black uppercase text-zinc-200 tracking-wider">
+                    Add Equipment Category
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddCategoryModal(false);
+                    setNewCategoryError('');
+                    setNewCategoryName('');
+                  }}
+                  className="text-zinc-400 hover:text-white p-1 rounded-full bg-zinc-800/50 hover:bg-zinc-800 transition-colors cursor-pointer"
+                  title="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveNewCategory} className="space-y-4">
+                <div>
+                  <label htmlFor="new_category_name_input" className="block text-[10px] font-mono font-extrabold uppercase text-zinc-400 mb-1.5">
+                    Category Name
+                  </label>
+                  <input
+                    id="new_category_name_input"
+                    aria-label="Category Name"
+                    type="text"
+                    placeholder="e.g. Lighting Modifiers, Drone Accessories..."
+                    value={newCategoryName}
+                    autoFocus
+                    onChange={(e) => {
+                      setNewCategoryName(e.target.value);
+                      if (newCategoryError) setNewCategoryError('');
+                    }}
+                    className={`w-full bg-zinc-955 border ${newCategoryError ? 'border-rose-500 focus:border-rose-500' : 'border-zinc-800 focus:border-amber-500/50'} rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none font-mono transition-colors`}
+                  />
+                  {newCategoryError && (
+                    <p className="text-rose-400 text-[10px] mt-1.5 font-mono flex items-center gap-1">
+                      <span>⚠️</span> {newCategoryError}
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-850">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddCategoryModal(false);
+                      setNewCategoryError('');
+                      setNewCategoryName('');
+                    }}
+                    className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    id="btn_save_equipment_category"
+                    type="submit"
+                    disabled={isSavingCategory}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 disabled:opacity-50 text-black font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                  >
+                    <span>{isSavingCategory ? 'Saving...' : 'Save Category'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Gear Form Modal */}
         {showGearForm && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
-            <div id="equipment_registry_form" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xl w-full max-w-lg relative flex flex-col max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-2rem)] min-h-0 overflow-hidden">
-              <button onClick={() => { setEditingId(null); setShowGearForm(false); }} className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 rounded-full bg-zinc-800/50 hover:bg-zinc-800 transition-colors z-10 cursor-pointer">
-                <X className="w-4 h-4" />
-              </button>
-              <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5 border-b border-zinc-850 pb-2.5 pr-8 shrink-0">
-                <PlusCircle className="w-4 h-4 text-amber-500" />
-                <span>{editingId ? 'Edit Register Details' : 'Register New Studio Gear'}</span>
-              </h3>
-
-              <form onSubmit={handleSubmit} className="space-y-4 text-xs mt-4 flex-1 min-h-0 overflow-y-auto pr-1">
-            <fieldset disabled={!canEdit} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
-                  Equipment Name *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Sony FX3 Full Cinema body"
-                  value={form.equipment_name}
-                  onChange={(e) => {
-                    setForm({ ...form, equipment_name: e.target.value });
-                    if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'equipment_name'));
-                  }}
-                  className={`w-full bg-zinc-955 border ${formErrors.includes('equipment_name') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
-                />
-                {formErrors.includes('equipment_name') && (
-                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
-                  Brand *
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Sony"
-                  value={form.brand}
-                  onChange={(e) => {
-                    setForm({ ...form, brand: e.target.value });
-                    if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'brand'));
-                  }}
-                  className={`w-full bg-zinc-955 border ${formErrors.includes('brand') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
-                />
-                {formErrors.includes('brand') && (
-                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
-                  Equipment Category *
-                </label>
-                <select
-                  value={form.equipment_type}
-                  onChange={(e) => {
-                    setForm({ ...form, equipment_type: e.target.value });
-                    if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'equipment_type'));
-                  }}
-                  className={`w-full bg-zinc-955 border ${formErrors.includes('equipment_type') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
-                >
-                  <option value="" disabled>Select Category</option>
-                  {['Camera', 'Lens', 'Drone', 'Gimbal', 'Tripod', 'Light', 'Audio Equipment', 'Memory Cards', 'Batteries', 'Other'].map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-                {formErrors.includes('equipment_type') && (
-                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
-                  Equipment Status *
-                </label>
-                <select
-                  value={form.status}
-                  onChange={(e) => {
-                    setForm({ ...form, status: e.target.value });
-                    if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'status'));
-                  }}
-                  className={`w-full bg-zinc-955 border ${formErrors.includes('status') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
-                >
-                  <option value="" disabled>Select Status</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-                {formErrors.includes('status') && (
-                  <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
-                )}
-              </div>
-            </fieldset>
-
-            {canEdit ? (
-              <div className="flex gap-2 justify-end pt-2 border-t border-zinc-850 mt-4">
-                <button
+            <div id="equipment_registry_form" className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-2xl w-full max-w-lg relative flex flex-col max-h-[85vh] sm:max-h-[80vh] min-h-0 overflow-hidden">
+              {/* Sticky Header */}
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-850 shrink-0">
+                <h3 className="text-xs font-mono font-black uppercase text-zinc-300 flex items-center gap-1.5">
+                  <PlusCircle className="w-4 h-4 text-amber-500" />
+                  <span>{editingId ? 'Edit Register Details' : 'Register New Studio Gear'}</span>
+                </h3>
+                <button 
                   type="button"
-                  onClick={handleCancelEdit}
-                  className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl cursor-pointer"
+                  onClick={() => { setEditingId(null); setShowGearForm(false); }} 
+                  className="text-zinc-400 hover:text-white p-1 rounded-full bg-zinc-800/50 hover:bg-zinc-800 transition-colors cursor-pointer"
+                  title="Close"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-xl cursor-pointer flex items-center gap-1"
-                >
-                  <span>{editingId ? 'Update Gear' : 'Add to Inventory'}</span>
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-            ) : (
-              <div className="bg-zinc-950/40 border border-zinc-850 p-3 rounded-lg text-[10px] text-zinc-500 font-mono mt-4">
-                🔒 Read-only mode access.
-              </div>
-            )}
-          </form>
+
+              <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden mt-3">
+                {/* Scrollable Content Area */}
+                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1.5 py-1 space-y-4 modal-scroll-area">
+                  <fieldset disabled={!canEdit} className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
+                        Equipment Name *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Sony FX3 Full Cinema body"
+                        value={form.equipment_name}
+                        onChange={(e) => {
+                          setForm({ ...form, equipment_name: e.target.value });
+                          if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'equipment_name'));
+                        }}
+                        className={`w-full bg-zinc-955 border ${formErrors.includes('equipment_name') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
+                      />
+                      {formErrors.includes('equipment_name') && (
+                        <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
+                        Brand *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Sony"
+                        value={form.brand}
+                        onChange={(e) => {
+                          setForm({ ...form, brand: e.target.value });
+                          if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'brand'));
+                        }}
+                        className={`w-full bg-zinc-955 border ${formErrors.includes('brand') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
+                      />
+                      {formErrors.includes('brand') && (
+                        <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 font-semibold">
+                          Equipment Category *
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewCategoryName('');
+                            setNewCategoryError('');
+                            setShowAddCategoryModal(true);
+                          }}
+                          className="text-[10px] font-mono font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                        >
+                          + Add Category
+                        </button>
+                      </div>
+                      <select
+                        value={form.equipment_type}
+                        onChange={(e) => {
+                          setForm({ ...form, equipment_type: e.target.value });
+                          if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'equipment_type'));
+                        }}
+                        className={`w-full bg-zinc-955 border ${formErrors.includes('equipment_type') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
+                      >
+                        <option value="" disabled>Select Category</option>
+                        {allEquipmentCategories.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                      {formErrors.includes('equipment_type') && (
+                        <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-mono font-extrabold uppercase text-zinc-500 mb-1 font-semibold">
+                        Equipment Status *
+                      </label>
+                      <select
+                        value={form.status}
+                        onChange={(e) => {
+                          setForm({ ...form, status: e.target.value });
+                          if (e.target.value) setFormErrors(prev => prev.filter(err => err !== 'status'));
+                        }}
+                        className={`w-full bg-zinc-955 border ${formErrors.includes('status') ? 'border-rose-500' : 'border-zinc-850'} rounded-xl px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 font-mono`}
+                      >
+                        <option value="" disabled>Select Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                      {formErrors.includes('status') && (
+                        <p className="text-rose-500 text-[10px] mt-1 font-mono">❌ Please fill all required fields.</p>
+                      )}
+                    </div>
+                  </fieldset>
+                </div>
+
+                {/* Sticky Action Footer */}
+                <div className="sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm pt-3 pb-1 border-t border-zinc-850 shrink-0 mt-auto z-10">
+                  {canEdit ? (
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={handleCancelEdit}
+                        className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl cursor-pointer text-xs transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-xl cursor-pointer flex items-center gap-1 text-xs shadow-md transition-all active:scale-95"
+                      >
+                        <span>{editingId ? 'Update Gear' : 'Add to Inventory'}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-zinc-950/40 border border-zinc-850 p-2.5 rounded-lg text-[10px] text-zinc-500 font-mono text-center">
+                      🔒 Read-only mode access.
+                    </div>
+                  )}
+                </div>
+              </form>
             </div>
           </div>
         )}
@@ -1653,22 +1825,13 @@ export const EquipmentManagement: React.FC = () => {
                                 <Eye className="w-3.5 h-3.5" />
                               </button>
                               {canEdit && (
-                                <>
-                                  <button
-                                    onClick={(e) => handleSelectEdit(eq, e)}
-                                    className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800 cursor-pointer"
-                                    title="Edit Item Details"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={(e) => handleDelete(eq.equipment_id, eq.equipment_name, e)}
-                                    className="p-1.5 hover:bg-zinc-800 text-zinc-500 hover:text-red-400 rounded transition-all cursor-pointer"
-                                    title="De-register Equipment"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
+                                <button
+                                  onClick={(e) => handleSelectEdit(eq, e)}
+                                  className="p-1.5 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded transition-all border border-transparent hover:border-zinc-800 cursor-pointer"
+                                  title="Edit Item Details"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
                               )}
                             </div>
                           </td>

@@ -57,6 +57,7 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
 
   const { 
     currentRole,
+    currentUser,
     orders, 
     leads, 
     operations, 
@@ -95,6 +96,39 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
 
   const finalOrderId = order?.order_id || booking?.orderId || targetOrderId || 'N/A';
 
+  const isStaff = isStaffView || 
+                  currentRole === 'Staff' || 
+                  currentRole === 'Operation Staff' || 
+                  currentRole === 'Operations Staff' ||
+                  Boolean(booking?.staffName || booking?.assignedStaff || booking?.assignmentId);
+
+  // Resolve current staff member object matching logged in user or booking
+  const currentStaffMember = useMemo(() => {
+    return (staff || []).find(s => 
+      (s.auth_user_id && currentUser?.id && s.auth_user_id === currentUser.id) || 
+      (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) ||
+      (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) ||
+      (s.name && currentUser?.full_name && s.name.trim().toLowerCase() === currentUser.full_name.trim().toLowerCase())
+    );
+  }, [staff, currentUser]);
+
+  const effectiveStaffName = useMemo(() => {
+    const fromBooking = booking?.staffName || booking?.assignedStaff || booking?.staff_name || booking?.assignedStaffName;
+    if (fromBooking && typeof fromBooking === 'string' && fromBooking.trim()) {
+      return fromBooking.trim();
+    }
+    const fromCurrentStaff = currentStaffMember?.name;
+    if (fromCurrentStaff && fromCurrentStaff.trim()) {
+      return fromCurrentStaff.trim();
+    }
+    const fromCurrentUser = currentUser?.name || currentUser?.full_name;
+    if (fromCurrentUser && typeof fromCurrentUser === 'string' && fromCurrentUser.trim()) {
+      return fromCurrentUser.trim();
+    }
+    return '';
+  }, [booking, currentStaffMember, currentUser]);
+
   // Extract Event Team Member Assignment Groups using canonical helper
   const allAssignmentGroups = useMemo(() => {
     return getEventTeamMemberStaffMapping({
@@ -104,15 +138,141 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
       staffAssignments: staffAssignments,
       operationsRecord: operation,
       staffList: staff,
-      targetStaffName: booking?.assignedStaff || booking?.staff_name
+      targetStaffName: effectiveStaffName || undefined
     });
-  }, [lead, order, targetLeadPkgs, staffAssignments, operation, staff, booking]);
+  }, [lead, order, targetLeadPkgs, staffAssignments, operation, staff, effectiveStaffName]);
 
   const targetEvId = booking?.eventId || booking?.event_id || booking?.assignment?.event_id;
   const targetEvName = booking?.eventName || booking?.event_name || booking?.assignment?.event_name || booking?.shootType;
   const targetEvType = booking?.eventType || booking?.event_type || booking?.assignment?.event_type;
 
+  // Filter display groups strictly by assigned staff member + assigned event for staff view
   const displayGroups = useMemo(() => {
+    if (!allAssignmentGroups || allAssignmentGroups.length === 0) return [];
+
+    if (isStaff && effectiveStaffName) {
+      const staffNorm = effectiveStaffName.toLowerCase().trim();
+      const staffId = currentStaffMember?.staff_id || (currentStaffMember as any)?.id;
+
+      const assignedGroups = allAssignmentGroups.filter(g => {
+        // 1. Direct match in group.mappings (team members assigned to this staff member)
+        if (g.mappings && g.mappings.some(m => {
+          const assignedName = (m.assignedStaffName || '').trim().toLowerCase();
+          if (assignedName && assignedName !== 'unassigned' && assignedName !== 'none') {
+            if (assignedName === staffNorm) return true;
+          }
+          if (staffId && m.assignedStaffId && String(m.assignedStaffId) === String(staffId)) {
+            return true;
+          }
+          return false;
+        })) {
+          return true;
+        }
+
+        // 2. Direct match in staffAssignments table from database
+        if (staffAssignments && staffAssignments.length > 0) {
+          const hasDbAssignment = staffAssignments.some(sa => {
+            if (sa.assignment_status === 'Cancelled' || sa.assignment_status === 'Rejected') return false;
+            
+            const saStaffName = (sa.staff_name || '').trim().toLowerCase();
+            const saStaffId = sa.staff_id;
+            const isMatchingStaff = saStaffName === staffNorm || (staffId && saStaffId && String(saStaffId) === String(staffId));
+            if (!isMatchingStaff) return false;
+
+            const matchesOrder = (targetOrderId && (sa.order_id === targetOrderId || sa.lead_id === targetOrderId)) ||
+                                 (order?.order_id && (sa.order_id === order.order_id || sa.lead_id === order.order_id)) ||
+                                 (lead?.lead_id && (sa.order_id === lead.lead_id || sa.lead_id === lead.lead_id));
+            if (!matchesOrder) return false;
+
+            // Event-level match
+            if (sa.event_id && g.eventId) {
+              if (String(sa.event_id).toLowerCase() === String(g.eventId).toLowerCase()) return true;
+            }
+            if (sa.event_name) {
+              const sEvName = sa.event_name.trim().toLowerCase();
+              if (sEvName === g.eventName.toLowerCase().trim() || sEvName === g.eventType.toLowerCase().trim()) return true;
+            }
+            // If neither event_id nor event_name is specified on assignment, match only if single event or general event
+            if (!sa.event_id && !sa.event_name && (allAssignmentGroups.length === 1 || g.eventId === 'default_event' || g.eventId === 'gen')) {
+              return true;
+            }
+
+            return false;
+          });
+
+          if (hasDbAssignment) return true;
+        }
+
+        // 3. Direct match in lead.events or order.events (assigned_staff_names / assigned_staff_ids field)
+        const checkEventsArray = (eventsList: any[]) => {
+          if (!Array.isArray(eventsList)) return false;
+          return eventsList.some(ev => {
+            const evId = String(ev.id || ev.event_id || '');
+            const evName = (ev.event_name || ev.custom_event_name || ev.event_type || '').trim().toLowerCase();
+            const isMatchingEv = (evId && g.eventId && evId.toLowerCase() === String(g.eventId).toLowerCase()) ||
+                                 (evName && (evName === g.eventName.toLowerCase().trim() || evName === g.eventType.toLowerCase().trim()));
+            
+            if (isMatchingEv) {
+              if (ev.assigned_staff_names) {
+                const names = ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()).filter(Boolean);
+                if (names.includes(staffNorm)) return true;
+              }
+              if (ev.assigned_staff_ids && staffId) {
+                const ids = ev.assigned_staff_ids.split(',').map((id: string) => id.trim()).filter(Boolean);
+                if (ids.includes(String(staffId))) return true;
+              }
+            }
+            return false;
+          });
+        };
+
+        if (lead?.events && checkEventsArray(lead.events)) return true;
+        if (order?.events && checkEventsArray(order.events)) return true;
+
+        // 4. Check deserialized notes_special_customizations
+        if (lead?.notes_special_customizations) {
+          try {
+            const parsed = deserializeLeadEvents(lead.notes_special_customizations);
+            if (parsed.events && checkEventsArray(parsed.events)) return true;
+          } catch (e) {}
+        }
+        if (order?.notes_special_customizations) {
+          try {
+            const parsed = deserializeLeadEvents(order.notes_special_customizations);
+            if (parsed.events && checkEventsArray(parsed.events)) return true;
+          } catch (e) {}
+        }
+
+        // 5. Check operationsRecord (for single event or general assignment)
+        if (allAssignmentGroups.length === 1 || g.eventId === 'default_event' || g.eventId === 'gen') {
+          if (operation) {
+            if (operation.photographer_assigned?.trim().toLowerCase() === staffNorm) return true;
+            if (operation.videographer_assigned?.trim().toLowerCase() === staffNorm) return true;
+            if (operation.drone_operator_assigned?.trim().toLowerCase() === staffNorm) return true;
+            if (operation.assistant_assigned?.trim().toLowerCase() === staffNorm) return true;
+          }
+        }
+
+        // 6. Check booking context if booking specifically passed this event
+        if (booking) {
+          const bStaff = (booking.assignedStaff || booking.staffName || booking.staff_name || '').trim().toLowerCase();
+          if (!bStaff || bStaff === staffNorm) {
+            if (booking.eventId && g.eventId && String(booking.eventId).toLowerCase() === String(g.eventId).toLowerCase()) {
+              return true;
+            }
+            if (booking.eventName && (booking.eventName.toLowerCase().trim() === g.eventName.toLowerCase().trim() || booking.eventName.toLowerCase().trim() === g.eventType.toLowerCase().trim())) {
+              return true;
+            }
+          }
+        }
+
+        return false;
+      });
+
+      return assignedGroups;
+    }
+
+    // For non-staff (e.g. manager / admin viewing details), check target event if specific booking passed
     if (targetEvId || targetEvName || targetEvType) {
       const matched = allAssignmentGroups.filter(g => {
         if (targetEvId && String(g.eventId).toLowerCase() === String(targetEvId).toLowerCase()) return true;
@@ -124,8 +284,9 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
         return matched;
       }
     }
+
     return allAssignmentGroups;
-  }, [allAssignmentGroups, targetEvId, targetEvName, targetEvType]);
+  }, [allAssignmentGroups, isStaff, effectiveStaffName, currentStaffMember, staffAssignments, targetOrderId, order, lead, operation, booking, targetEvId, targetEvName, targetEvType]);
 
   // Extract comprehensive Equipment Given and Equipment Returned dataset
   const equipmentDetailsList: EquipmentItemDetail[] = useMemo(() => {
@@ -174,9 +335,14 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
     });
 
     // B. From staffAssignments (for order / lead)
-    const matchingAssignments = (staffAssignments || []).filter(sa => 
-      sa.order_id === targetOrderId || sa.order_id === order?.order_id || (lead?.lead_id && sa.order_id === lead.lead_id)
-    );
+    const matchingAssignments = (staffAssignments || []).filter(sa => {
+      const matchesOrder = sa.order_id === targetOrderId || sa.order_id === order?.order_id || (lead?.lead_id && sa.order_id === lead.lead_id);
+      if (!matchesOrder) return false;
+      if (isStaff && effectiveStaffName) {
+        if ((sa.staff_name || '').trim().toLowerCase() !== effectiveStaffName.toLowerCase()) return false;
+      }
+      return true;
+    });
     matchingAssignments.forEach(sa => {
       let eqList: string[] = [];
       if (Array.isArray(sa.equipment)) {
@@ -219,8 +385,8 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
       });
     });
 
-    // C. From operation.equipment_kit
-    if (operation?.equipment_kit) {
+    // C. From operation.equipment_kit (only if not filtered to another staff member)
+    if (operation?.equipment_kit && (!isStaff || !effectiveStaffName || operation.photographer_assigned?.toLowerCase() === effectiveStaffName.toLowerCase() || operation.videographer_assigned?.toLowerCase() === effectiveStaffName.toLowerCase())) {
       const kits = operation.equipment_kit.split(',').map(s => s.trim()).filter(Boolean);
       kits.forEach(kitName => {
         const key = kitName.toLowerCase();
@@ -441,8 +607,6 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
   }, [leadEquipmentHistory, finalOrderId, lead, booking]);
 
   if (!isOpen || (!orderId && !booking)) return null;
-
-  const isStaff = isStaffView || currentRole === 'Staff' || currentRole === 'Operation Staff';
 
   return createPortal(
     <div className="fixed inset-0 z-[99999] flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">

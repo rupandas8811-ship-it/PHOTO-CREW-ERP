@@ -36,7 +36,7 @@ import { AddressAutocomplete } from './AddressAutocomplete';
 import { TimePicker12Hour } from './TimePicker12Hour';
 import { jsPDF } from 'jspdf';
 import { SearchablePackageSelect } from './sales/SearchablePackageSelect';
-import { fetchAndResolveLatestPaymentData } from './SalesUtils';
+import { fetchAndResolveLatestPaymentData, verifyAndFormatLeadPackagePayload } from './SalesUtils';
 
 interface LocalEditableInputProps {
   value: string;
@@ -3317,7 +3317,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         // 2. Also save / update lead_packages record in Supabase
         try {
-          const packagePayload = {
+          const rawPackagePayload = {
             lead_id: leadId,
             package_id: pkgId,
             package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
@@ -3330,34 +3330,58 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
             Team_Members_Included: teamMembersJson,
             editable_inclusions: updatedInclusions,
             deliverables_descriptionn: deliverablesJson,
-            deliverables_json: deliverablesJson,
             deliverables_description: deliverablesText,
             editable_deliverables: updatedDeliverables,
             updated_at: new Date().toISOString()
           };
 
-          const { data: existingLps } = await supabaseClient
+          const { payload: packagePayload, isValid, teamMembersValid, deliverablesValid, issues } = verifyAndFormatLeadPackagePayload(
+            rawPackagePayload,
+            'SalesModule saveStep3DataRealtime [Realtime Step 3 Auto-Save]'
+          );
+
+          const { data: existingLps, error: fetchLpErr } = await supabaseClient
             .from('lead_packages')
             .select('*')
             .eq('lead_id', leadId);
+
+          if (fetchLpErr) {
+            console.warn("[lead_packages realtime SalesModule] Error querying existing lead_packages:", fetchLpErr);
+          }
           
           let targetLpId = `LP-${leadId}-${pkgId}`;
           
           if (existingLps && existingLps.length > 0) {
             const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
             targetLpId = matched.lead_package_id || matched.id || targetLpId;
-            await supabaseClient
+            console.log(`🚀 [Supabase API Call] Realtime updating 'lead_packages' (ID: "${targetLpId}"):`, packagePayload);
+            const { data: updateRes, error: updateErr } = await supabaseClient
               .from('lead_packages')
               .update(packagePayload)
-              .eq(matched.lead_package_id ? 'lead_package_id' : 'id', targetLpId);
+              .eq(matched.lead_package_id ? 'lead_package_id' : 'id', targetLpId)
+              .select('*');
+
+            if (updateErr) {
+              console.error(`❌ [Supabase API Error] Realtime error updating 'lead_packages':`, updateErr);
+            } else {
+              console.log(`✅ [Supabase API Success] Realtime updated 'lead_packages' record:`, updateRes);
+            }
           } else {
-            await supabaseClient
+            console.log(`🚀 [Supabase API Call] Realtime inserting 'lead_packages' (ID: "${targetLpId}"):`, packagePayload);
+            const { data: insertRes, error: insertErr } = await supabaseClient
               .from('lead_packages')
               .insert({
                 ...packagePayload,
                 lead_package_id: targetLpId,
                 created_at: new Date().toISOString()
-              });
+              })
+              .select('*');
+
+            if (insertErr) {
+              console.error(`❌ [Supabase API Error] Realtime error inserting 'lead_packages':`, insertErr);
+            } else {
+              console.log(`✅ [Supabase API Success] Realtime inserted 'lead_packages' record:`, insertRes);
+            }
           }
         } catch (lpErr) {
           console.warn("Could not update lead_packages in saveStep3DataRealtime:", lpErr);
@@ -5395,33 +5419,93 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                 const customLowerKey = `custom_package_${event.id}`;
                 const customLowerNameKey = `custom_package_${event.event_name || event.event_type || 'Unnamed Event'}`;
 
+                const isMulti = currentEvents && currentEvents.length > 1;
+                const evId = String(event.id || event.event_id || `EV-${eventIdx + 1}`);
+                const eventKey = `${selectedPkgId}_${evId}`;
+                const altKey = `Custom Package_${evId}`;
+                const customKey = `custom_package_${evId}`;
+
+                const directTm = event.team_members || event.inclusions || event.Team_Members || event.team_members_included;
+                const parsedDirectTm = directTm ? (Array.isArray(directTm) ? directTm.map((m: any) => {
+                  const { qty, text } = parseQtyAndText(m);
+                  return text ? combineQtyAndText(qty, text) : '';
+                }).filter(Boolean) : null) : null;
+
                 const eventInclusions = editableInclusions[eventKey] !== undefined
                   ? editableInclusions[eventKey]
-                  : (editableInclusions[nameKey] !== undefined
-                    ? editableInclusions[nameKey]
-                    : (editableInclusions[customKey] !== undefined
-                      ? editableInclusions[customKey]
-                      : (editableInclusions[customNameKey] !== undefined
-                        ? editableInclusions[customNameKey]
-                        : (editableInclusions[customLowerKey] !== undefined
-                          ? editableInclusions[customLowerKey]
-                          : (editableInclusions[customLowerNameKey] !== undefined
-                            ? editableInclusions[customLowerNameKey]
-                            : (currentEvents.length === 1 ? inclusionsList : []))))));
+                  : (editableInclusions[altKey] !== undefined
+                      ? editableInclusions[altKey]
+                      : (editableInclusions[customKey] !== undefined
+                          ? editableInclusions[customKey]
+                          : (editableInclusions[evId] !== undefined
+                              ? editableInclusions[evId]
+                              : (parsedDirectTm !== null
+                                  ? parsedDirectTm
+                                  : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))))));
+
+                const directDel = event.deliverables || event.deliverables_list || event.Add_Deliverable || event.deliverables_description;
+                const parsedDirectDel = directDel ? (Array.isArray(directDel) ? directDel.map((d: any) => {
+                  const { qty, text } = parseQtyAndText(d);
+                  return text ? combineQtyAndText(qty, text) : '';
+                }).filter(Boolean) : null) : null;
 
                 const eventDeliverables = editableDeliverables[eventKey] !== undefined
                   ? editableDeliverables[eventKey]
-                  : (editableDeliverables[nameKey] !== undefined
-                    ? editableDeliverables[nameKey]
-                    : (editableDeliverables[customKey] !== undefined
-                      ? editableDeliverables[customKey]
-                      : (editableDeliverables[customNameKey] !== undefined
-                        ? editableDeliverables[customNameKey]
-                        : (editableDeliverables[customLowerKey] !== undefined
-                          ? editableDeliverables[customLowerKey]
-                          : (editableDeliverables[customLowerNameKey] !== undefined
-                            ? editableDeliverables[customLowerNameKey]
-                            : (currentEvents.length === 1 ? deliverablesList : []))))));
+                  : (editableDeliverables[altKey] !== undefined
+                      ? editableDeliverables[altKey]
+                      : (editableDeliverables[customKey] !== undefined
+                          ? editableDeliverables[customKey]
+                          : (editableDeliverables[evId] !== undefined
+                              ? editableDeliverables[evId]
+                              : (parsedDirectDel !== null
+                                  ? parsedDirectDel
+                                  : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))))));
+
+                const updateInclusionsForEvent = (newList: string[]) => {
+                  const updated = {
+                    ...editableInclusions,
+                    [eventKey]: newList,
+                    [altKey]: newList,
+                    [customKey]: newList,
+                    [evId]: newList
+                  };
+                  if (!isMulti) {
+                    updated[selectedPkgId] = newList;
+                    updated['Custom Package'] = newList;
+                    updated['custom_package'] = newList;
+                  }
+                  setEditableInclusions(updated);
+                  if (crmEvents && crmEvents.length > 0) {
+                    setCrmEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, team_members: newList, inclusions: newList } : e)));
+                  }
+                  if (createEvents && createEvents.length > 0) {
+                    setCreateEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, team_members: newList, inclusions: newList } : e)));
+                  }
+                  saveStep3DataRealtime(updated, editableDeliverables);
+                };
+
+                const updateDeliverablesForEvent = (newList: string[]) => {
+                  const updated = {
+                    ...editableDeliverables,
+                    [eventKey]: newList,
+                    [altKey]: newList,
+                    [customKey]: newList,
+                    [evId]: newList
+                  };
+                  if (!isMulti) {
+                    updated[selectedPkgId] = newList;
+                    updated['Custom Package'] = newList;
+                    updated['custom_package'] = newList;
+                  }
+                  setEditableDeliverables(updated);
+                  if (crmEvents && crmEvents.length > 0) {
+                    setCrmEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, deliverables: newList, deliverables_list: newList } : e)));
+                  }
+                  if (createEvents && createEvents.length > 0) {
+                    setCreateEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, deliverables: newList, deliverables_list: newList } : e)));
+                  }
+                  saveStep3DataRealtime(editableInclusions, updated);
+                };
 
                 const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
                 const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';
@@ -5487,13 +5571,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             onClick={() => {
                               const currentList = [...eventInclusions];
                               currentList.push("");
-                              const updated = {
-                                ...editableInclusions,
-                                [eventKey]: currentList,
-                                [nameKey]: currentList
-                              };
-                              setEditableInclusions(updated);
-                              saveStep3DataRealtime(updated, editableDeliverables);
+                              updateInclusionsForEvent(currentList);
                             }}
                             className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                           >
@@ -5512,24 +5590,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               onChange={(newVal) => {
                                 const currentList = [...eventInclusions];
                                 currentList[idx] = newVal;
-                                const updated = {
-                                  ...editableInclusions,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
-                                };
-                                setEditableInclusions(updated);
-                                saveStep3DataRealtime(updated, editableDeliverables);
+                                updateInclusionsForEvent(currentList);
                               }}
                               onDelete={() => {
                                 const currentList = [...eventInclusions];
                                 currentList.splice(idx, 1);
-                                const updated = {
-                                  ...editableInclusions,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
-                                };
-                                setEditableInclusions(updated);
-                                saveStep3DataRealtime(updated, editableDeliverables);
+                                updateInclusionsForEvent(currentList);
                               }}
                             />
                           ))}
@@ -5539,13 +5605,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               onClick={() => {
                                 const currentList = [...eventInclusions];
                                 currentList.push("");
-                                const updated = {
-                                  ...editableInclusions,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
-                                };
-                                setEditableInclusions(updated);
-                                saveStep3DataRealtime(updated, editableDeliverables);
+                                updateInclusionsForEvent(currentList);
                               }}
                               className="text-[11px] text-indigo-400 hover:text-indigo-300 font-bold font-mono bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-md border border-indigo-500/20 transition-all cursor-pointer"
                             >
@@ -5569,13 +5629,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                             onClick={() => {
                               const currentList = [...eventDeliverables];
                               currentList.push("");
-                              const updated = {
-                                ...editableDeliverables,
-                                [eventKey]: currentList,
-                                [nameKey]: currentList
-                              };
-                              setEditableDeliverables(updated);
-                              saveStep3DataRealtime(editableInclusions, updated);
+                              updateDeliverablesForEvent(currentList);
                             }}
                             className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                           >
@@ -5594,24 +5648,12 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               onChange={(newVal) => {
                                 const currentList = [...eventDeliverables];
                                 currentList[idx] = newVal;
-                                const updated = {
-                                  ...editableDeliverables,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
-                                };
-                                setEditableDeliverables(updated);
-                                saveStep3DataRealtime(editableInclusions, updated);
+                                updateDeliverablesForEvent(currentList);
                               }}
                               onDelete={() => {
                                 const currentList = [...eventDeliverables];
                                 currentList.splice(idx, 1);
-                                const updated = {
-                                  ...editableDeliverables,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
-                                };
-                                setEditableDeliverables(updated);
-                                saveStep3DataRealtime(editableInclusions, updated);
+                                updateDeliverablesForEvent(currentList);
                               }}
                             />
                           ))}
@@ -5621,13 +5663,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               onClick={() => {
                                 const currentList = [...eventDeliverables];
                                 currentList.push("");
-                                const updated = {
-                                  ...editableDeliverables,
-                                  [eventKey]: currentList,
-                                  [nameKey]: currentList
-                                };
-                                setEditableDeliverables(updated);
-                                saveStep3DataRealtime(editableInclusions, updated);
+                                updateDeliverablesForEvent(currentList);
                               }}
                               className="text-[11px] text-emerald-400 hover:text-emerald-300 font-bold font-mono bg-emerald-500/10 hover:bg-emerald-500/20 px-2.5 py-1 rounded-md border border-emerald-500/20 transition-all cursor-pointer"
                             >
@@ -6576,52 +6612,88 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
         // Also upsert to lead_packages table so that Step 3 reloads from lead_packages perfectly
         try {
-          // If we safely retained the old lead data, we should also try to retain the old json data
-          // if the new one is empty. We can check if teamMembersText was '[]' but we saved safeTeamMembersText
-          const isTeamEmpty = teamMembersText === '[]' || teamMembersText === '';
-          const isDelEmpty = deliverablesText === '[]' || deliverablesText === '';
-          
-          const packagePayload = {
+          const isValidPackage = INITIAL_PACKAGES.some(p => p.package_id === pkgId);
+          if (!isValidPackage) {
+            console.warn(`[SalesModule] Skipping lead_packages upsert for invalid package_id: ${pkgId}`);
+            throw new Error(`Invalid package_id: ${pkgId}`);
+          }
+
+          const rawPackagePayload = {
             lead_id: targetLeadId,
             package_id: pkgId,
             package_name: wizardLeadData.package_name || (pkgId === 'Custom Package' || pkgId === 'custom_package' ? 'Custom Package' : `Package ${pkgId}`),
             quantity: 1,
+            package_cost: cleanPkgCost || 0,
             total_amount: cleanPkgCost || 0,
             discount: cleanDiscount || 0,
             final_amount: cleanFinalAmt || 0,
             Team_Members_Included: teamMembersJson,
             editable_inclusions: editableInclusions,
             deliverables_descriptionn: deliverablesJson,
-            deliverables_json: deliverablesJson,
             deliverables_description: deliverablesText,
             editable_deliverables: editableDeliverables,
             updated_at: new Date().toISOString()
           };
 
-          const { data: existingLps } = await supabaseClient
+          const { payload: packagePayload, isValid, teamMembersValid, deliverablesValid, issues } = verifyAndFormatLeadPackagePayload(
+            rawPackagePayload,
+            'SalesModule handleSavePackageOnly [Save Package]'
+          );
+
+          console.log('[SalesModule lead_packages API Prep] Target Lead ID:', targetLeadId, 'Package ID:', pkgId);
+          console.log('[SalesModule lead_packages API Prep] Verification status:', {
+            isValid,
+            teamMembersValid,
+            deliverablesValid,
+            issuesCount: issues.length,
+            Team_Members_Included_Type: Array.isArray(packagePayload.Team_Members_Included) ? 'Array' : typeof packagePayload.Team_Members_Included,
+            deliverables_descriptionn_Type: Array.isArray(packagePayload.deliverables_descriptionn) ? 'Array' : typeof packagePayload.deliverables_descriptionn
+          });
+
+          const { data: existingLps, error: fetchLpErr } = await supabaseClient
             .from('lead_packages')
             .select('*')
             .eq('lead_id', targetLeadId);
 
+          if (fetchLpErr) {
+            console.warn("[lead_packages SalesModule] Error querying existing lead_packages:", fetchLpErr);
+          }
+
           let targetLpId = `LP-${targetLeadId}-${pkgId}`;
           if (existingLps && existingLps.length > 0) {
             const matched = existingLps.find(lp => String(lp.package_id) === String(pkgId)) || existingLps[0];
-            targetLpId = matched.lead_package_id;
-            await supabaseClient
+            targetLpId = matched.lead_package_id || matched.id || targetLpId;
+            console.log(`🚀 [Supabase API Call] Updating 'lead_packages' record (lead_package_id: "${targetLpId}"):`, packagePayload);
+            const { data: updateRes, error: updateErr } = await supabaseClient
               .from('lead_packages')
               .update(packagePayload)
-              .eq('lead_package_id', targetLpId);
+              .eq(matched.lead_package_id ? 'lead_package_id' : 'id', targetLpId)
+              .select('*');
+
+            if (updateErr) {
+              console.error(`❌ [Supabase API Error] Error updating 'lead_packages':`, updateErr);
+            } else {
+              console.log(`✅ [Supabase API Success] Successfully updated 'lead_packages' record:`, updateRes);
+            }
           } else {
-            await supabaseClient
+            console.log(`🚀 [Supabase API Call] Inserting new 'lead_packages' record (lead_package_id: "${targetLpId}"):`, packagePayload);
+            const { data: insertRes, error: insertErr } = await supabaseClient
               .from('lead_packages')
               .insert({
                 ...packagePayload,
                 lead_package_id: targetLpId,
                 created_at: new Date().toISOString()
-              });
+              })
+              .select('*');
+
+            if (insertErr) {
+              console.error(`❌ [Supabase API Error] Error inserting into 'lead_packages':`, insertErr);
+            } else {
+              console.log(`✅ [Supabase API Success] Successfully inserted 'lead_packages' record:`, insertRes);
+            }
           }
         } catch (lpErr) {
-          console.warn("Could not upsert lead_packages record:", lpErr);
+          console.error("❌ Exception while upserting lead_packages record in SalesModule handleSavePackageOnly:", lpErr);
         }
       }
 
@@ -8091,6 +8163,17 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
     } else {
       setCreateEvents(prev => prev.filter(ev => ev.id !== id));
     }
+    const purgeKeys = (record: Record<string, string[]>) => {
+      const next = { ...record };
+      Object.keys(next).forEach(k => {
+        if (k === id || k.endsWith(`_${id}`) || k.includes(id)) {
+          delete next[k];
+        }
+      });
+      return next;
+    };
+    setEditableInclusions(prev => purgeKeys(prev));
+    setEditableDeliverables(prev => purgeKeys(prev));
     showToastMsg("Event removed from list.", "success");
   };
 
@@ -10017,9 +10100,37 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
 
     return matchesSearch && matchesSource && matchesStatus && matchesSales && matchesDate && matchesDateRange;
   }).sort((a, b) => {
-    const timeB = b.created_at ? new Date(b.created_at).getTime() : (b.updated_at ? new Date(b.updated_at).getTime() : new Date(b.created_date).getTime());
-    const timeA = a.created_at ? new Date(a.created_at).getTime() : (a.updated_at ? new Date(a.updated_at).getTime() : new Date(a.created_date).getTime());
-    return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
+    const parseRegistrationTimestamp = (leadObj: Lead): number => {
+      const raw = leadObj.created_at || leadObj.created_date || (leadObj as any).registered_date || (leadObj as any).registration_date || leadObj.updated_at;
+      if (!raw) return 0;
+      if (typeof raw === 'number') return raw;
+      const s = String(raw).trim();
+      if (!s) return 0;
+      const parsed = new Date(s).getTime();
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+      if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(s)) {
+        const parts = s.split(/[-/]/);
+        const day = parseInt(parts[0], 10);
+        const month = parseInt(parts[1], 10) - 1;
+        const year = parseInt(parts[2], 10);
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d.getTime();
+      }
+      return 0;
+    };
+
+    const timeB = parseRegistrationTimestamp(b);
+    const timeA = parseRegistrationTimestamp(a);
+    if (timeA !== timeB && timeA > 0 && timeB > 0) {
+      return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
+    }
+    if (timeB > 0 && timeA === 0) return sortOrder === 'latest' ? 1 : -1;
+    if (timeA > 0 && timeB === 0) return sortOrder === 'latest' ? -1 : 1;
+
+    const idA = (a.lead_id || '').trim();
+    const idB = (b.lead_id || '').trim();
+    const comp = idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
+    return sortOrder === 'latest' ? -comp : comp;
   });
 
   return (
@@ -12598,7 +12709,7 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                                           className="w-full h-8 px-3 text-xs font-bold bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 hover:text-white rounded-lg border border-blue-900/40 transition-all cursor-pointer flex items-center gap-2 shadow"
                                         >
                                           <FileText className="w-3.5 h-3.5 shrink-0" />
-                                          <span>Add Note</span>
+                                          <span>VIEW/ADD NOTE</span>
                                         </button>
                                         
                                         {/* View CRM Option */}
@@ -12959,8 +13070,20 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                       type="number"
                       required
                       readOnly
-                      value={confirmForm.quotation_amount || Number(selectedLead?.Final_Package_Amount) || Number((selectedLead as any)?.final_package_amount) || Number(selectedLead?.Final_Quotation_Amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0)}
-                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none font-mono opacity-80 cursor-not-allowed"
+                      disabled
+                      value={(() => {
+                        const step3ResolvedAmt = getStep3FinalQuotationAmount(selectedLead, {
+                          dynamicFinalAmt,
+                          wizardLeadData,
+                          quotations,
+                          leads,
+                          orders,
+                          leadPackages,
+                          confirmFormQuotationAmount: confirmForm.quotation_amount
+                        });
+                        return step3ResolvedAmt > 0 ? step3ResolvedAmt : (confirmForm.quotation_amount || '');
+                      })()}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none font-mono opacity-80 cursor-not-allowed select-none"
                     />
                   </div>
 
@@ -13977,16 +14100,93 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                               <div>
                                 {crmEvents && crmEvents.length > 0 ? (
                                   crmEvents.map((event, eventIdx) => {
-                                    const eventKey = `${selectedPkgId}_${event.id}`;
-                                    const nameKey = `${selectedPkgId}_${event.event_name || event.event_type || 'Unnamed Event'}`;
+                                    const isMulti = crmEvents && crmEvents.length > 1;
+                                    const evId = String(event.id || event.event_id || `EV-${eventIdx + 1}`);
+                                    const eventKey = `${selectedPkgId}_${evId}`;
+                                    const altKey = `Custom Package_${evId}`;
+                                    const customKey = `custom_package_${evId}`;
+
+                                    const directTm = event.team_members || event.inclusions || event.Team_Members || event.team_members_included;
+                                    const parsedDirectTm = directTm ? (Array.isArray(directTm) ? directTm.map((m: any) => {
+                                      const { qty, text } = parseQtyAndText(m);
+                                      return text ? combineQtyAndText(qty, text) : '';
+                                    }).filter(Boolean) : null) : null;
 
                                     const eventInclusions = editableInclusions[eventKey] !== undefined
                                       ? editableInclusions[eventKey]
-                                      : (editableInclusions[nameKey] !== undefined ? editableInclusions[nameKey] : (crmEvents.length === 1 ? inclusionsList : []));
+                                      : (editableInclusions[altKey] !== undefined
+                                          ? editableInclusions[altKey]
+                                          : (editableInclusions[customKey] !== undefined
+                                              ? editableInclusions[customKey]
+                                              : (editableInclusions[evId] !== undefined
+                                                  ? editableInclusions[evId]
+                                                  : (parsedDirectTm !== null
+                                                      ? parsedDirectTm
+                                                      : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))))));
+
+                                    const directDel = event.deliverables || event.deliverables_list || event.Add_Deliverable || event.deliverables_description;
+                                    const parsedDirectDel = directDel ? (Array.isArray(directDel) ? directDel.map((d: any) => {
+                                      const { qty, text } = parseQtyAndText(d);
+                                      return text ? combineQtyAndText(qty, text) : '';
+                                    }).filter(Boolean) : null) : null;
 
                                     const eventDeliverables = editableDeliverables[eventKey] !== undefined
                                       ? editableDeliverables[eventKey]
-                                      : (editableDeliverables[nameKey] !== undefined ? editableDeliverables[nameKey] : (crmEvents.length === 1 ? deliverablesList : []));
+                                      : (editableDeliverables[altKey] !== undefined
+                                          ? editableDeliverables[altKey]
+                                          : (editableDeliverables[customKey] !== undefined
+                                              ? editableDeliverables[customKey]
+                                              : (editableDeliverables[evId] !== undefined
+                                                  ? editableDeliverables[evId]
+                                                  : (parsedDirectDel !== null
+                                                      ? parsedDirectDel
+                                                      : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))))));
+
+                                    const updateInclusionsForEvent = (newList: string[]) => {
+                                      const updated = {
+                                        ...editableInclusions,
+                                        [eventKey]: newList,
+                                        [altKey]: newList,
+                                        [customKey]: newList,
+                                        [evId]: newList
+                                      };
+                                      if (!isMulti) {
+                                        updated[selectedPkgId] = newList;
+                                        updated['Custom Package'] = newList;
+                                        updated['custom_package'] = newList;
+                                      }
+                                      setEditableInclusions(updated);
+                                      if (crmEvents && crmEvents.length > 0) {
+                                        setCrmEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, team_members: newList, inclusions: newList } : e)));
+                                      }
+                                      if (createEvents && createEvents.length > 0) {
+                                        setCreateEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, team_members: newList, inclusions: newList } : e)));
+                                      }
+                                      saveStep3DataRealtime(updated, editableDeliverables);
+                                    };
+
+                                    const updateDeliverablesForEvent = (newList: string[]) => {
+                                      const updated = {
+                                        ...editableDeliverables,
+                                        [eventKey]: newList,
+                                        [altKey]: newList,
+                                        [customKey]: newList,
+                                        [evId]: newList
+                                      };
+                                      if (!isMulti) {
+                                        updated[selectedPkgId] = newList;
+                                        updated['Custom Package'] = newList;
+                                        updated['custom_package'] = newList;
+                                      }
+                                      setEditableDeliverables(updated);
+                                      if (crmEvents && crmEvents.length > 0) {
+                                        setCrmEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, deliverables: newList, deliverables_list: newList } : e)));
+                                      }
+                                      if (createEvents && createEvents.length > 0) {
+                                        setCreateEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, deliverables: newList, deliverables_list: newList } : e)));
+                                      }
+                                      saveStep3DataRealtime(editableInclusions, updated);
+                                    };
 
                                     const startDateStr = formatDDMMYYYY(event.event_start_date || event.event_date);
                                     const endDateRaw = event.event_end_date || (event as any).Event_End_Date || '';

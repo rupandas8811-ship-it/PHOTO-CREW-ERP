@@ -1,6 +1,8 @@
 {
-  "name": "PhotoCrew ERP",
-  "description": "PhotoCrew Pictures CRM & Production Management System",
+  "name": "Remix Final PHOTO CREW ERP",
+  "description": "",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

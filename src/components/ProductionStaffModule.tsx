@@ -13,6 +13,7 @@ import { ProjectDetailModal } from './ProjectDetailModal';
 import { AddNoteModal } from './AddNoteModal';
 import { TimePicker12Hour } from './TimePicker12Hour';
 import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
+import { ProductionStaffCalendar } from './ProductionStaffCalendar';
 import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY, triggerAutoScrollAndFocus } from '../utils';
 
 // Format ISO string to DD MMM YYYY in IST (Asia/Kolkata)
@@ -689,6 +690,22 @@ export const ProductionStaffModule: React.FC = () => {
   const staffName = prodStaffMember?.name || opStaffMember?.name || currentUser?.name || 'Staff';
   
   // Local state
+  const [activeViewTab, setActiveViewTab] = useState<'calendar' | 'deliverables'>('calendar');
+  const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
+  const viewDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (viewDropdownRef.current && !viewDropdownRef.current.contains(e.target as Node)) {
+        setViewDropdownOpen(false);
+      }
+    };
+    if (viewDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [viewDropdownOpen]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<string | null>(null);
@@ -1880,30 +1897,6 @@ Thank you.`;
   return (
     <div className="p-4 sm:p-6 bg-black min-h-screen text-white font-sans selection:bg-purple-500/30">
       <div className="max-w-[1400px] mx-auto space-y-6">
-        
-        {/* HEADER PANEL */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-zinc-900/50 p-5 rounded-2xl border border-zinc-800 shadow-xl">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20">
-                EDITOR STAFF PORTAL
-              </span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-black text-white uppercase tracking-wider mb-1">
-              Production Staff Dashboard
-            </h1>
-            <p className="text-sm text-zinc-400">
-              Welcome, <span className="text-purple-400 font-bold">{staffName}</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-3 px-4 py-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-            <Activity className="w-5 h-5 text-purple-400" />
-            <div>
-              <div className="text-[10px] uppercase font-mono text-zinc-400">Assigned Deliverables</div>
-              <span className="text-xl font-black text-white">{activeBookings.length} Active</span>
-            </div>
-          </div>
-        </div>
 
         {/* TOAST NOTIFICATION */}
         {toastMessage && (
@@ -1915,8 +1908,123 @@ Thank you.`;
           </div>
         )}
 
+        {/* VIEW NAVIGATION: DROPDOWN SELECTOR */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/90 p-2.5 sm:p-3 rounded-2xl border border-zinc-800 shadow-xl">
+          {/* Dropdown Selector */}
+          <div ref={viewDropdownRef} className="relative w-full sm:w-auto sm:min-w-[280px] md:min-w-[340px]">
+            <label id="production_staff_view_label" className="sr-only">Select View Section</label>
+            <button
+              type="button"
+              id="production_staff_view_dropdown_btn"
+              onClick={() => setViewDropdownOpen(prev => !prev)}
+              aria-labelledby="production_staff_view_label production_staff_view_dropdown_btn"
+              aria-haspopup="listbox"
+              aria-expanded={viewDropdownOpen}
+              className="w-full flex items-center justify-between gap-3 px-4 py-2.5 bg-zinc-950/90 hover:bg-zinc-850/80 border border-zinc-700/80 hover:border-purple-500/50 rounded-xl transition-all duration-150 cursor-pointer shadow-md group focus:outline-none focus:ring-2 focus:ring-purple-500/40"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="p-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0">
+                  {activeViewTab === 'calendar' ? (
+                    <Calendar className="w-4 h-4" />
+                  ) : (
+                    <CheckSquare className="w-4 h-4" />
+                  )}
+                </span>
+                <span className="font-mono font-bold text-xs sm:text-sm text-zinc-100 truncate">
+                  {activeViewTab === 'calendar' ? (
+                    'Production Staff Calendar'
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <span>My Assigned Deliverables</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-purple-300 border border-zinc-700 font-mono">
+                        {activeBookings.length}
+                      </span>
+                    </span>
+                  )}
+                </span>
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-zinc-400 group-hover:text-white transition-transform duration-200 shrink-0 ${
+                  viewDropdownOpen ? 'rotate-180 text-purple-400' : ''
+                }`}
+              />
+            </button>
+
+            {/* Dropdown Menu Options */}
+            {viewDropdownOpen && (
+              <div 
+                className="absolute top-full left-0 mt-1.5 w-full sm:min-w-[340px] bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl z-50 overflow-hidden divide-y divide-zinc-850/80 animate-in fade-in zoom-in-95 duration-150"
+                role="listbox"
+              >
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={activeViewTab === 'calendar'}
+                  onClick={() => {
+                    setActiveViewTab('calendar');
+                    setViewDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-all cursor-pointer ${
+                    activeViewTab === 'calendar'
+                      ? 'bg-purple-950/40 text-white font-bold border-l-2 border-purple-500'
+                      : 'text-zinc-300 hover:text-white hover:bg-zinc-900/80 border-l-2 border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <Calendar className={`w-4 h-4 shrink-0 ${activeViewTab === 'calendar' ? 'text-purple-400' : 'text-zinc-400'}`} />
+                    <span className="font-mono text-xs sm:text-sm">Production Staff Calendar</span>
+                  </div>
+                  {activeViewTab === 'calendar' && (
+                    <span className="text-purple-400 font-mono text-xs">✓</span>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={activeViewTab === 'deliverables'}
+                  onClick={() => {
+                    setActiveViewTab('deliverables');
+                    setViewDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-all cursor-pointer ${
+                    activeViewTab === 'deliverables'
+                      ? 'bg-purple-950/40 text-white font-bold border-l-2 border-purple-500'
+                      : 'text-zinc-300 hover:text-white hover:bg-zinc-900/80 border-l-2 border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <CheckSquare className={`w-4 h-4 shrink-0 ${activeViewTab === 'deliverables' ? 'text-purple-400' : 'text-zinc-400'}`} />
+                    <span className="font-mono text-xs sm:text-sm">My Assigned Deliverables</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-purple-300 border border-zinc-700 font-mono font-bold">
+                      {activeBookings.length}
+                    </span>
+                    {activeViewTab === 'deliverables' && (
+                      <span className="text-purple-400 font-mono text-xs">✓</span>
+                    )}
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="text-[10px] sm:text-xs font-mono text-zinc-400 px-3.5 py-2 bg-zinc-950/70 rounded-xl border border-zinc-800/80 self-start sm:self-center shrink-0">
+            Editor: <strong className="text-purple-400">{staffName}</strong>
+          </div>
+        </div>
+
+        {/* PRODUCTION STAFF CALENDAR VIEW */}
+        {activeViewTab === 'calendar' && (
+          <div className="animate-fade-in space-y-4">
+            <ProductionStaffCalendar staffMemberId={resolvedStaffId} staffMemberName={staffName} />
+          </div>
+        )}
+
         {/* TASKS TABLE */}
-        <div className="space-y-4">
+        {activeViewTab === 'deliverables' && (
+        <div className="space-y-4 animate-fade-in">
           <div className="flex flex-wrap items-center justify-between gap-3 pl-1">
             <h2 className="text-xs font-mono font-black uppercase tracking-widest text-zinc-400 flex items-center gap-2">
               <span>🎬 My Assigned Deliverables</span>
@@ -2317,7 +2425,7 @@ Thank you.`;
                                         }}
                                         className="w-full text-left px-4 py-2.5 text-xs text-zinc-200 hover:bg-amber-600/20 hover:text-amber-300 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
                                       >
-                                        <span className="w-4 h-4 flex items-center justify-center text-amber-400">📝</span> Add Note
+                                        <span className="w-4 h-4 flex items-center justify-center text-amber-400">📝</span> VIEW/ADD NOTE
                                       </button>
 
                                       {/* View Customer Confirmation Proof */}
@@ -2754,7 +2862,7 @@ Thank you.`;
                                     }}
                                     className="w-full text-left px-4 py-3 text-xs text-zinc-200 hover:bg-amber-600/20 hover:text-amber-300 font-bold flex items-center gap-2 transition-colors cursor-pointer border-t border-zinc-800/80"
                                   >
-                                    <span className="w-4 h-4 flex items-center justify-center text-amber-400">📝</span> Add Note
+                                    <span className="w-4 h-4 flex items-center justify-center text-amber-400">📝</span> VIEW/ADD NOTE
                                   </button>
 
                                   {/* View Customer Confirmation Proof */}
@@ -2886,6 +2994,7 @@ Thank you.`;
             </div>
           )}
         </div>
+        )}
 
       </div>
 

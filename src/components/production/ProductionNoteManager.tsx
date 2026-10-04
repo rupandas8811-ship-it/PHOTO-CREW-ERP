@@ -25,7 +25,7 @@ export const ProductionNoteManager: React.FC = () => {
       if (!btn) return;
 
       const btnText = (btn.textContent || '').trim();
-      if (btnText.includes('Add Note')) {
+      if (btnText.includes('VIEW/ADD NOTE') || btnText.includes('Add Note') || btnText.includes('View/Add Note')) {
         const dropdown = document.getElementById('production-action-dropdown') || target.closest('#production-action-dropdown');
         if (dropdown) {
           const headerSpans = Array.from(dropdown.querySelectorAll('span'));

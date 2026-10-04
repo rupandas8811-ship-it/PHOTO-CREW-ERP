@@ -11,30 +11,15 @@ import {
   CartesianGrid, Legend, BarChart, Bar, Cell, PieChart, Pie, LineChart, Line
 } from 'recharts';
 import { CameraLensStatsCard } from '../../CameraLensStatsCard';
+import { calculateTotalOutstandingBalance } from '../../../utils/paymentCalculations';
 
 export const OwnerRevenueDetailed: React.FC = () => {
-  const { leads, orders, payments, quotations, globalDateRange } = useRole();
+  const { leads, orders, payments, quotations, globalDateRange, paymentHistory } = useRole();
 
   const metrics = useMemo(() => {
     const totalCollected = payments.reduce((sum, p) => sum + (p.advance_received || 0) + (p.final_payment_received || 0), 0);
-    const totalPending = payments.reduce((sum, p) => sum + (p.balance_due || 0), 0);
-    
-    // Sum Final Quotation Amount for leads whose status is between Order Confirmed and Delivered (inclusive)
-    const totalQuotation = leads.reduce((sum, l) => {
-      const excluded = [
-        'Draft', 'New Lead', 'Quotation Pending', 'Cancelled', 'Rejected',
-        'Contacted', 'Follow Up', 'Follow-up', 'Quotation Sent', 'Negotiation', 'Lost Lead', 'Lost'
-      ];
-      if (l.status && !excluded.includes(l.status)) {
-        const amt = Number(l.Final_Quotation_Amount) || Number(l.final_amount) || Number(l.final_package_amount) || Number(l.budget) || 0;
-        return sum + amt;
-      }
-      return sum;
-    }, 0);
-
-    const totalAdvance = payments.reduce((sum, p) => sum + (p.advance_received || 0), 0);
-    const totalFinal = payments.reduce((sum, p) => sum + (p.final_payment_received || 0), 0);
-    const outstandingBalance = payments.reduce((sum, p) => sum + (p.balance_due || 0), 0);
+    const outstandingBalance = calculateTotalOutstandingBalance(orders, leads, payments, paymentHistory);
+    const totalPending = outstandingBalance;
     const totalConfirmed = orders.length;
     const totalPipeline = leads.length;
 

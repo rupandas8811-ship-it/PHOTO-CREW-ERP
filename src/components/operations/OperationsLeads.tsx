@@ -188,6 +188,98 @@ export const sortEventsByDateAsc = (events: any[]): any[] => {
   });
 };
 
+/**
+ * Formats a date value into clean "12 Sep 2026" (or "5 Sep 2026") format.
+ * Guarantees that null, undefined, "undefined", "null", "N/A", "—", or invalid dates
+ * NEVER produce "undefined", "null", or invalid text.
+ */
+export const formatOperationsEventDate = (dateVal?: string | null | Date): string => {
+  if (dateVal === null || dateVal === undefined) return '';
+  const s = String(dateVal).trim();
+  if (
+    !s ||
+    s.toLowerCase() === 'undefined' ||
+    s.toLowerCase() === 'null' ||
+    s.toLowerCase() === 'n/a' ||
+    s.toLowerCase() === 'na' ||
+    s.toLowerCase() === '—' ||
+    s.toLowerCase() === '-' ||
+    s.toLowerCase() === 'none'
+  ) {
+    return '';
+  }
+  const cal = toCalendarDateString(dateVal);
+  if (!cal) return '';
+  const parts = cal.split('-');
+  if (parts.length < 3) return '';
+  const y = parts[0];
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  if (isNaN(m) || isNaN(d) || m < 1 || m > 12 || d < 1 || d > 31) return '';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const monthStr = months[m - 1] || 'Jan';
+  return `${d} ${monthStr} ${y}`;
+};
+
+export interface FormattedOrderEventDate {
+  dateStr: string;
+  calDate: string;
+  formatted: string;
+  timestamp: number;
+}
+
+/**
+ * Extracts unique, valid event dates from an order's events,
+ * eliminates duplicate dates, formats each as "12 Sep 2026",
+ * and sorts them chronologically with the most relevant/current upcoming date first.
+ */
+export const getUniqueSortedOrderEventDates = (orderEvents: any[]): FormattedOrderEventDate[] => {
+  if (!Array.isArray(orderEvents) || orderEvents.length === 0) return [];
+
+  const seenCalDates = new Set<string>();
+  const validDates: FormattedOrderEventDate[] = [];
+
+  for (const ev of orderEvents) {
+    const raw = ev?.event_date || ev?.eventDate || ev?.Event_Date || ev?.date || '';
+    const cal = toCalendarDateString(raw);
+    if (!cal) continue;
+    if (seenCalDates.has(cal)) continue;
+    seenCalDates.add(cal);
+
+    const formatted = formatOperationsEventDate(raw);
+    if (!formatted) continue;
+
+    const parts = cal.split('-').map(Number);
+    const timestamp = new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+
+    validDates.push({
+      dateStr: String(raw),
+      calDate: cal,
+      formatted,
+      timestamp
+    });
+  }
+
+  if (validDates.length === 0) return [];
+  if (validDates.length === 1) return validDates;
+
+  const todayCal = toCalendarDateString(new Date()) || '1970-01-01';
+
+  // Partition into upcoming (>= today) and past (< today)
+  const upcoming = validDates.filter(d => d.calDate >= todayCal);
+  const past = validDates.filter(d => d.calDate < todayCal);
+
+  // Sort upcoming chronologically ascending (earliest upcoming first: e.g. 12 Sep 2026, then 18 Sep 2026)
+  upcoming.sort((a, b) => a.calDate.localeCompare(b.calDate));
+
+  // Sort past chronologically descending (most recent past first)
+  past.sort((a, b) => b.calDate.localeCompare(a.calDate));
+
+  // If there are upcoming dates, upcoming comes first (earliest upcoming first), followed by past
+  // If no upcoming dates, most recent past comes first
+  return [...upcoming, ...past];
+};
+
 const isEventWithinDateRange = (
   dateStr: string | null | undefined,
   filterType: string,
@@ -618,6 +710,20 @@ export const OperationsLeads: React.FC = () => {
   const [viewingLocationsModal, setViewingLocationsModal] = useState<{ orderId: string; customerName?: string; events: any[] } | null>(null);
   const [viewingEventCategoriesModal, setViewingEventCategoriesModal] = useState<{ orderId: string; customerName?: string; events: any[] } | null>(null);
   const [viewingDatesModal, setViewingDatesModal] = useState<{ orderId: string; customerName?: string; events: any[] } | null>(null);
+  const [expandedDateOrderIds, setExpandedDateOrderIds] = useState<Set<string>>(new Set());
+
+  const toggleExpandDates = (orderId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setExpandedDateOrderIds(prev => {
+      const next = new Set(prev);
+      if (next.has(orderId)) {
+        next.delete(orderId);
+      } else {
+        next.add(orderId);
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (viewingLocationsModal || viewingDatesModal || viewingEventCategoriesModal) {
@@ -776,6 +882,22 @@ export const OperationsLeads: React.FC = () => {
   
   // Inline edit state for assignment
   const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [fetchedEquipment, setFetchedEquipment] = useState<any[]>([]);
+
+  const loadEquipment = async () => {
+    const { data, error } = await supabaseClient
+      .from('equipment')
+      .select('equipment_id, equipment_name')
+      .order('equipment_name', { ascending: true });
+
+    if (error) {
+      console.warn('[OperationsLeads] Load equipment error:', error.message || error);
+      setFetchedEquipment([]);
+      return;
+    }
+
+    setFetchedEquipment(data || []);
+  };
   const [isSaving, setIsSaving] = useState(false);
   const whatsappModalRef = useRef<HTMLDivElement>(null);
   const whatsappScrollRef = useRef<HTMLDivElement>(null);
@@ -1469,8 +1591,27 @@ export const OperationsLeads: React.FC = () => {
     if (!equipmentName) return result;
     const cleanEqName = equipmentName.trim().toLowerCase();
 
-    const eqItem = (equipment || []).find(e => e.equipment_name.toLowerCase() === cleanEqName);
-    if (eqItem && (eqItem.status === 'Under Maintenance' || eqItem.status === 'Damaged' || eqItem.status === 'Inactive')) {
+    const isCurrentOrderMatch = (targetOrdId?: string) => {
+      if (!targetOrdId || !currentOrderId) return false;
+      if (targetOrdId === currentOrderId) return true;
+      const currOrd = orderMap.get(currentOrderId);
+      const currLead = leadMap.get(currentOrderId) || (currOrd ? leadMap.get(currOrd.lead_id) : undefined);
+      const matchedIds = new Set<string>([
+        currentOrderId,
+        currOrd?.order_id || '',
+        currOrd?.lead_id || '',
+        currLead?.lead_id || '',
+        (currLead as any)?.order_id || ''
+      ].filter(Boolean));
+      return matchedIds.has(targetOrdId);
+    };
+
+    const eqItem = (equipment || []).find((e: any) => {
+      const eName = String(e.equipment_name || e.name || e.Equipment_Name || '').trim().toLowerCase();
+      const eId = String(e.equipment_id || e.id || '').trim().toLowerCase();
+      return eName === cleanEqName || eId === cleanEqName;
+    });
+    if (eqItem && (eqItem.status === 'Under Maintenance' || eqItem.status === 'Damaged' || eqItem.status === 'Inactive' || eqItem.status === 'Retired')) {
       result.isBusy = true;
       result.statusText = eqItem.status;
       return result;
@@ -1510,7 +1651,7 @@ export const OperationsLeads: React.FC = () => {
 
     // 1. Staff Assignments
     (staffAssignments || []).forEach(sa => {
-      if (currentOrderId && sa.order_id === currentOrderId) return;
+      if (isCurrentOrderMatch(sa.order_id) || isCurrentOrderMatch((sa as any).lead_id)) return;
       
       const assignStatus = (sa.assignment_status || '').toLowerCase();
       const taskStatus = ((sa as any).task_status || '').toLowerCase();
@@ -1576,7 +1717,7 @@ export const OperationsLeads: React.FC = () => {
 
     // 2. Operations equipment kit (if not already handled by staff assignments)
     (operations || []).forEach(op => {
-      if (currentOrderId && op.order_id === currentOrderId) return;
+      if (isCurrentOrderMatch(op.order_id) || isCurrentOrderMatch((op as any).lead_id)) return;
       if (!op.equipment_kit || !op.equipment_kit.trim()) return;
 
       if (['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return;
@@ -2087,7 +2228,7 @@ export const OperationsLeads: React.FC = () => {
       'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed', 'Order Closed'
     ];
     
-    const stage = (o.current_stage || '').trim();
+    const stage = (o.current_stage || o.order_status || '').trim();
     if (postOpStages.includes(stage)) return true;
 
     const lead = leads?.find(l => l.lead_id === o.lead_id || l.lead_id === o.order_id);
@@ -2104,22 +2245,18 @@ export const OperationsLeads: React.FC = () => {
     return false;
   };
 
-  // Filter orders to show confirmed ones for Operations
+  // Filter orders to show confirmed ones for Operations (active workflow stages only)
   const allowedStages = [
     'Confirm Order', 'Order Confirmed', 'New Order Received', 'Operations Assigned',
     'Assigned Crew', 'Staff Assigned', 'Event Scheduled',
     'Event Started', 'Event Start',
     'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
     'Footage Handover', 'Equipment Handover',
-    'Verified Footage', 'Footage Handover Verified',
-    'Event Cancelled',
-    'Raw Footage Received', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
-    'Internal QC Review', 'Client Review Sent', 'Internal Review', 'Client Review',
-    'Revision Required', 'Revision In Progress', 'Revision', 'Final Approval',
-    'Ready for Delivery', 'Project Delivered', 'Delivered', 'Project Completed', 'Completed', 'Order Closed'
+    'Event Cancelled'
   ];
   const operationsOrders = orders.filter(o => {
     if (!allowedStages.includes(o.current_stage)) return false;
+    if (isVerifiedFootageOrder(o)) return false;
     if (currentRole === 'Operation Staff') {
       const staffName = currentUserName || '';
       const orderAssigns = staffAssignments ? staffAssignments.filter(sa => sa.order_id === o.order_id && sa.assignment_status !== 'Cancelled') : [];
@@ -2178,6 +2315,9 @@ export const OperationsLeads: React.FC = () => {
     const baseSource = operationsOrders;
 
     return baseSource.filter(o => {
+      // Automatically remove orders that reached Verified Footage or moved to Production
+      if (isVerifiedFootageOrder(o)) return false;
+
       // Search term validation (Search by Customer Name, Order ID, Mobile Number)
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
@@ -2190,7 +2330,8 @@ export const OperationsLeads: React.FC = () => {
 
       // 1. Status Dropdown filter
       if (statusFilter === 'All') {
-        // Show all active operations orders
+        // Automatically remove orders that reached Verified Footage or moved to Production
+        if (isVerifiedFootageOrder(o)) return false;
       } else {
         const isStaffAssigned = staffAssignments ? staffAssignments.some(x => x.order_id === o.order_id) : false;
         const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
@@ -2420,6 +2561,7 @@ export const OperationsLeads: React.FC = () => {
       event_time: order.event_time || op?.event_time || ''
     });
     setAssigningOrderId(order.order_id);
+    loadEquipment();
     
     // Initialize selectedKits
     const kits = isNewAssignment ? [] : parseEquipmentKit(op?.equipment_kit);
@@ -2455,14 +2597,17 @@ export const OperationsLeads: React.FC = () => {
     const hasAnyAllocations = Object.values(eventAllocations).some((alloc: any) => alloc.staff && alloc.staff.length > 0);
     if (activeAssignments.length === 0 && !hasAnyAllocations) {
       alert("Please assign at least one staff member.");
+      setIsSaving(false);
       return;
     }
     if (!assignForm.event_date) {
       alert("Please select an event date.");
+      setIsSaving(false);
       return;
     }
     if (!assignForm.reporting_time) {
       alert("Please select a reporting time.");
+      setIsSaving(false);
       return;
     }
 
@@ -2472,9 +2617,17 @@ export const OperationsLeads: React.FC = () => {
       for (const st of staffList) {
         const eqList = st.equipment || [];
         for (const kitName of eqList) {
-          const found = equipment.find(eq => eq.equipment_name.toLowerCase() === kitName.toLowerCase());
-          if (!found) {
-            alert(`Equipment "${kitName}" not found in inventory.`);
+          if (!kitName || !kitName.trim()) continue;
+          const cleanKit = kitName.trim().toLowerCase();
+
+          const found = (equipment || []).find((eq: any) => {
+            const eqName = String(eq.equipment_name || eq.name || eq.Equipment_Name || '').trim().toLowerCase();
+            const eqId = String(eq.equipment_id || eq.id || '').trim().toLowerCase();
+            return eqName === cleanKit || eqId === cleanKit;
+          });
+          if (found && (found.status === 'Under Maintenance' || found.status === 'Damaged' || found.status === 'Inactive' || found.status === 'Retired')) {
+            alert(`Equipment "${kitName}" is currently ${found.status} in inventory.`);
+            setIsSaving(false);
             return;
           }
           
@@ -2494,6 +2647,7 @@ export const OperationsLeads: React.FC = () => {
               });
             }
             alert(conflictMsg);
+            setIsSaving(false);
             return;
           }
         }
@@ -2947,22 +3101,58 @@ export const OperationsLeads: React.FC = () => {
     let verifiedFootage = 0;
 
     orders.forEach(o => {
+      // 1. If order or lead has reached Verified Footage (or downstream production stage), count ONLY in verifiedFootage
+      if (isVerifiedFootageOrder(o)) {
+        verifiedFootage++;
+        return;
+      }
+
+      const lead = findLeadForOrder(o, leads || []);
       const assignedStaffDetails = getAssignedStaffDetailsForOrder(o);
       const staffStatuses = assignedStaffDetails.map(s => s.staff_status);
-      const calculatedStage = getCalculatedOrderStage(o.current_stage, staffStatuses);
+      const baseStage = (o.current_stage || (lead ? getLeadCurrentStatus(lead) : 'Order Confirmed')).trim();
+      const calculatedStage = getCalculatedOrderStage(baseStage, staffStatuses).trim();
+      const normStage = calculatedStage.toLowerCase();
 
-      if (['Order Confirmed', 'Confirm Order', 'New Order Received'].includes(calculatedStage)) {
-        newProjectArrived++;
-      } else if (['Assigned Crew', 'Staff Assigned', 'Event Scheduled', 'Operations Assigned'].includes(calculatedStage)) {
-        assignedCrew++;
-      } else if (['Event Started', 'Event Start'].includes(calculatedStage)) {
-        eventStarted++;
-      } else if (['Event Ended', 'Event End', 'Event Completed', 'Event Complete'].includes(calculatedStage)) {
-        eventEnded++;
-      } else if (['Footage Handover', 'Equipment Handover'].includes(calculatedStage)) {
-        footageHandover++;
-      } else if (['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received'].includes(calculatedStage) || isVerifiedFootageOrder(o)) {
+      // 2. Exactly one mutually exclusive current status card per order
+      if (
+        normStage === 'verified footage' ||
+        normStage === 'footage handover verified' ||
+        normStage === 'raw footage received' ||
+        getStageRank(calculatedStage) >= 4
+      ) {
         verifiedFootage++;
+      } else if (
+        normStage === 'footage handover' ||
+        normStage === 'equipment handover' ||
+        normStage === 'equipment received' ||
+        normStage === 'raw footage uploaded'
+      ) {
+        footageHandover++;
+      } else if (
+        normStage === 'event ended' ||
+        normStage === 'event end' ||
+        normStage === 'event completed' ||
+        normStage === 'event complete'
+      ) {
+        eventEnded++;
+      } else if (
+        normStage === 'event started' ||
+        normStage === 'event start' ||
+        normStage === 'event starting'
+      ) {
+        eventStarted++;
+      } else if (
+        normStage === 'assigned crew' ||
+        normStage === 'crew assigned' ||
+        normStage === 'staff assigned' ||
+        normStage === 'event scheduled' ||
+        normStage === 'operations assigned'
+      ) {
+        assignedCrew++;
+      } else {
+        // Order Confirmed / Confirm Order / New Project Arrived / default new order stage
+        newProjectArrived++;
       }
     });
 
@@ -3190,6 +3380,28 @@ export const OperationsLeads: React.FC = () => {
               <th className="p-4">
                 <button
                   type="button"
+                  onClick={() => handleColumnSort('event_date')}
+                  className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
+                  title={
+                    sortColumn === 'event_date'
+                      ? sortDirection === 'asc'
+                        ? 'Event Date: Earliest to Latest (Click for Latest to Earliest)'
+                        : 'Event Date: Latest to Earliest (Click for Reset / Default)'
+                      : 'Event Date: Click for Earliest to Latest'
+                  }
+                >
+                  <span>Event Date</span>
+                  <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'event_date' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                  {sortColumn === 'event_date' && (
+                    <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                      {sortDirection === 'asc' ? '▲' : '▼'}
+                    </span>
+                  )}
+                </button>
+              </th>
+              <th className="p-4">
+                <button
+                  type="button"
                   onClick={() => handleColumnSort('reporting_time')}
                   className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
                   title={
@@ -3221,7 +3433,7 @@ export const OperationsLeads: React.FC = () => {
               if (mainBoardList.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={10} className="p-8 text-center text-zinc-500 italic">
+                    <td colSpan={11} className="p-8 text-center text-zinc-500 italic">
                       No matching operations leads found.
                     </td>
                   </tr>
@@ -3444,6 +3656,76 @@ export const OperationsLeads: React.FC = () => {
                         );
                       })()}
                     </td>
+                    <td className="p-4 font-mono text-zinc-300 text-xs">
+                      {(() => {
+                        const uniqueDates = getUniqueSortedOrderEventDates(allOrderEvents);
+                        if (uniqueDates.length === 0) {
+                          return <span className="text-zinc-600 italic">—</span>;
+                        }
+
+                        const primaryDate = uniqueDates[0];
+                        const hasMultiple = uniqueDates.length > 1;
+                        const additionalCount = uniqueDates.length - 1;
+                        const isExpanded = expandedDateOrderIds.has(ord.order_id);
+
+                        if (hasMultiple && isExpanded) {
+                          return (
+                            <div className="flex flex-col gap-1 items-start text-left select-text">
+                              <div className="flex items-start gap-1.5">
+                                <div className="flex flex-col gap-1">
+                                  {uniqueDates.map((d, dIdx) => (
+                                    <span
+                                      key={d.calDate || dIdx}
+                                      className="font-bold text-zinc-100 font-mono text-xs leading-snug"
+                                    >
+                                      {d.formatted}
+                                    </span>
+                                  ))}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => toggleExpandDates(ord.order_id, e)}
+                                  className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700 hover:text-zinc-200 transition-all cursor-pointer shrink-0 mt-0.5"
+                                  title="Click to collapse event dates"
+                                >
+                                  ▲
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div
+                            role={hasMultiple ? "button" : undefined}
+                            tabIndex={hasMultiple ? 0 : undefined}
+                            onClick={hasMultiple ? (e) => toggleExpandDates(ord.order_id, e) : undefined}
+                            onKeyDown={hasMultiple ? (e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                toggleExpandDates(ord.order_id);
+                              }
+                            } : undefined}
+                            className={`flex items-center gap-1.5 whitespace-nowrap select-text ${hasMultiple ? 'cursor-pointer group' : ''}`}
+                            title={hasMultiple ? `Click +${additionalCount} to view all ${uniqueDates.length} event dates` : primaryDate.formatted}
+                          >
+                            <span className={`font-semibold text-zinc-100 font-mono text-xs ${hasMultiple ? 'group-hover:text-indigo-300 transition-colors' : ''}`}>
+                              {primaryDate.formatted}
+                            </span>
+                            {hasMultiple && (
+                              <button
+                                type="button"
+                                onClick={(e) => toggleExpandDates(ord.order_id, e)}
+                                className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 group-hover:bg-indigo-500/30 group-hover:border-indigo-500/50 group-hover:text-white transition-all cursor-pointer shrink-0 shadow-sm"
+                                title={`Click +${additionalCount} to view all ${uniqueDates.length} event dates`}
+                              >
+                                +{additionalCount}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td className="p-4 font-mono text-zinc-300">
                       {op?.reporting_time ? formatTime12Hour(op.reporting_time) : <span className="text-zinc-600 italic">—</span>}
                     </td>
@@ -3660,10 +3942,10 @@ export const OperationsLeads: React.FC = () => {
                           }
 
                           // 2. When Current Status = Footage Handover or Event Completed
-                          // 3. Add Note
-                          if (!actionItems.some(i => i.label === 'Add Note')) {
+                          // 3. View/Add Note
+                          if (!actionItems.some(i => i.label === 'VIEW/ADD NOTE' || i.label === 'Add Note')) {
                             actionItems.push({
-                              label: 'Add Note',
+                              label: 'VIEW/ADD NOTE',
                               onClick: () => {
                                 setNoteModalLeadId(ord.lead_id);
                                 setNoteModalOrderId(ord.order_id);
@@ -3907,7 +4189,7 @@ export const OperationsLeads: React.FC = () => {
                     const eventNameDisplay = ev.event_name || ev.event_type || 'N/A';
 
                     return (
-                      <div key={evId} id={`assign-event-${evId}`} className="bg-zinc-950/60 border border-zinc-850 rounded-2xl relative overflow-hidden transition-all duration-300">
+                      <div key={evId} id={`assign-event-${evId}`} className="bg-zinc-950/60 border border-zinc-850 rounded-2xl relative overflow-visible transition-all duration-300">
                         {/* Collapsible Header */}
                         <div 
                           className="p-4 flex items-center justify-between cursor-pointer hover:bg-zinc-900/40 transition-colors"
@@ -4004,9 +4286,6 @@ export const OperationsLeads: React.FC = () => {
                           <h4 className="text-[11px] font-mono font-bold uppercase text-sky-400 tracking-wider">
                             Team Members Included & Staff Allocation
                           </h4>
-                          <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-2 py-1 rounded-md border border-zinc-800 shadow-inner">
-                            {allocStaff.filter((s: any) => s.staff_name && s.staff_name.trim()).length} Staff Assigned
-                          </span>
                         </div>
 
                         <div className="space-y-4">
@@ -4138,9 +4417,9 @@ export const OperationsLeads: React.FC = () => {
                               const assignedCount = slotsToRender.filter((s: any) => s.staff_name && s.staff_name.trim() !== '').length;
 
                               return (
-                                <div key={`task_${groupIdx}_${task.roleName}`} className="border border-zinc-800/80 rounded-xl overflow-hidden bg-zinc-950/80 shadow-md">
+                                <div key={`task_${groupIdx}_${task.roleName}`} className="border border-zinc-800/80 rounded-xl overflow-visible bg-zinc-950/80 shadow-md">
                                   {/* Task Header */}
-                                  <div className="bg-zinc-900/80 px-3.5 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2">
+                                  <div className="bg-zinc-900/80 px-3.5 py-2.5 border-b border-zinc-800/80 flex items-center justify-between flex-wrap gap-2 rounded-t-xl">
                                     <div className="flex items-center gap-2">
                                       <span className="text-sky-400 text-xs">✔</span>
                                       <span className="text-xs font-bold text-zinc-100 font-sans uppercase tracking-wide">
@@ -4380,13 +4659,13 @@ export const OperationsLeads: React.FC = () => {
 
                                              <div className="flex-1 min-w-0 w-full">
                                                <EquipmentSelectorDropdown
-                                                 equipment={equipment}
-                                                 selectedEquipmentNames={slot.equipment || []}
+                                                 equipment={fetchedEquipment}
+                                                 selectedEquipmentNames={slot?.equipment || []}
                                                  otherStaffEquipments={allocStaff
-                                                   .filter((s: any) => !isSameAssignmentSlot(s, slot))
+                                                   .filter((s: any) => s && !isSameAssignmentSlot(s, slot))
                                                    .map((s: any) => ({
-                                                     staffName: s.name || s.staff_name,
-                                                     equipmentNames: s.equipment || []
+                                                     staffName: s?.name || s?.staff_name || "",
+                                                     equipmentNames: s?.equipment || []
                                                    }))}
                                                  onToggleEquipment={(eqName) => {
                                                    setEventAllocations((prev: any) => {
@@ -4740,14 +5019,15 @@ export const OperationsLeads: React.FC = () => {
                                                 <div className="flex-1 min-w-0 w-full">
                                                   <EquipmentSelectorDropdown
                                                     equipment={equipment}
-                                                    selectedEquipmentNames={assignedStaff.equipment || []}
+                                                    selectedEquipmentNames={assignedStaff?.equipment || []}
                                                     otherStaffEquipments={allocStaff
                                                       .filter((s: any, idx: number) => {
+                                                        if (!s) return false;
                                                         return s.role_index !== undefined ? s.role_index !== roleIdx : idx !== roleIdx;
                                                       })
                                                       .map((s: any) => ({
-                                                        staffName: s.name || s.staff_name,
-                                                        equipmentNames: s.equipment || []
+                                                        staffName: s?.name || s?.staff_name || "",
+                                                        equipmentNames: s?.equipment || []
                                                       }))}
                                                     onToggleEquipment={(eqName) => {
                                                       setEventAllocations((prev: any) => {
@@ -5674,7 +5954,7 @@ export const OperationsLeads: React.FC = () => {
 
       {/* Multi-Staff WhatsApp Share picker */}
       {whatsappShareModalData && (
-        <div id="personalized-whatsapp-share-modal-overlay" className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4">
+        <div id="personalized-whatsapp-share-modal-overlay" className="fixed inset-0 bg-black/85 backdrop-blur-sm z-[9999] flex items-center justify-center p-3 sm:p-4">
           <div ref={whatsappModalRef} id="personalized-whatsapp-share-modal-card" className="bg-zinc-900 border border-zinc-800 rounded-2xl sm:rounded-3xl w-full max-w-2xl shadow-2xl p-4 sm:p-6 relative animate-in zoom-in duration-200 flex flex-col max-h-[92dvh] sm:max-h-[90vh]">
             <button 
               onClick={() => setWhatsappShareModalData(null)}
@@ -6750,7 +7030,7 @@ export const OperationsLeads: React.FC = () => {
                     eventLabel = `Event ${idx + 1}: ${rawName}`;
                   }
                 }
-                const formattedDate = ev.event_date ? (formatDateDDMMYY(ev.event_date) || ev.event_date) : '';
+                const formattedDate = ev.event_date ? (formatOperationsEventDate(ev.event_date) || formatDateDDMMYY(ev.event_date) || ev.event_date) : '';
                 return (
                   <div 
                     key={ev.id || `${viewingDatesModal.orderId}_ev_${idx + 1}`}

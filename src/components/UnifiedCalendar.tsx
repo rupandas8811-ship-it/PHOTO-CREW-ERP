@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole } from './RoleContext';
 import { 
@@ -8,3092 +8,931 @@ import {
   Clock, 
   MapPin, 
   Phone, 
-  Tag, 
   User, 
   X, 
-  Plus, 
   Search, 
   Filter, 
-  AlertCircle, 
   Briefcase, 
   CheckCircle2, 
   Camera, 
   Video, 
-  FileText, 
-  Check, 
-  HelpCircle,
-  ChevronDown,
-  ChevronUp,
-  Edit,
-  Trash2
+  ExternalLink,
+  Sparkles,
+  Layers,
+  UserPlus
 } from 'lucide-react';
 import { formatINR, formatTime12Hour, formatDateDDMMYY } from '../utils';
-import { EVENT_TYPES, ACTIVE_STAGE_GROUPS } from '../types';
-import { AssignedStaffDropdown } from './AssignedStaffDropdown';
 
 interface UnifiedCalendarProps {
-  role: 'sales' | 'operations' | 'production' | 'owner' | 'worker';
+  role: 'sales' | 'operations' | 'production' | 'production_staff' | 'owner' | 'worker';
+  staffMemberId?: string;
+  staffMemberName?: string;
   onSelectLead?: (lead: any) => void;
+  onOpenAssignEditor?: (targetOrderId: string, targetLeadId?: string) => void;
 }
 
-export interface CalendarEvent {
+interface CalendarEventItem {
   id: string;
-  sourceType: 'lead' | 'order' | 'operation' | 'production' | 'memo';
-    eventClass: 
-    | 'New Lead' 
-    | 'Follow-up' 
-    | 'Quotation Sent' 
-    | 'Booking Confirmed' 
-    | 'Event Scheduled' 
-    | 'Event Completed' 
-    | 'Raw Footage Pending' 
-    | 'Editing In Progress' 
-    | 'Target Delivery'
-    | 'Delivery Overdue'
-    | 'Overdue' 
-    | 'Calendar Memo';
-  date: string; // "YYYY-MM-DD"
+  orderId: string;
+  leadId?: string;
   customerName: string;
-  eventName?: string;
-  mobile: string;
+  customerMobile?: string;
+  eventName: string;
   eventType: string;
-  eventTime: string;
-  eventLocation: string;
-  currentStage: string;
-  notes?: string;
-  packageName?: string;
-  totalAmount?: number;
-  
-  // Operations specific
-  photographer?: string;
-  videographer?: string;
-  drone?: string;
-  assistant?: string;
-  kit?: string;
+  eventDate: string;
+  eventTime?: string;
+  reportingDate?: string;
   reportingTime?: string;
-  
-  // Production specific
-  editor?: string;
-  editingStatus?: string;
-  expectedDeliveryDate?: string;
+  location?: string;
+  assignedRole?: string;
+  assignedStaff?: string;
+  assignedCrew?: {
+    photographer?: string;
+    videographer?: string;
+    drone?: string;
+    assistant?: string;
+  };
+  editorAssigned?: string;
+  deliverables?: string | string[];
+  equipmentKit?: string;
   targetDeliveryDate?: string;
-  orderId?: string;
-  eventId?: string;
-  salesCrew?: string;
-  
-  raw: any;
+  rawFootageLink?: string;
+  budget?: number;
+  salesPerson?: string;
+  status: string;
+  desk?: string;
+  sourceRecord?: any;
 }
 
-export const normalizeToYYYYMMDD = (dateStr: string | null | undefined): string => {
-  if (!dateStr || dateStr === '—' || dateStr === 'N/A' || dateStr === 'undefined' || dateStr === 'null') return '';
-  const clean = String(dateStr).includes('T') ? String(dateStr).split('T')[0] : String(dateStr).trim();
-  if (!clean) return '';
-  const parts = clean.split(/[-/]/);
-  if (parts.length === 3) {
-    if (parts[0].length === 4) {
-      // YYYY-MM-DD or YYYY/MM/DD
-      return `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
-    } else if (parts[2].length === 4) {
-      // DD-MM-YYYY or DD/MM/YYYY
-      return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    }
+const normalizeDateStr = (dateVal?: string | null | Date): string => {
+  if (!dateVal) return '';
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return '';
+    return `${dateVal.getFullYear()}-${String(dateVal.getMonth() + 1).padStart(2, '0')}-${String(dateVal.getDate()).padStart(2, '0')}`;
   }
-  try {
-    const d = new Date(clean);
-    if (!isNaN(d.getTime())) {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    }
-  } catch (e) {}
-  return clean;
-};
-
-const parseLocalDate = (dateStr: string | Date | null | undefined): Date => {
-  if (!dateStr) return new Date();
-  if (dateStr instanceof Date) return isNaN(dateStr.getTime()) ? new Date() : dateStr;
-  const ymd = normalizeToYYYYMMDD(String(dateStr));
-  if (ymd) {
-    const parts = ymd.split('-');
-    if (parts.length === 3) {
-      const y = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10) - 1;
-      const d = parseInt(parts[2], 10);
-      return new Date(y, m, d);
-    }
+  const s = String(dateVal).trim();
+  if (!s) return '';
+  if (s.includes('T')) return s.split('T')[0];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) {
+    const [d, m, y] = s.split('/');
+    return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
   }
-  const fallback = new Date(dateStr);
-  return isNaN(fallback.getTime()) ? new Date() : fallback;
-};
-
-const parseEventTimes = (timeStr: string) => {
-  if (!timeStr) return { start: '10:00 AM', end: '--' };
-  // Check if it contains a range delimiter ' - ', '-', or ' to '
-  const delimiter = timeStr.includes(' - ') ? ' - ' : timeStr.includes('-') ? '-' : timeStr.includes(' to ') ? ' to ' : null;
-  if (delimiter) {
-    const parts = timeStr.split(delimiter);
-    return {
-      start: parts[0]?.trim() || timeStr,
-      end: parts[1]?.trim() || '--'
-    };
+  const parsed = new Date(s);
+  if (!isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
   }
-  return {
-    start: timeStr,
-    end: '--'
-  };
+  return s;
 };
 
-const formatDateDMY = (dateStr: string | null | undefined): string => {
-  if (!dateStr || dateStr === '—' || dateStr === 'N/A') return '—';
-  return formatDateDDMMYY(dateStr) || '—';
-};
-
-const getProductionAssignedDate = (
-  orderId?: string,
-  leadId?: string,
-  prodRecord?: any,
-  editorAssignments?: any[]
-): string => {
-  if (editorAssignments && editorAssignments.length > 0) {
-    const match = editorAssignments.find(a => 
-      (orderId && a.order_id === orderId) ||
-      (leadId && (a.lead_id === leadId || a.order_id === leadId)) ||
-      (prodRecord?.production_id && a.production_id === prodRecord.production_id)
-    );
-    if (match) {
-      const rawDate = match.assigned_date || match.assignment_date || match.created_at;
-      if (rawDate) return formatDateDMY(rawDate);
-    }
-  }
-
-  if (prodRecord?.editing_start_date) return formatDateDMY(prodRecord.editing_start_date);
-  if (prodRecord?.created_at) return formatDateDMY(prodRecord.created_at);
-
-  return '—';
-};
-
-export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ role, onSelectLead }) => {
+export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({ 
+  role, 
+  staffMemberId, 
+  staffMemberName, 
+  onSelectLead, 
+  onOpenAssignEditor 
+}) => {
   const { 
-    currentUser,
+    currentUser, 
     currentUserName,
-    leads, 
-    orders, 
-    operations, 
-    production, 
-    rawFootage, 
-    notifications, 
-    addNotification,
-    calendarMemos,
-    addCalendarMemo,
-    updateCalendarMemo,
-    deleteCalendarMemo,
-    logs,
-    staffAssignments,
-    editorAssignments,
-    payments,
-    isDataLoading
+    leads = [], 
+    orders = [], 
+    operations = [], 
+    production = [], 
+    staffAssignments = [], 
+    editorAssignments = [], 
+    rawFootage = [] 
   } = useRole();
 
-  const systemToday = new Date();
-  
-  const getLocalDateStr = (d: Date) => {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  const [currentMonth, setCurrentMonth] = useState<Date>(new Date());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('All');
+  const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
+  const [calendarModalEvents, setCalendarModalEvents] = useState<CalendarEventItem[]>([]);
+
+  // Month navigation handlers
+  const handlePrevMonth = () => {
+    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
   };
-  
-  const systemTodayStr = getLocalDateStr(systemToday);
 
-  // Anchor and navigate state
-  const [currentDate, setCurrentDate] = useState<Date>(systemToday);
-  const [selectedDate, setSelectedDate] = useState<string | null>(systemTodayStr);
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  const [calendarError, setCalendarError] = useState<string | null>(null);
-  
-  // Tab states
-  const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day' | 'agenda'>('month');
-  
-  // Search and Filter states
-  const [searchInputValue, setSearchInputValue] = useState('');
-  const [appliedSearchQuery, setAppliedSearchQuery] = useState('');
-  const [isSearchExecuted, setIsSearchExecuted] = useState(false);
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [eventTypeFilter, setEventTypeFilter] = useState('All');
-  const [showFilters, setShowFilters] = useState(false);
-  
-  // Memo form overlay state
-  const [showAddMemo, setShowAddMemo] = useState(false);
-  const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
-  const [newMemoTitle, setNewMemoTitle] = useState('');
-  const [newMemoMessage, setNewMemoMessage] = useState('');
-  
-  const [popupDate, setPopupDate] = useState<string | null>(null);
-  const [popupLeadId, setPopupLeadId] = useState<string | null>(null);
-  const [showSelectedDateModal, setShowSelectedDateModal] = useState<boolean>(false);
-  const [expandedLeads, setExpandedLeads] = useState<Set<string>>(new Set());
+  const handleNextMonth = () => {
+    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
 
-  const handleEventAction = (ev: CalendarEvent | any) => {
-    if (ev?.sourceType === 'memo') {
-      setNewMemoTitle(ev.customerName || '');
-      setNewMemoMessage(ev.notes || '');
-      setEditingMemoId(ev.id);
-      setSelectedDate(ev.date);
-      setShowAddMemo(true);
-      return;
-    }
+  const handleToday = () => {
+    setCurrentMonth(new Date());
+  };
 
-    const targetLeadId = ev?.raw?.lead_id || ev?.orderId || ev?.lead_id || ev?.id;
-    const orderDisplayId = ev?.orderId || ev?.raw?.order_id || ev?.raw?.tracking_id || ev?.raw?.lead_id;
+  // Compile calendar events according to the active role
+  const allEvents = useMemo<CalendarEventItem[]>(() => {
+    const items: CalendarEventItem[] = [];
 
-    const targetLead = leads.find(
-      (l) =>
-        (targetLeadId && (l.lead_id === targetLeadId || l.order_id === targetLeadId)) ||
-        (orderDisplayId && (l.lead_id === orderDisplayId || l.order_id === orderDisplayId)) ||
-        (ev?.customerName && l.customer_name && l.customer_name.trim().toLowerCase() === ev.customerName.trim().toLowerCase()) ||
-        (l.events && l.events.some((e) => e.id === ev?.id || (ev?.raw && e.id === ev.raw.id)))
-    ) || (ev?.raw?.lead_id ? ev.raw : (targetLeadId ? { lead_id: targetLeadId, customer_name: ev?.customerName, mobile: ev?.mobile } : null));
-
-    setShowSelectedDateModal(false);
-    setPopupDate(null);
-    setPopupLeadId(null);
-
-    if (role === 'sales' || role === 'owner' || onSelectLead) {
-      if (onSelectLead && targetLead) {
-        onSelectLead(targetLead);
+    // Helper to safely extract deliverables list
+    const extractDeliverablesString = (orderItem: any, prodItem: any): string => {
+      if (prodItem?.deliverables_summary) return prodItem.deliverables_summary;
+      if (prodItem?.assigned_deliverables) {
+        if (Array.isArray(prodItem.assigned_deliverables)) return prodItem.assigned_deliverables.join(', ');
+        return String(prodItem.assigned_deliverables);
       }
-      window.dispatchEvent(
-        new CustomEvent("calendar-action-click", {
-          detail: {
-            leadId: targetLead?.lead_id || targetLeadId,
-            role,
-            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
+      if (orderItem?.package_details) {
+        try {
+          const pkg = typeof orderItem.package_details === 'string' ? JSON.parse(orderItem.package_details) : orderItem.package_details;
+          if (pkg?.deliverables) {
+            if (Array.isArray(pkg.deliverables)) return pkg.deliverables.map((d: any) => d.name || d.deliverable_name || d).join(', ');
+            return String(pkg.deliverables);
           }
-        })
-      );
-      window.dispatchEvent(
-        new CustomEvent("calendar-action-click-deferred", {
-          detail: {
-            leadId: targetLead?.lead_id || targetLeadId,
-            role,
-            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
-          }
-        })
-      );
-    } else {
-      window.dispatchEvent(
-        new CustomEvent("calendar-action-click", {
-          detail: {
-            leadId: targetLead?.lead_id || targetLeadId,
-            role,
-            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
-          }
-        })
-      );
-      window.dispatchEvent(
-        new CustomEvent("calendar-action-click-deferred", {
-          detail: {
-            leadId: targetLead?.lead_id || targetLeadId,
-            role,
-            orderId: orderDisplayId || targetLead?.order_id || targetLead?.lead_id || targetLeadId
-          }
-        })
-      );
-    }
-  };
-
-  const toggleLeadExpand = (leadId: string) => {
-    const newSet = new Set(expandedLeads);
-    if (newSet.has(leadId)) newSet.delete(leadId);
-    else newSet.add(leadId);
-    setExpandedLeads(newSet);
-  };
-  const [teamPopupEvent, setTeamPopupEvent] = useState<any>(null);
-
-  const getOrderId = (orderId?: string, leadId?: string, ev?: any): string => {
-    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
-    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
-    const prodRecord = production?.find(p => (orderId && (p.order_id === orderId || p.tracking_id === orderId)) || (leadId && (p.lead_id === leadId || p.tracking_id === leadId)));
-
-    return linkedOrder?.order_id || prodRecord?.order_id || ev?.orderId || ev?.raw?.order_id || ev?.raw?.tracking_id || leadObj?.order_id || leadObj?.lead_id || orderId || leadId || '—';
-  };
-
-  const getEventName = (orderId?: string, leadId?: string, ev?: any): string => {
-    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
-    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
-
-    return (
-      ev?.eventName || 
-      ev?.raw?.event_name || 
-      ev?.raw?.custom_event_name || 
-      leadObj?.custom_event_name || 
-      (leadObj?.events && leadObj?.events[0]?.event_name) || 
-      linkedOrder?.event_type || 
-      ev?.eventType || 
-      'Event Shoot'
-    );
-  };
-
-  const getClientName = (orderId?: string, leadId?: string, ev?: any): string => {
-    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
-    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
-
-    return ev?.customerName || ev?.raw?.customer_name || linkedOrder?.client_name || leadObj?.customer_name || '—';
-  };
-
-  const getSalesCrew = (orderId?: string, leadId?: string, ev?: any): string => {
-    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
-    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
-
-    const rawCrew =
-      ev?.salesCrew ||
-      ev?.raw?.salesCrew ||
-      ev?.raw?.sales_crew ||
-      leadObj?.sales_person ||
-      leadObj?.sales_staff_name ||
-      linkedOrder?.sales_person ||
-      linkedOrder?.sales_staff_name ||
-      ev?.raw?.sales_person ||
-      ev?.raw?.sales_staff_name;
-
-    if (!rawCrew || rawCrew === '—' || rawCrew === 'N/A' || rawCrew === 'none' || rawCrew === 'null' || String(rawCrew).trim() === '') {
-      return 'Unassigned';
-    }
-    return String(rawCrew).trim();
-  };
-
-  const getReportingTime = (orderId?: string, leadId?: string, ev?: any): string => {
-    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
-    const op = operations?.find(o => (orderId && (o.order_id === orderId || o.lead_id === orderId)) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
-    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
-
-    const rawTime =
-      ev?.reportingTime ||
-      ev?.raw?.reporting_time ||
-      op?.reporting_time ||
-      linkedOrder?.reporting_time ||
-      leadObj?.reporting_time ||
-      ev?.eventTime ||
-      ev?.raw?.event_start_time ||
-      linkedOrder?.event_start_time ||
-      '08:00 AM';
-
-    if (!rawTime || rawTime === '—' || rawTime === 'N/A') return '08:00 AM';
-    return formatTime12Hour(rawTime);
-  };
-
-  const getOperationsActionDetails = (orderId?: string, leadId?: string, ev?: any) => {
-    const linkedOrder = orders?.find(o => (orderId && o.order_id === orderId) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
-    const leadObj = leads?.find(l => (leadId && l.lead_id === leadId) || (orderId && (l.order_id === orderId || l.lead_id === orderId)));
-    const op = operations?.find(o => (orderId && (o.order_id === orderId || o.lead_id === orderId)) || (leadId && (o.lead_id === leadId || o.order_id === leadId)));
-    const prodRecord = production?.find(p => (orderId && (p.order_id === orderId || p.tracking_id === orderId)) || (leadId && (p.lead_id === leadId || p.tracking_id === leadId)));
-
-    const effOrderId = linkedOrder?.order_id || op?.order_id || prodRecord?.order_id || orderId || leadId || '—';
-    const effLeadId = leadObj?.lead_id || linkedOrder?.lead_id || leadId;
-
-    const currentStage = linkedOrder?.current_stage || prodRecord?.editing_status || prodRecord?.production_status || leadObj?.status || ev?.currentStage || 'Order Confirmed';
-
-    // Check if crew/staff is assigned
-    const assigns = (staffAssignments || []).filter(sa =>
-      ((effOrderId && (sa.order_id === effOrderId || sa.lead_id === effOrderId)) ||
-       (effLeadId && (sa.order_id === effLeadId || sa.lead_id === effLeadId))) &&
-      sa.assignment_status !== 'Cancelled' && sa.assignment_status !== 'Rejected'
-    );
-    const hasCrewAssigned = assigns.length > 0 || Boolean(op?.photographer_assigned || op?.videographer_assigned || op?.staff_assigned);
-
-    // Check if editor is assigned
-    const editorAssigns = (editorAssignments || []).filter(ea =>
-      (effOrderId && (ea.order_id === effOrderId || ea.lead_id === effOrderId)) ||
-      (effLeadId && (ea.lead_id === effLeadId || ea.lead_id === effLeadId))
-    );
-    const hasEditorAssigned = Boolean(prodRecord?.editor_assigned || prodRecord?.editor_name || editorAssigns.length > 0);
-
-    // Check if it's in editor / footage handover / production stage
-    const isEditorStage =
-      currentStage === 'Footage Handover' ||
-      currentStage === 'Raw Footage Received' ||
-      currentStage === 'Verified Footage' ||
-      currentStage === 'Editing' ||
-      currentStage === 'Editing In Progress' ||
-      currentStage === 'Under Review' ||
-      currentStage === 'Production' ||
-      Boolean(prodRecord);
-
-    let label = 'Assign';
-    if (role === 'production') {
-      label = hasEditorAssigned ? 'Reassign Editor' : 'Assign Editor';
-    } else {
-      label = 'Assign';
-    }
-
-    return { label, effOrderId, effLeadId, isEditorStage, hasCrewAssigned, hasEditorAssigned };
-  };
-
-  const handleCalendarRowAction = (targetOrderId: string, targetLeadId?: string, actionLabel: string = 'Assign') => {
-    setShowSelectedDateModal(false);
-    setPopupDate(null);
-    setPopupLeadId(null);
-
-    const targetRole = role === 'production' ? 'production' : 'operations';
-
-    window.dispatchEvent(
-      new CustomEvent("calendar-action-click", {
-        detail: {
-          leadId: targetLeadId || targetOrderId,
-          role: targetRole,
-          orderId: targetOrderId
-        }
-      })
-    );
-    window.dispatchEvent(
-      new CustomEvent("calendar-action-click-deferred", {
-        detail: {
-          leadId: targetLeadId || targetOrderId,
-          role: targetRole,
-          orderId: targetOrderId
-        }
-      })
-    );
-  };
-  
-  const todayStr = systemTodayStr; // Anchor date for relative analysis
-
-  const tomorrowDate = new Date(systemToday);
-  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-  const tomorrowStr = getLocalDateStr(tomorrowDate);
-
-  const getEventHighlights = (ev: CalendarEvent) => {
-    const isCompleted = ['Verified Footage', 'Footage Handover Verified', 'Raw Footage Received', 'Event Ended', 'Event Completed', 'Delivered', 'Paid', 'Closed'].includes(ev.currentStage);
-    const dateStr = ev.date;
-
-    // Overdue Event = Red
-    const isOverdue = dateStr < todayStr && !isCompleted;
-    if (isOverdue || ev.eventClass === 'Overdue') {
-      return {
-        name: 'Overdue Event',
-        bg: 'bg-red-500/10 border-red-500/30 text-red-400',
-        dot: 'bg-red-500',
-        badge: 'text-red-400 border-red-500/20 bg-red-950/20',
-        glow: 'shadow-[0_0_12px_rgba(239,68,68,0.25)]',
-        cellBg: 'bg-red-950/25 border-red-900/30'
-      };
-    }
-
-    // Event Today = Green
-    if (dateStr === todayStr) {
-      return {
-        name: 'Event Today',
-        bg: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400',
-        dot: 'bg-emerald-500 animate-pulse',
-        badge: 'text-emerald-400 border-emerald-500/20 bg-emerald-950/20',
-        glow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)] ring-1 ring-emerald-500/30',
-        cellBg: 'bg-green-950/25 border-green-500/35'
-      };
-    }
-
-    // Event Tomorrow = Orange
-    if (dateStr === tomorrowStr) {
-      return {
-        name: 'Event Tomorrow',
-        bg: 'bg-orange-500/10 border-orange-500/30 text-orange-400',
-        dot: 'bg-orange-500',
-        badge: 'text-orange-400 border-orange-500/20 bg-orange-950/20',
-        glow: 'shadow-[0_0_12px_rgba(249,115,22,0.15)] ring-1 ring-orange-500/20',
-        cellBg: 'bg-orange-950/15 border-orange-550/30'
-      };
-    }
-
-    // Event In Progress = Cyan
-    const isInProgress = ['Editing In Progress', 'Operations Assigned'].includes(ev.eventClass) || ['In Progress', 'Editing', 'Operations Assigned'].includes(ev.currentStage);
-    if (isInProgress) {
-      return {
-        name: 'Event In Progress',
-        bg: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400',
-        dot: 'bg-cyan-400',
-        badge: 'text-cyan-400 border-cyan-500/20 bg-cyan-950/20',
-        glow: 'shadow-[0_0_10px_rgba(6,182,212,0.1)]',
-        cellBg: 'bg-cyan-950/15 border-cyan-900/35'
-      };
-    }
-
-    // Event Completed = Dark Green
-    if (isCompleted || ev.eventClass === 'Event Completed') {
-      return {
-        name: 'Event Completed',
-        bg: 'bg-green-950/35 border-green-900/30 text-green-500',
-        dot: 'bg-green-700',
-        badge: 'text-green-500 border-green-900/20 bg-green-950/35',
-        glow: '',
-        cellBg: 'bg-emerald-950/10 border-emerald-900/20'
-      };
-    }
-
-    // Event Scheduled = Bright Blue (Default)
-    return {
-      name: 'Event Scheduled',
-      bg: 'bg-blue-500/15 border-blue-500/35 text-blue-400',
-      dot: 'bg-blue-400',
-      badge: 'text-blue-400 border-blue-500/20 bg-blue-950/20',
-      glow: 'shadow-[0_0_10px_rgba(59,130,246,0.1)]',
-      cellBg: 'bg-blue-950/15 border-blue-900/35'
+        } catch (_) {}
+      }
+      return orderItem?.package_name || 'Deliverables Pending';
     };
-  };
 
-  // Cell Urgency Sorter to find primary cell color highlight candidate
-  const getCellUrgencyHighlight = (evs: CalendarEvent[]) => {
-    if (evs.length === 0) return null;
-    const urgencies = evs.map(ev => {
-      const h = getEventHighlights(ev);
-      let score = 0;
-      if (h.name === 'Overdue Event') score = 6;
-      else if (h.name === 'Event Today') score = 5;
-      else if (h.name === 'Event Tomorrow') score = 4;
-      else if (h.name === 'Event In Progress') score = 3;
-      else if (h.name === 'Event Scheduled') score = 2;
-      else if (h.name === 'Event Completed') score = 1;
-      return { event: ev, highlights: h, score };
-    });
-    urgencies.sort((a, b) => b.score - a.score);
-    return urgencies[0].highlights;
-  };
+    // 1. PRODUCTION & PRODUCTION STAFF CALENDARS
+    if (role === 'production' || role === 'production_staff') {
+      const targetStaffName = (staffMemberName || currentUserName || currentUser?.name || '').trim().toLowerCase();
+      const targetStaffId = staffMemberId || currentUser?.id;
 
+      // Group by order/production
+      const prodKeys = new Set<string>();
 
-
-  
-  // Helper to extract follow-up dates from remarks
-  const parseFollowUpDate = (remarks) => {
-    if (!remarks) return null;
-    const match = remarks.match(/Next follow-up:\s*(\d{4}-\d{2}-\d{2})/i);
-    return match && match[1] ? match[1] : null;
-  };
-
-  // Convert raw records into a standardized structure
-  const allEvents = useMemo(() => {
-    try {
-      const events: CalendarEvent[] = [];
-
-      const salesStages = [
-        'Quotation Sent', 'Quote Sent', 'Created Quotation', 'Quote Follow-up', 'Create Quote',
-        'Confirm Order', 'Order Confirmed', 'Booking Confirmed', 'Advance Received', 'Payment Received',
-        'Event Scheduled', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned',
-        'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
-        'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
-        'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review',
-        'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress',
-        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved', 'Approved / Order Close',
-        'Delivered', 'Project Delivered', 'Business Owner Review',
-        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
+      // A. Process from orders in Production stages or with production artifacts
+      const validProdStages = [
+        'verified footage', 'footage handover verified', 'raw footage received', 'raw footage uploaded',
+        'assigned editor', 'editor assigned', 'assigned', 'editing started', 'editing in progress',
+        'internal qc review', 'customer review', 'client review sent', 'revision required',
+        'revision in progress', 'editing completed', 'final approval', 'client acceptance',
+        'approved', 'project delivered', 'completed', 'order closed', 'closed'
       ];
-
-      const operationsStages = [
-        'Confirm Order', 'Order Confirmed', 'Booking Confirmed',
-        'Event Scheduled', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned',
-        'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
-        'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
-        'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review',
-        'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress',
-        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved', 'Approved / Order Close',
-        'Delivered', 'Project Delivered', 'Business Owner Review',
-        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
-      ];
-
-      const productionStages = [
-        'Verified Footage', 'Footage Handover Verified', 'Raw Footage Received',
-        'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress',
-        'Internal QC Review', 'Customer Review', 'Client Review', 'Client Review Sent',
-        'Revision Required', 'Revision In Progress', 'Editing Completed', 'Editing Complete',
-        'Client Acceptance', 'Final Approval', 'Approved', 'Approved / Order Close',
-        'Delivered', 'Project Delivered', 'Business Owner Review',
-        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
-      ];
-
-      const ownerStages = [
-        'Confirm Order', 'Order Confirmed', 'Booking Confirmed',
-        'Event Scheduled', 'Operations Assigned', 'Assigned Crew', 'Staff Assigned',
-        'Event Started', 'Event Start', 'Event Ended', 'Event End', 'Event Completed', 'Event Complete',
-        'Footage Handover', 'Footage Handover Verified', 'Verified Footage', 'Raw Footage Received',
-        'Assigned Editor', 'Editor Assigned', 'Editing Started', 'Editing In Progress', 'Internal QC Review',
-        'Customer Review', 'Client Review', 'Client Review Sent', 'Revision Required', 'Revision In Progress',
-        'Editing Completed', 'Editing Complete', 'Client Acceptance', 'Final Approval', 'Approved', 'Approved / Order Close',
-        'Delivered', 'Project Delivered', 'Business Owner Review',
-        'Closed', 'Order Closed', 'Project Closed', 'Project Completed', 'Completed', 'Cancelled Order', 'Cancelled', 'Active Event', 'Event'
-      ];
-
-      // Build a unified collection of all leads and orders
-      const combinedItemsMap = new Map<string, { ld: any; ord?: any }>();
-      (leads || []).forEach(ld => {
-        if (!ld) return;
-        const key = ld.lead_id || (ld as any).order_id;
-        if (key) combinedItemsMap.set(key, { ld });
-      });
 
       (orders || []).forEach(ord => {
-        if (!ord) return;
-        const key = ord.lead_id || ord.order_id;
-        if (key && combinedItemsMap.has(key)) {
-          combinedItemsMap.get(key)!.ord = ord;
-        } else if (ord.order_id && combinedItemsMap.has(ord.order_id)) {
-          combinedItemsMap.get(ord.order_id)!.ord = ord;
-        } else {
-          combinedItemsMap.set(ord.order_id || ord.lead_id, { ld: ord, ord });
-        }
-      });
+        const stage = (ord.current_stage || '').trim().toLowerCase();
+        const matchedProd = (production || []).find(p => p.order_id === ord.order_id || p.tracking_id === ord.order_id || p.lead_id === ord.lead_id);
+        const matchedAssignments = (editorAssignments || []).filter(ea => ea.order_id === ord.order_id || ea.production_id === ord.order_id);
+        const matchedRf = (rawFootage || []).find(rf => rf.order_id === ord.order_id || rf.tracking_id === ord.order_id);
 
-      combinedItemsMap.forEach(({ ld, ord: matchedOrd }) => {
-        if (!ld) return;
+        const isProdCandidate = validProdStages.includes(stage) || !!matchedProd || matchedAssignments.length > 0 || !!matchedRf;
+        if (!isProdCandidate) return;
 
-        const ord = matchedOrd || (orders ? orders.find(o => o.lead_id === ld.lead_id || o.order_id === ld.lead_id || (ld.order_id && o.order_id === ld.order_id)) : undefined);
-        const orderId = ord?.order_id || ld.order_id || ld.lead_id;
-        const leadId = ld.lead_id || ord?.lead_id || orderId;
-
-        const prodRecord = production?.find(p => 
-          p.tracking_id === leadId || 
-          p.order_id === leadId || 
-          p.tracking_id === orderId || 
-          (p as any).order_id === orderId || 
-          (p.production_id && (p.production_id === ld.production_id || p.production_id === (ld as any).prod_id))
-        );
-        const opsRecord = operations?.find(o => o.order_id === orderId || o.order_id === leadId);
-
-        const statusClean = (ord?.current_stage || prodRecord?.editing_status || prodRecord?.production_status || ld.status || ld.current_status || 'Event').trim();
-
-        let isVisible = false;
-
-        if (role === 'sales') {
-          isVisible = salesStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
-        } else if (role === 'operations') {
-          isVisible = operationsStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
-        } else if (role === 'worker') {
-          isVisible = operationsStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
-        } else if (role === 'production') {
-          isVisible = productionStages.some(st => st.toLowerCase() === statusClean.toLowerCase());
-        } else if (role === 'owner') {
-          // Business Owner views all events regardless of status
-          isVisible = true;
-        } else {
-          isVisible = true;
-        }
-
-        if (!isVisible) return;
-
-        // Find staff assignments
-        const assigns = staffAssignments ? staffAssignments.filter(x => 
-          x.order_id === leadId || 
-          x.order_id === orderId || 
-          (x as any).lead_id === leadId
-        ) : [];
-
-        // Operations Staff restriction: show ONLY events assigned to this staff member
-        if (role === 'worker') {
-          const activeStaffName = (currentUserName || currentUser?.name || '').toLowerCase().trim();
-          const activeStaffEmail = (currentUser?.email || '').toLowerCase().trim();
-          const activeStaffMobile = (currentUser?.mobile || '').trim();
-
-          const isAssigned = (activeStaffName || activeStaffEmail || activeStaffMobile) && (
-            assigns.some(a => 
-              (a.staff_name && activeStaffName && a.staff_name.toLowerCase().trim() === activeStaffName) ||
-              (a.staff_email && activeStaffEmail && a.staff_email.toLowerCase().trim() === activeStaffEmail) ||
-              (a.staff_mobile && activeStaffMobile && a.staff_mobile === activeStaffMobile)
-            ) ||
-            (ld.events && ld.events.some((e: any) => {
-              const assignedNames = e.assigned_staff_names ? e.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) : [];
-              return activeStaffName && assignedNames.includes(activeStaffName);
-            })) ||
-            (opsRecord && (
-              (opsRecord.photographer_assigned && activeStaffName && opsRecord.photographer_assigned.toLowerCase().includes(activeStaffName)) ||
-              (opsRecord.videographer_assigned && activeStaffName && opsRecord.videographer_assigned.toLowerCase().includes(activeStaffName)) ||
-              (opsRecord.drone_operator_assigned && activeStaffName && opsRecord.drone_operator_assigned.toLowerCase().includes(activeStaffName)) ||
-              (opsRecord.assistant_assigned && activeStaffName && opsRecord.assistant_assigned.toLowerCase().includes(activeStaffName))
-            ))
-          );
-
+        // If Production Staff view, strictly filter for this staff member's assignments
+        if (role === 'production_staff') {
+          const isAssigned = matchedAssignments.some(ea => {
+            const nameMatch = ea.staff_name && ea.staff_name.trim().toLowerCase() === targetStaffName;
+            const idMatch = targetStaffId && ea.staff_id && ea.staff_id === targetStaffId;
+            return nameMatch || idMatch;
+          }) || (matchedProd?.editor_assigned && matchedProd.editor_assigned.toLowerCase().includes(targetStaffName));
           if (!isAssigned) return;
         }
 
-        // Fetch events from ld.events or fall back to lead-level event if no events are saved
-        const eventsList = (ld.events && Array.isArray(ld.events) && ld.events.length > 0) ? ld.events : [
-          {
-            id: `fallback-${leadId}`,
-            event_date: ld.event_date || ord?.event_date || '',
-            event_start_time: ld.event_time || ord?.event_time || '10:00 AM',
-            event_name: ld.custom_event_name || ord?.custom_event_name || ld.event_type || ord?.event_type || 'Event Shoot',
-            event_type: ld.event_type || ord?.event_type || 'Shoot',
-            event_location: ld.event_location || ord?.event_location || 'Studio'
-          }
-        ];
+        const matchedLead = (leads || []).find(l => l.lead_id === ord.lead_id || l.order_id === ord.order_id);
+        
+        // Resolve Target Delivery Date as primary date for Production Calendar
+        const explicitTargetDate = matchedAssignments.find(a => a.target_finish_date || a.target_delivery_date)?.target_finish_date ||
+                                   matchedAssignments.find(a => a.target_finish_date || a.target_delivery_date)?.target_delivery_date ||
+                                   matchedProd?.target_delivery_date || 
+                                   matchedProd?.expected_delivery_date || 
+                                   (ord as any)?.target_delivery_date ||
+                                   (ord as any)?.delivery_target_date ||
+                                   (matchedLead as any)?.delivery_target_date || '';
+        
+        const fallbackDate = ord.event_date || matchedLead?.event_date || '';
+        const primaryTargetDate = explicitTargetDate || fallbackDate;
+        const normDate = normalizeDateStr(primaryTargetDate);
+        if (!normDate) return;
 
-        const baseTargetDeliveryDate = normalizeToYYYYMMDD(
-          prodRecord?.target_delivery_date || 
-          prodRecord?.expected_delivery_date || 
-          prodRecord?.delivery_date || 
-          ord?.delivery_target_date || 
-          (ord as any)?.target_delivery_date || 
-          (ord as any)?.expected_delivery_date || 
-          ld.delivery_target_date || 
-          (ld as any)?.target_delivery_date || 
-          (ld as any)?.expected_delivery_date || 
-          opsRecord?.target_delivery_date || 
-          ''
-        );
+        const assignedEditorName = matchedAssignments.map(ea => ea.staff_name).filter(Boolean).join(', ') || 
+                                   matchedProd?.editor_assigned || 
+                                   'Unassigned';
 
-        const uniqueStaff = new Set(assigns.map(a => a.staff_name));
-        const assignedTeamCount = uniqueStaff.size;
+        const delivs = extractDeliverablesString(ord, matchedProd);
 
-        eventsList.forEach((ev, index) => {
-          if (!ev) return;
+        const rawLink = matchedProd?.raw_footage_location || 
+                        matchedRf?.server_path || 
+                        ord.raw_footage_link || 
+                        '';
 
-          const exactEventId = ev.id || `evt-${leadId}-${index}`;
-          const isOnlyEvent = eventsList.length === 1;
-
-          const evTargetDeliveryDate = normalizeToYYYYMMDD(
-            ev.target_delivery_date || 
-            ev.targeted_date || 
-            ev.delivery_target_date || 
-            ev.target_date || 
-            baseTargetDeliveryDate
-          );
-
-          const evSavedEventDate = normalizeToYYYYMMDD(
-            ev.event_date || 
-            ev.event_start_date || 
-            ev.date ||
-            (isOnlyEvent ? (ld.event_date || ord?.event_date || '') : '')
-          );
-
-          const evStartTime = ev.event_start_time || ev.event_time || ev.time || (isOnlyEvent ? (ld.event_time || ord?.event_time) : '') || '10:00 AM';
-          const evName = ev.event_name || ev.custom_event_name || ev.event_type || (isOnlyEvent ? (ld.custom_event_name || ord?.custom_event_name || ld.event_type || ord?.event_type) : '') || 'Event Shoot';
-          const evType = ev.event_type || (isOnlyEvent ? (ld.event_type || ord?.event_type) : '') || 'Shoot';
-          const evLoc = ev.event_location || ev.location || ev.venue || ev.venue_address || (isOnlyEvent ? (ld.event_location || ord?.event_location) : '') || 'Studio';
-
-          // Sales Crew mapping per exact event record:
-          // Strictly show ONLY the Sales Staff Name of the person who originally created/confirmed that order from the Sales Dashboard
-          // Do NOT show assigned operations/production staff (photographers, drone operators, editors, etc.)
-          const rawSalesStaffCandidate = 
-            ld.sales_staff_name ||
-            ord?.sales_staff_name ||
-            ld.sales_person ||
-            ord?.sales_person ||
-            ld.Sales_Staff ||
-            ord?.Sales_Staff ||
-            ld.sales_staff ||
-            ord?.sales_staff ||
-            (ld.created_by ? (String(ld.created_by).includes('|') ? String(ld.created_by).split('|')[0].trim() : String(ld.created_by).trim()) : '') ||
-            (ord?.created_by ? (String(ord.created_by).includes('|') ? String(ord.created_by).split('|')[0].trim() : String(ord.created_by).trim()) : '') ||
-            'Unassigned';
-
-          let evSalesCrew = String(rawSalesStaffCandidate).trim();
-          if (evSalesCrew.includes('|')) {
-            evSalesCrew = evSalesCrew.split('|')[0].trim();
-          }
-          if (evSalesCrew.includes(',')) {
-            evSalesCrew = evSalesCrew.split(',')[0].trim();
-          }
-          if (!evSalesCrew || evSalesCrew === 'null' || evSalesCrew === 'undefined') {
-            evSalesCrew = 'Unassigned';
-          }
-
-          if (role === 'owner') {
-            // Business Owner Calendar:
-            // 1. Display on exact saved Event Date
-            if (evSavedEventDate) {
-              events.push({
-                id: ev.id ? `lead-event-${leadId}-${ev.id}` : `lead-event-${leadId}-${index}`,
-                sourceType: 'order',
-                eventClass: 'Event Scheduled',
-                date: evSavedEventDate,
-                customerName: ld.customer_name || ord?.customer_name || 'Customer',
-                mobile: ld.mobile || ord?.mobile || '',
-                eventName: evName, 
-                eventType: evType,
-                eventTime: evStartTime,
-                eventLocation: evLoc,
-                salesCrew: evSalesCrew,
-                eventId: exactEventId,
-                currentStage: statusClean || ld.status,
-                notes: 'On Track',
-                packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
-                totalAmount: ld.package_price || ld.budget || ord?.quotation_amount || 0,
-                orderId: orderId,
-                targetDeliveryDate: evTargetDeliveryDate,
-                raw: {
-                  ...ld,
-                  ...ev,
-                  lead_id: leadId,
-                  order_id: orderId,
-                  event_id: exactEventId,
-                  eventId: exactEventId,
-                  event_name: evName,
-                  event_type: evType,
-                  event_date: evSavedEventDate,
-                  event_start_time: evStartTime,
-                  event_end_time: ev.event_end_time || '',
-                  reporting_date: ev.reporting_date || '',
-                  reporting_time: ev.reporting_time || '',
-                  event_location: evLoc,
-                  salesCrew: evSalesCrew,
-                  sales_crew: evSalesCrew,
-                  sales_staff_name: evSalesCrew,
-                  assignedTeamCount,
-                  assigns,
-                  targetDeliveryDate: evTargetDeliveryDate,
-                  delivery_target_date: evTargetDeliveryDate,
-                  expected_delivery_date: evTargetDeliveryDate,
-                  sales_person: ld.sales_person || ld.created_by || ord?.sales_person || 'Sales Team'
-                }
-              });
-            }
-
-            // 2. If Targeted Date exists and differs from event date, also display on exact Targeted Date
-            if (evTargetDeliveryDate && evTargetDeliveryDate !== evSavedEventDate) {
-              events.push({
-                id: ev.id ? `lead-target-delivery-${leadId}-${ev.id}` : `lead-target-delivery-${leadId}-${index}`,
-                sourceType: 'order',
-                eventClass: 'Target Delivery',
-                date: evTargetDeliveryDate,
-                customerName: ld.customer_name || ord?.customer_name || 'Customer',
-                mobile: ld.mobile || ord?.mobile || '',
-                eventName: `Target Delivery - ${evName}`, 
-                eventType: evType,
-                eventTime: evStartTime,
-                eventLocation: evLoc,
-                salesCrew: evSalesCrew,
-                eventId: exactEventId,
-                currentStage: statusClean || ld.status,
-                notes: 'Target Delivery',
-                packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
-                totalAmount: ld.package_price || ld.budget || ord?.quotation_amount || 0,
-                orderId: orderId,
-                targetDeliveryDate: evTargetDeliveryDate,
-                raw: {
-                  ...ld,
-                  ...ev,
-                  lead_id: leadId,
-                  order_id: orderId,
-                  event_id: exactEventId,
-                  eventId: exactEventId,
-                  event_name: evName,
-                  event_type: evType,
-                  event_date: evSavedEventDate || evTargetDeliveryDate,
-                  event_start_time: evStartTime,
-                  event_end_time: ev.event_end_time || '',
-                  reporting_date: ev.reporting_date || '',
-                  reporting_time: ev.reporting_time || '',
-                  event_location: evLoc,
-                  salesCrew: evSalesCrew,
-                  sales_crew: evSalesCrew,
-                  sales_staff_name: evSalesCrew,
-                  assignedTeamCount,
-                  assigns,
-                  targetDeliveryDate: evTargetDeliveryDate,
-                  delivery_target_date: evTargetDeliveryDate,
-                  expected_delivery_date: evTargetDeliveryDate,
-                  sales_person: ld.sales_person || ld.created_by || ord?.sales_person || 'Sales Team'
-                }
-              });
-            }
-          } else {
-            let dateToUse = '';
-            if (role === 'production') {
-              // Production calendar shows target delivery date only
-              dateToUse = evTargetDeliveryDate;
-            } else {
-              // Sales/Ops/Ops Staff calendars show actual event date
-              dateToUse = evSavedEventDate || evTargetDeliveryDate;
-            }
-
-            // If dateToUse is missing/empty, do not render on calendar
-            if (!dateToUse) return;
-
-            events.push({
-              id: ev.id ? `lead-event-${leadId}-${ev.id}` : `lead-event-${leadId}-${index}`,
-              sourceType: 'order',
-              eventClass: role === 'production' ? 'Target Delivery' : 'Event Scheduled',
-              date: dateToUse,
-              customerName: ld.customer_name || ord?.customer_name || 'Customer',
-              mobile: ld.mobile || ord?.mobile || '',
-              eventName: evName, 
-              eventType: evType,
-              eventTime: evStartTime,
-              eventLocation: evLoc,
-              salesCrew: evSalesCrew,
-              eventId: exactEventId,
-              currentStage: statusClean || ld.status,
-              notes: 'On Track',
-              packageName: ld.Select_Package_Option || ord?.package_name || 'Custom Package',
-              totalAmount: ld.package_price || ld.budget || ord?.quotation_amount || 0,
-              orderId: orderId,
-              targetDeliveryDate: evTargetDeliveryDate,
-              raw: {
-                ...ld,
-                ...ev,
-                lead_id: leadId,
-                order_id: orderId,
-                event_id: exactEventId,
-                eventId: exactEventId,
-                event_name: evName,
-                event_type: evType,
-                event_date: evSavedEventDate || dateToUse,
-                event_start_time: evStartTime,
-                event_end_time: ev.event_end_time || '',
-                reporting_date: ev.reporting_date || '',
-                reporting_time: ev.reporting_time || '',
-                event_location: evLoc,
-                salesCrew: evSalesCrew,
-                sales_crew: evSalesCrew,
-                sales_staff_name: evSalesCrew,
-                assignedTeamCount,
-                assigns,
-                targetDeliveryDate: evTargetDeliveryDate,
-                delivery_target_date: evTargetDeliveryDate,
-                expected_delivery_date: evTargetDeliveryDate,
-                sales_person: ld.sales_person || ld.created_by || ord?.sales_person || 'Sales Team'
-              }
-            });
-          }
+        items.push({
+          id: `PROD-${ord.order_id}`,
+          orderId: ord.order_id,
+          leadId: ord.lead_id,
+          customerName: ord.customer_name || matchedLead?.customer_name || 'Client',
+          customerMobile: ord.customer_phone || ord.mobile || matchedLead?.mobile || '',
+          eventName: ord.custom_event_name || ord.event_type || matchedLead?.event_type || 'Production Project',
+          eventType: ord.event_type || matchedLead?.event_type || 'Video Editing',
+          eventDate: normDate, // Placed on Calendar strictly by Target Delivery Date
+          targetDeliveryDate: normalizeDateStr(explicitTargetDate || fallbackDate),
+          editorAssigned: assignedEditorName,
+          deliverables: delivs,
+          rawFootageLink: rawLink,
+          status: matchedProd?.editing_status || ord.current_stage || 'Verified Footage',
+          desk: 'Production',
+          sourceRecord: { order: ord, prod: matchedProd, assignments: matchedAssignments, lead: matchedLead }
         });
+
+        prodKeys.add(ord.order_id);
       });
 
-      return events;
-    } catch (err: any) {
-      console.error("Error computing calendar events:", err);
-      if (!calendarError) {
-        setCalendarError(err.message || "Unknown error occurred while parsing database events.");
-      }
-      return [];
-    }
-  }, [leads, orders, production, operations, staffAssignments, calendarMemos, role, currentUser, currentUserName]);
+      // B. Process production records that might not have orders
+      (production || []).forEach(p => {
+        const ordId = p.order_id || p.tracking_id || p.production_id;
+        if (ordId && prodKeys.has(ordId)) return;
 
-  // Filters Event list by role first
-  const roleFilteredEvents = useMemo(() => {
-    return allEvents;
-  }, [allEvents, role]);
-
-  // Search execution handlers
-  const handleExecuteSearch = () => {
-    const q = searchInputValue.trim();
-    setAppliedSearchQuery(q);
-    setIsSearchExecuted(true);
-  };
-
-  const handleClearSearch = () => {
-    setSearchInputValue('');
-    setAppliedSearchQuery('');
-    setIsSearchExecuted(false);
-  };
-
-  // Compute matching search results for search table display
-  const searchResultsEvents = useMemo(() => {
-    if (!isSearchExecuted) return [];
-    const q = appliedSearchQuery.toLowerCase().trim();
-    return roleFilteredEvents.filter(ev => {
-      if (ev.sourceType === 'memo') return false;
-      if (!q) return true; // If empty search submitted, match all non-memo events
-      const matchesName = (ev.customerName || '').toLowerCase().includes(q);
-      const matchesLoc = (ev.eventLocation || '').toLowerCase().includes(q);
-      const matchesType = (ev.eventType || '').toLowerCase().includes(q);
-      const matchesNotes = (ev.notes || '').toLowerCase().includes(q);
-      const matchesOrder = String(ev.orderId || '').toLowerCase().includes(q);
-      const matchesEventName = (ev.raw?.event_name || '').toLowerCase().includes(q);
-      const matchesDate = (ev.date || '').toLowerCase().includes(q);
-      const matchesStage = (ev.currentStage || '').toLowerCase().includes(q);
-      const matchesClass = (ev.eventClass || '').toLowerCase().includes(q);
-      return matchesName || matchesLoc || matchesType || matchesNotes || matchesOrder || matchesEventName || matchesDate || matchesStage || matchesClass;
-    });
-  }, [roleFilteredEvents, isSearchExecuted, appliedSearchQuery]);
-
-  // Inline filter by type and classes for calendar display
-  const filteredEvents = useMemo(() => {
-    return roleFilteredEvents.filter(ev => {
-      // Exclude memos from calendar UI
-      if (ev.sourceType === 'memo') return false;
-
-      // Event Status (Class) filter
-      if (statusFilter !== 'All' && statusFilter !== 'All Statuses' && statusFilter !== 'All Stages') {
-        const stageNorm = (ev.currentStage || '').trim().toLowerCase();
-        const classNorm = (ev.eventClass || '').trim().toLowerCase();
-        const filterNorm = statusFilter.trim().toLowerCase();
-
-        const directMatch = stageNorm === filterNorm || classNorm === filterNorm;
-
-        if (!directMatch) {
-          // Specific status alias matching
-          if (filterNorm === 'order confirmed') {
-            if (!['order confirmed', 'confirm order', 'new order received', 'booking confirmed'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'assigned crew') {
-            if (!['assigned crew', 'staff assigned', 'operations assigned'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'event started') {
-            if (!['event started', 'event start'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'event ended') {
-            if (!['event ended', 'event end', 'event completed', 'event complete'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'footage handover') {
-            if (!['footage handover', 'equipment handover'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'verified footage') {
-            if (!['verified footage', 'raw footage received', 'footage handover verified'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'event cancelled') {
-            if (stageNorm !== 'event cancelled') return false;
-          } else if (filterNorm === 'assigned editor') {
-            if (!['assigned editor', 'editor assigned'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'editing started') {
-            if (!['editing started', 'editing in progress', 'editing'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'customer review') {
-            if (!['customer review', 'client review', 'client review sent', 'ready for review', 'internal qc review', 'revision required', 'revision in progress'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'editing completed') {
-            if (!['editing completed', 'editing complete'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'client acceptance') {
-            if (!['client acceptance', 'final approval', 'approved'].includes(stageNorm)) return false;
-          } else if (filterNorm === 'order closed') {
-            if (!['order closed', 'closed', 'completed', 'project closed', 'project completed', 'delivered', 'project delivered'].includes(stageNorm)) return false;
-          } else {
-            return false;
-          }
+        if (role === 'production_staff') {
+          const isAssigned = (p.editor_assigned && p.editor_assigned.toLowerCase().includes(targetStaffName)) ||
+                             (p.assigned_staff && p.assigned_staff.toLowerCase().includes(targetStaffName));
+          if (!isAssigned) return;
         }
+
+        const dateVal = p.target_delivery_date || p.expected_delivery_date || p.event_date || p.created_at;
+        const normDate = normalizeDateStr(dateVal);
+        if (!normDate) return;
+
+        items.push({
+          id: p.production_id || `PRD-${p.tracking_id}`,
+          orderId: p.order_id || p.tracking_id || '—',
+          leadId: p.lead_id,
+          customerName: p.customer_name || 'Client',
+          customerMobile: p.customer_mobile || '',
+          eventName: p.custom_event_name || 'Production Item',
+          eventType: 'Editing',
+          eventDate: normDate, // Placed on Calendar strictly by Target Delivery Date
+          targetDeliveryDate: normalizeDateStr(dateVal),
+          editorAssigned: p.editor_assigned || p.assigned_staff || 'Unassigned',
+          deliverables: p.deliverables_summary || 'Deliverables',
+          rawFootageLink: p.raw_footage_location || '',
+          status: p.editing_status || 'Verified Footage',
+          desk: 'Production',
+          sourceRecord: { prod: p }
+        });
+      });
+    }
+
+    // 2. OPERATIONS CALENDAR
+    else if (role === 'operations') {
+      (orders || []).forEach(ord => {
+        const matchedOp = (operations || []).find(op => op.order_id === ord.order_id);
+        const matchedLead = (leads || []).find(l => l.lead_id === ord.lead_id || l.order_id === ord.order_id);
+        const matchedSa = (staffAssignments || []).filter(sa => sa.order_id === ord.order_id);
+
+        const eventDateStr = ord.event_date || matchedOp?.event_date || matchedLead?.event_date;
+        const normDate = normalizeDateStr(eventDateStr);
+        if (!normDate) return;
+
+        // Resolve assigned crew
+        const photographer = matchedOp?.photographer_assigned || matchedSa.find(s => (s.staff_role || '').toLowerCase().includes('photo'))?.staff_name || 'Unassigned';
+        const videographer = matchedOp?.videographer_assigned || matchedSa.find(s => (s.staff_role || '').toLowerCase().includes('video'))?.staff_name || 'Unassigned';
+        const drone = matchedOp?.drone_operator_assigned || matchedSa.find(s => (s.staff_role || '').toLowerCase().includes('drone'))?.staff_name || 'Unassigned';
+        const assistant = matchedOp?.assistant_assigned || matchedSa.find(s => (s.staff_role || '').toLowerCase().includes('assist'))?.staff_name || 'Unassigned';
+
+        items.push({
+          id: `OPS-${ord.order_id}`,
+          orderId: ord.order_id,
+          leadId: ord.lead_id,
+          customerName: ord.customer_name || matchedLead?.customer_name || 'Client',
+          customerMobile: ord.customer_phone || ord.mobile || matchedLead?.mobile || '',
+          eventName: ord.custom_event_name || ord.event_type || matchedLead?.event_type || 'Event',
+          eventType: ord.event_type || matchedLead?.event_type || 'Photography',
+          eventDate: normDate,
+          reportingDate: matchedOp?.reporting_date || normDate,
+          reportingTime: matchedOp?.reporting_time || ord.event_time || '08:00 AM',
+          location: ord.address || matchedLead?.city || matchedLead?.address || 'Studio / On Site',
+          assignedCrew: { photographer, videographer, drone, assistant },
+          equipmentKit: matchedOp?.equipment_kit || 'Standard Kit',
+          status: matchedOp?.event_status || ord.current_stage || 'Assigned Crew',
+          desk: 'Operations',
+          sourceRecord: { order: ord, op: matchedOp, lead: matchedLead, staffAssignments: matchedSa }
+        });
+      });
+    }
+
+    // 3. SALES CALENDAR
+    else if (role === 'sales') {
+      (leads || []).forEach(lead => {
+        const normDate = normalizeDateStr(lead.event_date);
+        if (!normDate) return;
+
+        const matchedOrder = (orders || []).find(o => o.lead_id === lead.lead_id || o.order_id === lead.order_id);
+
+        items.push({
+          id: `LEAD-${lead.lead_id}`,
+          orderId: matchedOrder?.order_id || lead.order_id || lead.lead_id,
+          leadId: lead.lead_id,
+          customerName: lead.customer_name || 'Client',
+          customerMobile: lead.mobile || lead.whatsapp_number || '',
+          eventName: lead.custom_event_name || lead.event_type || 'Shoot',
+          eventType: lead.event_type || 'Photography & Videography',
+          eventDate: normDate,
+          eventTime: lead.event_time || '',
+          location: lead.city || lead.address || '—',
+          budget: lead.budget || matchedOrder?.quotation_amount || 0,
+          salesPerson: lead.sales_person || matchedOrder?.sales_person || 'Sales Team',
+          status: lead.status || lead.current_status || matchedOrder?.current_stage || 'New Lead',
+          desk: 'Sales',
+          sourceRecord: { lead, order: matchedOrder }
+        });
+      });
+    }
+
+    // 4. BUSINESS OWNER CALENDAR (Consolidated Studio Milestones)
+    else if (role === 'owner') {
+      // Collect across sales, operations, and production
+      (orders || []).forEach(ord => {
+        const normDate = normalizeDateStr(ord.event_date);
+        if (!normDate) return;
+        const matchedOp = (operations || []).find(op => op.order_id === ord.order_id);
+        const matchedProd = (production || []).find(p => p.order_id === ord.order_id);
+        const matchedLead = (leads || []).find(l => l.lead_id === ord.lead_id);
+
+        items.push({
+          id: `OWNER-${ord.order_id}`,
+          orderId: ord.order_id,
+          leadId: ord.lead_id,
+          customerName: ord.customer_name || 'Client',
+          customerMobile: ord.customer_phone || ord.mobile || '',
+          eventName: ord.custom_event_name || ord.event_type || 'Event',
+          eventType: ord.event_type || 'Milestone',
+          eventDate: normDate,
+          reportingTime: matchedOp?.reporting_time || ord.event_time || '',
+          location: ord.address || matchedLead?.city || '—',
+          budget: ord.quotation_amount || matchedLead?.budget || 0,
+          editorAssigned: matchedProd?.editor_assigned || '—',
+          status: ord.current_stage || 'In Progress',
+          desk: matchedProd ? 'Production' : (matchedOp ? 'Operations' : 'Sales'),
+          sourceRecord: { order: ord, op: matchedOp, prod: matchedProd, lead: matchedLead }
+        });
+      });
+    }
+
+    return items;
+  }, [role, staffMemberId, staffMemberName, currentUserName, currentUser, orders, leads, operations, production, editorAssignments, staffAssignments, rawFootage]);
+
+  // Filter items by search term and status
+  const filteredEvents = useMemo(() => {
+    const list = allEvents.filter(ev => {
+      if (searchTerm) {
+        const q = searchTerm.toLowerCase();
+        const matchId = ev.orderId.toLowerCase().includes(q) || (ev.leadId && ev.leadId.toLowerCase().includes(q));
+        const matchName = ev.customerName.toLowerCase().includes(q);
+        const matchEvent = ev.eventName.toLowerCase().includes(q) || ev.eventType.toLowerCase().includes(q);
+        const matchStaff = (ev.editorAssigned && ev.editorAssigned.toLowerCase().includes(q)) ||
+                           (ev.assignedStaff && ev.assignedStaff.toLowerCase().includes(q));
+        if (!matchId && !matchName && !matchEvent && !matchStaff) return false;
       }
 
-      // Event Type filter
-      if (eventTypeFilter !== 'All' && eventTypeFilter !== 'All Event Types') {
-        if (ev.eventType !== eventTypeFilter) return false;
+      if (selectedStatusFilter !== 'All') {
+        if (ev.status.toLowerCase() !== selectedStatusFilter.toLowerCase()) return false;
       }
 
       return true;
     });
-  }, [roleFilteredEvents, statusFilter, eventTypeFilter]);
 
-
-
-  // Unique Event Class states for filters
-  const uniqueEventClasses = [
-    'All',
-    'New Lead',
-    'Follow-up',
-    'Quotation Sent',
-    'Booking Confirmed',
-    'Event Scheduled',
-    'Event Completed',
-    'Raw Footage Pending',
-    'Editing In Progress',
-    
-    'Overdue',
-    'Calendar Memo'
-  ];
-
-  // Month navigation helpers
-  const currentYear = currentDate.getFullYear();
-  const currentMonth = currentDate.getMonth();
-
-  const handlePrevMonth = () => {
-    setCurrentDate(new Date(currentYear, currentMonth - 1, 15));
-  };
-
-  const handleNextMonth = () => {
-    setCurrentDate(new Date(currentYear, currentMonth + 1, 15));
-  };
-
-  const handleSetToday = () => {
-    setCurrentDate(systemToday);
-    setSelectedDate(systemTodayStr);
-  };
-
-  // Month Grid Days
-  const gridDays = useMemo(() => {
-    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-    const firstDayIndex = new Date(currentYear, currentMonth, 1).getDay();
-    
-    const days: { dayNumber: number | null; dateString: string | null; isCurrentMonth: boolean }[] = [];
-    
-    // Previous month's trailing cells
-    const prevMonthDays = new Date(currentYear, currentMonth, 0).getDate();
-    for (let i = firstDayIndex - 1; i >= 0; i--) {
-      const dNum = prevMonthDays - i;
-      const prevM = currentMonth === 0 ? 11 : currentMonth - 1;
-      const prevY = currentMonth === 0 ? currentYear - 1 : currentYear;
-      const mStr = (prevM + 1) < 10 ? `0${prevM + 1}` : `${prevM + 1}`;
-      const dStr = dNum < 10 ? `0${dNum}` : `${dNum}`;
-      days.push({
-        dayNumber: dNum,
-        dateString: `${prevY}-${mStr}-${dStr}`,
-        isCurrentMonth: false
+    // For production & production staff, strictly order by Target Delivery Date
+    if (role === 'production' || role === 'production_staff') {
+      list.sort((a, b) => {
+        const timeA = a.targetDeliveryDate || a.eventDate ? new Date(a.targetDeliveryDate || a.eventDate).getTime() : 0;
+        const timeB = b.targetDeliveryDate || b.eventDate ? new Date(b.targetDeliveryDate || b.eventDate).getTime() : 0;
+        if (timeA > 0 && timeB > 0 && timeA !== timeB) return timeA - timeB;
+        if (timeA > 0 && timeB === 0) return -1;
+        if (timeB > 0 && timeA === 0) return 1;
+        return a.orderId.localeCompare(b.orderId, undefined, { numeric: true });
       });
     }
 
-    // Current month cells
-    for (let d = 1; d <= daysInMonth; d++) {
-      const mStr = (currentMonth + 1) < 10 ? `0${currentMonth + 1}` : `${currentMonth + 1}`;
-      const dStr = d < 10 ? `0${d}` : `${d}`;
-      days.push({
-        dayNumber: d,
-        dateString: `${currentYear}-${mStr}-${dStr}`,
-        isCurrentMonth: true
-      });
-    }
-
-    // Next month's trailing cells to make a full 42-day calendar square
-    const remaining = 42 - days.length;
-    for (let d = 1; d <= remaining; d++) {
-      const nextM = currentMonth === 11 ? 0 : currentMonth + 1;
-      const nextY = currentMonth === 11 ? currentYear + 1 : currentYear;
-      const mStr = (nextM + 1) < 10 ? `0${nextM + 1}` : `${nextM + 1}`;
-      const dStr = d < 10 ? `0${d}` : `${d}`;
-      days.push({
-        dayNumber: d,
-        dateString: `${nextY}-${mStr}-${dStr}`,
-        isCurrentMonth: false
-      });
-    }
-
-    return days;
-  }, [currentYear, currentMonth]);
-
-  // Week Grid Days (for selectedDate week)
-  const weekDays = useMemo(() => {
-    const baseDate = selectedDate ? parseLocalDate(selectedDate) : parseLocalDate(currentDate);
-    const dayOfWeek = baseDate.getDay();
-    const list: { name: string; dateStr: string; dateObj: Date }[] = [];
-    
-    const weekdaysNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    
-    for (let i = 0; i < 7; i++) {
-      const offset = i - dayOfWeek;
-      const tempDate = new Date(baseDate);
-      tempDate.setDate(baseDate.getDate() + offset);
-      const y = tempDate.getFullYear();
-      const m = tempDate.getMonth() + 1;
-      const d = tempDate.getDate();
-      const mStr = m < 10 ? `0${m}` : `${m}`;
-      const dStr = d < 10 ? `0${d}` : `${d}`;
-      
-      list.push({
-        name: weekdaysNames[i],
-        dateStr: `${y}-${mStr}-${dStr}`,
-        dateObj: tempDate
-      });
-    }
     return list;
-  }, [selectedDate, currentDate]);
+  }, [allEvents, searchTerm, selectedStatusFilter, role]);
 
-  // Color Class mapper
-  const getColorClasses = (cls: CalendarEvent['eventClass']) => {
-    switch (cls) {
-      case 'New Lead':
+  // Calendar Grid Calculation
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const monthName = currentMonth.toLocaleString('default', { month: 'long' });
+
+  const firstDayIndex = new Date(year, month, 1).getDay();
+  const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPreviousMonth = new Date(year, month, 0).getDate();
+  const todayStr = normalizeDateStr(new Date());
+
+  const calendarGrid: {
+    dateStr: string;
+    dayNum: number;
+    isCurrentMonth: boolean;
+    isToday: boolean;
+    events: CalendarEventItem[];
+  }[] = [];
+
+  // Prev month padding
+  for (let i = firstDayIndex - 1; i >= 0; i--) {
+    const dNum = daysInPreviousMonth - i;
+    const pDate = new Date(year, month - 1, dNum);
+    const dateStr = `${pDate.getFullYear()}-${String(pDate.getMonth() + 1).padStart(2, '0')}-${String(dNum).padStart(2, '0')}`;
+    const evs = filteredEvents.filter(e => e.eventDate === dateStr);
+    calendarGrid.push({
+      dateStr,
+      dayNum: dNum,
+      isCurrentMonth: false,
+      isToday: dateStr === todayStr,
+      events: evs
+    });
+  }
+
+  // Current month days
+  for (let d = 1; d <= daysInCurrentMonth; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const evs = filteredEvents.filter(e => e.eventDate === dateStr);
+    calendarGrid.push({
+      dateStr,
+      dayNum: d,
+      isCurrentMonth: true,
+      isToday: dateStr === todayStr,
+      events: evs
+    });
+  }
+
+  // Next month padding to fill row
+  const remaining = calendarGrid.length % 7 === 0 ? 0 : 7 - (calendarGrid.length % 7);
+  for (let d = 1; d <= remaining; d++) {
+    const nDate = new Date(year, month + 1, d);
+    const dateStr = `${nDate.getFullYear()}-${String(nDate.getMonth() + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const evs = filteredEvents.filter(e => e.eventDate === dateStr);
+    calendarGrid.push({
+      dateStr,
+      dayNum: d,
+      isCurrentMonth: false,
+      isToday: dateStr === todayStr,
+      events: evs
+    });
+  }
+
+  // Get distinct statuses for filter
+  const distinctStatuses = useMemo(() => {
+    const set = new Set<string>();
+    allEvents.forEach(e => {
+      if (e.status) set.add(e.status);
+    });
+    return Array.from(set);
+  }, [allEvents]);
+
+  // Calendar Theme Colors based on Role
+  const theme = useMemo(() => {
+    switch (role) {
+      case 'production':
+      case 'production_staff':
         return {
-          dotBg: 'bg-blue-500',
-          badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20',
-          card: 'border-l-4 border-l-blue-500 bg-blue-950/10 hover:bg-blue-950/20 border border-zinc-800'
+          primary: 'purple',
+          border: 'border-purple-500/30',
+          bgHighlight: 'bg-purple-500/10',
+          textHighlight: 'text-purple-400',
+          buttonBg: 'bg-purple-600 hover:bg-purple-500 text-white'
         };
-      case 'Follow-up':
+      case 'operations':
         return {
-          dotBg: 'bg-orange-500',
-          badge: 'bg-orange-500/10 text-orange-400 border-orange-500/20 hover:bg-orange-500/20',
-          card: 'border-l-4 border-l-orange-500 bg-orange-950/10 hover:bg-orange-950/20 border border-zinc-800'
+          primary: 'amber',
+          border: 'border-amber-500/30',
+          bgHighlight: 'bg-amber-500/10',
+          textHighlight: 'text-amber-400',
+          buttonBg: 'bg-amber-600 hover:bg-amber-500 text-white'
         };
-      case 'Quotation Sent':
+      case 'sales':
         return {
-          dotBg: 'bg-purple-500',
-          badge: 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20',
-          card: 'border-l-4 border-l-purple-500 bg-purple-950/10 hover:bg-purple-950/20 border border-zinc-800'
+          primary: 'blue',
+          border: 'border-blue-500/30',
+          bgHighlight: 'bg-blue-500/10',
+          textHighlight: 'text-blue-400',
+          buttonBg: 'bg-blue-600 hover:bg-blue-500 text-white'
         };
-      case 'Booking Confirmed':
-        return {
-          dotBg: 'bg-emerald-500',
-          badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20',
-          card: 'border-l-4 border-l-emerald-500 bg-emerald-950/15 hover:bg-emerald-950/25 border border-zinc-800'
-        };
-      
-      case 'Event Scheduled':
-        return {
-          dotBg: 'bg-cyan-500',
-          badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20',
-          card: 'border-l-4 border-l-cyan-500 bg-cyan-950/10 hover:bg-cyan-950/20 border border-zinc-800'
-        };
-      case 'Target Delivery':
-        return {
-          dotBg: 'bg-indigo-500',
-          badge: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20',
-          card: 'border-l-4 border-l-indigo-500 bg-indigo-950/10 hover:bg-indigo-950/20 border border-zinc-800'
-        };
-      case 'Delivery Overdue':
-        return {
-          dotBg: 'bg-red-500',
-          badge: 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20',
-          card: 'border-l-4 border-l-red-500 bg-red-950/10 hover:bg-red-950/20 border border-red-900/50'
-        };
-      case 'Event Completed':
-        return {
-          dotBg: 'bg-green-600',
-          badge: 'bg-green-600/10 text-green-400 border-green-600/20 hover:bg-green-600/20',
-          card: 'border-l-4 border-l-green-600 bg-green-950/15 hover:bg-green-950/25 border border-zinc-800'
-        };
-      case 'Raw Footage Pending':
-        return {
-          dotBg: 'bg-yellow-500',
-          badge: 'bg-yellow-500/10 text-yellow-450 border-yellow-500/20 hover:bg-yellow-500/20',
-          card: 'border-l-4 border-l-yellow-500 bg-yellow-950/10 hover:bg-yellow-950/20 border border-zinc-800'
-        };
-      case 'Editing In Progress':
-        return {
-          dotBg: 'bg-violet-500',
-          badge: 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20',
-          card: 'border-l-4 border-l-violet-500 bg-violet-950/10 hover:bg-violet-950/20 border border-zinc-800'
-        };
-      
-      case 'Overdue':
-        return {
-          dotBg: 'bg-red-500',
-          badge: 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20',
-          card: 'border-l-4 border-l-red-500 bg-red-950/10 hover:bg-red-950/20 border border-zinc-800'
-        };
-      case 'Calendar Memo':
-        return {
-          dotBg: 'bg-fuchsia-500',
-          badge: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20 hover:bg-fuchsia-400/20',
-          card: 'border-l-4 border-l-fuchsia-500 bg-fuchsia-950/10 hover:bg-fuchsia-950/20 border border-zinc-800'
-        };
+      case 'owner':
       default:
         return {
-          dotBg: 'bg-zinc-500',
-          badge: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/20 hover:bg-zinc-500/20',
-          card: 'border-l-4 border-l-zinc-500 bg-zinc-950/10 hover:bg-zinc-950/20 border border-zinc-800'
+          primary: 'emerald',
+          border: 'border-emerald-500/30',
+          bgHighlight: 'bg-emerald-500/10',
+          textHighlight: 'text-emerald-400',
+          buttonBg: 'bg-emerald-600 hover:bg-emerald-500 text-white'
         };
     }
-  };
-
-  // WIDGET DATA ENGINE
-  const widgets = useMemo(() => {
-    // 1. Today's Events
-    const todayEvents = roleFilteredEvents.filter(e => e.date === todayStr);
-
-    // 2. Tomorrow's Events
-    const tomorrowEvents = roleFilteredEvents.filter(e => e.date === tomorrowStr);
-
-    // 3. Upcoming Events (7 days window)
-    const sevenDaysDate = new Date(systemToday);
-    sevenDaysDate.setDate(sevenDaysDate.getDate() + 7);
-    const sevenDaysLater = getLocalDateStr(sevenDaysDate);
-    const upcomingEvents = roleFilteredEvents.filter(e => e.date >= todayStr && e.date <= sevenDaysLater);
-
-    // 4. Overdue Tasks
-    // - Lead follow up dates or event dates in past and stage is incomplete
-    // - Production expected delivery in past and not delivered
-    const overdueTasks = roleFilteredEvents.filter(e => {
-      if (e.date >= todayStr) return false;
-      
-      if (e.sourceType === 'lead') {
-        return !['Order Confirmed', 'Closed'].includes(e.currentStage);
-      }
-      if (e.sourceType === 'production') {
-        return !['Delivered', 'Closed', 'Approved'].includes(e.currentStage);
-      }
-      if (e.sourceType === 'order') {
-        return !['Event Completed', 'Delivered', 'Paid', 'Closed'].includes(e.currentStage);
-      }
-      return false;
-    });
-
-    // 5. Deliveries Due (Expected dates in the next 7 days in Post Production)
-    const deliveriesDue = roleFilteredEvents.filter(e => {
-      const isPostEvent = e.sourceType === 'order' && (e.eventClass === 'Target Delivery' || e.eventClass === 'Delivery Overdue');
-      if (!isPostEvent) return false;
-      return e.date >= todayStr && e.date <= sevenDaysLater;
-    });
-
-    return {
-      todayEvents,
-      tomorrowEvents,
-      upcomingEvents,
-      overdueTasks,
-      deliveriesDue
-    };
-  }, [roleFilteredEvents]);
-
-
-  // Add Memo submit handler
-  const handleSaveMemo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMemoTitle.trim() || !newMemoMessage.trim() || !selectedDate) return;
-
-    try {
-      if (editingMemoId && updateCalendarMemo) {
-        await updateCalendarMemo(editingMemoId, {
-          title: newMemoTitle,
-          message: newMemoMessage
-        });
-      } else if (addCalendarMemo) {
-        await addCalendarMemo({
-          memo_date: selectedDate,
-          title: newMemoTitle,
-          message: newMemoMessage
-        });
-      }
-
-      setNewMemoTitle('');
-      setNewMemoMessage('');
-      setEditingMemoId(null);
-      setShowAddMemo(false);
-    } catch (err) {
-      console.error("Failed storing calendar memo:", err);
-    }
-  };
-
-
-  // Selected Event metadata log pipeline (for details popup activity feed)
-  const eventTimeline = useMemo(() => {
-    if (!selectedEvent) return [];
-    
-    // Attempt to match logs on order ID or lead ID
-    const matches: string[] = [];
-    if (selectedEvent.sourceType === 'lead' && selectedEvent.raw?.lead_id) {
-       matches.push(selectedEvent.raw.lead_id);
-    } else if (selectedEvent.sourceType === 'order' && selectedEvent.raw?.order_id) {
-       matches.push(selectedEvent.raw.order_id);
-       if (selectedEvent.raw.lead_id) matches.push(selectedEvent.raw.lead_id);
-    } else if (selectedEvent.sourceType === 'production' && selectedEvent.raw?.tracking_id) {
-       matches.push(selectedEvent.raw.tracking_id);
-    }
-
-    if (matches.length === 0) return [];
-
-    return logs.filter(log => {
-      return matches.includes(log.record_id);
-    }).sort((a,b) => b.timestamp.localeCompare(a.timestamp));
-  }, [selectedEvent, logs]);
-
-
-  // Month names
-  const monthNames = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-
+  }, [role]);
 
   return (
-    <div id="unified_calendar_container" className="space-y-6 text-zinc-100 pb-10">
-      
-      {calendarError && (
-        <div className="p-3 bg-red-950/60 border border-red-500/35 rounded-xl text-xs text-red-200 flex items-center justify-between gap-2 shadow-lg">
-          <span>{calendarError}</span>
-          <button 
-            onClick={() => setCalendarError(null)}
-            className="text-red-400 hover:text-white font-bold px-2 py-1 rounded hover:bg-red-900/40 transition-colors"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-      {/* 3. Filtering and Custom Parameters Console */}
-      <div className="bg-zinc-900/20 border border-zinc-900 p-3 sm:p-4 rounded-2xl flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 w-full">
-          {/* Search Input Box + Search/OK Button */}
-          <div className="flex items-center gap-2 w-full sm:max-w-md">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
-              <input
-                id="cal_search_input"
-                type="text"
-                placeholder="Search client name, order ID, event type..."
-                value={searchInputValue}
-                onChange={(e) => setSearchInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleExecuteSearch();
-                  }
-                }}
-                className="w-full bg-zinc-950/50 hover:bg-zinc-950 border border-zinc-850 focus:border-yellow-500 h-9 pl-9 pr-8 rounded-xl text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition-all"
-              />
-              {searchInputValue && (
-                <button
-                  onClick={handleClearSearch}
-                  className="absolute right-2.5 top-2.5 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer"
-                  title="Clear search"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+    <div className="space-y-4">
+      {/* Calendar Header Card */}
+      <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl md:rounded-3xl p-4 sm:p-5 md:p-6 shadow-2xl space-y-4 md:space-y-6">
+        
+        {/* Navigation & Controls Bar */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+          
+          {/* Month / Year Navigator */}
+          <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 shadow-sm">
             <button
-              id="btn_cal_search_submit"
-              onClick={handleExecuteSearch}
-              className="px-3.5 h-9 bg-yellow-500 hover:bg-yellow-400 text-zinc-950 font-bold text-xs rounded-xl flex items-center gap-1.5 shrink-0 transition-all cursor-pointer shadow-sm"
+              type="button"
+              onClick={handlePrevMonth}
+              className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition cursor-pointer active:scale-90 shrink-0"
+              aria-label="Previous Month"
             >
-              <Search className="w-3.5 h-3.5" />
-              <span>Search</span>
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            
+            <h2 className="text-sm sm:text-base font-mono font-bold tracking-wider text-center px-3 whitespace-nowrap">
+              <span className={`${theme.textHighlight} font-extrabold`}>{monthName}</span>
+              <span className="text-zinc-200 font-medium ml-1.5">{year}</span>
+            </h2>
+
+            <button
+              type="button"
+              onClick={handleNextMonth}
+              className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition cursor-pointer active:scale-90 shrink-0"
+              aria-label="Next Month"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={handleToday}
+              className="ml-2 px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/60 rounded-lg text-xs font-mono font-bold text-zinc-300 hover:text-white transition cursor-pointer"
+            >
+              Today
             </button>
           </div>
 
-          {/* Filter toggle button */}
-          <button
-            id="btn_cal_filter_toggle"
-            onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-1.5 px-3.5 h-9 bg-zinc-900 hover:bg-zinc-850 border rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-              showFilters ? 'border-yellow-500/40 text-yellow-400 bg-yellow-500/5' : 'border-zinc-800 text-zinc-400'
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Filter</span>
-          </button>
-        </div>
-
-        {/* Collapsible filters */}
-        {showFilters && (
-          <div className="flex flex-wrap items-center gap-3 w-full pt-3 border-t border-zinc-850 animate-fade-in">
-            <div className="flex items-center gap-1.5 w-full sm:w-auto">
-              <span className="text-[10px] font-mono uppercase text-zinc-500">Status</span>
-              <select
-                id="cal_status_filter"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
-              >
-                <option value="All">All Statuses</option>
-                {role === 'operations' || role === 'worker' ? (
-                  <>
-                    <option value="Order Confirmed">Order Confirmed</option>
-                    <option value="Assigned Crew">Assigned Crew</option>
-                    <option value="Event Started">Event Started</option>
-                    <option value="Event Ended">Event Ended</option>
-                    <option value="Footage Handover">Footage Handover</option>
-                    <option value="Verified Footage">Verified Footage</option>
-                    <option value="Event Cancelled">Event Cancelled</option>
-                  </>
-                ) : role === 'production' ? (
-                  <>
-                    <option value="Verified Footage">Verified Footage</option>
-                    <option value="Assigned Editor">Assigned Editor</option>
-                    <option value="Editing Started">Editing Started</option>
-                    <option value="Customer Review">Customer Review</option>
-                    <option value="Editing Completed">Editing Completed</option>
-                    <option value="Client Acceptance">Client Acceptance</option>
-                    <option value="Order Closed">Order Closed</option>
-                  </>
-                ) : (
-                  ACTIVE_STAGE_GROUPS.map((group, idx) => (
-                    <optgroup key={idx} label={group.label} className={`bg-zinc-950 ${group.colorClass} font-bold`}>
-                      {group.options.map(opt => (
-                        <option key={opt.value} value={opt.value} className="text-white font-normal">{opt.label}</option>
-                      ))}
-                    </optgroup>
-                  ))
-                )}
-              </select>
+          {/* Search & Status Filter */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative flex-1 sm:w-64">
+              <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                placeholder="Search orders, clients, events..."
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl pl-9 pr-3 py-2 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition"
+              />
             </div>
 
-            <div className="flex items-center gap-1.5 w-full sm:w-auto">
-              <span className="text-[10px] font-mono uppercase text-zinc-500">Event</span>
+            {distinctStatuses.length > 0 && (
               <select
-                id="cal_event_filter"
-                value={eventTypeFilter}
-                onChange={(e) => setEventTypeFilter(e.target.value)}
-                className="bg-zinc-950 border border-zinc-850 h-9 px-3 rounded-xl text-xs text-zinc-300 focus:outline-none focus:border-yellow-500 cursor-pointer w-full sm:w-auto"
+                value={selectedStatusFilter}
+                onChange={e => setSelectedStatusFilter(e.target.value)}
+                className="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs font-mono text-zinc-300 focus:outline-none focus:border-zinc-600 transition cursor-pointer"
               >
-                <option value="All">All Event Types</option>
-                {EVENT_TYPES.map(t => (
-                  <option key={t} value={t}>{t}</option>
+                <option value="All">All Statuses ({allEvents.length})</option>
+                {distinctStatuses.map(st => (
+                  <option key={st} value={st}>{st}</option>
                 ))}
               </select>
+            )}
+
+            <div className="px-3 py-2 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs font-mono font-bold text-zinc-400">
+              Total: <span className={`${theme.textHighlight} font-black`}>{filteredEvents.length}</span>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* Search Results Table View */}
-      {isSearchExecuted && (
-        <div className="bg-zinc-950 border border-zinc-850 rounded-2xl p-4 shadow-xl space-y-3 animate-fade-in">
-          <div className="flex items-center justify-between pb-3 border-b border-zinc-850">
-            <div className="flex items-center gap-2">
-              <Search className="w-4 h-4 text-yellow-500" />
-              <h3 className="text-xs font-mono font-bold uppercase tracking-wider text-white">
-                Search Results {appliedSearchQuery ? <><span className="text-zinc-400">for</span> <span className="text-yellow-400">"{appliedSearchQuery}"</span></> : null}
-              </h3>
-              <span className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded font-mono font-bold border border-zinc-700">
-                {searchResultsEvents.length} {searchResultsEvents.length === 1 ? 'result' : 'results'}
-              </span>
-            </div>
-            <button
-              onClick={handleClearSearch}
-              className="text-xs text-zinc-400 hover:text-white flex items-center gap-1 bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-800 transition-colors cursor-pointer"
-            >
-              <X className="w-3.5 h-3.5" />
-              <span>Clear Search</span>
-            </button>
-          </div>
-
-          {searchResultsEvents.length === 0 ? (
-            <div className="py-8 text-center text-zinc-500 text-xs font-mono italic">
-              No results found
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[1180px]">
-                <thead>
-                  <tr className="bg-zinc-900/80 text-zinc-400 text-[10px] font-mono uppercase tracking-wider border-b border-zinc-800">
-                    {role === 'sales' ? (
-                      <>
-                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[110px]">Event Time</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
-                        <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
-                      </>
-                    ) : (role === 'operations' || role === 'production') ? (
-                      <>
-                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Client Name</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Reporting Time</th>
-                        <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
-                      </>
-                    ) : (
-                      <>
-                        <th className="p-3">Event Date</th>
-                        <th className="p-3">Event Name</th>
-                        <th className="p-3">Event Type</th>
-                        <th className="p-3">Customer Name</th>
-                        <th className="p-3">Order ID</th>
-                        <th className="p-3">Event Time</th>
-                        <th className="p-3">Current Status</th>
-                        <th className="p-3 text-right min-w-[100px] whitespace-nowrap">Action</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-900">
-                  {searchResultsEvents.map((ev, idx) => {
-                    if (role === 'sales') {
-                      const custName = ev.customerName || ev.raw?.customer_name || '—';
-                      const custNumber = ev.mobile || ev.raw?.mobile || ev.raw?.whatsapp_number || '';
-                      const evName = ev.eventName || ev.raw?.event_name || ev.raw?.custom_event_name || ev.eventType || 'Event';
-                      const location = ev.eventLocation || ev.raw?.event_location || '—';
-                      const salesCrew = ev.salesCrew || ev.raw?.salesCrew || ev.raw?.sales_crew || ev.raw?.sales_staff_name || ev.raw?.sales_person || 'Unassigned';
-                      const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.Order_ID || ev.raw?.tracking_id || ev.raw?.lead_id || '—';
-                      const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
-                      const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
-                      const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
-
-                      return (
-                        <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
-                          <td className="p-3.5 pl-4 align-middle min-w-[130px]">
-                            <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
-                              {orderDisplayId}
-                            </span>
-                          </td>
-                          <td className="p-3.5 align-middle min-w-[190px]">
-                            <div 
-                              className="font-bold text-white text-xs leading-snug"
-                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                            >
-                              {custName}
-                            </div>
-                            {custNumber ? (
-                              <div className="text-[11px] font-mono text-zinc-400 mt-1 whitespace-nowrap">
-                                {custNumber}
-                              </div>
-                            ) : (
-                              <div className="text-[10px] font-mono text-zinc-500 italic mt-0.5">—</div>
-                            )}
-                          </td>
-                          <td className="p-3.5 align-middle min-w-[180px]">
-                            <div 
-                              className="font-bold text-white text-xs leading-snug"
-                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                            >
-                              {evName}
-                            </div>
-                          </td>
-                          <td className="p-3.5 align-middle min-w-[210px]">
-                            <div 
-                              className="text-zinc-300 text-xs leading-snug"
-                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                              title={location}
-                            >
-                              {location}
-                            </div>
-                          </td>
-                          <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
-                            <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                              {evDate}
-                            </span>
-                          </td>
-                          <td className="p-3.5 align-middle whitespace-nowrap min-w-[110px]">
-                            <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                              {evTime ? formatTime12Hour(evTime) : '—'}
-                            </span>
-                          </td>
-                          <td className="p-3.5 align-middle min-w-[160px]">
-                            <div 
-                              className="text-zinc-200 text-xs leading-relaxed"
-                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                            >
-                              <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
-                                {salesCrew}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-3.5 align-middle min-w-[130px]">
-                            <span 
-                              className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 leading-tight text-center"
-                              style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                            >
-                              {status}
-                            </span>
-                          </td>
-                          <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
-                            <button
-                              onClick={() => handleEventAction(ev)}
-                              className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                            >
-                              Details
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    if (role === 'operations' || role === 'production') {
-                      const orderDisplayId = getOrderId(ev.orderId, ev.raw?.lead_id, ev);
-                      const evName = getEventName(ev.orderId, ev.raw?.lead_id, ev);
-                      const clientName = getClientName(ev.orderId, ev.raw?.lead_id, ev);
-                      const salesCrew = getSalesCrew(ev.orderId, ev.raw?.lead_id, ev);
-                      const repTime = getReportingTime(ev.orderId, ev.raw?.lead_id, ev);
-                      const { label: actionLabel, effLeadId } = getOperationsActionDetails(ev.orderId, ev.raw?.lead_id, ev);
-
-                      return (
-                        <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
-                          <td className="p-3.5 pl-4 align-middle min-w-[130px]">
-                            <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
-                              {orderDisplayId}
-                            </span>
-                          </td>
-                          <td className="p-3.5 align-middle min-w-[180px]">
-                            <div className="font-bold text-white text-xs leading-snug">
-                              {evName}
-                            </div>
-                          </td>
-                          <td className="p-3.5 align-middle min-w-[180px]">
-                            <div className="font-bold text-zinc-100 text-xs leading-snug">
-                              {clientName}
-                            </div>
-                          </td>
-                          <td className="p-3.5 align-middle min-w-[160px]">
-                            <div className="text-zinc-200 text-xs leading-relaxed">
-                              <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
-                                {salesCrew}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
-                            <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                              {repTime}
-                            </span>
-                          </td>
-                          <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
-                            <button
-                              type="button"
-                              onClick={() => handleCalendarRowAction(orderDisplayId, effLeadId, actionLabel)}
-                              className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                            >
-                              {actionLabel}
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    return (
-                      <tr key={ev.id || idx} className="hover:bg-zinc-900/50 text-zinc-300 transition-colors">
-                        <td className="p-3 font-mono text-yellow-400 font-bold">{ev.date || 'N/A'}</td>
-                        <td className="p-3 font-bold text-white">{ev.raw?.event_name || ev.eventName || ev.eventType || 'Event Shoot'}</td>
-                        <td className="p-3 text-zinc-300">{ev.eventType || 'N/A'}</td>
-                        <td className="p-3 font-semibold text-zinc-200">{ev.customerName || 'N/A'}</td>
-                        <td className="p-3 font-mono text-indigo-400 font-bold">{ev.orderId || 'N/A'}</td>
-                        <td className="p-3 font-mono text-zinc-400">{ev.eventTime ? formatTime12Hour(ev.eventTime) : 'N/A'}</td>
-                        <td className="p-3">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-zinc-300 border border-zinc-700 inline-block">
-                            {ev.currentStage || ev.eventClass || 'N/A'}
-                          </span>
-                        </td>
-                        <td className="p-3 text-right whitespace-nowrap min-w-[100px]">
-                          {role !== 'operations' && (
-                            <button
-                              onClick={() => handleEventAction(ev)}
-                              className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
-                              style={{ whiteSpace: 'nowrap' }}
-                            >
-                              Details
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
-      )}
 
-      {/* 4. Secondary Row: Main Screen Split Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        
-        {/* LEFT COLUMN: Main viewport calendar area */}
-        <div className="lg:col-span-3 bg-zinc-950/45 border border-zinc-905 p-3 sm:p-4 md:p-6 rounded-2xl shadow-xl space-y-4 md:space-y-6 relative">
-          {isDataLoading && (
-            <div className="absolute inset-0 bg-zinc-950/70 backdrop-blur-[1px] flex items-center justify-center rounded-2xl z-50">
-              <div className="flex flex-col items-center gap-3 bg-zinc-900 border border-zinc-800 p-6 rounded-xl shadow-2xl animate-fade-in">
-                <div className="w-6 h-6 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs text-zinc-300 font-mono">Loading calendar events...</span>
-              </div>
+        {/* Days of Week Header */}
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 text-center text-[10px] sm:text-xs font-mono font-bold uppercase text-zinc-500">
+          {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(day => (
+            <div key={day} className="py-2 bg-zinc-950/70 rounded-xl border border-zinc-850">
+              {day}
             </div>
-          )}
-          
-          {/* Calendar Section Header */}
-          <div className="flex items-center justify-between pb-2 border-b border-zinc-900/40">
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="w-4 h-4 text-yellow-500 shrink-0" />
-              <h3 className="text-xs sm:text-sm font-mono font-extrabold tracking-widest text-zinc-100 uppercase">
-                {role === 'operations' ? 'OPERATIONS CALENDAR' : role === 'production' ? 'PRODUCTION CALENDAR' : 'UNIFIED CALENDAR'}
-              </h3>
-            </div>
-            <div className="flex items-center gap-1.5 bg-emerald-950/20 px-2 py-0.5 rounded-full border border-emerald-500/10">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-              <span className="text-[9px] font-mono font-bold text-zinc-400 uppercase tracking-wider">LIVE SYNC</span>
-            </div>
-          </div>
+          ))}
+        </div>
 
-          {/* Unified Premium Calendar Toolbar */}
-          <div id="unified_calendar_toolbar" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-900/60 pb-5">
-            {/* Left Column: Month Navigation & Today Button */}
-            <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
-              <div className="flex items-center gap-4 bg-zinc-950 border border-zinc-900 rounded-xl px-3.5 py-2 w-full sm:w-auto select-none">
-                <button
-                  id="btn_cal_prev_month"
-                  onClick={handlePrevMonth}
-                  className="px-2 py-1 text-zinc-500 hover:text-white transition duration-150 cursor-pointer active:scale-90 font-mono font-bold text-xs"
-                  aria-label="Previous Month"
-                >
-                  [ &lt; ]
-                </button>
-                
-                <h2 id="calendar_current_period" className="text-xs sm:text-sm font-mono font-bold tracking-wider text-center flex items-center justify-center flex-1 sm:flex-none sm:min-w-[140px]">
-                  <span className="text-yellow-500 font-extrabold mr-1.5">{monthNames[currentMonth]}</span>
-                  <span className="text-zinc-500 font-light">{currentYear}</span>
-                </h2>
+        {/* Calendar Month Grid */}
+        <div className="grid grid-cols-7 gap-1 sm:gap-2 w-full max-w-full">
+          {calendarGrid.map((cell, idx) => {
+            const hasEvents = cell.events.length > 0;
+            const isSelected = cell.dateStr === calendarModalDate;
 
-                <button
-                  id="btn_cal_next_month"
-                  onClick={handleNextMonth}
-                  className="px-2 py-1 text-zinc-500 hover:text-white transition duration-150 cursor-pointer active:scale-90 font-mono font-bold text-xs"
-                  aria-label="Next Month"
-                >
-                  [ &gt; ]
-                </button>
-              </div>
-
-              <button
-                id="btn_cal_today"
-                onClick={handleSetToday}
-                className="px-4 py-2.5 bg-zinc-950 hover:bg-zinc-900 border border-zinc-900 hover:border-zinc-800 rounded-xl text-xs font-mono font-bold text-zinc-300 hover:text-white transition-all duration-150 cursor-pointer active:scale-95 shadow-md shrink-0"
+            return (
+              <div
+                key={idx}
+                onClick={() => {
+                  if (hasEvents) {
+                    setCalendarModalDate(cell.dateStr);
+                    setCalendarModalEvents(cell.events);
+                  }
+                }}
+                className={`aspect-square min-h-[52px] sm:min-h-[80px] p-1 sm:p-2 rounded-xl border flex flex-col items-center justify-between select-none touch-manipulation relative transition-all duration-150 ${
+                  hasEvents ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'
+                } ${
+                  isSelected
+                    ? `bg-zinc-900 ${theme.border} ring-1 ring-purple-500/30 shadow-lg`
+                    : cell.isToday
+                    ? `${theme.bgHighlight} ${theme.border} text-white shadow-md`
+                    : cell.isCurrentMonth
+                    ? 'bg-zinc-950/80 border-zinc-850 hover:border-zinc-700 hover:bg-zinc-900/40 text-zinc-200'
+                    : 'bg-zinc-950/20 border-transparent text-zinc-800 opacity-20 pointer-events-none'
+                }`}
               >
-                [ Today ]
-              </button>
-            </div>
-
-            {/* Right Column: Month/Week/Day/Agenda Segmented Control */}
-            <div id="calendar_view_selectors" className="flex bg-zinc-950 p-1 rounded-xl border border-zinc-900 select-none w-full sm:w-auto justify-between sm:justify-start gap-1 sm:min-w-[320px]">
-              {(['month', 'week', 'day', 'agenda'] as const).map((view) => {
-                const isSelected = calendarView === view;
-                return (
-                  <button
-                    key={view}
-                    id={`btn_view_${view}`}
-                    onClick={() => setCalendarView(view)}
-                    className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-mono font-bold capitalize transition-all duration-150 cursor-pointer text-center ${
-                      isSelected
-                        ? 'border border-yellow-500 text-yellow-500 bg-transparent shadow-md font-black'
-                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/40 border border-transparent'
+                {/* Date Number Display */}
+                <div className="w-full flex items-center justify-between">
+                  <span
+                    className={`text-[11px] sm:text-xs font-mono font-extrabold shrink-0 ${
+                      cell.isToday
+                        ? `${theme.textHighlight} font-black`
+                        : cell.isCurrentMonth
+                        ? 'text-zinc-200'
+                        : 'text-zinc-700'
                     }`}
                   >
-                    {view}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* RENDERING VIEWS */}
-          {calendarView === 'month' && (
-            <div className="animate-fade-in space-y-4">
-              {/* COMPACT UNIFIED MONTH VIEW (Fully responsive Google Calendar layout) */}
-              <div className="space-y-3">
-                {/* SUN / MON / TUE / WED / THU / FRI / SAT headers */}
-                <div className="grid grid-cols-7 text-center font-mono text-[10px] sm:text-xs font-bold uppercase text-zinc-500 py-2 border-b border-zinc-900/40">
-                  {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map((d) => (
-                    <span key={d} className="tracking-widest">{d}</span>
-                  ))}
-                </div>
-
-                {/* 7-Column Grid */}
-                <div className="grid grid-cols-7 gap-1 sm:gap-2 w-full max-w-full">
-                  {gridDays.map((cell, idx) => {
-                    const evs = filteredEvents.filter(ev => ev.date === cell.dateString);
-                    const isSelected = selectedDate === cell.dateString;
-                    const isTodayStr = cell.dateString === todayStr;
-
-                    return (
-                      <div
-                        key={cell.dateString || idx}
-                        id={`cell_day_${cell.dateString || idx}`}
-                        onClick={() => {
-                          if (cell.dateString) {
-                            setSelectedDate(cell.dateString);
-                            setShowSelectedDateModal(true);
-                          }
-                        }}
-                        className={`flex flex-col items-start justify-start p-1 sm:p-1.5 rounded-xl aspect-square border transition-all duration-150 cursor-pointer select-none touch-manipulation relative overflow-hidden ${
-                          isSelected
-                            ? "bg-zinc-900 border-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.18)]"
-                            : isTodayStr
-                            ? "bg-[#0d0d0e] border-emerald-500/40"
-                            : cell.isCurrentMonth
-                            ? "bg-[#0d0d0e] border-zinc-900/80 hover:border-zinc-700 hover:bg-zinc-900/50"
-                            : "bg-[#040405] border-transparent opacity-25 text-zinc-700 hover:border-zinc-800"
-                        }`}
-                      >
-                        {/* Date Number Display */}
-                        <div className="w-full flex items-center justify-between shrink-0 pointer-events-none">
-                          <span
-                            className={`text-xs sm:text-sm font-mono font-extrabold ${
-                              isSelected
-                                ? "text-yellow-500 font-black"
-                                : isTodayStr
-                                ? "text-emerald-400 font-bold"
-                                : cell.isCurrentMonth
-                                ? "text-zinc-200"
-                                : "text-zinc-700"
-                            }`}
-                          >
-                            {cell.dayNumber}
-                          </span>
-                          {evs.length > 0 && (
-                            <span className="text-[8px] font-mono px-1.5 py-0.2 rounded-full bg-yellow-500/20 text-yellow-400 font-bold border border-yellow-500/30">
-                              {evs.length}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Event names list inside the existing date box */}
-                        {evs.length > 0 && (
-                          <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-y-auto overflow-x-hidden mt-0.5 min-h-0 pr-0.5 pointer-events-auto">
-                            {evs.map((ev, eIdx) => {
-                              const displayName = role === 'sales'
-                                ? (ev.customerName || ev.raw?.customer_name || 'Client')
-                                : (ev.eventName || ev.raw?.event_name || ev.eventType || ev.customerName || 'Event');
-                              return (
-                                <div
-                                  key={ev.id || eIdx}
-                                  className="w-full truncate shrink-0 text-[8px] sm:text-[9.5px] leading-tight px-1 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800/80 font-medium text-left hover:text-white hover:border-zinc-700"
-                                  title={displayName}
-                                >
-                                  {displayName}
-                                </div>
-                              );
-                            })}
-                            {evs.length > 4 && (
-                              <div className="text-[8px] font-mono text-yellow-400 px-1 py-0.2 font-bold shrink-0 text-left">
-                                +{evs.length - 4} more
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-
-              </div>
-            </div>
-          )}
-
-          {calendarView === 'week' && (
-            <div className="animate-fade-in space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
-                {weekDays.map((day, dIdx) => {
-                  const evs = filteredEvents.filter(ev => ev.date === day.dateStr);
-                  const isSelected = selectedDate === day.dateStr;
-                  const isTodayStr = day.dateStr === todayStr;
-
-                  return (
-                    <div
-                      key={day.dateStr || dIdx}
-                      onClick={() => {
-                        if (day.dateStr) {
-                          setSelectedDate(day.dateStr);
-                          setShowSelectedDateModal(true);
-                        }
-                      }}
-                      className={`min-h-[250px] bg-zinc-950/20 border rounded-2xl p-3 flex flex-col transition-all cursor-pointer ${
-                        isSelected 
-                          ? 'border-yellow-500 bg-zinc-900/40 ring-1 ring-yellow-500/10' 
-                          : 'border-zinc-900 hover:border-zinc-700 hover:bg-zinc-900/20'
-                      }`}
-                    >
-                      <div className="flex justify-between items-center border-b border-zinc-900 pb-1.5">
-                        <span className="text-[10px] font-mono uppercase text-zinc-450">{day.name}</span>
-                        <span className={`text-xs ml-2 px-1.5 py-0.5 rounded-md font-mono ${
-                          isTodayStr ? 'bg-yellow-500 text-zinc-950 font-bold' : 'text-zinc-300'
-                        }`}>
-                          {day.dateStr.split('-')[2]}
-                        </span>
-                      </div>
-
-                      {/* Week Events items stack */}
-                      <div className="mt-3 flex-1 space-y-2 overflow-y-auto no-scrollbar max-h-[300px]">
-                        {evs.length === 0 ? (
-                          <span className="text-[10px] text-zinc-650 font-mono italic block py-4 text-center">
-                            Empty
-                          </span>
-                        ) : (
-                          evs.map(ev => {
-                            const col = getColorClasses(ev.eventClass);
-                            return (
-                              <div
-                                key={ev.id}
-                                id={`week_card_${ev.id}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEventAction(ev);
-                                }}
-                                className={`p-2 rounded-xl text-xs flex flex-col gap-1 transition cursor-pointer w-full hover:brightness-110 active:scale-95 ${col.card}`}
-                              >
-                                <span className="font-bold text-zinc-100 line-clamp-1">{ev.customerName}</span>
-                                {role === 'production' ? (
-                                  <>
-                                    {ev.orderId && (
-                                      <span className="text-[9px] font-mono text-zinc-400">Order ID: {ev.orderId}</span>
-                                    )}
-                                    <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
-                                      <Clock className="w-2.5 h-2.5" />
-                                      <span>{ev.eventName || ev.eventType}</span>
-                                    </div>
-                                    <div className="text-[9px] font-mono text-pink-400 font-bold">Due: {ev.targetDeliveryDate || ev.date}</div>
-                                  </>
-                                ) : (
-                                  <div className="flex items-center gap-1 text-[9px] text-zinc-400 font-mono">
-                                    <Clock className="w-2.5 h-2.5" />
-                                    <span>{formatTime12Hour(ev.eventTime)}</span>
-                                  </div>
-                                )}
-                                <span className={`${col.badge} text-[9px] font-semibold px-1.5 py-0.5 rounded-md self-start font-mono border text-center  overflow-hidden text-ellipsis break-words max-w-full`}>
-                                  {ev.currentStage || ev.eventClass}
-                                </span>
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {calendarView === 'day' && (
-            <div className="animate-fade-in space-y-4">
-              <div className="bg-zinc-950/20 border border-zinc-900 p-4 rounded-2xl flex justify-between items-center">
-                <div>
-                  <span className="text-[10px] font-mono uppercase text-zinc-450">Day Perspective</span>
-                  <h3 className="text-sm font-bold text-white mt-0.5">
-                    Viewing events for: <span className="text-yellow-500 font-mono">{selectedDate || todayStr}</span>
-                  </h3>
-                </div>
-                {selectedDate === todayStr && (
-                  <span className="text-xs px-2.5 py-0.5 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-full font-mono animate-pulse">
-                    Today
+                    {cell.dayNum}
                   </span>
-                )}
-              </div>
 
-              {/* Day Time Schedule list */}
-              <div className="space-y-3">
-                {(() => {
-                  const dayEvents = filteredEvents.filter(ev => ev.date === (selectedDate || todayStr));
-                  if (dayEvents.length === 0) {
-                    return (
-                      <div className="py-20 text-center bg-zinc-950/10 border border-dashed border-zinc-900 rounded-3xl">
-                        <CalendarIcon className="w-8 h-8 text-zinc-700 mx-auto mb-2 animate-bounce" />
-                        <h4 className="text-sm font-bold text-zinc-200">No events locked</h4>
-                        <p className="text-xs text-zinc-500 mt-1">Schedule assignments or memos for this calendar square.</p>
-                      </div>
-                    );
-                  }
+                  {/* Badge count if multiple */}
+                  {hasEvents && cell.events.length > 1 && (
+                    <span className={`text-[8px] sm:text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-full ${theme.bgHighlight} ${theme.textHighlight} border ${theme.border}`}>
+                      {cell.events.length}
+                    </span>
+                  )}
+                </div>
 
-                  return dayEvents.map(ev => {
-                    const col = getColorClasses(ev.eventClass);
-                    return (
-                      <div
-                        key={ev.id}
-                        id={`day_card_${ev.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEventAction(ev);
-                        }}
-                        className={`p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all cursor-pointer w-full hover:brightness-110 active:scale-[0.99] ${col.card}`}
-                      >
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] font-mono uppercase px-2 py-0.5 bg-zinc-900 text-zinc-400 rounded-md border border-zinc-800">
-                              {ev.eventName || ev.eventType}
-                            </span>
-                            <span className={`text-[10px] px-2 py-0.5 border rounded-md font-mono font-bold shadow ${col.badge}`}>
-                              {ev.currentStage || ev.eventClass}
-                            </span>
-                          </div>
-
-                          <h3 className="text-sm font-bold text-white">
-                            {ev.customerName}
-                          </h3>
-
-                          {role === 'production' ? (
-                            <div className="flex items-center gap-4 text-xs font-mono text-zinc-400 flex-wrap">
-                              {ev.orderId && (
-                                <div className="flex items-center gap-1 text-yellow-500">
-                                  <span>Order ID:</span>
-                                  <span>{ev.orderId}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-1 text-pink-400 font-bold">
-                                <span>Target Delivery:</span>
-                                <span>{ev.targetDeliveryDate || ev.date}</span>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-4 text-xs font-mono text-zinc-400 flex-wrap">
-                              <div className="flex items-center gap-1">
-                                <Clock className="w-3.5 h-3.5 text-zinc-500" />
-                                <span>{formatTime12Hour(ev.eventTime)}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <MapPin className="w-3.5 h-3.5 text-zinc-500" />
-                                <span className="break-words max-w-[200px]">{ev.eventLocation}</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Extra details indicator */}
-                        <div className="flex items-center gap-2 self-start md:self-center">
-                          <button
-                            id={`btn_day_evt_view_${ev.id}`}
-                            className="text-xs bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white px-3 py-1.5 rounded-xl border border-zinc-850 hover:border-zinc-700 transition"
-                          >
-                            Inspection Desk
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
-          )}
-
-          {calendarView === 'agenda' && (
-            <div className="animate-fade-in space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-xs font-mono text-zinc-400 uppercase tracking-widest">
-                  Chronological Studio Feed
-                </h3>
-                <span className="text-xs text-zinc-500 font-mono">{filteredEvents.length} schedules load</span>
-              </div>
-
-              {/* Feed items */}
-              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                {filteredEvents.length === 0 ? (
-                  <div className="py-20 text-center border border-zinc-900 rounded-2xl block text-zinc-500">
-                    No matching schedulers found. Refine your filters.
-                  </div>
-                ) : (
-                  filteredEvents
-                    .sort((a,b) => a.date.localeCompare(b.date))
-                    .map(ev => {
-                      const col = getColorClasses(ev.eventClass);
+                {/* Event Names inside the Date Cell */}
+                {cell.isCurrentMonth && hasEvents && (
+                  <div className="w-full flex-1 flex flex-col justify-start gap-0.5 overflow-hidden mt-0.5 min-h-0">
+                    {cell.events.slice(0, 2).map((ev, eIdx) => {
+                      const displayName = ev.customerName || ev.orderId;
                       return (
                         <div
-                          key={ev.id}
-                          id={`agenda_row_${ev.id}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEventAction(ev);
-                          }}
-                          className={`p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition cursor-pointer w-full hover:brightness-110 active:scale-[0.99] ${col.card}`}
+                          key={`${ev.id}_${eIdx}`}
+                          className="w-full truncate text-[9px] sm:text-[10px] leading-tight px-1 py-0.5 rounded bg-zinc-900/90 text-zinc-300 border border-zinc-800 font-medium text-left hover:text-white"
+                          title={`${ev.orderId}: ${ev.customerName} (${ev.status})`}
                         >
-                          <div className="flex items-start gap-3 w-full sm:w-auto">
-                            <div className="flex flex-col items-center bg-zinc-950 px-3 py-2 rounded-xl text-center min-w-max border border-zinc-900">
-                              <span className="text-[10px] font-mono text-zinc-400 font-bold uppercase">
-                                {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseLocalDate(ev.date).getMonth()]}
-                              </span>
-                              <span className="text-base font-black text-yellow-500 font-mono">
-                                {ev.date.split('-')[2]}
-                              </span>
-                            </div>
-
-                            <div className="space-y-1">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[9px] px-1.5 py-0.5 border rounded-md font-mono font-bold ${col.badge}`}>
-                                  {ev.eventClass}
-                                </span>
-                                <span className="text-[10px] font-mono text-zinc-550 border-l border-zinc-800 pl-2">
-                                  {ev.eventName || ev.eventType}
-                                </span>
-                              </div>
-                              <h4 className="text-xs font-bold text-white">
-                                {ev.customerName}
-                              </h4>
-                              <div className="flex items-center gap-1.5 text-[10px] text-zinc-450 font-mono">
-                                <span>{formatDateDDMMYY(ev.date)}</span>
-                                <span className="text-zinc-700">•</span>
-                                <Clock className="w-3 h-3 text-zinc-650" />
-                                <span>{formatTime12Hour(ev.eventTime)}</span>
-                                <span className="text-zinc-700">•</span>
-                                <MapPin className="w-3 h-3 text-zinc-650" />
-                                <span className="break-words max-w-[200px]">{ev.eventLocation}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="text-[10px] text-zinc-500 font-mono self-end sm:self-center">
-                            ID: {ev.id.slice(0, 12)}
-                          </div>
+                          <span className={`${theme.textHighlight} font-bold mr-0.5`}>•</span>
+                          {displayName}
                         </div>
                       );
-                    })
+                    })}
+                    {cell.events.length > 2 && (
+                      <span className="text-[8px] text-zinc-500 font-mono text-left pl-0.5">
+                        +{cell.events.length - 2} more
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
-          )}
-
+            );
+          })}
         </div>
 
-        {/* RIGHT COLUMN: Workspace Memos Board (Hidden per user request) */}
-        <div className="hidden" style={{ display: 'none' }}>
-          <div className="bg-zinc-950/45 border border-zinc-905 p-4 md:p-6 rounded-2xl shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-850 pb-3">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-yellow-500" />
-                <h3 className="text-xs font-black uppercase tracking-wider text-white font-mono">
-                  Workspace Memos
-                </h3>
-              </div>
-              <button
-                id="btn_add_memo_sidebar"
-                onClick={() => {
-                  setEditingMemoId(null);
-                  setNewMemoTitle('');
-                  setNewMemoMessage('');
-                  setShowAddMemo(true);
-                }}
-                className="flex items-center gap-1 px-2 py-1 bg-yellow-500 hover:bg-yellow-450 border border-yellow-600 rounded-lg text-[10px] text-zinc-950 font-bold transition-all cursor-pointer"
-              >
-                <Plus className="w-3 h-3 stroke-[2.5]" />
-                <span>Add Memo</span>
-              </button>
-            </div>
-
-            <p className="text-[11px] text-zinc-500 font-sans">
-              Displaying role-specific bulletins and action items synchronized on this calendar board.
-            </p>
-
-            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-              {calendarMemos && calendarMemos.length > 0 ? (
-                calendarMemos.map((memo) => (
-                  <div key={memo.id} className="p-3 bg-zinc-900/40 border border-zinc-850 rounded-xl space-y-2 relative group hover:border-zinc-800 transition-all">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded">
-                          {memo.memo_date}
-                        </span>
-                        <h4 className="text-xs font-bold text-white mt-1.5">{memo.title}</h4>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => {
-                            setEditingMemoId(memo.id);
-                            setNewMemoTitle(memo.title);
-                            setNewMemoMessage(memo.message);
-                            setShowAddMemo(true);
-                          }}
-                          className="p-1 hover:bg-zinc-800 rounded text-zinc-400 hover:text-white transition"
-                          title="Edit Memo"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (window.confirm("Are you sure you want to delete this memo?")) {
-                              deleteCalendarMemo(memo.id);
-                            }
-                          }}
-                          className="p-1 hover:bg-zinc-800 rounded text-red-450 hover:text-red-400 transition"
-                          title="Delete Memo"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 whitespace-pre-wrap leading-relaxed">{memo.message}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="p-8 text-center bg-zinc-900/20 border border-dashed border-zinc-850 rounded-xl text-zinc-500 text-xs font-mono">
-                  No memos recorded for {role}.
+        {/* Modal for Clicked Date: Real Horizontal Table */}
+        {calendarModalDate && createPortal(
+          <div 
+            className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-4 bg-zinc-950/85 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setCalendarModalDate(null)}
+          >
+            <div 
+              className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl rounded-2xl md:rounded-3xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-4 sm:p-6 border-b border-zinc-800/80 shrink-0">
+                <div>
+                  <span className={`text-[10px] font-mono uppercase tracking-wider ${theme.textHighlight} block font-extrabold`}>
+                    {role.toUpperCase().replace('_', ' ')} CALENDAR // EVENT DETAILS
+                  </span>
+                  <h4 className="text-base sm:text-lg font-black text-white font-mono mt-0.5 flex items-center gap-2">
+                    <CalendarIcon className="w-4 h-4 text-zinc-400" />
+                    <span>{formatDateDDMMYY(calendarModalDate) || calendarModalDate}</span>
+                  </h4>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 5. ADD memo DIALOG POPUP PORTAL OVERLAY */}
-      {showAddMemo && selectedDate && createPortal(
-        <div 
-          id="dialog_add_memo"
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
-        >
-          <div className="bg-zinc-900 border border-zinc-800 w-full w-full max-w-lg p-6 rounded-2xl space-y-4 shadow-2xl relative">
-            <button
-              id="close_dialog_add_memo"
-              onClick={() => {
-                setShowAddMemo(false);
-                setEditingMemoId(null);
-                setNewMemoTitle('');
-                setNewMemoMessage('');
-              }}
-              className="absolute right-4 top-4 p-1 hover:bg-zinc-850 rounded-lg text-zinc-400 hover:text-white transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div>
-              <span className="text-[10px] font-mono uppercase text-yellow-500">Office Bulletin board</span>
-              <h3 className="text-base font-bold text-white mt-1">
-                Record Workspace Memo on <span className="text-yellow-500 font-mono">{selectedDate}</span>
-              </h3>
-              <p className="text-xs text-zinc-400 mt-1">
-                This item displays exclusively for the active role ({role}) on the calendar timeline.
-              </p>
-            </div>
-
-            <form onSubmit={handleSaveMemo} className="space-y-4 pt-1">
-              <div className="space-y-1">
-                <label className="text-[10px] font-mono uppercase block text-zinc-400">Memo Headline Title</label>
-                <input
-                  id="memo_input_title"
-                  type="text"
-                  required
-                  placeholder="e.g., Drone battery checkup required"
-                  value={newMemoTitle}
-                  onChange={(e) => setNewMemoTitle(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 focus:border-yellow-500 h-10 px-3 rounded-xl text-xs text-zinc-200 placeholder-zinc-650 focus:outline-none transition-all"
-                />
+                <div className="flex items-center gap-3">
+                  <span className={`text-xs font-mono font-bold px-2.5 py-1 ${theme.bgHighlight} ${theme.textHighlight} border ${theme.border} rounded-lg`}>
+                    {calendarModalEvents.length} {calendarModalEvents.length === 1 ? 'RECORD' : 'RECORDS'}
+                  </span>
+                  <button
+                    onClick={() => setCalendarModalDate(null)}
+                    className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-mono uppercase block text-zinc-400">Memo Instructions Context</label>
-                <textarea
-                  id="memo_input_message"
-                  required
-                  rows={3}
-                  placeholder="Insert staff notifications, specific coordinate shifts, client package upgrades, or delivery notes..."
-                  value={newMemoMessage}
-                  onChange={(e) => setNewMemoMessage(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 focus:border-yellow-500 p-3 rounded-xl text-xs text-zinc-200 placeholder-zinc-650 focus:outline-none focus:ring-0 transition-all resize-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2.5 pt-2">
-                <button
-                  id="btn_cancel_memo"
-                  type="button"
-                  onClick={() => {
-                    setShowAddMemo(false);
-                    setEditingMemoId(null);
-                    setNewMemoTitle('');
-                    setNewMemoMessage('');
-                  }}
-                  className="px-4 py-2 bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 text-zinc-300 rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  id="btn_save_memo"
-                  type="submit"
-                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-450 border border-yellow-600 text-zinc-950 rounded-xl text-xs font-bold transition cursor-pointer"
-                >
-                  Commit Memo
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>,
-        document.body
-      )}
-      
-      {/* EVENTS SCHEDULED MODAL FOR A SPECIFIC DATE OR LEAD */}
-      {(popupDate || popupLeadId) && createPortal(
-        <div 
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in overflow-y-auto"
-        >
-          <div className="bg-zinc-900 border border-zinc-805 w-full w-full max-w-6xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] p-6 rounded-2xl shadow-2xl relative space-y-6 my-8">
-            <button
-              onClick={() => { setPopupDate(null); setPopupLeadId(null); }}
-              className="absolute right-4 top-4 p-1.5 hover:bg-zinc-850 rounded-lg text-zinc-400 hover:text-white transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="border-b border-zinc-800 pb-4">
-              <h3 className="text-lg font-black text-white">
-                {popupLeadId ? `Event Details` : `Events Scheduled - ${popupDate}`}
-              </h3>
-            </div>
-            
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse min-w-[1180px]">
-                <thead>
-                  <tr className="bg-zinc-950/70 text-zinc-405 font-bold border-b border-zinc-850 text-[10px] uppercase font-mono tracking-wider">
-                    {role === 'sales' ? (
-                      <>
-                        <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[110px]">Event Time</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
-                        <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
-                      </>
-                    ) : (role === 'operations' || role === 'production') ? (
-                      <>
-                        <th className="p-3.5 pl-5 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Client Name</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
-                        <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Reporting Time</th>
-                        <th className="p-3.5 pr-5 text-center whitespace-nowrap min-w-[110px]">Action</th>
-                      </>
-                    ) : (
-                      <>
-                        <th className="p-3.5 pl-5">Order ID</th>
-                        <th className="p-3.5">Customer Name</th>
-                        <th className="p-3.5">Event Name</th>
-                        <th className="p-3.5">Assigned Staff</th>
-                        <th className="p-3.5">Current Status</th>
-                        {role === 'operations' ? (
-                          <th className="p-3.5">Assigned Team</th>
-                        ) : (
-                          <>
-                            <th className="p-3.5">Payment Status</th>
-                            <th className="p-3.5 text-right">Outstanding Balance</th>
-                          </>
-                        )}
-                        <th className="p-3.5 text-right pr-5 min-w-[100px] whitespace-nowrap">Action</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-900/60">
-                  {(() => {
-                    if (role === 'sales') {
-                      let evsToShow: CalendarEvent[] = [];
-                      if (popupLeadId) {
-                        evsToShow = filteredEvents.filter(e => (e.raw?.lead_id === popupLeadId || e.orderId === popupLeadId || e.raw?.order_id === popupLeadId));
-                      } else if (popupDate) {
-                        evsToShow = filteredEvents.filter(e => e.date === popupDate && e.sourceType !== 'memo');
-                      }
-
-                      if (evsToShow.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={9} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
-                          </tr>
-                        );
-                      }
-
-                      return evsToShow.map((ev, idx) => {
-                        const custName = ev.customerName || ev.raw?.customer_name || '—';
-                        const custNumber = ev.mobile || ev.raw?.mobile || ev.raw?.whatsapp_number || '';
-                        const evName = ev.eventName || ev.raw?.event_name || ev.raw?.custom_event_name || ev.eventType || 'Event';
-                        const location = ev.eventLocation || ev.raw?.event_location || '—';
-                        const salesCrew = ev.salesCrew || ev.raw?.salesCrew || ev.raw?.sales_crew || ev.raw?.sales_staff_name || ev.raw?.sales_person || 'Unassigned';
-                        const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.Order_ID || ev.raw?.tracking_id || ev.raw?.lead_id || '—';
-                        const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
-                        const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
-                        const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
-
-                        return (
-                          <tr key={ev.id || idx} className="hover:bg-zinc-900/30 text-zinc-300 transition-all select-text">
-                            <td className="p-3.5 pl-4 align-middle min-w-[130px]">
-                              <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
-                                {orderDisplayId}
-                              </span>
-                            </td>
-                            <td className="p-3.5 align-middle min-w-[190px]">
-                              <div 
-                                className="font-bold text-white text-xs leading-snug"
-                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                              >
-                                {custName}
-                              </div>
-                              {custNumber ? (
-                                <div className="text-[11px] font-mono text-zinc-400 mt-1 whitespace-nowrap">
-                                  {custNumber}
-                                </div>
-                              ) : (
-                                <div className="text-[10px] font-mono text-zinc-500 italic mt-0.5">—</div>
-                              )}
-                            </td>
-                            <td className="p-3.5 align-middle min-w-[180px]">
-                              <div 
-                                className="font-bold text-zinc-100 text-xs leading-snug"
-                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                              >
-                                {evName}
-                              </div>
-                            </td>
-                            <td className="p-3.5 align-middle min-w-[210px]">
-                              <div 
-                                className="text-zinc-300 text-xs leading-snug"
-                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                                title={location}
-                              >
-                                {location}
-                              </div>
-                            </td>
-                            <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
-                              <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                                {evDate}
-                              </span>
-                            </td>
-                            <td className="p-3.5 align-middle whitespace-nowrap min-w-[110px]">
-                              <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                                {evTime ? formatTime12Hour(evTime) : '—'}
-                              </span>
-                            </td>
-                            <td className="p-3.5 align-middle min-w-[160px]">
-                              <div 
-                                className="text-zinc-200 text-xs leading-relaxed"
-                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                              >
-                                <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
-                                  {salesCrew}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="p-3.5 align-middle min-w-[130px]">
-                              <span 
-                                className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 leading-tight text-center"
-                                style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                              >
-                                {status}
-                              </span>
-                            </td>
-                            <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
-                              <button
-                                type="button"
-                                onClick={() => handleEventAction(ev)}
-                                className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                              >
-                                Details
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    }
-
-                    if (role === 'operations' || role === 'production') {
-                      let evsToShow: CalendarEvent[] = [];
-                      if (popupLeadId) {
-                        evsToShow = filteredEvents.filter(e => (e.raw?.lead_id === popupLeadId || e.orderId === popupLeadId || e.raw?.order_id === popupLeadId));
-                      } else if (popupDate) {
-                        evsToShow = filteredEvents.filter(e => e.date === popupDate && e.sourceType !== 'memo');
-                      }
-
-                      if (evsToShow.length === 0) {
-                        return (
-                          <tr>
-                            <td colSpan={6} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
-                          </tr>
-                        );
-                      }
-
-                      return evsToShow.map((ev, idx) => {
-                        const orderDisplayId = getOrderId(ev.orderId, ev.raw?.lead_id, ev);
-                        const evName = getEventName(ev.orderId, ev.raw?.lead_id, ev);
-                        const clientName = getClientName(ev.orderId, ev.raw?.lead_id, ev);
-                        const salesCrew = getSalesCrew(ev.orderId, ev.raw?.lead_id, ev);
-                        const repTime = getReportingTime(ev.orderId, ev.raw?.lead_id, ev);
-                        const { label: actionLabel, effLeadId } = getOperationsActionDetails(ev.orderId, ev.raw?.lead_id, ev);
-
-                        return (
-                          <tr key={ev.id || idx} className="hover:bg-zinc-900/30 text-zinc-300 transition-all select-text">
-                            <td className="p-3.5 pl-5 align-middle min-w-[130px]">
-                              <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
-                                {orderDisplayId}
-                              </span>
-                            </td>
-                            <td className="p-3.5 align-middle min-w-[180px]">
-                              <div className="font-bold text-white text-xs leading-snug">
-                                {evName}
-                              </div>
-                            </td>
-                            <td className="p-3.5 align-middle min-w-[180px]">
-                              <div className="font-bold text-zinc-100 text-xs leading-snug">
-                                {clientName}
-                              </div>
-                            </td>
-                            <td className="p-3.5 align-middle min-w-[160px]">
-                              <div className="text-zinc-200 text-xs leading-relaxed">
-                                <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
-                                  {salesCrew}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
-                              <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                                {repTime}
-                              </span>
-                            </td>
-                            <td className="p-3.5 pr-5 align-middle text-center whitespace-nowrap min-w-[110px]">
-                              <button
-                                type="button"
-                                onClick={() => handleCalendarRowAction(orderDisplayId, effLeadId, actionLabel)}
-                                className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                              >
-                                {actionLabel}
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    }
-
-                    let leadsToShow = [];
-                    if (popupLeadId) {
-                      const found = leads.find(l => l.lead_id === popupLeadId);
-                      if (found) leadsToShow = [found];
-                    } else if (popupDate) {
-                      const popupEvs = filteredEvents.filter(e => e.date === popupDate && e.sourceType !== "memo");
-                      const leadIds = Array.from(new Set(popupEvs.map(e => e.raw?.lead_id || e.orderId).filter(Boolean)));
-                      leadsToShow = leads.filter(l => leadIds.includes(l.lead_id));
-                    }
-
-                    if (leadsToShow.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan={7} className="p-8 text-center text-zinc-500 font-mono">No specific event data found.</td>
-                        </tr>
-                      );
-                    }
-
-                    return leadsToShow.map(lead => {
-                      const linkedOrder = orders.find((o) => o.lead_id === lead.lead_id);
-                      const orderIdDisplay = linkedOrder?.order_id || lead.lead_id;
-                      const prodRecord = production?.find(p => p.tracking_id === lead.lead_id || p.order_id === lead.lead_id || p.tracking_id === orderIdDisplay || (p as any).order_id === orderIdDisplay);
-
-                      if (role === 'production') {
-                        const customerName = lead.customer_name || linkedOrder?.client_name || '—';
-                        const assignedDate = getProductionAssignedDate(orderIdDisplay, lead.lead_id, prodRecord, editorAssignments);
-                        const targetDeliveryDate = formatDateDMY(prodRecord?.target_delivery_date || prodRecord?.expected_delivery_date || lead.delivery_target_date || popupDate);
-                        const currentStatus = prodRecord?.production_status || prodRecord?.editing_status || linkedOrder?.current_stage || lead.status || 'Active';
-
-                        return (
-                          <tr 
-                            key={lead.lead_id} 
-                            onClick={() => {
-                              window.dispatchEvent(new CustomEvent("calendar-action-click", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
-                              window.dispatchEvent(new CustomEvent("calendar-action-click-deferred", { detail: { leadId: lead.lead_id, role, orderId: orderIdDisplay } }));
-                              setPopupDate(null);
-                              setPopupLeadId(null);
-                            }}
-                            className="hover:bg-zinc-900/30 text-zinc-300 transition-all cursor-pointer"
-                          >
-                            <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-amber-400">
-                              {orderIdDisplay}
-                            </td>
-                            <td className="p-3.5 font-bold text-white">
-                              {customerName}
-                            </td>
-                            <td className="p-3.5 font-mono text-[11px] text-zinc-300">
-                              {assignedDate}
-                            </td>
-                            <td className="p-3.5 font-mono text-[11px] font-bold text-pink-400">
-                              {targetDeliveryDate}
-                            </td>
-                            <td className="p-3.5 pr-5">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
-                                {currentStatus}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      }
-
-                      const paymentRecord = payments?.find(p => p.order_id === orderIdDisplay || p.lead_id === lead.lead_id);
-                      const assigns = staffAssignments ? staffAssignments.filter(x => x.order_id === lead.lead_id || x.order_id === orderIdDisplay) : [];
-
-                      const currentStatus = linkedOrder?.current_stage || prodRecord?.editing_status || lead.status || "Active";
-                      const staffNames = assigns.filter(a => a.speciality !== "Lead Editor" && a.speciality !== "Editor").map(a => `${a.staff_name} (${a.speciality || "Staff"})`).join(", ") || "Unassigned";
-                      const editorName = prodRecord?.editor_assigned || prodRecord?.editor_name || assigns.find(a => a.speciality === "Lead Editor" || a.speciality === "Editor" || a.role === "Production")?.staff_name || "Unassigned";
-                      
-                      const paymentStatus = paymentRecord?.payment_status || (paymentRecord && paymentRecord.balance_due === 0 ? "Fully Paid" : "Pending");
-                      const balanceDue = paymentRecord?.balance_due ?? linkedOrder?.balance_amount ?? 0;
-
-                      return (
-                        <tr key={lead.lead_id} className="hover:bg-zinc-900/30 text-zinc-300 transition-all">
-                          <td className="p-3.5 pl-5 font-mono text-[11px] font-bold text-amber-400">
-                            {orderIdDisplay}
-                          </td>
-                          <td className="p-3.5 font-bold text-white">
-                            {lead.customer_name}
-                          </td>
-                          <td className="p-3.5 text-zinc-300 font-sans">
-                            {lead.custom_event_name || lead.event_type || (lead.events && lead.events[0]?.event_name) || "Shoot Event"}
-                          </td>
-                          <td className="p-3.5 font-sans">
-                            <AssignedStaffDropdown orderId={orderIdDisplay} leadId={lead.lead_id} />
-                          </td>
-                          <td className="p-3.5">
-                            <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tight bg-zinc-800 text-amber-300 border border-zinc-700">
-                              {currentStatus}
-                            </span>
-                          </td>
-                          {role === 'operations' ? (
-                            <td className="p-3.5 font-mono text-[11px] text-indigo-300">
-                              {staffNames}
-                            </td>
-                          ) : (
+              
+              {/* Modal Body: Responsive Genuine Horizontal Table */}
+              <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+                {calendarModalEvents.length === 0 ? (
+                  <div className="p-8 text-center bg-zinc-950/40 border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs font-mono">
+                    No events scheduled for this date.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto w-full border border-zinc-800 rounded-2xl bg-zinc-950/80 shadow-inner">
+                    <table className="w-full text-left border-collapse min-w-[700px]">
+                      <thead>
+                        <tr className="border-b border-zinc-800 bg-zinc-950/90 text-zinc-400 font-mono text-[10px] sm:text-[11px] uppercase tracking-wider font-bold">
+                          <th className="p-3 pl-4 whitespace-nowrap">Order / Lead ID</th>
+                          <th className="p-3 whitespace-nowrap">Customer Name</th>
+                          <th className="p-3 whitespace-nowrap">Event Name & Type</th>
+                          
+                          {/* Role-Specific Column Headers */}
+                          {(role === 'production' || role === 'production_staff') && (
                             <>
-                              <td className="p-3.5 font-mono text-[11px]">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                  paymentStatus === "Fully Paid" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
-                                  "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                                }`}>
-                                  {paymentStatus}
-                                </span>
-                              </td>
-                              <td className="p-3.5 text-right font-mono text-[11px] font-bold text-zinc-200">
-                                ₹{Number(balanceDue).toLocaleString("en-IN")}
-                              </td>
+                              <th className="p-3 whitespace-nowrap">Deliverables</th>
+                              <th className="p-3 whitespace-nowrap">Target Delivery</th>
+                              <th className="p-3 whitespace-nowrap">Assigned Editor</th>
+                              <th className="p-3 whitespace-nowrap">Raw Footage Link</th>
                             </>
                           )}
-                          <td className="p-3.5 text-right pr-5 whitespace-nowrap min-w-[100px]">
-                            {role !== 'operations' && (
-                              <button 
-                                onClick={() => {
-                                  handleEventAction({ raw: lead, lead_id: lead.lead_id, orderId: orderIdDisplay });
-                                }}
-                                className="inline-block px-3 py-1 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] rounded-md transition-all shadow-sm cursor-pointer whitespace-nowrap min-w-max"
-                                style={{ whiteSpace: 'nowrap' }}
-                              >
-                                Details
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
 
-      {/* TEAM POPUP */}
-      {teamPopupEvent && createPortal(
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-zinc-950/90 backdrop-blur-md animate-in zoom-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-5xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] p-6 rounded-2xl shadow-2xl relative">
-            <button
-              onClick={() => setTeamPopupEvent(null)}
-              className="absolute right-4 top-4 p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <h3 className="text-lg font-black text-white mb-4">Assigned Team: {teamPopupEvent.orderId}</h3>
-            
-            <div className="overflow-x-auto max-h-[60vh] overflow-y-auto custom-scrollbar">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-zinc-800 text-xs font-mono text-zinc-455 uppercase text-left whitespace-nowrap">
-                    <th className="p-3">Role</th>
-                    <th className="p-3">Staff Name</th>
-                  </tr>
-                </thead>
-                <tbody className="text-sm">
-                  {teamPopupEvent?.raw?.assigns?.map((a: any, idx: number) => (
-                    <tr key={idx} className="border-b border-zinc-800/50 hover:bg-zinc-800/20">
-                      <td className="p-3 text-zinc-350">{a.speciality || 'Staff'}</td>
-                      <td className="p-3 text-white">{a.staff_name}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
-    
-      {/* RESPONSIVE SELECTED DATE EVENT POPUP (READ-ONLY TABLE) */}
-      {showSelectedDateModal && selectedDate && createPortal(
-        <div 
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm animate-fade-in"
-          onClick={(e) => { e.stopPropagation(); setShowSelectedDateModal(false); }}
-        >
-          <div 
-            className="bg-zinc-900 border border-zinc-800 w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] rounded-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 md:p-6 border-b border-zinc-800/80 shrink-0">
-              <div>
-                <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 block font-bold">
-                  EVENT DETAILS
-                </span>
-                <h3 className="text-sm sm:text-base font-extrabold text-zinc-200 font-mono mt-0.5 flex items-center gap-2">
-                  <CalendarIcon className="w-5 h-5 text-yellow-500" />
-                  {formatDateDDMMYY(selectedDate)}
-                </h3>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-mono font-bold px-2.5 py-1 bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-lg select-none">
-                  {filteredEvents.filter(ev => ev.date === selectedDate).length} EVENTS
-                </span>
-                <button
-                  onClick={() => setShowSelectedDateModal(false)}
-                  className="p-2 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-white transition cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
+                          {role === 'operations' && (
+                            <>
+                              <th className="p-3 whitespace-nowrap">Reporting Time</th>
+                              <th className="p-3 whitespace-nowrap">Location</th>
+                              <th className="p-3 whitespace-nowrap">Assigned Crew</th>
+                              <th className="p-3 whitespace-nowrap">Equipment</th>
+                            </>
+                          )}
 
-            {/* Content Body with Responsive Read-Only Table */}
-            <div className="p-4 md:p-6 overflow-y-auto">
-              {(() => {
-                const selectedEvs = filteredEvents.filter(ev => ev.date === selectedDate);
-                if (selectedEvs.length === 0) {
-                  return (
-                    <div className="p-8 text-center bg-zinc-950/40 border border-dashed border-zinc-800/80 rounded-2xl text-zinc-500 text-xs font-mono">
-                      No events scheduled for this date.
-                    </div>
-                  );
-                }
+                          {role === 'sales' && (
+                            <>
+                              <th className="p-3 whitespace-nowrap">Location</th>
+                              <th className="p-3 whitespace-nowrap">Package / Budget</th>
+                              <th className="p-3 whitespace-nowrap">Sales Rep</th>
+                            </>
+                          )}
 
-                return (
-                  <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-950/60 shadow-inner">
-                    <table className="w-full text-left border-collapse min-w-[1180px]">
-                      <thead>
-                        <tr className="border-b border-zinc-850 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
-                          {role === 'sales' ? (
+                          {role === 'owner' && (
                             <>
-                              <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[190px]">Customer Name &amp; Number</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[210px]">Event Location</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Event Date</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[110px]">Event Time</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Status</th>
-                              <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
+                              <th className="p-3 whitespace-nowrap">Desk / Stage</th>
+                              <th className="p-3 whitespace-nowrap">Location</th>
+                              <th className="p-3 whitespace-nowrap">Value</th>
                             </>
-                          ) : (role === 'operations' || role === 'production') ? (
-                            <>
-                              <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[130px]">Order ID</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Event Name</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Client Name</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[160px]">Sales Crew</th>
-                              <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Reporting Time</th>
-                              <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[110px]">Action</th>
-                            </>
-                          ) : (
-                            <>
-                              <th className="p-3.5 pl-4">Order ID</th>
-                              <th className="p-3.5">Event Name</th>
-                              <th className="p-3.5">Customer</th>
-                              <th className="p-3.5">Assigned Staff</th>
-                              <th className="p-3.5">Event Date</th>
-                              <th className="p-3.5">Event Time</th>
-                              <th className="p-3.5">Location</th>
-                              <th className="p-3.5">Status</th>
-                              {role !== 'operations' && role !== 'worker' && (
-                                <th className={`p-3.5 ${role === 'production' ? 'pr-4' : ''}`}>Target Delivery Date</th>
-                              )}
-                              {role !== 'production' && (
-                                <th className="p-3.5 pr-4 text-right">Action</th>
-                              )}
-                            </>
+                          )}
+
+                          <th className="p-3 whitespace-nowrap">Status</th>
+                          
+                          {role === 'production' && onOpenAssignEditor && (
+                            <th className="p-3 pr-4 text-center whitespace-nowrap">Action</th>
+                          )}
+                          {role === 'sales' && onSelectLead && (
+                            <th className="p-3 pr-4 text-center whitespace-nowrap">Action</th>
                           )}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
-                        {selectedEvs.map((ev, idx) => {
-                          const orderDisplayId = ev.orderId || ev.raw?.order_id || ev.raw?.tracking_id || ev.raw?.lead_id || '—';
-                          const evName = ev.eventName || ev.raw?.event_name || ev.raw?.custom_event_name || ev.eventType || 'Event';
-                          const evDate = formatDateDMY(ev.raw?.event_date || ev.date);
-                          const evTime = ev.eventTime || ev.raw?.event_start_time || '10:00 AM';
-                          const custName = ev.customerName || ev.raw?.customer_name || '—';
-                          const custNumber = ev.mobile || ev.raw?.mobile || ev.raw?.whatsapp_number || '';
-                          const location = ev.eventLocation || ev.raw?.event_location || '—';
-                          const salesCrew = ev.salesCrew || ev.raw?.salesCrew || ev.raw?.sales_crew || ev.raw?.sales_staff_name || ev.raw?.sales_person || 'Unassigned';
-                          const status = ev.currentStage || ev.eventClass || ev.raw?.status || 'Active';
-                          const targetDelDate = formatDateDMY(ev.targetDeliveryDate || ev.raw?.targetDeliveryDate || ev.raw?.delivery_target_date || ev.raw?.expected_delivery_date || '—');
-
-                          if (role === 'sales') {
-                            return (
-                              <tr 
-                                key={ev.id || idx}
-                                className="bg-zinc-950/30 hover:bg-zinc-900/40 transition-colors select-text"
-                              >
-                                {/* 1. Order ID */}
-                                <td className="p-3.5 pl-4 align-middle min-w-[130px]">
-                                  <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
-                                    {orderDisplayId}
-                                  </span>
-                                </td>
-
-                                {/* 2. Customer Name and Number */}
-                                <td className="p-3.5 align-middle min-w-[190px]">
-                                  <div 
-                                    className="font-bold text-zinc-100 text-xs leading-snug"
-                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                                  >
-                                    {custName}
-                                  </div>
-                                  {custNumber ? (
-                                    <div className="text-[11px] font-mono text-zinc-400 mt-1 whitespace-nowrap">
-                                      {custNumber}
-                                    </div>
-                                  ) : (
-                                    <div className="text-[10px] font-mono text-zinc-500 italic mt-0.5">—</div>
-                                  )}
-                                </td>
-
-                                {/* 3. Event Name */}
-                                <td className="p-3.5 align-middle min-w-[180px]">
-                                  <div 
-                                    className="font-bold text-zinc-100 text-xs leading-snug"
-                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                                  >
-                                    {evName}
-                                  </div>
-                                </td>
-
-                                {/* 4. Event Location */}
-                                <td className="p-3.5 align-middle min-w-[210px]">
-                                  <div 
-                                    className="text-zinc-300 text-xs leading-snug"
-                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                                    title={location}
-                                  >
-                                    {location}
-                                  </div>
-                                </td>
-
-                                {/* 5. Event Date */}
-                                <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
-                                  <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                                    {evDate}
-                                  </span>
-                                </td>
-
-                                {/* 6. Event Time */}
-                                <td className="p-3.5 align-middle whitespace-nowrap min-w-[110px]">
-                                  <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                                    {evTime ? formatTime12Hour(evTime) : '—'}
-                                  </span>
-                                </td>
-
-                                {/* 7. Sales Crew */}
-                                <td className="p-3.5 align-middle min-w-[160px]">
-                                  <div 
-                                    className="text-zinc-200 text-xs leading-relaxed"
-                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                                  >
-                                    <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
-                                      {salesCrew}
-                                    </span>
-                                  </div>
-                                </td>
-
-                                {/* 8. Status */}
-                                <td className="p-3.5 align-middle min-w-[130px]">
-                                  <span 
-                                    className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 leading-tight text-center"
-                                    style={{ wordBreak: 'normal', overflowWrap: 'normal', hyphens: 'none' }}
-                                  >
-                                    {status}
-                                  </span>
-                                </td>
-
-                                {/* 9. Action */}
-                                <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleEventAction(ev);
-                                    }}
-                                    className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                                  >
-                                    Details
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          }
-
-                          if (role === 'operations' || role === 'production') {
-                            const orderDisplayId = getOrderId(ev.orderId, ev.raw?.lead_id, ev);
-                            const evName = getEventName(ev.orderId, ev.raw?.lead_id, ev);
-                            const clientName = getClientName(ev.orderId, ev.raw?.lead_id, ev);
-                            const salesCrew = getSalesCrew(ev.orderId, ev.raw?.lead_id, ev);
-                            const repTime = getReportingTime(ev.orderId, ev.raw?.lead_id, ev);
-                            const { label: actionLabel, effLeadId } = getOperationsActionDetails(ev.orderId, ev.raw?.lead_id, ev);
-
-                            return (
-                              <tr 
-                                key={ev.id || idx}
-                                className="bg-zinc-950/30 hover:bg-zinc-900/40 transition-colors select-text"
-                              >
-                                {/* 1. Order ID */}
-                                <td className="p-3.5 pl-4 align-middle min-w-[130px]">
-                                  <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
-                                    {orderDisplayId}
-                                  </span>
-                                </td>
-
-                                {/* 2. Event Name */}
-                                <td className="p-3.5 align-middle min-w-[180px]">
-                                  <div className="font-bold text-white text-xs leading-snug">
-                                    {evName}
-                                  </div>
-                                </td>
-
-                                {/* 3. Client Name */}
-                                <td className="p-3.5 align-middle min-w-[180px]">
-                                  <div className="font-bold text-zinc-100 text-xs leading-snug">
-                                    {clientName}
-                                  </div>
-                                </td>
-
-                                {/* 4. Sales Crew */}
-                                <td className="p-3.5 align-middle min-w-[160px]">
-                                  <div className="text-zinc-200 text-xs leading-relaxed">
-                                    <span className="inline-block px-2.5 py-1 rounded bg-zinc-900 border border-zinc-800 text-zinc-300 font-medium">
-                                      {salesCrew}
-                                    </span>
-                                  </div>
-                                </td>
-
-                                {/* 5. Reporting Time */}
-                                <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
-                                  <span className="font-mono text-zinc-300 text-xs whitespace-nowrap inline-block font-medium">
-                                    {repTime}
-                                  </span>
-                                </td>
-
-                                {/* 6. Action */}
-                                <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[110px]">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCalendarRowAction(orderDisplayId, effLeadId, actionLabel)}
-                                    className="inline-flex items-center justify-center px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[11px] font-mono rounded-lg transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                                  >
-                                    {actionLabel}
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          }
-
-                          return (
-                            <tr 
-                              key={ev.id || idx}
-                              className="bg-zinc-950/30 hover:bg-zinc-900/40 transition-colors select-text"
-                            >
-                              <td className="p-3.5 pl-4 font-mono font-bold text-yellow-400">
-                                {orderDisplayId}
-                              </td>
-                              <td className="p-3.5 font-bold text-zinc-100">
-                                {evName}
-                              </td>
-                              <td className="p-3.5 text-zinc-200 font-medium">
-                                <div>{custName}</div>
-                                {ev.mobile && (
-                                   <div className="text-[10px] font-mono text-zinc-500">{ev.mobile}</div>
-                                )}
-                              </td>
-                              <td className="p-3.5 font-sans">
-                                <AssignedStaffDropdown orderId={ev.orderId || ev.raw?.order_id || ev.raw?.tracking_id || ev.raw?.lead_id} leadId={ev.raw?.lead_id || ev.raw?.order_id || ev.orderId} />
-                              </td>
-                              <td className="p-3.5 font-mono text-zinc-300 whitespace-nowrap">
-                                {evDate}
-                              </td>
-                              <td className="p-3.5 font-mono text-zinc-300 whitespace-nowrap">
-                                {formatTime12Hour(evTime)}
-                              </td>
-                              <td className="p-3.5 text-zinc-300 max-w-[150px] truncate" title={location}>
-                                {location}
-                              </td>
-                              <td className="p-3.5 whitespace-nowrap">
-                                <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
-                                  {status}
+                      <tbody className="divide-y divide-zinc-850 text-xs font-sans">
+                        {calendarModalEvents.map((ev, idx) => (
+                          <tr key={`${ev.id}_${idx}`} className="hover:bg-zinc-900/50 transition font-mono">
+                            <td className="p-3 pl-4 text-zinc-200 font-bold whitespace-nowrap">
+                              <span className={`${theme.textHighlight}`}>{ev.orderId}</span>
+                              {ev.leadId && ev.leadId !== ev.orderId && (
+                                <span className="block text-[10px] text-zinc-500 font-normal">
+                                  Lead: {ev.leadId}
                                 </span>
-                              </td>
-                              {role !== 'operations' && role !== 'worker' && (
-                                <td className={`p-3.5 font-mono font-bold text-pink-400 whitespace-nowrap ${role === 'production' ? 'pr-4' : ''}`}>
-                                  {targetDelDate}
-                                </td>
                               )}
-                              {role !== 'production' && (
-                                <td className="p-3.5 pr-4 text-right whitespace-nowrap">
-                                  {role !== 'operations' && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleEventAction(ev);
-                                      }}
-                                      className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] font-bold border border-zinc-700 transition cursor-pointer"
+                            </td>
+                            
+                            <td className="p-3 font-sans font-bold text-white whitespace-nowrap">
+                              <div>{ev.customerName}</div>
+                              {ev.customerMobile && (
+                                <div className="text-[10px] font-mono text-zinc-400 font-normal">
+                                  {ev.customerMobile}
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="p-3 whitespace-nowrap text-zinc-300">
+                              <div className="font-semibold text-zinc-100">{ev.eventName}</div>
+                              <div className="text-[10px] text-zinc-500">{ev.eventType}</div>
+                            </td>
+
+                            {/* Production & Production Staff specific cells */}
+                            {(role === 'production' || role === 'production_staff') && (
+                              <>
+                                <td className="p-3 max-w-[200px] truncate text-zinc-300 font-sans" title={String(ev.deliverables)}>
+                                  {String(ev.deliverables || 'Deliverables')}
+                                </td>
+                                <td className="p-3 whitespace-nowrap text-zinc-300">
+                                  {ev.targetDeliveryDate ? formatDateDDMMYY(ev.targetDeliveryDate) || ev.targetDeliveryDate : '—'}
+                                </td>
+                                <td className="p-3 whitespace-nowrap text-purple-300 font-semibold">
+                                  {ev.editorAssigned || 'Unassigned'}
+                                </td>
+                                <td className="p-3 whitespace-nowrap">
+                                  {ev.rawFootageLink ? (
+                                    <a
+                                      href={ev.rawFootageLink.startsWith('http') ? ev.rawFootageLink : `https://${ev.rawFootageLink}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 hover:underline bg-cyan-950/40 border border-cyan-500/30 px-2.5 py-1 rounded-lg"
                                     >
-                                      Details
-                                    </button>
+                                      <span>Drive Link</span>
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-zinc-600 text-[10px]">No Link</span>
                                   )}
                                 </td>
-                              )}
-                            </tr>
-                          );
-                        })}
+                              </>
+                            )}
+
+                            {/* Operations specific cells */}
+                            {role === 'operations' && (
+                              <>
+                                <td className="p-3 whitespace-nowrap text-zinc-300">
+                                  {ev.reportingTime || '08:00 AM'}
+                                </td>
+                                <td className="p-3 max-w-[180px] truncate text-zinc-300" title={ev.location}>
+                                  {ev.location || '—'}
+                                </td>
+                                <td className="p-3 whitespace-nowrap text-[10px] text-zinc-300">
+                                  {ev.assignedCrew ? (
+                                    <div className="space-y-0.5">
+                                      {ev.assignedCrew.photographer && ev.assignedCrew.photographer !== 'Unassigned' && (
+                                        <div><span className="text-zinc-500">P:</span> {ev.assignedCrew.photographer}</div>
+                                      )}
+                                      {ev.assignedCrew.videographer && ev.assignedCrew.videographer !== 'Unassigned' && (
+                                        <div><span className="text-zinc-500">V:</span> {ev.assignedCrew.videographer}</div>
+                                      )}
+                                      {ev.assignedCrew.drone && ev.assignedCrew.drone !== 'Unassigned' && (
+                                        <div><span className="text-zinc-500">D:</span> {ev.assignedCrew.drone}</div>
+                                      )}
+                                      {(!ev.assignedCrew.photographer || ev.assignedCrew.photographer === 'Unassigned') &&
+                                       (!ev.assignedCrew.videographer || ev.assignedCrew.videographer === 'Unassigned') && (
+                                        <span className="text-zinc-600">Unassigned</span>
+                                      )}
+                                    </div>
+                                  ) : '—'}
+                                </td>
+                                <td className="p-3 whitespace-nowrap text-zinc-400 text-[11px]">
+                                  {ev.equipmentKit || '—'}
+                                </td>
+                              </>
+                            )}
+
+                            {/* Sales specific cells */}
+                            {role === 'sales' && (
+                              <>
+                                <td className="p-3 whitespace-nowrap text-zinc-300">
+                                  {ev.location || '—'}
+                                </td>
+                                <td className="p-3 whitespace-nowrap text-emerald-400 font-bold">
+                                  {ev.budget ? formatINR(ev.budget) : '—'}
+                                </td>
+                                <td className="p-3 whitespace-nowrap text-zinc-300">
+                                  {ev.salesPerson || 'Sales'}
+                                </td>
+                              </>
+                            )}
+
+                            {/* Owner specific cells */}
+                            {role === 'owner' && (
+                              <>
+                                <td className="p-3 whitespace-nowrap">
+                                  <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 text-[10px] font-bold">
+                                    {ev.desk || 'Studio'}
+                                  </span>
+                                </td>
+                                <td className="p-3 whitespace-nowrap text-zinc-300">
+                                  {ev.location || '—'}
+                                </td>
+                                <td className="p-3 whitespace-nowrap text-emerald-400 font-bold">
+                                  {ev.budget ? formatINR(ev.budget) : '—'}
+                                </td>
+                              </>
+                            )}
+
+                            {/* Status Badge */}
+                            <td className="p-3 whitespace-nowrap">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${theme.bgHighlight} ${theme.textHighlight} ${theme.border}`}>
+                                {ev.status}
+                              </span>
+                            </td>
+
+                            {/* Optional Action Buttons */}
+                            {role === 'production' && onOpenAssignEditor && (
+                              <td className="p-3 pr-4 text-center whitespace-nowrap">
+                                <button
+                                  onClick={() => {
+                                    setCalendarModalDate(null);
+                                    onOpenAssignEditor(ev.orderId, ev.leadId);
+                                  }}
+                                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-mono font-bold transition cursor-pointer shadow flex items-center gap-1 mx-auto"
+                                >
+                                  <UserPlus className="w-3.5 h-3.5" />
+                                  <span>Assign Editor</span>
+                                </button>
+                              </td>
+                            )}
+
+                            {role === 'sales' && onSelectLead && (
+                              <td className="p-3 pr-4 text-center whitespace-nowrap">
+                                <button
+                                  onClick={() => {
+                                    setCalendarModalDate(null);
+                                    if (ev.sourceRecord?.lead) onSelectLead(ev.sourceRecord.lead);
+                                  }}
+                                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-mono font-bold transition cursor-pointer shadow mx-auto"
+                                >
+                                  Open Lead
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>
-                );
-              })()}
+                )}
+              </div>
             </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </div>,
+          document.body
+        )}
+      </div>
     </div>
   );
 };

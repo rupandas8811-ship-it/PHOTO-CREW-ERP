@@ -78,6 +78,11 @@ export function compareAlphanumeric(valA: any, valB: any): number {
 export function getRecordDateTimestamp(item: any): number {
   if (!item) return 0;
 
+  // 0. Explicit production entry / transfer timestamp (most recent transfer into Production)
+  if (item.production_entry_timestamp && typeof item.production_entry_timestamp === 'number' && item.production_entry_timestamp > 0) {
+    return item.production_entry_timestamp;
+  }
+
   // 1. Direct or nested event_date + event_time
   const eventDateStr = item.event_date || item.eventDate || item.orderObj?.event_date || item.leadObj?.event_date || item.date;
   const eventTimeStr = item.event_time || item.eventStartTime || item.event_start_time || item.start_time || item.time || item.orderObj?.event_time || item.leadObj?.event_time;

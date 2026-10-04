@@ -361,36 +361,25 @@ export function buildStep3EventPayloads(
   const eventsList = hasEvents ? currentEvents : [null];
 
   const teamMembersJson = eventsList.map((event, idx) => {
-    const evId = event ? (event.id || event.event_id || `EV-${idx + 1}`) : 'default';
-    const evAltId = event ? (event.event_id || event.id || `EVT-0${idx + 1}`) : 'default';
+    const evId = String(event ? (event.id || event.event_id || `EV-${idx + 1}`) : 'default');
     const evName = event?.event_name || event?.custom_event_name || event?.event_type || `Event ${idx + 1}`;
 
-    const keysToTry = [
-      `${effectivePkgId}_${evId}`,
-      `${effectivePkgId}_${evAltId}`,
-      `Custom Package_${evId}`,
-      `Custom Package_${evAltId}`,
-      `custom_package_${evId}`,
-      `custom_package_${evAltId}`,
-      `${evId}`,
-      `${evAltId}`,
-      `EV-${idx + 1}`,
-      `EVT-0${idx + 1}`,
-      `EVT-${idx + 1}`
-    ];
-
-    if (!isMultiEvent) {
-      keysToTry.push(
-        `${effectivePkgId}_${evName}`,
-        `Custom Package_${evName}`,
-        `custom_package_${evName}`,
-        `${evName}`
-      );
-    }
-
-    if (!isMultiEvent && (!event || !hasEvents)) {
-      keysToTry.push(effectivePkgId, 'Custom Package', 'custom_package');
-    }
+    const keysToTry: string[] = isMultiEvent
+      ? [
+          evId,
+          `${effectivePkgId}_${evId}`,
+          `Custom Package_${evId}`,
+          `custom_package_${evId}`
+        ]
+      : [
+          evId,
+          `${effectivePkgId}_${evId}`,
+          `Custom Package_${evId}`,
+          `custom_package_${evId}`,
+          effectivePkgId,
+          'Custom Package',
+          'custom_package'
+        ];
 
     let list: any[] = [];
     for (const k of keysToTry) {
@@ -404,12 +393,10 @@ export function buildStep3EventPayloads(
     if (list.length === 0 && event) {
       if (Array.isArray(event.team_members) && event.team_members.length > 0) {
         list = event.team_members;
+      } else if (Array.isArray(event.inclusions) && event.inclusions.length > 0) {
+        list = event.inclusions;
       } else if (Array.isArray(event.members) && event.members.length > 0) {
         list = event.members;
-      } else if (typeof event.team_members === 'string' && event.team_members.trim() && event.team_members.trim() !== '[]') {
-        list = parseTeamMembers(event.team_members, evName, evId, idx);
-      } else if (!isMultiEvent && (event.team_members_included || event.inclusions)) {
-        list = parseTeamMembers(event.team_members_included || event.inclusions, evName, evId, idx);
       }
     }
 
@@ -421,36 +408,25 @@ export function buildStep3EventPayloads(
   });
 
   const deliverablesJson = eventsList.map((event, idx) => {
-    const evId = event ? (event.id || event.event_id || `EV-${idx + 1}`) : 'default';
-    const evAltId = event ? (event.event_id || event.id || `EVT-0${idx + 1}`) : 'default';
+    const evId = String(event ? (event.id || event.event_id || `EV-${idx + 1}`) : 'default');
     const evName = event?.event_name || event?.custom_event_name || event?.event_type || `Event ${idx + 1}`;
 
-    const keysToTry = [
-      `${effectivePkgId}_${evId}`,
-      `${effectivePkgId}_${evAltId}`,
-      `Custom Package_${evId}`,
-      `Custom Package_${evAltId}`,
-      `custom_package_${evId}`,
-      `custom_package_${evAltId}`,
-      `${evId}`,
-      `${evAltId}`,
-      `EV-${idx + 1}`,
-      `EVT-0${idx + 1}`,
-      `EVT-${idx + 1}`
-    ];
-
-    if (!isMultiEvent) {
-      keysToTry.push(
-        `${effectivePkgId}_${evName}`,
-        `Custom Package_${evName}`,
-        `custom_package_${evName}`,
-        `${evName}`
-      );
-    }
-
-    if (!isMultiEvent && (!event || !hasEvents)) {
-      keysToTry.push(effectivePkgId, 'Custom Package', 'custom_package');
-    }
+    const keysToTry: string[] = isMultiEvent
+      ? [
+          evId,
+          `${effectivePkgId}_${evId}`,
+          `Custom Package_${evId}`,
+          `custom_package_${evId}`
+        ]
+      : [
+          evId,
+          `${effectivePkgId}_${evId}`,
+          `Custom Package_${evId}`,
+          `custom_package_${evId}`,
+          effectivePkgId,
+          'Custom Package',
+          'custom_package'
+        ];
 
     let list: any[] = [];
     for (const k of keysToTry) {
@@ -466,10 +442,6 @@ export function buildStep3EventPayloads(
         list = event.deliverables;
       } else if (Array.isArray(event.deliverables_list) && event.deliverables_list.length > 0) {
         list = event.deliverables_list;
-      } else if (typeof event.deliverables === 'string' && event.deliverables.trim() && event.deliverables.trim() !== '[]') {
-        list = parseDeliverablesWithQty(event.deliverables, evName, evId, idx);
-      } else if (!isMultiEvent && event.deliverables_description) {
-        list = parseDeliverablesWithQty(event.deliverables_description, evName, evId, idx);
       }
     }
 
@@ -498,6 +470,14 @@ export function buildStep3EventPayloads(
     flatDeliverables = formatListToStructuredObjects(pkgList);
   }
 
+  // Ensure single event entries receive flat fallback items if event-level items were empty
+  if (teamMembersJson.length === 1 && teamMembersJson[0].team_members.length === 0 && flatTeamMembers.length > 0) {
+    teamMembersJson[0].team_members = [...flatTeamMembers];
+  }
+  if (deliverablesJson.length === 1 && deliverablesJson[0].deliverables.length === 0 && flatDeliverables.length > 0) {
+    deliverablesJson[0].deliverables = [...flatDeliverables];
+  }
+
   return {
     teamMembersJson,
     deliverablesJson,
@@ -505,6 +485,193 @@ export function buildStep3EventPayloads(
     flatDeliverables,
     teamMembersText: hasEvents ? JSON.stringify(teamMembersJson) : JSON.stringify(flatTeamMembers),
     deliverablesText: hasEvents ? JSON.stringify(deliverablesJson) : JSON.stringify(flatDeliverables)
+  };
+}
+
+export interface VerifiedLeadPackagePayloadResult {
+  payload: Record<string, any>;
+  isValid: boolean;
+  teamMembersValid: boolean;
+  deliverablesValid: boolean;
+  issues: string[];
+}
+
+/**
+ * Validates, normalizes, and logs the payload being sent to the Supabase 'lead_packages' table.
+ * Specifically verifies that:
+ * 1. 'Team_Members_Included' is an Array of events, each with event_id, event_name, and an array of { name: string, qty: number }
+ * 2. 'deliverables_descriptionn' is an Array of events, each with event_id, event_name, and an array of { name: string, qty: number }
+ */
+export function verifyAndFormatLeadPackagePayload(
+  rawPayload: Record<string, any>,
+  source: string = 'Sales Dashboard Package Save'
+): VerifiedLeadPackagePayloadResult {
+  const issues: string[] = [];
+  const payload: Record<string, any> = { ...rawPayload };
+
+  // 1. Verify and validate Team_Members_Included
+  let rawTeamMembers = payload.Team_Members_Included;
+  if (typeof rawTeamMembers === 'string') {
+    try {
+      rawTeamMembers = JSON.parse(rawTeamMembers);
+    } catch {
+      issues.push("Team_Members_Included was a serialized string that failed to JSON parse");
+    }
+  }
+
+  let structuredTeamMembers: Array<{ event_id: string; event_name: string; team_members: Array<{ name: string; qty: number }> }> = [];
+  let teamMembersValid = true;
+
+  if (Array.isArray(rawTeamMembers)) {
+    structuredTeamMembers = rawTeamMembers.map((item: any, idx: number) => {
+      const evId = String(item?.event_id || item?.id || `EV-${idx + 1}`);
+      const evName = String(item?.event_name || item?.custom_event_name || item?.event_type || `Event ${idx + 1}`);
+
+      let list: any[] = [];
+      if (Array.isArray(item?.team_members)) {
+        list = item.team_members;
+      } else if (Array.isArray(item?.members)) {
+        list = item.members;
+      } else if (item && typeof item === 'object' && !item.event_id && !item.event_name) {
+        // Flat item { name, qty } passed accidentally inside array
+        list = [item];
+      }
+
+      const formatted = formatListToStructuredObjects(list);
+      if (list.length > 0 && formatted.length === 0) {
+        teamMembersValid = false;
+        issues.push(`Event '${evName}' (ID: ${evId}) contains invalid team_members: ${JSON.stringify(list)}`);
+      }
+
+      return {
+        event_id: evId,
+        event_name: evName,
+        team_members: formatted
+      };
+    });
+  } else if (rawTeamMembers && typeof rawTeamMembers === 'object') {
+    // Record of keys -> array of members
+    structuredTeamMembers = [{
+      event_id: 'default',
+      event_name: 'General',
+      team_members: formatListToStructuredObjects(Object.values(rawTeamMembers).flat())
+    }];
+  } else {
+    teamMembersValid = false;
+    issues.push("Team_Members_Included is not an array or object");
+    structuredTeamMembers = [];
+  }
+
+  // 2. Verify and validate deliverables_descriptionn
+  let rawDeliverables = payload.deliverables_descriptionn;
+  if (typeof rawDeliverables === 'string') {
+    try {
+      rawDeliverables = JSON.parse(rawDeliverables);
+    } catch {
+      issues.push("deliverables_descriptionn was a serialized string that failed to JSON parse");
+    }
+  }
+
+  let structuredDeliverables: Array<{ event_id: string; event_name: string; deliverables: Array<{ name: string; qty: number }> }> = [];
+  let deliverablesValid = true;
+
+  if (Array.isArray(rawDeliverables)) {
+    structuredDeliverables = rawDeliverables.map((item: any, idx: number) => {
+      const evId = String(item?.event_id || item?.id || `EV-${idx + 1}`);
+      const evName = String(item?.event_name || item?.custom_event_name || item?.event_type || `Event ${idx + 1}`);
+
+      let list: any[] = [];
+      if (Array.isArray(item?.deliverables)) {
+        list = item.deliverables;
+      } else if (Array.isArray(item?.deliverables_list)) {
+        list = item.deliverables_list;
+      } else if (item && typeof item === 'object' && !item.event_id && !item.event_name) {
+        list = [item];
+      }
+
+      const formatted = formatListToStructuredObjects(list);
+      if (list.length > 0 && formatted.length === 0) {
+        deliverablesValid = false;
+        issues.push(`Event '${evName}' (ID: ${evId}) contains invalid deliverables: ${JSON.stringify(list)}`);
+      }
+
+      return {
+        event_id: evId,
+        event_name: evName,
+        deliverables: formatted
+      };
+    });
+  } else if (rawDeliverables && typeof rawDeliverables === 'object') {
+    structuredDeliverables = [{
+      event_id: 'default',
+      event_name: 'General',
+      deliverables: formatListToStructuredObjects(Object.values(rawDeliverables).flat())
+    }];
+  } else {
+    deliverablesValid = false;
+    issues.push("deliverables_descriptionn is not an array or object");
+    structuredDeliverables = [];
+  }
+
+  // Assign normalized and verified structures back to the payload
+  payload.Team_Members_Included = structuredTeamMembers;
+  payload.deliverables_descriptionn = structuredDeliverables;
+
+  const isValid = issues.length === 0 && teamMembersValid && deliverablesValid;
+
+  // 3. EXTENSIVE CONSOLE LOGGING
+  try {
+    console.group(`📦 [Supabase lead_packages Payload Inspection] - ${source}`);
+    console.log('%cLead ID:', 'color: #38bdf8; font-weight: bold;', payload.lead_id);
+    console.log('%cPackage ID:', 'color: #38bdf8; font-weight: bold;', payload.package_id);
+    console.log('%cPackage Name:', 'color: #38bdf8; font-weight: bold;', payload.package_name);
+    console.log('%cPricing Summary:', 'color: #38bdf8; font-weight: bold;', {
+      package_cost: payload.package_cost,
+      total_amount: payload.total_amount,
+      discount: payload.discount,
+      final_amount: payload.final_amount
+    });
+    console.log('%cComplete Payload destined for Supabase "lead_packages" table:', 'color: #c084fc; font-weight: bold;', payload);
+
+    // Group 1: Team_Members_Included verification details
+    console.group(`👥 Team_Members_Included [${structuredTeamMembers.length} event(s)]`);
+    console.log('Is Array:', Array.isArray(payload.Team_Members_Included));
+    console.log('Is Correctly Structured:', teamMembersValid);
+    console.log('Total Events in Team_Members_Included:', structuredTeamMembers.length);
+    structuredTeamMembers.forEach((ev, idx) => {
+      console.log(`  Event ${idx + 1}: "${ev.event_name}" (${ev.event_id}) -> ${ev.team_members.length} member roles:`, ev.team_members);
+    });
+    console.log('Raw Structured Object:', payload.Team_Members_Included);
+    console.groupEnd();
+
+    // Group 2: deliverables_descriptionn verification details
+    console.group(`🎁 deliverables_descriptionn [${structuredDeliverables.length} event(s)]`);
+    console.log('Is Array:', Array.isArray(payload.deliverables_descriptionn));
+    console.log('Is Correctly Structured:', deliverablesValid);
+    console.log('Total Events in deliverables_descriptionn:', structuredDeliverables.length);
+    structuredDeliverables.forEach((ev, idx) => {
+      console.log(`  Event ${idx + 1}: "${ev.event_name}" (${ev.event_id}) -> ${ev.deliverables.length} deliverables:`, ev.deliverables);
+    });
+    console.log('Raw Structured Object:', payload.deliverables_descriptionn);
+    console.groupEnd();
+
+    // Group 3: Overall Validation Status
+    if (!isValid || issues.length > 0) {
+      console.warn('%c⚠️ Payload Structure Warnings Detected:', 'color: #f59e0b; font-weight: bold;', issues);
+    } else {
+      console.log('%c✅ Payload Structure Fully Verified: Team_Members_Included & deliverables_descriptionn conform exactly to the Supabase schema.', 'color: #10b981; font-weight: bold;');
+    }
+    console.groupEnd();
+  } catch (logErr) {
+    console.log('[lead_packages payload inspection]', payload);
+  }
+
+  return {
+    payload,
+    isValid,
+    teamMembersValid,
+    deliverablesValid,
+    issues
   };
 }
 
@@ -548,53 +715,26 @@ export function parseTeamMembersJsonToRecord(
   const safeEvents = normalizeCrmArray(eventsList);
   const result: Record<string, string[]> = {};
   const effectivePkgId = pkgId || 'Custom Package';
+  const isMulti = safeEvents.length > 1;
 
-  const assignEventKeys = (
-    evId: string | number | undefined,
-    evAltId: string | number | undefined,
-    evIdx: number | undefined,
-    members: string[]
-  ) => {
-    if (!members || members.length === 0) return;
-    const cleanMembers = members.map((m: any) => {
+  const setForEvent = (evId: string, members: string[]) => {
+    if (!evId || !members || members.length === 0) return;
+    const clean = members.map((m: any) => {
       const { qty, text } = parseQtyAndText(m);
       return text ? combineQtyAndText(qty, text) : '';
     }).filter(Boolean);
-
-    if (cleanMembers.length === 0) return;
-
-    if (evId !== undefined && evId !== null && String(evId) !== '') {
-      const sId = String(evId);
-      result[`${effectivePkgId}_${sId}`] = cleanMembers;
-      result[`Custom Package_${sId}`] = cleanMembers;
-      result[`custom_package_${sId}`] = cleanMembers;
-      result[sId] = cleanMembers;
-    }
-    if (evAltId !== undefined && evAltId !== null && String(evAltId) !== '') {
-      const sAlt = String(evAltId);
-      result[`${effectivePkgId}_${sAlt}`] = cleanMembers;
-      result[`Custom Package_${sAlt}`] = cleanMembers;
-      result[`custom_package_${sAlt}`] = cleanMembers;
-      result[sAlt] = cleanMembers;
-    }
-    if (evIdx !== undefined && evIdx !== null && evIdx >= 0) {
-      const idxStr1 = `EV-${evIdx + 1}`;
-      const idxStr2 = `EVT-0${evIdx + 1}`;
-      const idxStr3 = `EVT-${evIdx + 1}`;
-      [idxStr1, idxStr2, idxStr3].forEach(idxStr => {
-        result[`${effectivePkgId}_${idxStr}`] = cleanMembers;
-        result[`Custom Package_${idxStr}`] = cleanMembers;
-        result[`custom_package_${idxStr}`] = cleanMembers;
-        result[idxStr] = cleanMembers;
-      });
-    }
+    if (clean.length === 0) return;
+    result[evId] = clean;
+    result[`${effectivePkgId}_${evId}`] = clean;
+    result[`Custom Package_${evId}`] = clean;
+    result[`custom_package_${evId}`] = clean;
   };
 
   // 1. Check if events have direct team_members / inclusions properties attached
   if (safeEvents.length > 0) {
-    const isMulti = safeEvents.length > 1;
     safeEvents.forEach((ev, idx) => {
-      const directTm = ev.team_members || ev.members || (!isMulti ? (ev.inclusions || ev.Team_Members || ev.team_members_included) : null);
+      const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
+      const directTm = ev.team_members || ev.members || ev.inclusions;
       if (directTm) {
         let members: string[] = [];
         if (Array.isArray(directTm)) {
@@ -611,17 +751,10 @@ export function parseTeamMembersJsonToRecord(
                 return text ? combineQtyAndText(qty, text) : '';
               }).filter(Boolean);
             }
-          } catch (e) {
-            if (!isMulti) {
-              members = directTm.split(/[,\n]/).map((s: string) => {
-                const { qty, text } = parseQtyAndText(s);
-                return text ? combineQtyAndText(qty, text) : '';
-              }).filter(Boolean);
-            }
-          }
+          } catch {}
         }
         if (members.length > 0) {
-          assignEventKeys(ev.id, ev.event_id, idx, members);
+          setForEvent(evId, members);
         }
       }
     });
@@ -633,22 +766,21 @@ export function parseTeamMembersJsonToRecord(
   if (typeof rawTeamData === 'string') {
     try {
       parsed = JSON.parse(rawTeamData);
-    } catch (e) {
-      const list = rawTeamData.split(/[,\n]/).map((s: string) => {
-        const { qty, text } = parseQtyAndText(s);
-        return text ? combineQtyAndText(qty, text) : '';
-      }).filter(Boolean);
-      if (list.length > 0) {
-        if (safeEvents.length > 0) {
-          safeEvents.forEach((ev, idx) => {
-            if (safeEvents.length === 1 || idx === 0) {
-              assignEventKeys(ev.id, ev.event_id, idx, list);
-            }
-          });
+    } catch {
+      if (!isMulti) {
+        const list = rawTeamData.split(/[,\n]/).map((s: string) => {
+          const { qty, text } = parseQtyAndText(s);
+          return text ? combineQtyAndText(qty, text) : '';
+        }).filter(Boolean);
+        if (list.length > 0) {
+          result[effectivePkgId] = list;
+          result['Custom Package'] = list;
+          result['custom_package'] = list;
+          if (safeEvents[0]) {
+            const evId = String(safeEvents[0].id || safeEvents[0].event_id || 'EV-1');
+            setForEvent(evId, list);
+          }
         }
-        result[effectivePkgId] = list;
-        result['Custom Package'] = list;
-        result['custom_package'] = list;
       }
       return result;
     }
@@ -663,8 +795,8 @@ export function parseTeamMembersJsonToRecord(
       } else if (item && typeof item === 'object') {
         const isEventStructure = (item.event_name || item.event_type || item.event_id) && (Array.isArray(item.team_members) || Array.isArray(item.members));
         if (isEventStructure) {
-          const evName = item.event_name || item.event_type;
-          const evId = item.event_id;
+          const evId = item.event_id ? String(item.event_id) : '';
+          const evName = item.event_name ? String(item.event_name).trim().toLowerCase() : '';
           const membersList = Array.isArray(item.team_members) ? item.team_members : (Array.isArray(item.members) ? item.members : []);
           const members = membersList.map((m: any) => {
             const { qty, text } = parseQtyAndText(m);
@@ -674,28 +806,17 @@ export function parseTeamMembersJsonToRecord(
           if (evName === 'General' || (!evName && !evId)) {
             generalList = [...generalList, ...members];
           } else {
-            let matchedIdx = -1;
             const matchedEv = safeEvents.find((e, eIdx) => {
-              const idMatches = evId && (
-                (e.id && String(e.id) === String(evId)) ||
-                (e.event_id && String(e.event_id) === String(evId))
-              );
-              const nameMatches = evName && e.event_name && (
-                String(e.event_name).trim().toLowerCase() === String(evName).trim().toLowerCase()
-              );
-              const idxMatches = eIdx === idx;
-              if (idMatches || nameMatches || idxMatches) {
-                matchedIdx = eIdx;
-                return true;
-              }
+              if (evId && (String(e.id) === evId || String(e.event_id) === evId)) return true;
+              if (evName && e.event_name && String(e.event_name).trim().toLowerCase() === evName) return true;
+              if (!evId && !evName && eIdx === idx) return true;
               return false;
             });
 
-            const targetId = matchedEv ? (matchedEv.id || matchedEv.event_id || evId) : (evId || `EV-${idx + 1}`);
-            const targetAltId = matchedEv ? (matchedEv.event_id || matchedEv.id) : undefined;
-            const eventIndex = matchedIdx >= 0 ? matchedIdx : idx;
-
-            assignEventKeys(targetId, targetAltId || evId, eventIndex, members);
+            const targetId = matchedEv ? String(matchedEv.id || matchedEv.event_id || evId) : (evId || `EV-${idx + 1}`);
+            if (targetId) {
+              setForEvent(targetId, members);
+            }
           }
         } else {
           const rawName = item.role || item.member_name || item.name || item.text || item.title || '';
@@ -709,17 +830,14 @@ export function parseTeamMembersJsonToRecord(
       }
     });
 
-    if (generalList.length > 0) {
-      if (safeEvents.length > 0) {
-        safeEvents.forEach((ev, idx) => {
-          if (safeEvents.length === 1 || idx === 0) {
-            assignEventKeys(ev.id, ev.event_id, idx, generalList);
-          }
-        });
-      }
+    if (generalList.length > 0 && !isMulti) {
       result[effectivePkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
+      if (safeEvents[0]) {
+        const evId = String(safeEvents[0].id || safeEvents[0].event_id || 'EV-1');
+        setForEvent(evId, generalList);
+      }
     }
   } else if (parsed && typeof parsed === 'object') {
     Object.keys(parsed).forEach(k => {
@@ -729,21 +847,6 @@ export function parseTeamMembersJsonToRecord(
           return text ? combineQtyAndText(qty, text) : '';
         }).filter(Boolean);
         result[k] = cleanArr;
-
-        if (safeEvents.length > 0) {
-          safeEvents.forEach((ev, idx) => {
-            const evId = String(ev.id || '');
-            const evAltId = String(ev.event_id || '');
-            const idxStr = `EV-${idx + 1}`;
-            if (
-              (evId && k.includes(evId)) ||
-              (evAltId && k.includes(evAltId)) ||
-              k.includes(idxStr)
-            ) {
-              assignEventKeys(ev.id, ev.event_id, idx, cleanArr);
-            }
-          });
-        }
       }
     });
   }
@@ -759,53 +862,26 @@ export function parseDeliverablesJsonToRecord(
   const safeEvents = normalizeCrmArray(eventsList);
   const result: Record<string, string[]> = {};
   const effectivePkgId = pkgId || 'Custom Package';
+  const isMulti = safeEvents.length > 1;
 
-  const assignEventKeys = (
-    evId: string | number | undefined,
-    evAltId: string | number | undefined,
-    evIdx: number | undefined,
-    deliverables: string[]
-  ) => {
-    if (!deliverables || deliverables.length === 0) return;
-    const cleanDeliverables = deliverables.map((d: any) => {
+  const setForEvent = (evId: string, deliverables: string[]) => {
+    if (!evId || !deliverables || deliverables.length === 0) return;
+    const clean = deliverables.map((d: any) => {
       const { qty, text } = parseQtyAndText(d);
       return text ? combineQtyAndText(qty, text) : '';
     }).filter(Boolean);
-
-    if (cleanDeliverables.length === 0) return;
-
-    if (evId !== undefined && evId !== null && String(evId) !== '') {
-      const sId = String(evId);
-      result[`${effectivePkgId}_${sId}`] = cleanDeliverables;
-      result[`Custom Package_${sId}`] = cleanDeliverables;
-      result[`custom_package_${sId}`] = cleanDeliverables;
-      result[sId] = cleanDeliverables;
-    }
-    if (evAltId !== undefined && evAltId !== null && String(evAltId) !== '') {
-      const sAlt = String(evAltId);
-      result[`${effectivePkgId}_${sAlt}`] = cleanDeliverables;
-      result[`Custom Package_${sAlt}`] = cleanDeliverables;
-      result[`custom_package_${sAlt}`] = cleanDeliverables;
-      result[sAlt] = cleanDeliverables;
-    }
-    if (evIdx !== undefined && evIdx !== null && evIdx >= 0) {
-      const idxStr1 = `EV-${evIdx + 1}`;
-      const idxStr2 = `EVT-0${evIdx + 1}`;
-      const idxStr3 = `EVT-${evIdx + 1}`;
-      [idxStr1, idxStr2, idxStr3].forEach(idxStr => {
-        result[`${effectivePkgId}_${idxStr}`] = cleanDeliverables;
-        result[`Custom Package_${idxStr}`] = cleanDeliverables;
-        result[`custom_package_${idxStr}`] = cleanDeliverables;
-        result[idxStr] = cleanDeliverables;
-      });
-    }
+    if (clean.length === 0) return;
+    result[evId] = clean;
+    result[`${effectivePkgId}_${evId}`] = clean;
+    result[`Custom Package_${evId}`] = clean;
+    result[`custom_package_${evId}`] = clean;
   };
 
   // 1. Check if events have direct deliverables properties attached
   if (safeEvents.length > 0) {
-    const isMulti = safeEvents.length > 1;
     safeEvents.forEach((ev, idx) => {
-      const directDel = ev.deliverables || ev.deliverables_list || (!isMulti ? (ev.Add_Deliverable || ev.deliverables_description) : null);
+      const evId = String(ev.id || ev.event_id || `EV-${idx + 1}`);
+      const directDel = ev.deliverables || ev.deliverables_list;
       if (directDel) {
         let deliverables: string[] = [];
         if (Array.isArray(directDel)) {
@@ -822,17 +898,10 @@ export function parseDeliverablesJsonToRecord(
                 return text ? combineQtyAndText(qty, text) : '';
               }).filter(Boolean);
             }
-          } catch (e) {
-            if (!isMulti) {
-              deliverables = directDel.split(/[,\n]/).map((s: string) => {
-                const { qty, text } = parseQtyAndText(s);
-                return text ? combineQtyAndText(qty, text) : '';
-              }).filter(Boolean);
-            }
-          }
+          } catch {}
         }
         if (deliverables.length > 0) {
-          assignEventKeys(ev.id, ev.event_id, idx, deliverables);
+          setForEvent(evId, deliverables);
         }
       }
     });
@@ -844,22 +913,21 @@ export function parseDeliverablesJsonToRecord(
   if (typeof rawDelData === 'string') {
     try {
       parsed = JSON.parse(rawDelData);
-    } catch (e) {
-      const list = rawDelData.split(/[,\n]/).map((s: string) => {
-        const { qty, text } = parseQtyAndText(s);
-        return text ? combineQtyAndText(qty, text) : '';
-      }).filter(Boolean);
-      if (list.length > 0) {
-        if (safeEvents.length > 0) {
-          safeEvents.forEach((ev, idx) => {
-            if (safeEvents.length === 1 || idx === 0) {
-              assignEventKeys(ev.id, ev.event_id, idx, list);
-            }
-          });
+    } catch {
+      if (!isMulti) {
+        const list = rawDelData.split(/[,\n]/).map((s: string) => {
+          const { qty, text } = parseQtyAndText(s);
+          return text ? combineQtyAndText(qty, text) : '';
+        }).filter(Boolean);
+        if (list.length > 0) {
+          result[effectivePkgId] = list;
+          result['Custom Package'] = list;
+          result['custom_package'] = list;
+          if (safeEvents[0]) {
+            const evId = String(safeEvents[0].id || safeEvents[0].event_id || 'EV-1');
+            setForEvent(evId, list);
+          }
         }
-        result[effectivePkgId] = list;
-        result['Custom Package'] = list;
-        result['custom_package'] = list;
       }
       return result;
     }
@@ -874,8 +942,8 @@ export function parseDeliverablesJsonToRecord(
       } else if (item && typeof item === 'object') {
         const isEventStructure = (item.event_name || item.event_type || item.event_id) && (Array.isArray(item.deliverables) || Array.isArray(item.deliverables_list));
         if (isEventStructure) {
-          const evName = item.event_name || item.event_type;
-          const evId = item.event_id;
+          const evId = item.event_id ? String(item.event_id) : '';
+          const evName = item.event_name ? String(item.event_name).trim().toLowerCase() : '';
           let deliverables: string[] = [];
           if (Array.isArray(item.deliverables)) {
             deliverables = item.deliverables.map((d: any) => {
@@ -892,28 +960,17 @@ export function parseDeliverablesJsonToRecord(
           if (evName === 'General' || (!evName && !evId) || (!evId && evName === 'Unnamed Event')) {
             generalList = [...generalList, ...deliverables];
           } else {
-            let matchedIdx = -1;
             const matchedEv = safeEvents.find((e, eIdx) => {
-              const idMatches = evId && (
-                (e.id && String(e.id) === String(evId)) ||
-                (e.event_id && String(e.event_id) === String(evId))
-              );
-              const nameMatches = evName && e.event_name && (
-                String(e.event_name).trim().toLowerCase() === String(evName).trim().toLowerCase()
-              );
-              const idxMatches = eIdx === idx;
-              if (idMatches || nameMatches || idxMatches) {
-                matchedIdx = eIdx;
-                return true;
-              }
+              if (evId && (String(e.id) === evId || String(e.event_id) === evId)) return true;
+              if (evName && e.event_name && String(e.event_name).trim().toLowerCase() === evName) return true;
+              if (!evId && !evName && eIdx === idx) return true;
               return false;
             });
 
-            const targetId = matchedEv ? (matchedEv.id || matchedEv.event_id || evId) : (evId || `EV-${idx + 1}`);
-            const targetAltId = matchedEv ? (matchedEv.event_id || matchedEv.id) : undefined;
-            const eventIndex = matchedIdx >= 0 ? matchedIdx : idx;
-
-            assignEventKeys(targetId, targetAltId || evId, eventIndex, deliverables);
+            const targetId = matchedEv ? String(matchedEv.id || matchedEv.event_id || evId) : (evId || `EV-${idx + 1}`);
+            if (targetId) {
+              setForEvent(targetId, deliverables);
+            }
           }
         } else {
           const rawName = item.name || item.deliverable || item.title || item.text || '';
@@ -927,17 +984,14 @@ export function parseDeliverablesJsonToRecord(
       }
     });
 
-    if (generalList.length > 0) {
-      if (safeEvents.length > 0) {
-        safeEvents.forEach((ev, idx) => {
-          if (safeEvents.length === 1 || idx === 0) {
-            assignEventKeys(ev.id, ev.event_id, idx, generalList);
-          }
-        });
-      }
+    if (generalList.length > 0 && !isMulti) {
       result[effectivePkgId] = generalList;
       result['Custom Package'] = generalList;
       result['custom_package'] = generalList;
+      if (safeEvents[0]) {
+        const evId = String(safeEvents[0].id || safeEvents[0].event_id || 'EV-1');
+        setForEvent(evId, generalList);
+      }
     }
   } else if (parsed && typeof parsed === 'object') {
     Object.keys(parsed).forEach(k => {
@@ -947,21 +1001,6 @@ export function parseDeliverablesJsonToRecord(
           return text ? combineQtyAndText(qty, text) : '';
         }).filter(Boolean);
         result[k] = cleanArr;
-
-        if (safeEvents.length > 0) {
-          safeEvents.forEach((ev, idx) => {
-            const evId = String(ev.id || '');
-            const evAltId = String(ev.event_id || '');
-            const idxStr = `EV-${idx + 1}`;
-            if (
-              (evId && k.includes(evId)) ||
-              (evAltId && k.includes(evAltId)) ||
-              k.includes(idxStr)
-            ) {
-              assignEventKeys(ev.id, ev.event_id, idx, cleanArr);
-            }
-          });
-        }
       }
     });
   }
@@ -2481,6 +2520,124 @@ export interface SalesModuleProps {
 }
 
 /**
+ * Resolves the exact Step 3 Final Quotation Amount as the single source of truth
+ * for the Booking Confirmation & Contract Form.
+ * Strictly respects the requirement:
+ * 1. Step 3 Final Quotation Amount is used directly without recalculation.
+ * 2. Original Package Price, discount amount, or additional service amount are NOT used directly.
+ * 3. The amount remains 100% consistent from Step 3 to Booking Confirmation.
+ */
+export function getStep3FinalQuotationAmount(
+  targetLead?: any,
+  options?: {
+    dynamicFinalAmt?: number;
+    wizardLeadData?: any;
+    quotations?: any[];
+    leads?: any[];
+    orders?: any[];
+    leadPackages?: any[];
+    confirmFormQuotationAmount?: number | string;
+  }
+): number {
+  const leadId = targetLead?.lead_id || options?.wizardLeadData?.lead_id;
+
+  // 1. If currently in Step 3 / Active CRM Wizard for this lead, active Step 3 Final Quotation Amount takes top precedence
+  if (options?.dynamicFinalAmt !== undefined && options?.dynamicFinalAmt !== null && !isNaN(Number(options.dynamicFinalAmt)) && Number(options.dynamicFinalAmt) > 0) {
+    if (!targetLead || !options?.wizardLeadData?.lead_id || targetLead.lead_id === options.wizardLeadData.lead_id) {
+      return Number(options.dynamicFinalAmt);
+    }
+  }
+
+  if (options?.wizardLeadData?.final_amount !== undefined && options?.wizardLeadData?.final_amount !== null && options?.wizardLeadData?.final_amount !== '' && !isNaN(Number(options.wizardLeadData.final_amount)) && Number(options.wizardLeadData.final_amount) > 0) {
+    if (!targetLead || !options?.wizardLeadData?.lead_id || targetLead.lead_id === options.wizardLeadData.lead_id) {
+      return Number(options.wizardLeadData.final_amount);
+    }
+  }
+
+  // 2. Saved Final Quotation Amount on targetLead object (Final_Quotation_Amount takes strict priority)
+  if (targetLead) {
+    const val = targetLead.Final_Quotation_Amount ?? targetLead.final_quotation_amount;
+    if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+      return Number(val);
+    }
+  }
+
+  // 3. Search in matching lead from leads array
+  if (leadId && Array.isArray(options?.leads)) {
+    const matched = options.leads.find((l: any) => l.lead_id === leadId);
+    if (matched) {
+      const val = matched.Final_Quotation_Amount ?? matched.final_quotation_amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 4. Search in leadPackages array (matching lead_id - Step 3 calculated final_amount)
+  if (leadId && Array.isArray(options?.leadPackages)) {
+    const matchedLp = options.leadPackages.find((lp: any) => lp.lead_id === leadId);
+    if (matchedLp) {
+      const val = matchedLp.final_amount ?? matchedLp.Final_Amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 5. Search in quotations array (final_quotation_amount or final_amount only)
+  if (leadId && Array.isArray(options?.quotations) && options.quotations.length > 0) {
+    const matchedQuotes = options.quotations.filter((q: any) => q.lead_id === leadId || q.leadId === leadId);
+    if (matchedQuotes.length > 0) {
+      const sorted = [...matchedQuotes].sort((a, b) => {
+        const timeA = new Date(a.updated_at || a.created_at || 0).getTime();
+        const timeB = new Date(b.updated_at || b.created_at || 0).getTime();
+        return timeB - timeA;
+      });
+      const latest = sorted[0];
+      const val = latest.final_quotation_amount ?? latest.final_amount ?? latest.Final_Quotation_Amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 6. Search in orders array
+  if (leadId && Array.isArray(options?.orders)) {
+    const matchedOrder = options.orders.find((o: any) => o.lead_id === leadId || o.order_id === targetLead?.order_id);
+    if (matchedOrder) {
+      const val = matchedOrder.quotation_amount ?? matchedOrder.finalPackageAmount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 7. Secondary fallback to Final_Package_Amount (only if Final_Quotation_Amount was not saved separately)
+  if (targetLead) {
+    const val = targetLead.Final_Package_Amount ?? targetLead.final_package_amount ?? targetLead.final_amount;
+    if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+      return Number(val);
+    }
+  }
+  if (leadId && Array.isArray(options?.leads)) {
+    const matched = options.leads.find((l: any) => l.lead_id === leadId);
+    if (matched) {
+      const val = matched.Final_Package_Amount ?? matched.final_package_amount ?? matched.final_amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 8. Check confirmForm quotation_amount if already set to a valid positive number
+  if (options?.confirmFormQuotationAmount !== undefined && options?.confirmFormQuotationAmount !== null && options?.confirmFormQuotationAmount !== '' && !isNaN(Number(options.confirmFormQuotationAmount)) && Number(options.confirmFormQuotationAmount) > 0) {
+    return Number(options.confirmFormQuotationAmount);
+  }
+
+  return 0;
+}
+
+/**
  * Synchronously retrieves the exact saved Final Quotation Amount for a specific lead / order.
  * Strictly checks the quotation records and lead records matching the exact target ID.
  * Returns null if no quotation data exists for this specific ID.
@@ -2491,13 +2648,44 @@ export const getSyncSavedQuotationAmount = (
   targetOrderId?: string | null,
   allQuotations?: any[],
   allLeads?: any[],
-  allOrders?: any[]
+  allOrders?: any[],
+  allLeadPackages?: any[]
 ): number | null => {
   const leadId = targetLeadId || targetLead?.lead_id;
   const orderId = targetOrderId || targetLead?.order_id;
   if (!leadId && !orderId) return null;
 
-  // 1. From quotations store matching this exact lead_id or order_id (latest updated first)
+  // 1. From targetLead object directly (Final Quotation Amount first!)
+  if (targetLead && (leadId && targetLead.lead_id === leadId)) {
+    const val = targetLead.Final_Quotation_Amount ?? targetLead.final_quotation_amount;
+    if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+      return Number(val);
+    }
+  }
+
+  // 2. From leads array strictly matching leadId
+  if (leadId && Array.isArray(allLeads)) {
+    const matchedLead = allLeads.find((l: any) => l.lead_id === leadId);
+    if (matchedLead) {
+      const val = matchedLead.Final_Quotation_Amount ?? matchedLead.final_quotation_amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 3. From lead_packages array matching leadId (final_amount is Step 3 final amount)
+  if (leadId && Array.isArray(allLeadPackages)) {
+    const matchedLp = allLeadPackages.find((lp: any) => lp.lead_id === leadId);
+    if (matchedLp) {
+      const val = matchedLp.final_amount ?? matchedLp.Final_Amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 4. From quotations store matching this exact lead_id or order_id (latest updated first, ONLY final_quotation_amount or final_amount!)
   if (Array.isArray(allQuotations) && allQuotations.length > 0) {
     const matchedQuotes = allQuotations.filter((q: any) => 
       (leadId && (q.lead_id === leadId || q.leadId === leadId)) || 
@@ -2510,38 +2698,36 @@ export const getSyncSavedQuotationAmount = (
         return timeB - timeA;
       });
       const latest = sorted[0];
-      const val = latest.final_quotation_amount ?? latest.final_amount ?? latest.Final_Quotation_Amount ?? latest.quotation_amount;
-      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+      const val = latest.final_quotation_amount ?? latest.final_amount ?? latest.Final_Quotation_Amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
         return Number(val);
       }
     }
   }
 
-  // 2. From targetLead object directly if present
-  if (targetLead && (leadId && targetLead.lead_id === leadId)) {
-    const val = targetLead.Final_Quotation_Amount ?? targetLead.final_quotation_amount ?? targetLead.Final_Package_Amount ?? targetLead.final_package_amount ?? targetLead.final_amount ?? targetLead.budget;
-    if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
-      return Number(val);
-    }
-  }
-
-  // 3. From leads array strictly matching leadId
-  if (leadId && Array.isArray(allLeads)) {
-    const matchedLead = allLeads.find((l: any) => l.lead_id === leadId);
-    if (matchedLead) {
-      const val = matchedLead.Final_Quotation_Amount ?? matchedLead.final_quotation_amount ?? matchedLead.Final_Package_Amount ?? matchedLead.final_package_amount ?? matchedLead.final_amount ?? matchedLead.budget;
-      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
-        return Number(val);
-      }
-    }
-  }
-
-  // 4. From orders array strictly matching orderId or leadId
+  // 5. From orders array strictly matching orderId or leadId
   if (Array.isArray(allOrders)) {
     const matchedOrder = allOrders.find((o: any) => (leadId && o.lead_id === leadId) || (orderId && o.order_id === orderId));
     if (matchedOrder) {
-      const val = matchedOrder.quotation_amount ?? matchedOrder.finalPackageAmount ?? matchedOrder.totalRevenue;
-      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+      const val = matchedOrder.quotation_amount ?? matchedOrder.finalPackageAmount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+        return Number(val);
+      }
+    }
+  }
+
+  // 6. Secondary fallback to Final_Package_Amount
+  if (targetLead) {
+    const val = targetLead.Final_Package_Amount ?? targetLead.final_package_amount ?? targetLead.final_amount;
+    if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+      return Number(val);
+    }
+  }
+  if (leadId && Array.isArray(allLeads)) {
+    const matchedLead = allLeads.find((l: any) => l.lead_id === leadId);
+    if (matchedLead) {
+      const val = matchedLead.Final_Package_Amount ?? matchedLead.final_package_amount ?? matchedLead.final_amount;
+      if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
         return Number(val);
       }
     }
@@ -2559,16 +2745,56 @@ export const resolveSavedQuotationAmount = async (
   targetOrderId?: string | null,
   allQuotations?: any[],
   allLeads?: any[],
-  allOrders?: any[]
+  allOrders?: any[],
+  allLeadPackages?: any[]
 ): Promise<number | null> => {
   if (!targetLeadId && !targetOrderId) return null;
 
-  // 1. Query Supabase quotations table directly for this specific lead_id / order_id
+  // 1. Query Supabase leads table directly for Final_Quotation_Amount
   if (supabaseClient) {
+    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD') {
+      try {
+        const { data: dbLead, error: leadErr } = await supabaseClient
+          .from('leads')
+          .select('Final_Quotation_Amount, final_quotation_amount')
+          .eq('lead_id', targetLeadId)
+          .maybeSingle();
+        if (!leadErr && dbLead) {
+          const val = dbLead.Final_Quotation_Amount ?? dbLead.final_quotation_amount;
+          if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+            return Number(val);
+          }
+        }
+      } catch (err) {
+        console.warn('[resolveSavedQuotationAmount] Supabase leads fetch error:', err);
+      }
+    }
+
+    // 2. Query Supabase lead_packages table directly for final_amount (Step 3 calculated final amount)
+    if (targetLeadId && targetLeadId !== 'DRAFT-LEAD') {
+      try {
+        const { data: dbLp, error: lpErr } = await supabaseClient
+          .from('lead_packages')
+          .select('final_amount, total_amount')
+          .eq('lead_id', targetLeadId)
+          .order('updated_at', { ascending: false })
+          .limit(1);
+        if (!lpErr && Array.isArray(dbLp) && dbLp.length > 0) {
+          const val = dbLp[0].final_amount;
+          if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+            return Number(val);
+          }
+        }
+      } catch (err) {
+        console.warn('[resolveSavedQuotationAmount] Supabase lead_packages fetch error:', err);
+      }
+    }
+
+    // 3. Query Supabase quotations table directly for final_quotation_amount / final_amount
     try {
       let query = supabaseClient
         .from('quotations')
-        .select('final_quotation_amount, final_amount, quotation_amount, package_price, created_at, updated_at');
+        .select('final_quotation_amount, final_amount, created_at, updated_at');
       
       if (targetLeadId && targetLeadId !== 'DRAFT-LEAD') {
         query = query.eq('lead_id', targetLeadId);
@@ -2584,8 +2810,8 @@ export const resolveSavedQuotationAmount = async (
           return timeB - timeA;
         });
         const latest = sorted[0];
-        const val = latest.final_quotation_amount ?? latest.final_amount ?? latest.quotation_amount ?? latest.package_price;
-        if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+        const val = latest.final_quotation_amount ?? latest.final_amount;
+        if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
           return Number(val);
         }
       }
@@ -2593,28 +2819,49 @@ export const resolveSavedQuotationAmount = async (
       console.warn('[resolveSavedQuotationAmount] Supabase quotations fetch error:', err);
     }
 
-    // 2. Query Supabase leads table directly for this specific lead_id
+    // 4. Query Supabase orders table for quotation_amount
+    try {
+      let oQuery = supabaseClient
+        .from('orders')
+        .select('quotation_amount, final_package_amount');
+      if (targetLeadId && targetLeadId !== 'DRAFT-LEAD') {
+        oQuery = oQuery.eq('lead_id', targetLeadId);
+      } else if (targetOrderId) {
+        oQuery = oQuery.eq('order_id', targetOrderId);
+      }
+      const { data: dbOrders, error: oErr } = await oQuery;
+      if (!oErr && Array.isArray(dbOrders) && dbOrders.length > 0) {
+        const val = dbOrders[0].quotation_amount ?? dbOrders[0].final_package_amount;
+        if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
+          return Number(val);
+        }
+      }
+    } catch (err) {
+      console.warn('[resolveSavedQuotationAmount] Supabase orders fetch error:', err);
+    }
+
+    // 5. Query Final_Package_Amount from leads as secondary fallback
     if (targetLeadId && targetLeadId !== 'DRAFT-LEAD') {
       try {
-        const { data: dbLead, error: leadErr } = await supabaseClient
+        const { data: dbLead2, error: leadErr2 } = await supabaseClient
           .from('leads')
-          .select('Final_Quotation_Amount, final_quotation_amount, Final_Package_Amount, final_package_amount, final_amount, budget')
+          .select('Final_Package_Amount, final_package_amount, final_amount')
           .eq('lead_id', targetLeadId)
           .maybeSingle();
-        if (!leadErr && dbLead) {
-          const val = dbLead.Final_Quotation_Amount ?? dbLead.final_quotation_amount ?? dbLead.Final_Package_Amount ?? dbLead.final_package_amount ?? dbLead.final_amount ?? dbLead.budget;
-          if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+        if (!leadErr2 && dbLead2) {
+          const val = dbLead2.Final_Package_Amount ?? dbLead2.final_package_amount ?? dbLead2.final_amount;
+          if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) && Number(val) > 0) {
             return Number(val);
           }
         }
       } catch (err) {
-        console.warn('[resolveSavedQuotationAmount] Supabase leads fetch error:', err);
+        console.warn('[resolveSavedQuotationAmount] Supabase leads fallback fetch error:', err);
       }
     }
   }
 
-  // 3. Fallback to synchronous in-memory store
-  return getSyncSavedQuotationAmount(null, targetLeadId, targetOrderId, allQuotations, allLeads, allOrders);
+  // 6. Fallback to synchronous in-memory store
+  return getSyncSavedQuotationAmount(null, targetLeadId, targetOrderId, allQuotations, allLeads, allOrders, allLeadPackages);
 };
 
 export interface ResolvedPaymentData {

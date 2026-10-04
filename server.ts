@@ -450,8 +450,14 @@ async function startServer() {
         'photo_url', 'proof_photos', 'raw_footage_link', 'handover_to',
         'handover_notes', 'equipment_name', 'asset_id', 'remarks', 'created_at'
       ]);
+      if (!clone.id) {
+        clone.id = crypto.randomUUID();
+      }
       if (!clone.created_at) {
         clone.created_at = new Date().toISOString();
+      }
+      if (clone.proof_photos && typeof clone.proof_photos === 'object') {
+        clone.proof_photos = JSON.stringify(clone.proof_photos);
       }
       for (const k of Object.keys(clone)) {
         if (!validCols.has(k)) {
@@ -586,13 +592,21 @@ async function startServer() {
     return String(email).trim().toLowerCase();
   }
 
-  async function checkGlobalMobileUniqueInDb(db: any, mobile: string | undefined | null, excludeId?: string | null): Promise<{ isUnique: boolean; error?: string }> {
+  async function checkGlobalMobileUniqueInDb(
+    db: any, 
+    mobile: string | undefined | null, 
+    excludeId?: string | null,
+    excludeEmail?: string | null,
+    excludeStaffId?: string | null
+  ): Promise<{ isUnique: boolean; error?: string }> {
     const norm = cleanPhone(mobile);
     if (!norm || norm.length < 7) {
       return { isUnique: true };
     }
 
     const cleanExclude = excludeId ? String(excludeId).trim().toLowerCase() : null;
+    const cleanExcludeEmail = excludeEmail ? String(excludeEmail).trim().toLowerCase() : null;
+    const cleanExcludeStaffId = excludeStaffId ? String(excludeStaffId).trim().toLowerCase() : null;
 
     try {
       // 1. Check public.users
@@ -602,7 +616,10 @@ async function startServer() {
           const uNorm = cleanPhone(u.mobile);
           if (uNorm && uNorm === norm) {
             const uId = u.id ? String(u.id).trim().toLowerCase() : '';
-            if (cleanExclude && uId === cleanExclude) continue;
+            const uEmail = u.email ? String(u.email).trim().toLowerCase() : '';
+            if (cleanExclude && (uId === cleanExclude || uEmail === cleanExclude)) continue;
+            if (cleanExcludeEmail && uEmail === cleanExcludeEmail) continue;
+            if (cleanExcludeStaffId && uId === cleanExcludeStaffId) continue;
             return { isUnique: false, error: 'Mobile number already exists. Please use a different mobile number.' };
           }
         }
@@ -615,7 +632,10 @@ async function startServer() {
           const sNorm = cleanPhone(s.mobile || s.mobile_number || s.phone);
           if (sNorm && sNorm === norm) {
             const sId = s.staff_id ? String(s.staff_id).trim().toLowerCase() : (s.id ? String(s.id).trim().toLowerCase() : '');
-            if (cleanExclude && sId === cleanExclude) continue;
+            const sEmail = s.email ? String(s.email).trim().toLowerCase() : '';
+            if (cleanExcludeStaffId && sId === cleanExcludeStaffId) continue;
+            if (cleanExclude && (sId === cleanExclude || sEmail === cleanExclude)) continue;
+            if (cleanExcludeEmail && sEmail === cleanExcludeEmail) continue;
             return { isUnique: false, error: 'Mobile number already exists. Please use a different mobile number.' };
           }
         }
@@ -628,7 +648,10 @@ async function startServer() {
           const pNorm = cleanPhone(p.mobile || p.mobile_number || p.phone);
           if (pNorm && pNorm === norm) {
             const pId = p.staff_id ? String(p.staff_id).trim().toLowerCase() : (p.id ? String(p.id).trim().toLowerCase() : '');
-            if (cleanExclude && pId === cleanExclude) continue;
+            const pEmail = p.email ? String(p.email).trim().toLowerCase() : '';
+            if (cleanExcludeStaffId && pId === cleanExcludeStaffId) continue;
+            if (cleanExclude && (pId === cleanExclude || pEmail === cleanExclude)) continue;
+            if (cleanExcludeEmail && pEmail === cleanExcludeEmail) continue;
             return { isUnique: false, error: 'Mobile number already exists. Please use a different mobile number.' };
           }
         }
@@ -951,7 +974,7 @@ async function startServer() {
       }
     }
 
-    if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs'].includes(table)) {
+    if (!['activity_logs', 'notifications', 'analytics_snapshots', 'login_logs', 'staff_task_submissions'].includes(table)) {
       console.error(`[Server DB ${operation} Error] ${table}:`, lastError);
     }
     return { success: false, error: lastError?.message || String(lastError) };
@@ -1210,7 +1233,7 @@ async function startServer() {
         db.from('activity_logs').select('*').order('timestamp', { ascending: false }),
         db.from('operations_staff').select('*').order('name'),
         db.from('notifications').select('*').order('created_at', { ascending: false }),
-        db.from('equipment').select('*').order('created_at', { ascending: false }),
+        db.from('equipment').select('*'),
         db.from('lead_packages').select('*'),
         db.from('packages').select('*').order('created_at', { ascending: false }),
         db.from('staff_assignments').select('*'),
@@ -1958,7 +1981,7 @@ async function startServer() {
   });
 
   app.post('/api/auth/update-user', async (req, res) => {
-    const { auth_id, email, password, name, role, mobile, active } = req.body;
+    const { auth_id, staff_id, email, password, name, role, mobile, active } = req.body;
     try {
       const db = getServerSupabase();
       if (!db.auth.admin) {
@@ -1967,23 +1990,62 @@ async function startServer() {
       
       const isStaffRole = role && ['Operation Staff', 'production staff', 'Editor', 'Sales Team'].some(r => role.toLowerCase().includes(r.toLowerCase()));
       const cleanMobile = mobile ? cleanPhone(mobile) : undefined;
+      const cleanEmail = email ? email.trim().toLowerCase() : undefined;
 
-      // Check global mobile uniqueness if mobile is being updated
-      if (cleanMobile) {
-        const uniqueCheck = await checkGlobalMobileUniqueInDb(db, cleanMobile, auth_id);
+      // Identify whether mobile number is actually changing from the staff's existing mobile
+      let isMobileChanged = false;
+      let existingMobileFound: string | null = null;
+
+      if (auth_id) {
+        const { data: userRec } = await db.from('users').select('id, email, mobile').eq('id', auth_id).maybeSingle();
+        if (userRec?.mobile) existingMobileFound = cleanPhone(userRec.mobile);
+      }
+      if (!existingMobileFound && staff_id) {
+        const { data: opRec } = await db.from('operations_staff').select('staff_id, mobile').eq('staff_id', staff_id).maybeSingle();
+        if (opRec?.mobile) existingMobileFound = cleanPhone(opRec.mobile);
+        if (!existingMobileFound) {
+          const { data: prodRec } = await db.from('production_staff').select('staff_id, mobile').eq('staff_id', staff_id).maybeSingle();
+          if (prodRec?.mobile) existingMobileFound = cleanPhone(prodRec.mobile);
+        }
+      }
+      if (!existingMobileFound && cleanEmail) {
+        const { data: emailUser } = await db.from('users').select('mobile').eq('email', cleanEmail).maybeSingle();
+        if (emailUser?.mobile) existingMobileFound = cleanPhone(emailUser.mobile);
+      }
+
+      if (cleanMobile && existingMobileFound && cleanMobile !== existingMobileFound) {
+        isMobileChanged = true;
+      }
+
+      // Check global mobile uniqueness ONLY if mobile is being changed to a new number
+      if (isMobileChanged && cleanMobile) {
+        const uniqueCheck = await checkGlobalMobileUniqueInDb(db, cleanMobile, auth_id, cleanEmail, staff_id);
         if (!uniqueCheck.isUnique) {
           return res.status(400).json({ success: false, error: uniqueCheck.error });
         }
       }
 
+      // Determine auth user ID
+      let targetAuthId = auth_id;
+      if (!targetAuthId && (cleanEmail || cleanMobile)) {
+        try {
+          const { data: listData } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          const found = (listData?.users || []).find((u: any) =>
+            (cleanEmail && u.email?.trim().toLowerCase() === cleanEmail) ||
+            (cleanMobile && (cleanPhone(u.phone) === cleanMobile || cleanPhone(u.user_metadata?.mobile) === cleanMobile))
+          );
+          if (found) targetAuthId = found.id;
+        } catch (e) {}
+      }
+
       const updates: any = {};
       if (password) updates.password = password;
-      if (email && !isStaffRole) updates.email = email.trim().toLowerCase();
+      if (cleanEmail && !isStaffRole) updates.email = cleanEmail;
       if (name || role || cleanMobile) updates.user_metadata = { name, role, mobile: cleanMobile || mobile };
       
-      if (Object.keys(updates).length > 0 && auth_id) {
+      if (Object.keys(updates).length > 0 && targetAuthId) {
         try {
-          const { error } = await db.auth.admin.updateUserById(auth_id, updates);
+          const { error } = await db.auth.admin.updateUserById(targetAuthId, updates);
           if (error) {
             console.warn(`[Server Auth Update Warning]`, error.message);
           }
@@ -1995,7 +2057,7 @@ async function startServer() {
       // Update users table (note: public.users has created_at, no updated_at)
       const userUpdates: any = {};
       if (name) userUpdates.name = name;
-      if (email && !isStaffRole) userUpdates.email = email.trim().toLowerCase();
+      if (cleanEmail && !isStaffRole) userUpdates.email = cleanEmail;
       if (role) {
         const r = String(role).trim().toLowerCase();
         if (r.includes('owner') || r.includes('business')) userUpdates.role = 'Business Owner';
@@ -2012,19 +2074,35 @@ async function startServer() {
       if (password) userUpdates.password = password;
       if (active !== undefined) userUpdates.active = active;
       
-      let query = db.from('users').update(userUpdates);
+      let dbData: any[] | null = null;
       if (auth_id) {
-        query = query.eq('id', auth_id);
-      } else if (email) {
-        query = query.eq('email', email.trim().toLowerCase());
-      } else if (cleanMobile) {
-        query = query.eq('mobile', cleanMobile);
+        const { data: res1 } = await db.from('users').update(userUpdates).eq('id', auth_id).select();
+        if (Array.isArray(res1) && res1.length > 0) dbData = res1;
       }
-      
-      const { data: dbData, error: dbError } = await query.select();
-      
-      if (dbError) {
-        console.warn(`[Server Auth DB Update Warning]`, dbError.message);
+      if (!dbData && cleanEmail) {
+        const { data: res2 } = await db.from('users').update(userUpdates).eq('email', cleanEmail).select();
+        if (Array.isArray(res2) && res2.length > 0) dbData = res2;
+      }
+      if (!dbData && cleanMobile) {
+        const { data: res3 } = await db.from('users').update(userUpdates).eq('mobile', cleanMobile).select();
+        if (Array.isArray(res3) && res3.length > 0) dbData = res3;
+      }
+      if (!dbData && (cleanMobile || cleanEmail) && password) {
+        const newRecord = {
+          id: targetAuthId || (staff_id || crypto.randomUUID()),
+          email: cleanEmail || `${cleanMobile}@photocrew.com`,
+          username: cleanEmail || cleanMobile,
+          name: name || 'Staff Member',
+          mobile: cleanMobile,
+          password: password,
+          role: userUpdates.role || 'Operation Staff',
+          active: active !== undefined ? active : true,
+          created_at: new Date().toISOString()
+        };
+        const { data: insertData } = await db.from('users').insert(newRecord).select();
+        if (Array.isArray(insertData) && insertData.length > 0) {
+          dbData = insertData;
+        }
       }
       
       res.json({ success: true, data: { record: dbData?.[0] || userUpdates } });

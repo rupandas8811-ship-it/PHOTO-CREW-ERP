@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useRole, getStaffCurrentPassword, fetchStaffCurrentPassword } from './RoleContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -7,7 +7,8 @@ import {
   Play, CheckCircle2, UserCheck, Eye, EyeOff, Calendar, Lock, Layers, AlertCircle, Ban, RefreshCw, Clock,
   PlusSquare, ArrowRight, CheckSquare, AlertTriangle, Truck, Users, BarChart3, TrendingUp, Sparkles, UserPlus, ChevronRight,
   Aperture, Camera, Sliders, ShieldCheck, Image, Download, Printer, FileSpreadsheet, FileText, Search,
-  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink, FileVideo, Upload, ChevronDown
+  Trash2, X, Mail, MessageSquare, Edit3, MapPin, Plus, Phone, ExternalLink, FileVideo, Upload, ChevronDown,
+  ArrowUpDown, ArrowUp, ArrowDown, Filter, Check, RotateCcw
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import * as XLSX from 'xlsx';
@@ -22,13 +23,14 @@ import { StatusText } from './ui/StatusText';
 import { EventDropdownCell } from './EventDropdownCell';
 import { UnifiedEventDropdownCell } from './UnifiedEventDropdownCell';
 import { ProductionCalendar } from './ProductionCalendar';
+import { ProductionStaffCalendar } from './ProductionStaffCalendar';
 import { StaffManagementModule } from './StaffManagementModule';
 import { NotificationsModule } from './NotificationsModule';
 import { Bell } from 'lucide-react';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { ProductionStaffDirectoryModule } from './ProductionStaffDirectoryModule';
 import { ProductionRoleSpecialitiesModule } from './ProductionRoleSpecialitiesModule';
-import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
+import { ListSortFilter, SortOrder, compareRecordsByDate, compareAlphanumeric } from './ui/ListSortFilter';
 import { isEditorAssignmentStarted } from '../services/operationsAssignmentService';
 
 function getIndividualDeliverables(description: string): string[] {
@@ -499,8 +501,36 @@ const StaffSelectDropdown = React.memo(({
   );
 });
 
+export function parseTargetDeliveryDateToTimestamp(dateStr?: string | null): number {
+  if (!dateStr || typeof dateStr !== 'string') return 0;
+  const s = dateStr.trim();
+  if (!s || s === 'N/A' || s === '—' || s === 'Pending' || s === 'Not Set') return 0;
+
+  // DD-MM-YYYY or DD/MM/YYYY
+  if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(s)) {
+    const parts = s.split(/[-/]/);
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const year = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+  // YYYY-MM-DD
+  if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(s)) {
+    const parts = s.split(/[-/]/);
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
 export interface ProductionModuleProps {
-  activeSubTab: 'pipeline' | 'production_leads' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'staff_roster' | 'production_staff_directory' | 'production_role_specialities';
+  activeSubTab: 'pipeline' | 'production_leads' | 'project_queue' | 'assignments' | 'tracker' | 'delivery' | 'resources' | 'analytics' | 'staff_performance' | 'overall_performance' | 'deliveries_desk' | 'staff_management' | 'notifications' | 'crew_roster' | 'staff_roster' | 'production_staff_directory' | 'production_role_specialities' | 'production_calendar' | 'production_staff_calendar';
   setActiveSubTab: (tab: any) => void;
 }
 
@@ -544,7 +574,8 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
     deleteProduction,
     pushUpdate,
     clientAcceptanceVerifications = [],
-    saveClientAcceptanceVerification
+    saveClientAcceptanceVerification,
+    statusHistory = []
   } = useRole();
 
   // Role permissions gate
@@ -750,6 +781,46 @@ export const ProductionModule: React.FC<ProductionModuleProps> = ({ activeSubTab
       foundOrder,
       foundLead,
     };
+  };
+
+  // Helper to extract the Sales Crew (Sales Staff Name) who handled/created the order
+  const getSalesCrewName = (prodItem: any): string => {
+    if (!prodItem) return '—';
+    const { order, lead } = resolveOrderAndLead(prodItem);
+
+    // 1. Direct sales_staff_name on order or lead
+    const sName = order?.sales_staff_name || lead?.sales_staff_name || (prodItem as any)?.sales_staff_name;
+    if (sName && typeof sName === 'string' && sName.trim() && !['unassigned', 'none', 'n/a', 'null', 'undefined', '—'].includes(sName.trim().toLowerCase())) {
+      return sName.trim();
+    }
+
+    // 2. sales_person on order or lead
+    const sPerson = order?.sales_person || lead?.sales_person || (prodItem as any)?.sales_person;
+    if (sPerson && typeof sPerson === 'string' && sPerson.trim() && !['unassigned', 'none', 'n/a', 'null', 'undefined', '—'].includes(sPerson.trim().toLowerCase())) {
+      return sPerson.trim();
+    }
+
+    // 3. Check quotation matching this order or lead
+    const q = (quotations || []).find(quo => 
+      (order?.order_id && quo.order_id === order.order_id) ||
+      (lead?.lead_id && (quo.lead_id === lead.lead_id || quo.order_id === lead.lead_id)) ||
+      (prodItem.order_id && quo.order_id === prodItem.order_id) ||
+      (prodItem.tracking_id && (quo.order_id === prodItem.tracking_id || quo.lead_id === prodItem.tracking_id))
+    );
+    if (q) {
+      const qSales = (q as any).sales_staff_name || (q as any).sales_person || q.created_by;
+      if (qSales && typeof qSales === 'string' && qSales.trim() && !['unassigned', 'none', 'n/a', 'null', 'undefined', '—'].includes(qSales.trim().toLowerCase())) {
+        return qSales.trim();
+      }
+    }
+
+    // 4. Fallback to created_by if it corresponds to the sales creator
+    const createdBy = lead?.created_by || order?.created_by;
+    if (createdBy && typeof createdBy === 'string' && createdBy.trim() && !['unassigned', 'none', 'n/a', 'null', 'undefined', '—', 'system', 'admin'].includes(createdBy.trim().toLowerCase())) {
+      return createdBy.trim();
+    }
+
+    return '—';
   };
 
   const getProductionProgress = (prodId: string) => {
@@ -1126,10 +1197,11 @@ ${coordinatorName}`;
       const isProdStage = validProductionStages.includes(prodStatus) || validProductionStages.includes(orderStage) || validProductionStages.includes(leadStatus);
 
       // STRICT PRODUCTION ENTRY GATE
-      // Projects MUST NOT enter Production until they reach "Verified Footage".
-      // Even if a production record exists accidentally, we hide it if the primary workflow is still pre-production.
-      const currentPrimaryStage = (orderStage || leadStatus || '').trim();
-      if (preProductionStages.includes(currentPrimaryStage)) {
+      // Projects MUST NOT enter Production until they reach "Verified Footage" or have valid production artifacts.
+      const isExplicitlyVerified = isProdStage || hasProductionRecord || hasAssignments || hasRawFootage;
+      const currentPrimaryStage = (orderStage || leadStatus || prodStatus || '').trim();
+
+      if (!isExplicitlyVerified && preProductionStages.includes(currentPrimaryStage)) {
         continue;
       }
 
@@ -1227,6 +1299,70 @@ ${coordinatorName}`;
         (prod?.customer_mobile && prod.customer_mobile !== 'No contact phone' ? prod.customer_mobile : '') || 
         '';
 
+      // Calculate exact production entry / transfer timestamp (e.g. when order moved to Verified Footage)
+      let transferTimestamp = 0;
+      const targetOrdId = realOrderId || order?.order_id || l?.order_id || prod?.order_id || rf?.order_id || trackingId;
+      const targetLdId = l?.lead_id || order?.lead_id || prod?.lead_id || rf?.lead_id;
+
+      // 1. Status transition history to Verified Footage / Production stages
+      if (statusHistory && Array.isArray(statusHistory) && statusHistory.length > 0) {
+        const prodStages = [
+          'verified footage', 'footage handover verified', 'raw footage received', 'raw footage uploaded',
+          'assigned editor', 'editor assigned', 'editing started', 'editing in progress',
+          'internal qc review', 'customer review', 'client review sent', 'revision required',
+          'revision in progress', 'editing completed', 'final approval', 'client acceptance',
+          'approved', 'project delivered', 'completed', 'order closed', 'closed'
+        ];
+        const matchingHistory = statusHistory.filter((h: any) => {
+          const mKey = (targetOrdId && (h.order_id === targetOrdId || h.lead_id === targetOrdId)) ||
+                       (targetLdId && (h.lead_id === targetLdId || h.order_id === targetLdId));
+          if (!mKey) return false;
+          const st = String(h.new_status || '').trim().toLowerCase();
+          return prodStages.includes(st);
+        });
+        if (matchingHistory.length > 0) {
+          const tList = matchingHistory.map((h: any) => h.created_at ? new Date(h.created_at).getTime() : 0).filter(t => t > 0);
+          if (tList.length > 0) transferTimestamp = Math.max(...tList);
+        }
+      }
+
+      // 2. Raw footage timestamp (recorded at footage handover / upload)
+      if (!transferTimestamp && rf) {
+        const rfTime = (rf.uploaded_date ? new Date(rf.uploaded_date).getTime() : 0) || (rf.created_at ? new Date(rf.created_at).getTime() : 0);
+        if (rfTime > 0) transferTimestamp = rfTime;
+      }
+
+      // 3. Production record timestamp
+      if (!transferTimestamp && prod) {
+        const prdTime = (prod.created_at ? new Date(prod.created_at).getTime() : 0) || (prod.updated_at ? new Date(prod.updated_at).getTime() : 0);
+        if (prdTime > 0) transferTimestamp = prdTime;
+      }
+
+      // 4. Order updated_at if order is in a production stage
+      if (!transferTimestamp && order?.updated_at) {
+        const ordTime = new Date(order.updated_at).getTime();
+        if (ordTime > 0) transferTimestamp = ordTime;
+      }
+
+      // 5. Lead updated_at
+      if (!transferTimestamp && l?.updated_at) {
+        const ldTime = new Date(l.updated_at).getTime();
+        if (ldTime > 0) transferTimestamp = ldTime;
+      }
+
+      // 6. Operations updated_at
+      const op = (operations || []).find((o: any) => (targetOrdId && o.order_id === targetOrdId));
+      if (!transferTimestamp && op?.updated_at) {
+        const opTime = new Date(op.updated_at).getTime();
+        if (opTime > 0) transferTimestamp = opTime;
+      }
+
+      // 7. Fallback to created_at of order or lead
+      if (!transferTimestamp) {
+        transferTimestamp = (order?.created_at ? new Date(order.created_at).getTime() : 0) || 
+                            (l?.created_at ? new Date(l.created_at).getTime() : 0);
+      }
+
       const candidateObj = {
         ...(prod || {}),
         production_id: prodId,
@@ -1248,19 +1384,30 @@ ${coordinatorName}`;
         expected_delivery_date: prod?.expected_delivery_date || computedTargetDate,
         event_date: evtDate,
         event_time: evtTime,
+        production_entry_timestamp: transferTimestamp,
+        created_at: prod?.created_at || (transferTimestamp > 0 ? new Date(transferTimestamp).toISOString() : order?.created_at || l?.created_at || new Date().toISOString()),
+        updated_at: prod?.updated_at || (transferTimestamp > 0 ? new Date(transferTimestamp).toISOString() : order?.updated_at || l?.updated_at || new Date().toISOString())
       };
 
       candidatesList.push(candidateObj);
     }
 
+    // Sort newest transferred to Production at the top
     candidatesList.sort((a, b) => {
-      const timeA = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const timeB = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return timeB - timeA;
+      const timeA = a.production_entry_timestamp || (a.created_at ? new Date(a.created_at).getTime() : 0);
+      const timeB = b.production_entry_timestamp || (b.created_at ? new Date(b.created_at).getTime() : 0);
+      if (timeA !== timeB && timeA > 0 && timeB > 0) {
+        return timeB - timeA;
+      }
+      if (timeA > 0 && timeB === 0) return -1;
+      if (timeB > 0 && timeA === 0) return 1;
+      const idA = String(a.order_id || a.tracking_id || a.production_id || '');
+      const idB = String(b.order_id || b.tracking_id || b.production_id || '');
+      return compareAlphanumeric(idB, idA);
     });
 
     return candidatesList;
-  }, [leadsData, orders, rawFootage, production, editorAssignments, operations, currentRole, currentUserName, currentUser]);
+  }, [leadsData, orders, rawFootage, production, editorAssignments, operations, statusHistory, currentRole, currentUserName, currentUser]);
 
   // Staff Performance Filter State
   const [staffRoleFilter, setStaffRoleFilter] = useState<'All' | 'Editor' | 'Album Designer' | 'Retoucher' | 'Motion Graphics Designer'>('All');
@@ -1595,6 +1742,72 @@ ${coordinatorName}`;
   const [statusFilter, setStatusFilter] = useState('All');
   const [sortOrder, setSortOrder] = useState<SortOrder>('latest');
 
+  // Target Delivery Date column sort state
+  const [targetDateSort, setTargetDateSort] = useState<'none' | 'asc' | 'desc'>('none');
+
+  // Delivery Status column filter state
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState<string>('All');
+  const [isDeliveryStatusMenuOpen, setIsDeliveryStatusMenuOpen] = useState(false);
+  const deliveryStatusMenuRef = useRef<HTMLDivElement>(null);
+  const deliveryStatusBtnRef = useRef<HTMLButtonElement>(null);
+  const [deliveryStatusMenuCoords, setDeliveryStatusMenuCoords] = useState<{ top: number; left: number; openUpward: boolean } | null>(null);
+
+  const updateDeliveryStatusMenuPosition = useCallback(() => {
+    if (!deliveryStatusBtnRef.current) return;
+    const rect = deliveryStatusBtnRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const dropdownWidth = 190;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const openUpward = spaceBelow < 280 && spaceAbove > spaceBelow;
+
+    let left = rect.right - dropdownWidth;
+    left = Math.max(12, Math.min(left, viewportWidth - dropdownWidth - 12));
+
+    const top = openUpward ? rect.top - 6 : rect.bottom + 6;
+
+    setDeliveryStatusMenuCoords({
+      top,
+      left,
+      openUpward
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!isDeliveryStatusMenuOpen) return;
+    updateDeliveryStatusMenuPosition();
+
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (
+        deliveryStatusBtnRef.current &&
+        !deliveryStatusBtnRef.current.contains(target) &&
+        deliveryStatusMenuRef.current &&
+        !deliveryStatusMenuRef.current.contains(target)
+      ) {
+        setIsDeliveryStatusMenuOpen(false);
+      }
+    };
+
+    const handleScrollOrResize = () => {
+      setIsDeliveryStatusMenuOpen(false);
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [isDeliveryStatusMenuOpen, updateDeliveryStatusMenuPosition]);
+
   // Dedicated filter states for customer name, order ID search and date ranges
   const [searchCustName, setSearchCustName] = useState('');
   const [searchOrdId, setSearchOrdId] = useState('');
@@ -1907,6 +2120,9 @@ ${coordinatorName}`;
     const cleanEvt = String(eventId || 'default').trim().toLowerCase();
 
     const savedVerif = (clientAcceptanceVerifications || []).find(v => {
+      if (a && a.assignment_id) {
+        return (v.assignment_id && v.assignment_id === a.assignment_id) || (v.task_id && v.task_id === a.assignment_id);
+      }
       const vOrd = String(v.order_id || '').trim().toLowerCase();
       const vEvt = String(v.event_id || 'default').trim().toLowerCase();
       if (cleanOrd && vOrd === cleanOrd) {
@@ -1917,48 +2133,62 @@ ${coordinatorName}`;
       return false;
     });
 
-    const uploadLink = (
+    const uploadLink = a ? (
       savedVerif?.upload_link_path ||
+      a?.server_file_link ||
+      a?.upload_link ||
+      a?.upload_link_path ||
       a?.Edited_Drive_Link ||
       a?.edited_drive_link ||
-      a?.upload_link ||
       a?.drive_link ||
       a?.edited_link ||
+      ''
+    ).trim() : (
+      savedVerif?.upload_link_path ||
       prod?.edited_drive_link ||
       prod?.delivery_link ||
       ''
     ).trim();
 
-    const folderName = (
+    const folderName = a ? (
       savedVerif?.folder_name ||
       a?.server_upload_folder_name ||
+      a?.folder_name ||
       a?.server_path ||
+      ''
+    ).trim() : (
+      savedVerif?.folder_name ||
       prod?.server_upload_folder_name ||
       prod?.server_path ||
       ''
     ).trim();
 
-    const eventDate = (
+    const eventDate = a ? (
       a?.server_upload_event_date ||
-      prod?.server_upload_event_date ||
       a?.event_date ||
+      savedVerif?.event_date ||
+      ''
+    ).trim() : (
+      prod?.server_upload_event_date ||
       prod?.event_date ||
       ''
     ).trim();
 
-    const confirmedAt = (savedVerif?.updated_at || a?.server_upload_confirmed_at || prod?.server_upload_confirmed_at || '').trim();
-    const confirmedBy = (a?.server_upload_confirmed_by || a?.staff_name || prod?.server_upload_confirmed_by || '').trim();
+    const confirmedAt = (savedVerif?.updated_at || a?.server_upload_confirmed_at || (!a ? prod?.server_upload_confirmed_at : '') || '').trim();
+    const confirmedBy = (a?.server_upload_confirmed_by || a?.staff_name || (!a ? prod?.server_upload_confirmed_by : '') || '').trim();
 
     // Persisted validation: true if server_upload_confirmed, folder name, server path, or edited drive link exists
-    const isUploaded = Boolean(
-      savedVerif?.consent_proof_verified === true ||
-      (typeof savedVerif?.folder_name === 'string' && savedVerif.folder_name.trim().length > 0) ||
+    const isUploaded = a ? Boolean(
+      (savedVerif && (savedVerif.consent_proof_verified === true || (typeof savedVerif.folder_name === 'string' && savedVerif.folder_name.trim().length > 0))) ||
       a?.server_upload_confirmed === true ||
       a?.edited_folder_uploaded_to_server === true ||
       (typeof a?.server_upload_folder_name === 'string' && a.server_upload_folder_name.trim().length > 0) ||
+      (typeof a?.folder_name === 'string' && a.folder_name.trim().length > 0) ||
       (typeof a?.server_path === 'string' && a.server_path.trim().length > 0) ||
-      (typeof a?.Edited_Drive_Link === 'string' && a.Edited_Drive_Link.trim().length > 0) ||
-      (typeof a?.edited_drive_link === 'string' && a.edited_drive_link.trim().length > 0) ||
+      (typeof a?.server_file_link === 'string' && a.server_file_link.trim().length > 0)
+    ) : Boolean(
+      savedVerif?.consent_proof_verified === true ||
+      (typeof savedVerif?.folder_name === 'string' && savedVerif.folder_name.trim().length > 0) ||
       prod?.server_upload_confirmed === true ||
       (typeof prod?.server_upload_folder_name === 'string' && prod.server_upload_folder_name.trim().length > 0) ||
       (typeof prod?.server_path === 'string' && prod.server_path.trim().length > 0) ||
@@ -2500,7 +2730,7 @@ Production Team`;
           'CUSTOMER NAME': order?.customer_name || '',
           'EVENT TYPE': order?.event_type || '',
           'EVENT DATE': order?.event_date || '',
-          'ASSIGNED TEAM': getAssignedEditorsText(prod),
+          'SALES CREW': getSalesCrewName(prod),
           'CURRENT STATUS': getProductionStatus(prod),
           'EXPECTED DELIVERY DATE': prod.expected_delivery_date || '',
           'PRIORITY': prod.project_priority || 'Medium'
@@ -2511,7 +2741,7 @@ Production Team`;
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, "Production Leads");
       
-      const keys = ['ORDER ID', 'CUSTOMER NAME', 'EVENT TYPE', 'EVENT DATE', 'ASSIGNED TEAM', 'CURRENT STATUS', 'EXPECTED DELIVERY DATE', 'PRIORITY'];
+      const keys = ['ORDER ID', 'CUSTOMER NAME', 'EVENT TYPE', 'EVENT DATE', 'SALES CREW', 'CURRENT STATUS', 'EXPECTED DELIVERY DATE', 'PRIORITY'];
       const maxColLengths = keys.map(k => {
         const kLen = k.length;
         const vals = data.map(item => String(item[k as keyof typeof item] ?? '').length);
@@ -2554,7 +2784,7 @@ Production Team`;
     doc.text("Order ID", colX[0], 55);
     doc.text("Customer Name", colX[1], 55);
     doc.text("Event Date", colX[2], 55);
-    doc.text("Assigned Team", colX[3], 55);
+    doc.text("Sales Crew", colX[3], 55);
     doc.text("Current Status", colX[4], 55);
     doc.text("Priority", colX[5], 55);
     
@@ -2576,7 +2806,7 @@ Production Team`;
         doc.text("Order ID", colX[0], y);
         doc.text("Customer Name", colX[1], y);
         doc.text("Event Date", colX[2], y);
-        doc.text("Assigned Team", colX[3], y);
+        doc.text("Sales Crew", colX[3], y);
         doc.text("Current Status", colX[4], y);
         doc.text("Priority", colX[5], y);
         doc.line(14, y + 2, 196, y + 2);
@@ -2591,7 +2821,7 @@ Production Team`;
       const ordId = order?.order_id || 'N/A';
       const custName = order?.customer_name || 'N/A';
       const evDate = order?.event_date || 'N/A';
-      const edName = getAssignedEditorsText(prod);
+      const salesCrewName = getSalesCrewName(prod);
       const pStatus = getProductionStatus(prod);
       const pPriority = prod.project_priority || 'Medium';
       
@@ -2599,7 +2829,7 @@ Production Team`;
       const truncatedName = custName.length > 25 ? custName.substring(0, 23) + "..." : custName;
       doc.text(truncatedName, colX[1], y);
       doc.text(evDate, colX[2], y);
-      doc.text(edName, colX[3], y);
+      doc.text(salesCrewName, colX[3], y);
       doc.text(pStatus, colX[4], y);
       doc.text(pPriority, colX[5], y);
       
@@ -2624,7 +2854,7 @@ Production Team`;
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.customer_name || ''}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.event_type || ''}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${order?.event_date || ''}</td>
-          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${getAssignedEditorsText(prod)}</td>
+          <td style="padding: 8px; border-bottom: 1px solid #ddd;">${getSalesCrewName(prod)}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${getProductionStatus(prod)}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd;">${prod.expected_delivery_date || ''}</td>
           <td style="padding: 8px; border-bottom: 1px solid #ddd; font-weight: bold;">${prod.project_priority || 'Medium'}</td>
@@ -2663,7 +2893,7 @@ Production Team`;
                 <th>Customer Name</th>
                 <th>Event Type</th>
                 <th>Event Date</th>
-                <th>Assigned Team</th>
+                <th>Sales Crew</th>
                 <th>Current Status</th>
                 <th>Target Delivery</th>
                 <th>Priority</th>
@@ -2694,22 +2924,6 @@ Production Team`;
 
   // Step-by-step action popup modal states
   const [activeWorkflowProd, setActiveWorkflowProd] = useState<Production | null>(null);
-  useEffect(() => {
-    const handler = (e: any) => {
-      if (e.detail.role === 'production') {
-        const p = (production || []).find(prod => {
-          const rf = (rawFootage || []).find(x => x.tracking_id === prod.tracking_id);
-          return rf?.order_id === e.detail.orderId;
-        });
-        if (p) {
-          setActiveSubTab('production_workflow');
-          setSelectedLeadProd(p);
-        }
-      }
-    };
-    window.addEventListener('calendar-action-click-deferred', handler);
-    return () => window.removeEventListener('calendar-action-click-deferred', handler);
-  }, [production, rawFootage]);
   
   const [workflowActionType, setWorkflowActionType] = useState<'assign_editor' | 'reassign_staff' | 'delivery_checklist' | 'send_review' | 'request_revision' | 'deliver_project' | 'manage_payment_close' | 'manage_status' | 'close_project' | null>(null);
 
@@ -2907,6 +3121,56 @@ Production Team`;
     setWorkflowActionType('assign_editor');
   };
 
+  // Helper to open the existing Assign Editor modal from Production Dashboard Calendar
+  const openAssignEditorForCalendarItem = (targetOrderId: string, targetLeadId?: string) => {
+    const targetId = targetOrderId || targetLeadId;
+    if (!targetId) return;
+
+    // 1. Try finding in leads (which is the full Production items list)
+    let prod = (leads || []).find(p => {
+      const order = getRowOrderDetails(p);
+      return (targetOrderId && (order?.order_id === targetOrderId || (p as any).order_id === targetOrderId || p.tracking_id === targetOrderId || p.production_id === targetOrderId)) ||
+             (targetLeadId && (p.lead_id === targetLeadId || order?.lead_id === targetLeadId || p.tracking_id === targetLeadId));
+    });
+
+    // 2. Try finding in production
+    if (!prod) {
+      prod = (production || []).find(p => {
+        const rf = (rawFootage || []).find(x => x.tracking_id === p.tracking_id);
+        return (targetOrderId && (rf?.order_id === targetOrderId || (p as any).order_id === targetOrderId || p.tracking_id === targetOrderId || p.production_id === targetOrderId)) ||
+               (targetLeadId && (p.lead_id === targetLeadId || rf?.tracking_id === targetLeadId || p.tracking_id === targetLeadId));
+      });
+    }
+
+    // 3. Fallback: match by tracking ID or lead_id from orders
+    if (!prod && orders) {
+      const ord = orders.find(o => (targetOrderId && o.order_id === targetOrderId) || (targetLeadId && o.lead_id === targetLeadId));
+      if (ord) {
+        prod = (leads || []).find(p => p.tracking_id === ord.lead_id || (p as any).order_id === ord.order_id) ||
+               (production || []).find(p => p.tracking_id === ord.lead_id || (p as any).order_id === ord.order_id);
+      }
+    }
+
+    if (prod) {
+      handleOpenAssignEditor(prod);
+    }
+  };
+
+  // Calendar action listener to open Assign Editor popup directly
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e.detail?.role === 'production') {
+        openAssignEditorForCalendarItem(e.detail.orderId, e.detail.leadId);
+      }
+    };
+    window.addEventListener('calendar-action-click-deferred', handler);
+    window.addEventListener('calendar-action-click', handler);
+    return () => {
+      window.removeEventListener('calendar-action-click-deferred', handler);
+      window.removeEventListener('calendar-action-click', handler);
+    };
+  }, [leads, production, rawFootage, orders]);
+
   const handleSectionEditorChange = (eventId: string, deliverableId: string, editorName: string) => {
     const assignmentKey = `${eventId}_${deliverableId}`;
     setAssignedEditors(prev => ({
@@ -2967,6 +3231,7 @@ Production Team`;
   const [leadRemarks, setLeadRemarks] = useState('');
 
   // Crew Roster Filter state
+  const [crewSubView, setCrewSubView] = useState<'roster' | 'calendar'>('roster');
   const [crewSearch, setCrewSearch] = useState('');
   const [crewSpecialityFilter, setCrewSpecialityFilter] = useState('All');
   const [crewStatusFilter, setCrewStatusFilter] = useState('All');
@@ -3845,7 +4110,14 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {/* PRODUCTION CALENDAR MODULE EMBED */}
       {activeSubTab === 'production_calendar' && (
         <div className="animate-fade-in-up flex flex-col gap-6">
-          <ProductionCalendar />
+          <ProductionCalendar onOpenAssignEditor={openAssignEditorForCalendarItem} />
+        </div>
+      )}
+
+      {/* PRODUCTION STAFF CALENDAR MODULE EMBED */}
+      {activeSubTab === 'production_staff_calendar' && (
+        <div className="animate-fade-in-up flex flex-col gap-6">
+          <ProductionStaffCalendar />
         </div>
       )}
 
@@ -4165,7 +4437,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         <th className="p-3 font-bold">Order ID</th>
                         <th className="p-3 font-bold">Customer Name</th>
                         <th className="p-3 font-bold">Event Details</th>
-                        <th className="p-3 font-bold text-center">Assigned Team</th>
+                        <th className="p-3 font-bold">Sales Crew</th>
                         <th className="p-3 font-bold">Raw Footage Drive Link</th>
                         <th className="p-3 font-bold">Current Production Status</th>
                         <th className="p-3 font-bold text-right pr-4">Action</th>
@@ -4192,18 +4464,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             <td className="p-3 text-zinc-300 font-sans">
                               <UnifiedEventDropdownCell lead={lead || order} />
                             </td>
-                            <td className="p-3 font-sans text-center">
-                              {editorsList.length > 0 ? (
-                                <span 
-                                  onClick={() => setAssignedEditorsModalProd(prod)}
-                                  className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
-                                  title="View Assigned Team"
-                                >
-                                  👥 {editorsList.length}
-                                </span>
-                              ) : (
-                                <span className="text-zinc-650 italic text-[10px]">No Production Staff Assigned.</span>
-                              )}
+                            <td className="p-3 font-sans">
+                              {(() => {
+                                const salesCrew = getSalesCrewName(prod);
+                                if (!salesCrew || salesCrew === '—') {
+                                  return <span className="text-zinc-500 italic text-[11px]">Unassigned</span>;
+                                }
+                                return (
+                                  <span className="font-semibold text-zinc-200 text-xs">
+                                    {salesCrew}
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className="p-3">
                               {(() => {
@@ -4285,10 +4557,69 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     <th className="p-4 font-black">Customer Name</th>
                     <th className="p-4 font-black">Event Details</th>
                     <th className="p-4 font-black">Raw Footage Link</th>
-                    <th className="p-4 font-black text-center">Assigned Team</th>
+                    <th className="p-4 font-black">Sales Crew</th>
+                    <th className="p-4 font-black text-center">ASSIGNED TEAM</th>
                     <th className="p-4 font-black">Current Status</th>
-                    <th className="p-4 font-black">Target Delivery Date</th>
-                    <th className="p-4 font-black">Delivery Status</th>
+                    <th className="p-4 font-black">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (targetDateSort === 'none') {
+                            setTargetDateSort('asc');
+                          } else if (targetDateSort === 'asc') {
+                            setTargetDateSort('desc');
+                          } else {
+                            setTargetDateSort('none');
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[9px] font-black text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
+                        title={
+                          targetDateSort === 'asc'
+                            ? 'Target Delivery Date: Earliest First (Click to Sort Latest First)'
+                            : targetDateSort === 'desc'
+                            ? 'Target Delivery Date: Latest First (Click to Reset)'
+                            : 'Target Delivery Date: Click to Sort Earliest First'
+                        }
+                      >
+                        <span>Target Delivery Date</span>
+                        <ArrowUpDown className={`w-3 h-3 transition-colors ${
+                          targetDateSort !== 'none'
+                            ? 'text-amber-400'
+                            : 'text-zinc-500 group-hover:text-zinc-300'
+                        }`} />
+                        {targetDateSort !== 'none' && (
+                          <span className="text-[9px] font-bold font-mono text-amber-400">
+                            {targetDateSort === 'asc' ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </button>
+                    </th>
+                    <th className="p-4 font-black">
+                      <div className="inline-flex items-center gap-1.5 select-none">
+                        <span>Delivery Status</span>
+                        <button
+                          ref={deliveryStatusBtnRef}
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsDeliveryStatusMenuOpen(!isDeliveryStatusMenuOpen);
+                          }}
+                          className={`p-1 rounded-md transition-colors cursor-pointer select-none inline-flex items-center gap-0.5 ${
+                            isDeliveryStatusMenuOpen
+                              ? 'bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/40'
+                              : deliveryStatusFilter !== 'All'
+                              ? 'text-amber-400 bg-amber-400/10 hover:bg-zinc-800'
+                              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/60'
+                          }`}
+                          title="Filter Delivery Status"
+                        >
+                          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-150 ${isDeliveryStatusMenuOpen ? 'rotate-180 text-amber-400' : ''}`} />
+                          {deliveryStatusFilter !== 'All' && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 ring-2 ring-zinc-950" />
+                          )}
+                        </button>
+                      </div>
+                    </th>
                     {currentRole !== 'Production Team' && (
                       <>
                         <th className="p-4 font-black">Payment Status</th>
@@ -4363,20 +4694,74 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         if (activeCardFilter === 'total_projects_completed' && !isTotalProjectsCompleted(prod)) return false;
                       }
 
+                      // Delivery Status filtration
+                      if (deliveryStatusFilter !== 'All') {
+                        const displayStatus = getAutomatedProductionStatus(prod);
+                        const targetDeliveryDate = getTargetDeliveryDateFromAssignments(prod);
+                        const daysRem = calculateDaysRemaining(targetDeliveryDate);
+                        const isFinished = isProjectLocked(displayStatus) || isProjectLocked(prod.production_status) || isProjectLocked(prod.editing_status);
+                        const isAssigned = getAssignedEditorsList(prod).length > 0 || (prod.editor_assigned && prod.editor_assigned !== 'Unassigned');
+
+                        let currentDeliveryStatus = 'Not Set';
+                        if (!isAssigned) {
+                          currentDeliveryStatus = 'Pending';
+                        } else if (daysRem !== null) {
+                          if (daysRem < 0) {
+                            currentDeliveryStatus = isFinished ? 'Completed' : 'Overdue';
+                          } else if (daysRem <= 3) {
+                            currentDeliveryStatus = isFinished ? 'Completed' : 'Due Soon';
+                          } else {
+                            currentDeliveryStatus = isFinished ? 'Completed' : 'On Time';
+                          }
+                        } else {
+                          currentDeliveryStatus = isFinished ? 'Completed' : 'Not Set';
+                        }
+
+                        if (currentDeliveryStatus !== deliveryStatusFilter) {
+                          return false;
+                        }
+                      }
+
                       return true;
                     });
 
                     if (filteredLeads.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={10} className="p-10 text-center text-zinc-550 font-mono text-xs">
+                          <td colSpan={currentRole !== 'Production Team' ? 12 : 10} className="p-10 text-center text-zinc-550 font-mono text-xs">
                             No production leads matching filter parameters found.
                           </td>
                         </tr>
                       );
                     }
 
-                    return [...(filteredLeads || [])].sort((a, b) => compareRecordsByDate(a, b, sortOrder)).map((prod, idx) => {
+                    return [...(filteredLeads || [])].sort((a, b) => {
+                      if (targetDateSort === 'asc') {
+                        const timeA = parseTargetDeliveryDateToTimestamp(getTargetDeliveryDateFromAssignments(a));
+                        const timeB = parseTargetDeliveryDateToTimestamp(getTargetDeliveryDateFromAssignments(b));
+                        if (timeA > 0 && timeB > 0) {
+                          if (timeA !== timeB) return timeA - timeB;
+                        } else if (timeA > 0) {
+                          return -1;
+                        } else if (timeB > 0) {
+                          return 1;
+                        }
+                        return compareRecordsByDate(a, b, sortOrder);
+                      }
+                      if (targetDateSort === 'desc') {
+                        const timeA = parseTargetDeliveryDateToTimestamp(getTargetDeliveryDateFromAssignments(a));
+                        const timeB = parseTargetDeliveryDateToTimestamp(getTargetDeliveryDateFromAssignments(b));
+                        if (timeA > 0 && timeB > 0) {
+                          if (timeA !== timeB) return timeB - timeA;
+                        } else if (timeA > 0) {
+                          return -1;
+                        } else if (timeB > 0) {
+                          return 1;
+                        }
+                        return compareRecordsByDate(a, b, sortOrder);
+                      }
+                      return compareRecordsByDate(a, b, sortOrder);
+                    }).map((prod, idx) => {
                       const order = getRowOrderDetails(prod);
                       const foundOrder = order.foundOrder;
                       const foundLead = order.foundLead;
@@ -4547,25 +4932,45 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                               })()}
                             </td>
 
-                          {/* Editor Assigned */}
+                          {/* Sales Crew */}
+                          <td className="p-4 font-sans">
+                            {(() => {
+                              const salesCrew = getSalesCrewName(prod);
+                              if (!salesCrew || salesCrew === '—') {
+                                return <span className="text-zinc-500 italic text-[11px]">Unassigned</span>;
+                              }
+                              return (
+                                <span className="font-semibold text-zinc-200 text-xs">
+                                  {salesCrew}
+                                </span>
+                              );
+                            })()}
+                          </td>
+
+                          {/* ASSIGNED TEAM */}
                           <td className="p-4 text-center font-sans">
-                            <div className="font-bold text-zinc-200">
-                              {(() => {
-                                const editorsList = getAssignedEditorsList(prod);
-                                if (editorsList.length === 0) {
-                                  return <span className="text-zinc-650 italic text-[10px]">No Production Staff Assigned.</span>;
-                                }
+                            {(() => {
+                              const assignedEditors = getAssignedEditorsList(prod);
+                              const count = assignedEditors.length;
+                              if (count > 0) {
                                 return (
-                                  <span 
+                                  <button
+                                    type="button"
                                     onClick={() => setAssignedEditorsModalProd(prod)}
-                                    className="cursor-pointer text-indigo-400 hover:text-indigo-300 underline underline-offset-2 px-2 py-1 bg-indigo-500/10 rounded font-bold"
-                                    title="View Assigned Team"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 hover:text-purple-300 border border-purple-500/25 hover:border-purple-500/50 rounded-lg font-mono font-bold text-xs transition-all shadow-sm active:scale-95 cursor-pointer"
+                                    title={`Click to view assigned team details (${assignedEditors.map(e => e.name).join(', ')})`}
                                   >
-                                    👥 {editorsList.length}
-                                  </span>
+                                    <span>👥</span>
+                                    <span>{count}</span>
+                                  </button>
                                 );
-                              })()}
-                            </div>
+                              }
+                              return (
+                                <span className="text-zinc-500 italic text-[11px] font-sans">
+                                  No Production Staff Assigned.
+                                </span>
+                              );
+                            })()}
                           </td>
 
                           {/* Current Status */}
@@ -4688,6 +5093,76 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
             </div>
           </div>
 
+          {/* Delivery Status Filter Dropdown */}
+          {isDeliveryStatusMenuOpen && deliveryStatusMenuCoords && typeof document !== 'undefined' && createPortal(
+            <div
+              ref={deliveryStatusMenuRef}
+              style={{
+                position: 'fixed',
+                top: deliveryStatusMenuCoords.openUpward ? undefined : `${deliveryStatusMenuCoords.top}px`,
+                bottom: deliveryStatusMenuCoords.openUpward ? `${window.innerHeight - deliveryStatusMenuCoords.top}px` : undefined,
+                left: `${deliveryStatusMenuCoords.left}px`,
+                width: '190px',
+                zIndex: 999999
+              }}
+              className="bg-zinc-950/98 backdrop-blur-md border border-zinc-800 rounded-xl shadow-2xl overflow-hidden py-1 animate-in fade-in zoom-in-95 duration-150 font-sans text-xs"
+            >
+              <div className="px-3 py-2 text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-400 border-b border-zinc-850 flex items-center justify-between">
+                <span>Delivery Status</span>
+                <span className="text-amber-400 text-[9px] font-mono">FILTER</span>
+              </div>
+
+              <div className="p-1 space-y-0.5">
+                {[
+                  { id: 'All', label: 'All Statuses', dot: 'bg-zinc-500' },
+                  { id: 'On Time', label: 'On Time', dot: 'bg-green-400' },
+                  { id: 'Due Soon', label: 'Due Soon', dot: 'bg-yellow-400' },
+                  { id: 'Overdue', label: 'Overdue', dot: 'bg-red-400' },
+                  { id: 'Completed', label: 'Completed', dot: 'bg-zinc-400' },
+                  { id: 'Pending', label: 'Pending', dot: 'bg-zinc-500' },
+                  { id: 'Not Set', label: 'Not Set', dot: 'bg-zinc-600' },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setDeliveryStatusFilter(opt.id);
+                      setIsDeliveryStatusMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-left ${
+                      deliveryStatusFilter === opt.id
+                        ? 'bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30'
+                        : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${opt.dot}`} />
+                      <span>{opt.label}</span>
+                    </span>
+                    {deliveryStatusFilter === opt.id && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0 ml-1.5" />}
+                  </button>
+                ))}
+              </div>
+
+              {deliveryStatusFilter !== 'All' && (
+                <div className="p-1 border-t border-zinc-900/80 mt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryStatusFilter('All');
+                      setIsDeliveryStatusMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3 text-zinc-400" />
+                    <span>Reset Filter</span>
+                  </button>
+                </div>
+              )}
+            </div>,
+            document.body
+          )}
+
           {/* Floating Action Dropdown Menu */}
           {openActionDropdown && createPortal(
             (() => {
@@ -4793,7 +5268,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-blue-300 hover:text-white hover:bg-blue-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                       >
                         <FileText className="w-3.5 h-3.5" />
-                        <span>Add Note</span>
+                        <span>VIEW/ADD NOTE</span>
                       </button>
                       
                       {/* Send Review Link */}
@@ -8582,12 +9057,12 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
       {/* STEP-BY-STEP INTERACTIVE WORKFLOW MODALS */}
       {activeWorkflowProd && workflowActionType && (() => {
-        const order = (orders || []).find(o => {
+        const order = getRowOrderDetails(activeWorkflowProd) || (orders || []).find(o => {
           const rf = (rawFootage || []).find(f => f.tracking_id === activeWorkflowProd.tracking_id);
           return rf?.order_id === o.order_id;
-        });
-        const customerName = order ? order?.customer_name : 'Customer';
-        const orderId = order ? order?.order_id : 'Order';
+        }) || (orders || []).find(o => (activeWorkflowProd.order_id && o.order_id === activeWorkflowProd.order_id) || (activeWorkflowProd.lead_id && o.lead_id === activeWorkflowProd.lead_id));
+        const customerName = order ? (order?.customer_name || (order as any)?.client_name) : (activeWorkflowProd.customer_name || 'Customer');
+        const orderId = order ? order?.order_id : ((activeWorkflowProd as any).order_id || activeWorkflowProd.tracking_id || 'Order');
         
         const payment = order ? (payments || []).find(p => p.order_id === order?.order_id) : null;
         const totalAmount = order?.quotation_amount || 0;
@@ -10432,8 +10907,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     const getEventName = (eventId?: string, fallbackIdx: number = 0) => {
                       if (eventId) {
-                        const found = eventsList.find((e: any) => e.id === eventId || e.event_id === eventId);
-                        if (found) return found.event_name || found.event_type || `Event ${fallbackIdx + 1}`;
+                        const found = eventsList.find((e: any) => 
+                          e.id === eventId || 
+                          e.event_id === eventId || 
+                          (e.event_name && e.event_name.toLowerCase() === eventId.toLowerCase()) ||
+                          (e.event_type && e.event_type.toLowerCase() === eventId.toLowerCase())
+                        );
+                        if (found) return found.event_name || found.event_type || eventId;
                         const match = eventId.match(/EVT-0*(\d+)/i);
                         if (match) {
                           const idx = parseInt(match[1], 10) - 1;
@@ -10442,6 +10922,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           }
                           return `Event ${idx + 1}`;
                         }
+                        return eventId;
                       }
                       if (eventsList[fallbackIdx]) {
                         return eventsList[fallbackIdx].event_name || eventsList[fallbackIdx].event_type || `Event ${fallbackIdx + 1}`;
@@ -10461,7 +10942,15 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       isProductionStaffAssignment(a)
                     );
 
-                    let displayItems: any[] = rawAssignments;
+                    let displayItems: any[] = [...rawAssignments].sort((a, b) => {
+                      const nameA = a.staff_name || '';
+                      const nameB = b.staff_name || '';
+                      if (nameA !== nameB) return nameA.localeCompare(nameB);
+                      const evtA = a.event_id || '';
+                      const evtB = b.event_id || '';
+                      if (evtA !== evtB) return evtA.localeCompare(evtB);
+                      return (a.speciality || '').localeCompare(b.speciality || '');
+                    });
                     if (displayItems.length === 0) {
                       const staffStr = prod.assigned_staff || prod.editor_assigned;
                       if (staffStr && staffStr !== 'Unassigned' && staffStr.trim() !== '') {
@@ -10584,8 +11073,20 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const finalDriveLinkStr = getSpecificFinalDriveLink(assignment);
                       const hasFinalDriveLink = Boolean(finalDriveLinkStr);
 
-                      // Parse Customer Proof according to unified logic across Supabase storage & records
-                      const proof = parseCustomerProof(assignment, prod, order);
+                      // Parse Customer Proof strictly for this specific assignment
+                      let proof = parseCustomerProof(assignment);
+                      if (!proof.hasProof && assignment.assignment_id && Array.isArray(clientAcceptanceVerifications)) {
+                        const matchingVerif = clientAcceptanceVerifications.find(v =>
+                          (v.assignment_id && v.assignment_id === assignment.assignment_id) ||
+                          (v.task_id && v.task_id === assignment.assignment_id)
+                        );
+                        if (matchingVerif) {
+                          const vProof = parseCustomerProof(matchingVerif);
+                          if (vProof.hasProof) {
+                            proof = vProof;
+                          }
+                        }
+                      }
 
                       return (
                         <tr key={assignment.assignment_id || idx} className="hover:bg-zinc-900/40 transition-colors">

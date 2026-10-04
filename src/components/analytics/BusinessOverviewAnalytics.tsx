@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRole } from '../RoleContext';
 import { DatePreset, getPresetDateRange, isDateInRange, TODAY_REF } from './DateFilterHelper';
 import { DatePresetSelector } from './DatePresetSelector';
 import { AnalyticsReportModal } from './AnalyticsReportModal';
 import { formatINR } from '../../utils';
 import { CameraLensStatsCard } from '../CameraLensStatsCard';
+import { calculateAllPendingRecords } from '../../utils/paymentCalculations';
 import { 
   DollarSign, TrendingUp, AlertTriangle, ShieldCheck, Briefcase, Calendar, Users, 
   HelpCircle, ChevronRight, Activity, Percent, Sparkles, PieChart, FileText, Filter
@@ -15,7 +16,25 @@ import {
 } from 'recharts';
 
 export const BusinessOverviewAnalytics: React.FC = () => {
-  const { leads, orders, payments, operations, production, staff, globalDateRange } = useRole();
+  const { leads, orders, payments, operations, production, staff, globalDateRange, paymentHistory, refreshData } = useRole();
+
+  useEffect(() => {
+    const handleSync = () => {
+      if (typeof refreshData === 'function') {
+        refreshData();
+      }
+    };
+    window.addEventListener('payment-updated', handleSync);
+    window.addEventListener('lead-updated', handleSync);
+    window.addEventListener('order-updated', handleSync);
+    window.addEventListener('refresh-pending-payments', handleSync);
+    return () => {
+      window.removeEventListener('payment-updated', handleSync);
+      window.removeEventListener('lead-updated', handleSync);
+      window.removeEventListener('order-updated', handleSync);
+      window.removeEventListener('refresh-pending-payments', handleSync);
+    };
+  }, [refreshData]);
 
   // Drilldown Modal states
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -40,6 +59,11 @@ export const BusinessOverviewAnalytics: React.FC = () => {
     });
   }, [payments, orders, activeRange]);
 
+  // Unified Pending Records from single source of truth (Sales Payment Pending)
+  const pendingRecords = useMemo(() => {
+    return calculateAllPendingRecords(orders, leads, payments, paymentHistory);
+  }, [orders, leads, payments, paymentHistory]);
+
   // 1. Revenue Analytics calculations
   const totalRevenue = useMemo(() => {
     return filteredOrders.reduce((sum, o) => sum + (o.quotation_amount || 0), 0);
@@ -49,18 +73,18 @@ export const BusinessOverviewAnalytics: React.FC = () => {
     return filteredPayments.reduce((sum, p) => sum + (p.advance_received + p.final_payment_received), 0);
   }, [filteredPayments]);
 
-  const totalPendingAmount = useMemo(() => {
-    return filteredPayments.reduce((sum, p) => sum + p.balance_due, 0);
-  }, [filteredPayments]);
+  // Outstanding is the exact total pending payment from Sales Dashboard Payment Pending
+  const outstandingBalance = useMemo(() => {
+    return pendingRecords.reduce((sum, r) => sum + (r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount), 0);
+  }, [pendingRecords]);
+
+  const totalPendingAmount = outstandingBalance;
 
   const partialPaymentAmount = useMemo(() => {
-    return filteredPayments
-      .filter(p => p.payment_status === 'Partially Paid')
-      .reduce((sum, p) => sum + p.advance_received, 0);
-  }, [filteredPayments]);
-
-  // Outstanding is balance_due
-  const outstandingBalance = totalPendingAmount;
+    return pendingRecords
+      .filter(r => r.paymentStatus === 'Partial')
+      .reduce((sum, r) => sum + r.approvedAmount, 0);
+  }, [pendingRecords]);
 
   // 2. Event Analytics calculations
   const totalEvents = filteredOrders.length;

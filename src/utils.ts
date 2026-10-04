@@ -2669,6 +2669,103 @@ export function getEventDeliverables(order: any, lead: any, eventId: string, eve
   return [];
 }
 
+const WHATSAPP_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+
+const toCalendarDateString = (dateVal?: string | null | Date): string | null => {
+  if (!dateVal && (dateVal as any) !== 0) return null;
+  if (dateVal instanceof Date) {
+    if (isNaN(dateVal.getTime())) return null;
+    const y = dateVal.getFullYear();
+    const m = String(dateVal.getMonth() + 1).padStart(2, '0');
+    const d = String(dateVal.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  let str = String(dateVal).trim();
+  if (!str || str === '—' || str === '-' || str === 'N/A' || str === 'null' || str === 'undefined') return null;
+
+  // Strip day of week prefix like "Sun, " or "Sunday, "
+  str = str.replace(/^(?:sun|mon|tue|wed|thu|fri|sat)[a-z]*[\s,]+/i, '');
+
+  // 1. YYYY-MM-DD or YYYY/MM/DD (e.g. "2026-09-20" or "2026-09-20T...")
+  const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (ymdMatch) {
+    return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
+  }
+
+  // 2. DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY or MM/DD/YYYY etc.
+  const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (dmyMatch) {
+    const n1 = parseInt(dmyMatch[1], 10);
+    const n2 = parseInt(dmyMatch[2], 10);
+    const y = dmyMatch[3];
+    if (n2 > 12 && n1 <= 12) {
+      return `${y}-${String(n1).padStart(2, '0')}-${String(n2).padStart(2, '0')}`;
+    }
+    return `${y}-${String(n2).padStart(2, '0')}-${String(n1).padStart(2, '0')}`;
+  }
+
+  // 3. DD/MM/YY or DD-MM-YY
+  const dmyShortMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2})$/);
+  if (dmyShortMatch) {
+    let y = parseInt(dmyShortMatch[3], 10);
+    y = y < 100 ? 2000 + y : y;
+    return `${y}-${dmyShortMatch[2].padStart(2, '0')}-${dmyShortMatch[1].padStart(2, '0')}`;
+  }
+
+  // 4. DD MMM YYYY or DD-MMM-YYYY or DD Month YYYY (e.g. "20 Sep 2026")
+  const dMmmYMatch = str.match(/^(\d{1,2})[\s\-\/\.]*([a-zA-Z]{3,9})[\s\-\/\.,]*(\d{2,4})/);
+  if (dMmmYMatch) {
+    const d = dMmmYMatch[1].padStart(2, '0');
+    const mStr = dMmmYMatch[2].toLowerCase().slice(0, 3);
+    const mIdx = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(mStr);
+    if (mIdx !== -1) {
+      const m = String(mIdx + 1).padStart(2, '0');
+      let y = parseInt(dMmmYMatch[3], 10);
+      if (y < 100) y += 2000;
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  // 5. MMM DD, YYYY or Month DD, YYYY (e.g. "Sep 20, 2026")
+  const mmmDYMatch = str.match(/^([a-zA-Z]{3,9})[\s\-\/\.]*(\d{1,2})(?:st|nd|rd|th)?[\s\-\/\.,]*(\d{2,4})/);
+  if (mmmDYMatch) {
+    const mStr = mmmDYMatch[1].toLowerCase().slice(0, 3);
+    const mIdx = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(mStr);
+    if (mIdx !== -1) {
+      const m = String(mIdx + 1).padStart(2, '0');
+      const d = mmmDYMatch[2].padStart(2, '0');
+      let y = parseInt(mmmDYMatch[3], 10);
+      if (y < 100) y += 2000;
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) {
+    const y = fallback.getFullYear();
+    const m = String(fallback.getMonth() + 1).padStart(2, '0');
+    const d = String(fallback.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return null;
+};
+
+export function formatOperationWhatsAppDate(dateVal?: string | null | Date): string {
+  if (!dateVal && (dateVal as any) !== 0) return '';
+  const cal = toCalendarDateString(dateVal);
+  if (!cal) {
+    const raw = String(dateVal).trim();
+    if (!raw || raw === '—' || raw === '-' || raw === 'N/A' || raw === 'null' || raw === 'undefined') return '';
+    return raw;
+  }
+  const [year, monthStr, dayStr] = cal.split('-');
+  const monthIdx = parseInt(monthStr, 10) - 1;
+  const monthName = WHATSAPP_MONTHS[monthIdx] || monthStr;
+  const dayNum = parseInt(dayStr, 10);
+  return `${dayNum} ${monthName} ${year}`;
+}
+
 export function generateWhatsAppAssignmentMessage(params: {
   order: any;
   lead?: any;
@@ -2756,9 +2853,179 @@ export function generateWhatsAppAssignmentMessage(params: {
       msg += `Event: ${group.eventName}\n\n`;
     }
 
+    // Determine event-specific Assigned Tasks for target staff member
+    const cleanTaskTitle = (rawTask: string): string => {
+      if (!rawTask) return '';
+      let t = rawTask.trim();
+      // Strip bullet points or numbering prefixes if present
+      t = t.replace(/^[-•*]\s*/, '').replace(/^\d+[\.\)]\s*/, '').trim();
+      
+      const lower = t.toLowerCase();
+      if (lower === 'lead photographer' || lower === 'photographer' || lower === 'main photographer') {
+        return 'Photography';
+      }
+      if (lower === 'candid photographer' || lower === 'candid photography') {
+        return 'Candid Photography';
+      }
+      if (lower === 'traditional photographer' || lower === 'traditional photography') {
+        return 'Traditional Photography';
+      }
+      if (lower === 'lead videographer' || lower === 'videographer' || lower === 'main videographer') {
+        return 'Videography';
+      }
+      if (lower === 'candid videographer' || lower === 'candid cinematographer' || lower === 'candid cinematography' || lower === 'cinematographer') {
+        return 'Cinematography';
+      }
+      if (lower === 'traditional videographer' || lower === 'traditional cinematography' || lower === 'traditional videography') {
+        return 'Traditional Videography';
+      }
+      if (lower === 'drone operator' || lower === 'drone pilot' || lower === 'drone shooter') {
+        return 'Drone Shoot';
+      }
+      if (lower === 'assistant' || lower === 'production assistant' || lower === 'helper') {
+        return 'Production Assistance';
+      }
+      if (lower === 'editor' || lower === 'video editor') {
+        return 'Video Editing';
+      }
+      if (lower === 'photo editor') {
+        return 'Photo Editing';
+      }
+      if (lower === 'album designer') {
+        return 'Album Design';
+      }
+      return t;
+    };
+
+    const staffAssignedTasks: string[] = [];
+    const addedTasksSet = new Set<string>();
+
+    const addTaskItem = (raw: any) => {
+      if (!raw) return;
+      if (Array.isArray(raw)) {
+        raw.forEach(item => addTaskItem(item));
+        return;
+      }
+      if (typeof raw === 'string') {
+        const parts = raw.split(/[\n,;]|\s+[-•*]\s+/);
+        parts.forEach(p => {
+          const cleaned = cleanTaskTitle(p);
+          if (
+            cleaned && 
+            cleaned.toLowerCase() !== 'unassigned' && 
+            cleaned.toLowerCase() !== 'none' && 
+            cleaned.toLowerCase() !== 'pending' && 
+            cleaned.toLowerCase() !== 'tbd' && 
+            cleaned.toLowerCase() !== 'staff' && 
+            cleaned.toLowerCase() !== 'operations staff'
+          ) {
+            const key = cleaned.toLowerCase();
+            if (!addedTasksSet.has(key)) {
+              addedTasksSet.add(key);
+              staffAssignedTasks.push(cleaned);
+            }
+          }
+        });
+      }
+    };
+
+    if (targetStaffName && targetStaffName.trim()) {
+      const targetNameLower = targetStaffName.trim().toLowerCase();
+
+      // 1. From finalAssignments for this exact event (highest priority from current modal assignment)
+      if (params.finalAssignments && params.finalAssignments.length > 0) {
+        params.finalAssignments.forEach((a: any) => {
+          const isEvMatch = a.event_id 
+            ? (a.event_id === group.eventId || a.event_id.includes(group.eventId)) 
+            : (groups.length === 1 || (a.event_name && a.event_name.toLowerCase() === group.eventName.toLowerCase()));
+          if (isEvMatch && (a.staff_name || '').trim().toLowerCase() === targetNameLower) {
+            addTaskItem(a.assigned_tasks || a.assigned_task || a.tasks || a.deliverables || a.task || a.staff_role);
+          }
+        });
+      }
+
+      // 2. From modalEventAllocations for this exact event
+      if (params.modalEventAllocations && params.modalEventAllocations[group.eventId]?.staff) {
+        params.modalEventAllocations[group.eventId].staff.forEach((s: any) => {
+          if ((s.staff_name || s.name || '').trim().toLowerCase() === targetNameLower) {
+            addTaskItem(s.assigned_tasks || s.assigned_task || s.tasks || s.deliverables || s.task || s.staff_role || s.role || s.skill);
+          }
+        });
+      }
+
+      // 3. From staffAssignments in db for this exact event
+      if (params.staffAssignments && params.staffAssignments.length > 0) {
+        const orderIdToMatch = order?.order_id || lead?.lead_id;
+        params.staffAssignments.forEach((sa: any) => {
+          if (sa.order_id === orderIdToMatch || sa.order_id === order?.order_id || sa.order_id === lead?.lead_id) {
+            if (sa.assignment_status !== 'Cancelled') {
+              const isEvMatch = sa.event_id 
+                ? (sa.event_id === group.eventId || sa.event_id.includes(group.eventId)) 
+                : (groups.length === 1 || (sa.event_name && sa.event_name.toLowerCase() === group.eventName.toLowerCase()));
+              if (isEvMatch && (sa.staff_name || '').trim().toLowerCase() === targetNameLower) {
+                addTaskItem((sa as any).assigned_tasks || sa.assigned_task || (sa as any).tasks || (sa as any).deliverables || (sa as any).task || sa.staff_role);
+              }
+            }
+          }
+        });
+      }
+
+      // 4. From group mappings for this exact event
+      group.mappings.forEach(m => {
+        if (m.assignedStaffName && m.assignedStaffName.trim().toLowerCase() === targetNameLower) {
+          addTaskItem(m.teamMemberRole || m.assignedStaffRole);
+        }
+      });
+
+      // 5. Match event deliverables for this event if they align with the staff member's craft
+      const eventDeliverables = getEventDeliverables(order, lead, group.eventId, group.eventName);
+      if (eventDeliverables && eventDeliverables.length > 0) {
+        const assignedCrafts = staffAssignedTasks.map(t => t.toLowerCase());
+        const stObj = params.staffList?.find(s => s.name?.toLowerCase() === targetNameLower);
+        const stRole = (stObj?.role || '').toLowerCase();
+        const isPhotographer = assignedCrafts.some(c => c.includes('photo')) || stRole.includes('photo');
+        const isVideographer = assignedCrafts.some(c => c.includes('video') || c.includes('cinema')) || stRole.includes('video') || stRole.includes('cinema');
+        const isDrone = assignedCrafts.some(c => c.includes('drone') || c.includes('aerial')) || stRole.includes('drone');
+
+        eventDeliverables.forEach(d => {
+          const dLower = d.toLowerCase();
+          let shouldInclude = false;
+          if (isPhotographer && (dLower.includes('photo') || dLower.includes('album') || dLower.includes('raw photo') || dLower.includes('traditional photo') || dLower.includes('candid photo'))) {
+            shouldInclude = true;
+          } else if (isVideographer && (dLower.includes('video') || dLower.includes('film') || dLower.includes('teaser') || dLower.includes('highlight') || dLower.includes('raw footage') || dLower.includes('reel') || dLower.includes('cinema'))) {
+            shouldInclude = true;
+          } else if (isDrone && (dLower.includes('drone') || dLower.includes('aerial'))) {
+            shouldInclude = true;
+          }
+          if (shouldInclude) {
+            addTaskItem(d);
+          }
+        });
+      }
+
+      // 6. Fallback if still empty: check staff directory role transformed to task
+      if (staffAssignedTasks.length === 0 && params.staffList) {
+        const stObj = params.staffList.find(s => s.name?.toLowerCase() === targetNameLower);
+        if (stObj?.role) {
+          addTaskItem(stObj.role);
+        }
+      }
+    }
+
+    if (staffAssignedTasks.length > 0) {
+      msg += `Assigned Tasks:\n`;
+      staffAssignedTasks.forEach(t => {
+        msg += `- ${t}\n`;
+      });
+      msg += `\n`;
+    }
+
     const repDate = (group.reportingDate && group.reportingDate !== 'N/A') ? group.reportingDate : (group.eventDate && group.eventDate !== 'N/A' ? group.eventDate : '');
     if (repDate) {
-      msg += `Reporting Date: ${repDate}\n`;
+      const formattedDate = formatOperationWhatsAppDate(repDate);
+      if (formattedDate) {
+        msg += `Operation Date: ${formattedDate}\n`;
+      }
     }
     if (group.reportingTime && group.reportingTime !== 'N/A') {
       msg += `Reporting Time: ${group.reportingTime}\n`;
@@ -2845,20 +3112,10 @@ export function generateWhatsAppAssignmentMessage(params: {
       }
     });
 
-    // If targetStaffName is specified but has no role yet, look up their role
-    if (targetStaffName && targetStaffName.trim()) {
-      const tName = targetStaffName.trim();
-      if (!eventStaffMap.has(tName)) {
-        const stObj = params.staffList?.find(s => s.name?.toLowerCase() === tName.toLowerCase());
-        eventStaffMap.set(tName, stObj?.role || 'Operations Staff');
-      }
-    }
-
-    if (eventStaffMap.size > 0) {
-      msg += `Team Members Included:\n`;
-      eventStaffMap.forEach((role, name) => {
-        msg += `- ${name} — ${role}\n`;
-      });
+    const eventStaffNames = Array.from(eventStaffMap.keys()).filter(Boolean);
+    if (eventStaffNames.length > 0) {
+      msg += `Assigned Team Members\n\n`;
+      msg += eventStaffNames.join('\n') + '\n';
     }
 
     if (idx < totalGroups - 1) {
@@ -3049,6 +3306,42 @@ export function saveCustomCategoryToStorage(catName: string): void {
 }
 
 /**
+ * Loads custom equipment categories from persistent local storage
+ */
+export function getStoredEquipmentCategories(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem('erp_custom_equipment_categories') || localStorage.getItem('equipment_categories');
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(Boolean).map((s: string) => String(s).trim()) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+/**
+ * Saves a new custom equipment category into persistent local storage and dispatches sync event
+ */
+export function saveEquipmentCategoryToStorage(catName: string): string[] {
+  if (!catName || typeof window === 'undefined') return getStoredEquipmentCategories();
+  const clean = catName.trim();
+  if (!clean) return getStoredEquipmentCategories();
+  let updated = getStoredEquipmentCategories();
+  try {
+    if (!updated.some(c => c.toLowerCase() === clean.toLowerCase())) {
+      updated = [...updated, clean];
+      localStorage.setItem('erp_custom_equipment_categories', JSON.stringify(updated));
+      localStorage.setItem('equipment_categories', JSON.stringify(updated));
+    }
+  } catch (_) {}
+  try {
+    window.dispatchEvent(new CustomEvent('equipment-categories-updated', { detail: updated }));
+  } catch (_) {}
+  return updated;
+}
+
+/**
  * Resolves all canonical and formatted variations of Order ID and Lead ID
  * to ensure bulletproof relational querying, payment association, and approval mapping.
  */
@@ -3165,4 +3458,122 @@ export const getAllMatchingOrderIds = (
 
   return Array.from(set);
 };
+
+const FINISHED_STAFF_TASK_STATUSES = [
+  'footage handover', 'verified footage', 'footage handover verified',
+  'raw footage received', 'editor assigned', 'assigned editor',
+  'editing started', 'editing in progress', 'internal qc review',
+  'client review sent', 'internal review', 'client review',
+  'revision required', 'revision in progress', 'revision',
+  'final approval', 'project delivered', 'project closed',
+  'completed', 'closed', 'order closed', 'delivered'
+];
+
+export function calculateStaffActiveBookingsCount(
+  staffName: string | undefined | null,
+  staffAssignments: any[] = [],
+  leads: any[] = [],
+  orders: any[] = [],
+  operations: any[] = []
+): number {
+  if (!staffName || !staffName.trim()) return 0;
+  const normStaffName = staffName.trim().toLowerCase();
+
+  const processedAssignmentIds = new Set<string>();
+  const processedUniqueKeys = new Set<string>();
+  let activeCount = 0;
+
+  // 1. Direct staff assignments
+  (staffAssignments || []).forEach((sa: any) => {
+    if (!sa || sa.assignment_status === 'Cancelled') return;
+    if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return;
+
+    const currentStaffStatus = (sa.task_status || 'Assigned Crew').trim().toLowerCase();
+    if (!FINISHED_STAFF_TASK_STATUSES.includes(currentStaffStatus)) {
+      activeCount++;
+      if (sa.assignment_id) processedAssignmentIds.add(sa.assignment_id);
+      const key = `${sa.order_id}_${sa.assignment_id || 'asst'}_${sa.event_id || 'ev'}_${normStaffName}`;
+      processedUniqueKeys.add(key);
+    }
+  });
+
+  // 2. Events inside leads
+  (leads || []).forEach((lead: any) => {
+    const order = (orders || []).find((o: any) => o.lead_id === lead.lead_id);
+    const orderId = order?.order_id || `OR-${lead.lead_id?.replace(/^LD-?/, '')}`;
+    let hasEventAssignment = false;
+
+    if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
+      lead.events.forEach((ev: any, evIdx: number) => {
+        const assignedNames = ev.assigned_staff_names 
+          ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) 
+          : [];
+        if (assignedNames.includes(normStaffName)) {
+          hasEventAssignment = true;
+          const sa = (staffAssignments || []).find((s: any) => {
+            if (s.order_id !== orderId) return false;
+            if ((s.staff_name || '').toLowerCase() !== normStaffName) return false;
+            if (s.event_id && ev.id && s.event_id !== ev.id) return false;
+            return true;
+          });
+
+          if (sa && processedAssignmentIds.has(sa.assignment_id)) return;
+
+          const assignmentId = sa?.assignment_id || '';
+          const evIdentifier = ev.id || `evt_${evIdx}`;
+          const uniqueKey = assignmentId 
+            ? `${orderId}_${assignmentId}_${evIdentifier}_${normStaffName}`
+            : `${orderId}_${evIdentifier}_crew_${normStaffName}`;
+
+          if (processedUniqueKeys.has(uniqueKey)) return;
+
+          const saStatus = (sa as any)?.task_status;
+          const currentStaffStatus = (saStatus || 'Assigned Crew').trim().toLowerCase();
+          if (!FINISHED_STAFF_TASK_STATUSES.includes(currentStaffStatus)) {
+            activeCount++;
+            processedUniqueKeys.add(uniqueKey);
+            if (assignmentId) processedAssignmentIds.add(assignmentId);
+          }
+        }
+      });
+    }
+
+    if (!hasEventAssignment) {
+      const op = (operations || []).find((o: any) => o.order_id === orderId || o.order_id === lead.lead_id);
+      const isAssignedInOp = op && (
+        (op.photographer_assigned || '').toLowerCase() === normStaffName ||
+        (op.videographer_assigned || '').toLowerCase() === normStaffName ||
+        (op.drone_operator_assigned || '').toLowerCase() === normStaffName ||
+        (op.assistant_assigned || '').toLowerCase() === normStaffName
+      );
+      const hasStaffAssignment = (staffAssignments || []).some((sa: any) => 
+        sa.order_id === orderId && 
+        (sa.staff_name || '').trim().toLowerCase() === normStaffName &&
+        sa.assignment_status !== 'Cancelled'
+      );
+
+      if (isAssignedInOp || hasStaffAssignment) {
+        const sa = (staffAssignments || []).find((s: any) => s.order_id === orderId && (s.staff_name || '').trim().toLowerCase() === normStaffName);
+        if (sa && processedAssignmentIds.has(sa.assignment_id)) return;
+
+        const assignmentId = sa?.assignment_id || '';
+        const uniqueKey = assignmentId 
+          ? `${orderId}_${assignmentId}_gen_${normStaffName}`
+          : `${orderId}_gen_crew_${normStaffName}`;
+
+        if (processedUniqueKeys.has(uniqueKey)) return;
+
+        const currentStaffStatus = ((sa as any)?.task_status || 'Assigned Crew').trim().toLowerCase();
+        if (!FINISHED_STAFF_TASK_STATUSES.includes(currentStaffStatus)) {
+          activeCount++;
+          processedUniqueKeys.add(uniqueKey);
+          if (assignmentId) processedAssignmentIds.add(assignmentId);
+        }
+      }
+    }
+  });
+
+  return activeCount;
+}
+
 

@@ -430,7 +430,14 @@ export const getStaffCurrentPassword = (
 
   const staffId = member.staff_id;
   const staffEmail = (member.email || '').trim().toLowerCase();
-  const rawMobile = member.mobile || '';
+  let memberWhatsapp = member.whatsapp_number || '';
+  if (!memberWhatsapp && typeof member.notes === 'string') {
+    try {
+      const parsed = JSON.parse(member.notes);
+      if (parsed.whatsapp_number) memberWhatsapp = parsed.whatsapp_number;
+    } catch (e) {}
+  }
+  const rawMobile = member.mobile || memberWhatsapp || '';
   const mobileDigits = rawMobile.replace(/\D/g, '');
   const mobileLast10 = mobileDigits.length >= 10 ? mobileDigits.slice(-10) : mobileDigits;
   const staffName = (member.name || '').trim().toLowerCase();
@@ -467,9 +474,13 @@ export const getStaffCurrentPassword = (
   if (mobileLast10 && mobileLast10.length >= 7) {
     const u = usersList.find(x => {
       if (!x) return false;
-      const uMobileDigits = (x.mobile || x.phone || '').replace(/\D/g, '');
+      const uMobileDigits = (x.mobile || x.phone || x.name || '').replace(/\D/g, '');
       const uMobileLast10 = uMobileDigits.length >= 10 ? uMobileDigits.slice(-10) : uMobileDigits;
-      return uMobileDigits === mobileDigits || (uMobileLast10 && uMobileLast10 === mobileLast10);
+      const uEmail = (x.email || '').toLowerCase();
+      return (
+        (uMobileDigits && (uMobileDigits === mobileDigits || (uMobileLast10 && uMobileLast10 === mobileLast10))) ||
+        (mobileDigits.length >= 8 && uEmail.includes(mobileDigits.slice(0, 8)))
+      );
     });
     const pwd = checkUser(u);
     if (pwd) return pwd;
@@ -1093,7 +1104,16 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [staff, setStaff] = useState<Staff[]>([]);
   const [productionStaff, setProductionStaff] = useState<Staff[]>([]);
 
-  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [equipment, setEquipment] = useState<Equipment[]>(() => {
+    try {
+      const saved = localStorage.getItem('erp_equipment');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (_) {}
+    return INITIAL_EQUIPMENT;
+  });
 
   const [staffAssignments, setStaffAssignments] = useState<StaffAssignment[]>([]);
 
@@ -2461,7 +2481,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
             return { success: true };
           }
-          console.warn(`Supabase Insert error in ${table}:`, error?.message || String(error));
+          console.error(`[Server DB insert Error] ${table}:`, error?.message || String(error));
           updateDiagnosticMetric('insert', 'fail', error?.message || String(error));
           return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
         } else {
@@ -2777,7 +2797,7 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           if (['activity_logs', 'notifications', 'analytics_snapshots'].includes(table)) {
             return { success: true };
           }
-          console.warn(`[pushUpdate ERROR] in ${table}:`, error?.message || String(error));
+          console.error(`[Server DB update Error] ${table}:`, error?.message || String(error));
           updateDiagnosticMetric('update', 'fail', error?.message || String(error));
           return { success: false, error: `[Table: ${table}] ${error?.message || String(error)}` };
         } else {
@@ -3240,8 +3260,11 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
             const finalPkgAmt = l.Final_Package_Amount ?? l.final_package_amount ?? finalQuoteAmt;
             const cleanLostReason = l.Lost_Reason || l.lost_reason || l.LostReason || l.lostReason || '';
             const cleanLostNotes = l.Lost_Notes || l.lost_notes || l.LostNotes || l.lostNotes || '';
+            const cleanEventName = (l.custom_event_name || l.event_name || '').toString().trim();
             return { 
               ...l, 
+              event_name: cleanEventName,
+              custom_event_name: cleanEventName,
               Lost_Reason: cleanLostReason,
               lost_reason: cleanLostReason,
               Lost_Notes: cleanLostNotes,
@@ -3402,18 +3425,20 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (dbNotifications) {
           setNotifications(dbNotifications.map(mapNotificationFromDb));
         }
-        if (dbEquipment) {
-          setEquipment(dbEquipment.map((item: any) => ({
+        if (dbEquipment && dbEquipment.length > 0) {
+          const mappedEquipment = dbEquipment.map((item: any) => ({
             ...item,
-            equipment_id: mapFromDbEquipmentId(item.equipment_id),
-            equipment_name: item.equipment_name || item.Equipment_Name || item.name || 'Unnamed Gear',
-            brand: item.brand || item.Brand || '',
-            equipment_type: item.equipment_type || item.Equipment_Category || item.category || 'Camera',
-            status: item.status || item.Equipment_Status || 'Active',
-            serial_number: item.serial_number || item.Serial_Number || '',
-            purchase_date: item.purchase_date || item.Purchase_Date || '',
-            notes: item.notes || item.Notes || ''
-          })));
+            equipment_id: mapFromDbEquipmentId(item.equipment_id || item.id),
+            equipment_name: item.equipment_name || 'Unnamed Gear',
+            equipment_type: item.equipment_type || 'Other'
+          }));
+          setEquipment(mappedEquipment);
+          try {
+            localStorage.setItem('erp_equipment', JSON.stringify(mappedEquipment));
+          } catch (_) {}
+        } else if (dbEquipment && dbEquipment.length === 0) {
+          setEquipment([]);
+        } else {
         }
         if (dbLeadPackages) setLeadPackages(dbLeadPackages);
         
@@ -5032,15 +5057,22 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (!teamMembersJson && edInclusions) {
           teamMembersJson = (leadEventsList && leadEventsList.length > 0)
             ? leadEventsList.map(event => {
-                const eventKey = `${pkg.package_id}_${event.id}`;
-                const list = edInclusions[eventKey] !== undefined ? edInclusions[eventKey] : (edInclusions[pkg.package_id] || []);
+                const evId = String(event.id || event.event_id || '');
+                const eventKey = `${pkg.package_id}_${evId}`;
+                const list = edInclusions[eventKey] !== undefined
+                  ? edInclusions[eventKey]
+                  : (edInclusions[evId] !== undefined
+                      ? edInclusions[evId]
+                      : (leadEventsList.length === 1 ? (edInclusions[pkg.package_id] || []) : []));
                 return {
+                  event_id: evId,
                   event_name: event.event_name || event.event_type || 'Unnamed Event',
                   team_members: list.filter(Boolean)
                 };
               })
             : [
                 {
+                  event_id: 'default',
                   event_name: "General",
                   team_members: (edInclusions[pkg.package_id] || []).filter(Boolean)
                 }
@@ -5050,13 +5082,22 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         if (!deliverablesJson && edDeliverables) {
           deliverablesJson = (leadEventsList && leadEventsList.length > 0)
             ? leadEventsList.map(event => {
+                const evId = String(event.id || event.event_id || '');
+                const eventKey = `${pkg.package_id}_${evId}`;
+                const list = edDeliverables[eventKey] !== undefined
+                  ? edDeliverables[eventKey]
+                  : (edDeliverables[evId] !== undefined
+                      ? edDeliverables[evId]
+                      : (leadEventsList.length === 1 ? (edDeliverables[pkg.package_id] || []) : []));
                 return {
+                  event_id: evId,
                   event_name: event.event_name || event.event_type || 'Unnamed Event',
-                  deliverables: (edDeliverables[pkg.package_id] || []).filter(Boolean)
+                  deliverables: list.filter(Boolean)
                 };
               })
             : [
                 {
+                  event_id: 'default',
                   event_name: "General",
                   deliverables: (edDeliverables[pkg.package_id] || []).filter(Boolean)
                 }
@@ -5068,6 +5109,15 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
           ...(teamMembersJson ? { Team_Members_Included: teamMembersJson } : {}),
           ...(deliverablesJson ? { deliverables_descriptionn: deliverablesJson } : {})
         };
+
+        console.log(`[RoleContext saveLeadPackages] Package payload for 'lead_packages':`, {
+          leadId,
+          packageId: pkg.package_id,
+          Team_Members_Included: updatedPkgData.Team_Members_Included,
+          deliverables_descriptionn: updatedPkgData.deliverables_descriptionn,
+          isTeamArray: Array.isArray(updatedPkgData.Team_Members_Included),
+          isDelArray: Array.isArray(updatedPkgData.deliverables_descriptionn)
+        });
 
         if (existingPkg) {
           await pushUpdate('lead_packages', 'lead_package_id', existingPkg.lead_package_id, {
@@ -8300,6 +8350,9 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         try {
           if (targetMobile) {
             await pushUpdate('users', 'mobile', targetMobile, { password: pwd });
+          }
+          if (targetEmail) {
+            await pushUpdate('users', 'email', targetEmail, { password: pwd });
           }
           setUsers((prev) => prev.map(u => {
             const cleanM = cleanPhone(targetMobile);

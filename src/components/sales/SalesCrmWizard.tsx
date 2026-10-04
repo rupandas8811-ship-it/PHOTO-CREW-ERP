@@ -15,7 +15,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, INITIAL_PACKAGES, SalesModuleProps, sortEventsAscending, normalizeCrmArray } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, INITIAL_PACKAGES, SalesModuleProps, sortEventsAscending, normalizeCrmArray, getStep3FinalQuotationAmount } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 import { TimePicker12Hour } from '../TimePicker12Hour';
 
@@ -199,7 +199,10 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
     showDuplicateWarning,
     duplicateCustomerInfo,
     handleDuplicateContinue,
-    handleDuplicateCancel
+    handleDuplicateCancel,
+    leadPackages = props.leadPackages,
+    dynamicFinalAmt = props.dynamicFinalAmt,
+    quotations = props.quotations
   } = props;
 
   const leadSourcesList = props.LEAD_SOURCES || LEAD_SOURCES || [];
@@ -276,10 +279,19 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                     ? Number(wizardLeadData.advance_received)
                     : 0)));
 
+      const step3Amount = getStep3FinalQuotationAmount(leadForConfirmation, {
+        dynamicFinalAmt,
+        wizardLeadData,
+        quotations,
+        leads,
+        orders,
+        leadPackages
+      });
+
       setConfirmForm({
         ...confirmForm,
         package_name: packages?.find((p: any) => String(p.package_id) === String(activePkgId))?.package_name || activePkgId,
-        quotation_amount: finalTotal || Number(leadForConfirmation.Final_Quotation_Amount) || Number(leadForConfirmation.budget) || 0,
+        quotation_amount: step3Amount || Number(leadForConfirmation.Final_Quotation_Amount) || 0,
         advance_received: calcAdvance,
         event_date: (activeEventsList[0]?.event_date) || leadForConfirmation.event_date || today,
         event_time: (activeEventsList[0]?.event_time) || leadForConfirmation.event_time || ''
@@ -1059,8 +1071,6 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                     activeEventsList.map((event, eventIdx) => {
                                       const isMulti = activeEventsList.length > 1;
                                       const evId = String(event.id || event.event_id || `EV-${eventIdx + 1}`);
-                                      const evAltId = String(event.event_id || event.id || `EVT-0${eventIdx + 1}`);
-                                      const evIdxKey = `EV-${eventIdx + 1}`;
                                       const eventKey = `${selectedPkgId}_${evId}`;
                                       const altKey = `Custom Package_${evId}`;
                                       const customKey = `custom_package_${evId}`;
@@ -1079,25 +1089,9 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                 ? editableInclusions[customKey]
                                                 : (editableInclusions[evId] !== undefined
                                                     ? editableInclusions[evId]
-                                                    : (editableInclusions[`${selectedPkgId}_${evAltId}`] !== undefined
-                                                        ? editableInclusions[`${selectedPkgId}_${evAltId}`]
-                                                        : (editableInclusions[`Custom Package_${evAltId}`] !== undefined
-                                                            ? editableInclusions[`Custom Package_${evAltId}`]
-                                                            : (editableInclusions[`custom_package_${evAltId}`] !== undefined
-                                                                ? editableInclusions[`custom_package_${evAltId}`]
-                                                                : (editableInclusions[evAltId] !== undefined
-                                                                    ? editableInclusions[evAltId]
-                                                                    : (editableInclusions[`${selectedPkgId}_${evIdxKey}`] !== undefined
-                                                                        ? editableInclusions[`${selectedPkgId}_${evIdxKey}`]
-                                                                        : (editableInclusions[`Custom Package_${evIdxKey}`] !== undefined
-                                                                            ? editableInclusions[`Custom Package_${evIdxKey}`]
-                                                                            : (editableInclusions[`custom_package_${evIdxKey}`] !== undefined
-                                                                                ? editableInclusions[`custom_package_${evIdxKey}`]
-                                                                                : (editableInclusions[evIdxKey] !== undefined
-                                                                                    ? editableInclusions[evIdxKey]
-                                                                                    : (parsedDirectTm !== null
-                                                                                        ? parsedDirectTm
-                                                                                        : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))))))))))))));
+                                                    : (parsedDirectTm !== null
+                                                        ? parsedDirectTm
+                                                        : (isMulti ? [] : (inclusionsList.length > 0 ? [...inclusionsList] : []))))));
                                       const eventInclusions = normalizeCrmArray<string>(rawEventInclusions);
 
                                       const directDel = event.deliverables || (event as any).deliverables_list || (event as any).Add_Deliverable || (event as any).deliverables_description;
@@ -1114,25 +1108,9 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                                 ? editableDeliverables[customKey]
                                                 : (editableDeliverables[evId] !== undefined
                                                     ? editableDeliverables[evId]
-                                                    : (editableDeliverables[`${selectedPkgId}_${evAltId}`] !== undefined
-                                                        ? editableDeliverables[`${selectedPkgId}_${evAltId}`]
-                                                        : (editableDeliverables[`Custom Package_${evAltId}`] !== undefined
-                                                            ? editableDeliverables[`Custom Package_${evAltId}`]
-                                                            : (editableDeliverables[`custom_package_${evAltId}`] !== undefined
-                                                                ? editableDeliverables[`custom_package_${evAltId}`]
-                                                                : (editableDeliverables[evAltId] !== undefined
-                                                                    ? editableDeliverables[evAltId]
-                                                                    : (editableDeliverables[`${selectedPkgId}_${evIdxKey}`] !== undefined
-                                                                        ? editableDeliverables[`${selectedPkgId}_${evIdxKey}`]
-                                                                        : (editableDeliverables[`Custom Package_${evIdxKey}`] !== undefined
-                                                                            ? editableDeliverables[`Custom Package_${evIdxKey}`]
-                                                                            : (editableDeliverables[`custom_package_${evIdxKey}`] !== undefined
-                                                                                ? editableDeliverables[`custom_package_${evIdxKey}`]
-                                                                                : (editableDeliverables[evIdxKey] !== undefined
-                                                                                    ? editableDeliverables[evIdxKey]
-                                                                                    : (parsedDirectDel !== null
-                                                                                        ? parsedDirectDel
-                                                                                        : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))))))))))))));
+                                                    : (parsedDirectDel !== null
+                                                        ? parsedDirectDel
+                                                        : (isMulti ? [] : (deliverablesList.length > 0 ? [...deliverablesList] : []))))));
                                       const eventDeliverables = normalizeCrmArray<string>(rawEventDeliverables);
 
                                     const updateInclusionsForEvent = (newList: string[]) => {
@@ -1141,15 +1119,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                         [eventKey]: newList,
                                         [altKey]: newList,
                                         [customKey]: newList,
-                                        [evId]: newList,
-                                        [`${selectedPkgId}_${evAltId}`]: newList,
-                                        [`Custom Package_${evAltId}`]: newList,
-                                        [`custom_package_${evAltId}`]: newList,
-                                        [evAltId]: newList,
-                                        [`${selectedPkgId}_${evIdxKey}`]: newList,
-                                        [`Custom Package_${evIdxKey}`]: newList,
-                                        [`custom_package_${evIdxKey}`]: newList,
-                                        [evIdxKey]: newList
+                                        [evId]: newList
                                       };
                                       if (!isMulti) {
                                         updated[selectedPkgId] = newList;
@@ -1157,6 +1127,12 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                         updated['custom_package'] = newList;
                                       }
                                       setEditableInclusions(updated);
+                                      if (crmEvents && crmEvents.length > 0) {
+                                        setCrmEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, team_members: newList, inclusions: newList } : e)));
+                                      }
+                                      if (createEvents && createEvents.length > 0) {
+                                        setCreateEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, team_members: newList, inclusions: newList } : e)));
+                                      }
                                       saveStep3DataRealtime(updated, editableDeliverables);
                                     };
 
@@ -1166,15 +1142,7 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                         [eventKey]: newList,
                                         [altKey]: newList,
                                         [customKey]: newList,
-                                        [evId]: newList,
-                                        [`${selectedPkgId}_${evAltId}`]: newList,
-                                        [`Custom Package_${evAltId}`]: newList,
-                                        [`custom_package_${evAltId}`]: newList,
-                                        [evAltId]: newList,
-                                        [`${selectedPkgId}_${evIdxKey}`]: newList,
-                                        [`Custom Package_${evIdxKey}`]: newList,
-                                        [`custom_package_${evIdxKey}`]: newList,
-                                        [evIdxKey]: newList
+                                        [evId]: newList
                                       };
                                       if (!isMulti) {
                                         updated[selectedPkgId] = newList;
@@ -1182,6 +1150,12 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                         updated['custom_package'] = newList;
                                       }
                                       setEditableDeliverables(updated);
+                                      if (crmEvents && crmEvents.length > 0) {
+                                        setCrmEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, deliverables: newList, deliverables_list: newList } : e)));
+                                      }
+                                      if (createEvents && createEvents.length > 0) {
+                                        setCreateEvents(prev => prev.map(e => (String(e.id || e.event_id) === evId ? { ...e, deliverables: newList, deliverables_list: newList } : e)));
+                                      }
                                       saveStep3DataRealtime(editableInclusions, updated);
                                     };
 
@@ -1607,10 +1581,19 @@ export const SalesCrmWizard: React.FC<SalesCrmWizardProps> = (props) => {
                                             ? Number(wizardLeadData.advance_received) 
                                             : 0)));
                               
+                              const step3Amount = getStep3FinalQuotationAmount(selectedLead, {
+                                dynamicFinalAmt,
+                                wizardLeadData,
+                                quotations,
+                                leads,
+                                orders,
+                                leadPackages
+                              });
+                              
                               setConfirmForm({
                                 ...confirmForm,
                                 package_name: packages?.find((p) => String(p.package_id) === String(wizardLeadData.selected_package_id || selectedLead.Select_Package_Option))?.package_name || wizardLeadData.selected_package_id || selectedLead.Select_Package_Option || '',
-                                quotation_amount: Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || Number(selectedLead.Final_Package_Amount) || Number((selectedLead as any).final_package_amount) || Number(wizardLeadData.final_amount) || Number((selectedLead as any).final_amount) || 0,
+                                quotation_amount: step3Amount || Number(selectedLead.Final_Quotation_Amount) || Number((selectedLead as any).final_quotation_amount) || 0,
                                 advance_received: calcAdvance,
                                 event_date: selectedLead.event_date || today,
                                 event_time: selectedLead.event_time || ''

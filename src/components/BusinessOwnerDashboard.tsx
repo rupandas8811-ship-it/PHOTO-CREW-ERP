@@ -43,6 +43,7 @@ import {
   History
 } from 'lucide-react';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
+import { calculateAllPendingRecords } from '../utils/paymentCalculations';
 import { OwnerStaffPerformanceReport } from './OwnerModule';
 import { BusinessOwnerCardDetailModal } from './BusinessOwnerCardDetailModal';
 import { PaymentHistoryModal } from './PaymentHistoryModal';
@@ -73,6 +74,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     production, 
     editorAssignments,
     notifications,
+    paymentHistory,
     currentUserName, 
     currentRole,
     updateOrderStage, 
@@ -949,13 +951,14 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     };
   }, [unifiedPipeline, productionProjects]);
 
+  // Unified pending payment records matching Sales Dashboard Payment Pending exactly
+  const allPendingRecords = useMemo(() => {
+    return calculateAllPendingRecords(orders, leads, payments, paymentHistory);
+  }, [orders, leads, payments, paymentHistory]);
+
   const outstandingPaymentTotal = useMemo(() => {
-    return filteredOrders.reduce((sum, o) => {
-      const pay = payments.find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
-      if (pay) return sum + (pay.balance_due || 0);
-      return sum + (o.balance_amount || 0);
-    }, 0);
-  }, [filteredOrders, payments]);
+    return allPendingRecords.reduce((sum, r) => sum + (r.paymentStatus === 'Fully Paid' ? 0 : r.remainingAmount), 0);
+  }, [allPendingRecords]);
 
   // Clickable card modal state
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -972,13 +975,16 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     if (selectedCard === 'overview_revenue') return filteredOrders;
     if (selectedCard === 'overview_active') return filteredOrders.filter(o => o.current_stage !== 'Order Closed' && o.current_stage !== 'Closed' && o.current_stage !== 'Event Cancelled');
     if (selectedCard === 'overview_approval') return waitingApprovalOrders;
-    if (selectedCard === 'overview_outstanding') return filteredOrders.map(o => {
-      const pay = payments.find(p => p.order_id === o.order_id || p.lead_id === o.lead_id);
-      const totalRev = o.quotation_amount || o.advance_received || 0;
-      const received = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (o.advance_received || 0);
-      const outstanding = pay ? (pay.balance_due || 0) : (o.balance_amount || Math.max(0, totalRev - received));
-      return { ...o, totalRevenue: totalRev, paymentReceived: received, outstandingAmount: outstanding };
-    }).filter(item => item.outstandingAmount > 0);
+    if (selectedCard === 'overview_outstanding') return allPendingRecords.filter(r => r.remainingAmount > 0).map(r => ({
+      ...r.order,
+      order_id: r.orderId,
+      customer_name: r.customerName,
+      event_type: r.eventType,
+      event_date: r.eventDate,
+      totalRevenue: r.finalPackageAmount,
+      paymentReceived: r.totalPaidAmount,
+      outstandingAmount: r.remainingAmount
+    }));
 
     // SALES CARDS
     if (selectedCard === 'sales_total_leads' || selectedCard === 'overview_sales') {
@@ -2684,11 +2690,11 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
                   }}
                 >
                   {dayEvents.map((ev, eIdx) => {
-                    const displayName = ev.eventName || ev.title || ev.customerName || 'Event';
+                    const displayName = ev.customerName || ev.rawOrder?.customer_name || ev.rawLead?.customer_name || ev.raw?.customer_name || ev.raw?.client_name || 'Client';
                     return (
                       <div
                         key={ev.id || eIdx}
-                        className="w-full truncate shrink-0 text-[8px] sm:text-[9.5px] leading-tight px-1 py-0.5 rounded bg-zinc-900/95 text-zinc-300 border border-zinc-800/80 font-medium text-left hover:text-white hover:border-zinc-700"
+                        className="w-full truncate shrink-0 text-[8px] sm:text-[9.5px] leading-tight px-1 py-0.5 rounded bg-zinc-900/95 text-zinc-300 border border-zinc-800/80 font-medium text-left hover:text-white hover:border-zinc-700 cursor-pointer"
                         title={displayName}
                       >
                         {displayName}
@@ -4255,7 +4261,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
                         >
                           <option value="" disabled>More ▾</option>
                           <option value="payment_history">Payment Details</option>
-                          <option value="add_note">Add Note</option>
+                          <option value="add_note">VIEW/ADD NOTE</option>
                         </select>
                       </div>
                     </td>
@@ -4865,6 +4871,9 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
   event,
   onClose
 }) => {
+  const { leads, staffAssignments } = useRole();
+  const [selectedIdx, setSelectedIdx] = useState(0);
+
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
@@ -4887,6 +4896,201 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
   const eventList: any[] = event?.events ? event.events : [event];
   const dateStr = event?.date || eventList[0]?.eventDate || '';
 
+  const formatReportingDate = (dateVal: string | null | undefined): string => {
+    if (!dateVal || dateVal === '—' || dateVal === 'null' || dateVal === 'undefined') return '—';
+    const clean = String(dateVal).split('T')[0].trim();
+    const parts = clean.split(/[-/]/);
+    if (parts.length === 3) {
+      let y = 0, m = 0, d = 0;
+      if (parts[0].length === 4) {
+        y = parseInt(parts[0], 10);
+        m = parseInt(parts[1], 10) - 1;
+        d = parseInt(parts[2], 10);
+      } else if (parts[2].length === 4) {
+        d = parseInt(parts[0], 10);
+        m = parseInt(parts[1], 10) - 1;
+        y = parseInt(parts[2], 10);
+      }
+      if (y && !isNaN(m) && d) {
+        const dt = new Date(y, m, d);
+        if (!isNaN(dt.getTime())) {
+          const dayStr = String(d).padStart(2, '0');
+          const monthShort = dt.toLocaleString('en-US', { month: 'short' });
+          return `${dayStr} ${monthShort} ${y}`;
+        }
+      }
+    }
+    return clean;
+  };
+
+  const getReportingDate = (ev: any): string => {
+    let rawDate: string | null = null;
+    if (ev?.rawEvent?.Reporting_date && String(ev.rawEvent.Reporting_date).trim() && ev.rawEvent.Reporting_date !== 'null') {
+      rawDate = String(ev.rawEvent.Reporting_date).trim();
+    } else if (ev?.rawEvent?.reporting_date && String(ev.rawEvent.reporting_date).trim() && ev.rawEvent.reporting_date !== 'null') {
+      rawDate = String(ev.rawEvent.reporting_date).trim();
+    } else if (ev?.rawLead?.Reporting_date && String(ev.rawLead.Reporting_date).trim() && ev.rawLead.Reporting_date !== 'null') {
+      rawDate = String(ev.rawLead.Reporting_date).trim();
+    } else if (ev?.rawLead?.reporting_date && String(ev.rawLead.reporting_date).trim() && ev.rawLead.reporting_date !== 'null') {
+      rawDate = String(ev.rawLead.reporting_date).trim();
+    }
+
+    if (!rawDate) {
+      const effLeadId = ev.rawLead?.lead_id || ev.rawOrder?.lead_id || ev.orderId;
+      const lObj = leads?.find(l => (effLeadId && (l.lead_id === effLeadId || l.order_id === effLeadId)));
+      if (lObj?.events && Array.isArray(lObj.events)) {
+        const match = lObj.events.find((e: any) =>
+          (ev?.id && (e.id === ev.id || e.event_id === ev.id)) ||
+          (ev?.eventName && (e.event_name === ev.eventName || e.custom_event_name === ev.eventName))
+        );
+        if (match?.Reporting_date && String(match.Reporting_date).trim() && match.Reporting_date !== 'null') {
+          rawDate = String(match.Reporting_date).trim();
+        } else if (match?.reporting_date && String(match.reporting_date).trim() && match.reporting_date !== 'null') {
+          rawDate = String(match.reporting_date).trim();
+        }
+      }
+      if (!rawDate && lObj) {
+        if (lObj.Reporting_date && String(lObj.Reporting_date).trim() && lObj.Reporting_date !== 'null') {
+          rawDate = String(lObj.Reporting_date).trim();
+        } else if (lObj.reporting_date && String(lObj.reporting_date).trim() && lObj.reporting_date !== 'null') {
+          rawDate = String(lObj.reporting_date).trim();
+        }
+      }
+    }
+
+    if (!rawDate) return '—';
+    return formatReportingDate(rawDate);
+  };
+
+  const getReportingTime = (ev: any): string => {
+    let rawTime: string | null = null;
+    if (ev?.rawEvent?.reporting_time && String(ev.rawEvent.reporting_time).trim() && ev.rawEvent.reporting_time !== 'null') {
+      rawTime = String(ev.rawEvent.reporting_time).trim();
+    } else if (ev?.rawEvent?.Reporting_time && String(ev.rawEvent.Reporting_time).trim() && ev.rawEvent.Reporting_time !== 'null') {
+      rawTime = String(ev.rawEvent.Reporting_time).trim();
+    } else if (ev?.rawLead?.reporting_time && String(ev.rawLead.reporting_time).trim() && ev.rawLead.reporting_time !== 'null') {
+      rawTime = String(ev.rawLead.reporting_time).trim();
+    }
+
+    if (!rawTime) {
+      const effLeadId = ev.rawLead?.lead_id || ev.rawOrder?.lead_id || ev.orderId;
+      const lObj = leads?.find(l => (effLeadId && (l.lead_id === effLeadId || l.order_id === effLeadId)));
+      if (lObj?.events && Array.isArray(lObj.events)) {
+        const match = lObj.events.find((e: any) =>
+          (ev?.id && (e.id === ev.id || e.event_id === ev.id)) ||
+          (ev?.eventName && (e.event_name === ev.eventName || e.custom_event_name === ev.eventName))
+        );
+        if (match?.reporting_time && String(match.reporting_time).trim() && match.reporting_time !== 'null') {
+          rawTime = String(match.reporting_time).trim();
+        }
+      }
+      if (!rawTime && lObj?.reporting_time && String(lObj.reporting_time).trim() && lObj.reporting_time !== 'null') {
+        rawTime = String(lObj.reporting_time).trim();
+      }
+    }
+
+    if (!rawTime || rawTime === '—' || rawTime === 'N/A') return '—';
+    return formatTime12Hour(rawTime);
+  };
+
+  const getLocation = (ev: any): string => {
+    if (ev.location && ev.location !== '—' && ev.location !== 'N/A') return ev.location;
+    if (ev.rawEvent?.location && ev.rawEvent.location !== '—' && ev.rawEvent.location !== 'N/A') return ev.rawEvent.location;
+    if (ev.rawEvent?.venue && ev.rawEvent.venue !== '—' && ev.rawEvent.venue !== 'N/A') return ev.rawEvent.venue;
+    if (ev.rawEvent?.event_location && ev.rawEvent.event_location !== '—' && ev.rawEvent.event_location !== 'N/A') return ev.rawEvent.event_location;
+    if (ev.rawOrder?.event_location && ev.rawOrder.event_location !== '—' && ev.rawOrder.event_location !== 'N/A') return ev.rawOrder.event_location;
+    if (ev.rawLead?.event_location && ev.rawLead.event_location !== '—' && ev.rawLead.event_location !== 'N/A') return ev.rawLead.event_location;
+    if (ev.venue && ev.venue !== '—' && ev.venue !== 'N/A') return ev.venue;
+    return '—';
+  };
+
+  const getAssignedRole = (ev: any): string => {
+    const effOrderId = ev.orderId || ev.rawOrder?.order_id;
+    const effLeadId = ev.rawLead?.lead_id || ev.rawOrder?.lead_id || effOrderId;
+    const roles: string[] = [];
+
+    const matchingSAs = (staffAssignments || []).filter(sa => {
+      if (sa.assignment_status === 'Cancelled' || sa.assignment_status === 'Rejected') return false;
+      return (effOrderId && (sa.order_id === effOrderId || sa.lead_id === effOrderId)) ||
+             (effLeadId && (sa.lead_id === effLeadId || sa.order_id === effLeadId));
+    });
+
+    matchingSAs.forEach(sa => {
+      const r = (sa.staff_role || (sa as any).role || '').trim();
+      if (r && !roles.includes(r)) roles.push(r);
+    });
+
+    return roles.length > 0 ? roles.join(', ') : 'Not assigned';
+  };
+
+  const getEquipmentDetails = (ev: any): string[] => {
+    const effOrderId = ev.orderId || ev.rawOrder?.order_id;
+    const effLeadId = ev.rawLead?.lead_id || ev.rawOrder?.lead_id || effOrderId;
+    const eqSet = new Set<string>();
+
+    const extractEq = (rawEq: any) => {
+      if (!rawEq) return;
+      if (Array.isArray(rawEq)) {
+        rawEq.forEach((item: any) => {
+          if (typeof item === 'string' && item.trim()) {
+            const clean = item.trim();
+            if (clean.toLowerCase() !== 'none' && clean.toLowerCase() !== 'not assigned' && clean.toLowerCase() !== 'null' && clean.toLowerCase() !== 'undefined') {
+              eqSet.add(clean);
+            }
+          } else if (item && typeof item === 'object' && (item.name || item.equipment_name)) {
+            const clean = (item.name || item.equipment_name).trim();
+            if (clean) eqSet.add(clean);
+          }
+        });
+      } else if (typeof rawEq === 'string') {
+        const trimmed = rawEq.trim();
+        if (trimmed && trimmed.toLowerCase() !== 'none' && trimmed.toLowerCase() !== 'not assigned' && trimmed.toLowerCase() !== 'null' && trimmed.toLowerCase() !== 'undefined') {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((p: any) => {
+                if (typeof p === 'string' && p.trim()) eqSet.add(p.trim());
+                else if (p && typeof p === 'object' && (p.name || p.equipment_name)) eqSet.add((p.name || p.equipment_name).trim());
+              });
+              return;
+            }
+          } catch (_) {}
+          trimmed.split(',').forEach((s: string) => {
+            const c = s.trim();
+            if (c && c.toLowerCase() !== 'none' && c.toLowerCase() !== 'not assigned') eqSet.add(c);
+          });
+        }
+      }
+    };
+
+    const matchingSAs = (staffAssignments || []).filter(sa => {
+      if (sa.assignment_status === 'Cancelled' || sa.assignment_status === 'Rejected') return false;
+      return (effOrderId && (sa.order_id === effOrderId || sa.lead_id === effOrderId)) ||
+             (effLeadId && (sa.lead_id === effLeadId || sa.order_id === effLeadId));
+    });
+
+    matchingSAs.forEach(sa => {
+      extractEq(sa.equipment);
+      extractEq(sa.assigned_equipment);
+      extractEq(sa.equipment_details);
+    });
+
+    extractEq(ev.rawEvent?.assigned_equipment);
+    extractEq(ev.rawEvent?.equipment);
+
+    return Array.from(eqSet);
+  };
+
+  const activeEv = eventList[selectedIdx] || eventList[0];
+  const orderDisplayId = activeEv?.orderId || activeEv?.rawOrder?.order_id || activeEv?.rawLead?.lead_id || '—';
+  const custName = activeEv?.customerName || activeEv?.rawOrder?.customer_name || activeEv?.rawLead?.customer_name || '—';
+  const evType = activeEv?.rawEvent?.event_type || activeEv?.rawOrder?.event_type || activeEv?.eventName || 'Event';
+  const repDate = getReportingDate(activeEv);
+  const repTime = getReportingTime(activeEv);
+  const assignedRole = getAssignedRole(activeEv);
+  const eqList = getEquipmentDetails(activeEv);
+  const status = activeEv?.currentStatus || activeEv?.rawOrder?.current_stage || activeEv?.rawLead?.status || 'Confirmed';
+
   return createPortal(
     <div 
       className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-4 overflow-y-auto"
@@ -4895,21 +5099,22 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
       }}
     >
       <div 
-        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-5xl 2xl:max-w-7xl min-[1920px]:max-w-[1600px] min-[2560px]:max-w-[2000px] min-[3840px]:max-w-[2800px] p-5 md:p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-zinc-950 border border-zinc-800 rounded-2xl w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[1600px] p-4 sm:p-6 space-y-4 shadow-2xl relative animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-3 border-b border-zinc-850 shrink-0">
           <div>
-            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500">
+            <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-500 block">
               EVENT DETAILS
             </span>
-            <h3 className="text-base sm:text-lg font-black text-white mt-0.5 font-mono">
-              {dateStr || 'Selected Date'}
+            <h3 className="text-base sm:text-lg font-black text-white mt-0.5 font-mono flex items-center gap-2">
+              <CalendarIcon className="w-5 h-5 text-amber-500 shrink-0" />
+              <span>{formatDateDDMMYY(dateStr) || dateStr || 'Event Details'}</span>
             </h3>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs font-mono font-bold px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg select-none">
-              {eventList.length} EVENTS
+              {eventList.length} {eventList.length === 1 ? 'EVENT' : 'EVENTS'}
             </span>
             <button
               onClick={onClose}
@@ -4920,57 +5125,117 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Read-Only Table */}
-        <div className="overflow-y-auto flex-1">
-          <div className="overflow-x-auto w-full border border-zinc-850 rounded-xl bg-zinc-900/40">
-            <table className="w-full text-left border-collapse min-w-[700px]">
+        {/* Content Body: Responsive Table on Desktop/Tablet and Stacked Table on Mobile */}
+        <div className="overflow-y-auto flex-1 max-h-[calc(90vh-80px)] space-y-4">
+          {/* DESKTOP & TABLET: Full Table View */}
+          <div className="hidden md:block overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-900/40 shadow-inner">
+            <table className="w-full text-left border-collapse min-w-[900px]">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
-                  <th className="p-3.5 pl-4">Event Name</th>
-                  <th className="p-3.5">Event Date</th>
-                  <th className="p-3.5">Event Time</th>
-                  <th className="p-3.5">Customer</th>
-                  <th className="p-3.5">Assigned Staff</th>
-                  <th className="p-3.5">Status</th>
-                  <th className="p-3.5 pr-4">Target Delivery Date</th>
+                  <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[120px]">Order ID</th>
+                  <th className="p-3.5 text-left whitespace-nowrap min-w-[170px]">Customer Name</th>
+                  <th className="p-3.5 text-left whitespace-nowrap min-w-[150px]">Event Type</th>
+                  <th className="p-3.5 text-left whitespace-nowrap min-w-[130px]">Reporting Date</th>
+                  <th className="p-3.5 text-left whitespace-nowrap min-w-[120px]">Reporting Time</th>
+                  <th className="p-3.5 text-left whitespace-nowrap min-w-[170px]">Location</th>
+                  <th className="p-3.5 text-left whitespace-nowrap min-w-[150px]">Assigned Role</th>
+                  <th className="p-3.5 text-left whitespace-nowrap min-w-[180px]">Equipment Details</th>
+                  <th className="p-3.5 text-left whitespace-nowrap min-w-[120px]">Status</th>
+                  <th className="p-3.5 pr-4 text-center whitespace-nowrap min-w-[130px]">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-850/60 text-xs font-sans">
                 {eventList.map((ev, idx) => {
-                  const evName = ev.eventName || ev.rawOrder?.custom_event_name || ev.title || 'Event';
-                  const evDate = ev.eventDate || ev.rawOrder?.event_date || dateStr;
-                  const evTime = ev.rawOrder?.event_time || '10:00 AM';
-                  const custName = ev.customerName || ev.rawOrder?.customer_name || '—';
-                  const status = ev.currentStatus || ev.rawOrder?.current_stage || 'Active';
-                  const targetDel = ev.targetDeliveryDate || ev.rawOrder?.target_delivery_date || ev.rawProd?.target_delivery_date || ev.rawProd?.expected_delivery_date || ev.rawOrder?.delivery_target_date || ev.rawLead?.delivery_target_date || '—';
+                  const orderDisplayId = ev.orderId || ev.rawOrder?.order_id || ev.rawLead?.lead_id || '—';
+                  const custName = ev.customerName || ev.rawOrder?.customer_name || ev.rawLead?.customer_name || '—';
+                  const evType = ev.rawEvent?.event_type || ev.rawOrder?.event_type || ev.eventName || 'Event';
+                  const repDate = getReportingDate(ev);
+                  const repTime = getReportingTime(ev);
+                  const locationVal = getLocation(ev);
+                  const assignedRole = getAssignedRole(ev);
+                  const eqList = getEquipmentDetails(ev);
+                  const status = ev.currentStatus || ev.rawOrder?.current_stage || ev.rawLead?.status || 'Confirmed';
 
                   return (
-                    <tr 
-                      key={ev.id || idx}
-                      className="bg-zinc-950/20 select-text"
-                    >
-                      <td className="p-3.5 pl-4 font-bold text-zinc-100">
-                        {evName}
+                    <tr key={`dt_${ev.id || idx}`} className="bg-zinc-950/20 hover:bg-zinc-900/30 transition-colors select-text">
+                      {/* 1. Order ID */}
+                      <td className="p-3.5 pl-4 align-middle min-w-[120px]">
+                        <span className="font-mono text-amber-400 font-bold text-xs whitespace-nowrap inline-block">
+                          {orderDisplayId}
+                        </span>
                       </td>
-                      <td className="p-3.5 font-mono text-zinc-300">
-                        {evDate}
+
+                      {/* 2. Customer Name */}
+                      <td className="p-3.5 align-middle min-w-[170px]">
+                        <div className="font-bold text-white text-xs leading-snug break-words max-w-[220px]">
+                          {custName}
+                        </div>
                       </td>
-                      <td className="p-3.5 font-mono text-zinc-300">
-                        {formatTime12Hour(evTime)}
+
+                      {/* 3. Event Type */}
+                      <td className="p-3.5 align-middle min-w-[150px]">
+                        <div className="text-zinc-200 text-xs leading-snug">
+                          {evType}
+                        </div>
                       </td>
-                      <td className="p-3.5 text-zinc-200 font-medium">
-                        {custName}
+
+                      {/* 4. Reporting Date */}
+                      <td className="p-3.5 align-middle whitespace-nowrap min-w-[130px]">
+                        <span className="font-mono text-zinc-200 text-xs font-medium">
+                          {repDate}
+                        </span>
                       </td>
-                      <td className="p-3.5 font-sans">
-                        <AssignedStaffDropdown orderId={ev.rawOrder?.order_id || ev.orderId || ev.rawLead?.lead_id || ev.leadId} leadId={ev.rawLead?.lead_id || ev.leadId || ev.rawOrder?.lead_id} order={ev.rawOrder} lead={ev.rawLead} productionItem={ev.rawProd} />
+
+                      {/* 5. Reporting Time */}
+                      <td className="p-3.5 align-middle whitespace-nowrap min-w-[120px]">
+                        <span className="font-mono text-zinc-200 text-xs font-medium">
+                          {repTime}
+                        </span>
                       </td>
-                      <td className="p-3.5">
-                        <span className="inline-block px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold uppercase bg-zinc-850 text-amber-400 border border-zinc-750">
+
+                      {/* 6. Location */}
+                      <td className="p-3.5 align-middle min-w-[170px]">
+                        <div className="text-zinc-200 text-xs leading-snug break-words max-w-[220px]">
+                          {locationVal}
+                        </div>
+                      </td>
+
+                      {/* 7. Assigned Role */}
+                      <td className="p-3.5 align-middle min-w-[150px]">
+                        <div className="text-zinc-200 text-xs leading-snug">
+                          {assignedRole}
+                        </div>
+                      </td>
+
+                      {/* 8. Equipment Details */}
+                      <td className="p-3.5 align-middle min-w-[180px]">
+                        {eqList.length > 0 ? (
+                          <div className="space-y-0.5 text-xs text-zinc-200 font-medium">
+                            {eqList.map((eq, i) => (
+                              <div key={i} className="break-words">{eq}</div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-zinc-500 italic text-xs">No equipment assigned</span>
+                        )}
+                      </td>
+
+                      {/* 9. Status */}
+                      <td className="p-3.5 align-middle min-w-[120px]">
+                        <span className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-850 text-amber-300 border border-zinc-700 leading-tight text-center">
                           {status}
                         </span>
                       </td>
-                      <td className="p-3.5 pr-4 font-mono font-bold text-pink-400">
-                        {targetDel}
+
+                      {/* 10. Actions */}
+                      <td className="p-3.5 pr-4 align-middle text-center whitespace-nowrap min-w-[130px]">
+                        <AssignedStaffDropdown 
+                          orderId={ev.rawOrder?.order_id || ev.orderId || ev.rawLead?.lead_id || ev.leadId} 
+                          leadId={ev.rawLead?.lead_id || ev.leadId || ev.rawOrder?.lead_id} 
+                          order={ev.rawOrder} 
+                          lead={ev.rawLead} 
+                          productionItem={ev.rawProd} 
+                        />
                       </td>
                     </tr>
                   );
@@ -4978,13 +5243,155 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
               </tbody>
             </table>
           </div>
+
+          {/* MOBILE: Stacked Responsive Table / Card Layout */}
+          <div className="block md:hidden space-y-4">
+            {eventList.map((ev, idx) => {
+              const orderDisplayId = ev.orderId || ev.rawOrder?.order_id || ev.rawLead?.lead_id || '—';
+              const custName = ev.customerName || ev.rawOrder?.customer_name || ev.rawLead?.customer_name || '—';
+              const evType = ev.rawEvent?.event_type || ev.rawOrder?.event_type || ev.eventName || 'Event';
+              const repDate = getReportingDate(ev);
+              const repTime = getReportingTime(ev);
+              const locationVal = getLocation(ev);
+              const assignedRole = getAssignedRole(ev);
+              const eqList = getEquipmentDetails(ev);
+              const status = ev.currentStatus || ev.rawOrder?.current_stage || ev.rawLead?.status || 'Confirmed';
+
+              return (
+                <div key={`mb_${ev.id || idx}`} className="w-full bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-lg">
+                  {/* 1. Order ID */}
+                  <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2.5">
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                        Order ID
+                      </span>
+                      <span className="font-mono text-amber-400 font-bold text-sm break-all">
+                        {orderDisplayId}
+                      </span>
+                    </div>
+                    <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 shrink-0">
+                      {status}
+                    </span>
+                  </div>
+
+                  {/* 2. Customer Name */}
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                      Customer Name
+                    </span>
+                    <div className="font-bold text-white text-sm mt-0.5 break-words">
+                      {custName}
+                    </div>
+                  </div>
+
+                  {/* 3. Event Type */}
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                      Event Type
+                    </span>
+                    <div className="text-zinc-200 text-xs mt-0.5 font-medium">
+                      {evType}
+                    </div>
+                  </div>
+
+                  {/* 4 & 5. Reporting Date & Time */}
+                  <div className="grid grid-cols-2 gap-3 bg-zinc-900/60 p-3 rounded-xl border border-zinc-850">
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                        Reporting Date
+                      </span>
+                      <span className="font-mono text-zinc-200 text-xs font-semibold mt-0.5 block">
+                        {repDate}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                        Reporting Time
+                      </span>
+                      <span className="font-mono text-zinc-200 text-xs font-semibold mt-0.5 block">
+                        {repTime}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 6. Location */}
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                      Location
+                    </span>
+                    <div className="text-zinc-200 text-xs mt-0.5 font-medium break-words">
+                      {locationVal}
+                    </div>
+                  </div>
+
+                  {/* 7. Assigned Role */}
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                      Assigned Role
+                    </span>
+                    <div className="text-zinc-200 text-xs mt-0.5 font-medium">
+                      {assignedRole}
+                    </div>
+                  </div>
+
+                  {/* 7. Equipment Details */}
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                      Equipment Details
+                    </span>
+                    {eqList.length > 0 ? (
+                      <div className="mt-1 space-y-1 text-xs text-zinc-200 font-medium">
+                        {eqList.map((eq, i) => (
+                          <div key={i} className="break-words bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-800/80">
+                            {eq}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-zinc-500 italic mt-0.5">
+                        No equipment assigned
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 8. Status */}
+                  <div>
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
+                      Status
+                    </span>
+                    <div className="mt-1">
+                      <span className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
+                        {status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 9. Actions */}
+                  <div className="pt-3 border-t border-zinc-850">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block mb-2">
+                      Actions
+                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <AssignedStaffDropdown 
+                        orderId={ev.rawOrder?.order_id || ev.orderId || ev.rawLead?.lead_id || ev.leadId} 
+                        leadId={ev.rawLead?.lead_id || ev.leadId || ev.rawOrder?.lead_id} 
+                        order={ev.rawOrder} 
+                        lead={ev.rawLead} 
+                        productionItem={ev.rawProd} 
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {/* Modal Footer */}
-        <div className="pt-2 flex items-center justify-end shrink-0">
+        <div className="pt-2 flex items-center justify-end shrink-0 border-t border-zinc-850">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-400 hover:text-white cursor-pointer transition-colors"
+            className="px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-300 hover:text-white cursor-pointer transition-colors"
           >
             Close
           </button>

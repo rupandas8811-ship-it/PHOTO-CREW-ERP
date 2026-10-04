@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRole } from './RoleContext';
 import { Menu, RefreshCw, LogOut } from 'lucide-react';
 import { UserRole } from '../types';
 import { AppLogo } from './AppLogo';
 import { NotificationBell } from './NotificationBell';
+import { calculateStaffActiveBookingsCount } from '../utils';
 
 interface RoleSwitcherProps {
   sidebarOpen?: boolean;
@@ -11,8 +12,30 @@ interface RoleSwitcherProps {
 }
 
 export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSidebarOpen }) => {
-  const { currentRole, currentUser, logout, refreshData } = useRole();
+  const { 
+    currentRole, 
+    currentUser, 
+    logout, 
+    refreshData,
+    staff = [],
+    staffAssignments = [],
+    leads = [],
+    orders = [],
+    operations = []
+  } = useRole();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const staffMember = (staff || []).find(s => 
+    (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) || 
+    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email?.toLowerCase()) ||
+    (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name?.trim().toLowerCase())
+  );
+  const staffName = staffMember?.name || currentUser?.name || '';
+  
+  const assignedTasksCount = useMemo(() => {
+    if (!currentUser || !staffName || (currentRole !== 'Operation Staff' && currentRole !== 'Production Staff')) return 0;
+    return calculateStaffActiveBookingsCount(staffName, staffAssignments, leads, orders, operations);
+  }, [currentUser, staffName, currentRole, staffAssignments, leads, orders, operations]);
 
   if (!currentUser) return null;
 
@@ -34,15 +57,21 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
         return 'bg-sky-500/10 text-sky-400 border-sky-500/40';
       case 'Production Team':
         return 'bg-purple-500/10 text-purple-400 border-purple-500/40';
+      case 'Operation Staff':
+        return 'bg-amber-500/10 text-amber-400 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.1)]';
+      case 'Production Staff':
+        return 'bg-purple-500/10 text-purple-400 border-purple-500/40';
+      default:
+        return 'bg-zinc-800 text-zinc-300 border-zinc-700';
     }
   };
 
   return (
     <header className="bg-black/90 border-b border-zinc-900 backdrop-blur-md py-4 px-4 sm:px-6 sticky top-0 z-50 shadow-2xl font-sans">
-      <div className="max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] w-full mx-auto flex items-center justify-between gap-4">
+      <div className="max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] w-full mx-auto flex items-center justify-between gap-2 sm:gap-4">
         
         {/* Left Side: Toggle (☰ Menu), Logo & Current Role Name */}
-        <div className="flex items-center gap-3 sm:gap-4">
+        <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
           {setSidebarOpen && (
             <button
               id="header_sidebar_toggle"
@@ -56,15 +85,28 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
           
           <AppLogo size="sm" showTextOnFallback={false} />
 
-          <div className="h-4 w-[1px] bg-zinc-800" />
+          <div className={`h-4 w-[1px] bg-zinc-800 ${(currentRole === 'Operation Staff' || currentRole === 'Production Staff') ? 'hidden lg:block' : 'hidden xs:block'}`} />
 
-          <span className={`text-[10px] sm:text-xs px-2.5 py-1 rounded font-mono font-bold tracking-wider uppercase border ${getRoleBadgeStyle(currentRole)}`}>
+          <span className={`text-[10px] sm:text-xs px-2.5 py-1 rounded font-mono font-bold tracking-wider uppercase border whitespace-nowrap ${getRoleBadgeStyle(currentRole)} ${(currentRole === 'Operation Staff' || currentRole === 'Production Staff') ? 'hidden lg:inline-flex' : 'hidden xs:inline-flex'}`}>
             {currentRole}
           </span>
         </div>
 
+        {/* Assigned Tasks in Header (Desktop only - on mobile it appears in the side menu) */}
+        {(currentRole === 'Operation Staff' || currentRole === 'Production Staff') && (
+          <div className="hidden lg:flex items-center gap-2 bg-zinc-900/90 border border-zinc-800 rounded-xl px-3.5 py-1.5 shadow-md">
+            <span className="text-[10px] font-mono text-zinc-400 uppercase font-bold tracking-wider">
+              Assigned Tasks
+            </span>
+            <span className="text-xs sm:text-sm font-black text-white bg-zinc-800/90 px-2 py-0.5 rounded-lg border border-zinc-700/60 font-mono flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              {assignedTasksCount} Active
+            </span>
+          </div>
+        )}
+
         {/* Right Side: Refresh & Logout Buttons (Always visible on all screen sizes) */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <NotificationBell />
 
           <button

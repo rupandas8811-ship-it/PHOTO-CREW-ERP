@@ -15,7 +15,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, getSyncSavedQuotationAmount, resolveSavedQuotationAmount } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, getStep3FinalQuotationAmount, getSyncSavedQuotationAmount, resolveSavedQuotationAmount } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 import { TimePicker12Hour } from '../TimePicker12Hour';
 
@@ -47,28 +47,56 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
     wizardLeadData,
     isSaving,
     quotations,
-    leads
+    leads,
+    leadPackages = props.leadPackages,
+    dynamicFinalAmt = props.dynamicFinalAmt
   } = props;
 
-  // Ensure exact latest saved Final Quotation Amount is fetched/verified when modal opens
+  // Step 3 Final Quotation Amount is the single source of truth for the Booking Confirmation form
   useEffect(() => {
     if (showConfirmModal && selectedLead) {
       const leadId = selectedLead.lead_id;
       const orderId = selectedLead.order_id;
-      const syncAmt = getSyncSavedQuotationAmount(selectedLead, leadId, orderId, quotations, leads, orders);
-      if (syncAmt !== null && syncAmt > 0) {
-        if (!confirmForm.quotation_amount || Number(confirmForm.quotation_amount) !== syncAmt) {
-          setConfirmForm((prev: any) => ({ ...prev, quotation_amount: syncAmt }));
+      
+      const step3Amt = getStep3FinalQuotationAmount(selectedLead, {
+        dynamicFinalAmt,
+        wizardLeadData,
+        quotations,
+        leads,
+        orders,
+        leadPackages,
+        confirmFormQuotationAmount: confirmForm.quotation_amount
+      });
+
+      if (step3Amt > 0) {
+        if (!confirmForm.quotation_amount || Number(confirmForm.quotation_amount) !== step3Amt) {
+          setConfirmForm((prev: any) => ({ ...prev, quotation_amount: step3Amt }));
         }
-      } else {
-        resolveSavedQuotationAmount(leadId, orderId, quotations, leads, orders).then((resolvedAmt) => {
-          if (resolvedAmt !== null && resolvedAmt > 0) {
-            setConfirmForm((prev: any) => ({ ...prev, quotation_amount: resolvedAmt }));
-          }
-        });
       }
+
+      // If asynchronous data loads or upon page refresh/reopening, resolve latest saved Step 3 Final Quotation Amount
+      resolveSavedQuotationAmount(leadId, orderId, quotations, leads, orders, leadPackages).then((resolvedAmt) => {
+        if (resolvedAmt !== null && resolvedAmt > 0) {
+          setConfirmForm((prev: any) => {
+            const liveStep3 = getStep3FinalQuotationAmount(selectedLead, {
+              dynamicFinalAmt,
+              wizardLeadData,
+              quotations,
+              leads,
+              orders,
+              leadPackages,
+              confirmFormQuotationAmount: prev.quotation_amount
+            });
+            const finalTarget = liveStep3 > 0 ? liveStep3 : resolvedAmt;
+            if (!prev.quotation_amount || Number(prev.quotation_amount) !== finalTarget) {
+              return { ...prev, quotation_amount: finalTarget };
+            }
+            return prev;
+          });
+        }
+      });
     }
-  }, [showConfirmModal, selectedLead?.lead_id]);
+  }, [showConfirmModal, selectedLead?.lead_id, dynamicFinalAmt, wizardLeadData?.final_amount]);
 
   if (!showConfirmModal || !selectedLead) return null;
 
@@ -278,8 +306,20 @@ export const SalesBookingConfirmationModal: React.FC<SalesBookingConfirmationMod
                       type="number"
                       required
                       readOnly
-                      value={confirmForm.quotation_amount || Number(selectedLead?.Final_Quotation_Amount) || Number((selectedLead as any)?.final_quotation_amount) || Number(selectedLead?.Final_Package_Amount) || Number((selectedLead as any)?.final_package_amount) || Number((selectedLead as any)?.final_amount) || (Number(wizardLeadData.final_amount) > 0 ? Number(wizardLeadData.final_amount) : 0)}
-                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none font-mono opacity-80 cursor-not-allowed"
+                      disabled
+                      value={(() => {
+                        const step3ResolvedAmt = getStep3FinalQuotationAmount(selectedLead, {
+                          dynamicFinalAmt,
+                          wizardLeadData,
+                          quotations,
+                          leads,
+                          orders,
+                          leadPackages,
+                          confirmFormQuotationAmount: confirmForm.quotation_amount
+                        });
+                        return step3ResolvedAmt > 0 ? step3ResolvedAmt : (confirmForm.quotation_amount || '');
+                      })()}
+                      className="w-full h-9 bg-slate-900 border border-slate-750 rounded-lg px-3 text-slate-100 text-xs focus:outline-none font-mono opacity-80 cursor-not-allowed select-none"
                     />
                   </div>
 

@@ -18,7 +18,7 @@ import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
 import { jsPDF } from 'jspdf';
-import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, checkIsLeadCrmLocked } from '../SalesUtils';
+import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, highlightText, LEAD_SOURCES, SalesModuleProps, checkIsLeadCrmLocked, getStep3FinalQuotationAmount } from '../SalesUtils';
 import { AddNoteModal } from '../AddNoteModal';
 
 export interface SalesLeadsTableProps {
@@ -106,7 +106,10 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
     activeTab,
     setActiveTab,
     categoriesList,
-    users
+    users,
+    leadPackages = props.leadPackages,
+    dynamicFinalAmt = props.dynamicFinalAmt,
+    quotations = props.quotations
   } = props;
 
   const leadSourcesList = props.LEAD_SOURCES || LEAD_SOURCES || [];
@@ -180,10 +183,22 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
 
   const getLeadCreatedTimestamp = (leadObj: Lead): number => {
     // Sourced strictly from actual saved created_at or created_date
-    const dateVal = leadObj.created_at || leadObj.created_date;
-    if (!dateVal) return 0;
-    const t = new Date(dateVal).getTime();
-    return isNaN(t) ? 0 : t;
+    const raw = leadObj.created_at || leadObj.created_date || (leadObj as any).registered_date || (leadObj as any).registration_date || leadObj.updated_at;
+    if (!raw) return 0;
+    if (typeof raw === 'number') return raw;
+    const s = String(raw).trim();
+    if (!s) return 0;
+    const parsed = new Date(s).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+    if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(s)) {
+      const parts = s.split(/[-/]/);
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
+      const d = new Date(year, month, day);
+      if (!isNaN(d.getTime())) return d.getTime();
+    }
+    return 0;
   };
 
   const compareAlphanumeric = (valA: string, valB: string): number => {
@@ -993,7 +1008,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                           className="w-full h-8 px-3 text-xs font-bold bg-blue-950/40 hover:bg-blue-900/60 text-blue-400 hover:text-white rounded-lg border border-blue-900/40 transition-all cursor-pointer flex items-center gap-2 shadow"
                                         >
                                           <FileText className="w-3.5 h-3.5 shrink-0" />
-                                          <span>Add Note</span>
+                                          <span>VIEW/ADD NOTE</span>
                                         </button>
                                         
                                         {/* VIEW / MANAGE CRM */}
@@ -1038,10 +1053,18 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                                                       : (lead.advance_collected !== undefined && lead.advance_collected !== null && lead.advance_collected !== ''
                                                           ? Number(lead.advance_collected) 
                                                           : 0));
+                                                const step3Amount = getStep3FinalQuotationAmount(lead, {
+                                                  dynamicFinalAmt,
+                                                  wizardLeadData,
+                                                  quotations,
+                                                  leads,
+                                                  orders,
+                                                  leadPackages
+                                                });
                                                 setConfirmForm({
                                                   ...confirmForm,
                                                   package_name: packages?.find((p: any) => String(p.package_id) === String(lead.Select_Package_Option))?.package_name || lead.Select_Package_Option || '',
-                                                  quotation_amount: Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || Number(lead.Final_Package_Amount) || Number((lead as any).final_package_amount) || Number((lead as any).final_amount) || (lead.lead_id === selectedLead?.lead_id ? Number(wizardLeadData.final_amount) : 0) || 0,
+                                                  quotation_amount: step3Amount || Number(lead.Final_Quotation_Amount) || Number((lead as any).final_quotation_amount) || 0,
                                                   advance_received: calcAdvance,
                                                   event_date: lead.event_date || today,
                                                   event_time: lead.event_time || ''
