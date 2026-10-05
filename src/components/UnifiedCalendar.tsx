@@ -711,55 +711,55 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                   </div>
                 ) : (
                   <div className="overflow-x-auto w-full border border-zinc-800 rounded-2xl bg-zinc-950/80 shadow-inner">
-                    <table className="w-full text-left border-collapse min-w-[700px]">
+                    <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-zinc-800 bg-zinc-950/90 text-zinc-400 font-mono text-[10px] sm:text-[11px] uppercase tracking-wider font-bold">
-                          <th className="p-3 pl-4 whitespace-nowrap">Order / Lead ID</th>
-                          <th className="p-3 whitespace-nowrap">Customer Name</th>
-                          <th className="p-3 whitespace-nowrap">Event Name & Type</th>
+                          <th className="p-3 pl-4 min-w-[120px]">Order / Lead ID</th>
+                          <th className="p-3 min-w-[150px]">Customer Name</th>
+                          <th className="p-3 min-w-[150px]">Event Name & Type</th>
                           
                           {/* Role-Specific Column Headers */}
                           {(role === 'production' || role === 'production_staff') && (
                             <>
-                              <th className="p-3 whitespace-nowrap">Deliverables</th>
-                              <th className="p-3 whitespace-nowrap">Target Delivery</th>
-                              <th className="p-3 whitespace-nowrap">Assigned Editor</th>
-                              <th className="p-3 whitespace-nowrap">Raw Footage Link</th>
+                              <th className="p-3 min-w-[150px]">Deliverables</th>
+                              <th className="p-3 min-w-[120px]">Target Delivery</th>
+                              <th className="p-3 min-w-[120px]">Assigned Editor</th>
+                              <th className="p-3 min-w-[120px]">Raw Footage Link</th>
                             </>
                           )}
 
                           {role === 'operations' && (
                             <>
-                              <th className="p-3 whitespace-nowrap">Reporting Time</th>
-                              <th className="p-3 whitespace-nowrap">Location</th>
-                              <th className="p-3 whitespace-nowrap">Assigned Crew</th>
-                              <th className="p-3 whitespace-nowrap">Equipment</th>
+                              <th className="p-3 min-w-[120px]">Reporting Time</th>
+                              <th className="p-3 min-w-[150px]">Location</th>
+                              <th className="p-3 min-w-[150px]">Assigned Crew</th>
+                              <th className="p-3 min-w-[120px]">Equipment</th>
                             </>
                           )}
 
                           {role === 'sales' && (
                             <>
-                              <th className="p-3 whitespace-nowrap">Location</th>
-                              <th className="p-3 whitespace-nowrap">Package / Budget</th>
-                              <th className="p-3 whitespace-nowrap">Sales Rep</th>
+                              <th className="p-3 min-w-[150px]">Location</th>
+                              <th className="p-3 min-w-[120px]">Package / Budget</th>
+                              <th className="p-3 min-w-[120px]">Sales Rep</th>
                             </>
                           )}
 
                           {role === 'owner' && (
                             <>
-                              <th className="p-3 whitespace-nowrap">Desk / Stage</th>
-                              <th className="p-3 whitespace-nowrap">Location</th>
-                              <th className="p-3 whitespace-nowrap">Value</th>
+                              <th className="p-3 min-w-[100px]">Desk / Stage</th>
+                              <th className="p-3 min-w-[150px]">Location</th>
+                              <th className="p-3 min-w-[100px]">Value</th>
                             </>
                           )}
 
-                          <th className="p-3 whitespace-nowrap">Status</th>
+                          <th className="p-3 min-w-[100px]">Status</th>
                           
                           {role === 'production' && onOpenAssignEditor && (
-                            <th className="p-3 pr-4 text-center whitespace-nowrap">Action</th>
+                            <th className="p-3 pr-4 text-center min-w-[100px]">Action</th>
                           )}
                           {role === 'sales' && onSelectLead && (
-                            <th className="p-3 pr-4 text-center whitespace-nowrap">Action</th>
+                            <th className="p-3 pr-4 text-center min-w-[100px]">Action</th>
                           )}
                         </tr>
                       </thead>
