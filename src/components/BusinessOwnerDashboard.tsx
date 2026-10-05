@@ -5125,11 +5125,10 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Content Body: Responsive Table on Desktop/Tablet and Stacked Table on Mobile */}
+        {/* Content Body: Genuine Horizontal Scrollable Table on all screen sizes */}
         <div className="overflow-y-auto flex-1 max-h-[calc(90vh-80px)] space-y-4">
-          {/* DESKTOP & TABLET: Full Table View */}
-          <div className="hidden md:block overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-900/40 shadow-inner">
-            <table className="w-full text-left border-collapse min-w-[900px]">
+          <div className="overflow-x-auto w-full border border-zinc-800 rounded-xl bg-zinc-900/40 shadow-inner">
+            <table className="w-full text-left border-collapse min-w-[950px]">
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-950/90 text-zinc-400 font-mono text-[11px] uppercase tracking-wider font-bold">
                   <th className="p-3.5 pl-4 text-left whitespace-nowrap min-w-[120px]">Order ID</th>
@@ -5242,148 +5241,6 @@ const CalendarEventDetailModal: React.FC<CalendarEventDetailModalProps> = ({
                 })}
               </tbody>
             </table>
-          </div>
-
-          {/* MOBILE: Stacked Responsive Table / Card Layout */}
-          <div className="block md:hidden space-y-4">
-            {eventList.map((ev, idx) => {
-              const orderDisplayId = ev.orderId || ev.rawOrder?.order_id || ev.rawLead?.lead_id || '—';
-              const custName = ev.customerName || ev.rawOrder?.customer_name || ev.rawLead?.customer_name || '—';
-              const evType = ev.rawEvent?.event_type || ev.rawOrder?.event_type || ev.eventName || 'Event';
-              const repDate = getReportingDate(ev);
-              const repTime = getReportingTime(ev);
-              const locationVal = getLocation(ev);
-              const assignedRole = getAssignedRole(ev);
-              const eqList = getEquipmentDetails(ev);
-              const status = ev.currentStatus || ev.rawOrder?.current_stage || ev.rawLead?.status || 'Confirmed';
-
-              return (
-                <div key={`mb_${ev.id || idx}`} className="w-full bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-lg">
-                  {/* 1. Order ID */}
-                  <div className="flex items-start justify-between gap-2 border-b border-zinc-850 pb-2.5">
-                    <div>
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                        Order ID
-                      </span>
-                      <span className="font-mono text-amber-400 font-bold text-sm break-all">
-                        {orderDisplayId}
-                      </span>
-                    </div>
-                    <span className="inline-block px-2.5 py-0.5 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700 shrink-0">
-                      {status}
-                    </span>
-                  </div>
-
-                  {/* 2. Customer Name */}
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                      Customer Name
-                    </span>
-                    <div className="font-bold text-white text-sm mt-0.5 break-words">
-                      {custName}
-                    </div>
-                  </div>
-
-                  {/* 3. Event Type */}
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                      Event Type
-                    </span>
-                    <div className="text-zinc-200 text-xs mt-0.5 font-medium">
-                      {evType}
-                    </div>
-                  </div>
-
-                  {/* 4 & 5. Reporting Date & Time */}
-                  <div className="grid grid-cols-2 gap-3 bg-zinc-900/60 p-3 rounded-xl border border-zinc-850">
-                    <div>
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                        Reporting Date
-                      </span>
-                      <span className="font-mono text-zinc-200 text-xs font-semibold mt-0.5 block">
-                        {repDate}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                        Reporting Time
-                      </span>
-                      <span className="font-mono text-zinc-200 text-xs font-semibold mt-0.5 block">
-                        {repTime}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 6. Location */}
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                      Location
-                    </span>
-                    <div className="text-zinc-200 text-xs mt-0.5 font-medium break-words">
-                      {locationVal}
-                    </div>
-                  </div>
-
-                  {/* 7. Assigned Role */}
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                      Assigned Role
-                    </span>
-                    <div className="text-zinc-200 text-xs mt-0.5 font-medium">
-                      {assignedRole}
-                    </div>
-                  </div>
-
-                  {/* 7. Equipment Details */}
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                      Equipment Details
-                    </span>
-                    {eqList.length > 0 ? (
-                      <div className="mt-1 space-y-1 text-xs text-zinc-200 font-medium">
-                        {eqList.map((eq, i) => (
-                          <div key={i} className="break-words bg-zinc-900 px-2.5 py-1 rounded-lg border border-zinc-800/80">
-                            {eq}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-xs text-zinc-500 italic mt-0.5">
-                        No equipment assigned
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 8. Status */}
-                  <div>
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block">
-                      Status
-                    </span>
-                    <div className="mt-1">
-                      <span className="inline-block px-2.5 py-1 rounded text-[10px] font-bold font-mono uppercase bg-zinc-800 text-amber-300 border border-zinc-700">
-                        {status}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 9. Actions */}
-                  <div className="pt-3 border-t border-zinc-850">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 font-bold block mb-2">
-                      Actions
-                    </span>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <AssignedStaffDropdown 
-                        orderId={ev.rawOrder?.order_id || ev.orderId || ev.rawLead?.lead_id || ev.leadId} 
-                        leadId={ev.rawLead?.lead_id || ev.leadId || ev.rawOrder?.lead_id} 
-                        order={ev.rawOrder} 
-                        lead={ev.rawLead} 
-                        productionItem={ev.rawProd} 
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         </div>
 

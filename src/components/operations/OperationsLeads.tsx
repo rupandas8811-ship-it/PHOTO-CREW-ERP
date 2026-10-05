@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
 import { 
-  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink, ArrowUpDown, Layers
+  Loader2, X, Users, Briefcase, Camera, Video, Compass, Clock, Clipboard, FileCheck, CheckCircle, Eye, Search, Calendar, MapPin, ExternalLink, ArrowUpDown, Layers, ChevronDown
 } from 'lucide-react';
 import { Order, CurrentStage, Staff, Equipment, TaskAssignmentDetail } from '../../types';
 import { AddNoteModal } from '../AddNoteModal';
@@ -227,6 +227,45 @@ export interface FormattedOrderEventDate {
   formatted: string;
   timestamp: number;
 }
+
+export const getUniqueSortedOrderReportingDates = (orderEvents: any[], ord?: any, lead?: any): FormattedOrderEventDate[] => {
+  const events = Array.isArray(orderEvents) && orderEvents.length > 0 ? orderEvents : [{}];
+  const seenCalDates = new Set<string>();
+  const validDates: FormattedOrderEventDate[] = [];
+
+  for (const ev of events) {
+    const raw = ev?.reporting_date || ev?.Reporting_date || ord?.Reporting_date || ord?.reporting_date || ev?.event_date || ord?.event_date || lead?.Reporting_date || lead?.event_date || '';
+    const cal = toCalendarDateString(raw);
+    if (!cal) continue;
+    if (seenCalDates.has(cal)) continue;
+    seenCalDates.add(cal);
+
+    const formatted = formatOperationsEventDate(raw);
+    if (!formatted) continue;
+
+    const parts = cal.split('-').map(Number);
+    const timestamp = new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+
+    validDates.push({
+      dateStr: String(raw),
+      calDate: cal,
+      formatted,
+      timestamp
+    });
+  }
+
+  if (validDates.length === 0) return [];
+  if (validDates.length === 1) return validDates;
+
+  const todayCal = toCalendarDateString(new Date()) || '1970-01-01';
+  const upcoming = validDates.filter(d => d.calDate >= todayCal);
+  const past = validDates.filter(d => d.calDate < todayCal);
+
+  upcoming.sort((a, b) => a.calDate.localeCompare(b.calDate));
+  past.sort((a, b) => b.calDate.localeCompare(a.calDate));
+
+  return [...upcoming, ...past];
+};
 
 /**
  * Extracts unique, valid event dates from an order's events,
@@ -680,6 +719,7 @@ export const OperationsLeads: React.FC = () => {
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('All');
+  const [showReportingDateFilterDropdown, setShowReportingDateFilterDropdown] = useState(false);
 
   // Track which order's action dropdown is open
   const [activeMenuOrderId, setActiveMenuOrderId] = useState<string | null>(null);
@@ -793,8 +833,8 @@ export const OperationsLeads: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [sortDateOrder, setSortDateOrder] = useState<SortOrder>('latest');
 
-  // 3-State Column Header Sorting: Order ID, Event Date, Reporting Time
-  const [sortColumn, setSortColumn] = useState<'order_id' | 'event_date' | 'reporting_time' | null>(null);
+  // 3-State Column Header Sorting: Order ID, Reporting Date, Reporting Time
+  const [sortColumn, setSortColumn] = useState<'order_id' | 'reporting_date' | 'reporting_time' | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const parseReportingTimeToMinutes = (timeStr?: string): number => {
@@ -839,7 +879,16 @@ export const OperationsLeads: React.FC = () => {
     return parseDateTimeToTimestamp(dateStr, timeStr);
   };
 
-  const handleColumnSort = (column: 'order_id' | 'event_date' | 'reporting_time') => {
+  const getOrderPrimaryReportingTimestamp = (ord: Order, lead?: any, op?: any): number => {
+    const events = getOrderEventsList(ord, lead);
+    const sorted = sortEventsByDateAsc(events);
+    const ev = sorted[0];
+    const dateStr = ev?.reporting_date || ev?.Reporting_date || ord?.Reporting_date || ord?.reporting_date || ev?.event_date || ord?.event_date || (lead as any)?.Reporting_date || (lead as any)?.event_date || '';
+    const timeStr = ev?.reporting_time || ev?.event_start_time || ev?.event_time || ord.event_time || (lead as any)?.event_time || '';
+    return parseDateTimeToTimestamp(dateStr, timeStr);
+  };
+
+  const handleColumnSort = (column: 'order_id' | 'reporting_date' | 'reporting_time') => {
     if (sortColumn !== column) {
       // 1st CLICK: Ascending
       setSortColumn(column);
@@ -2434,12 +2483,14 @@ export const OperationsLeads: React.FC = () => {
         return compareRecordsByDate(a, b, sortDateOrder);
       }
 
-      // 2. EVENT DATE: Click 1 -> Oldest to Newest, Click 2 -> Newest to Oldest, Click 3 -> Reset
-      if (sortColumn === 'event_date') {
+      // 2. REPORTING DATE: Click 1 -> Oldest to Newest, Click 2 -> Newest to Oldest, Click 3 -> Reset
+      if (sortColumn === 'reporting_date') {
         const leadA = findLeadForOrder(a, leads || []);
         const leadB = findLeadForOrder(b, leads || []);
-        const tsA = getOrderPrimaryEventTimestamp(a, leadA);
-        const tsB = getOrderPrimaryEventTimestamp(b, leadB);
+        const opA = getOpDetails(a.order_id);
+        const opB = getOpDetails(b.order_id);
+        const tsA = getOrderPrimaryReportingTimestamp(a, leadA, opA);
+        const tsB = getOrderPrimaryReportingTimestamp(b, leadB, opB);
 
         if (tsA > 0 && tsB > 0 && tsA !== tsB) {
           return sortDirection === 'asc' ? tsA - tsB : tsB - tsA;
@@ -3275,7 +3326,7 @@ export const OperationsLeads: React.FC = () => {
                     onChange={(e) => setDateFilter(e.target.value)}
                     className="w-full bg-zinc-900/60 border border-zinc-800 rounded-xl px-3 py-2.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500/50 font-mono cursor-pointer"
                   >
-                    <option value="All">All Dates (Event Date)</option>
+                    <option value="All">All Dates (Reporting Date)</option>
                     <option value="Today">Today</option>
                     <option value="Tomorrow">Tomorrow</option>
                     <option value="This Week">This Week</option>
@@ -3377,27 +3428,75 @@ export const OperationsLeads: React.FC = () => {
               <th className="p-4 font-bold">Mobile Number</th>
               <th className="p-4 font-bold">Event Category</th>
               <th className="p-4 font-bold">Event Location</th>
-              <th className="p-4">
-                <button
-                  type="button"
-                  onClick={() => handleColumnSort('event_date')}
-                  className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
-                  title={
-                    sortColumn === 'event_date'
-                      ? sortDirection === 'asc'
-                        ? 'Event Date: Earliest to Latest (Click for Latest to Earliest)'
-                        : 'Event Date: Latest to Earliest (Click for Reset / Default)'
-                      : 'Event Date: Click for Earliest to Latest'
-                  }
-                >
-                  <span>Event Date</span>
-                  <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'event_date' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
-                  {sortColumn === 'event_date' && (
-                    <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
-                      {sortDirection === 'asc' ? '▲' : '▼'}
-                    </span>
-                  )}
-                </button>
+              <th className="p-4 relative">
+                <div className="inline-flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleColumnSort('reporting_date')}
+                    className="inline-flex items-center gap-1.5 uppercase font-mono tracking-wider text-[10px] font-bold text-zinc-400 hover:text-white transition-colors cursor-pointer select-none group"
+                    title={
+                      sortColumn === 'reporting_date'
+                        ? sortDirection === 'asc'
+                          ? 'Reporting Date: Earliest to Latest (Click for Latest to Earliest)'
+                          : 'Reporting Date: Latest to Earliest (Click for Reset / Default)'
+                        : 'Reporting Date: Click for Earliest to Latest'
+                    }
+                  >
+                    <span>Reporting Date</span>
+                    <ArrowUpDown className={`w-3 h-3 transition-colors ${sortColumn === 'reporting_date' ? (sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400') : 'text-zinc-500 group-hover:text-zinc-300'}`} />
+                    {sortColumn === 'reporting_date' && (
+                      <span className={`text-[10px] font-bold font-mono ${sortDirection === 'asc' ? 'text-sky-400' : 'text-amber-400'}`}>
+                        {sortDirection === 'asc' ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowReportingDateFilterDropdown(!showReportingDateFilterDropdown);
+                    }}
+                    className={`p-1 rounded hover:bg-zinc-800 transition-colors cursor-pointer ${dateFilter !== 'All' ? 'text-amber-400 bg-zinc-800/80' : 'text-zinc-400 hover:text-white'}`}
+                    title="Filter by Reporting Date"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {showReportingDateFilterDropdown && (
+                  <div className="absolute left-4 top-14 z-50 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-2.5 min-w-[180px] text-xs font-sans">
+                    <div className="text-[10px] uppercase font-mono text-zinc-400 px-2 py-1 mb-1 border-b border-zinc-850">
+                      Filter Reporting Date
+                    </div>
+                    <div className="space-y-1">
+                      {[
+                        { label: 'All Dates', value: 'All' },
+                        { label: 'Today', value: 'Today' },
+                        { label: 'Tomorrow', value: 'Tomorrow' },
+                        { label: 'This Week', value: 'This Week' },
+                        { label: 'This Month', value: 'This Month' },
+                        { label: 'Custom Range', value: 'Custom' },
+                      ].map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            setDateFilter(opt.value);
+                            setShowReportingDateFilterDropdown(false);
+                          }}
+                          className={`w-full text-left px-2.5 py-1.5 rounded-lg font-mono text-xs transition-colors flex items-center justify-between cursor-pointer ${
+                            dateFilter === opt.value
+                              ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30'
+                              : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
+                          }`}
+                        >
+                          <span>{opt.label}</span>
+                          {dateFilter === opt.value && <span className="text-amber-400">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </th>
               <th className="p-4">
                 <button
@@ -3658,7 +3757,7 @@ export const OperationsLeads: React.FC = () => {
                     </td>
                     <td className="p-4 font-mono text-zinc-300 text-xs">
                       {(() => {
-                        const uniqueDates = getUniqueSortedOrderEventDates(allOrderEvents);
+                        const uniqueDates = getUniqueSortedOrderReportingDates(allOrderEvents, ord, lead);
                         if (uniqueDates.length === 0) {
                           return <span className="text-zinc-600 italic">—</span>;
                         }
@@ -3686,7 +3785,7 @@ export const OperationsLeads: React.FC = () => {
                                   type="button"
                                   onClick={(e) => toggleExpandDates(ord.order_id, e)}
                                   className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 hover:bg-zinc-700 hover:text-zinc-200 transition-all cursor-pointer shrink-0 mt-0.5"
-                                  title="Click to collapse event dates"
+                                  title="Click to collapse reporting dates"
                                 >
                                   ▲
                                 </button>
@@ -3707,7 +3806,7 @@ export const OperationsLeads: React.FC = () => {
                               }
                             } : undefined}
                             className={`flex items-center gap-1.5 whitespace-nowrap select-text ${hasMultiple ? 'cursor-pointer group' : ''}`}
-                            title={hasMultiple ? `Click +${additionalCount} to view all ${uniqueDates.length} event dates` : primaryDate.formatted}
+                            title={hasMultiple ? `Click +${additionalCount} to view all ${uniqueDates.length} reporting dates` : primaryDate.formatted}
                           >
                             <span className={`font-semibold text-zinc-100 font-mono text-xs ${hasMultiple ? 'group-hover:text-indigo-300 transition-colors' : ''}`}>
                               {primaryDate.formatted}
@@ -3717,7 +3816,7 @@ export const OperationsLeads: React.FC = () => {
                                 type="button"
                                 onClick={(e) => toggleExpandDates(ord.order_id, e)}
                                 className="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 group-hover:bg-indigo-500/30 group-hover:border-indigo-500/50 group-hover:text-white transition-all cursor-pointer shrink-0 shadow-sm"
-                                title={`Click +${additionalCount} to view all ${uniqueDates.length} event dates`}
+                                title={`Click +${additionalCount} to view all ${uniqueDates.length} reporting dates`}
                               >
                                 +{additionalCount}
                               </button>
