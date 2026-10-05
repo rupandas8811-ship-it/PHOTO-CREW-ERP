@@ -943,24 +943,37 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
         const normDate = normalizeDateStr(lead.event_date);
         if (!normDate) return;
 
-        const matchedOrder = (orders || []).find(o => o.lead_id === lead.lead_id || o.order_id === lead.order_id);
+        const matchedOrder = (orders || []).find(o => (o.lead_id && o.lead_id === lead.lead_id) || (lead.order_id && o.order_id === lead.order_id));
+        const matchedOp = matchedOrder
+          ? (operations || []).find(op => op.order_id === matchedOrder.order_id)
+          : (operations || []).find(op => op.lead_id === lead.lead_id);
+        const matchedSa = matchedOrder
+          ? (staffAssignments || []).filter(sa => sa.order_id === matchedOrder.order_id)
+          : (staffAssignments || []).filter(sa => sa.lead_id === lead.lead_id);
+
+        const assignedRoleStr = resolveAssignedRoles(matchedSa, matchedOp);
+        const eqList = resolveEquipmentList(matchedSa, undefined, matchedOp);
 
         items.push({
           id: `LEAD-${lead.lead_id}`,
           orderId: matchedOrder?.order_id || lead.order_id || lead.lead_id,
           leadId: lead.lead_id,
-          customerName: lead.customer_name || 'Client',
-          customerMobile: lead.mobile || lead.whatsapp_number || '',
+          customerName: lead.customer_name || matchedOrder?.customer_name || 'Client',
+          customerMobile: lead.mobile || lead.whatsapp_number || matchedOrder?.customer_phone || '',
           eventName: lead.custom_event_name || lead.event_type || 'Shoot',
-          eventType: lead.event_type || 'Photography & Videography',
+          eventType: lead.event_type || matchedOrder?.event_type || 'Photography & Videography',
           eventDate: normDate,
-          eventTime: lead.event_time || '',
-          location: lead.city || lead.address || '—',
+          reportingDate: matchedOp?.reporting_date || normDate,
+          reportingTime: matchedOp?.reporting_time || lead.event_time || matchedOrder?.event_time || '08:00 AM',
+          location: lead.city || lead.address || matchedOrder?.address || '—',
           budget: lead.budget || matchedOrder?.quotation_amount || 0,
           salesPerson: lead.sales_person || matchedOrder?.sales_person || 'Sales Team',
+          assignedRole: assignedRoleStr,
+          equipmentKit: eqList.join(', '),
+          equipmentItems: eqList,
           status: lead.status || lead.current_status || matchedOrder?.current_stage || 'New Lead',
           desk: 'Sales',
-          sourceRecord: { lead, order: matchedOrder }
+          sourceRecord: { lead, order: matchedOrder, op: matchedOp, staffAssignments: matchedSa }
         });
       });
     }
@@ -1348,7 +1361,17 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                     <table className="w-full text-left border-collapse min-w-[900px]">
                       <thead>
                         <tr className="border-b border-zinc-800 bg-zinc-950/90 text-zinc-400 font-mono text-[10px] sm:text-[11px] uppercase tracking-wider font-bold">
-                          {role === 'operations' ? (
+                          {role === 'sales' ? (
+                            <>
+                              <th className="p-3 pl-4 whitespace-nowrap min-w-[130px]">Order ID</th>
+                              <th className="p-3 whitespace-nowrap min-w-[170px]">Customer Name</th>
+                              <th className="p-3 whitespace-nowrap min-w-[150px]">Event Type</th>
+                              <th className="p-3 whitespace-nowrap min-w-[130px]">Reporting Date</th>
+                              <th className="p-3 whitespace-nowrap min-w-[130px]">Reporting Time</th>
+                              <th className="p-3 whitespace-nowrap min-w-[120px]">Status</th>
+                              <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">Action</th>
+                            </>
+                          ) : role === 'operations' ? (
                             <>
                               <th className="p-3 pl-4 whitespace-nowrap min-w-[130px]">Order ID</th>
                               <th className="p-3 whitespace-nowrap min-w-[170px]">Customer Name</th>
@@ -1375,14 +1398,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                                 </>
                               )}
 
-                              {role === 'sales' && (
-                                <>
-                                  <th className="p-3 whitespace-nowrap min-w-[170px]">Location</th>
-                                  <th className="p-3 whitespace-nowrap min-w-[140px]">Package / Budget</th>
-                                  <th className="p-3 whitespace-nowrap min-w-[140px]">Sales Rep</th>
-                                </>
-                              )}
-
                               {role === 'owner' && (
                                 <>
                                   <th className="p-3 whitespace-nowrap min-w-[120px]">Desk / Stage</th>
@@ -1396,9 +1411,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                               {role === 'production' && onOpenAssignEditor && (
                                 <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">Action</th>
                               )}
-                              {role === 'sales' && onSelectLead && (
-                                <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">Action</th>
-                              )}
                             </>
                           )}
                         </tr>
@@ -1406,7 +1418,73 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                       <tbody className="divide-y divide-zinc-850 text-xs font-sans">
                         {calendarModalEvents.map((ev, idx) => (
                           <tr key={`${ev.id}_${idx}`} className="hover:bg-zinc-900/50 transition font-mono">
-                            {role === 'operations' ? (
+                            {role === 'sales' ? (
+                              <>
+                                {/* 1. Order ID */}
+                                <td className="p-3 pl-4 text-zinc-200 font-bold whitespace-nowrap min-w-[130px]">
+                                  <span className={`${theme.textHighlight}`}>{ev.orderId}</span>
+                                  {ev.leadId && ev.leadId !== ev.orderId && (
+                                    <span className="block text-[10px] text-zinc-500 font-normal">
+                                      Lead: {ev.leadId}
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* 2. Customer Name */}
+                                <td className="p-3 font-sans font-bold text-white whitespace-nowrap min-w-[170px]">
+                                  <div>{ev.customerName}</div>
+                                  {ev.customerMobile && (
+                                    <div className="text-[10px] font-mono text-zinc-400 font-normal">
+                                      {ev.customerMobile}
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* 3. Event Type */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[150px]">
+                                  <div className="font-semibold text-zinc-100">{ev.eventType || ev.eventName || 'Event'}</div>
+                                </td>
+
+                                {/* 4. Reporting Date */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[130px]">
+                                  <span className="font-mono">
+                                    {ev.reportingDate ? (formatDateDDMMYY(ev.reportingDate) || ev.reportingDate) : (formatDateDDMMYY(ev.eventDate) || ev.eventDate)}
+                                  </span>
+                                </td>
+
+                                {/* 5. Reporting Time */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[130px]">
+                                  <span className="font-mono">{ev.reportingTime || '08:00 AM'}</span>
+                                </td>
+
+                                {/* 6. Status */}
+                                <td className="p-3 whitespace-nowrap min-w-[120px]">
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${theme.bgHighlight} ${theme.textHighlight} ${theme.border}`}>
+                                    {ev.status}
+                                  </span>
+                                </td>
+
+                                {/* 9. Action */}
+                                <td className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setCalendarModalDate(null);
+                                      if (onSelectLead) {
+                                        if (ev.sourceRecord?.lead) {
+                                          onSelectLead(ev.sourceRecord.lead);
+                                        } else if (ev.sourceRecord?.order) {
+                                          onSelectLead(ev.sourceRecord.order);
+                                        }
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs font-mono transition cursor-pointer shadow flex items-center justify-center gap-1 mx-auto"
+                                  >
+                                    <span>Open Lead</span>
+                                  </button>
+                                </td>
+                              </>
+                            ) : role === 'operations' ? (
                               <>
                                 {/* 1. Order ID */}
                                 <td className="p-3 pl-4 text-zinc-200 font-bold whitespace-nowrap min-w-[130px]">
