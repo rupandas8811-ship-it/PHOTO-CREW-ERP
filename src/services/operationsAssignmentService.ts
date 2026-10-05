@@ -854,7 +854,6 @@ export async function uploadEquipmentReceived(params: {
   // 2. Update staff_assignments row
   const updatePayload: any = {
     equipment_received_photo: photoUrl,
-    task_status: 'Equipment Received',
     assignment_status: 'Assigned',
     updated_at: timestamp,
     updated_by: updatedBy || staffName,
@@ -961,7 +960,6 @@ export async function uploadEquipmentHandover(params: {
     equipment_handover_photo: photoUrl,
     equipment_handover_to: handoverTo || staffName,
     equipment_handover_notes: handoverNotes || null,
-    task_status: 'Equipment Handover',
     updated_at: timestamp,
     updated_by: updatedBy || staffName,
     proofs: updatedProofs

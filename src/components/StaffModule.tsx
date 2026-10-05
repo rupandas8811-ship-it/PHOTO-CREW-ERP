@@ -23,7 +23,7 @@ const StaffActionDropdown: React.FC<{
   hasEquipmentHandover: boolean;
   isCompleted: boolean;
   onViewDetails: () => void;
-  onOpenPhotoModal: (step: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete') => void;
+  onOpenPhotoModal: (step: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Footage Handover' | 'Event Complete') => void;
   onAddNote: () => void;
 }> = ({
   booking,
@@ -150,8 +150,18 @@ const StaffActionDropdown: React.FC<{
     }
   });
 
-  // 2. Event Start (show whenever Event Start is pending or only 1 image has been uploaded)
+  // 2. Equipment Received & Event Start
   if (currentStatus === 'Assigned Crew') {
+    const hasEquipment = booking.equipmentItems && booking.equipmentItems.length > 0;
+    if (hasEquipment && !hasEquipmentReceived) {
+      actionOptions.push({
+        label: 'Equipment Received',
+        onClick: () => {
+          onOpenPhotoModal('Equipment Received');
+          setIsOpen(false);
+        }
+      });
+    }
     actionOptions.push({
       label: 'Event Start',
       onClick: () => {
@@ -172,13 +182,22 @@ const StaffActionDropdown: React.FC<{
     });
   }
 
-  // 4. Footage Handover (show only when current status is Event Ended)
+  // 4. Footage Handover & Equipment Handover (show only when current status is Event Ended)
   if (currentStatus === 'Event Ended') {
     const hasEquipment = booking.equipmentItems && booking.equipmentItems.length > 0;
+    if (hasEquipment && !hasEquipmentHandover) {
+      actionOptions.push({
+        label: 'Equipment Handover',
+        onClick: () => {
+          onOpenPhotoModal('Equipment Handover');
+          setIsOpen(false);
+        }
+      });
+    }
     actionOptions.push({
       label: hasEquipment ? 'Footage Handover' : 'Raw Footage Upload',
       onClick: () => {
-        onOpenPhotoModal('Equipment Handover');
+        onOpenPhotoModal('Footage Handover');
         setIsOpen(false);
       }
     });
@@ -543,6 +562,12 @@ const getBookingProofStatus = (
       return;
     }
 
+    const bEvName = (b.eventName || '').trim().toLowerCase();
+    const hEvName = (parsed.event_name || (h as any).event_name || '').trim().toLowerCase();
+    if (bEvName && hEvName && bEvName !== hEvName) {
+      return;
+    }
+
     const photoUrl = parsed.photo_url || (h as any).photo_url || '';
     if (!photoUrl) return;
 
@@ -875,8 +900,8 @@ export const StaffModule: React.FC = () => {
           let effStatus = parsedStatus;
           if (!effStatus || effStatus === 'Assigned Crew') {
             if (leh.equipment_status === 'Event Started') effStatus = 'Event Started';
-            else if (leh.equipment_status === 'Event Complete') effStatus = 'Event Ended';
-            else if (leh.equipment_status === 'Equipment Handover') effStatus = 'Footage Handover';
+            else if (leh.equipment_status === 'Event Complete' || leh.equipment_status === 'Event Ended') effStatus = 'Event Ended';
+            else if (leh.equipment_status === 'Footage Handover Completed' || leh.equipment_status === 'Footage Handover') effStatus = 'Footage Handover';
           }
 
           keysToUpdate.forEach(key => {
@@ -953,7 +978,7 @@ export const StaffModule: React.FC = () => {
   const [selectedBookingDetails, setSelectedBookingDetails] = useState<any | null>(null);
   const [photoModalData, setPhotoModalData] = useState<{
     booking: any;
-    stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete';
+    stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Footage Handover' | 'Event Complete';
   } | null>(null);
   const [noteModalData, setNoteModalData] = useState<{ leadId: string, orderId?: string, customerName: string } | null>(null);
   const [calendarModalDate, setCalendarModalDate] = useState<string | null>(null);
@@ -1519,7 +1544,7 @@ export const StaffModule: React.FC = () => {
   };
 
   // Open Equipment Photo Verification Modal
-  const openPhotoModal = (booking: any, stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Event Complete') => {
+  const openPhotoModal = (booking: any, stage: 'Equipment Received' | 'Event Start' | 'Equipment Handover' | 'Footage Handover' | 'Event Complete') => {
     setSubmitError(null);
     const existingPhotos: Record<string, string> = {};
     const existingTimestamps: Record<string, string> = {};
@@ -1562,6 +1587,13 @@ export const StaffModule: React.FC = () => {
         return false;
       }
 
+      // 5b. Match Event Name if both present to avoid cross-event contamination
+      const bEvName = (booking.eventName || '').trim().toLowerCase();
+      const hEvName = (parsed.event_name || (h as any).event_name || '').trim().toLowerCase();
+      if (bEvName && hEvName && bEvName !== hEvName) {
+        return false;
+      }
+
       // 6. Match Role if present
       if (parsed.staff_role && booking.assignedRole && parsed.staff_role.trim().toLowerCase() !== booking.assignedRole.trim().toLowerCase()) {
         return false;
@@ -1593,7 +1625,7 @@ export const StaffModule: React.FC = () => {
       const eqStatus = (h.equipment_status || '').toLowerCase();
       const proofType = (parsedRemarks.proof_type || '').toLowerCase();
 
-      if (stage === 'Equipment Handover') {
+      if (stage === 'Equipment Handover' || stage === 'Footage Handover') {
         const isHandover = eqName.includes('handover') || eqName.includes('asset return') || eqStatus.includes('handover') || eqStatus.includes('return') || proofType.includes('handover') || proofType.includes('return');
         if (isHandover) {
           existingPhotos['Equipment Handover Photo Proof'] = photoUrl;
@@ -1667,7 +1699,7 @@ export const StaffModule: React.FC = () => {
     });
 
     if (saRecord) {
-      if (stage === 'Equipment Handover') {
+      if (stage === 'Equipment Handover' || stage === 'Footage Handover') {
         if (saRecord.equipment_handover_photo && saRecord.equipment_handover_photo !== saRecord.equipment_received_photo) {
           existingPhotos['Equipment Handover Photo Proof'] = saRecord.equipment_handover_photo;
           existingPhotos['Asset Return Photo Proof'] = saRecord.equipment_handover_photo;
@@ -1708,7 +1740,7 @@ export const StaffModule: React.FC = () => {
     const genKey = `${booking.orderId}_gen_${booking.assignmentId || 'no_asst'}_${staffName.trim().toLowerCase()}`;
     const localProofObj = staffProofs[booking.key] || staffProofs[staffKey] || staffProofs[genKey];
     if (localProofObj) {
-      if (stage === 'Equipment Handover' && localProofObj.equipmentHandoverProofs) {
+      if ((stage === 'Equipment Handover' || stage === 'Footage Handover') && localProofObj.equipmentHandoverProofs) {
         for (const p of localProofObj.equipmentHandoverProofs) {
           if (p.photoUrl) {
             existingPhotos['Equipment Handover Photo Proof'] = p.photoUrl;
@@ -1784,7 +1816,8 @@ export const StaffModule: React.FC = () => {
       existingTimestamps['Asset Return Photo Proof'] = existingTimestamps['Asset Return Photo Proof'] || booking.equipmentHandoverTime;
     }
 
-    const existingRawLink = resolveRawFootageLink(
+    // Step 3 (Equipment Handover) must not prefill raw footage link; Step 4 (Footage Handover) resolves it
+    const existingRawLink = stage === 'Equipment Handover' ? '' : resolveRawFootageLink(
       booking.orderId,
       booking.assignmentId,
       booking.eventId,
@@ -1802,20 +1835,6 @@ export const StaffModule: React.FC = () => {
   const handlePhotoCapture = async (eqName: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
-
-    const hasEquipment = Boolean(photoModalData?.booking?.equipmentItems && photoModalData.booking.equipmentItems.length > 0);
-
-    // Enforce Event Start ordering rule ONLY if staff has equipment assigned: Must have Asset Collection image before Event Start image
-    if (hasEquipment && photoModalData?.stage === 'Event Start' && (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image')) {
-      const hasAssetColl = !!modalPhotos['Asset Collection Photo Proof'] || 
-        !!modalPhotos['Equipment Received / Asset Picture'];
-
-      if (!hasAssetColl) {
-        e.target.value = '';
-        showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
-        return;
-      }
-    }
 
     try {
       const captureTime = new Date().toISOString();
@@ -1868,54 +1887,49 @@ export const StaffModule: React.FC = () => {
     const { booking, stage } = photoModalData;
     setSubmitError(null);
 
-    // --- EVENT START WORKFLOW ---
-    if (stage === 'Event Start') {
+    // --- STAGE: EVENT START OR EQUIPMENT RECEIVED ---
+    if (stage === 'Event Start' || stage === 'Equipment Received') {
       const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
-      const isMultiEq = hasEquipment && booking.equipmentItems.length > 1;
-      const assetKeys = hasEquipment ? booking.equipmentItems.map((eq: any) => eq.name) : [];
+      const assetKeys = hasEquipment ? booking.equipmentItems.map((eq: any) => eq.name) : ['Asset Collection'];
       const hasAssetColl = hasEquipment
-        ? (!!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture'])
+        ? (!!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture'] || !!modalPhotos['Equipment Received'])
         : true;
       const hasEventStart = !!modalPhotos['Event Start Photo Proof'] || !!modalPhotos['Event Start Image'];
+      const hasNewAsset = hasEquipment && assetKeys.some(k => {
+        const url = modalPhotos[k] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Equipment Received'];
+        return url && !url.startsWith('http://') && !url.startsWith('https://');
+      });
 
-      // Strict Image Upload Validation before submitting
-      const missingList: string[] = [];
-      if (hasEquipment && !hasAssetColl) {
-        missingList.push('1. Equipment Received / Asset Picture');
-      }
-      if (!hasEventStart) {
-        missingList.push('2. Event Start Image');
-      }
+      // Step 1: Equipment Received Image only
+      const isSubmittingEquipmentReceivedOnly = stage === 'Equipment Received' || (stage === 'Event Start' && hasEquipment && hasNewAsset && !hasEventStart);
 
-      if (missingList.length > 0) {
-        setSubmitError({
-          title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
-          message: 'The following required image(s) are missing to start the event:',
-          details: missingList
-        });
-        return;
-      }
+      if (isSubmittingEquipmentReceivedOnly) {
+        if (hasEquipment && !hasAssetColl) {
+          setSubmitError({
+            title: 'IMAGE REQUIRED',
+            message: 'Please capture or upload the Equipment Received / Asset Picture.'
+          });
+          return;
+        }
 
-      try {
-        setIsSubmitting(true);
-        const timestamp = new Date().toISOString();
+        try {
+          setIsSubmitting(true);
+          const timestamp = new Date().toISOString();
+          const allProofsToSave: EquipmentProofItem[] = [];
 
-        const allProofsToSave: EquipmentProofItem[] = [];
-
-          // A. Save / verify Asset Images
+          // Upload and save Equipment Received image(s)
           for (const itemKey of assetKeys) {
-            const rawUrl = modalPhotos[itemKey] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'];
+            const rawUrl = modalPhotos[itemKey] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Equipment Received'];
             if (!rawUrl) continue;
 
             const isNewAsset = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://');
-            const fileName = `proofs/${booking.orderId || booking.leadId}_AssetCollection_${Date.now()}.jpg`;
+            const fileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_EquipmentReceived_${Date.now()}.jpg`;
             const finalUrl = await safeUploadImage(rawUrl, fileName);
 
             if (!finalUrl) {
               throw new Error("Failed to upload Equipment Received / Asset Picture.");
             }
 
-            // Capture exact system timestamp at the moment upload completes
             const assetUploadTime = isNewAsset
               ? new Date().toISOString()
               : (modalPhotoTimestamps[itemKey] || modalPhotoTimestamps['Asset Collection Photo Proof'] || modalPhotoTimestamps['Equipment Received / Asset Picture'] || booking.equipmentReceivedTime || new Date().toISOString());
@@ -1938,6 +1952,11 @@ export const StaffModule: React.FC = () => {
               equipment_status: 'Equipment Received',
               returned_by: staffName,
               returned_at: assetUploadTime,
+              photo_url: finalUrl,
+              asset_id: assetId,
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
+              proof_type: 'Equipment Received',
               remarks: JSON.stringify({
                 assignment_id: booking.assignmentId || '',
                 asset_id: assetId,
@@ -1952,89 +1971,37 @@ export const StaffModule: React.FC = () => {
                 lead_id: booking.leadId,
                 uploaded_at: assetUploadTime,
                 uploaded_by: staffName,
-                current_status: 'Event Started'
+                current_status: booking.taskStatus || 'Assigned Crew'
               })
             };
 
             await pushInsert('lead_equipment_history', historyRecord);
           }
 
-          // B. Save Event Start Image (strictly to event_start_photo)
-          const rawStartUrl = modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image'];
-          if (!rawStartUrl) {
-            setSubmitError({
-              title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
-              message: 'Event Start Image is missing. Please capture or upload a photo to start the event.'
-            });
-            setIsSubmitting(false);
-            return;
+          if (allProofsToSave.length === 0) {
+            const rawFallback = modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Equipment Received'];
+            if (rawFallback) {
+              const fileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_EquipmentReceived_${Date.now()}.jpg`;
+              const finalUrl = (await safeUploadImage(rawFallback, fileName)) || rawFallback;
+              const assetUploadTime = new Date().toISOString();
+              allProofsToSave.push({
+                equipmentName: 'Equipment Received',
+                assetId: 'Asset Collection',
+                photoUrl: finalUrl,
+                capturedAt: assetUploadTime
+              });
+            }
           }
 
-          const isNewStart = !rawStartUrl.startsWith('http://') && !rawStartUrl.startsWith('https://');
-          const startFileName = `proofs/${booking.orderId || booking.leadId}_EventStart_${Date.now()}.jpg`;
-          const finalStartUrl = (await safeUploadImage(rawStartUrl, startFileName)) || rawStartUrl;
-
-          // Capture exact system timestamp at the moment upload completes
-          const startUploadTime = isNewStart
-            ? new Date().toISOString()
-            : (modalPhotoTimestamps['Event Start Photo Proof'] || modalPhotoTimestamps['Event Start Image'] || booking.eventStartPhotoTime || new Date().toISOString());
-
-          allProofsToSave.push({
-            equipmentName: 'Event Start Photo Proof',
-            assetId: 'Event Start',
-            photoUrl: finalStartUrl,
-            capturedAt: startUploadTime
-          });
-
-          const startHistoryRecord = {
-            lead_id: booking.leadId || null,
-            order_id: booking.orderId || null,
-            assignment_id: booking.assignmentId || null,
-            equipment_name: 'Event Start',
-            equipment_status: 'Event Started',
-            returned_by: staffName,
-            returned_at: startUploadTime,
-            photo_url: finalStartUrl,
-            asset_id: 'Event Start',
-            proof_type: 'Event Start',
-            event_id: booking.eventId || null,
-            event_name: booking.eventName || null,
-            remarks: JSON.stringify({
-              assignment_id: booking.assignmentId || '',
-              asset_id: 'Event Start',
-              proof_type: 'Event Start',
-              staff_name: staffName,
-              staff_role: booking.assignedRole || '',
-              staff_id: staffMember?.id || currentUser?.id || '',
-              photo_url: finalStartUrl,
-              event_id: booking.eventId || 'ev',
-              event_name: booking.eventName,
-              order_id: booking.orderId,
-              lead_id: booking.leadId,
-              uploaded_at: startUploadTime,
-              uploaded_by: staffName,
-              current_status: 'Event Started'
-            })
-          };
-
-          try {
-            await pushInsert('lead_equipment_history', startHistoryRecord);
-          } catch (startHistErr) {
-            console.warn('[StaffModule] Error inserting start history record:', startHistErr);
-          }
-
-          // Update local statuses & localStorage
-          const nextStatuses = {
-            ...staffStatuses,
-            [booking.key]: 'Event Started'
-          };
-          setStaffStatuses(nextStatuses);
-          localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
-
+          // Update local staffProofs (CRITICAL: DO NOT change event status)
           const existingProofs = staffProofs[booking.key] || {};
           const updatedEventProofs = {
             ...existingProofs,
-            eventStartProofs: allProofsToSave
+            equipmentReceivedProofs: allProofsToSave,
+            eventStartProofs: [
+              ...(existingProofs.eventStartProofs || []).filter(p => !p.equipmentName.toLowerCase().includes('asset collection') && !p.equipmentName.toLowerCase().includes('equipment received')),
+              ...allProofsToSave
+            ]
           };
           const nextProofs = {
             ...staffProofs,
@@ -2047,7 +2014,7 @@ export const StaffModule: React.FC = () => {
             window.dispatchEvent(new CustomEvent('staff_status_updated'));
           }
 
-          // Update database tables: staff_assignments, operations, orders, leads
+          // Update staff_assignments without changing task_status
           if (booking.orderId) {
             const matchingSA = staffAssignments?.find(sa => {
               if (!sa || sa.order_id !== booking.orderId) return false;
@@ -2058,58 +2025,34 @@ export const StaffModule: React.FC = () => {
               return false;
             });
 
-            const eqReceivedPhotoItem = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof');
-            const eqReceivedPhoto = eqReceivedPhotoItem ? eqReceivedPhotoItem.photoUrl : undefined;
-            const startPhotoUrl = allProofsToSave.find(p => p.equipmentName === 'Event Start Photo Proof')?.photoUrl;
             let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
-            if (!targetAssignmentId && staffAssignments) {
-              const fallbackSA = staffAssignments.find(sa => 
-                sa.order_id === booking.orderId && 
-                (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase() &&
-                ((booking.eventId && sa.event_id === booking.eventId) || (booking.eventName && sa.event_name?.trim().toLowerCase() === booking.eventName.trim().toLowerCase()))
-              );
-              if (fallbackSA) {
-                targetAssignmentId = fallbackSA.assignment_id;
-              }
-            }
-
             const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
+            const primaryEqPhoto = allProofsToSave[0]?.photoUrl;
+            const primaryEqTime = allProofsToSave[0]?.capturedAt || timestamp;
 
-            const startProofItem = allProofsToSave.find(p => p.equipmentName === 'Event Start Photo Proof');
-            const eqProofItem = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof');
-            const actualStartTime = startProofItem?.capturedAt || new Date().toISOString();
-            const actualEqTime = eqProofItem?.capturedAt || booking.equipmentReceivedTime || new Date().toISOString();
-
-            let existingProofs: any = {};
+            let dbExistingProofs: any = {};
             if (existingSA?.proofs) {
               try {
-                existingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+                dbExistingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
               } catch (e) {}
             }
-            const updatedProofs = {
-              ...existingProofs,
-              ...(eqReceivedPhoto ? {
-                equipment_received_photo: eqReceivedPhoto,
-                equipment_received_time: actualEqTime,
-                equipment_received_date: actualEqTime.split('T')[0]
-              } : {}),
-              ...(startPhotoUrl ? {
-                event_start_photo: startPhotoUrl,
-                event_start_time: actualStartTime,
-                event_start_date: actualStartTime.split('T')[0]
-              } : {})
+            const updatedSAProofs = {
+              ...dbExistingProofs,
+              equipment_received_photo: primaryEqPhoto,
+              equipment_received_time: primaryEqTime,
+              equipment_received_date: primaryEqTime.split('T')[0]
             };
 
+            const currentTaskStatus = existingSA?.task_status || booking.taskStatus || 'Assigned Crew';
+
             if (existingSA) {
-              targetAssignmentId = existingSA.assignment_id;
-              await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
-                task_status: 'Event Started',
-                assignment_status: 'Assigned',
+              await pushUpdate('staff_assignments', 'assignment_id', existingSA.assignment_id, {
+                task_status: currentTaskStatus, // DO NOT CHANGE STATUS
                 updated_at: timestamp,
                 updated_by: staffName,
-                proofs: updatedProofs,
-                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: actualEqTime } : {}),
-                ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: actualStartTime } : {})
+                proofs: updatedSAProofs,
+                equipment_received_photo: primaryEqPhoto,
+                equipment_received_time: primaryEqTime
               });
             } else {
               const newAssignmentId = targetAssignmentId || `SA-${booking.orderId}-${booking.eventId || 'ev'}-${Date.now()}`;
@@ -2123,17 +2066,16 @@ export const StaffModule: React.FC = () => {
                 event_date: booking.eventDate || null,
                 staff_name: staffName,
                 staff_role: booking.assignedRole || 'Staff',
-                task_status: 'Event Started',
+                task_status: currentTaskStatus, // DO NOT CHANGE STATUS
                 assignment_status: 'Assigned',
                 updated_at: timestamp,
                 updated_by: staffName,
-                proofs: updatedProofs,
-                ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: actualEqTime } : {}),
-                ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: actualStartTime } : {})
+                proofs: updatedSAProofs,
+                equipment_received_photo: primaryEqPhoto,
+                equipment_received_time: primaryEqTime
               });
             }
 
-            // Insert into dedicated staff_task_submissions audit table
             try {
               await pushInsert('staff_task_submissions', {
                 assignment_id: targetAssignmentId || null,
@@ -2144,69 +2086,374 @@ export const StaffModule: React.FC = () => {
                 staff_name: staffName,
                 staff_role: booking.assignedRole || null,
                 staff_id: staffMember?.id || currentUser?.id || null,
-                submission_type: 'event_start',
-                task_status: 'Event Started',
-                photo_url: startPhotoUrl || eqReceivedPhoto || null,
+                submission_type: 'equipment_received',
+                task_status: currentTaskStatus,
+                photo_url: primaryEqPhoto || null,
                 proof_photos: allProofsToSave,
-                remarks: `Event started by ${staffName} on ${timestamp}`,
+                remarks: `Equipment Received proof saved by ${staffName} on ${timestamp} (status unchanged)`,
                 created_at: timestamp
               });
             } catch (subErr) {
               console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
             }
-
-            // Wrap parent status updates safely so minor errors never crash submission
-            try {
-              const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, 'Event Started', nextStatuses, orders, leads, staffAssignments);
-              const currentOrd = orders?.find(o => o.order_id === booking.orderId);
-              const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
-              const calculatedOverallStage = getCalculatedOrderStage(
-                currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
-                allStaffStatuses
-              );
-
-              const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
-              const payload: any = {
-                remarks: `Event Started by ${staffName} on ${timestamp}`
-              };
-              if (calculatedOverallStage !== currentStage) {
-                 payload.event_status = calculatedOverallStage;
-                 payload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
-              } else {
-                 payload.remarks += ` (Waiting for remaining assigned crew to start)`;
-              }
-
-              await pushUpdate('operations', 'order_id', booking.orderId, payload);
-
-              if (calculatedOverallStage !== currentStage) {
-                await pushUpdate('orders', 'order_id', booking.orderId, {
-                  current_stage: calculatedOverallStage,
-                  updated_by: staffName,
-                  updated_at: timestamp
-                });
-
-                if (booking.leadId) {
-                  await updateLead(booking.leadId, {
-                    status: calculatedOverallStage as any,
-                    current_status: calculatedOverallStage as any,
-                    updated_by: staffName
-                  });
-                }
-              }
-            } catch (parentErr) {
-              console.warn('[StaffModule] Parent status update warning on Event Start:', parentErr);
-            }
           }
 
-          // Close modal immediately and restore scrolling
           closePhotoModal();
-          showToast("✅ Event Started confirmed and saved successfully!");
+          showToast("✅ Equipment Received image saved successfully! Upload Event Start image to start the event.");
 
           try {
             await refreshData();
           } catch (e) {
             console.warn('refreshData error ignored:', e);
           }
+        } catch (error: any) {
+          console.error('Error saving Equipment Received photo:', error);
+          setSubmitError({
+            title: 'SAVE FAILED',
+            message: error?.message || 'An error occurred while uploading Equipment Received photo.'
+          });
+          showToast(`❌ ${error?.message || 'Failed to save photo.'}`);
+          if (photoModalScrollRef.current) {
+            photoModalScrollRef.current.scrollTop = 0;
+          }
+        } finally {
+          setIsSubmitting(false);
+          document.body.style.overflow = '';
+        }
+        return;
+      }
+
+      // Step 2: Staff is submitting Event Start!
+      const missingList: string[] = [];
+      if (hasEquipment && !hasAssetColl) {
+        missingList.push('1. Equipment Received / Asset Picture');
+      }
+      if (!hasEventStart) {
+        missingList.push('2. Event Start Image');
+      }
+
+      if (missingList.length > 0) {
+        setSubmitError({
+          title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
+          message: 'The following required image(s) are missing to start the event:',
+          details: missingList
+        });
+        return;
+      }
+
+      try {
+        setIsSubmitting(true);
+        const timestamp = new Date().toISOString();
+        const allProofsToSave: EquipmentProofItem[] = [];
+
+        // A. Save / verify Asset Images
+        for (const itemKey of assetKeys) {
+          const rawUrl = modalPhotos[itemKey] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Equipment Received'];
+          if (!rawUrl) continue;
+
+          const isNewAsset = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://');
+          const fileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_AssetCollection_${Date.now()}.jpg`;
+          const finalUrl = await safeUploadImage(rawUrl, fileName);
+
+          if (!finalUrl) {
+            throw new Error("Failed to upload Equipment Received / Asset Picture.");
+          }
+
+          const assetUploadTime = isNewAsset
+            ? new Date().toISOString()
+            : (modalPhotoTimestamps[itemKey] || modalPhotoTimestamps['Asset Collection Photo Proof'] || modalPhotoTimestamps['Equipment Received / Asset Picture'] || booking.equipmentReceivedTime || new Date().toISOString());
+
+          const eqName = itemKey;
+          const assetId = booking.equipmentItems?.find((eq: any) => eq.name === itemKey)?.assetId || 'Asset Collection';
+
+          allProofsToSave.push({
+            equipmentName: eqName,
+            assetId: assetId,
+            photoUrl: finalUrl,
+            capturedAt: assetUploadTime
+          });
+
+          const historyRecord = {
+            lead_id: booking.leadId || null,
+            order_id: booking.orderId || null,
+            assignment_id: booking.assignmentId || null,
+            equipment_name: eqName,
+            equipment_status: 'Equipment Received',
+            returned_by: staffName,
+            returned_at: assetUploadTime,
+            photo_url: finalUrl,
+            asset_id: assetId,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            proof_type: 'Equipment Received',
+            remarks: JSON.stringify({
+              assignment_id: booking.assignmentId || '',
+              asset_id: assetId,
+              proof_type: 'Equipment Received',
+              staff_name: staffName,
+              staff_role: booking.assignedRole || '',
+              staff_id: staffMember?.id || currentUser?.id || '',
+              photo_url: finalUrl,
+              event_id: booking.eventId || 'ev',
+              event_name: booking.eventName,
+              order_id: booking.orderId,
+              lead_id: booking.leadId,
+              uploaded_at: assetUploadTime,
+              uploaded_by: staffName,
+              current_status: 'Event Started'
+            })
+          };
+
+          await pushInsert('lead_equipment_history', historyRecord);
+        }
+
+        // B. Save Event Start Image (strictly to event_start_photo)
+        const rawStartUrl = modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image'];
+        if (!rawStartUrl) {
+          setSubmitError({
+            title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
+            message: 'Event Start Image is missing. Please capture or upload a photo to start the event.'
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
+        const isNewStart = !rawStartUrl.startsWith('http://') && !rawStartUrl.startsWith('https://');
+        const startFileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_EventStart_${Date.now()}.jpg`;
+        const finalStartUrl = (await safeUploadImage(rawStartUrl, startFileName)) || rawStartUrl;
+
+        const startUploadTime = isNewStart
+          ? new Date().toISOString()
+          : (modalPhotoTimestamps['Event Start Photo Proof'] || modalPhotoTimestamps['Event Start Image'] || booking.eventStartPhotoTime || new Date().toISOString());
+
+        allProofsToSave.push({
+          equipmentName: 'Event Start Photo Proof',
+          assetId: 'Event Start',
+          photoUrl: finalStartUrl,
+          capturedAt: startUploadTime
+        });
+
+        const startHistoryRecord = {
+          lead_id: booking.leadId || null,
+          order_id: booking.orderId || null,
+          assignment_id: booking.assignmentId || null,
+          equipment_name: 'Event Start',
+          equipment_status: 'Event Started',
+          returned_by: staffName,
+          returned_at: startUploadTime,
+          photo_url: finalStartUrl,
+          asset_id: 'Event Start',
+          proof_type: 'Event Start',
+          event_id: booking.eventId || null,
+          event_name: booking.eventName || null,
+          remarks: JSON.stringify({
+            assignment_id: booking.assignmentId || '',
+            asset_id: 'Event Start',
+            proof_type: 'Event Start',
+            staff_name: staffName,
+            staff_role: booking.assignedRole || '',
+            staff_id: staffMember?.id || currentUser?.id || '',
+            photo_url: finalStartUrl,
+            event_id: booking.eventId || 'ev',
+            event_name: booking.eventName,
+            order_id: booking.orderId,
+            lead_id: booking.leadId,
+            uploaded_at: startUploadTime,
+            uploaded_by: staffName,
+            current_status: 'Event Started'
+          })
+        };
+
+        try {
+          await pushInsert('lead_equipment_history', startHistoryRecord);
+        } catch (startHistErr) {
+          console.warn('[StaffModule] Error inserting start history record:', startHistErr);
+        }
+
+        // Update local statuses & localStorage
+        const nextStatuses = {
+          ...staffStatuses,
+          [booking.key]: 'Event Started'
+        };
+        setStaffStatuses(nextStatuses);
+        localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
+
+        const existingProofs = staffProofs[booking.key] || {};
+        const updatedEventProofs = {
+          ...existingProofs,
+          eventStartProofs: allProofsToSave
+        };
+        const nextProofs = {
+          ...staffProofs,
+          [booking.key]: updatedEventProofs
+        };
+        setStaffProofs(nextProofs);
+        localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('staff_status_updated'));
+        }
+
+        // Update database tables: staff_assignments, operations, orders, leads
+        if (booking.orderId) {
+          const matchingSA = staffAssignments?.find(sa => {
+            if (!sa || sa.order_id !== booking.orderId) return false;
+            if (!sa.staff_name || sa.staff_name.trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+            if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+            if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+            if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+            return false;
+          });
+
+          const eqReceivedPhotoItem = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof');
+          const eqReceivedPhoto = eqReceivedPhotoItem ? eqReceivedPhotoItem.photoUrl : undefined;
+          const startPhotoUrl = allProofsToSave.find(p => p.equipmentName === 'Event Start Photo Proof')?.photoUrl;
+          let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+          if (!targetAssignmentId && staffAssignments) {
+            const fallbackSA = staffAssignments.find(sa => 
+              sa.order_id === booking.orderId && 
+              (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase() &&
+              ((booking.eventId && sa.event_id === booking.eventId) || (booking.eventName && sa.event_name?.trim().toLowerCase() === booking.eventName.trim().toLowerCase()))
+            );
+            if (fallbackSA) {
+              targetAssignmentId = fallbackSA.assignment_id;
+            }
+          }
+
+          const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
+
+          const startProofItem = allProofsToSave.find(p => p.equipmentName === 'Event Start Photo Proof');
+          const eqProofItem = allProofsToSave.find(p => p.equipmentName !== 'Event Start Photo Proof');
+          const actualStartTime = startProofItem?.capturedAt || new Date().toISOString();
+          const actualEqTime = eqProofItem?.capturedAt || booking.equipmentReceivedTime || new Date().toISOString();
+
+          let existingProofsObj: any = {};
+          if (existingSA?.proofs) {
+            try {
+              existingProofsObj = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+            } catch (e) {}
+          }
+          const updatedProofs = {
+            ...existingProofsObj,
+            ...(eqReceivedPhoto ? {
+              equipment_received_photo: eqReceivedPhoto,
+              equipment_received_time: actualEqTime,
+              equipment_received_date: actualEqTime.split('T')[0]
+            } : {}),
+            ...(startPhotoUrl ? {
+              event_start_photo: startPhotoUrl,
+              event_start_time: actualStartTime,
+              event_start_date: actualStartTime.split('T')[0]
+            } : {})
+          };
+
+          if (existingSA) {
+            targetAssignmentId = existingSA.assignment_id;
+            await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
+              task_status: 'Event Started',
+              assignment_status: 'Assigned',
+              updated_at: timestamp,
+              updated_by: staffName,
+              proofs: updatedProofs,
+              ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: actualEqTime } : {}),
+              ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: actualStartTime } : {})
+            });
+          } else {
+            const newAssignmentId = targetAssignmentId || `SA-${booking.orderId}-${booking.eventId || 'ev'}-${Date.now()}`;
+            targetAssignmentId = newAssignmentId;
+            await pushInsert('staff_assignments', {
+              assignment_id: newAssignmentId,
+              order_id: booking.orderId,
+              lead_id: booking.leadId || null,
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
+              event_date: booking.eventDate || null,
+              staff_name: staffName,
+              staff_role: booking.assignedRole || 'Staff',
+              task_status: 'Event Started',
+              assignment_status: 'Assigned',
+              updated_at: timestamp,
+              updated_by: staffName,
+              proofs: updatedProofs,
+              ...(eqReceivedPhoto ? { equipment_received_photo: eqReceivedPhoto, equipment_received_time: actualEqTime } : {}),
+              ...(startPhotoUrl ? { event_start_photo: startPhotoUrl, event_start_time: actualStartTime } : {})
+            });
+          }
+
+          // Insert into dedicated staff_task_submissions audit table
+          try {
+            await pushInsert('staff_task_submissions', {
+              assignment_id: targetAssignmentId || null,
+              order_id: booking.orderId,
+              lead_id: booking.leadId || null,
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
+              staff_name: staffName,
+              staff_role: booking.assignedRole || null,
+              staff_id: staffMember?.id || currentUser?.id || null,
+              submission_type: 'event_start',
+              task_status: 'Event Started',
+              photo_url: startPhotoUrl || eqReceivedPhoto || null,
+              proof_photos: allProofsToSave,
+              remarks: `Event started by ${staffName} on ${timestamp}`,
+              created_at: timestamp
+            });
+          } catch (subErr) {
+            console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
+          }
+
+          // Wrap parent status updates safely so minor errors never crash submission
+          try {
+            const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, 'Event Started', nextStatuses, orders, leads, staffAssignments);
+            const currentOrd = orders?.find(o => o.order_id === booking.orderId);
+            const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
+            const calculatedOverallStage = getCalculatedOrderStage(
+              currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
+              allStaffStatuses
+            );
+
+            const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
+            const payload: any = {
+              remarks: `Event Started by ${staffName} on ${timestamp}`
+            };
+            if (calculatedOverallStage !== currentStage) {
+               payload.event_status = calculatedOverallStage;
+               payload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
+            } else {
+               payload.remarks += ` (Waiting for remaining assigned crew to start)`;
+            }
+
+            await pushUpdate('operations', 'order_id', booking.orderId, payload);
+
+            if (calculatedOverallStage !== currentStage) {
+              await pushUpdate('orders', 'order_id', booking.orderId, {
+                current_stage: calculatedOverallStage,
+                updated_by: staffName,
+                updated_at: timestamp
+              });
+
+              if (booking.leadId) {
+                await updateLead(booking.leadId, {
+                  status: calculatedOverallStage as any,
+                  current_status: calculatedOverallStage as any,
+                  updated_by: staffName
+                });
+              }
+            }
+          } catch (parentErr) {
+            console.warn('[StaffModule] Parent status update warning on Event Start:', parentErr);
+          }
+        }
+
+        // Close modal immediately and restore scrolling
+        closePhotoModal();
+        showToast("✅ Event Started confirmed and saved successfully!");
+
+        try {
+          await refreshData();
+        } catch (e) {
+          console.warn('refreshData error ignored:', e);
+        }
       } catch (error: any) {
         console.error('Error updating Event Start status:', error);
         setSubmitError({
@@ -2224,237 +2471,351 @@ export const StaffModule: React.FC = () => {
       return;
     }
 
-    // --- OTHER STAGES (Event Complete, Equipment Handover, Equipment Received) ---
-    let reqItems: { name: string; assetId: string; optional?: boolean }[] = [];
-    const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
-
-    if (stage === 'Event Complete') {
-      reqItems = [{ name: 'Event Completion Photo Proof', assetId: 'Event Completion' }];
-    } else if (stage === 'Equipment Handover') {
-      if (hasEquipment) {
-        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: true }));
-      } else {
-        reqItems = [];
-      }
-    } else if (stage === 'Equipment Received') {
-      if (hasEquipment) {
-        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: false }));
-      } else {
-        reqItems = [];
-      }
-    }
-
-    // Validate mandatory photo proofs
-    const missingOther: string[] = [];
-    for (const item of reqItems) {
-      if (!item.optional) {
-        const hasPhoto = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
-        if (!hasPhoto) {
-          missingOther.push(item.name);
-        }
-      }
-    }
-
-    // Validate mandatory Raw Footage Link for Footage Handover
-    if (stage === 'Equipment Handover' && (!modalRawFootageLink || !modalRawFootageLink.trim())) {
-      missingOther.push('Raw Footage Drive Link');
-    }
-
-    if (missingOther.length > 0) {
-      setSubmitError({
-        title: 'EVENT SUBMISSION CANNOT BE COMPLETED',
-        message: 'The following required item(s) are missing:',
-        details: missingOther
-      });
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const timestamp = new Date().toISOString();
-      const uploadedProofs: EquipmentProofItem[] = [];
-
-      const hasHandoverPhoto = stage === 'Equipment Handover' && hasEquipment && (
-        !!modalPhotos['Equipment Handover Photo Proof'] || !!modalPhotos['Asset Return Photo Proof'] ||
-        (booking.equipmentItems && booking.equipmentItems.some((eq: any) => !!modalPhotos[`Equipment Handover: ${eq.name}`]))
+    // --- STAGE: EQUIPMENT HANDOVER OR FOOTAGE HANDOVER ---
+    if (stage === 'Equipment Handover' || stage === 'Footage Handover') {
+      const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
+      const reqItems = hasEquipment ? booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name })) : [];
+      const hasHandoverPhoto = hasEquipment && (
+        !!modalPhotos['Equipment Handover Photo Proof'] || 
+        !!modalPhotos['Asset Return Photo Proof'] || 
+        !!modalPhotos['Equipment Handover'] ||
+        (booking.equipmentItems && booking.equipmentItems.some((eq: any) => !!modalPhotos[eq.name] || !!modalPhotos[`Equipment Handover: ${eq.name}`]))
+      );
+      const hasFootageLink = Boolean(modalRawFootageLink && modalRawFootageLink.trim());
+      const hasNewHandover = hasEquipment && (
+        (modalPhotos['Equipment Handover Photo Proof'] && !modalPhotos['Equipment Handover Photo Proof'].startsWith('http://') && !modalPhotos['Equipment Handover Photo Proof'].startsWith('https://')) ||
+        (modalPhotos['Asset Return Photo Proof'] && !modalPhotos['Asset Return Photo Proof'].startsWith('http://') && !modalPhotos['Asset Return Photo Proof'].startsWith('https://')) ||
+        (modalPhotos['Equipment Handover'] && !modalPhotos['Equipment Handover'].startsWith('http://') && !modalPhotos['Equipment Handover'].startsWith('https://')) ||
+        (booking.equipmentItems && booking.equipmentItems.some((eq: any) => modalPhotos[eq.name] && !modalPhotos[eq.name].startsWith('http://') && !modalPhotos[eq.name].startsWith('https://')))
       );
 
-      for (const item of reqItems) {
-        let rawUrl = null;
-        if (stage === 'Equipment Received') {
-          rawUrl = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'];
-        } else if (stage === 'Equipment Handover') {
-          rawUrl = modalPhotos[item.name] || modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'];
-        } else {
-          rawUrl = modalPhotos[item.name];
-        }
-        
-        if (rawUrl) {
-          const isNewUpload = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://');
-          const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
-          const finalUrl = await safeUploadImage(rawUrl, fileName);
+      // Step 3: Staff uploaded Equipment Handover image only (no footage link yet or in Equipment Handover stage)
+      const isSubmittingHandoverPhotoOnly = stage === 'Equipment Handover' || (hasEquipment && hasNewHandover && !hasFootageLink);
 
-          // Capture exact system timestamp at the moment upload completes
-          const itemUploadTime = isNewUpload
-            ? new Date().toISOString()
-            : (modalPhotoTimestamps[item.name] || modalPhotoTimestamps['Asset Collection Photo Proof'] || modalPhotoTimestamps['Equipment Handover Photo Proof'] || modalPhotoTimestamps['Event Completion Photo Proof'] || (stage === 'Event Complete' ? booking.eventEndPhotoTime : stage === 'Equipment Handover' ? booking.equipmentHandoverTime : booking.equipmentReceivedTime) || new Date().toISOString());
-
-          uploadedProofs.push({
-            equipmentName: item.name,
-            assetId: item.assetId,
-            photoUrl: finalUrl,
-            capturedAt: itemUploadTime
+      // Validation for Step 3
+      if (isSubmittingHandoverPhotoOnly) {
+        if (hasEquipment && !hasHandoverPhoto) {
+          setSubmitError({
+            title: 'IMAGE REQUIRED',
+            message: 'Please capture or upload the Equipment Handover Photo Proof.'
           });
+          return;
         }
-      }
-
-      if (uploadedProofs.length === 0) {
-        let fallbackPhoto = null;
-        if (stage === 'Equipment Received') {
-          fallbackPhoto = modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Equipment Received'];
-        } else if (stage === 'Equipment Handover') {
-          fallbackPhoto = modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover'];
-        }
-        if (fallbackPhoto) {
-          const isNewFallback = !fallbackPhoto.startsWith('http://') && !fallbackPhoto.startsWith('https://');
-          const fileName = `proofs/${booking.orderId || booking.leadId}_${stage.replace(/\s+/g, '_')}_${Date.now()}.jpg`;
-          const finalUrl = await safeUploadImage(fallbackPhoto, fileName);
-          const fallbackUploadTime = isNewFallback
-            ? new Date().toISOString()
-            : (modalPhotoTimestamps[stage === 'Equipment Handover' ? 'Equipment Handover Photo Proof' : 'Asset Collection Photo Proof'] || (stage === 'Equipment Handover' ? booking.equipmentHandoverTime : booking.equipmentReceivedTime) || new Date().toISOString());
-
-          uploadedProofs.push({
-            equipmentName: stage === 'Equipment Handover' ? 'Equipment Handover' : 'Equipment Received',
-            assetId: booking.assignmentId || stage,
-            photoUrl: finalUrl,
-            capturedAt: fallbackUploadTime
-          });
-        }
-      }
-
-      const effectiveEquipmentStatus = 
-        stage === 'Event Complete' ? 'Event Ended' :
-        stage === 'Equipment Handover' ? (hasEquipment ? (hasHandoverPhoto ? 'Equipment Handover Completed' : 'Equipment Not Handover') : 'Footage Handover Completed') : stage;
-
-      let nextStatus = staffStatuses[booking.key] || 'Assigned Crew';
-      if (stage === 'Event Complete') {
-        nextStatus = 'Event Ended';
-      } else if (stage === 'Equipment Handover') {
-        nextStatus = 'Footage Handover';
       } else {
-        nextStatus = stage;
-      }
+        // Validation for Step 4
+        const missingList: string[] = [];
+        if (hasEquipment && !hasHandoverPhoto) {
+          missingList.push('Equipment Handover Photo Proof');
+        }
+        if (!hasFootageLink) {
+          missingList.push('Raw Footage Drive Link');
+        }
 
-      const matchingSA = staffAssignments?.find(sa => {
-        if (!sa || sa.order_id !== booking.orderId) return false;
-        if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-        if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
-        if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
-        if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
-        return false;
-      });
-
-      let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
-      if (!targetAssignmentId && staffAssignments) {
-        const fallbackSA = staffAssignments.find(sa => 
-          sa.order_id === booking.orderId && 
-          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase() &&
-          ((booking.eventId && sa.event_id === booking.eventId) || (booking.eventName && sa.event_name?.trim().toLowerCase() === booking.eventName.trim().toLowerCase()))
-        );
-        if (fallbackSA) {
-          targetAssignmentId = fallbackSA.assignment_id;
+        if (missingList.length > 0) {
+          setSubmitError({
+            title: 'SUBMISSION INCOMPLETE',
+            message: 'The following required field(s) are missing to complete footage handover:',
+            details: missingList
+          });
+          return;
         }
       }
 
-      // Record lead equipment history
-      if (uploadedProofs.length > 0) {
-        for (const p of uploadedProofs) {
-          const historyRecord = {
-            lead_id: booking.leadId || null,
-            order_id: booking.orderId || null,
-            assignment_id: targetAssignmentId || booking.assignmentId || null,
-            equipment_name: p.equipmentName,
-            equipment_status: effectiveEquipmentStatus,
-            returned_by: staffName,
-            returned_at: p.capturedAt || timestamp,
-            photo_url: p.photoUrl || null,
-            asset_id: p.assetId || null,
-            event_id: booking.eventId || null,
-            event_name: booking.eventName || null,
-            proof_type: stage === 'Event Complete' ? 'Event End' : stage,
-            remarks: JSON.stringify({
-              assignment_id: targetAssignmentId || booking.assignmentId || '',
-              asset_id: p.assetId,
-              proof_type: stage === 'Event Complete' ? 'Event End' : stage,
-              staff_name: staffName,
-              staff_role: booking.assignedRole || '',
-              staff_id: staffMember?.id || currentUser?.id || '',
-              photo_url: p.photoUrl,
-              event_id: booking.eventId,
-              event_name: booking.eventName,
-              order_id: booking.orderId,
-              lead_id: booking.leadId,
-              raw_footage_link: modalRawFootageLink || null,
-              uploaded_at: p.capturedAt || timestamp,
-              uploaded_by: staffName,
-              current_status: nextStatus
-            })
+      // SUBCASE A (Step 3): Save Handover Photo only without changing status
+      if (isSubmittingHandoverPhotoOnly) {
+        try {
+          setIsSubmitting(true);
+          const timestamp = new Date().toISOString();
+          const uploadedProofs: EquipmentProofItem[] = [];
+
+          const reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name }));
+
+          for (const item of reqItems) {
+            const rawUrl = modalPhotos[item.name] || modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover'];
+            if (rawUrl) {
+              const isNewUpload = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://');
+              const fileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_EquipmentHandover_${Date.now()}.jpg`;
+              const finalUrl = await safeUploadImage(rawUrl, fileName);
+
+              const itemUploadTime = isNewUpload
+                ? new Date().toISOString()
+                : (modalPhotoTimestamps[item.name] || modalPhotoTimestamps['Equipment Handover Photo Proof'] || modalPhotoTimestamps['Asset Return Photo Proof'] || booking.equipmentHandoverTime || new Date().toISOString());
+
+              uploadedProofs.push({
+                equipmentName: item.name,
+                assetId: item.assetId,
+                photoUrl: finalUrl,
+                capturedAt: itemUploadTime
+              });
+            }
+          }
+
+          if (uploadedProofs.length === 0) {
+            const fallbackPhoto = modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover'];
+            if (fallbackPhoto) {
+              const isNewFallback = !fallbackPhoto.startsWith('http://') && !fallbackPhoto.startsWith('https://');
+              const fileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_EquipmentHandover_${Date.now()}.jpg`;
+              const finalUrl = (await safeUploadImage(fallbackPhoto, fileName)) || fallbackPhoto;
+              const fallbackUploadTime = isNewFallback
+                ? new Date().toISOString()
+                : (modalPhotoTimestamps['Equipment Handover Photo Proof'] || booking.equipmentHandoverTime || new Date().toISOString());
+
+              uploadedProofs.push({
+                equipmentName: 'Equipment Handover',
+                assetId: booking.assignmentId || 'Equipment Handover',
+                photoUrl: finalUrl,
+                capturedAt: fallbackUploadTime
+              });
+            }
+          }
+
+          const targetPhotoUrl = uploadedProofs[0]?.photoUrl;
+          const targetPhotoTime = uploadedProofs[0]?.capturedAt || timestamp;
+
+          // Record in lead_equipment_history
+          for (const p of uploadedProofs) {
+            const historyRecord = {
+              lead_id: booking.leadId || null,
+              order_id: booking.orderId || null,
+              assignment_id: booking.assignmentId || null,
+              equipment_name: p.equipmentName,
+              equipment_status: 'Equipment Handover',
+              returned_by: staffName,
+              returned_at: p.capturedAt || timestamp,
+              photo_url: p.photoUrl || null,
+              asset_id: p.assetId || null,
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
+              proof_type: 'Equipment Handover',
+              remarks: JSON.stringify({
+                assignment_id: booking.assignmentId || '',
+                asset_id: p.assetId,
+                proof_type: 'Equipment Handover',
+                staff_name: staffName,
+                staff_role: booking.assignedRole || '',
+                staff_id: staffMember?.id || currentUser?.id || '',
+                photo_url: p.photoUrl,
+                event_id: booking.eventId,
+                event_name: booking.eventName,
+                order_id: booking.orderId,
+                lead_id: booking.leadId,
+                uploaded_at: p.capturedAt || timestamp,
+                uploaded_by: staffName,
+                current_status: booking.taskStatus || 'Event Ended'
+              })
+            };
+            await pushInsert('lead_equipment_history', historyRecord);
+          }
+
+          // Update local staffProofs (CRITICAL: DO NOT change event status)
+          const existingProofs = staffProofs[booking.key] || {};
+          const updatedEventProofs = {
+            ...existingProofs,
+            equipmentHandoverProofs: uploadedProofs
           };
+          const nextProofs = {
+            ...staffProofs,
+            [booking.key]: updatedEventProofs
+          };
+          setStaffProofs(nextProofs);
+          localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
 
-          await pushInsert('lead_equipment_history', historyRecord);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('staff_status_updated'));
+          }
 
-          // If stage is Event Complete, also record with 'Event End Photo Proof' so DB view v_task_assignment_details (which filters by 'Event End Photo Proof') populates event_end_photo
-          if (stage === 'Event Complete' && p.equipmentName === 'Event Completion Photo Proof') {
-            await pushInsert('lead_equipment_history', {
-              ...historyRecord,
-              equipment_name: 'Event End Photo Proof'
+          // Update staff_assignments without changing task_status!
+          if (booking.orderId) {
+            const matchingSA = staffAssignments?.find(sa => {
+              if (!sa || sa.order_id !== booking.orderId) return false;
+              if (!sa.staff_name || sa.staff_name.trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+              if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+              if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+              if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+              return false;
+            });
+
+            let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+            const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
+
+            let dbExistingProofs: any = {};
+            if (existingSA?.proofs) {
+              try {
+                dbExistingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+              } catch (e) {}
+            }
+            const updatedProofs = {
+              ...dbExistingProofs,
+              equipment_handover_photo: targetPhotoUrl,
+              equipment_handover_time: targetPhotoTime,
+              equipment_handover_date: targetPhotoTime.split('T')[0]
+            };
+
+            const currentTaskStatus = existingSA?.task_status || booking.taskStatus || 'Event Ended';
+
+            if (existingSA) {
+              await pushUpdate('staff_assignments', 'assignment_id', existingSA.assignment_id, {
+                task_status: currentTaskStatus, // DO NOT CHANGE STATUS
+                updated_at: timestamp,
+                updated_by: staffName,
+                proofs: updatedProofs,
+                equipment_handover_photo: targetPhotoUrl,
+                equipment_handover_time: targetPhotoTime,
+                equipment_handover_date: targetPhotoTime.split('T')[0]
+              });
+            }
+
+            try {
+              await pushInsert('staff_task_submissions', {
+                assignment_id: targetAssignmentId || null,
+                order_id: booking.orderId,
+                lead_id: booking.leadId || null,
+                event_id: booking.eventId || null,
+                event_name: booking.eventName || null,
+                staff_name: staffName,
+                staff_role: booking.assignedRole || null,
+                staff_id: staffMember?.id || currentUser?.id || null,
+                submission_type: 'equipment_handover',
+                task_status: currentTaskStatus,
+                photo_url: targetPhotoUrl || null,
+                proof_photos: uploadedProofs,
+                remarks: `Equipment Handover proof saved by ${staffName} on ${timestamp} (status unchanged)`,
+                created_at: timestamp
+              });
+            } catch (subErr) {
+              console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
+            }
+          }
+
+          closePhotoModal();
+          showToast("✅ Equipment Handover image saved successfully! Provide Raw Footage Drive Link to complete footage handover.");
+
+          try {
+            await refreshData();
+          } catch (e) {
+            console.warn('refreshData error ignored:', e);
+          }
+        } catch (error: any) {
+          console.error('Error saving Equipment Handover photo:', error);
+          setSubmitError({
+            title: 'SAVE FAILED',
+            message: error?.message || 'An error occurred while uploading Equipment Handover photo.'
+          });
+          showToast(`❌ ${error?.message || 'Failed to save photo.'}`);
+        } finally {
+          setIsSubmitting(false);
+          document.body.style.overflow = '';
+        }
+        return;
+      }
+
+      // SUBCASE B (Step 4): All required conditions are met -> Complete Footage Handover!
+      try {
+        setIsSubmitting(true);
+        const timestamp = new Date().toISOString();
+        const uploadedProofs: EquipmentProofItem[] = [];
+
+        const reqItems = booking.equipmentItems && booking.equipmentItems.length > 0
+          ? booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name }))
+          : [];
+
+        for (const item of reqItems) {
+          const rawUrl = modalPhotos[item.name] || modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover'];
+          if (rawUrl) {
+            const isNewUpload = !rawUrl.startsWith('http://') && !rawUrl.startsWith('https://');
+            const fileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_EquipmentHandover_${Date.now()}.jpg`;
+            const finalUrl = await safeUploadImage(rawUrl, fileName);
+
+            const itemUploadTime = isNewUpload
+              ? new Date().toISOString()
+              : (modalPhotoTimestamps[item.name] || modalPhotoTimestamps['Equipment Handover Photo Proof'] || modalPhotoTimestamps['Asset Return Photo Proof'] || booking.equipmentHandoverTime || new Date().toISOString());
+
+            uploadedProofs.push({
+              equipmentName: item.name,
+              assetId: item.assetId,
+              photoUrl: finalUrl,
+              capturedAt: itemUploadTime
             });
           }
         }
-      } else if (stage === 'Equipment Handover') {
-        if (hasEquipment) {
-          // Record Equipment Not Handover when photo was not uploaded for assigned equipment
-          const historyRecord = {
-            lead_id: booking.leadId || null,
-            order_id: booking.orderId || null,
-            assignment_id: targetAssignmentId || booking.assignmentId || null,
-            equipment_name: 'Equipment Handover Photo Proof',
-            equipment_status: 'Equipment Not Handover',
-            returned_by: staffName,
-            returned_at: timestamp,
-            photo_url: null,
-            asset_id: 'Equipment Handover',
-            proof_type: 'Equipment Handover',
-            event_id: booking.eventId || null,
-            event_name: booking.eventName || null,
-            remarks: JSON.stringify({
-              assignment_id: targetAssignmentId || booking.assignmentId || '',
-              asset_id: 'Equipment Handover',
-              proof_type: 'Equipment Handover',
-              staff_name: staffName,
-              staff_role: booking.assignedRole || '',
-              staff_id: staffMember?.id || currentUser?.id || '',
-              photo_url: null,
-              event_id: booking.eventId,
-              event_name: booking.eventName,
-              order_id: booking.orderId,
-              lead_id: booking.leadId,
-              raw_footage_link: modalRawFootageLink || null,
-              uploaded_at: timestamp,
-              uploaded_by: staffName,
-              current_status: nextStatus
-            })
-          };
 
-          await pushInsert('lead_equipment_history', historyRecord);
+        if (uploadedProofs.length === 0 && hasHandoverPhoto) {
+          const fallbackPhoto = modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover'];
+          if (fallbackPhoto) {
+            const isNewFallback = !fallbackPhoto.startsWith('http://') && !fallbackPhoto.startsWith('https://');
+            const fileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_EquipmentHandover_${Date.now()}.jpg`;
+            const finalUrl = (await safeUploadImage(fallbackPhoto, fileName)) || fallbackPhoto;
+            const fallbackUploadTime = isNewFallback
+              ? new Date().toISOString()
+              : (modalPhotoTimestamps['Equipment Handover Photo Proof'] || booking.equipmentHandoverTime || new Date().toISOString());
+
+            uploadedProofs.push({
+              equipmentName: 'Equipment Handover',
+              assetId: booking.assignmentId || 'Equipment Handover',
+              photoUrl: finalUrl,
+              capturedAt: fallbackUploadTime
+            });
+          }
+        }
+
+        const effectiveEquipmentStatus = hasEquipment ? (hasHandoverPhoto ? 'Equipment Handover Completed' : 'Equipment Not Handover') : 'Footage Handover Completed';
+        const nextStatus = 'Footage Handover';
+
+        const matchingSA = staffAssignments?.find(sa => {
+          if (!sa || sa.order_id !== booking.orderId) return false;
+          if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+          if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+          return false;
+        });
+
+        let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+
+        // Record lead equipment history
+        if (uploadedProofs.length > 0) {
+          for (const p of uploadedProofs) {
+            const historyRecord = {
+              lead_id: booking.leadId || null,
+              order_id: booking.orderId || null,
+              assignment_id: targetAssignmentId || booking.assignmentId || null,
+              equipment_name: p.equipmentName,
+              equipment_status: effectiveEquipmentStatus,
+              returned_by: staffName,
+              returned_at: p.capturedAt || timestamp,
+              photo_url: p.photoUrl || null,
+              asset_id: p.assetId || null,
+              event_id: booking.eventId || null,
+              event_name: booking.eventName || null,
+              proof_type: 'Equipment Handover',
+              remarks: JSON.stringify({
+                assignment_id: targetAssignmentId || booking.assignmentId || '',
+                asset_id: p.assetId,
+                proof_type: 'Equipment Handover',
+                staff_name: staffName,
+                staff_role: booking.assignedRole || '',
+                staff_id: staffMember?.id || currentUser?.id || '',
+                photo_url: p.photoUrl,
+                event_id: booking.eventId,
+                event_name: booking.eventName,
+                order_id: booking.orderId,
+                lead_id: booking.leadId,
+                raw_footage_link: modalRawFootageLink || null,
+                uploaded_at: p.capturedAt || timestamp,
+                uploaded_by: staffName,
+                current_status: nextStatus
+              })
+            };
+            await pushInsert('lead_equipment_history', historyRecord);
+          }
         } else {
-          // Staff has NO equipment assigned -> Record Footage Handover
+          // Record Footage Handover
           const historyRecord = {
             lead_id: booking.leadId || null,
             order_id: booking.orderId || null,
             assignment_id: targetAssignmentId || booking.assignmentId || null,
-            equipment_name: 'Equipment Handover',
-            equipment_status: 'Footage Handover Completed',
+            equipment_name: hasEquipment ? 'Equipment Handover' : 'Footage Handover',
+            equipment_status: effectiveEquipmentStatus,
             returned_by: staffName,
             returned_at: timestamp,
             photo_url: null,
@@ -2480,108 +2841,63 @@ export const StaffModule: React.FC = () => {
               current_status: nextStatus
             })
           };
-
           await pushInsert('lead_equipment_history', historyRecord);
         }
-      }
 
-      // If stage is Equipment Handover, explicitly mark every assigned equipment item as returned
-      if (stage === 'Equipment Handover' && booking.equipmentItems && booking.equipmentItems.length > 0) {
-        for (const eqItem of booking.equipmentItems) {
-          if (!eqItem?.name) continue;
-          try {
-            await pushInsert('lead_equipment_history', {
-              lead_id: booking.leadId || null,
-              order_id: booking.orderId || null,
-              assignment_id: targetAssignmentId || booking.assignmentId || null,
-              equipment_name: 'Equipment Handover',
-              equipment_status: 'Equipment Handover Completed',
-              returned_by: staffName,
-              returned_at: timestamp,
-              photo_url: null,
-              asset_id: eqItem.assetId || null,
-              proof_type: 'Equipment Handover',
-              event_id: booking.eventId || null,
-              event_name: booking.eventName || null,
-              remarks: JSON.stringify({
-                assignment_id: targetAssignmentId || booking.assignmentId || '',
-                asset_id: eqItem.assetId || '',
-                proof_type: 'Equipment Handover',
-                staff_name: staffName,
-                staff_role: booking.assignedRole || '',
-                staff_id: staffMember?.id || currentUser?.id || '',
+        // Explicitly mark every assigned equipment item as returned
+        if (booking.equipmentItems && booking.equipmentItems.length > 0) {
+          for (const eqItem of booking.equipmentItems) {
+            if (!eqItem?.name) continue;
+            try {
+              await pushInsert('lead_equipment_history', {
+                lead_id: booking.leadId || null,
+                order_id: booking.orderId || null,
+                assignment_id: targetAssignmentId || booking.assignmentId || null,
+                equipment_name: 'Equipment Handover',
+                equipment_status: 'Equipment Handover Completed',
+                returned_by: staffName,
+                returned_at: timestamp,
                 photo_url: null,
-                event_id: booking.eventId,
-                event_name: booking.eventName,
-                order_id: booking.orderId,
-                lead_id: booking.leadId,
-                raw_footage_link: modalRawFootageLink || null,
-                uploaded_at: timestamp,
-                uploaded_by: staffName,
-                current_status: nextStatus
-              })
-            });
+                asset_id: eqItem.assetId || null,
+                proof_type: 'Equipment Handover',
+                event_id: booking.eventId || null,
+                event_name: booking.eventName || null,
+                remarks: JSON.stringify({
+                  assignment_id: targetAssignmentId || booking.assignmentId || '',
+                  asset_id: eqItem.assetId || '',
+                  proof_type: 'Equipment Handover',
+                  staff_name: staffName,
+                  staff_role: booking.assignedRole || '',
+                  staff_id: staffMember?.id || currentUser?.id || '',
+                  photo_url: null,
+                  event_id: booking.eventId,
+                  event_name: booking.eventName,
+                  order_id: booking.orderId,
+                  lead_id: booking.leadId,
+                  raw_footage_link: modalRawFootageLink || null,
+                  uploaded_at: timestamp,
+                  uploaded_by: staffName,
+                  current_status: nextStatus
+                })
+              });
 
-            await pushInsert('equipment_handovers', {
-              handover_id: `HND-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-              order_id: booking.orderId || booking.leadId || '',
-              equipment_name: eqItem.name,
-              return_status: 'Returned',
-              return_date: timestamp.split('T')[0],
-              returned_by: staffName,
-              notes: `Returned at footage handover by ${staffName}`,
-              created_at: timestamp
-            });
-          } catch (itemErr) {
-            console.warn('[StaffModule] Error saving equipment item return record:', itemErr);
-          }
-        }
-      }
-
-      if (booking.orderId) {
-        const matchingSA = staffAssignments?.find(sa => {
-          if (!sa || sa.order_id !== booking.orderId) return false;
-          if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-          
-          if (booking.assignmentId && sa.assignment_id) {
-            return sa.assignment_id === booking.assignmentId;
-          }
-          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id) {
-            return sa.event_id === booking.eventId;
-          }
-          if (booking.eventName && sa.event_name) {
-            return sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase();
-          }
-          return false;
-        });
-
-        let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
-        if (!targetAssignmentId && staffAssignments) {
-          const fallbackSA = staffAssignments.find(sa => {
-            if (sa.order_id !== booking.orderId) return false;
-            if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
-            
-            if (booking.eventId && booking.eventId !== 'ev' && sa.event_id) {
-              return sa.event_id === booking.eventId;
+              await pushInsert('equipment_handovers', {
+                handover_id: `HND-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+                order_id: booking.orderId || booking.leadId || '',
+                equipment_name: eqItem.name,
+                return_status: 'Returned',
+                return_date: timestamp.split('T')[0],
+                returned_by: staffName,
+                notes: `Returned at footage handover by ${staffName}`,
+                created_at: timestamp
+              });
+            } catch (itemErr) {
+              console.warn('[StaffModule] Error saving equipment item return record:', itemErr);
             }
-            if (booking.eventName && sa.event_name) {
-              return sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase();
-            }
-            
-            const otherSameStaffAssignments = staffAssignments.filter(s => 
-              s.order_id === booking.orderId && 
-              (s.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
-            );
-            if (otherSameStaffAssignments.length > 1) {
-              return false;
-            }
-            return true;
-          });
-          if (fallbackSA) {
-            targetAssignmentId = fallbackSA.assignment_id;
           }
         }
 
+        // Save raw footage link
         if (booking.orderId) {
           try {
             const targetAsgId = targetAssignmentId || booking.assignmentId || '';
@@ -2619,12 +2935,9 @@ export const StaffModule: React.FC = () => {
         localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
 
         const existingProofs = staffProofs[booking.key] || {};
-        const proofField = stage === 'Equipment Received' ? 'equipmentReceivedProofs' :
-                           stage === 'Equipment Handover' ? 'equipmentHandoverProofs' :
-                           'completeProofs';
         const updatedEventProofs = {
           ...existingProofs,
-          [proofField]: uploadedProofs
+          equipmentHandoverProofs: uploadedProofs
         };
         const nextProofs = {
           ...staffProofs,
@@ -2637,31 +2950,22 @@ export const StaffModule: React.FC = () => {
           window.dispatchEvent(new CustomEvent('staff_status_updated'));
         }
 
-        const updateAssignmentPayload: any = {
-          task_status: nextStatus,
-          updated_at: timestamp,
-          updated_by: staffName
-        };
         const targetProofItem = uploadedProofs.find(p => p.photoUrl) || uploadedProofs[0];
         const targetPhotoUrl = targetProofItem?.photoUrl;
         const targetPhotoTime = targetProofItem?.capturedAt || timestamp;
 
-        if (stage === 'Equipment Received' && targetPhotoUrl) {
-          updateAssignmentPayload.equipment_received_photo = targetPhotoUrl;
-          updateAssignmentPayload.equipment_received_time = targetPhotoTime;
-        } else if (stage === 'Equipment Handover') {
-          if (targetPhotoUrl) {
-            updateAssignmentPayload.equipment_handover_photo = targetPhotoUrl;
-          }
-          updateAssignmentPayload.equipment_handover_to = staffName;
-          updateAssignmentPayload.equipment_handover_time = targetPhotoTime;
-          updateAssignmentPayload.equipment_handover_date = targetPhotoTime.split('T')[0];
-        } else if (stage === 'Event Complete') {
-          if (targetPhotoUrl) {
-            updateAssignmentPayload.event_end_photo = targetPhotoUrl;
-          }
-          updateAssignmentPayload.event_end_time = targetPhotoTime;
+        const updateAssignmentPayload: any = {
+          task_status: nextStatus,
+          updated_at: timestamp,
+          updated_by: staffName,
+          raw_footage_link: modalRawFootageLink || null
+        };
+        if (targetPhotoUrl) {
+          updateAssignmentPayload.equipment_handover_photo = targetPhotoUrl;
         }
+        updateAssignmentPayload.equipment_handover_to = staffName;
+        updateAssignmentPayload.equipment_handover_time = targetPhotoTime;
+        updateAssignmentPayload.equipment_handover_date = targetPhotoTime.split('T')[0];
 
         const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
         let dbExistingProofs: any = {};
@@ -2673,16 +2977,9 @@ export const StaffModule: React.FC = () => {
 
         const updatedProofs = {
           ...dbExistingProofs,
-          ...(stage === 'Equipment Received' && targetPhotoUrl ? {
-            equipment_received_photo: targetPhotoUrl,
-            equipment_received_time: targetPhotoTime,
-            equipment_received_date: targetPhotoTime.split('T')[0]
-          } : {}),
-          ...(stage === 'Equipment Handover' ? {
-            equipment_handover_photo: targetPhotoUrl || existingSA?.equipment_handover_photo,
-            equipment_handover_time: targetPhotoTime,
-            equipment_handover_date: targetPhotoTime.split('T')[0]
-          } : {})
+          equipment_handover_photo: targetPhotoUrl || existingSA?.equipment_handover_photo,
+          equipment_handover_time: targetPhotoTime,
+          equipment_handover_date: targetPhotoTime.split('T')[0]
         };
         updateAssignmentPayload.proofs = updatedProofs;
 
@@ -2692,29 +2989,10 @@ export const StaffModule: React.FC = () => {
             ...updateAssignmentPayload,
             assignment_status: 'Assigned'
           });
-        } else {
-          const newAssignmentId = targetAssignmentId || `SA-${booking.orderId}-${booking.eventId || 'ev'}-${Date.now()}`;
-          targetAssignmentId = newAssignmentId;
-          await pushInsert('staff_assignments', {
-            assignment_id: newAssignmentId,
-            order_id: booking.orderId,
-            lead_id: booking.leadId || null,
-            event_id: booking.eventId || null,
-            event_name: booking.eventName || null,
-            event_date: booking.eventDate || null,
-            staff_name: staffName,
-            staff_role: booking.assignedRole || 'Staff',
-            assignment_status: 'Assigned',
-            ...updateAssignmentPayload
-          });
         }
 
         // Insert into dedicated staff_task_submissions audit table
         try {
-          const subType = stage === 'Equipment Received' ? 'equipment_received'
-            : stage === 'Equipment Handover' ? 'equipment_handover'
-            : 'event_complete';
-
           await pushInsert('staff_task_submissions', {
             assignment_id: targetAssignmentId || null,
             order_id: booking.orderId,
@@ -2724,18 +3002,19 @@ export const StaffModule: React.FC = () => {
             staff_name: staffName,
             staff_role: booking.assignedRole || null,
             staff_id: staffMember?.id || currentUser?.id || null,
-            submission_type: subType,
+            submission_type: 'footage_handover',
             task_status: nextStatus,
             photo_url: targetPhotoUrl || null,
             proof_photos: uploadedProofs,
             raw_footage_link: modalRawFootageLink || null,
-            remarks: `${stage} updated by ${staffName} on ${timestamp}`,
+            remarks: `Footage handover completed by ${staffName} on ${timestamp}`,
             created_at: timestamp
           });
         } catch (subErr) {
           console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
         }
 
+        // Update operations & orders parent stages
         try {
           const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, nextStatus, nextStatuses, orders, leads, staffAssignments);
           const currentOrd = orders?.find(o => o.order_id === booking.orderId);
@@ -2777,25 +3056,232 @@ export const StaffModule: React.FC = () => {
         } catch (parentErr) {
           console.warn('[StaffModule] Parent stage calculation error ignored:', parentErr);
         }
-      }
 
-      // Close modal immediately and restore scrolling
-      closePhotoModal();
-      const stageLabel = stage === 'Event Complete' ? 'Event End' : stage;
-      showToast(`✅ ${stageLabel} submitted & saved successfully!`);
+        closePhotoModal();
+        showToast("✅ Footage Handover submitted & saved successfully!");
+
+        try {
+          await refreshData();
+        } catch (e) {
+          console.warn('refreshData error ignored:', e);
+        }
+      } catch (error: any) {
+        console.error('Error updating status:', error);
+        showToast(`❌ Failed to submit Footage Handover: ${error.message || 'Unknown error'}`);
+      } finally {
+        setIsSubmitting(false);
+        document.body.style.overflow = '';
+      }
+      return;
+    }
+
+    // --- STAGE: EVENT COMPLETE (EVENT END) ---
+    if (stage === 'Event Complete') {
+      const hasPhoto = modalPhotos['Event Completion Photo Proof'];
+      if (!hasPhoto) {
+        setSubmitError({
+          title: 'EVENT COMPLETION PHOTO REQUIRED',
+          message: 'Please capture or upload the Event Completion Photo Proof to complete Event End.'
+        });
+        return;
+      }
 
       try {
-        await refreshData();
-      } catch (e) {
-        console.warn('refreshData error ignored:', e);
-      }
+        setIsSubmitting(true);
+        const timestamp = new Date().toISOString();
+        const isNewUpload = !hasPhoto.startsWith('http://') && !hasPhoto.startsWith('https://');
+        const fileName = `proofs/${booking.orderId || booking.leadId}_${booking.eventId || 'ev'}_EventComplete_${Date.now()}.jpg`;
+        const finalUrl = (await safeUploadImage(hasPhoto, fileName)) || hasPhoto;
 
-    } catch (error: any) {
-      console.error('Error updating status:', error);
-      showToast(`❌ Failed to submit ${stage}: ${error.message || 'Unknown error'}`);
-    } finally {
-      setIsSubmitting(false);
-      document.body.style.overflow = '';
+        const photoTime = isNewUpload
+          ? new Date().toISOString()
+          : (modalPhotoTimestamps['Event Completion Photo Proof'] || booking.eventEndPhotoTime || new Date().toISOString());
+
+        const uploadedProofs: EquipmentProofItem[] = [{
+          equipmentName: 'Event Completion Photo Proof',
+          assetId: 'Event Complete',
+          photoUrl: finalUrl,
+          capturedAt: photoTime
+        }];
+
+        const nextStatus = 'Event Ended';
+
+        const matchingSA = staffAssignments?.find(sa => {
+          if (!sa || sa.order_id !== booking.orderId) return false;
+          if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+          if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+          return false;
+        });
+
+        let targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id;
+
+        const historyRecord = {
+          lead_id: booking.leadId || null,
+          order_id: booking.orderId || null,
+          assignment_id: targetAssignmentId || booking.assignmentId || null,
+          equipment_name: 'Event Completion Photo Proof',
+          equipment_status: 'Event Ended',
+          returned_by: staffName,
+          returned_at: photoTime,
+          photo_url: finalUrl,
+          asset_id: 'Event Complete',
+          event_id: booking.eventId || null,
+          event_name: booking.eventName || null,
+          proof_type: 'Event End',
+          remarks: JSON.stringify({
+            assignment_id: targetAssignmentId || booking.assignmentId || '',
+            asset_id: 'Event Complete',
+            proof_type: 'Event End',
+            staff_name: staffName,
+            staff_role: booking.assignedRole || '',
+            staff_id: staffMember?.id || currentUser?.id || '',
+            photo_url: finalUrl,
+            event_id: booking.eventId,
+            event_name: booking.eventName,
+            order_id: booking.orderId,
+            lead_id: booking.leadId,
+            uploaded_at: photoTime,
+            uploaded_by: staffName,
+            current_status: nextStatus
+          })
+        };
+        await pushInsert('lead_equipment_history', historyRecord);
+        await pushInsert('lead_equipment_history', {
+          ...historyRecord,
+          equipment_name: 'Event End Photo Proof'
+        });
+
+        const nextStatuses = {
+          ...staffStatuses,
+          [booking.key]: nextStatus
+        };
+        setStaffStatuses(nextStatuses);
+        localStorage.setItem('staff_event_statuses_v2', JSON.stringify(nextStatuses));
+
+        const existingProofs = staffProofs[booking.key] || {};
+        const updatedEventProofs = {
+          ...existingProofs,
+          completeProofs: uploadedProofs
+        };
+        const nextProofs = {
+          ...staffProofs,
+          [booking.key]: updatedEventProofs
+        };
+        setStaffProofs(nextProofs);
+        localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
+
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('staff_status_updated'));
+        }
+
+        const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId || (matchingSA && sa.assignment_id === matchingSA.assignment_id));
+        let dbExistingProofs: any = {};
+        if (existingSA?.proofs) {
+          try {
+            dbExistingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+          } catch (e) {}
+        }
+        const updatedProofs = {
+          ...dbExistingProofs,
+          event_end_photo: finalUrl,
+          event_end_time: photoTime,
+          event_end_date: photoTime.split('T')[0]
+        };
+
+        if (existingSA) {
+          targetAssignmentId = existingSA.assignment_id;
+          await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
+            task_status: nextStatus,
+            updated_at: timestamp,
+            updated_by: staffName,
+            event_end_photo: finalUrl,
+            event_end_time: photoTime,
+            proofs: updatedProofs,
+            assignment_status: 'Assigned'
+          });
+        }
+
+        try {
+          await pushInsert('staff_task_submissions', {
+            assignment_id: targetAssignmentId || null,
+            order_id: booking.orderId,
+            lead_id: booking.leadId || null,
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            staff_name: staffName,
+            staff_role: booking.assignedRole || null,
+            staff_id: staffMember?.id || currentUser?.id || null,
+            submission_type: 'event_complete',
+            task_status: nextStatus,
+            photo_url: finalUrl,
+            proof_photos: uploadedProofs,
+            remarks: `Event completion submitted by ${staffName} on ${timestamp}`,
+            created_at: timestamp
+          });
+        } catch (subErr) {
+          console.warn('[StaffModule] staff_task_submissions insert fallback note:', subErr);
+        }
+
+        try {
+          const allStaffStatuses = getAllStaffStatusesForOrder(booking.orderId, staffName, nextStatus, nextStatuses, orders, leads, staffAssignments);
+          const currentOrd = orders?.find(o => o.order_id === booking.orderId);
+          const currentLead = leads?.find(l => l.lead_id === (currentOrd?.lead_id || booking.leadId || booking.orderId));
+          const calculatedOverallStage = getCalculatedOrderStage(
+            currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew',
+            allStaffStatuses
+          );
+
+          const opsPayload: any = {
+            equipment_status: 'Event Ended',
+            remarks: `Updated by ${staffName}: Stage updated to ${nextStatus}`
+          };
+
+          const currentStage = currentOrd?.current_stage || currentLead?.current_status || currentLead?.status || 'Assigned Crew';
+          if (calculatedOverallStage !== currentStage) {
+            opsPayload.event_status = calculatedOverallStage;
+            opsPayload.remarks += ` (Parent status updated to ${calculatedOverallStage})`;
+
+            await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
+
+            await pushUpdate('orders', 'order_id', booking.orderId, { 
+              current_stage: calculatedOverallStage,
+              updated_by: staffName,
+              updated_at: timestamp
+            });
+
+            if (booking.leadId) {
+              await updateLead(booking.leadId, { 
+                status: calculatedOverallStage as any,
+                current_status: calculatedOverallStage as any,
+                updated_by: staffName
+              });
+            }
+          } else {
+            opsPayload.remarks += ' (Waiting for remaining assigned crew)';
+            await pushUpdate('operations', 'order_id', booking.orderId, opsPayload);
+          }
+        } catch (parentErr) {
+          console.warn('[StaffModule] Parent stage calculation error ignored:', parentErr);
+        }
+
+        closePhotoModal();
+        showToast("✅ Event End submitted & saved successfully!");
+
+        try {
+          await refreshData();
+        } catch (e) {
+          console.warn('refreshData error ignored:', e);
+        }
+      } catch (error: any) {
+        console.error('Error updating status:', error);
+        showToast(`❌ Failed to submit Event End: ${error.message || 'Unknown error'}`);
+      } finally {
+        setIsSubmitting(false);
+        document.body.style.overflow = '';
+      }
+      return;
     }
   };
 
@@ -3357,7 +3843,15 @@ export const StaffModule: React.FC = () => {
             <div className="p-6 border-b border-zinc-800 bg-zinc-950/60 flex justify-between items-start">
               <div>
                 <span className="text-xs font-mono font-bold text-amber-400 uppercase tracking-widest block mb-1">
-                  {photoModalData.stage === 'Event Complete' ? 'Event End Workflow' : photoModalData.stage === 'Equipment Handover' ? 'Footage Handover Workflow' : `Verification • ${photoModalData.stage}`}
+                  {photoModalData.stage === 'Event Complete' 
+                    ? 'Event End Workflow' 
+                    : photoModalData.stage === 'Equipment Handover' 
+                    ? 'Equipment Handover Workflow' 
+                    : photoModalData.stage === 'Footage Handover'
+                    ? 'Footage Handover Workflow'
+                    : photoModalData.stage === 'Equipment Received'
+                    ? 'Equipment Received Workflow'
+                    : `Verification • ${photoModalData.stage}`}
                 </span>
                 <h3 className="text-xl font-black text-white">{photoModalData.booking.eventName}</h3>
                 <p className="text-zinc-400 text-xs mt-0.5">Order ID: {photoModalData.booking.orderId} | Staff: <strong className="text-white">{staffName}</strong></p>
@@ -3396,11 +3890,15 @@ export const StaffModule: React.FC = () => {
                   {photoModalData.stage === 'Event Complete' ? (
                     <span><strong>Event Completion Proof Required:</strong> Please upload or capture the <strong>Event Completion Photo Proof</strong> to complete the Event End stage.</span>
                   ) : photoModalData.stage === 'Equipment Handover' ? (
+                    <span><strong>Equipment Handover Photo:</strong> Please capture or upload a clear photo of the <strong>Equipment Handover Photo Proof</strong>.</span>
+                  ) : photoModalData.stage === 'Footage Handover' ? (
                     photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 ? (
-                      <span><strong>Footage & Equipment Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong> and capture/upload Equipment Handover Photo Proof.</span>
+                      <span><strong>Footage & Equipment Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong> and confirm <strong>Equipment Handover Photo Proof</strong> to complete footage handover.</span>
                     ) : (
                       <span><strong>Footage Handover:</strong> Provide the <strong>Raw Footage Drive Link (Required)</strong> to complete footage handover.</span>
                     )
+                  ) : photoModalData.stage === 'Equipment Received' ? (
+                    <span><strong>Equipment Received:</strong> Please capture or upload a clear photo of the assigned equipment (<strong>Equipment Received / Asset Picture</strong>).</span>
                   ) : photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 ? (
                     <span><strong>Equipment Inspection Required:</strong> Please capture or upload a clear photo of each assigned equipment item (Equipment Received / Asset Picture) and <strong>Event Start Image</strong> to start the event.</span>
                   ) : (
@@ -3438,34 +3936,33 @@ export const StaffModule: React.FC = () => {
                             isEventStart: true 
                           }
                         ])
+                  : photoModalData.stage === 'Equipment Received'
+                  ? [
+                      {
+                        name: 'Asset Collection Photo Proof',
+                        displayName: 'Equipment Received / Asset Picture',
+                        assetId: photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems[0]?.assetId ? photoModalData.booking.equipmentItems[0].assetId : 'Asset Collection',
+                        optional: false,
+                        isAsset: true
+                      }
+                    ]
                   : photoModalData.stage === 'Event Complete'
                   ? [
                       { name: 'Event Completion Photo Proof', displayName: 'Event Completion Photo Proof', assetId: 'Event Complete', optional: false }
                     ]
-                  : photoModalData.stage === 'Equipment Handover'
+                  : (photoModalData.stage === 'Equipment Handover' || photoModalData.stage === 'Footage Handover')
                   ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
                       ? [
                           {
                             name: 'Asset Return Photo Proof',
                             displayName: 'Equipment Handover Photo Proof',
                             assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Equipment Handover',
-                            optional: true
+                            optional: false
                           }
                         ]
                       : []
                     )
-                  : (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0
-                      ? [
-                          {
-                            name: 'Asset Collection Photo Proof',
-                            displayName: 'Equipment Received / Asset Picture',
-                            assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
-                            optional: false,
-                            isAsset: true
-                          }
-                        ]
-                      : []
-                    )
+                  : []
                 ).map((item: any, idx: number) => {
                   const currentPhoto = modalPhotos[item.name] || 
                     (item.isAsset ? (modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture']) : undefined) ||
@@ -3559,7 +4056,7 @@ export const StaffModule: React.FC = () => {
                 })}
 
                 {/* Raw Footage Link Input for Footage Handover stage */}
-                {photoModalData.stage === 'Equipment Handover' && (
+                {photoModalData.stage === 'Footage Handover' && (
                   <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-4 space-y-3">
                     <div className="flex justify-between items-center">
                       <div>
@@ -3620,12 +4117,22 @@ export const StaffModule: React.FC = () => {
                     <CheckCircle className="w-4 h-4" />
                     Confirm Event Start
                   </>
+                ) : photoModalData.stage === 'Equipment Received' ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Submit Equipment Received
+                  </>
                 ) : photoModalData.stage === 'Event Complete' ? (
                   <>
                     <CheckCircle className="w-4 h-4" />
                     Submit Event End
                   </>
                 ) : photoModalData.stage === 'Equipment Handover' ? (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    Submit Equipment Handover
+                  </>
+                ) : photoModalData.stage === 'Footage Handover' ? (
                   <>
                     <CheckCircle className="w-4 h-4" />
                     Submit Footage Handover

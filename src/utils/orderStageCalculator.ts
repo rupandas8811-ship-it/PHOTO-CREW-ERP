@@ -37,11 +37,10 @@ export function getStageRank(stageName: string | undefined): number {
     return 4;
   }
 
-  // Rank 3: Footage Handover / Equipment Handover
+  // Rank 3: Footage Handover
   if (
     s === 'footage handover' ||
-    s === 'equipment handover' ||
-    s === 'equipment received'
+    s === 'footage handover completed'
   ) {
     return 3;
   }
