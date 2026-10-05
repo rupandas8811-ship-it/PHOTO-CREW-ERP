@@ -5,13 +5,14 @@ import {
 import { useRole, mapUserFieldsFromDb, INITIAL_PACKAGES, getStatusRank, isFollowUpDateTimeReached } from '../RoleContext';
 import { supabaseClient } from '../../supabaseClient';
 import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIVE_STAGE_GROUPS, LeadEvent } from '../../types';
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, getStoredCustomCategories, saveCustomCategoryToStorage } from '../../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, getStoredCustomCategories, saveCustomCategoryToStorage, deserializeLeadEvents } from '../../utils';
 import { jsPDF } from 'jspdf';
 import { SHOOT_TYPES, LocalEditableInput, parseQtyAndText, combineQtyAndText, formatListToStructuredObjects, buildStep3EventPayloads, verifyAndFormatLeadPackagePayload, parseTeamMembersJsonToRecord, parseDeliverablesJsonToRecord, CompactQtyItemRowProps, CompactQtyItemRow, validateAndFormatTime, getLogoBase64FromUrl, generateQuotationPdfFileName, generateQuotationPDF, fetchAndResolveLatestPaymentData, highlightText, LEAD_SOURCES, SalesModuleProps, sortEventsAscending, normalizeCrmArray, checkIsEventEnded, checkIsLeadCrmLocked, getStep3FinalQuotationAmount, getSyncSavedQuotationAmount, resolveSavedQuotationAmount } from '../SalesUtils';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
 import { StatusText } from '../ui/StatusText';
 import { EventDropdownCell } from '../EventDropdownCell';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
+import { EventCategoryCell, getEventCategoryDateTimeTimestamp } from '../EventCategoryCell';
 import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { AddressAutocomplete } from '../AddressAutocomplete';
@@ -8924,69 +8925,43 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
   }).sort((a, b) => {
     // Helper to extract datetime timestamps for events
     const getLeadEventDetails = (leadObj: Lead) => {
-      const linkedOrder = orders?.find((o: any) => 
+      const linkedOrder: any = orders?.find((o: any) => 
         o.lead_id === leadObj.lead_id || 
         o.order_id === leadObj.lead_id || 
-        (leadObj.order_id && (o.order_id === leadObj.order_id || o.lead_id === leadObj.order_id)) ||
+        ((leadObj as any).order_id && (o.order_id === (leadObj as any).order_id || o.lead_id === (leadObj as any).order_id)) ||
         ((leadObj as any).orders && (o.order_id === (leadObj as any).orders || o.lead_id === (leadObj as any).orders))
       );
 
-      const rawEventsList = (leadObj?.events && Array.isArray(leadObj.events) && leadObj.events.length > 0)
-        ? leadObj.events
-        : (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0)
-          ? linkedOrder.events
-          : [];
+      let rawEventsList: any[] = [];
+      if (leadObj?.events && Array.isArray(leadObj.events) && leadObj.events.length > 0) {
+        rawEventsList = leadObj.events;
+      } else if (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0) {
+        rawEventsList = linkedOrder.events;
+      } else if (typeof leadObj?.events === 'string') {
+        try {
+          const parsed = JSON.parse(leadObj.events);
+          if (Array.isArray(parsed)) rawEventsList = parsed;
+        } catch (e) {}
+      } else if (typeof linkedOrder?.events === 'string') {
+        try {
+          const parsed = JSON.parse(linkedOrder.events);
+          if (Array.isArray(parsed)) rawEventsList = parsed;
+        } catch (e) {}
+      }
 
-      const parseDateTime = (dStr: string, tStr?: string): number => {
-        if (!dStr || !dStr.trim()) return 0;
-        const s = dStr.trim();
-        let year = 1970, month = 0, day = 1;
-        if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(s)) {
-          const parts = s.split(/[-/]/);
-          day = parseInt(parts[0], 10);
-          month = parseInt(parts[1], 10) - 1;
-          year = parseInt(parts[2], 10);
-        } else if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(s)) {
-          const parts = s.split(/[-/]/);
-          year = parseInt(parts[0], 10);
-          month = parseInt(parts[1], 10) - 1;
-          day = parseInt(parts[2], 10);
-        } else {
-          const d = new Date(s);
-          if (!isNaN(d.getTime())) {
-            year = d.getFullYear();
-            month = d.getMonth();
-            day = d.getDate();
-          }
-        }
-
-        let hours = 0, minutes = 0;
-        if (tStr && tStr.trim()) {
-          const t = tStr.trim().toUpperCase();
-          const isPM = t.includes('PM');
-          const isAM = t.includes('AM');
-          const cleanTime = t.replace(/(AM|PM)/g, '').trim();
-          const timeParts = cleanTime.split(':');
-          if (timeParts.length >= 1) {
-            let h = parseInt(timeParts[0], 10) || 0;
-            const m = parseInt(timeParts[1] || '0', 10) || 0;
-            if (isPM && h < 12) h += 12;
-            if (isAM && h === 12) h = 0;
-            hours = h;
-            minutes = m;
-          }
-        }
-
-        const combined = new Date(year, month, day, hours, minutes);
-        return isNaN(combined.getTime()) ? 0 : combined.getTime();
-      };
+      if (rawEventsList.length === 0 && leadObj?.notes_special_customizations) {
+        rawEventsList = deserializeLeadEvents(leadObj.notes_special_customizations).events;
+      }
+      if (rawEventsList.length === 0 && linkedOrder?.notes_special_customizations) {
+        rawEventsList = deserializeLeadEvents(linkedOrder.notes_special_customizations).events;
+      }
 
       const eventTimestamps: number[] = [];
       if (rawEventsList.length > 0) {
         rawEventsList.forEach((ev: any) => {
-          const dStr = ev.event_date || ev.Event_Date || ev.date || leadObj.event_date || '';
-          const tStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || leadObj.event_time || '';
-          const ts = parseDateTime(dStr, tStr);
+          const dStr = ev.event_date || ev.Event_Date || ev.date || leadObj.event_date || linkedOrder?.event_date || '';
+          const tStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || leadObj.event_time || linkedOrder?.event_time || '';
+          const ts = getEventCategoryDateTimeTimestamp(dStr, tStr);
           if (ts > 0) eventTimestamps.push(ts);
         });
       }
@@ -8994,7 +8969,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       if (eventTimestamps.length === 0) {
         const singleDate = leadObj.event_date || linkedOrder?.event_date || '';
         const singleTime = leadObj.event_time || linkedOrder?.event_time || '';
-        const ts = parseDateTime(singleDate, singleTime);
+        const ts = getEventCategoryDateTimeTimestamp(singleDate, singleTime);
         if (ts > 0) eventTimestamps.push(ts);
       }
 
@@ -9002,7 +8977,7 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
         return { mostRecent: 0, lastEvent: 0, hasDate: false };
       }
 
-      // Sort descending (latest event first)
+      // Sort descending (latest/most recent event first)
       eventTimestamps.sort((a, b) => b - a);
 
       const mostRecent = eventTimestamps[0];
@@ -9016,29 +8991,33 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
       };
     };
 
-    if (filterEventDateOption === 'most_recent') {
-      const detailsA = getLeadEventDetails(a);
-      const detailsB = getLeadEventDetails(b);
-      if (detailsA.hasDate && detailsB.hasDate) {
-        if (detailsA.mostRecent !== detailsB.mostRecent) {
-          return detailsA.mostRecent - detailsB.mostRecent; // Earliest upcoming event date first (ascending)
-        }
-      } else if (detailsA.hasDate) {
-        return -1;
-      } else if (detailsB.hasDate) {
-        return 1;
-      }
-    } else if (filterEventDateOption === 'last_event') {
-      const detailsA = getLeadEventDetails(a);
-      const detailsB = getLeadEventDetails(b);
+    const detailsA = getLeadEventDetails(a);
+    const detailsB = getLeadEventDetails(b);
+
+    if (filterEventDateOption === 'last_event') {
       if (detailsA.hasDate && detailsB.hasDate) {
         if (detailsA.lastEvent !== detailsB.lastEvent) {
-          return detailsA.lastEvent - detailsB.lastEvent; // Earliest event date first (ascending)
+          return sortOrder === 'oldest'
+            ? detailsA.lastEvent - detailsB.lastEvent
+            : detailsB.lastEvent - detailsA.lastEvent;
         }
       } else if (detailsA.hasDate) {
-        return -1;
+        return sortOrder === 'oldest' ? 1 : -1;
       } else if (detailsB.hasDate) {
-        return 1;
+        return sortOrder === 'oldest' ? -1 : 1;
+      }
+    } else {
+      // Most recent event / default: latest event first (descending)
+      if (detailsA.hasDate && detailsB.hasDate) {
+        if (detailsA.mostRecent !== detailsB.mostRecent) {
+          return sortOrder === 'oldest'
+            ? detailsA.mostRecent - detailsB.mostRecent
+            : detailsB.mostRecent - detailsA.mostRecent;
+        }
+      } else if (detailsA.hasDate) {
+        return sortOrder === 'oldest' ? 1 : -1;
+      } else if (detailsB.hasDate) {
+        return sortOrder === 'oldest' ? -1 : 1;
       }
     }
 
@@ -9064,15 +9043,15 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
     const timeB = parseRegistrationTimestamp(b);
     const timeA = parseRegistrationTimestamp(a);
     if (timeA !== timeB && timeA > 0 && timeB > 0) {
-      return sortOrder === 'latest' ? timeB - timeA : timeA - timeB;
+      return sortOrder === 'oldest' ? timeA - timeB : timeB - timeA;
     }
-    if (timeB > 0 && timeA === 0) return sortOrder === 'latest' ? 1 : -1;
-    if (timeA > 0 && timeB === 0) return sortOrder === 'latest' ? -1 : 1;
+    if (timeB > 0 && timeA === 0) return sortOrder === 'oldest' ? -1 : 1;
+    if (timeA > 0 && timeB === 0) return sortOrder === 'oldest' ? 1 : -1;
 
     const idA = (a.lead_id || '').trim();
     const idB = (b.lead_id || '').trim();
     const comp = idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
-    return sortOrder === 'latest' ? -comp : comp;
+    return sortOrder === 'oldest' ? comp : -comp;
   });
 
     return {

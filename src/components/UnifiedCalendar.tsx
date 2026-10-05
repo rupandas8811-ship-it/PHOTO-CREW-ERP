@@ -21,7 +21,8 @@ import {
   Layers,
   UserPlus
 } from 'lucide-react';
-import { formatINR, formatTime12Hour, formatDateDDMMYY, deserializeLeadEvents, parseDeliverablesWithQty, formatQtyItem } from '../utils';
+import { formatINR, formatTime12Hour, formatDateDDMMYY, deserializeLeadEvents, parseDeliverablesWithQty, formatQtyItem, formatIndianPhoneNumber } from '../utils';
+import { EventLocationCell, cleanLocationString } from './EventLocationCell';
 
 interface UnifiedCalendarProps {
   role: 'sales' | 'operations' | 'production' | 'production_staff' | 'owner' | 'worker';
@@ -939,11 +940,162 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
 
     // 3. SALES CALENDAR
     else if (role === 'sales') {
-      (leads || []).forEach(lead => {
-        const normDate = normalizeDateStr(lead.event_date);
-        if (!normDate) return;
+      const processedLeadIds = new Set<string>();
+      const processedOrderIds = new Set<string>();
 
-        const matchedOrder = (orders || []).find(o => (o.lead_id && o.lead_id === lead.lead_id) || (lead.order_id && o.order_id === lead.order_id));
+      // A. Process all confirmed orders from orders array
+      (orders || []).forEach(ord => {
+        const isOrderCancelled = ord.order_status === 'Cancelled' || ord.current_stage === 'Event Cancelled' || (ord as any).status === 'Cancelled';
+        if (isOrderCancelled) return;
+
+        const ordId = ord.order_id && typeof ord.order_id === 'string' ? ord.order_id.trim() : '';
+        if (!ordId || ordId.startsWith('DRAFT')) return;
+
+        const matchedLead = (leads || []).find(l => 
+          (ord.lead_id && l.lead_id === ord.lead_id) || 
+          (l.order_id && l.order_id === ordId) ||
+          ((l as any).orders && (l as any).orders === ordId)
+        );
+
+        const matchedOp = (operations || []).find(op => 
+          op.order_id === ordId || 
+          (ord.lead_id && op.lead_id === ord.lead_id)
+        );
+        const matchedSa = (staffAssignments || []).filter(sa => 
+          sa.order_id === ordId || 
+          (ord.lead_id && sa.lead_id === ord.lead_id)
+        );
+
+        processedOrderIds.add(ordId);
+        if (ord.lead_id) processedLeadIds.add(ord.lead_id);
+        if (matchedLead?.lead_id) processedLeadIds.add(matchedLead.lead_id);
+
+        let rawEvents: any[] = [];
+        if (ord.events && Array.isArray(ord.events) && ord.events.length > 0) {
+          rawEvents = ord.events;
+        } else if (matchedLead?.events && Array.isArray(matchedLead.events) && matchedLead.events.length > 0) {
+          rawEvents = matchedLead.events;
+        }
+        if (rawEvents.length === 0 && ord.notes_special_customizations) {
+          const parsed = deserializeLeadEvents(ord.notes_special_customizations);
+          if (parsed.events && parsed.events.length > 0) rawEvents = parsed.events;
+        }
+        if (rawEvents.length === 0 && matchedLead?.notes_special_customizations) {
+          const parsed = deserializeLeadEvents(matchedLead.notes_special_customizations);
+          if (parsed.events && parsed.events.length > 0) rawEvents = parsed.events;
+        }
+
+        const salesStaffName = resolveSalesCrewName(ord, matchedLead, undefined, quotations);
+
+        if (rawEvents.length > 0) {
+          rawEvents.forEach((ev: any, evIdx: number) => {
+            const evId = String(ev.id || ev.event_id || `ev_${evIdx + 1}`);
+            const eventDateStr = ev.event_date || ev.Event_Date || ev.date || ord.event_date || matchedLead?.event_date;
+            const normDate = normalizeDateStr(eventDateStr);
+            if (!normDate) return;
+
+            const evTimeStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || ord.event_time || matchedLead?.event_time || '';
+            const evLoc = cleanLocationString(ev.event_location || ev.venue_address || ev.venue || ev.location || ev.address || ord.event_location || ord.address || matchedLead?.event_location || matchedLead?.city || matchedLead?.address || '');
+
+            const evName = (ev.event_name || ev.custom_event_name || ev.eventName || ev.Event_Name || ev.event_type || ord.custom_event_name || ord.event_name || ord.event_type || matchedLead?.custom_event_name || matchedLead?.event_name || matchedLead?.event_type || `Event ${evIdx + 1}`).trim();
+            const evType = (ev.event_type || ev.event_category || ev.eventType || ord.event_type || matchedLead?.event_type || 'Event').trim();
+
+            const evSalesStaffName = resolveSalesCrewName(ord, matchedLead, ev, quotations);
+
+            items.push({
+              id: `ORD-${ordId}-${evId}`,
+              orderId: ordId, // Strictly Order ID only, never Lead ID
+              leadId: ord.lead_id || matchedLead?.lead_id,
+              eventId: evId,
+              customerName: ord.customer_name || matchedLead?.customer_name || 'Client',
+              customerMobile: ord.customer_phone || ord.mobile || matchedLead?.mobile || matchedLead?.whatsapp_number || '',
+              eventName: evName,
+              eventType: evType,
+              eventDate: normDate,
+              eventTime: evTimeStr,
+              reportingDate: ev.reporting_date || matchedOp?.reporting_date || normDate,
+              reportingTime: evTimeStr || matchedOp?.reporting_time || '08:00 AM',
+              location: evLoc,
+              budget: ord.quotation_amount || matchedLead?.budget || 0,
+              salesCrew: evSalesStaffName,
+              salesPerson: evSalesStaffName,
+              status: ord.current_stage || matchedLead?.status || 'Confirmed Order',
+              desk: 'Sales',
+              sourceRecord: { order: ord, lead: matchedLead, op: matchedOp, staffAssignments: matchedSa, event: ev }
+            });
+          });
+        } else {
+          const normDate = normalizeDateStr(ord.event_date || matchedLead?.event_date);
+          if (!normDate) return;
+
+          const evLoc = cleanLocationString(ord.event_location || ord.address || matchedLead?.event_location || matchedLead?.city || matchedLead?.address || '');
+          const evTimeStr = ord.event_time || matchedLead?.event_time || '';
+
+          const evName = (ord.custom_event_name || ord.event_name || ord.event_type || matchedLead?.custom_event_name || matchedLead?.event_name || matchedLead?.event_type || 'Shoot').trim();
+          const evType = (ord.event_type || matchedLead?.event_type || 'Photography & Videography').trim();
+
+          items.push({
+            id: `ORD-${ordId}`,
+            orderId: ordId, // Strictly Order ID only, never Lead ID
+            leadId: ord.lead_id || matchedLead?.lead_id,
+            customerName: ord.customer_name || matchedLead?.customer_name || 'Client',
+            customerMobile: ord.customer_phone || ord.mobile || matchedLead?.mobile || matchedLead?.whatsapp_number || '',
+            eventName: evName,
+            eventType: evType,
+            eventDate: normDate,
+            eventTime: evTimeStr,
+            reportingDate: matchedOp?.reporting_date || normDate,
+            reportingTime: matchedOp?.reporting_time || evTimeStr || '08:00 AM',
+            location: evLoc,
+            budget: ord.quotation_amount || matchedLead?.budget || 0,
+            salesCrew: salesStaffName,
+            salesPerson: salesStaffName,
+            status: ord.current_stage || matchedLead?.status || 'Confirmed Order',
+            desk: 'Sales',
+            sourceRecord: { order: ord, lead: matchedLead, op: matchedOp, staffAssignments: matchedSa }
+          });
+        }
+      });
+
+      // B. Process any confirmed leads not yet processed through orders array
+      (leads || []).forEach(lead => {
+        if (processedLeadIds.has(lead.lead_id)) return;
+        if (lead.order_id && processedOrderIds.has(lead.order_id)) return;
+
+        // Check existing Order Confirmation status/data: lead must be confirmed!
+        const isLeadConfirmed = Boolean(
+          lead.is_order_confirmed === true ||
+          lead.isOrderConfirmed === true ||
+          (lead as any).is_confirmed === true ||
+          ['Confirmed', 'Order Confirmed'].includes(lead.booking_status || '') ||
+          ['Order Confirmed', 'Booking Confirmed'].includes(lead.status || '') ||
+          ['Order Confirmed', 'Booking Confirmed'].includes(lead.current_status || '') ||
+          ['Order Confirmed', 'Booking Confirmed'].includes(lead.current_stage || '') ||
+          ['Confirmed', 'Completed', 'Project Completed', 'Delivered', 'Paid', 'Closed'].includes((lead as any).order_status || '') ||
+          (lead.order_id && typeof lead.order_id === 'string' && lead.order_id.trim() !== '' && lead.order_id !== lead.lead_id && !lead.order_id.startsWith('LD-') && !lead.order_id.startsWith('DRAFT'))
+        );
+
+        // Pre-confirmation leads must NOT appear in the Sales Calendar
+        if (!isLeadConfirmed) return;
+
+        // Match linked order if exists
+        const matchedOrder: any = (orders || []).find(o => 
+          (o.lead_id && o.lead_id === lead.lead_id) || 
+          (lead.order_id && o.order_id === lead.order_id) ||
+          ((lead as any).orders && (o.order_id === (lead as any).orders || o.lead_id === (lead as any).orders))
+        );
+
+        // Resolve valid Order ID - NEVER use Lead ID!
+        const resolvedOrderId = matchedOrder?.order_id || 
+          (lead.order_id && typeof lead.order_id === 'string' && lead.order_id.trim() !== '' && lead.order_id !== lead.lead_id && !lead.order_id.startsWith('LD-') && !lead.order_id.startsWith('DRAFT') ? lead.order_id.trim() : null) ||
+          ((lead as any).orders && typeof (lead as any).orders === 'string' && (lead as any).orders.trim() !== '' && (lead as any).orders !== lead.lead_id && !(lead as any).orders.startsWith('LD-') ? (lead as any).orders.trim() : null);
+
+        // An event only appears after order confirmation with a valid Order ID
+        if (!resolvedOrderId) return;
+
+        processedOrderIds.add(resolvedOrderId);
+        processedLeadIds.add(lead.lead_id);
+
         const matchedOp = matchedOrder
           ? (operations || []).find(op => op.order_id === matchedOrder.order_id)
           : (operations || []).find(op => op.lead_id === lead.lead_id);
@@ -951,30 +1103,88 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
           ? (staffAssignments || []).filter(sa => sa.order_id === matchedOrder.order_id)
           : (staffAssignments || []).filter(sa => sa.lead_id === lead.lead_id);
 
-        const assignedRoleStr = resolveAssignedRoles(matchedSa, matchedOp);
-        const eqList = resolveEquipmentList(matchedSa, undefined, matchedOp);
+        let rawEvents: any[] = [];
+        if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
+          rawEvents = lead.events;
+        } else if (matchedOrder?.events && Array.isArray(matchedOrder.events) && matchedOrder.events.length > 0) {
+          rawEvents = matchedOrder.events;
+        }
+        if (rawEvents.length === 0 && lead.notes_special_customizations) {
+          const parsed = deserializeLeadEvents(lead.notes_special_customizations);
+          if (parsed.events && parsed.events.length > 0) rawEvents = parsed.events;
+        }
+        if (rawEvents.length === 0 && matchedOrder?.notes_special_customizations) {
+          const parsed = deserializeLeadEvents(matchedOrder.notes_special_customizations);
+          if (parsed.events && parsed.events.length > 0) rawEvents = parsed.events;
+        }
 
-        items.push({
-          id: `LEAD-${lead.lead_id}`,
-          orderId: matchedOrder?.order_id || lead.order_id || lead.lead_id,
-          leadId: lead.lead_id,
-          customerName: lead.customer_name || matchedOrder?.customer_name || 'Client',
-          customerMobile: lead.mobile || lead.whatsapp_number || matchedOrder?.customer_phone || '',
-          eventName: lead.custom_event_name || lead.event_type || 'Shoot',
-          eventType: lead.event_type || matchedOrder?.event_type || 'Photography & Videography',
-          eventDate: normDate,
-          reportingDate: matchedOp?.reporting_date || normDate,
-          reportingTime: matchedOp?.reporting_time || lead.event_time || matchedOrder?.event_time || '08:00 AM',
-          location: lead.city || lead.address || matchedOrder?.address || '—',
-          budget: lead.budget || matchedOrder?.quotation_amount || 0,
-          salesPerson: lead.sales_person || matchedOrder?.sales_person || 'Sales Team',
-          assignedRole: assignedRoleStr,
-          equipmentKit: eqList.join(', '),
-          equipmentItems: eqList,
-          status: lead.status || lead.current_status || matchedOrder?.current_stage || 'New Lead',
-          desk: 'Sales',
-          sourceRecord: { lead, order: matchedOrder, op: matchedOp, staffAssignments: matchedSa }
-        });
+        const salesStaffName = resolveSalesCrewName(matchedOrder, lead, undefined, quotations);
+
+        if (rawEvents.length > 0) {
+          rawEvents.forEach((ev: any, evIdx: number) => {
+            const evId = String(ev.id || ev.event_id || `ev_${evIdx + 1}`);
+            const eventDateStr = ev.event_date || ev.Event_Date || ev.date || lead.event_date || matchedOrder?.event_date;
+            const normDate = normalizeDateStr(eventDateStr);
+            if (!normDate) return;
+
+            const evTimeStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || lead.event_time || matchedOrder?.event_time || '';
+            const evLoc = cleanLocationString(ev.event_location || ev.venue_address || ev.venue || ev.location || ev.address || lead.event_location || lead.city || lead.address || matchedOrder?.event_location || matchedOrder?.address || '');
+
+            const evName = (ev.event_name || ev.custom_event_name || ev.eventName || ev.Event_Name || ev.event_type || lead.custom_event_name || lead.event_name || lead.event_type || `Event ${evIdx + 1}`).trim();
+            const evType = (ev.event_type || ev.event_category || ev.eventType || lead.event_type || matchedOrder?.event_type || 'Event').trim();
+
+            const evSalesStaffName = resolveSalesCrewName(matchedOrder, lead, ev, quotations);
+
+            items.push({
+              id: `CONF-LEAD-${lead.lead_id}-${evId}`,
+              orderId: resolvedOrderId, // Strictly Order ID only, never Lead ID
+              leadId: lead.lead_id,
+              eventId: evId,
+              customerName: lead.customer_name || matchedOrder?.customer_name || 'Client',
+              customerMobile: lead.mobile || lead.whatsapp_number || matchedOrder?.customer_phone || matchedOrder?.mobile || '',
+              eventName: evName,
+              eventType: evType,
+              eventDate: normDate,
+              eventTime: evTimeStr,
+              reportingDate: ev.reporting_date || matchedOp?.reporting_date || normDate,
+              reportingTime: evTimeStr || matchedOp?.reporting_time || '08:00 AM',
+              location: evLoc,
+              budget: lead.budget || matchedOrder?.quotation_amount || 0,
+              salesCrew: evSalesStaffName,
+              salesPerson: evSalesStaffName,
+              status: lead.status || lead.current_status || matchedOrder?.current_stage || 'Confirmed Order',
+              desk: 'Sales',
+              sourceRecord: { lead, order: matchedOrder, op: matchedOp, staffAssignments: matchedSa, event: ev }
+            });
+          });
+        } else {
+          const normDate = normalizeDateStr(lead.event_date || matchedOrder?.event_date);
+          if (!normDate) return;
+
+          const evLoc = cleanLocationString(lead.event_location || (lead as any).venue_address || (lead as any).venue || lead.address || lead.city || matchedOrder?.event_location || matchedOrder?.address || '');
+          const evTimeStr = lead.event_time || matchedOrder?.event_time || '';
+
+          items.push({
+            id: `CONF-LEAD-${lead.lead_id}`,
+            orderId: resolvedOrderId, // Strictly Order ID only, never Lead ID
+            leadId: lead.lead_id,
+            customerName: lead.customer_name || matchedOrder?.customer_name || 'Client',
+            customerMobile: lead.mobile || lead.whatsapp_number || matchedOrder?.customer_phone || matchedOrder?.mobile || '',
+            eventName: (lead.custom_event_name || lead.event_name || lead.event_type || 'Shoot').trim(),
+            eventType: (lead.event_type || matchedOrder?.event_type || 'Photography & Videography').trim(),
+            eventDate: normDate,
+            eventTime: evTimeStr,
+            reportingDate: matchedOp?.reporting_date || normDate,
+            reportingTime: matchedOp?.reporting_time || evTimeStr || '08:00 AM',
+            location: evLoc,
+            budget: lead.budget || matchedOrder?.quotation_amount || 0,
+            salesCrew: salesStaffName,
+            salesPerson: salesStaffName,
+            status: lead.status || lead.current_status || matchedOrder?.current_stage || 'Confirmed Order',
+            desk: 'Sales',
+            sourceRecord: { lead, order: matchedOrder, op: matchedOp, staffAssignments: matchedSa }
+          });
+        }
       });
     }
 
@@ -1358,18 +1568,20 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                   </div>
                 ) : (
                   <div className="overflow-x-auto touch-pan-x w-full border border-zinc-800 rounded-2xl bg-zinc-950/80 shadow-inner">
-                    <table className="w-full text-left border-collapse min-w-[900px]">
+                    <table className="w-full text-left border-collapse min-w-[1050px]">
                       <thead>
                         <tr className="border-b border-zinc-800 bg-zinc-950/90 text-zinc-400 font-mono text-[10px] sm:text-[11px] uppercase tracking-wider font-bold">
                           {role === 'sales' ? (
                             <>
-                              <th className="p-3 pl-4 whitespace-nowrap min-w-[130px]">Order ID</th>
-                              <th className="p-3 whitespace-nowrap min-w-[170px]">Customer Name</th>
-                              <th className="p-3 whitespace-nowrap min-w-[150px]">Event Type</th>
-                              <th className="p-3 whitespace-nowrap min-w-[130px]">Reporting Date</th>
-                              <th className="p-3 whitespace-nowrap min-w-[130px]">Reporting Time</th>
+                              <th className="p-3 pl-4 whitespace-nowrap min-w-[120px]">Order ID</th>
+                              <th className="p-3 whitespace-nowrap min-w-[170px]">Customer Name & Number</th>
+                              <th className="p-3 whitespace-nowrap min-w-[140px]">Event Name</th>
+                              <th className="p-3 whitespace-nowrap min-w-[150px]">Event Location</th>
+                              <th className="p-3 whitespace-nowrap min-w-[130px]">Sales Crew</th>
+                              <th className="p-3 whitespace-nowrap min-w-[120px]">Event Date</th>
+                              <th className="p-3 whitespace-nowrap min-w-[110px]">Event Time</th>
                               <th className="p-3 whitespace-nowrap min-w-[120px]">Status</th>
-                              <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">Action</th>
+                              <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[120px]">Action</th>
                             </>
                           ) : role === 'operations' ? (
                             <>
@@ -1421,43 +1633,67 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                             {role === 'sales' ? (
                               <>
                                 {/* 1. Order ID */}
-                                <td className="p-3 pl-4 text-zinc-200 font-bold whitespace-nowrap min-w-[130px]">
+                                <td className="p-3 pl-4 text-zinc-200 font-bold whitespace-nowrap min-w-[120px]">
                                   <span className={`${theme.textHighlight}`}>{ev.orderId}</span>
-                                  {ev.leadId && ev.leadId !== ev.orderId && (
-                                    <span className="block text-[10px] text-zinc-500 font-normal">
-                                      Lead: {ev.leadId}
-                                    </span>
-                                  )}
                                 </td>
 
-                                {/* 2. Customer Name */}
+                                {/* 2. Customer Name & Number */}
                                 <td className="p-3 font-sans font-bold text-white whitespace-nowrap min-w-[170px]">
                                   <div>{ev.customerName}</div>
                                   {ev.customerMobile && (
-                                    <div className="text-[10px] font-mono text-zinc-400 font-normal">
-                                      {ev.customerMobile}
+                                    <div className="text-[10px] font-mono text-zinc-400 font-normal mt-0.5">
+                                      {formatIndianPhoneNumber(ev.customerMobile) || ev.customerMobile}
                                     </div>
                                   )}
                                 </td>
 
-                                {/* 3. Event Type */}
-                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[150px]">
-                                  <div className="font-semibold text-zinc-100">{ev.eventType || ev.eventName || 'Event'}</div>
+                                {/* 3. Event Name */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[140px]">
+                                  <div className="font-semibold text-zinc-100">{ev.eventName || ev.eventType || 'Event'}</div>
                                 </td>
 
-                                {/* 4. Reporting Date */}
+                                {/* 4. Event Location */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[150px]">
+                                  <EventLocationCell
+                                    lead={ev.sourceRecord?.lead ? {
+                                      ...ev.sourceRecord.lead,
+                                      order_id: ev.orderId,
+                                      events: ev.sourceRecord.lead.events || ev.sourceRecord?.order?.events || (ev.sourceRecord?.event ? [ev.sourceRecord.event] : [])
+                                    } : {
+                                      lead_id: ev.leadId || ev.orderId,
+                                      order_id: ev.orderId,
+                                      events: ev.sourceRecord?.order?.events || (ev.sourceRecord?.event ? [ev.sourceRecord.event] : []),
+                                      notes_special_customizations: ev.sourceRecord?.order?.notes_special_customizations,
+                                      event_location: ev.location,
+                                      address: ev.location
+                                    }}
+                                    orders={orders}
+                                    currentLocation={ev.location}
+                                  />
+                                </td>
+
+                                {/* 5. Sales Crew */}
                                 <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[130px]">
-                                  <span className="font-mono">
-                                    {ev.reportingDate ? (formatDateDDMMYY(ev.reportingDate) || ev.reportingDate) : (formatDateDDMMYY(ev.eventDate) || ev.eventDate)}
+                                  <div className="text-zinc-200 font-medium font-mono text-xs">
+                                    {ev.salesCrew || ev.salesPerson || 'Sales Team'}
+                                  </div>
+                                </td>
+
+                                {/* 6. Event Date */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[120px]">
+                                  <span className="font-mono text-xs text-zinc-200">
+                                    {formatDateDDMMYY(ev.eventDate) || ev.eventDate}
                                   </span>
                                 </td>
 
-                                {/* 5. Reporting Time */}
-                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[130px]">
-                                  <span className="font-mono">{ev.reportingTime || '08:00 AM'}</span>
+                                {/* 7. Event Time */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[110px]">
+                                  <span className="font-mono text-xs text-zinc-200">
+                                    {formatTime12Hour(ev.eventTime) || ev.eventTime || formatTime12Hour(ev.reportingTime) || ev.reportingTime || '—'}
+                                  </span>
                                 </td>
 
-                                {/* 6. Status */}
+                                {/* 8. Status */}
                                 <td className="p-3 whitespace-nowrap min-w-[120px]">
                                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${theme.bgHighlight} ${theme.textHighlight} ${theme.border}`}>
                                     {ev.status}
@@ -1465,7 +1701,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                                 </td>
 
                                 {/* 9. Action */}
-                                <td className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">
+                                <td className="p-3 pr-4 text-center whitespace-nowrap min-w-[120px]">
                                   <button
                                     type="button"
                                     onClick={() => {

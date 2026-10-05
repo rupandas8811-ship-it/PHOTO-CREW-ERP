@@ -7,13 +7,13 @@ import { Lead, CurrentStage, LeadPackage, EVENT_TYPES, PACKAGE_CATEGORIES, ACTIV
 import { StatusText } from '../ui/StatusText';
 import { EventDropdownCell } from '../EventDropdownCell';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
-import { EventCategoryCell } from '../EventCategoryCell';
+import { EventCategoryCell, getEventCategoryDateTimeTimestamp } from '../EventCategoryCell';
 import { EventLocationCell } from '../EventLocationCell';
 import { EventCell } from '../EventCell';
 import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY } from '../../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, deserializeLeadEvents } from '../../utils';
 import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
@@ -117,7 +117,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safePackages = Array.isArray(packages) ? packages : [];
 
-  const [sortColumn, setSortColumn] = useState<'created_date' | 'lead_id' | 'order_id' | 'event_date' | null>('created_date');
+  const [sortColumn, setSortColumn] = useState<'created_date' | 'lead_id' | 'order_id' | 'event_date' | null>('event_date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Sync toolbar sortOrder if changed from outside
@@ -142,8 +142,28 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         setSortDirection('asc');
         if (setSortOrder) setSortOrder('oldest');
       } else {
-        // 3rd CLICK: All / Reset (Reset sorting and return to normal/default table order)
-        setSortColumn(null);
+        // 3rd CLICK: All / Reset (Reset sorting and return to default Most Recent Event First)
+        setSortColumn('event_date');
+        setSortDirection('desc');
+        if (setSortOrder) setSortOrder('latest');
+      }
+      return;
+    }
+
+    if (column === 'event_date') {
+      if (sortColumn !== 'event_date') {
+        // 1st CLICK: Most Recent Event First (desc)
+        setSortColumn('event_date');
+        setSortDirection('desc');
+        if (setSortOrder) setSortOrder('latest');
+      } else if (sortDirection === 'desc') {
+        // 2nd CLICK: Earliest / Oldest Event First (asc)
+        setSortColumn('event_date');
+        setSortDirection('asc');
+        if (setSortOrder) setSortOrder('oldest');
+      } else {
+        // 3rd CLICK: Reset to default Most Recent First (desc)
+        setSortColumn('event_date');
         setSortDirection('desc');
         if (setSortOrder) setSortOrder('latest');
       }
@@ -158,7 +178,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
       }
     } else {
       setSortColumn(column);
-      const initialDir = column === 'event_date' ? 'asc' : 'desc';
+      const initialDir = 'desc';
       setSortDirection(initialDir);
       if (setSortOrder) {
         setSortOrder(initialDir === 'desc' ? 'latest' : 'oldest');
@@ -213,62 +233,36 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
       ((leadObj as any).orders && (o.order_id === (leadObj as any).orders || o.lead_id === (leadObj as any).orders))
     );
 
-    const rawEventsList = (leadObj?.events && Array.isArray(leadObj.events) && leadObj.events.length > 0)
-      ? leadObj.events
-      : (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0)
-        ? linkedOrder.events
-        : [];
+    let rawEventsList: any[] = [];
+    if (leadObj?.events && Array.isArray(leadObj.events) && leadObj.events.length > 0) {
+      rawEventsList = leadObj.events;
+    } else if (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0) {
+      rawEventsList = linkedOrder.events;
+    } else if (typeof leadObj?.events === 'string') {
+      try {
+        const parsed = JSON.parse(leadObj.events);
+        if (Array.isArray(parsed)) rawEventsList = parsed;
+      } catch (e) {}
+    } else if (typeof linkedOrder?.events === 'string') {
+      try {
+        const parsed = JSON.parse(linkedOrder.events);
+        if (Array.isArray(parsed)) rawEventsList = parsed;
+      } catch (e) {}
+    }
 
-    const parseDateTime = (dStr: string, tStr?: string): number => {
-      if (!dStr || !dStr.trim()) return 0;
-      const s = dStr.trim();
-      let year = 1970, month = 0, day = 1;
-      if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(s)) {
-        const parts = s.split(/[-/]/);
-        day = parseInt(parts[0], 10);
-        month = parseInt(parts[1], 10) - 1;
-        year = parseInt(parts[2], 10);
-      } else if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}$/.test(s)) {
-        const parts = s.split(/[-/]/);
-        year = parseInt(parts[0], 10);
-        month = parseInt(parts[1], 10) - 1;
-        day = parseInt(parts[2], 10);
-      } else {
-        const d = new Date(s);
-        if (!isNaN(d.getTime())) {
-          year = d.getFullYear();
-          month = d.getMonth();
-          day = d.getDate();
-        }
-      }
-
-      let hours = 0, minutes = 0;
-      if (tStr && tStr.trim()) {
-        const t = tStr.trim().toUpperCase();
-        const isPM = t.includes('PM');
-        const isAM = t.includes('AM');
-        const cleanTime = t.replace(/(AM|PM)/g, '').trim();
-        const timeParts = cleanTime.split(':');
-        if (timeParts.length >= 1) {
-          let h = parseInt(timeParts[0], 10) || 0;
-          const m = parseInt(timeParts[1] || '0', 10) || 0;
-          if (isPM && h < 12) h += 12;
-          if (isAM && h === 12) h = 0;
-          hours = h;
-          minutes = m;
-        }
-      }
-
-      const combined = new Date(year, month, day, hours, minutes);
-      return isNaN(combined.getTime()) ? 0 : combined.getTime();
-    };
+    if (rawEventsList.length === 0 && leadObj?.notes_special_customizations) {
+      rawEventsList = deserializeLeadEvents(leadObj.notes_special_customizations).events;
+    }
+    if (rawEventsList.length === 0 && (linkedOrder as any)?.notes_special_customizations) {
+      rawEventsList = deserializeLeadEvents((linkedOrder as any).notes_special_customizations).events;
+    }
 
     const timestamps: number[] = [];
     if (rawEventsList.length > 0) {
       rawEventsList.forEach((ev: any) => {
-        const dStr = ev.event_date || ev.Event_Date || ev.date || leadObj.event_date || '';
-        const tStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || leadObj.event_time || '';
-        const ts = parseDateTime(dStr, tStr);
+        const dStr = ev.event_date || ev.Event_Date || ev.date || leadObj.event_date || linkedOrder?.event_date || '';
+        const tStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || leadObj.event_time || linkedOrder?.event_time || '';
+        const ts = getEventCategoryDateTimeTimestamp(dStr, tStr);
         if (ts > 0) timestamps.push(ts);
       });
     }
@@ -276,7 +270,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
     if (timestamps.length === 0) {
       const singleDate = leadObj.event_date || linkedOrder?.event_date || '';
       const singleTime = leadObj.event_time || linkedOrder?.event_time || '';
-      const ts = parseDateTime(singleDate, singleTime);
+      const ts = getEventCategoryDateTimeTimestamp(singleDate, singleTime);
       if (ts > 0) timestamps.push(ts);
     }
 
@@ -290,9 +284,25 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   };
 
   const displayedLeads = React.useMemo(() => {
-    // If sortColumn is null (3rd Click / All / Reset state), return default table order
+    // If sortColumn is null (Reset state), sort by default: Most Recent Event/Order First
     if (!sortColumn) {
-      return [...safeFilteredLeads];
+      return [...safeFilteredLeads].sort((a, b) => {
+        const tsA = getLeadEventTimestamp(a);
+        const tsB = getLeadEventTimestamp(b);
+        if (tsA > 0 && tsB > 0 && tsA !== tsB) {
+          return tsB - tsA; // Latest/most recent event first
+        }
+        if (tsA > 0 && tsB === 0) return -1;
+        if (tsB > 0 && tsA === 0) return 1;
+        const timeA = getLeadCreatedTimestamp(a);
+        const timeB = getLeadCreatedTimestamp(b);
+        if (timeA !== timeB && timeA > 0 && timeB > 0) {
+          return timeB - timeA; // Most recent order/lead first
+        }
+        const idA = (a.lead_id || '').trim();
+        const idB = (b.lead_id || '').trim();
+        return compareAlphanumeric(idB, idA);
+      });
     }
 
     return [...safeFilteredLeads].sort((a, b) => {
@@ -352,13 +362,13 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
             return sortDirection === 'asc' ? tsA - tsB : tsB - tsA;
           }
         } else if (tsA > 0) {
-          return -1;
+          return sortDirection === 'asc' ? 1 : -1;
         } else if (tsB > 0) {
-          return 1;
+          return sortDirection === 'asc' ? -1 : 1;
         }
       }
 
-      // Default fallback
+      // Default fallback: Most recent order/lead date first
       const timeA = getLeadCreatedTimestamp(a);
       const timeB = getLeadCreatedTimestamp(b);
       if (timeA !== timeB && timeA > 0 && timeB > 0) {
