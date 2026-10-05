@@ -54,8 +54,150 @@ import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
 import { AssignedStaffDropdown } from './AssignedStaffDropdown';
 import { OwnerPasswordResetModule } from './OwnerPasswordResetModule';
-import { compareRecordsByDate } from './ui/ListSortFilter';
+import { compareRecordsByDate, compareAlphanumeric } from './ui/ListSortFilter';
 import { getAllMatchingOrderIds } from './SalesUtils';
+
+export function getOrderRemainingPendingAmount(
+  order: any, 
+  ordersList: any[] = [], 
+  leadsList: any[] = [], 
+  paymentsList: any[] = [], 
+  paymentHistoryList: any[] = []
+): { finalQuotation: number; totalPaid: number; remaining: number; payStatus: string } {
+  if (!order) return { finalQuotation: 0, totalPaid: 0, remaining: 0, payStatus: 'Pending' };
+
+  const orderId = order.order_id || order.orderId || '';
+  const leadId = order.lead_id || order.leadId || (order.lead && order.lead.lead_id) || '';
+  const matchingOrderIds = getAllMatchingOrderIds(orderId, leadId, ordersList, leadsList);
+
+  const orderObj = ordersList.find(o => (orderId && o.order_id === orderId) || (leadId && o.lead_id === leadId)) || order;
+  const paymentObj = paymentsList.find(p => (orderId && p.order_id === orderId) || (leadId && p.lead_id === leadId) || (orderObj && p.order_id === orderObj.order_id));
+  const leadObj = leadsList.find(l => (leadId && l.lead_id === leadId) || (orderObj && l.lead_id === orderObj.lead_id));
+
+  const finalQuotation = Number(leadObj?.Final_Quotation_Amount) || 
+    Number((leadObj as any)?.final_quotation_amount) || 
+    Number(orderObj?.quotation_amount) || 
+    Number(order?.quotation_amount) || 
+    Number(order?.totalRevenue) || 
+    Number(order?.finalPackageAmount) || 
+    Number(leadObj?.final_amount) || 
+    Number(leadObj?.budget) || 0;
+
+  let approvedIds = new Set<string>();
+  try {
+    const approvedSaved = localStorage.getItem('approved_payment_history_ids');
+    if (approvedSaved) approvedIds = new Set(JSON.parse(approvedSaved));
+  } catch (_) {}
+
+  let rejectedIds = new Set<string>();
+  try {
+    const rejectedSaved = localStorage.getItem('rejected_payment_history_ids');
+    if (rejectedSaved) rejectedIds = new Set(JSON.parse(rejectedSaved));
+  } catch (_) {}
+
+  const orderHistories = (paymentHistoryList || []).filter((h: any) => {
+    const hid = String(h.order_id || '').trim();
+    return matchingOrderIds.includes(hid);
+  });
+
+  const approvedItems = orderHistories.filter((h: any) => {
+    const histId = String(h.id || h.payment_history_id || '');
+    if (rejectedIds.has(histId) || h.approval_status === 'Rejected') return false;
+    const isExplicitlyRejected = typeof h.notes === 'string' && (
+      h.notes.endsWith('- Rejected') || 
+      h.notes.toLowerCase().includes('rejected by business owner')
+    );
+    if (isExplicitlyRejected) return false;
+
+    return (
+      h.approval_status === 'Approved' ||
+      approvedIds.has(histId) ||
+      (typeof h.notes === 'string' && h.notes.includes('Approved') && !h.notes.includes('Waiting for Approval')) ||
+      (!h.notes && h.approval_status !== 'Waiting for Approval')
+    );
+  });
+
+  const pendingItems = orderHistories.filter((h: any) => {
+    const histId = String(h.id || h.payment_history_id || '');
+    if (rejectedIds.has(histId) || h.approval_status === 'Rejected') return false;
+    if (approvedItems.includes(h)) return false;
+    return h.approval_status === 'Waiting for Approval' || (typeof h.notes === 'string' && h.notes.includes('Waiting for Approval'));
+  });
+
+  let totalPaid = approvedItems.reduce((sum: number, h: any) => sum + (Number(h.amount) || 0), 0);
+  if (orderHistories.length === 0 && paymentObj && paymentObj.payment_status !== 'Waiting for Approval') {
+    totalPaid = (Number(paymentObj.advance_received) || 0) + (Number(paymentObj.final_payment_received) || 0) + (Number(paymentObj.additional_received) || 0);
+  } else if (orderHistories.length === 0 && !paymentObj) {
+    totalPaid = Number(orderObj?.advance_received || order?.advance_received) || 0;
+  }
+
+  const remaining = Math.max(0, finalQuotation - totalPaid);
+
+  let payStatus = 'Pending';
+  if (pendingItems.length > 0 || paymentObj?.payment_status === 'Waiting for Approval') {
+    payStatus = 'Waiting for Approval';
+  } else if (remaining <= 0 && finalQuotation > 0) {
+    payStatus = 'Fully Paid';
+  } else if (totalPaid > 0) {
+    payStatus = 'Partially Paid';
+  }
+
+  return {
+    finalQuotation,
+    totalPaid,
+    remaining,
+    payStatus
+  };
+}
+
+export function getOrderCreationOrUpdateTimestamp(r: any): number {
+  if (!r) return 0;
+  const timestamps: number[] = [];
+
+  const addTime = (val: any) => {
+    if (!val) return;
+    if (typeof val === 'number' && !isNaN(val) && val > 0) {
+      timestamps.push(val);
+      return;
+    }
+    if (typeof val === 'string' && val.trim()) {
+      const t = new Date(val.trim()).getTime();
+      if (!isNaN(t) && t > 0) timestamps.push(t);
+    }
+  };
+
+  addTime(r.updated_at);
+  addTime(r.updatedAt);
+  addTime(r.created_at);
+  addTime(r.createdAt);
+  addTime(r.paymentDate);
+  
+  if (r.order) {
+    addTime(r.order.updated_at);
+    addTime(r.order.created_at);
+  }
+  if (r.lead) {
+    addTime(r.lead.updated_at);
+    addTime(r.lead.created_at);
+  }
+  if (r.payment) {
+    addTime(r.payment.updated_at);
+    addTime(r.payment.created_at);
+    addTime(r.payment.payment_date);
+  }
+
+  const numericIdMatch = String(r.orderId || r.order_id || r.leadId || '').match(/\d+/g);
+  let idNumber = 0;
+  if (numericIdMatch && numericIdMatch.length > 0) {
+    idNumber = parseInt(numericIdMatch[numericIdMatch.length - 1], 10) || 0;
+  }
+
+  if (timestamps.length > 0) {
+    return Math.max(...timestamps);
+  }
+
+  return idNumber;
+}
 
 interface BusinessOwnerDashboardProps {
   activeSection?: string;
@@ -1995,10 +2137,13 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                         const pay = payments.find(p => p.order_id === order.order_id || p.lead_id === order.lead_id);
                         const lead = leads.find(l => l.lead_id === order.lead_id || l.lead_id === order.order_id);
                         
-                        const totalQuotation = order.quotation_amount || lead?.quotation_amount || 0;
-                        const paymentReceived = pay ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : (order.advance_received || 0);
-                        const balanceDue = pay ? pay.balance_due : (order.balance_amount || Math.max(0, totalQuotation - paymentReceived));
-                        const payStatus = pay ? pay.payment_status : (balanceDue <= 0 ? 'Fully Paid' : (paymentReceived > 0 ? 'Partially Paid' : 'Pending'));
+                        const { finalQuotation: totalQuotation, remaining: balanceDue, payStatus } = getOrderRemainingPendingAmount(
+                          order,
+                          orders,
+                          leads,
+                          payments,
+                          paymentHistory
+                        );
                         const customerMobile = order.customer_phone || order.mobile || lead?.phone || lead?.mobile || pay?.customer_phone || 'N/A';
 
                         return (
@@ -3378,10 +3523,10 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
 
       const hasPendingApproval = hasPendingInHistory || hasPendingInLocal || (pay?.payment_status === 'Waiting for Approval');
 
-      const totalRevenue = o.quotation_amount || o.advance_received || 0;
+      const totalRevenue = Number(ld?.Final_Quotation_Amount) || Number((ld as any)?.final_quotation_amount) || Number(o.quotation_amount) || Number(ld?.final_amount) || Number(ld?.budget) || Number(o.advance_received) || 0;
       const paymentReceived = approvedHistories.length > 0
         ? historyApprovedSum
-        : (pay && pay.payment_status !== 'Waiting for Approval' ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : 0);
+        : (pay && pay.payment_status !== 'Waiting for Approval' ? ((pay.advance_received || 0) + (pay.final_payment_received || 0)) : Number(o.advance_received || 0));
       const outstanding = Math.max(0, totalRevenue - paymentReceived);
 
       const isCompleted = ['Event Completed', 'Client Acceptance', 'Delivered', 'Project Delivered', 'Completed'].includes(o.current_stage) || prod?.editing_status === 'Client Acceptance';
@@ -3410,7 +3555,12 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         hasPendingApproval,
         currentStage: isClosed ? 'Order Closed' : (prod?.editing_status || o.current_stage || 'Confirmed'),
         isCompleted,
-        isClosed
+        isClosed,
+        created_at: o.created_at || ld?.created_at || (pay as any)?.created_at,
+        updated_at: o.updated_at || ld?.updated_at || (pay as any)?.updated_at,
+        order: o,
+        lead: ld,
+        payment: pay
       };
     });
   }, [orders, payments, production, paymentHistory, leads]);
@@ -3483,9 +3633,12 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
     }).filter(Boolean) as (typeof records[0] & { matchingEvents: any[] })[];
 
     return matched.sort((a, b) => {
-      if (a.hasPendingApproval && !b.hasPendingApproval) return -1;
-      if (!a.hasPendingApproval && b.hasPendingApproval) return 1;
-      return compareRecordsByDate(a, b, 'latest');
+      const timeA = getOrderCreationOrUpdateTimestamp(a);
+      const timeB = getOrderCreationOrUpdateTimestamp(b);
+      if (timeA !== timeB) {
+        return timeB - timeA;
+      }
+      return compareAlphanumeric(b.orderId, a.orderId);
     });
   }, [records, searchTerm, startDate, endDate, paymentTab]);
 
