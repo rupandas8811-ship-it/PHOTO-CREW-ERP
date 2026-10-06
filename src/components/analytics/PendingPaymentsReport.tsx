@@ -23,11 +23,12 @@ import {
 import { jsPDF } from 'jspdf';
 import { motion, AnimatePresence } from 'motion/react';
 import { EVENT_TYPES } from '../../types';
-import { formatDateDDMMYY, formatTime12Hour, ensureModalScrolledToTop } from '../../utils';
+import { formatDateDDMMYY, formatDateToDDMMYYYY, formatTime12Hour, ensureModalScrolledToTop } from '../../utils';
 import { compareAlphanumeric } from '../ui/ListSortFilter';
 import { PaymentHistoryModal } from '../PaymentHistoryModal';
 import { UpdatePaymentModal } from './UpdatePaymentModal';
 import { supabaseClient } from '../../supabaseClient';
+import { DateFilterInput } from '../ui/DateFilterInput';
 
 export const PendingPaymentsReport: React.FC = () => {
   const { leads, orders, payments, currentUserName, recordPayment, refreshData, paymentHistory: contextPaymentHistory } = useRole();
@@ -1334,14 +1335,13 @@ export const PendingPaymentsReport: React.FC = () => {
               <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-amber-400 mb-1">
                 Start Date (Event Date)
               </label>
-              <input
+              <DateFilterInput
                 id="input_start_date"
                 data-testid="input_start_date"
-                type="date"
                 value={customStartDate}
-                onChange={(e) => {
-                  setCustomStartDate(e.target.value);
-                  setStartDate(e.target.value);
+                onChange={(val) => {
+                  setCustomStartDate(val);
+                  setStartDate(val);
                 }}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
               />
@@ -1350,14 +1350,13 @@ export const PendingPaymentsReport: React.FC = () => {
               <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-amber-400 mb-1">
                 End Date (Event Date)
               </label>
-              <input
+              <DateFilterInput
                 id="input_end_date"
                 data-testid="input_end_date"
-                type="date"
                 value={customEndDate}
-                onChange={(e) => {
-                  setCustomEndDate(e.target.value);
-                  setEndDate(e.target.value);
+                onChange={(val) => {
+                  setCustomEndDate(val);
+                  setEndDate(val);
                 }}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
               />
@@ -1388,7 +1387,7 @@ export const PendingPaymentsReport: React.FC = () => {
             </span>
             {activeEventDateRange.start && activeEventDateRange.end && (
               <span className="text-[10px] bg-zinc-800 px-2 py-0.5 rounded text-amber-400 border border-zinc-700">
-                {dateFilterOption === 'Custom Date Range' ? 'Custom Range' : dateFilterOption}: {formatDateDDMMYY(activeEventDateRange.start)} - {formatDateDDMMYY(activeEventDateRange.end)}
+                {dateFilterOption === 'Custom Date Range' ? 'Custom Range' : dateFilterOption}: {formatDateToDDMMYYYY(activeEventDateRange.start)} - {formatDateToDDMMYYYY(activeEventDateRange.end)}
               </span>
             )}
           </div>
@@ -1475,10 +1474,9 @@ export const PendingPaymentsReport: React.FC = () => {
           <div>
             <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-zinc-400 mb-1.5">Start Date</label>
             <div className="relative">
-              <input 
-                type="date"
+              <DateFilterInput 
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={setStartDate}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
               />
             </div>
@@ -1487,10 +1485,9 @@ export const PendingPaymentsReport: React.FC = () => {
           <div>
             <label className="block text-[10px] uppercase font-mono font-bold tracking-wider text-zinc-400 mb-1.5">End Date</label>
             <div className="relative">
-              <input 
-                type="date"
+              <DateFilterInput 
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={setEndDate}
                 className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500 font-mono cursor-pointer"
               />
             </div>

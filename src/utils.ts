@@ -458,7 +458,117 @@ export function formatDateTime(dateTimeInput?: string | null | Date, timeInput?:
 // Aliases for universal compatibility across codebase
 export const formatDate = formatDateDDMMYY;
 export const formatDateDMY = formatDateDDMMYY;
-export const formatDateDDMMYYYY = formatDateDDMMYY;
+
+/**
+ * Strict DD/MM/YYYY Date Formatter
+ * Formats any date into DD/MM/YYYY (e.g. "05/10/2026", "15/10/2026", "31/12/2026").
+ * Strict display format only. Does not alter underlying values.
+ */
+export function formatDateToDDMMYYYY(dateInput?: string | null | Date): string {
+  if (!dateInput && (dateInput as any) !== 0) return '';
+  if (dateInput instanceof Date) {
+    if (isNaN(dateInput.getTime())) return '';
+    const dd = String(dateInput.getDate()).padStart(2, '0');
+    const mm = String(dateInput.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(dateInput.getFullYear());
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  const s = String(dateInput).trim();
+  if (!s || s === '—' || s === '-' || s === 'N/A' || s === 'null' || s === 'undefined') return '';
+
+  // 1. If already DD/MM/YYYY (e.g. 05/10/2026)
+  const ddmmyyyyMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (ddmmyyyyMatch) {
+    const dd = ddmmyyyyMatch[1].padStart(2, '0');
+    const mm = ddmmyyyyMatch[2].padStart(2, '0');
+    const yyyy = ddmmyyyyMatch[3];
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // 2. If YYYY-MM-DD or YYYY/MM/DD or YYYY-MM-DDTHH:mm:ss
+  const yyyymmddMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (yyyymmddMatch) {
+    const yyyy = yyyymmddMatch[1];
+    const mm = yyyymmddMatch[2].padStart(2, '0');
+    const dd = yyyymmddMatch[3].padStart(2, '0');
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // 3. If DD-MM-YYYY or DD.MM.YYYY
+  const dashMatch = s.match(/^(\d{1,2})[-.](\d{1,2})[-.](\d{4})/);
+  if (dashMatch) {
+    const dd = dashMatch[1].padStart(2, '0');
+    const mm = dashMatch[2].padStart(2, '0');
+    const yyyy = dashMatch[3];
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // 4. If DD MMM YYYY (e.g. 05 Oct 2026 or 20 Sep 2026)
+  const textMonthMatch = s.match(/^(\d{1,2})[-/\s]+([a-zA-Z]{3,9})[-/\s,]+(\d{2,4})$/);
+  if (textMonthMatch) {
+    const dd = textMonthMatch[1].padStart(2, '0');
+    const mStr = textMonthMatch[2].toLowerCase().slice(0, 3);
+    const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+    const idx = months.indexOf(mStr);
+    const mm = idx !== -1 ? String(idx + 1).padStart(2, '0') : '01';
+    let yyyy = textMonthMatch[3];
+    if (yyyy.length === 2) yyyy = '20' + yyyy;
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  // 5. Fallback Date parse
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = String(d.getFullYear());
+    return `${dd}/${mm}/${yyyy}`;
+  }
+
+  return s;
+}
+
+/**
+ * Parses any date format (DD/MM/YYYY, DD-MM-YYYY, etc.) back to standard ISO YYYY-MM-DD.
+ * Ensures backend and query filtering continue working flawlessly.
+ */
+export function parseDateToYYYYMMDD(input?: string | null): string {
+  if (!input) return '';
+  const s = input.trim();
+  if (!s) return '';
+
+  // 1. If already YYYY-MM-DD
+  const yyyymmddMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (yyyymmddMatch) {
+    const yyyy = yyyymmddMatch[1];
+    const mm = yyyymmddMatch[2].padStart(2, '0');
+    const dd = yyyymmddMatch[3].padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 2. If DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+  const ddmmyyyyMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (ddmmyyyyMatch) {
+    const dd = ddmmyyyyMatch[1].padStart(2, '0');
+    const mm = ddmmyyyyMatch[2].padStart(2, '0');
+    const yyyy = ddmmyyyyMatch[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 3. Fallback Date parse
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) {
+    const yyyy = String(d.getFullYear());
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  return s;
+}
+
+export const formatDateDDMMYYYY = formatDateToDDMMYYYY;
 
 /**
  * Universal Chronological Event Timestamp Parser

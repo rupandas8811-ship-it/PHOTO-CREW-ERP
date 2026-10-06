@@ -570,20 +570,6 @@ const MainAppContent: React.FC = () => {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           </div>
 
-          {/* User Name on Side Menu */}
-          <div className="bg-zinc-950/70 border border-zinc-800/80 rounded-xl p-3 flex items-center gap-3 shadow-inner">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 font-mono font-bold">
-              <User className="w-4 h-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <span className="text-[9px] font-mono text-zinc-500 uppercase block font-semibold leading-tight">Logged in as</span>
-              <span className="text-xs font-bold text-amber-400 font-mono block truncate mt-0.5">{staffDisplayName}</span>
-              {staffDisplayMobile && (
-                <span className="text-[10px] font-mono text-zinc-400 block truncate leading-tight mt-0.5">({staffDisplayMobile})</span>
-              )}
-            </div>
-          </div>
-
           <nav className="space-y-1.5">
             <button
               onClick={() => handleTabSelect('staff_dashboard')}
@@ -605,24 +591,6 @@ const MainAppContent: React.FC = () => {
           <div className="pt-2 border-t border-zinc-850/80 space-y-2">
             <div className="text-[9px] font-mono uppercase tracking-[0.15em] text-zinc-500 font-extrabold px-1">
               Terminal Access & Activity
-            </div>
-
-            {/* Role Card */}
-            <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-xl p-3 flex items-center justify-between gap-3 shadow-inner">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                  <Shield className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[9px] font-mono text-zinc-500 uppercase block font-semibold leading-none">Role</span>
-                  <span className="text-xs font-bold text-white font-mono block mt-1 tracking-wide">
-                    {currentRole}
-                  </span>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400 border border-amber-500/30 shrink-0">
-                Active
-              </span>
             </div>
 
             {/* Active Tasks Card */}

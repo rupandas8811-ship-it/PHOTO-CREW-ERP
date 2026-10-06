@@ -10,6 +10,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, 
   Cell, CartesianGrid, PieChart, Pie 
 } from 'recharts';
+import { DateFilterInput } from '../../ui/DateFilterInput';
 
 export const OwnerStaffPerformanceDetailed: React.FC = () => {
   const { 
@@ -972,20 +973,22 @@ export const OwnerStaffPerformanceDetailed: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             {quickDateFilter === 'custom' && (
               <div className="flex items-center gap-1.5 bg-zinc-900/80 border border-zinc-800 rounded-xl px-3 py-1.5">
-                <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                <input 
-                  type="date" 
-                  value={startDate} 
-                  onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-                  className="bg-transparent text-zinc-200 text-xs font-mono outline-none"
-                />
+                <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <div className="w-32">
+                  <DateFilterInput 
+                    value={startDate} 
+                    onChange={val => { setStartDate(val); setCurrentPage(1); }}
+                    className="bg-transparent text-zinc-200 text-xs font-mono outline-none"
+                  />
+                </div>
                 <span className="text-zinc-600">-</span>
-                <input 
-                  type="date" 
-                  value={endDate} 
-                  onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-                  className="bg-transparent text-zinc-200 text-xs font-mono outline-none"
-                />
+                <div className="w-32">
+                  <DateFilterInput 
+                    value={endDate} 
+                    onChange={val => { setEndDate(val); setCurrentPage(1); }}
+                    className="bg-transparent text-zinc-200 text-xs font-mono outline-none"
+                  />
+                </div>
               </div>
             )}
 

@@ -31,6 +31,25 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
     (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name?.trim().toLowerCase())
   );
   const staffName = staffMember?.name || currentUser?.name || '';
+
+  const getHeaderDisplayName = (role: UserRole) => {
+    switch (role) {
+      case 'Sales Team':
+        return currentUser?.name || staffName || 'Sales Person';
+      case 'Operations Team':
+        return 'Operations Manager';
+      case 'Operation Staff':
+        return currentUser?.name || staffName || 'Operations Staff';
+      case 'Production Team':
+        return 'Production Manager';
+      case 'Production Staff':
+        return currentUser?.name || staffName || 'Production Staff';
+      case 'Business Owner':
+        return 'Business Owner';
+      default:
+        return currentUser?.name || role;
+    }
+  };
   
   const assignedTasksCount = useMemo(() => {
     if (!currentUser || !staffName || (currentRole !== 'Operation Staff' && currentRole !== 'Production Staff')) return 0;
@@ -85,10 +104,10 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
           
           <AppLogo size="sm" showTextOnFallback={false} />
 
-          <div className={`h-4 w-[1px] bg-zinc-800 ${(currentRole === 'Operation Staff' || currentRole === 'Production Staff') ? 'hidden lg:block' : 'hidden xs:block'}`} />
+          <div className="h-4 w-[1px] bg-zinc-800 hidden xs:block" />
 
-          <span className={`text-[10px] sm:text-xs px-2.5 py-1 rounded font-mono font-bold tracking-wider uppercase border whitespace-nowrap ${getRoleBadgeStyle(currentRole)} ${(currentRole === 'Operation Staff' || currentRole === 'Production Staff') ? 'hidden lg:inline-flex' : 'hidden xs:inline-flex'}`}>
-            {currentRole}
+          <span className={`text-[10px] sm:text-xs px-2.5 py-1 rounded font-mono font-bold tracking-wider uppercase border whitespace-nowrap ${getRoleBadgeStyle(currentRole)} inline-flex items-center`}>
+            {getHeaderDisplayName(currentRole)}
           </span>
         </div>
 

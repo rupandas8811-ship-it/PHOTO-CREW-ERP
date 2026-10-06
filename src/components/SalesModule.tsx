@@ -16,6 +16,7 @@ import { EventCell } from './EventCell';
 import { MultiSelectDropdown } from './ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from './CameraLensStatsCard';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
+import { DateFilterInput } from './ui/DateFilterInput';
 
 export const SHOOT_TYPES = [
   "CANDID PHOTOGRAPHY",
@@ -12355,11 +12356,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
                             Start Date (Created)
                           </label>
-                          <input
-                            type="date"
+                          <DateFilterInput
                             value={dateRangeStart}
-                            onChange={(e) => setDateRangeStart(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                            onChange={setDateRangeStart}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:border-amber-500"
                           />
                         </div>
 
@@ -12368,11 +12368,10 @@ export const SalesModule: React.FC<SalesModuleProps> = ({ activeSubTab: external
                           <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
                             End Date (Created)
                           </label>
-                          <input
-                            type="date"
+                          <DateFilterInput
                             value={dateRangeEnd}
-                            onChange={(e) => setDateRangeEnd(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                            onChange={setDateRangeEnd}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:border-amber-500"
                           />
                         </div>
 

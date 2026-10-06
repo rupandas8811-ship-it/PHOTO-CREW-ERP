@@ -49,13 +49,14 @@ import { BusinessOwnerCardDetailModal } from './BusinessOwnerCardDetailModal';
 import { PaymentHistoryModal } from './PaymentHistoryModal';
 import { AddNoteModal } from './AddNoteModal';
 import { OrderHistoryModal } from './OrderHistoryModal';
-import { formatINR, formatTime12Hour, formatDateDDMMYY, deserializeLeadEvents, resolveStorageUrl } from '../utils';
+import { formatINR, formatTime12Hour, formatDateDDMMYY, formatDateToDDMMYYYY, deserializeLeadEvents, resolveStorageUrl } from '../utils';
 import { performBusinessOwnerReview } from '../utils/businessOwnerReview';
 import { Order, Lead, Production, Payment } from '../types';
 import { AssignedStaffDropdown } from './AssignedStaffDropdown';
 import { OwnerPasswordResetModule } from './OwnerPasswordResetModule';
 import { compareRecordsByDate, compareAlphanumeric } from './ui/ListSortFilter';
 import { getAllMatchingOrderIds } from './SalesUtils';
+import { DateFilterInput } from './ui/DateFilterInput';
 
 export function getOrderRemainingPendingAmount(
   order: any, 
@@ -1759,19 +1760,21 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
 
                 {datePreset === 'custom' && (
                   <div className="flex items-center gap-1.5 text-xs font-mono">
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200 text-xs"
-                    />
+                    <div className="w-32">
+                      <DateFilterInput
+                        value={startDate}
+                        onChange={setStartDate}
+                        className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200 text-xs"
+                      />
+                    </div>
                     <span className="text-zinc-600">to</span>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200 text-xs"
-                    />
+                    <div className="w-32">
+                      <DateFilterInput
+                        value={endDate}
+                        onChange={setEndDate}
+                        className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1 text-zinc-200 text-xs"
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -1781,7 +1784,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
                 <CalendarIcon className="w-3.5 h-3.5 text-amber-400" />
                 <span className="text-zinc-500 font-bold uppercase text-[10px]">Active Range:</span>
                 <span className="text-zinc-200 font-bold">
-                  {datePreset === 'all' ? 'All Time' : `${startDate} to ${endDate}`}
+                  {datePreset === 'all' ? 'All Time' : `${formatDateToDDMMYYYY(startDate)} to ${formatDateToDDMMYYYY(endDate)}`}
                 </span>
               </div>
             </div>
@@ -2263,7 +2266,7 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
         isOpen={selectedCard !== null}
         onClose={() => setSelectedCard(null)}
         title={modalTitleAndMeta.title}
-        subtitle={`${startDate} ~ ${endDate}`}
+        subtitle={startDate && endDate ? `${formatDateToDDMMYYYY(startDate)} ~ ${formatDateToDDMMYYYY(endDate)}` : ''}
         accentColor={modalTitleAndMeta.accentColor}
         data={modalData}
         columns={modalColumns}
@@ -2984,10 +2987,9 @@ const LeadsReportSection: React.FC<LeadsReportSectionProps> = ({ leads }) => {
           {/* Date From */}
           <div className="space-y-1">
             <label className="text-[10px] font-mono font-bold uppercase text-zinc-400">From Date</label>
-            <input
-              type="date"
+            <DateFilterInput
               value={leadsStartDate}
-              onChange={(e) => setLeadsStartDate(e.target.value)}
+              onChange={setLeadsStartDate}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500"
             />
           </div>
@@ -2995,10 +2997,9 @@ const LeadsReportSection: React.FC<LeadsReportSectionProps> = ({ leads }) => {
           {/* Date To */}
           <div className="space-y-1">
             <label className="text-[10px] font-mono font-bold uppercase text-zinc-400">To Date</label>
-            <input
-              type="date"
+            <DateFilterInput
               value={leadsEndDate}
-              onChange={(e) => setLeadsEndDate(e.target.value)}
+              onChange={setLeadsEndDate}
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-cyan-500"
             />
           </div>
@@ -4092,19 +4093,21 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
             {/* Dates */}
             <div className="flex items-center gap-2 text-xs font-mono w-full sm:w-auto">
               <span className="text-zinc-500 uppercase text-[10px] font-bold">Dates:</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
-              />
+              <div className="w-32">
+                <DateFilterInput
+                  value={startDate}
+                  onChange={setStartDate}
+                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
+                />
+              </div>
               <span className="text-zinc-600">to</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
-              />
+              <div className="w-32">
+                <DateFilterInput
+                  value={endDate}
+                  onChange={setEndDate}
+                  className="bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1 text-zinc-200 text-xs"
+                />
+              </div>
             </div>
           </div>
 
@@ -4148,7 +4151,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
             {getPeriodLabel(selectedPeriod)}
           </div>
           <div className="text-[11px] font-mono text-zinc-400">
-            Active Range: <span className="text-zinc-200">{startDate}</span> to <span className="text-zinc-200">{endDate}</span>
+            Active Range: <span className="text-zinc-200">{formatDateToDDMMYYYY(startDate)}</span> to <span className="text-zinc-200">{formatDateToDDMMYYYY(endDate)}</span>
           </div>
         </div>
 
@@ -4254,7 +4257,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
             </span>
             {startDate && endDate && (
               <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800">
-                {startDate} to {endDate}
+                {formatDateToDDMMYYYY(startDate)} to {formatDateToDDMMYYYY(endDate)}
               </span>
             )}
             {selectedCard && (
@@ -4431,7 +4434,7 @@ const RevenuePaymentSummarySection: React.FC<RevenuePaymentSummarySectionProps> 
         isOpen={selectedCard !== null && selectedCard.startsWith('summary_')}
         onClose={() => setSelectedCard(null)}
         title={modalTitleAndMeta.title}
-        subtitle={`${startDate} ~ ${endDate}`}
+        subtitle={startDate && endDate ? `${formatDateToDDMMYYYY(startDate)} ~ ${formatDateToDDMMYYYY(endDate)}` : ''}
         accentColor={modalTitleAndMeta.accentColor}
         data={modalData}
         columns={modalColumns}

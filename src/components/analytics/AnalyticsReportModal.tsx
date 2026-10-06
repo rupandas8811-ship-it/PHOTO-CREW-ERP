@@ -8,6 +8,7 @@ import { EVENT_TYPES } from '../../types';
 import { jsPDF } from 'jspdf';
 import { useRole } from '../RoleContext';
 import * as XLSX from 'xlsx';
+import { DateFilterInput } from '../ui/DateFilterInput';
 
 interface AnalyticsReportModalProps {
   isOpen: boolean;
@@ -593,23 +594,25 @@ export const AnalyticsReportModal: React.FC<AnalyticsReportModalProps> = ({
           {/* Start Date */}
           <div className="flex flex-col gap-1">
             <span className="text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider">Start Date</span>
-            <input
-              type="date"
-              value={localStartDate}
-              onChange={(e) => setLocalStartDate(e.target.value)}
-              className="bg-zinc-900 w-36 border border-zinc-850 rounded-lg px-2.5 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500 h-8 font-mono"
-            />
+            <div className="w-36">
+              <DateFilterInput
+                value={localStartDate}
+                onChange={setLocalStartDate}
+                className="bg-zinc-900 border border-zinc-850 rounded-lg px-2.5 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500 h-8 font-mono"
+              />
+            </div>
           </div>
 
           {/* End Date */}
           <div className="flex flex-col gap-1">
             <span className="text-[10px] text-zinc-500 font-mono font-bold uppercase tracking-wider">End Date</span>
-            <input
-              type="date"
-              value={localEndDate}
-              onChange={(e) => setLocalEndDate(e.target.value)}
-              className="bg-zinc-900 w-36 border border-zinc-850 rounded-lg px-2.5 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500 h-8 font-mono"
-            />
+            <div className="w-36">
+              <DateFilterInput
+                value={localEndDate}
+                onChange={setLocalEndDate}
+                className="bg-zinc-900 border border-zinc-850 rounded-lg px-2.5 py-1 text-xs text-zinc-200 outline-none focus:border-indigo-500 h-8 font-mono"
+              />
+            </div>
           </div>
 
           {/* Status Filter */}

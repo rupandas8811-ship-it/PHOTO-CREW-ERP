@@ -13,7 +13,8 @@ import { EventCell } from '../EventCell';
 import { MultiSelectDropdown } from '../ui/MultiSelectDropdown';
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { ListSortFilter, SortOrder } from '../ui/ListSortFilter';
-import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, deserializeLeadEvents } from '../../utils';
+import { formatINR, formatIndianPhoneNumber, validateIndianMobile, formatTime12Hour, getCustomers, triggerAutoScrollAndFocus, normalizeCategory, parseTeamMembers, formatQtyItem, formatQtyArray, formatQtyList, formatDateDDMMYY, deserializeLeadEvents, formatDateToDDMMYYYY } from '../../utils';
+import { DateFilterInput } from '../ui/DateFilterInput';
 import { SalesCalendar } from '../SalesCalendar';
 import { CustomPackageMaster } from '../CustomPackageMaster';
 import { AddressAutocomplete } from '../AddressAutocomplete';
@@ -793,11 +794,10 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                           <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
                             Start Date
                           </label>
-                          <input
-                            type="date"
+                          <DateFilterInput
                             value={dateRangeStart}
-                            onChange={(e) => setDateRangeStart(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                            onChange={setDateRangeStart}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:border-amber-500"
                           />
                         </div>
 
@@ -806,11 +806,10 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                           <label className="block text-[10px] uppercase font-mono font-bold text-slate-400 mb-1">
                             End Date
                           </label>
-                          <input
-                            type="date"
+                          <DateFilterInput
                             value={dateRangeEnd}
-                            onChange={(e) => setDateRangeEnd(e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:outline-none"
+                            onChange={setDateRangeEnd}
+                            className="w-full bg-slate-900 border border-slate-750 rounded-lg py-1.5 px-3 text-xs text-slate-100 font-mono focus:border-amber-500"
                           />
                         </div>
 
@@ -964,7 +963,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
                             <StatusText status={leadStatus} />
                           </td>
                           <td className="p-3.5 font-mono text-zinc-400">
-                            {lead.created_date ? formatDateDDMMYY(lead.created_date.split('T')[0]) : 'N/A'}
+                            {lead.created_date ? formatDateToDDMMYYYY(lead.created_date.split('T')[0]) : 'N/A'}
                           </td>
                           <td className="p-3.5 text-right pr-5 w-[160px] min-w-max overflow-visible relative">
                             {(() => {

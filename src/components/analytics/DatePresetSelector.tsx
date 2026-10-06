@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DatePreset, DateRange, getPresetDateRange } from './DateFilterHelper';
 import { Calendar, Filter } from 'lucide-react';
+import { DateFilterInput } from '../ui/DateFilterInput';
 
 interface DatePresetSelectorProps {
   selectedPreset: DatePreset;
@@ -80,21 +81,23 @@ export const DatePresetSelector: React.FC<DatePresetSelectorProps> = ({
         <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-zinc-850/50 animate-in fade-in slide-in-from-top-1 duration-200">
           <div className="flex items-center gap-2 text-[10px] text-zinc-450 font-mono">
             <span className="uppercase font-bold">Start Date:</span>
-            <input
-              type="date"
-              value={internalStart}
-              onChange={(e) => setInternalStart(e.target.value)}
-              className="bg-zinc-950/80 border border-zinc-850 rounded-lg px-2 py-1 text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono"
-            />
+            <div className="w-36">
+              <DateFilterInput
+                value={internalStart}
+                onChange={setInternalStart}
+                className="bg-zinc-950/80 border border-zinc-850 rounded-lg px-2 py-1 text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+              />
+            </div>
           </div>
           <div className="flex items-center gap-2 text-[10px] text-zinc-450 font-mono">
             <span className="uppercase font-bold">End Date:</span>
-            <input
-              type="date"
-              value={internalEnd}
-              onChange={(e) => setInternalEnd(e.target.value)}
-              className="bg-zinc-950/80 border border-zinc-850 rounded-lg px-2 py-1 text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono"
-            />
+            <div className="w-36">
+              <DateFilterInput
+                value={internalEnd}
+                onChange={setInternalEnd}
+                className="bg-zinc-950/80 border border-zinc-850 rounded-lg px-2 py-1 text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono text-xs"
+              />
+            </div>
           </div>
           <button
             onClick={handleApplyCustom}

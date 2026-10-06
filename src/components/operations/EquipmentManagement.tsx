@@ -7,8 +7,9 @@ import {
 } from 'lucide-react';
 import { Equipment } from '../../types';
 import { supabaseClient } from '../../supabaseClient';
+import { DateFilterInput } from '../ui/DateFilterInput';
 
-import { formatTime12Hour, formatDateDDMMYY, getStoredEquipmentCategories, saveEquipmentCategoryToStorage } from "../../utils";
+import { formatTime12Hour, formatDateDDMMYY, formatDateToDDMMYYYY, getStoredEquipmentCategories, saveEquipmentCategoryToStorage } from "../../utils";
 
 const toCalendarDateString = (dateVal?: string | null | Date): string | null => {
   if (!dateVal && (dateVal as any) !== 0) return null;
@@ -1139,18 +1140,19 @@ export const EquipmentManagement: React.FC = () => {
       {/* Dashboard Metrics Header with Date Filter */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-2">
         <h2 className="text-xs font-mono font-black uppercase text-zinc-500">
-          Inventory Status for: <span className="text-zinc-200">{formatDateDDMMYY(selectedDate)}</span>
+          Inventory Status for: <span className="text-zinc-200">{formatDateToDDMMYYYY(selectedDate) || selectedDate}</span>
         </h2>
         <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-850 rounded-xl px-3 py-1.5 shadow-sm">
           <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <span className="text-[10px] font-mono font-bold uppercase text-zinc-400">Assignment / Event Date:</span>
-          <input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500 cursor-pointer"
-            title="Select Assignment / Event Date"
-          />
+          <div className="w-36">
+            <DateFilterInput
+              value={selectedDate}
+              onChange={setSelectedDate}
+              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500"
+              title="Select Assignment / Event Date"
+            />
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -1259,13 +1261,14 @@ export const EquipmentManagement: React.FC = () => {
                 <span className="text-[10px] text-zinc-400 font-mono">Filters:</span>
               </div>
 
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
-                title="Select Assignment/Event Date"
-              />
+              <div className="w-36">
+                <DateFilterInput
+                  value={selectedDate}
+                  onChange={setSelectedDate}
+                  className="bg-zinc-950 border border-zinc-850 rounded-xl px-2.5 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
+                  title="Select Assignment/Event Date"
+                />
+              </div>
 
               <select
                 value={selectedCategoryView || filters.type}

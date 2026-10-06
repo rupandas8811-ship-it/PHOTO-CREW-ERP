@@ -32,6 +32,7 @@ import { ProductionStaffDirectoryModule } from './ProductionStaffDirectoryModule
 import { ProductionRoleSpecialitiesModule } from './ProductionRoleSpecialitiesModule';
 import { ListSortFilter, SortOrder, compareRecordsByDate, compareAlphanumeric } from './ui/ListSortFilter';
 import { isEditorAssignmentStarted } from '../services/operationsAssignmentService';
+import { DateFilterInput } from './ui/DateFilterInput';
 
 function getIndividualDeliverables(description: string): string[] {
   if (!description) return [];
@@ -4264,10 +4265,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               {/* Start Date */}
               <div className="space-y-1 font-sans">
                 <label className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono block font-bold">Start Date</label>
-                <input
-                  type="date"
+                <DateFilterInput
                   value={dtStart}
-                  onChange={(e) => setDtStart(e.target.value)}
+                  onChange={setDtStart}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-150 focus:outline-none focus:ring-1 focus:ring-violet-505 font-mono cursor-pointer"
                 />
               </div>
@@ -4275,10 +4275,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               {/* End Date */}
               <div className="space-y-1 font-sans">
                 <label className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono block font-bold">End Date</label>
-                <input
-                  type="date"
+                <DateFilterInput
                   value={dtEnd}
-                  onChange={(e) => setDtEnd(e.target.value)}
+                  onChange={setDtEnd}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-2 py-1 text-xs text-zinc-150 focus:outline-none focus:ring-1 focus:ring-violet-505 font-mono cursor-pointer"
                 />
               </div>

@@ -7,7 +7,8 @@ import {
   Shield, Camera, Video, AlertTriangle
 } from 'lucide-react';
 import { Staff, Order } from '../../types';
-import { formatDateDDMMYY } from '../../utils';
+import { formatDateDDMMYY, formatDateToDDMMYYYY } from '../../utils';
+import { DateFilterInput } from '../ui/DateFilterInput';
 
 import { formatTime12Hour } from "../../utils";
 
@@ -436,11 +437,10 @@ export const OperationsAnalytics: React.FC = () => {
               <Calendar className="w-3.5 h-3.5 text-amber-500" />
               <span>Start Date (Inclusive)</span>
             </label>
-            <input
-              type="date"
+            <DateFilterInput
               value={startDateInput}
-              onChange={(e) => setStartDateInput(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 font-mono focus:outline-none"
+              onChange={setStartDateInput}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 font-mono focus:border-amber-500"
             />
           </div>
 
@@ -449,11 +449,10 @@ export const OperationsAnalytics: React.FC = () => {
               <Calendar className="w-3.5 h-3.5 text-amber-500" />
               <span>End Date (Inclusive)</span>
             </label>
-            <input
-              type="date"
+            <DateFilterInput
               value={endDateInput}
-              onChange={(e) => setEndDateInput(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 font-mono focus:outline-none"
+              onChange={setEndDateInput}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl py-1.5 px-3 text-xs text-zinc-100 font-mono focus:border-amber-500"
             />
           </div>
 

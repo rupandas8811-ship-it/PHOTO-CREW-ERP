@@ -15,6 +15,7 @@ import {
 import { jsPDF } from 'jspdf';
 import { CameraLensStatsCard } from '../CameraLensStatsCard';
 import { formatDateDDMMYY } from '../../utils';
+import { DateFilterInput } from '../ui/DateFilterInput';
 
 export const ProductionAnalytics: React.FC = () => {
   const { leads, orders, production, payments, operations, staff, globalDateRange, editorAssignments, rawFootage } = useRole();
@@ -257,22 +258,20 @@ export const ProductionAnalytics: React.FC = () => {
 
               {/* Start Date */}
               <div className="relative flex items-center">
-                <span className="absolute left-3 text-[9px] font-mono uppercase tracking-wider text-zinc-500 pr-2 border-r border-zinc-800 font-extrabold">START:</span>
-                <input 
-                  type="date"
+                <span className="absolute left-3 text-[9px] font-mono uppercase tracking-wider text-zinc-500 pr-2 border-r border-zinc-800 font-extrabold z-10">START:</span>
+                <DateFilterInput 
                   value={startDateStr}
-                  onChange={(e) => setStartDateStr(e.target.value)}
+                  onChange={setStartDateStr}
                   className="w-full bg-[#08080a] border border-zinc-900 rounded-xl py-2 pl-16 pr-3 text-xs text-zinc-300 outline-none focus:border-indigo-500 transition-all font-mono"
                 />
               </div>
 
               {/* End Date */}
               <div className="relative flex items-center">
-                <span className="absolute left-3 text-[9px] font-mono uppercase tracking-wider text-zinc-500 pr-2 border-r border-zinc-800 font-extrabold">END:</span>
-                <input 
-                  type="date"
+                <span className="absolute left-3 text-[9px] font-mono uppercase tracking-wider text-zinc-500 pr-2 border-r border-zinc-800 font-extrabold z-10">END:</span>
+                <DateFilterInput 
                   value={endDateStr}
-                  onChange={(e) => setEndDateStr(e.target.value)}
+                  onChange={setEndDateStr}
                   className="w-full bg-[#08080a] border border-zinc-900 rounded-xl py-2 pl-14 pr-3 text-xs text-zinc-300 outline-none focus:border-indigo-500 transition-all font-mono"
                 />
               </div>

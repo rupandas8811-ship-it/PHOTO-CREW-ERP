@@ -128,12 +128,6 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
                 <h2 className="text-xl font-black text-white">Sales & Lead Desk</h2>
-                {salesPersonName && (
-                  <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm">
-                    <span className="text-xs">👤</span>
-                    <span>{salesPersonName}</span>
-                  </span>
-                )}
               </div>
             </div>
 

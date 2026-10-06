@@ -17,12 +17,6 @@ export const SalesCalendar: React.FC<SalesCalendarProps> = ({ onSelectLead }) =>
         <div className="flex items-center gap-2.5 flex-wrap">
           <span className="p-1 px-2.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-mono rounded tracking-widest">CALENDAR</span>
           <h3 className="text-sm font-black text-white uppercase tracking-wider font-mono">Sales Calendar</h3>
-          {salesPersonName && (
-            <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-sm">
-              <span className="text-xs">👤</span>
-              <span>{salesPersonName}</span>
-            </span>
-          )}
         </div>
       </div>
       <UnifiedCalendar role="sales" onSelectLead={onSelectLead} />

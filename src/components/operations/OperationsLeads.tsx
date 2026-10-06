@@ -13,6 +13,7 @@ import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
 import { EquipmentSelectorDropdown } from './EquipmentSelectorDropdown';
 import { ListSortFilter, SortOrder, compareRecordsByDate, parseDateTimeToTimestamp, compareAlphanumeric } from '../ui/ListSortFilter';
+import { DateFilterInput } from '../ui/DateFilterInput';
 
 import { CameraLensStatsCard, CameraLensTheme } from '../CameraLensStatsCard';
 import { 
@@ -3364,19 +3365,21 @@ export const OperationsLeads: React.FC = () => {
           <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-zinc-900/30 text-xs animate-in slide-in-from-top-1 duration-150">
             <span className="text-[10px] uppercase font-mono font-bold text-zinc-500">Custom Range:</span>
             <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => setCustomStartDate(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 px-2.5 py-1.5 rounded-lg font-mono focus:outline-none focus:border-amber-500/40"
-              />
+              <div className="w-36">
+                <DateFilterInput
+                  value={customStartDate}
+                  onChange={setCustomStartDate}
+                  className="bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 px-2.5 py-1.5 rounded-lg font-mono focus:border-amber-500/40"
+                />
+              </div>
               <span className="text-zinc-650">—</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => setCustomEndDate(e.target.value)}
-                className="bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 px-2.5 py-1.5 rounded-lg font-mono focus:outline-none focus:border-amber-500/40"
-              />
+              <div className="w-36">
+                <DateFilterInput
+                  value={customEndDate}
+                  onChange={setCustomEndDate}
+                  className="bg-zinc-900 border border-zinc-800 text-[11px] text-zinc-300 px-2.5 py-1.5 rounded-lg font-mono focus:border-amber-500/40"
+                />
+              </div>
             </div>
             {(customStartDate || customEndDate) && (
               <button
