@@ -895,7 +895,6 @@ export const OperationsStaffManagement: React.FC = () => {
                 <th className="p-3.5 font-bold">Contact Node</th>
                 <th className="p-3.5 font-bold">Skills</th>
                 <th className="p-3.5 font-bold">Roster Status</th>
-                <th className="p-3.5 font-bold">Active Shoots</th>
                 <th className="p-3.5 text-right">Actions</th>
               </tr>
             </thead>
@@ -1010,28 +1009,7 @@ export const OperationsStaffManagement: React.FC = () => {
                           {st.status}
                         </span>
                       </td>
-                      <td className="p-3.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const bookings = getStaffActiveBookings(st.name);
-                            setSelectedStaffBookings({ staffName: st.name, bookings });
-                            setSearchQuery('');
-                          }}
-                          className={`flex items-center gap-2 font-mono text-xs text-left cursor-pointer group transition-all duration-200 ${
-                            activeAssignmentsCount > 0 
-                              ? 'text-amber-500 hover:text-amber-400 hover:underline' 
-                              : 'text-zinc-500 hover:text-zinc-400'
-                          }`}
-                          title={`Click to view bookings for ${st.name}`}
-                        >
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${activeAssignmentsCount > 0 ? 'bg-amber-500 animate-pulse' : 'bg-zinc-600'}`} />
-                          <span className="font-semibold">
-                            {activeAssignmentsCount === 1 ? '1 Booking' : `${activeAssignmentsCount} Bookings`}
-                          </span>
-                        </button>
-                      </td>
-                       <td className="p-3.5 text-right">
+                      <td className="p-3.5 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {canEdit && (
                             <>

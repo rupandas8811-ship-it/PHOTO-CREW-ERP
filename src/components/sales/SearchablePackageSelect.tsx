@@ -33,7 +33,8 @@ export const SearchablePackageSelect: React.FC<SearchablePackageSelectProps> = (
   // Close dropdown on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target;
+      if (target instanceof Node && containerRef.current && !containerRef.current.contains(target)) {
         setIsOpen(false);
       }
     };

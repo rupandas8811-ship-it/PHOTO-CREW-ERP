@@ -122,7 +122,8 @@ export const UnifiedEventDropdownCell: React.FC<UnifiedEventDropdownCellProps> =
     updatePosition();
 
     const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
+      const target = e.target;
+      if (!target || !(target instanceof Node)) return;
       if (buttonRef.current?.contains(target)) return;
       if (menuRef.current?.contains(target)) return;
       setIsOpen(false);

@@ -1,4 +1,4 @@
-import React, { Component, ReactNode, ErrorInfo } from 'react';
+import React, { Component, ReactNode, ErrorInfo, useMemo } from 'react';
 import { SalesModuleProps } from './SalesUtils';
 import { useSalesDashboardState } from './sales/useSalesDashboardState';
 import { SalesBookingConfirmationModal } from './sales/SalesBookingConfirmationModal';
@@ -75,8 +75,73 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
   setActiveSubTab: externalSetActiveTab 
 }) => {
   const state = useSalesDashboardState(externalActiveTab, externalSetActiveTab);
-  const { currentUser, currentUserName } = useRole();
-  const salesPersonName = currentUser?.name || currentUserName || 'Sales Team';
+  const { currentUser, currentUserName, staff = [], users = [] } = useRole();
+
+  // Logged-in Sales Person name computation
+  const salesPersonName = useMemo(() => {
+    if (currentUser?.name) return currentUser.name;
+    if ((currentUser as any)?.full_name) return (currentUser as any).full_name;
+    if (currentUserName && currentUserName !== 'Sales Team') return currentUserName;
+
+    // Look up in users list
+    const userMatch = (users || []).find((u: any) =>
+      (currentUser?.id && (u.id === currentUser.id || (u as any).auth_user_id === currentUser.id)) ||
+      (currentUser?.email && u.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (currentUser?.mobile && u.mobile && u.mobile === currentUser.mobile)
+    );
+    if (userMatch?.name) return userMatch.name;
+    if (userMatch?.full_name) return userMatch.full_name;
+
+    // Look up in staff
+    const staffMatch = (staff || []).find((s: any) =>
+      (currentUser?.id && s.staff_id === currentUser.id) ||
+      (currentUser?.email && s.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (currentUser?.mobile && s.mobile && s.mobile === currentUser.mobile)
+    );
+    if (staffMatch?.name) return staffMatch.name;
+
+    return currentUser?.name || currentUserName || 'Sales Team';
+  }, [currentUser, currentUserName, users, staff]);
+
+  // Logged-in Sales Person mobile computation
+  const loggedInSalesMobile = useMemo(() => {
+    if (currentUser?.mobile) return currentUser.mobile;
+    if ((currentUser as any)?.phone) return (currentUser as any).phone;
+
+    // Look up in staff
+    const staffMatch = (staff || []).find((s: any) =>
+      (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) ||
+      (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+    if (staffMatch?.mobile) return staffMatch.mobile;
+
+    // Look up in users list
+    const userMatch = (users || []).find((u: any) =>
+      (u.mobile && currentUser?.mobile && u.mobile === currentUser.mobile) ||
+      (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (u.name && currentUser?.name && u.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+    if (userMatch?.mobile) return userMatch.mobile;
+    if ((userMatch as any)?.phone) return (userMatch as any).phone;
+
+    // Match by resolved sales person name
+    if (salesPersonName && salesPersonName !== 'Sales Team') {
+      const matchByName = (users || []).find((u: any) => 
+        (u.name && u.name.trim().toLowerCase() === salesPersonName.trim().toLowerCase()) ||
+        (u.full_name && u.full_name.trim().toLowerCase() === salesPersonName.trim().toLowerCase())
+      );
+      if (matchByName?.mobile) return matchByName.mobile;
+      if ((matchByName as any)?.phone) return (matchByName as any).phone;
+
+      const staffByName = (staff || []).find((s: any) => 
+        s.name && s.name.trim().toLowerCase() === salesPersonName.trim().toLowerCase()
+      );
+      if (staffByName?.mobile) return staffByName.mobile;
+    }
+
+    return '';
+  }, [currentUser, staff, users, salesPersonName]);
 
   return (
     <SalesErrorBoundary>
@@ -125,10 +190,14 @@ export const SalesDashboardModule: React.FC<SalesModuleProps> = ({
         {state.activeTab !== 'create' && state.activeTab !== 'custom_package_master' && !state.selectedLead && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="p-1 px-2.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-mono rounded tracking-widest">SALES</span>
-                <h2 className="text-xl font-black text-white">Sales & Lead Desk</h2>
-              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-white font-sans tracking-tight">
+                {salesPersonName}
+              </h1>
+              {loggedInSalesMobile && (
+                <p className="text-xs sm:text-sm font-mono text-zinc-400 mt-1">
+                  {loggedInSalesMobile}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center gap-2.5 flex-wrap">

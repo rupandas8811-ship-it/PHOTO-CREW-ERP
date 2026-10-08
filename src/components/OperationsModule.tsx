@@ -2,6 +2,7 @@ import React from 'react';
 import { OperationsLeads } from './operations/OperationsLeads';
 import { EquipmentManagement } from './operations/EquipmentManagement';
 import { OperationsStaffManagement } from './operations/OperationsStaffManagement';
+import { OperationsStaffRoster } from './operations/OperationsStaffRoster';
 import { EventScheduling } from './operations/EventScheduling';
 import { TeamAssignments } from './operations/TeamAssignments';
 import { NotificationsModule } from './NotificationsModule';
@@ -15,7 +16,7 @@ import {
 } from 'lucide-react';
 
 interface OperationsModuleProps {
-  activeSubTab?: 'operations_leads' | 'operations_calendar' | 'equipment_management' | 'operations_staff' | 'event_scheduling' | 'team_assignments' | 'operations_notifications' | 'operations_analytics' | 'package_catalogue';
+  activeSubTab?: 'operations_leads' | 'operations_calendar' | 'equipment_management' | 'operations_staff' | 'operations_staff_roster' | 'event_scheduling' | 'team_assignments' | 'operations_notifications' | 'operations_analytics' | 'package_catalogue';
   setActiveSubTab?: (tab: any) => void;
 }
 
@@ -149,100 +150,31 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
   activeSubTab = 'operations_leads',
   setActiveSubTab
 }) => {
-  // Helper to determine the header metadata
-  const getHeaderMeta = () => {
-    switch (activeSubTab) {
-      case 'operations_leads':
-        return {
-          badge: 'Operations Leads',
-          title: 'Confirmed Project Directives',
-          desc: 'Monitor booked events, coordinate lead photographer/videographer staff, register safety logs, and advance workflows.'
-        };
-      case 'operations_calendar':
-        return {
-          badge: 'Operations Calendar',
-          title: 'Squad Roster & Dispatch Calendar',
-          desc: 'Monitor physical shoot event dates, reporting countdown timetables, photography teams, and custom site coordinates.'
-        };
-      case 'equipment_management':
-        return {
-          badge: 'Gears Registry',
-          title: 'Equipment & Asset Logistics',
-          desc: ''
-        };
-      case 'operations_staff':
-        return {
-          badge: 'Roster Board',
-          title: 'Staff Onboarding & Field Comms',
-          desc: 'Onboard field operators, configure day commission rates, map specialties, and audit duty logs.'
-        };
-      case 'event_scheduling':
-        return {
-          badge: 'Timetables',
-          title: 'Shoot Timelines & Site Scheduling',
-          desc: 'Manage site reporting hours, lock countdown intervals, calendar event dates, and customize site parameters.'
-        };
-      case 'team_assignments':
-        return {
-          badge: 'Squad Audit',
-          title: 'Roster & Team Double-Book Security',
-          desc: 'Inspect double-booking constraints across active calendar dates and manage operator capacities.'
-        };
-      case 'operations_notifications':
-        return {
-          badge: 'Bulletins',
-          title: 'Operational Telemetry Bulletins',
-          desc: 'View alerts, booking modifications, real-time allocations, and database state change triggers.'
-        };
-      case 'operations_analytics':
-        return {
-          badge: 'Metrics',
-          title: 'Studio Fleet & Resource Analytics',
-          desc: 'Analyze deployment rates, camera vs drone units, lifecycles, and capacity segmentation.'
-        };
-      case 'package_catalogue':
-        return {
-          badge: 'Catalogue',
-          title: 'Premium Package Catalogue',
-          desc: 'Verify template structures, price listings, deliverable inclusions, and staff quotas.'
-        };
-      default:
-        return {
-          badge: 'Operations',
-          title: 'Crew & Gear Dispatch Desk',
-          desc: 'Review booked orders, allocate crew personnel, deploy equipment kits, and execute shoot deliveries.'
-        };
-    }
-  };
+  const { currentUser, staff = [] } = useRole();
 
-  const meta = getHeaderMeta();
-  const isCoreTab = ['operations_leads', 'operations_calendar', 'operations_analytics', 'team_assignments'].includes(activeSubTab);
+  const loggedInStaffMember = (staff || []).find((s: any) => 
+    (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) || 
+    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+    (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+  );
+  const loggedInMobile = currentUser?.mobile || (currentUser as any)?.phone || loggedInStaffMember?.mobile || '';
 
   return (
     <div id="operations_module" className="space-y-6">
-      {/* Universal Module Header Banner & Core Top Tabs Switcher */}
-      {activeSubTab !== 'operations_calendar' && (
-      <div className="flex flex-col gap-4 border-b border-zinc-900 pb-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black text-white flex items-center gap-2">
-              <span className="p-1 px-2.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 text-xs font-mono rounded tracking-widest uppercase">
-                {meta.badge}
-              </span>
-              <span>{meta.title}</span>
-            </h2>
-            {meta.desc && (
-              <p className="text-xs text-zinc-400 mt-1 max-w-4xl">
-                {meta.desc}
-              </p>
-            )}
-          </div>
+      {/* Operations Dashboard Header / User Info */}
+      <div className="border-b border-zinc-900 pb-5">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-black text-white font-sans tracking-tight">
+            Operations Manager
+          </h1>
+          {loggedInMobile && (
+            <p className="text-xs sm:text-sm font-mono text-zinc-400 mt-1">
+              {loggedInMobile}
+            </p>
+          )}
         </div>
-
-        {/* Top level sub-tabs removed as functionality exists elsewhere */}
       </div>
 
-      )}
       {/* Render sub-modules based on selection state */}
       <div className="w-full">
         <div className={activeSubTab === 'operations_leads' ? '' : 'hidden'}>
@@ -251,6 +183,7 @@ export const OperationsModule: React.FC<OperationsModuleProps> = ({
         {activeSubTab === 'operations_calendar' && <OperationsCalendar />}
         {activeSubTab === 'equipment_management' && <EquipmentManagement />}
         {activeSubTab === 'operations_staff' && <OperationsStaffManagement />}
+        {activeSubTab === 'operations_staff_roster' && <OperationsStaffRoster />}
         {activeSubTab === 'event_scheduling' && <EventScheduling />}
         {activeSubTab === 'team_assignments' && <TeamAssignments />}
         {activeSubTab === 'operations_notifications' && <NotificationsModule />}

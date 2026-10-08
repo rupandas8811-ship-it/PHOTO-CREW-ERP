@@ -118,7 +118,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   const safeOrders = Array.isArray(orders) ? orders : [];
   const safePackages = Array.isArray(packages) ? packages : [];
 
-  const [sortColumn, setSortColumn] = useState<'created_date' | 'lead_id' | 'order_id' | 'event_date' | null>('event_date');
+  const [sortColumn, setSortColumn] = useState<'created_date' | 'lead_id' | 'order_id' | 'event_date' | null>('created_date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   // Sync toolbar sortOrder if changed from outside
@@ -143,8 +143,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         setSortDirection('asc');
         if (setSortOrder) setSortOrder('oldest');
       } else {
-        // 3rd CLICK: All / Reset (Reset sorting and return to default Most Recent Event First)
-        setSortColumn('event_date');
+        // 3rd CLICK: All / Reset (Reset sorting and return to default Most Recent Created Lead First)
+        setSortColumn('created_date');
         setSortDirection('desc');
         if (setSortOrder) setSortOrder('latest');
       }
@@ -163,8 +163,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         setSortDirection('asc');
         if (setSortOrder) setSortOrder('oldest');
       } else {
-        // 3rd CLICK: Reset to default Most Recent First (desc)
-        setSortColumn('event_date');
+        // 3rd CLICK: Reset to default Most Recent Created Lead First (desc)
+        setSortColumn('created_date');
         setSortDirection('desc');
         if (setSortOrder) setSortOrder('latest');
       }
@@ -203,8 +203,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   };
 
   const getLeadCreatedTimestamp = (leadObj: Lead): number => {
-    // Sourced strictly from actual saved created_at or created_date
-    const raw = leadObj.created_at || leadObj.created_date || (leadObj as any).registered_date || (leadObj as any).registration_date || leadObj.updated_at;
+    // Sourced strictly from actual saved creation timestamp or date
+    const raw = leadObj.created_at || (leadObj as any).timestamp || (leadObj as any).created_time || leadObj.created_date || (leadObj as any).registered_date || (leadObj as any).registration_date || leadObj.updated_at;
     if (!raw) return 0;
     if (typeof raw === 'number') return raw;
     const s = String(raw).trim();
@@ -285,48 +285,41 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
   };
 
   const displayedLeads = React.useMemo(() => {
-    // If sortColumn is null (Reset state), sort by default: Most Recent Event/Order First
-    if (!sortColumn) {
+    // By default (or when sortColumn is null or created_date): Always show the MOST RECENTLY CREATED LEAD at the TOP (descending order)
+    if (!sortColumn || sortColumn === 'created_date') {
       return [...safeFilteredLeads].sort((a, b) => {
-        const tsA = getLeadEventTimestamp(a);
-        const tsB = getLeadEventTimestamp(b);
-        if (tsA > 0 && tsB > 0 && tsA !== tsB) {
-          return tsB - tsA; // Latest/most recent event first
-        }
-        if (tsA > 0 && tsB === 0) return -1;
-        if (tsB > 0 && tsA === 0) return 1;
         const timeA = getLeadCreatedTimestamp(a);
         const timeB = getLeadCreatedTimestamp(b);
         if (timeA !== timeB && timeA > 0 && timeB > 0) {
-          return timeB - timeA; // Most recent order/lead first
+          return (sortColumn === 'created_date' && sortDirection === 'asc') ? timeA - timeB : timeB - timeA;
         }
+        if (timeA > 0 && timeB === 0) return (sortColumn === 'created_date' && sortDirection === 'asc') ? 1 : -1;
+        if (timeB > 0 && timeA === 0) return (sortColumn === 'created_date' && sortDirection === 'asc') ? -1 : 1;
+
+        // Tie-breaker: Numeric sequence from lead_id (newest lead ID first) or alphanumeric
         const idA = (a.lead_id || '').trim();
         const idB = (b.lead_id || '').trim();
-        return compareAlphanumeric(idB, idA);
+        const numA = parseInt(idA.replace(/\D/g, ''), 10);
+        const numB = parseInt(idB.replace(/\D/g, ''), 10);
+        if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+          return (sortColumn === 'created_date' && sortDirection === 'asc') ? numA - numB : numB - numA;
+        }
+        const comp = compareAlphanumeric(idA, idB);
+        return (sortColumn === 'created_date' && sortDirection === 'asc') ? comp : -comp;
       });
     }
 
     return [...safeFilteredLeads].sort((a, b) => {
-      // 1. If sorting by Created Date (Click 1: desc / Most Recent -> Click 2: asc / Last -> Click 3: All/Reset)
-      if (sortColumn === 'created_date') {
-        const timeA = getLeadCreatedTimestamp(a);
-        const timeB = getLeadCreatedTimestamp(b);
-        if (timeA !== timeB && timeA > 0 && timeB > 0) {
-          return sortDirection === 'desc' ? timeB - timeA : timeA - timeB;
-        }
-        if (timeA > 0) return -1;
-        if (timeB > 0) return 1;
-        const idA = (a.lead_id || '').trim();
-        const idB = (b.lead_id || '').trim();
-        const comp = compareAlphanumeric(idA, idB);
-        return sortDirection === 'desc' ? -comp : comp;
-      }
-
-      // 2. If sorting by Lead ID
+      // 1. If sorting by Lead ID
       if (sortColumn === 'lead_id') {
         const idA = (a.lead_id || '').trim();
         const idB = (b.lead_id || '').trim();
         if (idA && idB) {
+          const numA = parseInt(idA.replace(/\D/g, ''), 10);
+          const numB = parseInt(idB.replace(/\D/g, ''), 10);
+          if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+            return sortDirection === 'desc' ? numB - numA : numA - numB;
+          }
           const comp = compareAlphanumeric(idA, idB);
           if (comp !== 0) {
             return sortDirection === 'desc' ? -comp : comp;
@@ -338,7 +331,7 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         }
       }
 
-      // 3. If sorting by Order ID
+      // 2. If sorting by Order ID
       if (sortColumn === 'order_id') {
         const ordA = getLeadOrderId(a);
         const ordB = getLeadOrderId(b);
@@ -354,8 +347,8 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         }
       }
 
-      // 4. If sorting by Event Category / Event Date OR if Event Date filter option is active
-      if (sortColumn === 'event_date' || filterEventDateOption === 'most_recent' || filterEventDateOption === 'last_event') {
+      // 3. If sorting by Event Category / Event Date
+      if (sortColumn === 'event_date') {
         const tsA = getLeadEventTimestamp(a);
         const tsB = getLeadEventTimestamp(b);
         if (tsA > 0 && tsB > 0) {
@@ -369,15 +362,22 @@ export const SalesLeadsTable: React.FC<SalesLeadsTableProps> = (props) => {
         }
       }
 
-      // Default fallback: Most recent order/lead date first
+      // Default fallback: Most recently created lead first (descending)
       const timeA = getLeadCreatedTimestamp(a);
       const timeB = getLeadCreatedTimestamp(b);
       if (timeA !== timeB && timeA > 0 && timeB > 0) {
-        return sortDirection === 'desc' ? timeB - timeA : timeA - timeB;
+        return timeB - timeA;
       }
+      if (timeB > 0 && timeA === 0) return 1;
+      if (timeA > 0 && timeB === 0) return -1;
 
       const idA = (a.lead_id || '').trim();
       const idB = (b.lead_id || '').trim();
+      const numA = parseInt(idA.replace(/\D/g, ''), 10);
+      const numB = parseInt(idB.replace(/\D/g, ''), 10);
+      if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+        return numB - numA;
+      }
       return compareAlphanumeric(idB, idA);
     });
   }, [safeFilteredLeads, sortColumn, sortDirection, safeOrders, filterEventDateOption]);

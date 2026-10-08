@@ -3257,16 +3257,16 @@ export const OperationsLeads: React.FC = () => {
         customerName={noteModalCustomerName}
       />
 
-      {/* 1. Results Summary Row - 6 Operations Statuses */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+      {/* 1. Results Summary Row - Operations Statuses (Verified Footage card visually hidden) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         {[
           { label: "New Project Arrived", val: stats.newProjectArrived, theme: 'cyan' as CameraLensTheme, filterValue: 'Order Confirmed', trendText: 'New', chartPoints: [5, 12, 8, 15, 10, 20, 25] },
           { label: "Assigned Crew", val: stats.assignedCrew, theme: 'purple' as CameraLensTheme, filterValue: 'Assigned Crew', trendText: 'Rostered', chartPoints: [10, 18, 14, 25, 20, 31, 35] },
           { label: "Event Started", val: stats.eventStarted, theme: 'cyan' as CameraLensTheme, filterValue: "Event Started", trendText: 'Live On-Site', chartPoints: [5, 9, 7, 14, 11, 16, 15] },
           { label: "Event Ended", val: stats.eventEnded, theme: 'purple' as CameraLensTheme, filterValue: 'Event Ended', trendText: 'Wrapped', chartPoints: [8, 15, 12, 20, 16, 25, 24] },
           { label: "Footage Handover", val: stats.footageHandover, theme: 'red' as CameraLensTheme, filterValue: 'Footage Handover', trendText: 'Drive Upload', chartPoints: [2, 4, 1, 5, 3, 6, 2] },
-          { label: "Verified Footage", val: stats.verifiedFootage, theme: 'green' as CameraLensTheme, filterValue: 'Verified Footage', trendText: 'Verified', chartPoints: [12, 19, 22, 28, 30, 35, 40] },
-        ].map((card, idx) => (
+          { label: "Verified Footage", val: stats.verifiedFootage, theme: 'green' as CameraLensTheme, filterValue: 'Verified Footage', trendText: 'Verified', chartPoints: [12, 19, 22, 28, 30, 35, 40], hidden: true },
+        ].filter(card => !card.hidden).map((card, idx) => (
           <CameraLensStatsCard
             key={idx}
             label={card.label}

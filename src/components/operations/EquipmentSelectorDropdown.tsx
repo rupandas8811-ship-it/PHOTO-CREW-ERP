@@ -137,7 +137,8 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
     if (!isOpen) return;
 
     const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-      const target = event.target as Node;
+      const target = event.target;
+      if (!target || !(target instanceof Node)) return;
       if (
         triggerRef.current &&
         triggerRef.current.contains(target)

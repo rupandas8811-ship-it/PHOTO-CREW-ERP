@@ -5,7 +5,8 @@ import { useRole } from './RoleContext';
 import { 
   Clock, CheckCircle2, Eye, FileVideo, Play, UserCheck, 
   ShieldCheck, ChevronDown, ChevronUp, Upload, FileText, CheckSquare, Lock, Activity, 
-  Link as LinkIcon, AlertCircle, X, Sparkles, Check, MessageSquare, Copy, ExternalLink, RefreshCw
+  Link as LinkIcon, AlertCircle, X, Sparkles, Check, MessageSquare, Copy, ExternalLink, RefreshCw,
+  User, Phone
 } from 'lucide-react';
 import { supabaseClient } from '../supabaseClient';
 import { EditorAssignment } from '../types';
@@ -15,21 +16,10 @@ import { TimePicker12Hour } from './TimePicker12Hour';
 import { ListSortFilter, SortOrder, compareRecordsByDate } from './ui/ListSortFilter';
 import { parseQtyAndText, formatQtyItem, deserializeLeadEvents, parseDeliverablesWithQty, uploadProofToStorage, resolveStorageUrl, parseCustomerProof, ParsedCustomerProof, formatDateDDMMYY, triggerAutoScrollAndFocus } from '../utils';
 
-// Format ISO string to DD MMM YYYY in IST (Asia/Kolkata)
+// Format ISO string to DD MMM YYYY (e.g. 12 Sep 2026, 05 Jan 2026)
 const formatISTDate = (isoStr?: string | null): string => {
   if (!isoStr) return '';
-  try {
-    const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return '';
-    return new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Asia/Kolkata',
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    }).format(d);
-  } catch {
-    return '';
-  }
+  return formatDateDDMMYY(isoStr);
 };
 
 // Format ISO string to 12-hour AM/PM with seconds in IST (Asia/Kolkata)
@@ -136,16 +126,19 @@ const ActionMenuDropdown: React.FC<ActionMenuDropdownProps> = ({
   useEffect(() => {
     if (isOpen && coords) {
       const handleScrollOrResize = (e: Event) => {
-        if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) {
+        const target = e.target;
+        if (target instanceof Node && dropdownRef.current && dropdownRef.current.contains(target)) {
           return;
         }
         updatePosition();
       };
 
       const handleClickOutside = (e: MouseEvent) => {
+        const target = e.target;
+        if (!target || !(target instanceof Node)) return;
         if (
-          buttonRef.current && !buttonRef.current.contains(e.target as Node) &&
-          dropdownRef.current && !dropdownRef.current.contains(e.target as Node)
+          buttonRef.current && !buttonRef.current.contains(target) &&
+          dropdownRef.current && !dropdownRef.current.contains(target)
         ) {
           onClose();
         }
@@ -654,6 +647,7 @@ const getAssignedDeliverableQty = (
 
 export const ProductionStaffModule: React.FC = () => {
   const { 
+    currentRole,
     currentUser, 
     staff, 
     productionStaff,
@@ -678,15 +672,24 @@ export const ProductionStaffModule: React.FC = () => {
   // Resolve production staff member
   const prodStaffMember = (productionStaff || []).find(s => 
     (s.staff_id && currentUser?.id && s.staff_id === currentUser.id) ||
+    (s.auth_user_id && currentUser?.id && s.auth_user_id === currentUser.id) ||
+    ((s as any).id && currentUser?.id && (s as any).id === currentUser.id) ||
     (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) || 
-    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase())
+    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+    (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
   );
   const opStaffMember = (staff || []).find(s => 
+    (s.staff_id && currentUser?.id && s.staff_id === currentUser.id) ||
+    (s.auth_user_id && currentUser?.id && s.auth_user_id === currentUser.id) ||
+    ((s as any).id && currentUser?.id && (s as any).id === currentUser.id) ||
     (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) || 
-    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase())
+    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+    (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
   );
   const resolvedStaffId = prodStaffMember?.staff_id || opStaffMember?.staff_id || currentUser?.id;
   const staffName = prodStaffMember?.name || opStaffMember?.name || currentUser?.name || 'Staff';
+  const staffMobile = prodStaffMember?.mobile || opStaffMember?.mobile || currentUser?.mobile || '';
+  const isProdStaff = currentRole === 'Production Staff' || currentUser?.role === 'Production Staff' || !currentRole || currentRole === 'Operation Staff';
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -724,10 +727,10 @@ export const ProductionStaffModule: React.FC = () => {
     selectedIds: []
   });
 
-  // Helper to format any date to DD MMM YYYY (e.g. 21 Aug 2026)
-  const formatDateToDDMMYY = (dateStr: string): string => {
-    if (!dateStr) return '';
-    return formatDateDDMMYY(dateStr) || dateStr;
+  // Helper to strictly format any date to DD MMM YYYY (e.g. 12 Sep 2026, 05 Jan 2026)
+  const formatDateToDDMMYY = (dateStr?: string | null | Date): string => {
+    if (!dateStr && (dateStr as any) !== 0) return '';
+    return formatDateDDMMYY(dateStr) || String(dateStr);
   };
 
   // 2. Customer Review Modal
@@ -938,13 +941,14 @@ export const ProductionStaffModule: React.FC = () => {
           item.assignmentObj?.edited_folder_uploaded_to_server ||
           (existingFolderName.length > 0 && existingServerFileLink.length > 0)
         );
-        const existingEventDate = (
+        const rawEvtDate = (
           item.serverUploadEventDate ||
           item.assignmentObj?.server_upload_event_date ||
           item.eventDate ||
           grp.eventDate ||
           ''
         ).trim();
+        const existingEventDate = formatDateToDDMMYY(rawEvtDate) || rawEvtDate;
 
         eventConfigs[evtKey] = {
           eventKey: evtKey,
@@ -963,7 +967,7 @@ export const ProductionStaffModule: React.FC = () => {
       eventKey: currentEvtKey,
       eventId: delivItem.eventId || '',
       eventName: `${delivItem.eventName || grp.eventName || 'Event'} - ${delivItem.deliverableName || delivItem.speciality || 'Task'}`,
-      eventDate: delivItem.eventDate || grp.eventDate || '',
+      eventDate: formatDateToDDMMYY(delivItem.eventDate || grp.eventDate || '') || (delivItem.eventDate || grp.eventDate || ''),
       folderName: '',
       confirmed: false,
       serverFileLink: ''
@@ -1283,7 +1287,7 @@ export const ProductionStaffModule: React.FC = () => {
       const eventCount = uniqueEventNames.length || 1;
 
       const uniqueEventDates = Array.from(new Set(grp.deliverables.map((d: any) => d.eventDate).filter(Boolean)));
-      const displayDate = uniqueEventDates.join(', ') || grp.eventDate;
+      const displayDate = uniqueEventDates.map((d: any) => formatDateToDDMMYY(d) || d).join(', ') || (grp.eventDate ? (formatDateToDDMMYY(grp.eventDate) || grp.eventDate) : '');
 
       const completedCount = allOrderDeliverables.filter((d: any) => ['Completed', 'Editing Complete', 'Editing Completed', 'Client Acceptance', 'Order Closed'].includes(d.status)).length;
       const progressText = `${completedCount}/${allOrderDeliverables.length} DELIVERABLES COMPLETE`;
@@ -1878,7 +1882,7 @@ Thank you.`;
 
   return (
     <div className="p-4 sm:p-6 bg-black min-h-screen text-white font-sans selection:bg-purple-500/30">
-      <div className="max-w-[1400px] mx-auto space-y-6">
+      <div className="w-full mx-auto space-y-6">
 
         {/* TOAST NOTIFICATION */}
         {toastMessage && (
@@ -1889,6 +1893,29 @@ Thank you.`;
             </div>
           </div>
         )}
+
+        {/* STAFF PROFILE / INFO SECTION */}
+        <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-3.5 sm:gap-4">
+            <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0 shadow-inner">
+              <User className="w-6 h-6" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[10px] sm:text-xs font-mono font-extrabold uppercase tracking-widest text-purple-400">
+                Production Staff
+              </div>
+              <h1 className="text-base sm:text-lg md:text-xl font-bold text-white tracking-tight">
+                {staffName}
+              </h1>
+              {staffMobile && (
+                <div className="text-xs sm:text-sm font-mono text-zinc-400 flex items-center gap-1.5 pt-0.5">
+                  <Phone className="w-3.5 h-3.5 text-zinc-500" />
+                  <span>{staffMobile}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* TOP TITLE BAR */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/90 p-2.5 sm:p-3 rounded-2xl border border-zinc-800 shadow-xl">
@@ -1922,12 +1949,13 @@ Thank you.`;
               <p className="text-zinc-600 text-xs">New assignments made by Production Manager will automatically appear here.</p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {[...activeBookings].sort((a, b) => compareRecordsByDate(a, b, sortOrder)).map((grp) => {
+            <div className="w-full overflow-x-auto custom-scrollbar pb-6">
+              <div className="w-max min-w-full space-y-6 pr-6">
+                {[...activeBookings].sort((a, b) => compareRecordsByDate(a, b, sortOrder)).map((grp) => {
                 const isDetailsVisible = expandedOrderIds.includes(grp.orderId);
 
                 return (
-                  <div key={grp.groupId} className="bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl space-y-0 w-full max-w-full">
+                  <div key={grp.groupId} className="bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl space-y-0 w-full min-w-max">
                     {/* CUSTOMER / ORDER DETAILS CARD (HIDDEN BY DEFAULT, VISIBLE WHEN VIEW DETAILS IS CLICKED) */}
                     {isDetailsVisible && (
                       <div className="p-4 sm:p-5 bg-zinc-900/90 border-b border-zinc-800 relative animate-in fade-in duration-200">
@@ -1994,7 +2022,7 @@ Thank you.`;
                           {/* 4. Target Delivery Date */}
                           <div className="space-y-0.5 min-w-0">
                             <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Target Delivery Date</div>
-                            <span className="font-mono text-xs text-zinc-200 font-bold block pt-1 truncate">{grp.targetFinishDate || 'Not set'}</span>
+                            <span className="font-mono text-xs text-zinc-200 font-bold block pt-1 truncate">{formatDateToDDMMYY(grp.targetFinishDate) || 'Not set'}</span>
                           </div>
 
                           {/* 5. Overall Task Status */}
@@ -2006,44 +2034,46 @@ Thank you.`;
                     )}
 
                     {/* ASSIGNED DELIVERABLES PANEL (ALWAYS VISIBLE BY DEFAULT) */}
-                    <div className="p-4 bg-zinc-950/90 w-full max-w-full">
-                      <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <span className="flex items-center gap-2 flex-wrap">
-                          <span>📦 Assigned Deliverables</span>
-                          <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px]">
-                            {grp.deliverables.length} {grp.deliverables.length === 1 ? 'Deliverable' : 'Deliverables'}
+                    <div className="p-4 bg-zinc-950/90 w-full">
+                      {!isProdStaff && (
+                        <div className="text-[11px] font-mono font-bold text-zinc-400 uppercase tracking-wider mb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <span className="flex items-center gap-2 flex-wrap">
+                            <span>📦 Assigned Deliverables</span>
+                            <span className="px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[10px]">
+                              {grp.deliverables.length} {grp.deliverables.length === 1 ? 'Deliverable' : 'Deliverables'}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-violet-300 font-mono text-[10px] font-bold">
+                              Order ID: {grp.orderId}
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-amber-400 font-mono text-[10px] font-bold" title="Order status reflects the least-advanced deliverable">
+                              Order Status: {grp.overallStatus}
+                            </span>
                           </span>
-                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-violet-300 font-mono text-[10px] font-bold">
-                            Order ID: {grp.orderId}
-                          </span>
-                          <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-amber-400 font-mono text-[10px] font-bold" title="Order status reflects the least-advanced deliverable">
-                            Order Status: {grp.overallStatus}
-                          </span>
-                        </span>
-                        <div className="flex flex-col items-end gap-1">
-                          <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
-                          {grp.deliverables.length > 1 && (
-                            <span className="text-[9px] text-zinc-500 italic hidden sm:block">*Order status reflects the least-advanced deliverable</span>
-                          )}
+                          <div className="flex flex-col items-end gap-1">
+                            <span className="text-[10px] text-zinc-500 font-normal">Assigned to: <strong className="text-purple-400">{staffName}</strong></span>
+                            {grp.deliverables.length > 1 && (
+                              <span className="text-[9px] text-zinc-500 italic hidden sm:block">*Order status reflects the least-advanced deliverable</span>
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* DESKTOP LAYOUT (Table view, visible on all screens) */}
-                      <div className="block overflow-x-auto w-full">
+                      <div className="w-full">
                         <table className="w-full text-left border-collapse min-w-max">
                           <thead>
                             <tr className="bg-zinc-900/50 border-b border-zinc-800 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
-                              <th className="px-3.5 py-2.5 font-bold">Order ID</th>
-                              <th className="px-3.5 py-2.5 font-bold">Customer Name</th>
-                              <th className="px-3.5 py-2.5 font-bold">Event Name</th>
-                              <th className="px-3.5 py-2.5 font-bold">Assigned Task</th>
-                              <th className="px-3.5 py-2.5 font-bold">Target Delivery Date</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[110px] whitespace-nowrap">Order ID</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[160px] whitespace-nowrap">Customer Name</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[150px] whitespace-nowrap">Event Category</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[200px] whitespace-nowrap">Assigned Task</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[140px] whitespace-nowrap">Target Delivery Date</th>
                               
-                              <th className="px-3.5 py-2.5 font-bold">Current Status</th>
-                              <th className="px-3.5 py-2.5 font-bold">Edited Drive Link</th>
-                              <th className="px-3.5 py-2.5 font-bold">Customer Proof</th>
-                              <th className="px-3.5 py-2.5 font-bold">Row Footage</th>
-                              <th className="px-3.5 py-2.5 font-bold text-center">Action</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[140px] whitespace-nowrap">Current Status</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[130px] whitespace-nowrap">Edited Drive Link</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[180px] whitespace-nowrap">Customer Proof</th>
+                              <th className="px-3.5 py-2.5 font-bold min-w-[130px] whitespace-nowrap">Row Footage</th>
+                              <th className="px-4 py-2.5 font-bold text-center min-w-[130px] whitespace-nowrap">Action</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-zinc-900/80 text-xs font-sans">
@@ -2074,14 +2104,9 @@ Thank you.`;
                                     )}
                                   </td>
 
-                                  {/* 3. Event Name */}
+                                  {/* 3. Event Category */}
                                   <td className="px-3.5 py-3 font-semibold text-purple-300">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-zinc-200 font-bold">{delivItem.eventName || 'N/A'}</span>
-                                    </div>
-                                    {delivItem.eventType && delivItem.eventType !== delivItem.eventName && delivItem.eventType !== 'N/A' && (
-                                      <span className="text-[10px] text-amber-400 font-mono font-semibold block">{delivItem.eventType}</span>
-                                    )}
+                                    <span className="text-zinc-200 font-bold">{delivItem.eventType || 'N/A'}</span>
                                   </td>
 
                                   {/* 4. Assigned Task (Deliverable) */}
@@ -2094,12 +2119,11 @@ Thank you.`;
                                         </span>
                                       )}
                                     </div>
-                                    <span className="text-[10px] text-zinc-500 font-mono font-normal block mt-0.5">{delivItem.assignmentId}</span>
                                   </td>
 
                                   {/* 5. Target Delivery Date */}
                                   <td className="px-3.5 py-3 font-mono text-xs text-zinc-200 font-bold whitespace-nowrap">
-                                    {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
+                                    {formatDateToDDMMYY(delivItem.targetFinishDate || grp.targetFinishDate) || 'Not set'}
                                   </td>
 
                                   
@@ -2243,7 +2267,7 @@ Thank you.`;
                                       );
                                     })()}
                                     {Boolean(delivItem.serverUploadFolderName) && (
-                                      <div className="text-[9px] font-mono text-zinc-400 mt-1 flex items-center gap-1" title={`Server Folder: ${delivItem.serverUploadFolderName} (Event Date: ${delivItem.serverUploadEventDate || 'N/A'})`}>
+                                      <div className="text-[9px] font-mono text-zinc-400 mt-1 flex items-center gap-1" title={`Server Folder: ${delivItem.serverUploadFolderName} (Event Date: ${formatDateToDDMMYY(delivItem.serverUploadEventDate) || 'N/A'})`}>
                                         <span className="text-emerald-400">📁</span>
                                         <span className="truncate max-w-[120px]">{delivItem.serverUploadFolderName}</span>
                                       </div>
@@ -2269,7 +2293,7 @@ Thank you.`;
                                   </td>
 
                                   {/* 10. Action Dropdown */}
-                                  <td className="px-3.5 py-3 text-center">
+                                  <td className="px-4 py-3 text-center min-w-[130px] whitespace-nowrap">
                                     <ActionMenuDropdown
                                       dropdownId={`action_dropdown_menu_${delivItem.assignmentId}`}
                                       isOpen={activeDropdownId === delivItem.assignmentId}
@@ -2460,18 +2484,13 @@ Thank you.`;
                                 </div>
                               </div>
 
-                              {/* Event Name & Qty */}
+                              {/* Event Category & Qty */}
                               <div className="flex items-start justify-between gap-3">
                                 <div className="space-y-1 min-w-0 flex-1">
-                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Name</div>
-                                  <div className="text-sm font-bold text-white break-words">
-                                    {delivItem.eventName || 'N/A'}
+                                  <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Event Category</div>
+                                  <div className="text-sm font-bold text-zinc-200 break-words">
+                                    {delivItem.eventType || 'N/A'}
                                   </div>
-                                  {delivItem.eventType && delivItem.eventType !== delivItem.eventName && delivItem.eventType !== 'N/A' && (
-                                    <span className="inline-block px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-mono text-[9px] font-bold">
-                                      {delivItem.eventType}
-                                    </span>
-                                  )}
                                 </div>
                                 
                                 <div className="shrink-0 text-right">
@@ -2490,13 +2509,12 @@ Thank you.`;
                                     <span className="shrink-0 mt-0.5">🎯</span>
                                     <span className="flex-1">{delivQty} × {delivName}</span>
                                   </div>
-                                  <span className="text-[9px] text-zinc-500 font-mono block mt-0.5">{delivItem.assignmentId}</span>
                                 </div>
 
                                 <div className="space-y-1 min-w-0 text-right">
                                   <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-bold">Target Delivery</div>
                                   <span className="font-mono text-xs text-zinc-200 font-bold block pt-0.5">
-                                    {delivItem.targetFinishDate || grp.targetFinishDate || 'Not set'}
+                                    {formatDateToDDMMYY(delivItem.targetFinishDate || grp.targetFinishDate) || 'Not set'}
                                   </span>
                                 </div>
                               </div>
@@ -2698,7 +2716,7 @@ Thank you.`;
                                         <span className="truncate">{delivItem.serverUploadFolderName}</span>
                                       </span>
                                       {delivItem.serverUploadEventDate && (
-                                        <span className="text-[9px] text-zinc-500 shrink-0 font-bold">({delivItem.serverUploadEventDate})</span>
+                                        <span className="text-[9px] text-zinc-500 shrink-0 font-bold">({formatDateToDDMMYY(delivItem.serverUploadEventDate)})</span>
                                       )}
                                     </div>
                                   )}
@@ -2873,6 +2891,7 @@ Thank you.`;
                   </div>
                 );
               })}
+              </div>
             </div>
           )}
         </div>
@@ -2907,20 +2926,34 @@ Thank you.`;
 
               <form id="editing-started-form" onSubmit={handleEditingStartedSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                    Expected Delivery Date (Pre-filled)
+                  <label className="block text-xs font-mono font-bold text-zinc-400 uppercase mb-1 flex items-center justify-between">
+                    <span>Expected Delivery Date (Pre-filled)</span>
+                    {editingStartedForm.expected_delivery_date && (
+                      <span className="text-zinc-500 font-mono text-[11px] font-normal lowercase tracking-normal">
+                        ({formatDateToDDMMYY(editingStartedForm.expected_delivery_date)})
+                      </span>
+                    )}
                   </label>
-                  <input
-                    type="date"
-                    value={editingStartedForm.expected_delivery_date}
-                    onChange={(e) => setEditingStartedForm({ ...editingStartedForm, expected_delivery_date: e.target.value })}
-                    className="w-full bg-zinc-950 border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
-                  />
+                  <div className="relative">
+                    <input
+                      type="date"
+                      readOnly
+                      disabled
+                      tabIndex={-1}
+                      value={editingStartedForm.expected_delivery_date}
+                      className="w-full bg-zinc-900/80 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-zinc-400 cursor-not-allowed select-none pointer-events-none focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1">
-                    Estimated Completion Date <span className="text-rose-400">*</span>
+                  <label className="block text-xs font-mono font-bold text-zinc-300 uppercase mb-1 flex items-center justify-between">
+                    <span>Estimated Completion Date <span className="text-rose-400">*</span></span>
+                    {editingStartedForm.estimated_completion_date && (
+                      <span className="text-zinc-400 font-mono text-[11px] font-normal lowercase tracking-normal">
+                        ({formatDateToDDMMYY(editingStartedForm.estimated_completion_date)})
+                      </span>
+                    )}
                   </label>
                   <input
                     type="date"
@@ -3266,7 +3299,7 @@ Thank you.`;
                             {uniqueEventKeys.length > 1 && (
                               <div className="text-xs font-bold text-indigo-300 pb-2 border-b border-zinc-800/80 flex items-center justify-between">
                                 <span>Event: <strong className="text-white">{eventDisplayName}</strong></span>
-                                {defaultEvtDate && <span className="text-[10px] text-zinc-400 font-mono">({defaultEvtDate})</span>}
+                                {defaultEvtDate && <span className="text-[10px] text-zinc-400 font-mono">({formatDateToDDMMYY(defaultEvtDate)})</span>}
                               </div>
                             )}
 

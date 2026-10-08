@@ -284,7 +284,8 @@ export const EventCell: React.FC<EventCellProps> = ({ lead, orders, filterEventD
     };
 
     const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
+      const target = e.target;
+      if (!target || !(target instanceof Node)) return;
       if (
         menuRef.current && !menuRef.current.contains(target) &&
         buttonRef.current && !buttonRef.current.contains(target)

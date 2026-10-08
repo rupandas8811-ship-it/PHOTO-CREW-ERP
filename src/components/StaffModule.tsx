@@ -86,19 +86,22 @@ const StaffActionDropdown: React.FC<{
     if (!isOpen) return;
 
     const handleOutside = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as HTMLElement;
+      const target = e.target;
+      if (!target || !(target instanceof Node)) return;
+      const el = target instanceof Element ? target : target.parentElement;
       if (
         buttonRef.current &&
         !buttonRef.current.contains(target) &&
-        !target.closest(`.staff-action-dropdown-menu-${booking.orderId || booking.key}`)
+        (!el || !el.closest(`.staff-action-dropdown-menu-${booking.orderId || booking.key}`))
       ) {
         setIsOpen(false);
       }
     };
 
     const handleScrollOrResize = (e: Event) => {
-      const target = e.target as HTMLElement;
-      if (target && target.closest && target.closest(`.staff-action-dropdown-menu-${booking.orderId || booking.key}`)) {
+      const target = e.target;
+      const el = target instanceof Element ? target : (target instanceof Node ? target.parentElement : null);
+      if (el && el.closest(`.staff-action-dropdown-menu-${booking.orderId || booking.key}`)) {
         return;
       }
       setIsOpen(false);
@@ -638,18 +641,21 @@ const StaffEquipmentDetailsCell = ({ b, proofStatus }: { b: any, proofStatus: an
   useEffect(() => {
     if (!isOpen) return;
     const handleOutside = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as HTMLElement;
+      const target = e.target;
+      if (!target || !(target instanceof Node)) return;
+      const el = target instanceof Element ? target : target.parentElement;
       if (
         buttonRef.current &&
         !buttonRef.current.contains(target) &&
-        !target.closest(`.staff-equipment-details-popup-${b.orderId || b.key}`)
+        (!el || !el.closest(`.staff-equipment-details-popup-${b.orderId || b.key}`))
       ) {
         setIsOpen(false);
       }
     };
     const handleScrollOrResize = (e: Event) => {
-      const target = e.target as HTMLElement;
-      if (target && target.closest && target.closest(`.staff-equipment-details-popup-${b.orderId || b.key}`)) {
+      const target = e.target;
+      const el = target instanceof Element ? target : (target instanceof Node ? target.parentElement : null);
+      if (el && el.closest(`.staff-equipment-details-popup-${b.orderId || b.key}`)) {
         return;
       }
       setIsOpen(false);
@@ -750,8 +756,12 @@ export const StaffModule: React.FC = () => {
 
   // Resolve staff member
   const staffMember = (staff || []).find(s => 
-    (s.mobile && s.mobile === currentUser?.mobile) || 
-    (s.email && s.email.toLowerCase() === currentUser?.email?.toLowerCase())
+    (s.staff_id && currentUser?.id && s.staff_id === currentUser.id) ||
+    (s.auth_user_id && currentUser?.id && s.auth_user_id === currentUser.id) ||
+    ((s as any).id && currentUser?.id && (s as any).id === currentUser.id) ||
+    (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) || 
+    (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+    (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
   );
   const staffName = staffMember?.name || currentUser?.name || 'Staff';
   const staffMobile = staffMember?.mobile || currentUser?.mobile || '';
@@ -1109,23 +1119,315 @@ export const StaffModule: React.FC = () => {
     const processedAssignmentIds = new Set<string>();
     const processedUniqueKeys = new Set<string>();
 
-    const myAssignments = (staffAssignments || []).filter(sa => 
-      sa && sa.assignment_status !== 'Cancelled' &&
-      (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase()
-    );
+    const normStaff = (staffName || '').trim().toLowerCase();
+    const normCurUser = (currentUser?.name || '').trim().toLowerCase();
+    const currentStaffId = staffMember?.staff_id || (staffMember as any)?.id || currentUser?.id || '';
 
-    myAssignments.forEach(sa => {
-      let lead = (leads || []).find(l => l.lead_id === sa.lead_id);
-      const order = (orders || []).find(o => o.order_id === sa.order_id);
-      if (!lead && order) {
-        lead = (leads || []).find(l => l.lead_id === order.lead_id);
+    const isStaffAssigned = (checkName?: string | null, checkId?: string | null): boolean => {
+      const n = (checkName || '').trim().toLowerCase();
+      if (normStaff && n && n === normStaff) return true;
+      if (normCurUser && n && n === normCurUser) return true;
+      if (currentStaffId && checkId && String(checkId).trim() === String(currentStaffId).trim()) return true;
+      return false;
+    };
+
+    // Gather all distinct order / lead contexts
+    const orderMap = new Map<string, { order?: Order; lead?: Lead; op?: Operation }>();
+
+    (orders || []).forEach(o => {
+      const oId = o.order_id;
+      const l = (leads || []).find(lead => lead.lead_id === o.lead_id);
+      const op = (operations || []).find(op => op.order_id === oId || (l && op.order_id === l.lead_id));
+      orderMap.set(oId, { order: o, lead: l, op });
+    });
+
+    (leads || []).forEach(l => {
+      const matchingOrd = (orders || []).find(o => o.lead_id === l.lead_id);
+      const oId = matchingOrd?.order_id || `OR-${l.lead_id.replace(/^LD-?/, '')}`;
+      if (!orderMap.has(oId)) {
+        const op = (operations || []).find(op => op.order_id === oId || op.order_id === l.lead_id);
+        orderMap.set(oId, { order: matchingOrd, lead: l, op });
       }
-      const op = (operations || []).find(o => o.order_id === sa.order_id);
-      const orderId = sa.order_id;
+    });
 
-      let ev = sa.event_id ? lead?.events?.find((e: any) => e.id === sa.event_id) : null;
-      if (!ev && sa.event_name && lead?.events) {
-        ev = lead.events.find((e: any) => {
+    (staffAssignments || []).forEach(sa => {
+      if (sa && isStaffAssigned(sa.staff_name, sa.staff_id)) {
+        const oId = sa.order_id;
+        if (oId && !orderMap.has(oId)) {
+          const matchedOrd = (orders || []).find(o => o.order_id === oId);
+          const matchedLead = (leads || []).find(l => l.lead_id === (sa.lead_id || matchedOrd?.lead_id));
+          const op = (operations || []).find(op => op.order_id === oId);
+          orderMap.set(oId, { order: matchedOrd, lead: matchedLead, op });
+        }
+      }
+    });
+
+    // Evaluate each order/lead strictly by event-level assignment
+    orderMap.forEach(({ order, lead, op }, orderId) => {
+      const leadId = lead?.lead_id || order?.lead_id || '';
+
+      const orderEvents: any[] = (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
+        ? lead.events
+        : (order?.events && Array.isArray(order.events) && order.events.length > 0)
+          ? order.events
+          : [];
+
+      if (orderEvents.length > 0) {
+        // MULTIPLE or EXPLICIT EVENTS:
+        // A logged-in Operations Staff member must see ONLY the events specifically assigned to that staff member.
+        // Do NOT show events assigned to other Operations Staff members.
+        // Do NOT show unassigned events.
+        // Do NOT show all events from the order.
+        orderEvents.forEach((ev: any, evIdx: number) => {
+          const evIdentifier = String(ev.id || ev.event_id || `evt_${evIdx}`);
+          const evName = (ev.event_name || ev.custom_event_name || ev.event_type || '').trim();
+          const evType = (ev.event_type || ev.custom_event_type || 'Event').trim();
+
+          // 1. Check in staffAssignments table for this exact event
+          const sa = (staffAssignments || []).find(s => {
+            if (!s || s.assignment_status === 'Cancelled' || s.assignment_status === 'Rejected') return false;
+            if (s.order_id !== orderId && s.lead_id !== leadId) return false;
+            if (!isStaffAssigned(s.staff_name, s.staff_id)) return false;
+
+            if (s.event_id && evIdentifier) {
+              if (String(s.event_id).trim().toLowerCase() === evIdentifier.toLowerCase()) return true;
+            }
+            if (s.event_name) {
+              const sEv = s.event_name.trim().toLowerCase();
+              if (sEv === evName.toLowerCase() || sEv === evType.toLowerCase() || (ev.custom_event_name && sEv === ev.custom_event_name.trim().toLowerCase())) {
+                return true;
+              }
+            }
+            // Only if strictly 1 event in total for order, match unassigned event_id
+            if (orderEvents.length === 1 && !s.event_id && !s.event_name) {
+              return true;
+            }
+            return false;
+          });
+
+          // 2. Check in ev.assigned_staff_names / ev.assigned_staff_ids
+          const assignedNames = ev.assigned_staff_names
+            ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase())
+            : [];
+          const assignedIds = ev.assigned_staff_ids
+            ? ev.assigned_staff_ids.split(',').map((id: string) => id.trim())
+            : [];
+          const isDirectlyAssignedInEvent = assignedNames.some((n: string) => isStaffAssigned(n, null)) ||
+                                            assignedIds.some((id: string) => isStaffAssigned(null, id));
+
+          // 3. For strictly single-event orders only: check op fields
+          const isSingleEventOpMatch = orderEvents.length === 1 && op && (
+            isStaffAssigned(op.photographer_assigned) ||
+            isStaffAssigned(op.videographer_assigned) ||
+            isStaffAssigned(op.drone_operator_assigned) ||
+            isStaffAssigned(op.assistant_assigned)
+          );
+
+          const isAssignedToThisStaff = Boolean(sa || isDirectlyAssignedInEvent || isSingleEventOpMatch);
+
+          // If NOT assigned to this staff member, DO NOT DISPLAY
+          if (!isAssignedToThisStaff) {
+            return;
+          }
+
+          const assignmentId = sa?.assignment_id || '';
+          if (assignmentId && processedAssignmentIds.has(assignmentId)) {
+            return;
+          }
+
+          const staffObj = staff?.find(s => isStaffAssigned(s.name, s.staff_id || (s as any).id));
+          let assignedRole = staffObj ? staffObj.role : 'Crew Member';
+          if (sa?.staff_role) {
+            assignedRole = sa.staff_role;
+          } else if (orderEvents.length === 1 && op) {
+            if (isStaffAssigned(op.photographer_assigned)) assignedRole = 'Photographer';
+            else if (isStaffAssigned(op.videographer_assigned)) assignedRole = 'Videographer';
+            else if (isStaffAssigned(op.drone_operator_assigned)) assignedRole = 'Drone Operator';
+            else if (isStaffAssigned(op.assistant_assigned)) assignedRole = 'Assistant';
+          }
+
+          const staffIdx = assignedNames.findIndex((n: string) => isStaffAssigned(n, null));
+          const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, staffIdx, orderId, leadId, op);
+
+          const uniqueKey = assignmentId 
+            ? `${orderId}_${assignmentId}_${evIdentifier}_${normStaff}`
+            : `${orderId}_${evIdentifier}_${(assignedRole || 'crew').toLowerCase()}_${normStaff}`;
+
+          if (processedUniqueKeys.has(uniqueKey)) {
+            return;
+          }
+
+          const currentStaffStatus = sa?.task_status || (ev as any)?.status || 'Assigned Crew';
+
+          const resolvedRawLink = resolveRawFootageLink(
+            orderId,
+            assignmentId,
+            evIdentifier,
+            ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
+            sa?.raw_footage_link
+          );
+
+          if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
+            bookings.push({
+              key: uniqueKey,
+              assignmentId: assignmentId,
+              orderId: orderId,
+              leadId: leadId,
+              eventId: evIdentifier,
+              eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || ev.event_name || 'N/A'),
+              staffName: staffName,
+              assignedStaff: staffName,
+              customerName: lead?.customer_name || order?.customer_name || 'N/A',
+              customerMobile: lead?.mobile || order?.mobile || 'N/A',
+              customerWhatsapp: lead?.whatsapp_number || lead?.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
+              customerAddress: lead?.address || lead?.client_residence_address || lead?.city || 'N/A',
+              shootType: ev.event_shoot_type || lead?.shoot_type || sa?.staff_role || 'N/A',
+              assignedRole: assignedRole,
+              eventDate: ev.event_date || lead?.event_date || sa?.event_date || 'N/A',
+              eventStartTime: ev.event_start_time || ev.event_time || lead?.event_time || 'N/A',
+              eventEndDate: ev.event_end_date || ev.event_date || lead?.event_date || 'N/A',
+              eventEndTime: ev.event_end_time || 'N/A',
+              reportingDate: ev.Reporting_date || ev.reporting_date || (sa as any)?.Reporting_date || (sa as any)?.reporting_date || lead?.Reporting_date || lead?.reporting_date || '—',
+              reportingTime: ev.reporting_time || ev.Reporting_time || (sa as any)?.reporting_time || (sa as any)?.Reporting_time || op?.reporting_time || lead?.reporting_time || '—',
+              venue: ev.event_location || lead?.event_location || 'N/A',
+              googleMapsLink: ev.google_maps_link || ((orderEvents.length === 1) ? (lead?.google_maps_link || 'N/A') : 'N/A'),
+              guestPax: ev.guest_pax || (lead as any)?.guest_pax || 'N/A',
+              equipmentItems: assignedEqItems,
+              taskStatus: currentStaffStatus,
+              rawFootageVerificationStatus: getVerificationStatus(orderId, evIdentifier, assignmentId),
+              rawFootageLink: resolvedRawLink,
+              coordinator: op?.operations_coordinator || 'Unassigned',
+              createdAt: lead?.created_at || order?.created_at || (ev as any)?.created_at || sa?.created_at || '',
+              equipmentReceivedTime: sa?.equipment_received_time || (sa as any)?.equipment_received_time || null,
+              equipmentHandoverTime: sa?.equipment_handover_time || (sa as any)?.equipment_handover_time || null,
+              eventStartPhotoTime: sa?.event_start_time || (sa as any)?.event_start_time || null,
+              eventEndPhotoTime: sa?.event_end_time || (sa as any)?.event_end_time || null
+            });
+            if (assignmentId) processedAssignmentIds.add(assignmentId);
+            processedUniqueKeys.add(uniqueKey);
+          }
+        });
+      } else {
+        // NO EVENTS ARRAY (Single general event order):
+        const sa = (staffAssignments || []).find(s => {
+          if (!s || s.assignment_status === 'Cancelled' || s.assignment_status === 'Rejected') return false;
+          if (s.order_id !== orderId && s.lead_id !== leadId) return false;
+          return isStaffAssigned(s.staff_name, s.staff_id);
+        });
+
+        const isAssignedInOp = op && (
+          isStaffAssigned(op.photographer_assigned) ||
+          isStaffAssigned(op.videographer_assigned) ||
+          isStaffAssigned(op.drone_operator_assigned) ||
+          isStaffAssigned(op.assistant_assigned)
+        );
+
+        if (sa || isAssignedInOp) {
+          const assignmentId = sa?.assignment_id || '';
+          if (assignmentId && processedAssignmentIds.has(assignmentId)) {
+            return;
+          }
+
+          let assignedRole = 'Crew Member';
+          if (sa?.staff_role) {
+            assignedRole = sa.staff_role;
+          } else if (op) {
+            if (isStaffAssigned(op.photographer_assigned)) assignedRole = 'Photographer';
+            else if (isStaffAssigned(op.videographer_assigned)) assignedRole = 'Videographer';
+            else if (isStaffAssigned(op.drone_operator_assigned)) assignedRole = 'Drone Operator';
+            else if (isStaffAssigned(op.assistant_assigned)) assignedRole = 'Assistant';
+          }
+
+          const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, null, -1, orderId, leadId, op);
+          const evIdentifier = sa?.event_id || 'gen';
+
+          const uniqueKey = assignmentId 
+            ? `${orderId}_${assignmentId}_gen_${normStaff}`
+            : `${orderId}_gen_${(assignedRole || 'crew').toLowerCase()}_${normStaff}`;
+
+          if (processedUniqueKeys.has(uniqueKey)) {
+            return;
+          }
+
+          const currentStaffStatus = sa?.task_status || 'Assigned Crew';
+          const resolvedRawLink = resolveRawFootageLink(
+            orderId,
+            assignmentId,
+            evIdentifier,
+            sa?.event_name || lead?.event_name || lead?.shoot_type || 'General Event',
+            sa?.raw_footage_link
+          );
+
+          if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
+            bookings.push({
+              key: uniqueKey,
+              assignmentId: assignmentId,
+              orderId: orderId,
+              leadId: leadId,
+              eventId: evIdentifier,
+              eventName: sa?.event_name || lead?.event_name || lead?.shoot_type || 'General Event',
+              staffName: staffName,
+              assignedStaff: staffName,
+              customerName: lead?.customer_name || order?.customer_name || 'N/A',
+              customerMobile: lead?.mobile || order?.mobile || 'N/A',
+              customerWhatsapp: lead?.whatsapp_number || lead?.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
+              customerAddress: lead?.address || lead?.client_residence_address || lead?.city || 'N/A',
+              shootType: lead?.shoot_type || sa?.staff_role || 'N/A',
+              assignedRole: assignedRole,
+              eventDate: sa?.event_date || lead?.event_date || 'N/A',
+              eventStartTime: lead?.event_time || 'N/A',
+              eventEndDate: lead?.event_end_date || lead?.event_date || 'N/A',
+              eventEndTime: lead?.event_end_time || 'N/A',
+              reportingDate: (sa as any)?.Reporting_date || (sa as any)?.reporting_date || lead?.Reporting_date || lead?.reporting_date || '—',
+              reportingTime: (sa as any)?.reporting_time || (sa as any)?.Reporting_time || op?.reporting_time || lead?.reporting_time || '—',
+              venue: lead?.event_location || 'N/A',
+              googleMapsLink: lead?.google_maps_link || 'N/A',
+              guestPax: (lead as any)?.guest_pax || 'N/A',
+              equipmentItems: assignedEqItems,
+              taskStatus: currentStaffStatus,
+              rawFootageVerificationStatus: getVerificationStatus(orderId, evIdentifier, assignmentId),
+              rawFootageLink: resolvedRawLink,
+              coordinator: op?.operations_coordinator || 'Unassigned',
+              createdAt: lead?.created_at || order?.created_at || sa?.created_at || '',
+              equipmentReceivedTime: sa?.equipment_received_time || (sa as any)?.equipment_received_time || null,
+              equipmentHandoverTime: sa?.equipment_handover_time || (sa as any)?.equipment_handover_time || null,
+              eventStartPhotoTime: sa?.event_start_time || (sa as any)?.event_start_time || null,
+              eventEndPhotoTime: sa?.event_end_time || (sa as any)?.event_end_time || null
+            });
+            if (assignmentId) processedAssignmentIds.add(assignmentId);
+            processedUniqueKeys.add(uniqueKey);
+          }
+        }
+      }
+    });
+
+    // 4. Also catch any standalone staffAssignments belonging to this staff not covered above
+    (staffAssignments || []).forEach(sa => {
+      if (!sa || sa.assignment_status === 'Cancelled' || sa.assignment_status === 'Rejected') return;
+      if (!isStaffAssigned(sa.staff_name, sa.staff_id)) return;
+      if (sa.assignment_id && processedAssignmentIds.has(sa.assignment_id)) return;
+
+      const orderId = sa.order_id;
+      const matchedOrd = (orders || []).find(o => o.order_id === orderId);
+      const matchedLead = (leads || []).find(l => l.lead_id === (sa.lead_id || matchedOrd?.lead_id));
+      const op = (operations || []).find(o => o.order_id === orderId);
+
+      const orderEvents: any[] = (matchedLead?.events && Array.isArray(matchedLead.events)) ? matchedLead.events : [];
+      // If order has multiple events and sa does not match any of them, skip to avoid leaking
+      if (orderEvents.length > 1) {
+        const matchesEvent = orderEvents.some((e: any) => {
+          const evId = String(e.id || e.event_id || '');
+          const evName = (e.event_name || e.event_type || '').toLowerCase().trim();
+          if (sa.event_id && evId && String(sa.event_id).toLowerCase() === evId.toLowerCase()) return true;
+          if (sa.event_name && (sa.event_name.toLowerCase().trim() === evName)) return true;
+          return false;
+        });
+        if (!matchesEvent) return;
+      }
+
+      let ev = sa.event_id ? orderEvents.find((e: any) => String(e.id || e.event_id || '').toLowerCase() === String(sa.event_id).toLowerCase()) : null;
+      if (!ev && sa.event_name && orderEvents.length > 0) {
+        ev = orderEvents.find((e: any) => {
           const sEvName = (sa.event_name || '').trim().toLowerCase();
           const evName1 = (e.event_name || '').trim().toLowerCase();
           const evName2 = (e.event_type || '').trim().toLowerCase();
@@ -1133,21 +1435,20 @@ export const StaffModule: React.FC = () => {
         });
       }
 
-      const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, -1, orderId, lead?.lead_id, op);
-
-      // Role
-      const staffObj = staff?.find(s => (s.name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
+      const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, -1, orderId, matchedLead?.lead_id, op);
+      const staffObj = staff?.find(s => isStaffAssigned(s.name, s.staff_id || (s as any).id));
       let assignedRole = staffObj ? staffObj.role : 'Crew Member';
-      if (sa.staff_role) {
-        assignedRole = sa.staff_role;
-      }
+      if (sa.staff_role) assignedRole = sa.staff_role;
 
-      const assignmentId = sa.assignment_id;
+      const assignmentId = sa.assignment_id || '';
       const evIdentifier = ev?.id || sa.event_id || 'ev';
-      const uniqueKey = `${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`;
+      const uniqueKey = assignmentId 
+        ? `${orderId}_${assignmentId}_${evIdentifier}_${normStaff}`
+        : `${orderId}_${evIdentifier}_${(assignedRole || 'crew').toLowerCase()}_${normStaff}`;
+
+      if (processedUniqueKeys.has(uniqueKey)) return;
 
       const currentStaffStatus = sa.task_status || 'Assigned Crew';
-
       const resolvedRawLink = resolveRawFootageLink(
         orderId,
         assignmentId,
@@ -1161,240 +1462,37 @@ export const StaffModule: React.FC = () => {
           key: uniqueKey,
           assignmentId: assignmentId,
           orderId: orderId,
-          leadId: lead?.lead_id || sa.lead_id || '',
+          leadId: matchedLead?.lead_id || sa.lead_id || '',
           eventId: evIdentifier,
           eventName: ev ? (ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A')) : (sa.event_name || 'General Event'),
-          customerName: lead?.customer_name || order?.customer_name || 'N/A',
-          customerMobile: lead?.mobile || order?.mobile || 'N/A',
-          customerWhatsapp: lead?.whatsapp_number || lead?.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
-          customerAddress: lead?.address || lead?.client_residence_address || lead?.city || 'N/A',
-          shootType: ev?.event_shoot_type || lead?.shoot_type || sa.staff_role || 'N/A',
+          customerName: matchedLead?.customer_name || matchedOrd?.customer_name || 'N/A',
+          customerMobile: matchedLead?.mobile || matchedOrd?.mobile || 'N/A',
+          customerWhatsapp: matchedLead?.whatsapp_number || matchedLead?.mobile || matchedOrd?.whatsapp_number || matchedOrd?.mobile || 'N/A',
+          customerAddress: matchedLead?.address || matchedLead?.client_residence_address || matchedLead?.city || 'N/A',
+          shootType: ev?.event_shoot_type || matchedLead?.shoot_type || sa.staff_role || 'N/A',
           assignedRole: assignedRole,
-          eventDate: ev?.event_date || lead?.event_date || sa.event_date || 'N/A',
-          eventStartTime: ev?.event_start_time || lead?.event_time || 'N/A',
-          eventEndDate: ev?.event_end_date || ev?.event_date || lead?.event_date || 'N/A',
+          eventDate: ev?.event_date || matchedLead?.event_date || sa.event_date || 'N/A',
+          eventStartTime: ev?.event_start_time || matchedLead?.event_time || 'N/A',
+          eventEndDate: ev?.event_end_date || ev?.event_date || matchedLead?.event_date || 'N/A',
           eventEndTime: ev?.event_end_time || 'N/A',
-          reportingDate: ev?.Reporting_date || ev?.reporting_date || (sa as any)?.Reporting_date || (sa as any)?.reporting_date || lead?.Reporting_date || lead?.reporting_date || 'N/A',
-          reportingTime: ev?.reporting_time || ev?.Reporting_time || (sa as any)?.reporting_time || (sa as any)?.Reporting_time || op?.reporting_time || lead?.reporting_time || 'N/A',
-          venue: ev?.event_location || lead?.event_location || 'N/A',
+          reportingDate: ev?.Reporting_date || ev?.reporting_date || (sa as any)?.Reporting_date || (sa as any)?.reporting_date || matchedLead?.Reporting_date || matchedLead?.reporting_date || '—',
+          reportingTime: ev?.reporting_time || ev?.Reporting_time || (sa as any)?.reporting_time || (sa as any)?.Reporting_time || op?.reporting_time || matchedLead?.reporting_time || '—',
+          venue: ev?.event_location || matchedLead?.event_location || 'N/A',
           googleMapsLink: ev?.google_maps_link || 'N/A',
-          guestPax: ev?.guest_pax || (lead as any)?.guest_pax || 'N/A',
+          guestPax: ev?.guest_pax || (matchedLead as any)?.guest_pax || 'N/A',
           equipmentItems: assignedEqItems,
           taskStatus: currentStaffStatus,
           rawFootageVerificationStatus: getVerificationStatus(orderId, evIdentifier, assignmentId),
           rawFootageLink: resolvedRawLink,
           coordinator: op?.operations_coordinator || 'Unassigned',
-          createdAt: lead?.created_at || order?.created_at || (ev as any)?.created_at || sa.created_at || '',
+          createdAt: matchedLead?.created_at || matchedOrd?.created_at || (ev as any)?.created_at || sa.created_at || '',
           equipmentReceivedTime: sa.equipment_received_time || (sa as any).equipment_received_time || null,
           equipmentHandoverTime: sa.equipment_handover_time || (sa as any).equipment_handover_time || null,
           eventStartPhotoTime: sa.event_start_time || (sa as any).event_start_time || null,
           eventEndPhotoTime: sa.event_end_time || (sa as any).event_end_time || null
         });
-        processedAssignmentIds.add(assignmentId);
+        if (assignmentId) processedAssignmentIds.add(assignmentId);
         processedUniqueKeys.add(uniqueKey);
-      }
-    });
-
-    (leads || []).forEach((lead) => {
-      const order = (orders || []).find(o => o.lead_id === lead.lead_id);
-      const op = (operations || []).find(o => o.order_id === (order?.order_id || lead.lead_id));
-      const orderId = order?.order_id || `OR-${lead.lead_id.replace(/^LD-?/, '')}`;
-
-      let hasEventAssignment = false;
-
-      if (lead.events && lead.events.length > 0) {
-        lead.events.forEach((ev: any, evIdx: number) => {
-          const assignedNames = ev.assigned_staff_names 
-            ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) 
-            : [];
-            
-          if (assignedNames.includes(staffName.toLowerCase())) {
-            hasEventAssignment = true;
-
-            const staffIdx = assignedNames.indexOf(staffName.toLowerCase());
-
-            const sa = staffAssignments?.find(s => {
-              if (s.order_id !== orderId) return false;
-              if (s.staff_name?.toLowerCase() !== staffName.toLowerCase()) return false;
-              if (s.event_id && ev.id && s.event_id !== ev.id) return false;
-              if ((!s.event_id || !ev.id) && s.event_name) {
-                const sEvName = s.event_name.trim().toLowerCase();
-                const evName1 = (ev.event_name || '').trim().toLowerCase();
-                const evName2 = (ev.event_type || '').trim().toLowerCase();
-                if (sEvName !== evName1 && sEvName !== evName2) return false;
-              }
-              return true;
-            });
-
-            if (sa && processedAssignmentIds.has(sa.assignment_id)) {
-              return; 
-            }
-
-            const assignmentId = sa?.assignment_id || '';
-            const evIdentifier = ev.id || `evt_${evIdx}`;
-            
-            const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, ev, staffIdx, orderId, lead.lead_id, op);
-
-            const staffObj = staff?.find(s => (s.name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
-            let assignedRole = staffObj ? staffObj.role : 'Crew Member';
-            if (sa?.staff_role) {
-              assignedRole = sa.staff_role;
-            }
-
-            const uniqueKey = assignmentId 
-              ? `${orderId}_${assignmentId}_${evIdentifier}_${staffName.toLowerCase()}`
-              : `${orderId}_${evIdentifier}_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
-
-            if (processedUniqueKeys.has(uniqueKey)) {
-              return; 
-            }
-
-            const saStatus = (sa as any)?.task_status;
-            const currentStaffStatus = saStatus || 'Assigned Crew';
-
-            const resolvedRawLink = resolveRawFootageLink(
-              orderId,
-              assignmentId,
-              ev.id || 'ev',
-              ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
-              (sa as any)?.raw_footage_link
-            );
-
-            if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
-              bookings.push({
-                key: uniqueKey,
-                assignmentId: assignmentId,
-                orderId: orderId,
-                leadId: lead.lead_id,
-                eventId: ev.id || 'ev',
-                eventName: ev.event_type === 'Other' ? (ev.event_name || 'Other Event') : (ev.event_type || 'N/A'),
-                staffName: staffName,
-                assignedStaff: staffName,
-                customerName: lead.customer_name || order?.customer_name || 'N/A',
-                customerMobile: lead.mobile || order?.mobile || 'N/A',
-                customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
-                customerAddress: lead.address || lead.client_residence_address || lead.city || 'N/A',
-                shootType: ev.event_shoot_type || lead.shoot_type || 'N/A',
-                assignedRole: assignedRole,
-                eventDate: ev.event_date || lead.event_date || 'N/A',
-                eventStartTime: ev.event_start_time || lead.event_time || 'N/A',
-                eventEndDate: ev.event_end_date || ev.event_date || lead.event_date || 'N/A',
-                eventEndTime: ev.event_end_time || 'N/A',
-                reportingDate: ev.Reporting_date || ev.reporting_date || lead.Reporting_date || lead.reporting_date || '—',
-                reportingTime: ev.reporting_time || ev.Reporting_time || lead.reporting_time || '—',
-                venue: ev.event_location || lead.event_location || 'N/A',
-                googleMapsLink: ev.google_maps_link || ((lead.events && lead.events.length === 1) ? (lead.google_maps_link || 'N/A') : 'N/A'),
-                guestPax: ev.guest_pax || (lead as any).guest_pax || 'N/A',
-                equipmentItems: assignedEqItems,
-                taskStatus: currentStaffStatus,
-                rawFootageVerificationStatus: getVerificationStatus(orderId, ev.id || 'ev', assignmentId),
-                rawFootageLink: resolvedRawLink,
-                coordinator: op?.operations_coordinator || 'Unassigned',
-                createdAt: lead.created_at || order?.created_at || (ev as any)?.created_at || '',
-                equipmentReceivedTime: sa ? (sa.equipment_received_time || (sa as any).equipment_received_time || null) : null,
-                equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null,
-                eventStartPhotoTime: sa ? (sa.event_start_time || (sa as any).event_start_time || null) : null,
-                eventEndPhotoTime: sa ? (sa.event_end_time || (sa as any).event_end_time || null) : null
-              });
-              processedUniqueKeys.add(uniqueKey);
-              if (assignmentId) processedAssignmentIds.add(assignmentId);
-            }
-          }
-        });
-      }
-
-      if (!hasEventAssignment) {
-        const isAssignedInOp = op && (
-          op.photographer_assigned?.toLowerCase() === staffName.toLowerCase() ||
-          op.videographer_assigned?.toLowerCase() === staffName.toLowerCase() ||
-          op.drone_operator_assigned?.toLowerCase() === staffName.toLowerCase() ||
-          op.assistant_assigned?.toLowerCase() === staffName.toLowerCase()
-        );
-        const hasStaffAssignment = staffAssignments?.some(sa => 
-          sa.order_id === orderId && 
-          (sa.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase() &&
-          sa.assignment_status !== 'Cancelled'
-        );
-
-        if (isAssignedInOp || hasStaffAssignment) {
-          let assignedRole = 'Crew Member';
-          if (op) {
-            if (op.photographer_assigned?.toLowerCase() === staffName.toLowerCase()) assignedRole = 'Photographer';
-            else if (op.videographer_assigned?.toLowerCase() === staffName.toLowerCase()) assignedRole = 'Videographer';
-            else if (op.drone_operator_assigned?.toLowerCase() === staffName.toLowerCase()) assignedRole = 'Drone Operator';
-            else if (op.assistant_assigned?.toLowerCase() === staffName.toLowerCase()) assignedRole = 'Assistant';
-          }
-          const sa = staffAssignments?.find(s => s.order_id === orderId && (s.staff_name || '').trim().toLowerCase() === staffName.trim().toLowerCase());
-          if (sa?.staff_role) {
-            assignedRole = sa.staff_role;
-          }
-
-          if (sa && processedAssignmentIds.has(sa.assignment_id)) {
-            return;
-          }
-
-          const assignedEqItems = resolveAssignedEqListForStaff(staffName, sa, null, -1, orderId, lead.lead_id, op);
-
-          const assignmentId = sa?.assignment_id || '';
-          const uniqueKey = assignmentId 
-            ? `${orderId}_${assignmentId}_gen_${staffName.toLowerCase()}`
-            : `${orderId}_gen_${(assignedRole || 'crew').toLowerCase()}_${staffName.toLowerCase()}`;
-
-          if (processedUniqueKeys.has(uniqueKey)) {
-            return;
-          }
-
-          const saStatus = (sa as any)?.task_status;
-          const currentStaffStatus = saStatus || 'Assigned Crew';
-
-          const resolvedRawLink = resolveRawFootageLink(
-            orderId,
-            assignmentId,
-            'gen',
-            lead.event_name || lead.shoot_type || 'General Event',
-            (sa as any)?.raw_footage_link
-          );
-
-          if (!finishedStatuses.includes((currentStaffStatus || '').trim().toLowerCase())) {
-            bookings.push({
-              key: uniqueKey,
-              assignmentId: assignmentId,
-              orderId: orderId,
-              leadId: lead.lead_id,
-              eventId: 'gen',
-              eventName: lead.event_name || lead.shoot_type || 'General Event',
-              staffName: staffName,
-              assignedStaff: staffName,
-              customerName: lead.customer_name || order?.customer_name || 'N/A',
-              customerMobile: lead.mobile || order?.mobile || 'N/A',
-              customerWhatsapp: lead.whatsapp_number || lead.mobile || order?.whatsapp_number || order?.mobile || 'N/A',
-              customerAddress: lead.address || lead.client_residence_address || lead.city || 'N/A',
-              shootType: lead.shoot_type || 'N/A',
-              assignedRole: assignedRole,
-              eventDate: lead.event_date || 'N/A',
-              eventStartTime: lead.event_time || 'N/A',
-              eventEndDate: lead.event_end_date || lead.event_date || 'N/A',
-              eventEndTime: lead.event_end_time || 'N/A',
-              reportingDate: lead.Reporting_date || lead.reporting_date || '—',
-              reportingTime: lead.reporting_time || (lead as any).Reporting_time || '—',
-              venue: lead.event_location || 'N/A',
-              googleMapsLink: lead.google_maps_link || 'N/A',
-              guestPax: (lead as any).guest_pax || 'N/A',
-              equipmentItems: assignedEqItems,
-              taskStatus: currentStaffStatus,
-              rawFootageVerificationStatus: getVerificationStatus(orderId, 'gen', assignmentId),
-              rawFootageLink: resolvedRawLink,
-              coordinator: op?.operations_coordinator || 'Unassigned',
-              createdAt: lead.created_at || order?.created_at || '',
-              equipmentReceivedTime: sa ? (sa.equipment_received_time || (sa as any).equipment_received_time || null) : null,
-              equipmentHandoverTime: sa ? (sa.equipment_handover_time || (sa as any).equipment_handover_time || null) : null,
-              eventStartPhotoTime: sa ? (sa.event_start_time || (sa as any).event_start_time || null) : null,
-              eventEndPhotoTime: sa ? (sa.event_end_time || (sa as any).event_end_time || null) : null
-            });
-            processedUniqueKeys.add(uniqueKey);
-            if (assignmentId) processedAssignmentIds.add(assignmentId);
-          }
-        }
       }
     });
 
@@ -2881,6 +2979,29 @@ export const StaffModule: React.FC = () => {
           <span>{toastMessage}</span>
         </div>
       )}
+
+      {/* Staff Profile / Info Section */}
+      <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 sm:p-5 shadow-xl flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3.5 sm:gap-4">
+          <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0 shadow-inner">
+            <User className="w-6 h-6" />
+          </div>
+          <div className="space-y-0.5">
+            <div className="text-[10px] sm:text-xs font-mono font-extrabold uppercase tracking-widest text-amber-400">
+              Operations Staff
+            </div>
+            <h1 className="text-base sm:text-lg md:text-xl font-bold text-white tracking-tight">
+              {staffName}
+            </h1>
+            {staffMobile && (
+              <div className="text-xs sm:text-sm font-mono text-zinc-400 flex items-center gap-1.5 pt-0.5">
+                <Phone className="w-3.5 h-3.5 text-zinc-500" />
+                <span>{staffMobile}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Navigation View Switcher */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 md:gap-4 bg-zinc-900/90 border border-zinc-800 p-1.5 md:p-2 rounded-xl md:rounded-2xl shadow-lg">

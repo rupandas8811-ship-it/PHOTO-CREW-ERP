@@ -3593,80 +3593,125 @@ export function calculateStaffActiveBookingsCount(
   const processedUniqueKeys = new Set<string>();
   let activeCount = 0;
 
-  // 1. Direct staff assignments
-  (staffAssignments || []).forEach((sa: any) => {
-    if (!sa || sa.assignment_status === 'Cancelled') return;
-    if ((sa.staff_name || '').trim().toLowerCase() !== normStaffName) return;
+  const isStaffAssigned = (checkName?: string | null): boolean => {
+    const n = (checkName || '').trim().toLowerCase();
+    return Boolean(normStaffName && n && n === normStaffName);
+  };
 
-    const currentStaffStatus = (sa.task_status || 'Assigned Crew').trim().toLowerCase();
-    if (!FINISHED_STAFF_TASK_STATUSES.includes(currentStaffStatus)) {
-      activeCount++;
-      if (sa.assignment_id) processedAssignmentIds.add(sa.assignment_id);
-      const key = `${sa.order_id}_${sa.assignment_id || 'asst'}_${sa.event_id || 'ev'}_${normStaffName}`;
-      processedUniqueKeys.add(key);
+  // Build unified map of orders/leads
+  const orderMap = new Map<string, { order?: any; lead?: any; op?: any }>();
+  (orders || []).forEach((o: any) => {
+    const oId = o.order_id;
+    const l = (leads || []).find((lead: any) => lead.lead_id === o.lead_id);
+    const op = (operations || []).find((opItem: any) => opItem.order_id === oId || (l && opItem.order_id === l.lead_id));
+    orderMap.set(oId, { order: o, lead: l, op });
+  });
+
+  (leads || []).forEach((l: any) => {
+    const matchingOrd = (orders || []).find((o: any) => o.lead_id === l.lead_id);
+    const oId = matchingOrd?.order_id || `OR-${l.lead_id?.replace(/^LD-?/, '')}`;
+    if (!orderMap.has(oId)) {
+      const op = (operations || []).find((opItem: any) => opItem.order_id === oId || opItem.order_id === l.lead_id);
+      orderMap.set(oId, { order: matchingOrd, lead: l, op });
     }
   });
 
-  // 2. Events inside leads
-  (leads || []).forEach((lead: any) => {
-    const order = (orders || []).find((o: any) => o.lead_id === lead.lead_id);
-    const orderId = order?.order_id || `OR-${lead.lead_id?.replace(/^LD-?/, '')}`;
-    let hasEventAssignment = false;
-
-    if (lead.events && Array.isArray(lead.events) && lead.events.length > 0) {
-      lead.events.forEach((ev: any, evIdx: number) => {
-        const assignedNames = ev.assigned_staff_names 
-          ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase()) 
-          : [];
-        if (assignedNames.includes(normStaffName)) {
-          hasEventAssignment = true;
-          const sa = (staffAssignments || []).find((s: any) => {
-            if (s.order_id !== orderId) return false;
-            if ((s.staff_name || '').toLowerCase() !== normStaffName) return false;
-            if (s.event_id && ev.id && s.event_id !== ev.id) return false;
-            return true;
-          });
-
-          if (sa && processedAssignmentIds.has(sa.assignment_id)) return;
-
-          const assignmentId = sa?.assignment_id || '';
-          const evIdentifier = ev.id || `evt_${evIdx}`;
-          const uniqueKey = assignmentId 
-            ? `${orderId}_${assignmentId}_${evIdentifier}_${normStaffName}`
-            : `${orderId}_${evIdentifier}_crew_${normStaffName}`;
-
-          if (processedUniqueKeys.has(uniqueKey)) return;
-
-          const saStatus = (sa as any)?.task_status;
-          const currentStaffStatus = (saStatus || 'Assigned Crew').trim().toLowerCase();
-          if (!FINISHED_STAFF_TASK_STATUSES.includes(currentStaffStatus)) {
-            activeCount++;
-            processedUniqueKeys.add(uniqueKey);
-            if (assignmentId) processedAssignmentIds.add(assignmentId);
-          }
-        }
-      });
+  (staffAssignments || []).forEach((sa: any) => {
+    if (sa && isStaffAssigned(sa.staff_name)) {
+      const oId = sa.order_id;
+      if (oId && !orderMap.has(oId)) {
+        const matchedOrd = (orders || []).find((o: any) => o.order_id === oId);
+        const matchedLead = (leads || []).find((l: any) => l.lead_id === (sa.lead_id || matchedOrd?.lead_id));
+        const op = (operations || []).find((opItem: any) => opItem.order_id === oId);
+        orderMap.set(oId, { order: matchedOrd, lead: matchedLead, op });
+      }
     }
+  });
 
-    if (!hasEventAssignment) {
-      const op = (operations || []).find((o: any) => o.order_id === orderId || o.order_id === lead.lead_id);
-      const isAssignedInOp = op && (
-        (op.photographer_assigned || '').toLowerCase() === normStaffName ||
-        (op.videographer_assigned || '').toLowerCase() === normStaffName ||
-        (op.drone_operator_assigned || '').toLowerCase() === normStaffName ||
-        (op.assistant_assigned || '').toLowerCase() === normStaffName
-      );
-      const hasStaffAssignment = (staffAssignments || []).some((sa: any) => 
-        sa.order_id === orderId && 
-        (sa.staff_name || '').trim().toLowerCase() === normStaffName &&
-        sa.assignment_status !== 'Cancelled'
-      );
+  orderMap.forEach(({ order, lead, op }, orderId) => {
+    const leadId = lead?.lead_id || order?.lead_id || '';
+    const orderEvents: any[] = (lead?.events && Array.isArray(lead.events) && lead.events.length > 0)
+      ? lead.events
+      : (order?.events && Array.isArray(order.events) && order.events.length > 0)
+        ? order.events
+        : [];
 
-      if (isAssignedInOp || hasStaffAssignment) {
-        const sa = (staffAssignments || []).find((s: any) => s.order_id === orderId && (s.staff_name || '').trim().toLowerCase() === normStaffName);
-        if (sa && processedAssignmentIds.has(sa.assignment_id)) return;
+    if (orderEvents.length > 0) {
+      orderEvents.forEach((ev: any, evIdx: number) => {
+        const evIdentifier = String(ev.id || ev.event_id || `evt_${evIdx}`);
+        const evName = (ev.event_name || ev.custom_event_name || ev.event_type || '').trim();
+        const evType = (ev.event_type || ev.custom_event_type || 'Event').trim();
+
+        const sa = (staffAssignments || []).find((s: any) => {
+          if (!s || s.assignment_status === 'Cancelled' || s.assignment_status === 'Rejected') return false;
+          if (s.order_id !== orderId && s.lead_id !== leadId) return false;
+          if (!isStaffAssigned(s.staff_name)) return false;
+
+          if (s.event_id && evIdentifier) {
+            if (String(s.event_id).trim().toLowerCase() === evIdentifier.toLowerCase()) return true;
+          }
+          if (s.event_name) {
+            const sEv = s.event_name.trim().toLowerCase();
+            if (sEv === evName.toLowerCase() || sEv === evType.toLowerCase() || (ev.custom_event_name && sEv === ev.custom_event_name.trim().toLowerCase())) {
+              return true;
+            }
+          }
+          if (orderEvents.length === 1 && !s.event_id && !s.event_name) {
+            return true;
+          }
+          return false;
+        });
+
+        const assignedNames = ev.assigned_staff_names
+          ? ev.assigned_staff_names.split(',').map((n: string) => n.trim().toLowerCase())
+          : [];
+        const isDirectlyAssigned = assignedNames.some((n: string) => isStaffAssigned(n));
+
+        const isSingleEventOpMatch = orderEvents.length === 1 && op && (
+          isStaffAssigned(op.photographer_assigned) ||
+          isStaffAssigned(op.videographer_assigned) ||
+          isStaffAssigned(op.drone_operator_assigned) ||
+          isStaffAssigned(op.assistant_assigned)
+        );
+
+        if (!sa && !isDirectlyAssigned && !isSingleEventOpMatch) {
+          return;
+        }
 
         const assignmentId = sa?.assignment_id || '';
+        if (assignmentId && processedAssignmentIds.has(assignmentId)) return;
+
+        const uniqueKey = assignmentId 
+          ? `${orderId}_${assignmentId}_${evIdentifier}_${normStaffName}`
+          : `${orderId}_${evIdentifier}_crew_${normStaffName}`;
+
+        if (processedUniqueKeys.has(uniqueKey)) return;
+
+        const currentStaffStatus = ((sa as any)?.task_status || ev?.status || 'Assigned Crew').trim().toLowerCase();
+        if (!FINISHED_STAFF_TASK_STATUSES.includes(currentStaffStatus)) {
+          activeCount++;
+          processedUniqueKeys.add(uniqueKey);
+          if (assignmentId) processedAssignmentIds.add(assignmentId);
+        }
+      });
+    } else {
+      const sa = (staffAssignments || []).find((s: any) => {
+        if (!s || s.assignment_status === 'Cancelled' || s.assignment_status === 'Rejected') return false;
+        if (s.order_id !== orderId && s.lead_id !== leadId) return false;
+        return isStaffAssigned(s.staff_name);
+      });
+
+      const isAssignedInOp = op && (
+        isStaffAssigned(op.photographer_assigned) ||
+        isStaffAssigned(op.videographer_assigned) ||
+        isStaffAssigned(op.drone_operator_assigned) ||
+        isStaffAssigned(op.assistant_assigned)
+      );
+
+      if (sa || isAssignedInOp) {
+        const assignmentId = sa?.assignment_id || '';
+        if (assignmentId && processedAssignmentIds.has(assignmentId)) return;
+
         const uniqueKey = assignmentId 
           ? `${orderId}_${assignmentId}_gen_${normStaffName}`
           : `${orderId}_gen_crew_${normStaffName}`;
@@ -3680,6 +3725,42 @@ export function calculateStaffActiveBookingsCount(
           if (assignmentId) processedAssignmentIds.add(assignmentId);
         }
       }
+    }
+  });
+
+  // Also catch any standalone staffAssignments belonging to this staff
+  (staffAssignments || []).forEach((sa: any) => {
+    if (!sa || sa.assignment_status === 'Cancelled' || sa.assignment_status === 'Rejected') return;
+    if (!isStaffAssigned(sa.staff_name)) return;
+    if (sa.assignment_id && processedAssignmentIds.has(sa.assignment_id)) return;
+
+    const orderId = sa.order_id;
+    const matchedOrd = (orders || []).find((o: any) => o.order_id === orderId);
+    const matchedLead = (leads || []).find((l: any) => l.lead_id === (sa.lead_id || matchedOrd?.lead_id));
+    const orderEvents: any[] = (matchedLead?.events && Array.isArray(matchedLead.events)) ? matchedLead.events : [];
+    if (orderEvents.length > 1) {
+      const matchesEvent = orderEvents.some((e: any) => {
+        const evId = String(e.id || e.event_id || '');
+        const evName = (e.event_name || e.event_type || '').toLowerCase().trim();
+        if (sa.event_id && evId && String(sa.event_id).toLowerCase() === evId.toLowerCase()) return true;
+        if (sa.event_name && (sa.event_name.toLowerCase().trim() === evName)) return true;
+        return false;
+      });
+      if (!matchesEvent) return;
+    }
+
+    const assignmentId = sa.assignment_id || '';
+    const uniqueKey = assignmentId 
+      ? `${orderId}_${assignmentId}_${sa.event_id || 'ev'}_${normStaffName}`
+      : `${orderId}_${sa.event_id || 'ev'}_crew_${normStaffName}`;
+
+    if (processedUniqueKeys.has(uniqueKey)) return;
+
+    const currentStaffStatus = ((sa as any)?.task_status || 'Assigned Crew').trim().toLowerCase();
+    if (!FINISHED_STAFF_TASK_STATUSES.includes(currentStaffStatus)) {
+      activeCount++;
+      processedUniqueKeys.add(uniqueKey);
+      if (assignmentId) processedAssignmentIds.add(assignmentId);
     }
   });
 

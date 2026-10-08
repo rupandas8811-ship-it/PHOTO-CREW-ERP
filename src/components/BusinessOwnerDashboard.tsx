@@ -220,6 +220,9 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     paymentHistory,
     currentUserName, 
     currentRole,
+    currentUser,
+    staff = [],
+    users = [],
     updateOrderStage, 
     updateProduction, 
     logActivity,
@@ -227,6 +230,43 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
     globalDateRange,
     setGlobalDateRange
   } = useRole();
+
+  // Logged-in Business Owner mobile computation
+  const loggedInBusinessOwnerMobile = useMemo(() => {
+    if (currentUser?.mobile) return currentUser.mobile;
+    if ((currentUser as any)?.phone) return (currentUser as any).phone;
+
+    // Look up in users list
+    const userMatch = (users || []).find((u: any) =>
+      (u.mobile && currentUser?.mobile && u.mobile === currentUser.mobile) ||
+      (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (u.name && currentUser?.name && u.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase()) ||
+      (u.role === 'Business Owner' && (u.mobile || (u as any).phone))
+    );
+    if (userMatch?.mobile) return userMatch.mobile;
+    if ((userMatch as any)?.phone) return (userMatch as any).phone;
+
+    // Look up in staff list
+    const staffMatch = (staff || []).find((s: any) =>
+      (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) ||
+      (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+    if (staffMatch?.mobile) return staffMatch.mobile;
+    if ((staffMatch as any)?.phone) return (staffMatch as any).phone;
+
+    // Match by currentUserName
+    if (currentUserName) {
+      const matchByName = (users || []).find((u: any) =>
+        (u.name && u.name.trim().toLowerCase() === currentUserName.trim().toLowerCase()) ||
+        (u.full_name && u.full_name.trim().toLowerCase() === currentUserName.trim().toLowerCase())
+      );
+      if (matchByName?.mobile) return matchByName.mobile;
+      if ((matchByName as any)?.phone) return (matchByName as any).phone;
+    }
+
+    return '';
+  }, [currentUser, users, staff, currentUserName]);
 
   // Internal section tab state if not controlled externally
   const [internalSection, setInternalSection] = useState<'overview' | 'calendar' | 'approval' | 'summary' | 'leads_report' | 'staff_performance' | 'password_reset'>('overview');
@@ -1691,6 +1731,20 @@ export const BusinessOwnerDashboard: React.FC<BusinessOwnerDashboardProps> = ({
       {currentSection === 'overview' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           
+          {/* Business Overview Header / User Info */}
+          <div className="border-b border-zinc-900 pb-5">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-white font-sans tracking-tight">
+                Business Owner
+              </h1>
+              {loggedInBusinessOwnerMobile && (
+                <p className="text-xs sm:text-sm font-mono text-zinc-400 mt-1">
+                  {loggedInBusinessOwnerMobile}
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* Section Header & Date Filter */}
           <div className="bg-zinc-950/80 border border-zinc-850 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
             <div>
@@ -2407,7 +2461,8 @@ const BusinessOwnerCalendarView: React.FC<BusinessOwnerCalendarViewProps> = ({
   // Close filter dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+      const target = event.target;
+      if (target instanceof Node && filterDropdownRef.current && !filterDropdownRef.current.contains(target)) {
         setIsFilterOpen(false);
       }
     };

@@ -296,7 +296,8 @@ const FloatingPopoverCell: React.FC<{
     };
 
     const handleOutsidePointer = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
+      const target = e.target;
+      if (!target || !(target instanceof Node)) return;
       if (buttonRef.current && buttonRef.current.contains(target)) {
         return;
       }
@@ -788,26 +789,30 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
         const ordId = p.order_id || p.tracking_id || p.production_id;
         if (ordId && prodKeys.has(ordId)) return;
 
+        const matchedLead = (leads || []).find(l => l.lead_id === p.lead_id || (ordId && l.order_id === ordId));
+        const matchedOrd = (orders || []).find(o => ordId && o.order_id === ordId);
+
         const dateVal = p.target_delivery_date || p.expected_delivery_date || p.event_date || p.created_at;
         const normDate = normalizeDateStr(dateVal);
         if (!normDate) return;
 
         const editorsList = p.editor_assigned ? p.editor_assigned.split(',').map((s: string) => s.trim()).filter(Boolean) : (p.assigned_staff ? [p.assigned_staff] : []);
         const assignedEditorName = editorsList.length > 0 ? editorsList.join(', ') : 'Unassigned';
+        const salesStaffName = p.sales_staff_name || p.sales_person || resolveSalesCrewName(matchedOrd, matchedLead, undefined, quotations);
 
         items.push({
           id: p.production_id || `PRD-${p.tracking_id}`,
           orderId: p.order_id || p.tracking_id || '—',
           leadId: p.lead_id,
-          customerName: p.customer_name || 'Client',
+          customerName: p.customer_name || matchedLead?.customer_name || matchedOrd?.customer_name || 'Client',
           customerMobile: p.customer_mobile || '',
           eventName: p.custom_event_name || 'Production Item',
-          eventType: 'Editing',
+          eventType: p.event_type || matchedOrd?.event_type || matchedLead?.event_type || 'Editing',
           eventDate: normDate, // Placed on Calendar strictly by Target Delivery Date
           targetDeliveryDate: normalizeDateStr(dateVal),
           editorAssigned: assignedEditorName,
           editorsList: editorsList,
-          salesCrew: p.sales_staff_name || p.sales_person || '—',
+          salesCrew: salesStaffName,
           deliverables: p.deliverables_summary || 'Deliverables',
           deliverablesList: p.deliverables_summary ? [p.deliverables_summary] : ['Deliverables'],
           rawFootageLink: p.raw_footage_location || '',
@@ -1594,6 +1599,16 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                               <th className="p-3 whitespace-nowrap min-w-[120px]">Status</th>
                               <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">Actions</th>
                             </>
+                          ) : role === 'production' ? (
+                            <>
+                              <th className="p-3 pl-4 whitespace-nowrap min-w-[120px]">Order ID</th>
+                              <th className="p-3 whitespace-nowrap min-w-[170px]">Customer Name</th>
+                              <th className="p-3 whitespace-nowrap min-w-[140px]">Event Category</th>
+                              <th className="p-3 whitespace-nowrap min-w-[130px]">Sales Crew</th>
+                              <th className="p-3 whitespace-nowrap min-w-[130px]">Targeted Date</th>
+                              <th className="p-3 whitespace-nowrap min-w-[120px]">Status</th>
+                              <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">Action</th>
+                            </>
                           ) : (
                             <>
                               <th className="p-3 pl-4 whitespace-nowrap min-w-[130px]">Order / Lead ID</th>
@@ -1601,7 +1616,7 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                               <th className="p-3 whitespace-nowrap min-w-[160px]">Event Name & Type</th>
                               
                               {/* Role-Specific Column Headers */}
-                              {(role === 'production' || role === 'production_staff') && (
+                              {role === 'production_staff' && (
                                 <>
                                   <th className="p-3 whitespace-nowrap min-w-[180px]">Deliverables</th>
                                   <th className="p-3 whitespace-nowrap min-w-[130px]">Target Delivery</th>
@@ -1619,10 +1634,6 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                               )}
 
                               <th className="p-3 whitespace-nowrap min-w-[110px]">Status</th>
-                              
-                              {role === 'production' && onOpenAssignEditor && (
-                                <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">Action</th>
-                              )}
                             </>
                           )}
                         </tr>
@@ -1798,7 +1809,60 @@ export const UnifiedCalendar: React.FC<UnifiedCalendarProps> = ({
                                   </button>
                                 </td>
                               </>
-                            ) : (role === 'production' || role === 'production_staff') ? (
+                            ) : role === 'production' ? (
+                              <>
+                                {/* 1. Order ID */}
+                                <td className="p-3 pl-4 text-zinc-200 font-bold whitespace-nowrap min-w-[120px]">
+                                  <span className={`${theme.textHighlight}`}>{ev.orderId}</span>
+                                </td>
+
+                                {/* 2. Customer Name */}
+                                <td className="p-3 font-sans font-bold text-white whitespace-nowrap min-w-[170px]">
+                                  <div>{ev.customerName}</div>
+                                </td>
+
+                                {/* 3. Event Category */}
+                                <td className="p-3 whitespace-nowrap text-zinc-200 min-w-[140px]">
+                                  <span className="font-semibold text-zinc-100">{ev.eventType || '—'}</span>
+                                </td>
+
+                                {/* 4. Sales Crew */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[130px]">
+                                  <div className="text-zinc-200 font-medium font-mono text-xs">
+                                    {ev.salesCrew || '—'}
+                                  </div>
+                                </td>
+
+                                {/* 5. Targeted Date */}
+                                <td className="p-3 whitespace-nowrap text-zinc-300 min-w-[130px]">
+                                  <span className="font-mono text-xs text-zinc-200">
+                                    {ev.targetDeliveryDate ? (formatDateDDMMYY(ev.targetDeliveryDate) || ev.targetDeliveryDate) : '—'}
+                                  </span>
+                                </td>
+
+                                {/* 6. Status */}
+                                <td className="p-3 whitespace-nowrap min-w-[120px]">
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${theme.bgHighlight} ${theme.textHighlight} ${theme.border}`}>
+                                    {ev.status}
+                                  </span>
+                                </td>
+
+                                {/* 7. Action */}
+                                <td className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">
+                                  <button
+                                    onClick={() => {
+                                      setCalendarModalDate(null);
+                                      if (onOpenAssignEditor) {
+                                        onOpenAssignEditor(ev.orderId, ev.leadId);
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-mono font-bold transition cursor-pointer shadow flex items-center gap-1 mx-auto"
+                                  >
+                                    <span>Assign Editor</span>
+                                  </button>
+                                </td>
+                              </>
+                            ) : role === 'production_staff' ? (
                               <>
                                 {/* 1. Order ID */}
                                 <td className="p-3 pl-4 text-zinc-200 font-bold whitespace-nowrap min-w-[130px]">

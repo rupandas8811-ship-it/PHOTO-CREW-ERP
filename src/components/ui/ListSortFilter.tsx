@@ -222,7 +222,8 @@ export const ListSortFilter: React.FC<ListSortFilterProps> = ({
     updatePosition();
 
     const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
+      const target = e.target;
+      if (!target || !(target instanceof Node)) return;
       if (
         buttonRef.current &&
         !buttonRef.current.contains(target) &&

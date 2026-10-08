@@ -3,13 +3,12 @@ import { useRole } from '../RoleContext';
 import { 
   Camera, Package, PlusCircle, Wrench, Edit3, Calendar, 
   ClipboardList, Search, Filter, X, ChevronLeft, ChevronRight, 
-  Eye, CheckCircle2, AlertTriangle, Info, User, HelpCircle, MapPin, Tag
+  Eye, CheckCircle2, AlertTriangle, Info, User, HelpCircle, MapPin, Tag, Download
 } from 'lucide-react';
 import { Equipment } from '../../types';
 import { supabaseClient } from '../../supabaseClient';
-import { DateFilterInput } from '../ui/DateFilterInput';
 
-import { formatTime12Hour, formatDateDDMMYY, formatDateToDDMMYYYY, getStoredEquipmentCategories, saveEquipmentCategoryToStorage } from "../../utils";
+import { formatTime12Hour, formatDateDDMMYY, getStoredEquipmentCategories, saveEquipmentCategoryToStorage } from "../../utils";
 
 const toCalendarDateString = (dateVal?: string | null | Date): string | null => {
   if (!dateVal && (dateVal as any) !== 0) return null;
@@ -1119,6 +1118,86 @@ export const EquipmentManagement: React.FC = () => {
     return Math.ceil(filteredAndSortedEquipment.length / pageSize) || 1;
   }, [selectedCategoryView, categoriesSummary.length, filteredAndSortedEquipment.length, pageSize]);
 
+  // Handler for downloading category-wise equipment report CSV
+  const handleDownloadEquipmentReport = () => {
+    const itemsToReport = filteredAndSortedEquipment;
+    if (!itemsToReport || itemsToReport.length === 0) {
+      showToast('error', 'No equipment records available for the selected filter.');
+      return;
+    }
+
+    // Sort category-wise first, then by equipment name
+    const sortedForReport = [...itemsToReport].sort((a, b) => {
+      const catA = (a.categoryName || 'Other').toLowerCase();
+      const catB = (b.categoryName || 'Other').toLowerCase();
+      if (catA !== catB) return catA.localeCompare(catB);
+      return (a.equipment_name || '').localeCompare(b.equipment_name || '');
+    });
+
+    const headers = [
+      'S.No',
+      'Equipment Name',
+      'Equipment Category',
+      'Equipment ID',
+      'Quantity',
+      'Available Quantity',
+      'Assigned Quantity',
+      'Current Status',
+      'Brand',
+      'Model',
+      'Serial Number',
+      'Condition',
+      'Storage Location',
+      'Current Assignment / Event Shoot',
+      'Notes / Remarks'
+    ];
+
+    const csvRows = [headers];
+
+    sortedForReport.forEach((item, idx) => {
+      const assignedQty = item.quantity - (item.available_quantity ?? item.quantity);
+      const activeTasksSummary = item.activeTasks && item.activeTasks.length > 0
+        ? item.activeTasks.map((t: any) => `${t.eventName} (${t.assignedStaff || 'Unassigned'}) [${t.orderId}]`).join('; ')
+        : 'None';
+
+      csvRows.push([
+        String(idx + 1),
+        item.equipment_name || '—',
+        item.categoryName || 'Other',
+        item.equipment_id || '—',
+        String(item.quantity ?? 1),
+        String(item.available_quantity ?? (item.dynamicStatus === 'Available' ? item.quantity : 0)),
+        String(assignedQty > 0 ? assignedQty : (item.dynamicStatus === 'Busy' ? item.quantity : 0)),
+        item.dynamicStatus || item.status || 'Available',
+        item.brand || '—',
+        item.model || '—',
+        item.serial_number || '—',
+        item.parsedMeta?.condition || 'Excellent',
+        item.storage_location || 'Main Studio',
+        activeTasksSummary,
+        item.parsedMeta?.notes || item.notes || '—'
+      ]);
+    });
+
+    const csvString = '\uFEFF' + csvRows.map(row => 
+      row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
+    ).join('\n');
+
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStr = selectedDate || new Date().toISOString().split('T')[0];
+    const filterSuffix = filters.type !== 'All' ? `_${filters.type.replace(/\s+/g, '_')}` : '';
+    link.setAttribute('download', `Equipment_Report_${dateStr}${filterSuffix}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showToast('success', `Equipment report downloaded successfully (${sortedForReport.length} items).`);
+  };
+
   return (
     <div className="space-y-6 font-sans relative">
       
@@ -1140,19 +1219,18 @@ export const EquipmentManagement: React.FC = () => {
       {/* Dashboard Metrics Header with Date Filter */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-2">
         <h2 className="text-xs font-mono font-black uppercase text-zinc-500">
-          Inventory Status for: <span className="text-zinc-200">{formatDateToDDMMYYYY(selectedDate) || selectedDate}</span>
+          Inventory Status for: <span className="text-zinc-200">{formatDateDDMMYY(selectedDate)}</span>
         </h2>
         <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-850 rounded-xl px-3 py-1.5 shadow-sm">
           <Calendar className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <span className="text-[10px] font-mono font-bold uppercase text-zinc-400">Assignment / Event Date:</span>
-          <div className="w-36">
-            <DateFilterInput
-              value={selectedDate}
-              onChange={setSelectedDate}
-              className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500"
-              title="Select Assignment / Event Date"
-            />
-          </div>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1 text-xs font-mono text-amber-400 focus:outline-none focus:border-amber-500 cursor-pointer"
+            title="Select Assignment / Event Date"
+          />
         </div>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -1228,6 +1306,16 @@ export const EquipmentManagement: React.FC = () => {
             </button>
             <button
               type="button"
+              id="btn_download_equipment_report"
+              onClick={handleDownloadEquipmentReport}
+              className="px-3.5 py-2.5 rounded-xl border border-emerald-500/30 text-[10px] sm:text-xs font-bold font-mono flex items-center justify-center gap-1.5 transition-all cursor-pointer bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 shrink-0 w-full sm:w-auto shadow-sm"
+              title="Download category-wise equipment report CSV"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Download Report</span>
+            </button>
+            <button
+              type="button"
               onClick={() => { setEditingId(null); setShowGearForm(true); }}
               className="px-3.5 py-2.5 rounded-xl border text-[10px] sm:text-xs font-bold font-mono flex items-center justify-center gap-2 transition-all cursor-pointer bg-amber-500 hover:bg-amber-600 text-black shrink-0 w-full sm:w-auto"
             >
@@ -1261,14 +1349,13 @@ export const EquipmentManagement: React.FC = () => {
                 <span className="text-[10px] text-zinc-400 font-mono">Filters:</span>
               </div>
 
-              <div className="w-36">
-                <DateFilterInput
-                  value={selectedDate}
-                  onChange={setSelectedDate}
-                  className="bg-zinc-950 border border-zinc-850 rounded-xl px-2.5 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
-                  title="Select Assignment/Event Date"
-                />
-              </div>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="bg-zinc-950 border border-zinc-850 rounded-xl px-3 py-1.5 text-[10px] font-mono text-zinc-300 focus:outline-none"
+                title="Select Assignment/Event Date"
+              />
 
               <select
                 value={selectedCategoryView || filters.type}

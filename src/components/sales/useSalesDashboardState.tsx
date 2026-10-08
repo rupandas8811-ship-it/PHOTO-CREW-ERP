@@ -8923,106 +8923,8 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     return matchesSearch && matchesSource && matchesStatus && matchesSales && matchesDate && matchesDateRange;
   }).sort((a, b) => {
-    // Helper to extract datetime timestamps for events
-    const getLeadEventDetails = (leadObj: Lead) => {
-      const linkedOrder: any = orders?.find((o: any) => 
-        o.lead_id === leadObj.lead_id || 
-        o.order_id === leadObj.lead_id || 
-        ((leadObj as any).order_id && (o.order_id === (leadObj as any).order_id || o.lead_id === (leadObj as any).order_id)) ||
-        ((leadObj as any).orders && (o.order_id === (leadObj as any).orders || o.lead_id === (leadObj as any).orders))
-      );
-
-      let rawEventsList: any[] = [];
-      if (leadObj?.events && Array.isArray(leadObj.events) && leadObj.events.length > 0) {
-        rawEventsList = leadObj.events;
-      } else if (linkedOrder?.events && Array.isArray(linkedOrder.events) && linkedOrder.events.length > 0) {
-        rawEventsList = linkedOrder.events;
-      } else if (typeof leadObj?.events === 'string') {
-        try {
-          const parsed = JSON.parse(leadObj.events);
-          if (Array.isArray(parsed)) rawEventsList = parsed;
-        } catch (e) {}
-      } else if (typeof linkedOrder?.events === 'string') {
-        try {
-          const parsed = JSON.parse(linkedOrder.events);
-          if (Array.isArray(parsed)) rawEventsList = parsed;
-        } catch (e) {}
-      }
-
-      if (rawEventsList.length === 0 && leadObj?.notes_special_customizations) {
-        rawEventsList = deserializeLeadEvents(leadObj.notes_special_customizations).events;
-      }
-      if (rawEventsList.length === 0 && linkedOrder?.notes_special_customizations) {
-        rawEventsList = deserializeLeadEvents(linkedOrder.notes_special_customizations).events;
-      }
-
-      const eventTimestamps: number[] = [];
-      if (rawEventsList.length > 0) {
-        rawEventsList.forEach((ev: any) => {
-          const dStr = ev.event_date || ev.Event_Date || ev.date || leadObj.event_date || linkedOrder?.event_date || '';
-          const tStr = ev.event_start_time || ev.event_time || ev.Event_Start_Time || ev.time || leadObj.event_time || linkedOrder?.event_time || '';
-          const ts = getEventCategoryDateTimeTimestamp(dStr, tStr);
-          if (ts > 0) eventTimestamps.push(ts);
-        });
-      }
-
-      if (eventTimestamps.length === 0) {
-        const singleDate = leadObj.event_date || linkedOrder?.event_date || '';
-        const singleTime = leadObj.event_time || linkedOrder?.event_time || '';
-        const ts = getEventCategoryDateTimeTimestamp(singleDate, singleTime);
-        if (ts > 0) eventTimestamps.push(ts);
-      }
-
-      if (eventTimestamps.length === 0) {
-        return { mostRecent: 0, lastEvent: 0, hasDate: false };
-      }
-
-      // Sort descending (latest/most recent event first)
-      eventTimestamps.sort((a, b) => b - a);
-
-      const mostRecent = eventTimestamps[0];
-      // Last Event: event immediately before most recent if >= 2 events exist, else single event
-      const lastEvent = eventTimestamps.length >= 2 ? eventTimestamps[1] : eventTimestamps[0];
-
-      return {
-        mostRecent,
-        lastEvent,
-        hasDate: true
-      };
-    };
-
-    const detailsA = getLeadEventDetails(a);
-    const detailsB = getLeadEventDetails(b);
-
-    if (filterEventDateOption === 'last_event') {
-      if (detailsA.hasDate && detailsB.hasDate) {
-        if (detailsA.lastEvent !== detailsB.lastEvent) {
-          return sortOrder === 'oldest'
-            ? detailsA.lastEvent - detailsB.lastEvent
-            : detailsB.lastEvent - detailsA.lastEvent;
-        }
-      } else if (detailsA.hasDate) {
-        return sortOrder === 'oldest' ? 1 : -1;
-      } else if (detailsB.hasDate) {
-        return sortOrder === 'oldest' ? -1 : 1;
-      }
-    } else {
-      // Most recent event / default: latest event first (descending)
-      if (detailsA.hasDate && detailsB.hasDate) {
-        if (detailsA.mostRecent !== detailsB.mostRecent) {
-          return sortOrder === 'oldest'
-            ? detailsA.mostRecent - detailsB.mostRecent
-            : detailsB.mostRecent - detailsA.mostRecent;
-        }
-      } else if (detailsA.hasDate) {
-        return sortOrder === 'oldest' ? 1 : -1;
-      } else if (detailsB.hasDate) {
-        return sortOrder === 'oldest' ? -1 : 1;
-      }
-    }
-
     const parseRegistrationTimestamp = (leadObj: Lead): number => {
-      const raw = leadObj.created_at || leadObj.created_date || (leadObj as any).registered_date || (leadObj as any).registration_date || leadObj.updated_at;
+      const raw = leadObj.created_at || (leadObj as any).timestamp || (leadObj as any).created_time || leadObj.created_date || (leadObj as any).registered_date || (leadObj as any).registration_date || leadObj.updated_at;
       if (!raw) return 0;
       if (typeof raw === 'number') return raw;
       const s = String(raw).trim();
@@ -9050,6 +8952,11 @@ export const useSalesDashboardState = (externalActiveTab?: string, externalSetAc
 
     const idA = (a.lead_id || '').trim();
     const idB = (b.lead_id || '').trim();
+    const numA = parseInt(idA.replace(/\D/g, ''), 10);
+    const numB = parseInt(idB.replace(/\D/g, ''), 10);
+    if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+      return sortOrder === 'oldest' ? numA - numB : numB - numA;
+    }
     const comp = idA.localeCompare(idB, undefined, { numeric: true, sensitivity: 'base' });
     return sortOrder === 'oldest' ? comp : -comp;
   });

@@ -269,6 +269,27 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
         return false;
       });
 
+      // If a specific booking event is passed, show that specific assigned event
+      if (targetEvId || targetEvName || targetEvType) {
+        const specificMatches = assignedGroups.filter(g => {
+          if (targetEvId && targetEvId !== 'ev' && targetEvId !== 'gen' && g.eventId) {
+            if (String(g.eventId).toLowerCase() === String(targetEvId).toLowerCase()) return true;
+          }
+          if (targetEvName) {
+            const tName = String(targetEvName).toLowerCase().trim();
+            if (g.eventName.toLowerCase().trim() === tName || g.eventType.toLowerCase().trim() === tName) return true;
+          }
+          if (targetEvType) {
+            const tType = String(targetEvType).toLowerCase().trim();
+            if (g.eventType.toLowerCase().trim() === tType) return true;
+          }
+          return false;
+        });
+        if (specificMatches.length > 0) {
+          return specificMatches;
+        }
+      }
+
       return assignedGroups;
     }
 
@@ -340,6 +361,15 @@ export const ViewDetailsModal: React.FC<ViewDetailsModalProps> = ({
       if (!matchesOrder) return false;
       if (isStaff && effectiveStaffName) {
         if ((sa.staff_name || '').trim().toLowerCase() !== effectiveStaffName.toLowerCase()) return false;
+        if (displayGroups && displayGroups.length > 0) {
+          const matchesAnyGroup = displayGroups.some(g => {
+            if (sa.event_id && g.eventId && String(sa.event_id).toLowerCase() === String(g.eventId).toLowerCase()) return true;
+            if (sa.event_name && (sa.event_name.trim().toLowerCase() === g.eventName.toLowerCase() || sa.event_name.trim().toLowerCase() === g.eventType.toLowerCase())) return true;
+            if (!sa.event_id && !sa.event_name && displayGroups.length === 1) return true;
+            return false;
+          });
+          if (!matchesAnyGroup) return false;
+        }
       }
       return true;
     });

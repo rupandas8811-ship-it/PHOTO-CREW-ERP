@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useRole } from './RoleContext';
 import { Menu, RefreshCw, LogOut } from 'lucide-react';
-import { UserRole } from '../types';
 import { AppLogo } from './AppLogo';
 import { NotificationBell } from './NotificationBell';
 import { calculateStaffActiveBookingsCount } from '../utils';
@@ -31,25 +30,6 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
     (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name?.trim().toLowerCase())
   );
   const staffName = staffMember?.name || currentUser?.name || '';
-
-  const getHeaderDisplayName = (role: UserRole) => {
-    switch (role) {
-      case 'Sales Team':
-        return currentUser?.name || staffName || 'Sales Person';
-      case 'Operations Team':
-        return 'Operations Manager';
-      case 'Operation Staff':
-        return currentUser?.name || staffName || 'Operations Staff';
-      case 'Production Team':
-        return 'Production Manager';
-      case 'Production Staff':
-        return currentUser?.name || staffName || 'Production Staff';
-      case 'Business Owner':
-        return 'Business Owner';
-      default:
-        return currentUser?.name || role;
-    }
-  };
   
   const assignedTasksCount = useMemo(() => {
     if (!currentUser || !staffName || (currentRole !== 'Operation Staff' && currentRole !== 'Production Staff')) return 0;
@@ -66,30 +46,11 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
     }, 600);
   };
 
-  const getRoleBadgeStyle = (role: UserRole) => {
-    switch (role) {
-      case 'Business Owner':
-        return 'bg-amber-500/10 text-amber-400 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.1)]';
-      case 'Sales Team':
-        return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/40';
-      case 'Operations Team':
-        return 'bg-sky-500/10 text-sky-400 border-sky-500/40';
-      case 'Production Team':
-        return 'bg-purple-500/10 text-purple-400 border-purple-500/40';
-      case 'Operation Staff':
-        return 'bg-amber-500/10 text-amber-400 border-amber-500/40 shadow-[0_0_12px_rgba(245,158,11,0.1)]';
-      case 'Production Staff':
-        return 'bg-purple-500/10 text-purple-400 border-purple-500/40';
-      default:
-        return 'bg-zinc-800 text-zinc-300 border-zinc-700';
-    }
-  };
-
   return (
     <header className="bg-black/90 border-b border-zinc-900 backdrop-blur-md py-4 px-4 sm:px-6 sticky top-0 z-50 shadow-2xl font-sans">
       <div className="max-w-7xl 2xl:max-w-screen-2xl min-[1920px]:max-w-[1800px] min-[2560px]:max-w-[2400px] min-[3840px]:max-w-[3200px] w-full mx-auto flex items-center justify-between gap-2 sm:gap-4">
         
-        {/* Left Side: Toggle (☰ Menu), Logo & Current Role Name */}
+        {/* Left Side: Toggle (☰ Menu) & Logo */}
         <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
           {setSidebarOpen && (
             <button
@@ -103,12 +64,6 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({ sidebarOpen, setSide
           )}
           
           <AppLogo size="sm" showTextOnFallback={false} />
-
-          <div className="h-4 w-[1px] bg-zinc-800 hidden xs:block" />
-
-          <span className={`text-[10px] sm:text-xs px-2.5 py-1 rounded font-mono font-bold tracking-wider uppercase border whitespace-nowrap ${getRoleBadgeStyle(currentRole)} inline-flex items-center`}>
-            {getHeaderDisplayName(currentRole)}
-          </span>
         </div>
 
         {/* Assigned Tasks in Header (Desktop only - on mobile it appears in the side menu) */}

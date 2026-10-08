@@ -375,7 +375,7 @@ export const ProductionFullScreenManager: React.FC = () => {
       if (!activeModal) return;
 
       const bodyElem = activeModal.querySelector('.prod-fullscreen-body');
-      if (bodyElem && bodyElem.contains(e.target as Node)) {
+      if (bodyElem && e.target instanceof Node && bodyElem.contains(e.target)) {
         return;
       }
       e.preventDefault();
@@ -385,12 +385,14 @@ export const ProductionFullScreenManager: React.FC = () => {
     const handleTouchMove = (e: TouchEvent) => {
       if (!isLockedRef.current) return;
       
-      const target = e.target as HTMLElement | null;
-      if (!target) return;
+      const target = e.target;
+      if (!target || !(target instanceof Node)) return;
+      const el = target instanceof Element ? target : target.parentElement;
+      if (!el) return;
 
       // Allow touch gestures inside scrollable or interactive containers (including bodies, tables, and full modals)
       if (
-        target.closest(
+        el.closest(
           '.prod-fullscreen-body, .prod-client-acceptance-body, .proof-preview-modal-layer, [class*="overflow-y-auto"], [class*="overflow-x-auto"], table, tbody, tr, td, th, .prod-fullscreen-card, .prod-client-acceptance-card'
         )
       ) {
@@ -398,9 +400,9 @@ export const ProductionFullScreenManager: React.FC = () => {
       }
 
       const activeModal = document.querySelector('.prod-fullscreen-overlay, .prod-client-acceptance-overlay');
-      if (activeModal && (target === activeModal || activeModal.contains(target))) {
+      if (activeModal && (el === activeModal || (el instanceof Node && activeModal.contains(el)))) {
         const card = activeModal.querySelector('.prod-fullscreen-card, .prod-client-acceptance-card');
-        if (card && card.contains(target)) {
+        if (card && el instanceof Node && card.contains(el)) {
           return;
         }
       }

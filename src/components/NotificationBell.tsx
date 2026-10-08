@@ -31,7 +31,8 @@ export const NotificationBell: React.FC = () => {
   // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target;
+      if (target instanceof Node && dropdownRef.current && !dropdownRef.current.contains(target)) {
         setIsOpen(false);
       }
     };

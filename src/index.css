@@ -889,5 +889,14 @@ div.fixed.inset-0:has(h4 span.text-purple-300),
   animation: row-blink 1.5s ease-in-out infinite;
 }
 
+/* Production Staff Dashboard - Single Global Page Scrollbar */
+.production-staff-order-card,
+.production-staff-order-table-wrapper {
+  overflow: visible !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+  max-height: none !important;
+}
+
 
 

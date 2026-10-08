@@ -11,6 +11,8 @@ import { SalesDashboardModule } from './components/SalesDashboardModule';
 import { OperationsModule } from './components/OperationsModule';
 import { StaffModule } from './components/StaffModule';
 import { ProductionStaffModule } from './components/ProductionStaffModule';
+import { OperationsStaffReport } from './components/OperationsStaffReport';
+import { ProductionStaffReport } from './components/ProductionStaffReport';
 import { ProductionModule } from './components/ProductionModule';
 import { ProductionExtensionContainer } from './components/ProductionDashboardUpdates';
 import { StaffManagementModule } from './components/StaffManagementModule';
@@ -36,7 +38,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Briefcase, Camera, Video, Landmark, Shield, Users, User, Search, Info, Target, Sparkles, Menu, RefreshCw, Activity, Bell,
   UserPlus, Truck, Layers, CheckSquare, Clock, Play, BarChart3, LogOut, Calendar, TrendingUp, DollarSign, FileText, Package,
-  LayoutDashboard, ShieldCheck
+  LayoutDashboard, ShieldCheck, ClipboardList
 } from 'lucide-react';
 
 const AccessDeniedView: React.FC<{ section: string }> = ({ section }) => {
@@ -286,8 +288,8 @@ const MainAppContent: React.FC = () => {
         'sales_staff_management', 'notifications'].includes(tab);
     }
 
-    if (currentRole === 'Operation Staff' || currentRole === 'Production Staff') {
-      return ['staff_dashboard', 'notifications'].includes(tab);
+    if (currentRole === 'Operation Staff' || currentRole === 'Production Staff' || (currentRole as string) === 'Operations Staff') {
+      return ['staff_dashboard', 'staff_report', 'notifications'].includes(tab);
     }
 
     return false;
@@ -337,6 +339,7 @@ const MainAppContent: React.FC = () => {
     | 'operations_calendar'
     | 'equipment_management'
     | 'operations_staff'
+    | 'operations_staff_roster'
     | 'event_scheduling'
     | 'team_assignments'
     | 'operations_notifications'
@@ -347,6 +350,8 @@ const MainAppContent: React.FC = () => {
   // Initialize correct default tab according to user role to avoid visual flashes
   const [activeTab, setActiveTab] = useState<
     | 'dashboard'
+    | 'staff_dashboard'
+    | 'staff_report'
     | 'sales'
     | 'operations'
     | 'production'
@@ -466,7 +471,7 @@ const MainAppContent: React.FC = () => {
           setActiveTab('operations');
         } else if (currentRole === 'Production Team') {
           setActiveTab('production');
-        } else if (currentRole === 'Operation Staff' || currentRole === 'Production Staff') {
+        } else if (currentRole === 'Operation Staff' || currentRole === 'Production Staff' || (currentRole as string) === 'Operations Staff') {
           setActiveTab('staff_dashboard');
         }
       }
@@ -490,7 +495,7 @@ const MainAppContent: React.FC = () => {
         if (!['operations', 'notifications'].includes(activeTab)) {
           setActiveTab('operations');
         }
-        if (!['operations_leads', 'operations_calendar', 'operations_staff', 'operations_analytics', 'team_assignments', 'package_catalogue', 'equipment_management', 'event_scheduling', 'operations_notifications'].includes(activeOpSubTab)) {
+        if (!['operations_leads', 'operations_calendar', 'operations_staff', 'operations_staff_roster', 'operations_analytics', 'team_assignments', 'package_catalogue', 'equipment_management', 'event_scheduling', 'operations_notifications'].includes(activeOpSubTab)) {
           setActiveOpSubTab('operations_leads');
         }
       } else if (currentRole === 'Production Team') {
@@ -500,8 +505,8 @@ const MainAppContent: React.FC = () => {
         if (!['production_leads', 'production_calendar', 'crew_roster', 'staff_roster'].includes(activeSubTab)) {
           setActiveSubTab('production_leads');
         }
-      } else if (currentRole === 'Operation Staff' || currentRole === 'Production Staff') {
-        if (activeTab !== 'staff_dashboard') {
+      } else if (currentRole === 'Operation Staff' || currentRole === 'Production Staff' || (currentRole as string) === 'Operations Staff') {
+        if (!['staff_dashboard', 'staff_report', 'notifications'].includes(activeTab)) {
           setActiveTab('staff_dashboard');
         }
       }
@@ -560,19 +565,24 @@ const MainAppContent: React.FC = () => {
         </button>
       </div>
 
-      {(currentRole === 'Operation Staff' || currentRole === 'Production Staff') ? (
+      {(currentRole === 'Operation Staff' || currentRole === 'Production Staff' || (currentRole as string) === 'Operations Staff') ? (
         <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-3.5 shadow-xl relative animate-in fade-in duration-300">
-          <div className="flex items-center justify-between pb-1 border-b border-zinc-850">
-            <h3 className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-zinc-400 font-mono flex items-center gap-1.5">
-              <Briefcase className="w-3.5 h-3.5 text-amber-500" />
-              <span>STAFF TERMINAL</span>
-            </h3>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          </div>
+          {currentRole !== 'Production Staff' && (
+            <div className="flex items-center justify-between pb-1 border-b border-zinc-850">
+              <h3 className="text-[10px] font-extrabold uppercase tracking-[0.2em] text-zinc-400 font-mono flex items-center gap-1.5">
+                <Briefcase className="w-3.5 h-3.5 text-amber-500" />
+                <span>OPERATIONS STAFF</span>
+              </h3>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            </div>
+          )}
 
           <nav className="space-y-1.5">
             <button
-              onClick={() => handleTabSelect('staff_dashboard')}
+              onClick={() => {
+                handleTabSelect('staff_dashboard');
+                if (window.innerWidth < 1024) setSidebarOpen(false);
+              }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer ${
                 activeTab === 'staff_dashboard'
                   ? 'bg-gradient-to-r from-zinc-800 to-zinc-900 text-white border-zinc-700 font-bold shadow-md'
@@ -580,46 +590,32 @@ const MainAppContent: React.FC = () => {
               }`}
             >
               <div className="flex items-center gap-2.5">
-                <Calendar className="w-4 h-4 flex-shrink-0 text-amber-500" />
-                <span className="tracking-wide">My Bookings</span>
+                <Calendar className={`w-4 h-4 flex-shrink-0 ${currentRole === 'Production Staff' ? 'text-purple-400' : 'text-amber-500'}`} />
+                <span className="tracking-wide">
+                  {currentRole === 'Production Staff' ? 'My Deliverables' : 'My Bookings'}
+                </span>
               </div>
               <ChevronRightIcon active={activeTab === 'staff_dashboard'} />
             </button>
-          </nav>
 
-          {/* Operations Staff & Active Tasks cards inside the side menu underneath menu items */}
-          <div className="pt-2 border-t border-zinc-850/80 space-y-2">
-            <div className="text-[9px] font-mono uppercase tracking-[0.15em] text-zinc-500 font-extrabold px-1">
-              Terminal Access & Activity
-            </div>
-
-            {/* Active Tasks Card */}
             <button
               onClick={() => {
-                handleTabSelect('staff_dashboard');
+                handleTabSelect('staff_report');
                 if (window.innerWidth < 1024) setSidebarOpen(false);
               }}
-              className="w-full bg-zinc-950/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-amber-500/30 rounded-xl p-3 flex items-center justify-between gap-3 shadow-inner transition-all text-left cursor-pointer group"
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-bold rounded-xl transition-all duration-200 text-left border cursor-pointer ${
+                activeTab === 'staff_report'
+                  ? 'bg-gradient-to-r from-zinc-800 to-zinc-900 text-white border-zinc-700 font-bold shadow-md'
+                  : 'text-zinc-400 bg-transparent border-transparent hover:bg-zinc-900/50 hover:text-white hover:border-zinc-800'
+              }`}
             >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 group-hover:scale-105 transition-transform">
-                  <CheckSquare className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[9px] font-mono text-zinc-500 uppercase block font-semibold leading-none">Active Tasks</span>
-                  <span className="text-xs font-bold text-zinc-200 group-hover:text-white font-mono block mt-1">
-                    Assigned Orders
-                  </span>
-                </div>
+              <div className="flex items-center gap-2.5">
+                <FileText className={`w-4 h-4 flex-shrink-0 ${currentRole === 'Production Staff' ? 'text-purple-400' : 'text-amber-500'}`} />
+                <span className="tracking-wide">Report</span>
               </div>
-              <div className="flex items-center gap-1.5 shrink-0 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-lg">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-xs font-black text-amber-400 font-mono">
-                  {assignedTasksCount} Active
-                </span>
-              </div>
+              <ChevronRightIcon active={activeTab === 'staff_report'} />
             </button>
-          </div>
+          </nav>
         </div>
       ) : activeTab === 'operations' || currentRole === 'Operations Team' ? (
         <div className="bg-gradient-to-b from-zinc-900 to-zinc-950 rounded-2xl border border-zinc-850 p-4 space-y-4 shadow-xl relative animate-in fade-in duration-300">
@@ -655,6 +651,7 @@ const MainAppContent: React.FC = () => {
               { id: 'operations_leads', label: 'Operations Leads', icon: Briefcase },
               { id: 'operations_calendar', label: 'Operations Calendar', icon: Calendar },
               { id: 'operations_staff', label: 'Staff Directory', icon: Users },
+              { id: 'operations_staff_roster', label: 'Staff Roster', icon: ClipboardList },
               { id: 'equipment_management', label: 'Equipment Inventory', icon: Package }
             ].map((tab) => {
               const IconComponent = tab.icon;
@@ -945,31 +942,6 @@ const MainAppContent: React.FC = () => {
           <div className="my-1" />
         </div>
       )}
-
-      {/* Global Actions at bottom of sidebar */}
-      {!(activeTab === 'sales' || currentRole === 'Sales Team') && (
-        <div className="bg-[#09090b]/80 border border-zinc-900 rounded-2xl p-3.5 space-y-2.5 shadow-lg">
-          <button
-            onClick={handleRefresh}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all cursor-pointer border border-emerald-500/10 hover:border-emerald-500/35 bg-emerald-500/5 hover:bg-emerald-500/15 text-emerald-450 group"
-          >
-            <div className="flex items-center gap-2.5">
-              <RefreshCw className={`w-3.5 h-3.5 text-emerald-450 ${isRefreshing ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-300'}`} />
-              <span>Refresh System Flow</span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => logout()}
-            className="w-full flex items-center justify-between px-3.5 py-2.5 text-xs font-mono uppercase tracking-wider font-extrabold rounded-xl transition-all cursor-pointer border border-rose-500/10 hover:border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/15 text-rose-455"
-          >
-            <div className="flex items-center gap-2.5">
-              <LogOut className="w-3.5 h-3.5 text-rose-455" />
-              <span>Secure Logout</span>
-            </div>
-          </button>
-        </div>
-      )}
     </aside>
     );
   };
@@ -1121,8 +1093,13 @@ const MainAppContent: React.FC = () => {
                     {activeTab === 'notifications' && <NotificationsModule />}
                     {activeTab === 'payments' && (currentRole === 'Business Owner' || currentRole === 'Sales Team') && <PaymentsModule />}
                     {activeTab === 'search' && currentRole === 'Business Owner' && <OrderSearch />}
-                    {activeTab === 'staff_dashboard' && currentRole === 'Operation Staff' && <StaffModule />}
+                    {activeTab === 'staff_dashboard' && (currentRole === 'Operation Staff' || (currentRole as string) === 'Operations Staff') && <StaffModule />}
                     {activeTab === 'staff_dashboard' && currentRole === 'Production Staff' && <ProductionStaffModule />}
+                    {activeTab === 'staff_report' && (
+                      currentRole === 'Production Staff'
+                        ? <ProductionStaffReport onBack={() => setActiveTab('staff_dashboard')} />
+                        : <OperationsStaffReport onBack={() => setActiveTab('staff_dashboard')} />
+                    )}
                     {activeTab === 'sales_staff_management' && currentRole === 'Business Owner' && <SalesStaffManagementModule />}
                     {activeTab === 'users' && currentRole === 'Business Owner' && <UserManagementModule />}
                     {activeTab === 'diagnostics' && currentRole === 'Business Owner' && <DatabaseHealthModule />}

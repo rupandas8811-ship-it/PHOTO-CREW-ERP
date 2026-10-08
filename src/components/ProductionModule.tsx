@@ -299,7 +299,8 @@ const StaffSelectDropdown = React.memo(({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      const target = event.target;
+      if (target instanceof Node && dropdownRef.current && !dropdownRef.current.contains(target)) {
         setIsOpen(false);
       }
     };
@@ -1420,6 +1421,292 @@ ${coordinatorName}`;
   const [viewingStaffMember, setViewingStaffMember] = useState<Staff | null>(null);
   const [selectedMetricDetail, setSelectedMetricDetail] = useState<{ type: string; memberName: string; list: any[] } | null>(null);
   const [selectedStaffForTasks, setSelectedStaffForTasks] = useState<string | null>(null);
+  const [selectedStaffForCompletedTasks, setSelectedStaffForCompletedTasks] = useState<string | null>(null);
+  const [activeDeliverablesDropdown, setActiveDeliverablesDropdown] = useState<{
+    taskId: string;
+    items: string[];
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Helper to determine if an assignment is completed (including tasks through Editing Completed to Order Close)
+  const isTaskCompleted = useCallback((a: any): boolean => {
+    if (!a) return false;
+    const aStatus = (a.status || '').toLowerCase().trim();
+    if (['cancelled', 'canceled', 'rejected'].includes(aStatus)) return false;
+    if (['completed', 'editing completed', 'editing complete', 'project completed', 'project closed', 'order closed', 'closed', 'delivered', 'project delivered'].includes(aStatus)) {
+      return true;
+    }
+
+    const prod = (production || []).find(p => 
+      p.production_id === a.production_id || 
+      p.tracking_id === a.production_id || 
+      p.order_id === a.production_id ||
+      (a.order_id && (p.order_id === a.order_id || p.tracking_id === a.order_id))
+    );
+    if (prod) {
+      const prodStatus = (prod.editing_status || '').toLowerCase().trim();
+      if (['editing completed', 'editing complete', 'final approval', 'approved', 'project delivered', 'delivered', 'project completed', 'completed', 'order closed', 'closed'].includes(prodStatus)) {
+        return true;
+      }
+    }
+
+    const ordId = a.order_id || prod?.order_id || prod?.tracking_id;
+    if (ordId) {
+      const ord = (orders || []).find(o => o.order_id === ordId || o.tracking_id === ordId);
+      if (ord) {
+        const ordStage = (ord.current_stage || ord.status || '').toLowerCase().trim();
+        if (['editing completed', 'editing complete', 'project delivered', 'delivered', 'project completed', 'completed', 'order closed', 'closed'].includes(ordStage)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }, [production, orders]);
+
+  // Helper to determine if an assignment is currently active (assigned, not completed)
+  const isTaskActive = useCallback((a: any): boolean => {
+    if (!a) return false;
+    const aStatus = (a.status || '').toLowerCase().trim();
+    if (['cancelled', 'canceled', 'rejected'].includes(aStatus)) return false;
+    if (isTaskCompleted(a)) return false;
+    return isAssignmentActive(a, production || []);
+  }, [isTaskCompleted, production]);
+
+  // Helper to cleanly extract all deliverable names for an assignment, avoiding raw JSON or IDs
+  const extractDeliverablesFromAssignment = useCallback((a: any, correlatedProj?: any, matchedOrder?: any, matchedLead?: any): string[] => {
+    if (!a) return ['Deliverable'];
+
+    // Helper to find human-readable name from events if an ID is provided
+    const lookupDeliverableNameById = (idStr: string): string => {
+      if (!idStr) return '';
+      const cleanId = idStr.trim().toLowerCase();
+      const events = [
+        ...(Array.isArray(correlatedProj?.events) ? correlatedProj.events : []),
+        ...(Array.isArray(matchedOrder?.events) ? matchedOrder.events : []),
+        ...(Array.isArray(matchedLead?.events) ? matchedLead.events : [])
+      ];
+      for (const ev of events) {
+        const delivs = Array.isArray(ev?.deliverables) ? ev.deliverables : Array.isArray(ev?.deliverables_list) ? ev.deliverables_list : [];
+        for (const d of delivs) {
+          if (typeof d === 'object' && d !== null) {
+            const dId = String(d.id || d.deliverable_id || '').trim().toLowerCase();
+            if (dId && dId === cleanId) {
+              return String(d.name || d.deliverable || d.text || d.title || '').trim();
+            }
+          }
+        }
+      }
+      return '';
+    };
+
+    const sanitizeSingle = (val: any): string => {
+      if (!val) return '';
+      if (typeof val === 'object' && val !== null) {
+        return sanitizeSingle(val.name || val.deliverable || val.text || val.title || val.deliverable_name || val.label || '');
+      }
+      let str = String(val).trim();
+      // Remove leading bullets or asterisks
+      str = str.replace(/^[\*\-•xX×]\s*/, '').trim();
+
+      // Check if raw JSON string
+      if ((str.startsWith('{') && str.endsWith('}')) || (str.startsWith('[') && str.endsWith(']'))) {
+        try {
+          const parsed = JSON.parse(str);
+          if (parsed && typeof parsed === 'object') {
+            return sanitizeSingle(parsed.name || parsed.deliverable || parsed.title || parsed.text || '');
+          }
+        } catch (e) {}
+      }
+
+      // If it looks like a cryptic internal ID (UUID or DEL-xxx, EDR-xxx)
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) || /^(?:EDR|DEL|EVT|ORD|TRK|PRD)-[A-Za-z0-9_-]+$/i.test(str)) {
+        const lookedUp = lookupDeliverableNameById(str);
+        if (lookedUp) return lookedUp;
+        return '';
+      }
+
+      return str;
+    };
+
+    let rawList: any[] = [];
+
+    // 1. Check a.deliverables / (a as any).deliverable
+    const rawDelivs = a.deliverables || (a as any).deliverable;
+    if (Array.isArray(rawDelivs)) {
+      rawList.push(...rawDelivs);
+    } else if (rawDelivs && typeof rawDelivs === 'string') {
+      const trimmed = rawDelivs.trim();
+      if (trimmed.startsWith('[') || trimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            rawList.push(...parsed);
+          } else if (parsed && typeof parsed === 'object') {
+            if (Array.isArray(parsed.deliverables)) {
+              rawList.push(...parsed.deliverables);
+            } else {
+              rawList.push(parsed);
+            }
+          }
+        } catch (e) {
+          rawList.push(...trimmed.split(/[,;\n]/));
+        }
+      } else {
+        rawList.push(...trimmed.split(/[,;\n]/));
+      }
+    }
+
+    // 2. Check a.speciality
+    if (a.speciality) {
+      const specTrimmed = String(a.speciality).trim();
+      if (specTrimmed.startsWith('[') || specTrimmed.startsWith('{')) {
+        try {
+          const parsed = JSON.parse(specTrimmed);
+          if (Array.isArray(parsed)) {
+            rawList.push(...parsed);
+          } else if (parsed && typeof parsed === 'object') {
+            rawList.push(parsed);
+          }
+        } catch (e) {
+          rawList.push(...specTrimmed.split(/[,;\n]/));
+        }
+      } else if (specTrimmed.includes(',') || specTrimmed.includes(';') || specTrimmed.includes('\n')) {
+        rawList.push(...specTrimmed.split(/[,;\n]/));
+      } else {
+        rawList.push(specTrimmed);
+      }
+    }
+
+    // 3. Check a.deliverable_id
+    if (a.deliverable_id && rawList.length === 0) {
+      const lookedUp = lookupDeliverableNameById(a.deliverable_id);
+      if (lookedUp) rawList.push(lookedUp);
+    }
+
+    // Sanitize, deduplicate, and clean
+    const result: string[] = [];
+    const seen = new Set<string>();
+
+    for (const item of rawList) {
+      const cleaned = sanitizeSingle(item);
+      if (cleaned && cleaned !== 'null' && cleaned !== 'undefined' && cleaned !== '[object Object]' && cleaned !== '—') {
+        const lower = cleaned.toLowerCase();
+        if (!seen.has(lower)) {
+          seen.add(lower);
+          result.push(cleaned);
+        }
+      }
+    }
+
+    if (result.length > 0) {
+      return result;
+    }
+
+    return ['Deliverable'];
+  }, []);
+
+  // Helper to resolve row display data for assigned and completed tasks
+  const resolveTaskRowData = useCallback((a: any) => {
+    const correlatedProj = (production || []).find(p => 
+      p.production_id === a.production_id || 
+      p.tracking_id === a.production_id || 
+      p.order_id === a.production_id ||
+      (a.order_id && (p.order_id === a.order_id || p.tracking_id === a.order_id))
+    );
+    const orderDetails = getRowOrderDetails(correlatedProj || { production_id: a.production_id, order_id: a.order_id });
+    const matchedOrder = (orders || []).find(o => 
+      (a.order_id && o.order_id === a.order_id) || 
+      (orderDetails?.order_id && o.order_id === orderDetails.order_id) ||
+      (correlatedProj?.tracking_id && o.order_id === correlatedProj.tracking_id)
+    );
+    const matchedLead = (leadsData || leads || []).find(l => 
+      (matchedOrder?.lead_id && l.lead_id === matchedOrder.lead_id) || 
+      (orderDetails?.foundLead?.lead_id && l.lead_id === orderDetails.foundLead.lead_id) || 
+      (a.production_id && l.lead_id === a.production_id) || 
+      (correlatedProj?.lead_id && l.lead_id === correlatedProj.lead_id)
+    );
+
+    const rawOrderId = matchedOrder?.order_id || orderDetails?.order_id || a.order_id || correlatedProj?.order_id || correlatedProj?.tracking_id || '';
+    const orderId = (rawOrderId && rawOrderId !== 'NULL' && rawOrderId !== 'NIL' && !rawOrderId.startsWith('TRK-'))
+      ? rawOrderId 
+      : (a.order_id || rawOrderId || '—');
+
+    const customerName = matchedOrder?.customer_name || 
+                         matchedOrder?.client_name || 
+                         orderDetails?.customer_name || 
+                         matchedLead?.customer_name || 
+                         matchedLead?.client_name || 
+                         correlatedProj?.customer_name || 
+                         'Client';
+
+    const deliverablesList = extractDeliverablesFromAssignment(a, correlatedProj, matchedOrder, matchedLead);
+    const deliverable = deliverablesList[0] || 'Deliverable';
+
+    const startDateRaw = a.assigned_date || a.created_at || (a as any).start_date || correlatedProj?.created_at || '';
+    const startDate = startDateRaw ? (formatDateDDMMYY(startDateRaw) || startDateRaw) : '—';
+
+    const targetDateRaw = a.target_finish_date || 
+                          (a as any).target_delivery_date || 
+                          correlatedProj?.target_delivery_date || 
+                          correlatedProj?.expected_delivery_date || 
+                          matchedOrder?.target_delivery_date || 
+                          '';
+    const targetDeliveryDate = targetDateRaw ? (formatDateDDMMYY(targetDateRaw) || targetDateRaw) : '—';
+
+    const completedDateRaw = a.server_upload_confirmed_at || 
+                             a.completed_at || 
+                             (a as any).completed_date || 
+                             a.updated_at || 
+                             correlatedProj?.completed_at || 
+                             correlatedProj?.updated_at || 
+                             a.target_finish_date || 
+                             '';
+    const completedDate = completedDateRaw ? (formatDateDDMMYY(completedDateRaw) || completedDateRaw) : '—';
+
+    const taskStatus = a.status || correlatedProj?.editing_status || 'Assigned';
+
+    return {
+      assignmentId: a.assignment_id || a.id,
+      orderId,
+      customerName,
+      deliverable,
+      deliverablesList,
+      startDate,
+      targetDeliveryDate,
+      completedDate,
+      status: taskStatus,
+      rawAssignment: a,
+      correlatedProj,
+      matchedOrder,
+      matchedLead
+    };
+  }, [production, orders, leadsData, leads, extractDeliverablesFromAssignment]);
+
+  // Helper to find production record to trigger Assign Editor popup
+  const findProdForTask = useCallback((rawAssignment: any) => {
+    if (!rawAssignment) return null;
+    let prod = (leads || []).find(p => {
+      const o = getRowOrderDetails(p);
+      return (rawAssignment.order_id && (o?.order_id === rawAssignment.order_id || (p as any).order_id === rawAssignment.order_id || p.tracking_id === rawAssignment.order_id || p.production_id === rawAssignment.order_id)) ||
+             (rawAssignment.production_id && (p.production_id === rawAssignment.production_id || p.tracking_id === rawAssignment.production_id));
+    });
+    if (!prod) {
+      prod = (production || []).find(p => {
+        return (rawAssignment.production_id && (p.production_id === rawAssignment.production_id || p.tracking_id === rawAssignment.production_id)) ||
+               (rawAssignment.order_id && (p.order_id === rawAssignment.order_id || p.tracking_id === rawAssignment.order_id || p.production_id === rawAssignment.order_id));
+      });
+    }
+    if (!prod && orders && rawAssignment.order_id) {
+      const ord = orders.find(o => o.order_id === rawAssignment.order_id);
+      if (ord) {
+        prod = (leads || []).find(p => p.tracking_id === ord.lead_id || (p as any).order_id === ord.order_id) ||
+               (production || []).find(p => p.tracking_id === ord.lead_id || (p as any).order_id === ord.order_id);
+      }
+    }
+    return prod;
+  }, [leads, production, orders]);
 
   // Form states for Staff
   const [staffFormName, setStaffFormName] = useState('');
@@ -1737,6 +2024,38 @@ ${coordinatorName}`;
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [masterOrderIdForDetail, setMasterOrderIdForDetail] = useState<string | null>(null);
 
+  // Logged-in Production Manager mobile computation for Production Leads header
+  const loggedInProductionManagerMobile = useMemo(() => {
+    if (currentUser?.mobile) return currentUser.mobile;
+    if ((currentUser as any)?.phone) return (currentUser as any).phone;
+
+    const matchedProdStaff = (productionStaff || []).find((s: any) =>
+      (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) ||
+      (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+    if (matchedProdStaff?.mobile) return matchedProdStaff.mobile;
+    if ((matchedProdStaff as any)?.phone) return (matchedProdStaff as any).phone;
+
+    const matchedStaff = (staff || []).find((s: any) =>
+      (s.mobile && currentUser?.mobile && s.mobile === currentUser.mobile) ||
+      (s.email && currentUser?.email && s.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (s.name && currentUser?.name && s.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+    if (matchedStaff?.mobile) return matchedStaff.mobile;
+    if ((matchedStaff as any)?.phone) return (matchedStaff as any).phone;
+
+    const matchedUser = (users || []).find((u: any) =>
+      (u.mobile && currentUser?.mobile && u.mobile === currentUser.mobile) ||
+      (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+      (u.name && currentUser?.name && u.name.trim().toLowerCase() === currentUser.name.trim().toLowerCase())
+    );
+    if (matchedUser?.mobile) return matchedUser.mobile;
+    if ((matchedUser as any)?.phone) return (matchedUser as any).phone;
+
+    return '';
+  }, [currentUser, productionStaff, staff, users]);
+
   // Production Leads UI Search/Filter States
   const [leadSearch, setLeadSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('All');
@@ -1781,7 +2100,8 @@ ${coordinatorName}`;
     updateDeliveryStatusMenuPosition();
 
     const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
-      const target = e.target as Node;
+      const target = e.target;
+      if (!target || !(target instanceof Node)) return;
       if (
         deliveryStatusBtnRef.current &&
         !deliveryStatusBtnRef.current.contains(target) &&
@@ -1822,7 +2142,7 @@ ${coordinatorName}`;
   const [appliedEndDate, setAppliedEndDate] = useState('');
 
   // Active Analytics card click filter (All | Card types)
-  const [activeCardFilter, setActiveCardFilter] = useState<'All' | 'new_projects_received' | 'in_progress_edit' | 'client_approved' | 'client_not_approved' | 'total_projects_completed'>('All');
+  const [activeCardFilter, setActiveCardFilter] = useState<'All' | 'new_projects_received' | 'editing_started' | 'customer_review' | 'editing_completed' | 'client_acceptance'>('All');
 
   // Dynamic Editor assignment selection mode: Single vs Multiple
   const [assignmentMode, setAssignmentMode] = useState<'single' | 'multiple'>('single');
@@ -2619,40 +2939,49 @@ Production Team`;
   };
 
   // Matching helper functions for custom analytics card groupings (matching raw & standardized)
+  const isClientAcceptance = (prod: Production) => {
+    const autoS = getAutomatedProductionStatus(prod);
+    const s = getProductionStatus(prod);
+    const raw = (prod.editing_status || '') as string;
+    return autoS === 'Client Acceptance' || s === 'Client Acceptance' || s === 'Final Approval' || s === 'Project Delivered' || s === 'Order Closed' || s === 'Completed' ||
+           ['Client Acceptance', 'Client Accepted', 'Approved', 'Final Approval', 'Delivered', 'Project Delivered', 'Completed', 'Project Completed', 'Order Closed', 'Closed', 'Project Closed'].includes(raw);
+  };
+
+  const isEditingCompleted = (prod: Production) => {
+    if (isClientAcceptance(prod)) return false;
+    const autoS = getAutomatedProductionStatus(prod);
+    const s = getProductionStatus(prod);
+    const raw = (prod.editing_status || '') as string;
+    return autoS === 'Editing Completed' || s === 'Editing Completed' ||
+           ['Editing Completed', 'Editing Complete'].includes(raw);
+  };
+
+  const isCustomerReview = (prod: Production) => {
+    if (isClientAcceptance(prod) || isEditingCompleted(prod)) return false;
+    const autoS = getAutomatedProductionStatus(prod);
+    const s = getProductionStatus(prod);
+    const raw = (prod.editing_status || '') as string;
+    return autoS === 'Customer Review' || s === 'Customer Review' || s === 'Client Review Sent' ||
+           ['Customer Review', 'Client Review', 'Client Review Sent', 'Ready For Review', 'Revision Required', 'Revision'].includes(raw);
+  };
+
+  const isEditingStarted = (prod: Production) => {
+    if (isClientAcceptance(prod) || isEditingCompleted(prod) || isCustomerReview(prod)) return false;
+    const autoS = getAutomatedProductionStatus(prod);
+    const s = getProductionStatus(prod);
+    const raw = (prod.editing_status || '') as string;
+    return autoS === 'Editing Started' || s === 'Editing Started' || s === 'Internal QC Review' ||
+           ['Editing Started', 'Editing', 'Editing In Progress', 'In Progress', 'Internal QC Review', 'Revision In Progress'].includes(raw);
+  };
+
   const isNewProject = (prod: Production) => {
-    const s = getProductionStatus(prod);
+    if (isClientAcceptance(prod) || isEditingCompleted(prod) || isCustomerReview(prod) || isEditingStarted(prod)) return false;
     const autoS = getAutomatedProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Raw Footage Received' || s === 'Verified Footage' || s === 'Assigned Editor' || s === 'Editor Assigned' ||
-           autoS === 'Raw Footage Received' || autoS === 'Assigned Editor' || autoS === 'Editor Assigned' || autoS === 'Verified Footage' ||
-           ['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Editor Assigned', 'Assigned Editor', 'Pending', 'Footage Handover'].includes(raw);
-  };
-
-  const isInProgressEdit = (prod: Production) => {
     const s = getProductionStatus(prod);
-    const autoS = getAutomatedProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Editing Started' || s === 'Editing In Progress' || s === 'Internal QC Review' || s === 'Assigned Editor' || s === 'Editor Assigned' ||
-           autoS === 'Editing Started' || autoS === 'Customer Review' || autoS === 'Editing Completed' || autoS === 'Assigned Editor' ||
-           ['Editing Started', 'Editing', 'Editing In Progress', 'Internal QC Review', 'Assigned Editor', 'Editor Assigned'].includes(raw);
-  };
-
-  const isClientApproved = (prod: Production) => {
-    const s = getProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Final Approval' || s === 'Project Delivered' || s === 'Completed' || raw === 'Approved' || raw === 'Final Approval' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Payment Pending' || raw === 'Client Acceptance' || raw === 'Order Closed' || s === 'Order Closed';
-  };
-
-  const isClientNotApproved = (prod: Production) => {
-    const s = getProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Client Review Sent' || s === 'Revision Required' || s === 'Revision In Progress' || raw === 'Ready For Review' || raw === 'Client Review Sent' || raw === 'Customer Review' || raw === 'Revision Required' || raw === 'Revision In Progress';
-  };
-
-  const isTotalProjectsCompleted = (prod: Production) => {
-    const s = getProductionStatus(prod);
-    const raw = prod.editing_status as string;
-    return s === 'Project Delivered' || s === 'Completed' || raw === 'Delivered' || raw === 'Project Delivered' || raw === 'Closed' || raw === 'Project Closed' || raw === 'Completed' || raw === 'Project Completed' || s === 'Project Completed' || raw === 'Project Cancelled' || s === 'Project Cancelled' || raw === 'Order Closed' || s === 'Order Closed';
+    const raw = (prod.editing_status || '') as string;
+    return autoS === 'Verified Footage' || autoS === 'Raw Footage Received' || autoS === 'Assigned Editor' ||
+           s === 'Verified Footage' || s === 'Raw Footage Received' || s === 'Assigned Editor' ||
+           ['Raw Footage Received', 'Verified Footage', 'Footage Handover Verified', 'Editor Assigned', 'Assigned Editor', 'Pending', 'Footage Handover', 'New Project', 'New Project Arrived'].includes(raw);
   };
 
   // Base list filtered by applied date range, customer name, and order ID
@@ -2680,10 +3009,10 @@ Production Team`;
 
   // Computed counts for the five distinct analytics cards
   const countNewProjects = useMemo(() => filteredLeadsList.filter(isNewProject).length, [filteredLeadsList]);
-  const countInProgressEdit = useMemo(() => filteredLeadsList.filter(isInProgressEdit).length, [filteredLeadsList]);
-  const countClientApproved = useMemo(() => filteredLeadsList.filter(isClientApproved).length, [filteredLeadsList]);
-  const countClientNotApproved = useMemo(() => filteredLeadsList.filter(isClientNotApproved).length, [filteredLeadsList]);
-  const countTotalCompleted = useMemo(() => filteredLeadsList.filter(isTotalProjectsCompleted).length, [filteredLeadsList]);
+  const countEditingStarted = useMemo(() => filteredLeadsList.filter(isEditingStarted).length, [filteredLeadsList]);
+  const countCustomerReview = useMemo(() => filteredLeadsList.filter(isCustomerReview).length, [filteredLeadsList]);
+  const countEditingCompleted = useMemo(() => filteredLeadsList.filter(isEditingCompleted).length, [filteredLeadsList]);
+  const countClientAcceptance = useMemo(() => filteredLeadsList.filter(isClientAcceptance).length, [filteredLeadsList]);
 
   // Report download utilities
   const downloadCSVReport = () => {
@@ -4033,11 +4362,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
   });
 
   // Calculate stats for pipeline counters
-  const statTotalVideo = leads.length;
-  const statPendingVideo = (leads || []).filter(p => ['Pending', 'New Raw Footage Arrived', 'Raw Footage Received', 'Editor Assigned', 'Verified Footage', 'Footage Handover Verified'].includes(p.editing_status)).length;
-  const statEditingVideo = (leads || []).filter(p => ['Editing Started', 'Editing In Progress', 'Editing'].includes(p.editing_status)).length;
-  const statReviewVideo = (leads || []).filter(p => ['Internal QC Review', 'Client Review Sent', 'Customer Review', 'Ready For Review', 'Revision Required', 'Revision In Progress'].includes(p.editing_status)).length;
-  const statApprovedVideo = (leads || []).filter(p => ['Approved', 'Final Approval'].includes(p.editing_status)).length;
+  const statPendingVideo = (leads || []).filter(isNewProject).length;
+  const statEditingVideo = (leads || []).filter(isEditingStarted).length;
+  const statReviewVideo = (leads || []).filter(isCustomerReview).length;
+  const statCompletedVideo = (leads || []).filter(isEditingCompleted).length;
+  const statApprovedVideo = (leads || []).filter(isClientAcceptance).length;
 
   const visibleProduction = leads;
 
@@ -4126,10 +4455,24 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {activeSubTab === 'production_leads' && (
         <div className="space-y-6 animate-fade-in text-zinc-100">
           
+          {/* Production Leads Header / Production Manager User Info */}
+          <div className="border-b border-zinc-900 pb-5">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-white font-sans tracking-tight">
+                Production Manager
+              </h1>
+              {loggedInProductionManagerMobile && (
+                <p className="text-xs sm:text-sm font-mono text-zinc-400 mt-1">
+                  {loggedInProductionManagerMobile}
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* Dashboard Widgets specific to Production Leads */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+          <div className={`grid grid-cols-2 sm:grid-cols-3 ${currentRole === 'Production Staff' ? 'md:grid-cols-4' : 'md:grid-cols-5'} gap-4`}>
             <CameraLensStatsCard
-              label="New Projects Received"
+              label="New Project Received"
               val={countNewProjects}
               theme="blue"
               trendText="Ready Ingest"
@@ -4141,53 +4484,55 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               lensLabel="AF-BLUE 50"
             />
             <CameraLensStatsCard
-              label="In Progress Edit"
-              val={countInProgressEdit}
+              label="Editing Started"
+              val={countEditingStarted}
               theme="purple"
               trendText="Active Cutting"
               subText="AF focus"
-              chartPoints={[15, 10, 19, 14, 22, 18, countInProgressEdit || 5]}
+              chartPoints={[15, 10, 19, 14, 22, 18, countEditingStarted || 5]}
               activeFilterValue={activeCardFilter}
-              currentFilterValue="in_progress_edit"
-              onClick={() => setActiveCardFilter(activeCardFilter === 'in_progress_edit' ? 'All' : 'in_progress_edit')}
+              currentFilterValue="editing_started"
+              onClick={() => setActiveCardFilter(activeCardFilter === 'editing_started' ? 'All' : 'editing_started')}
               lensLabel="V-EDIT 35"
             />
             <CameraLensStatsCard
-              label="Client Approved"
-              val={countClientApproved}
-              theme="green"
-              trendText="Approved Gallery"
-              subText="AF focus"
-              chartPoints={[8, 15, 12, 20, 16, 25, countClientApproved || 5]}
-              activeFilterValue={activeCardFilter}
-              currentFilterValue="client_approved"
-              onClick={() => setActiveCardFilter(activeCardFilter === 'client_approved' ? 'All' : 'client_approved')}
-              lensLabel="M-GREEN 85"
-            />
-            <CameraLensStatsCard
-              label="Client Not Approved"
-              val={countClientNotApproved}
+              label="Customer Review"
+              val={countCustomerReview}
               theme="gold"
-              trendText="Revision Loop"
+              trendText="Client Feedback"
               subText="AF focus"
-              chartPoints={[5, 9, 7, 14, 11, 16, countClientNotApproved || 5]}
+              chartPoints={[5, 9, 7, 14, 11, 16, countCustomerReview || 5]}
               activeFilterValue={activeCardFilter}
-              currentFilterValue="client_not_approved"
-              onClick={() => setActiveCardFilter(activeCardFilter === 'client_not_approved' ? 'All' : 'client_not_approved')}
+              currentFilterValue="customer_review"
+              onClick={() => setActiveCardFilter(activeCardFilter === 'customer_review' ? 'All' : 'customer_review')}
               lensLabel="QC-GOLD 24"
             />
             <CameraLensStatsCard
-              label="Total Projects Completed"
-              val={countTotalCompleted}
-              theme="cyan"
-              trendText="Delivered Vault"
+              label="Editing Completed"
+              val={countEditingCompleted}
+              theme="green"
+              trendText="Master Cuts"
               subText="AF focus"
-              chartPoints={[12, 18, 15, 26, 22, 34, countTotalCompleted || 5]}
+              chartPoints={[8, 15, 12, 20, 16, 25, countEditingCompleted || 5]}
               activeFilterValue={activeCardFilter}
-              currentFilterValue="total_projects_completed"
-              onClick={() => setActiveCardFilter(activeCardFilter === 'total_projects_completed' ? 'All' : 'total_projects_completed')}
-              lensLabel="C-GLASS 70"
+              currentFilterValue="editing_completed"
+              onClick={() => setActiveCardFilter(activeCardFilter === 'editing_completed' ? 'All' : 'editing_completed')}
+              lensLabel="M-GREEN 85"
             />
+            {currentRole !== 'Production Staff' && (
+              <CameraLensStatsCard
+                label="Client Acceptance"
+                val={countClientAcceptance}
+                theme="cyan"
+                trendText="Delivered Vault"
+                subText="AF focus"
+                chartPoints={[12, 18, 15, 26, 22, 34, countClientAcceptance || 5]}
+                activeFilterValue={activeCardFilter}
+                currentFilterValue="client_acceptance"
+                onClick={() => setActiveCardFilter(activeCardFilter === 'client_acceptance' ? 'All' : 'client_acceptance')}
+                lensLabel="C-GLASS 70"
+              />
+            )}
           </div>
 
           {/* Advanced Search & Filter Center Toggle */}
@@ -4220,11 +4565,11 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 <div className="flex items-center gap-2 self-start bg-amber-400/10 text-amber-300 border border-amber-400/10 rounded-lg px-3 py-1.5 text-xs font-mono">
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
                   <span>Active Focus: <strong>{
-                    activeCardFilter === 'new_projects_received' ? 'New Projects Received Only' :
-                    activeCardFilter === 'in_progress_edit' ? 'In Progress Edit Only' :
-                    activeCardFilter === 'client_approved' ? 'Client Approved Only' :
-                    activeCardFilter === 'client_not_approved' ? 'Client Not Approved Only' :
-                    'Total Projects Completed Only'
+                    activeCardFilter === 'new_projects_received' ? 'New Project Received Only' :
+                    activeCardFilter === 'editing_started' ? 'Editing Started Only' :
+                    activeCardFilter === 'customer_review' ? 'Customer Review Only' :
+                    activeCardFilter === 'editing_completed' ? 'Editing Completed Only' :
+                    'Client Acceptance Only'
                   }</strong></span>
                   <button 
                     onClick={() => setActiveCardFilter('All')} 
@@ -4687,10 +5032,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       // Active Card filtration
                       if (activeCardFilter && activeCardFilter !== 'All') {
                         if (activeCardFilter === 'new_projects_received' && !isNewProject(prod)) return false;
-                        if (activeCardFilter === 'in_progress_edit' && !isInProgressEdit(prod)) return false;
-                        if (activeCardFilter === 'client_approved' && !isClientApproved(prod)) return false;
-                        if (activeCardFilter === 'client_not_approved' && !isClientNotApproved(prod)) return false;
-                        if (activeCardFilter === 'total_projects_completed' && !isTotalProjectsCompleted(prod)) return false;
+                        if (activeCardFilter === 'editing_started' && !isEditingStarted(prod)) return false;
+                        if (activeCardFilter === 'customer_review' && !isCustomerReview(prod)) return false;
+                        if (activeCardFilter === 'editing_completed' && !isEditingCompleted(prod)) return false;
+                        if (activeCardFilter === 'client_acceptance' && !isClientAcceptance(prod)) return false;
                       }
 
                       // Delivery Status filtration
@@ -6334,13 +6679,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
       {activeSubTab === 'pipeline' && (
         <div className="space-y-6">
           {/* Production Team Dashboard KPI Panel */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5">
+          <div className={`grid grid-cols-2 sm:grid-cols-3 ${currentRole === 'Production Staff' ? 'md:grid-cols-4' : 'md:grid-cols-5'} gap-3.5`}>
             {[
-              { label: 'Total Projects', val: statTotalVideo, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: Layers },
-              { label: 'Pending Raw Ingest', val: statPendingVideo, color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/20', icon: Clock },
+              { label: 'New Project Received', val: statPendingVideo, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/20', icon: Clock },
               { label: 'Editing Started', val: statEditingVideo, color: 'text-sky-400', bg: 'bg-sky-500/10 border-sky-500/20', icon: Play },
               { label: 'Customer Review', val: statReviewVideo, color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20', icon: Eye },
-              { label: 'Release Approved', val: statApprovedVideo, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: CheckCircle2 },
+              { label: 'Editing Completed', val: statCompletedVideo, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: Layers },
+              ...(currentRole !== 'Production Staff' ? [{ label: 'Client Acceptance', val: statApprovedVideo, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: CheckCircle2 }] : []),
             ].map((kpi, idx) => {
               const IconComponent = kpi.icon;
               return (
@@ -7647,60 +7992,70 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
               <table className="w-full text-left border-collapse min-w-max">
                 <thead>
                   <tr className="bg-zinc-900/50 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
-                    <th className="px-3 py-3 font-bold text-center w-16 min-w-[64px] whitespace-nowrap">S.NO</th>
+                    <th className="px-3 py-3 font-bold text-center w-16 min-w-[64px] whitespace-nowrap">S.No</th>
                     <th className="px-4 py-3 font-bold">Staff Name</th>
-                    <th className="px-4 py-3 font-bold">Order ID</th>
-                    <th className="px-4 py-3 font-bold">Assigned Tasks</th>
-                    <th className="px-4 py-3 font-bold">Date Assigned</th>
-                    <th className="px-4 py-3 font-bold">Delivery Target Date</th>
+                    <th className="px-4 py-3 font-bold text-center">Assigned Tasks</th>
+                    <th className="px-4 py-3 font-bold text-center">Completed Task</th>
                     <th className="px-4 py-3 font-bold">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
                   {(() => {
-                    // Build integrated roster rows for the Staff Roster table from assigned editors
+                    // Build consolidated roster rows for the Staff Roster table
                     const groupedRoster = new Map<string, any>();
-                    [...(editorAssignments || [])].forEach(assign => {
-                      const correlatedProj = (production || []).find(p => p.production_id === assign.production_id || p.tracking_id === assign.production_id || (p as any).order_id === assign.production_id || p.production_id === assign.order_id);
-                      const order = getRowOrderDetails(correlatedProj || { production_id: assign.production_id, order_id: assign.order_id });
-                      const orderId = order?.order_id && order?.order_id !== 'NULL' && order?.order_id !== 'NIL' && !order?.order_id.startsWith('TRK-') ? order?.order_id : (order?.order_id || correlatedProj?.tracking_id || 'N/A');
-                      
-                      const staffName = assign.staff_name || 'Unassigned';
-                      const isCompleted = assign.status === 'Completed';
-                      
-                      if (!groupedRoster.has(staffName)) {
-                        groupedRoster.set(staffName, {
-                          staffName: staffName,
-                          orderId: orderId,
-                          dateAssigned: assign.assigned_date || '—',
-                          deliveryTargetDate: assign.target_finish_date || '—',
-                          status: assign.status,
-                          speciality: assign.speciality || 'Editor',
-                          eventName: order?.event_type || order?.custom_event_name || 'Project',
-                          assignedTasks: isCompleted ? 0 : 1,
-                          assignmentId: assign.assignment_id, // just for sorting
-                          latestAssignmentTime: new Date(assign.assigned_date || 0).getTime()
-                        });
-                      } else {
-                        const existing = groupedRoster.get(staffName);
-                        if (!isCompleted) {
-                            existing.assignedTasks += 1;
-                        }
-                        
-                        const assignTime = new Date(assign.assigned_date || 0).getTime();
-                        if (assignTime > existing.latestAssignmentTime) {
-                           existing.orderId = orderId;
-                           existing.dateAssigned = assign.assigned_date || '—';
-                           existing.deliveryTargetDate = assign.target_finish_date || '—';
-                           existing.status = assign.status;
-                           existing.speciality = assign.speciality || 'Editor';
-                           existing.eventName = order?.event_type || order?.custom_event_name || 'Project';
-                           existing.latestAssignmentTime = assignTime;
-                           existing.assignmentId = assign.assignment_id;
+
+                    // 1. Populate registered production staff
+                    (productionStaff || []).forEach(staff => {
+                      if (staff.name && staff.name.trim()) {
+                        const sName = staff.name.trim();
+                        const key = sName.toLowerCase();
+                        if (!groupedRoster.has(key)) {
+                          groupedRoster.set(key, {
+                            staffName: sName,
+                            speciality: staff.production_role_speciality || (Array.isArray(staff.Skill) ? staff.Skill.join(', ') : staff.Skill) || 'Editor',
+                            status: staff.status || 'Active',
+                            assignedTasks: 0,
+                            completedTasks: 0,
+                            assignmentId: staff.staff_id,
+                            latestAssignmentTime: 0
+                          });
                         }
                       }
                     });
-                    
+
+                    // 2. Aggregate tasks from editor assignments
+                    [...(editorAssignments || [])].forEach(assign => {
+                      const staffName = (assign.staff_name || '').trim();
+                      if (!staffName || staffName.toLowerCase() === 'unassigned') return;
+                      const staffKey = staffName.toLowerCase();
+
+                      const isCompleted = isTaskCompleted(assign);
+                      const isActive = isTaskActive(assign);
+
+                      if (!groupedRoster.has(staffKey)) {
+                        groupedRoster.set(staffKey, {
+                          staffName: staffName,
+                          speciality: assign.speciality || 'Editor',
+                          status: assign.status || 'Active',
+                          assignedTasks: isActive ? 1 : 0,
+                          completedTasks: isCompleted ? 1 : 0,
+                          assignmentId: assign.assignment_id,
+                          latestAssignmentTime: new Date(assign.assigned_date || assign.created_at || 0).getTime()
+                        });
+                      } else {
+                        const existing = groupedRoster.get(staffKey);
+                        if (isActive) {
+                          existing.assignedTasks += 1;
+                        } else if (isCompleted) {
+                          existing.completedTasks += 1;
+                        }
+                        const assignTime = new Date(assign.assigned_date || assign.created_at || 0).getTime();
+                        if (assignTime > existing.latestAssignmentTime) {
+                          existing.latestAssignmentTime = assignTime;
+                        }
+                      }
+                    });
+
                     const rosterRows = Array.from(groupedRoster.values());
 
                     // Filter roster rows by search query and status dropdown
@@ -7708,9 +8063,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       const searchLower = rosterSearch.toLowerCase();
                       const matchesSearch = !rosterSearch || 
                         row.staffName.toLowerCase().includes(searchLower) ||
-                        row.orderId.toLowerCase().includes(searchLower) ||
-                        row.speciality.toLowerCase().includes(searchLower) ||
-                        row.eventName.toLowerCase().includes(searchLower);
+                        row.speciality.toLowerCase().includes(searchLower);
 
                       const matchesStatus = rosterStatusFilter === 'All' || 
                         row.status.toLowerCase() === rosterStatusFilter.toLowerCase();
@@ -7718,20 +8071,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       return matchesSearch && matchesStatus;
                     });
 
-                    // Sort: Latest assigned staff at the top (descending by date/ID)
+                    // Sort: Staff with active workload/latest tasks at top, then alphabetical
                     const sortedRosterRows = [...filteredRosterRows].sort((a, b) => {
-                      const dateA = a.dateAssigned !== '—' ? new Date(a.dateAssigned).getTime() : 0;
-                      const dateB = b.dateAssigned !== '—' ? new Date(b.dateAssigned).getTime() : 0;
-                      if (dateA !== dateB && dateA > 0 && dateB > 0) return dateB - dateA;
-                      const ordComp = String(b.orderId || '').localeCompare(String(a.orderId || ''), undefined, { numeric: true, sensitivity: 'base' });
-                      if (ordComp !== 0) return ordComp;
-                      return String(b.assignmentId).localeCompare(String(a.assignmentId), undefined, { numeric: true, sensitivity: 'base' });
+                      if (b.assignedTasks !== a.assignedTasks) return b.assignedTasks - a.assignedTasks;
+                      if (b.completedTasks !== a.completedTasks) return b.completedTasks - a.completedTasks;
+                      if (b.latestAssignmentTime !== a.latestAssignmentTime) return b.latestAssignmentTime - a.latestAssignmentTime;
+                      return a.staffName.localeCompare(b.staffName);
                     });
 
                     if (sortedRosterRows.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
+                          <td colSpan={5} className="px-4 py-8 text-center text-zinc-500 font-mono text-xs">
                             No matching roster entries found.
                           </td>
                         </tr>
@@ -7740,53 +8091,51 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
 
                     return sortedRosterRows.map((row, idx) => {
                       return (
-                        <tr key={`assign-${row.assignmentId}`} className="hover:bg-zinc-900/30 transition-colors">
-                          {/* S.No */}
+                        <tr key={`assign-${row.staffName}-${idx}`} className="hover:bg-zinc-900/30 transition-colors">
+                          {/* 1. S.No */}
                           <td className="px-3 py-3 font-mono text-zinc-400 text-center text-xs font-bold w-16 min-w-[64px] whitespace-nowrap">
                             {idx + 1}
                           </td>
-                          {/* Staff Name */}
+
+                          {/* 2. Staff Name */}
                           <td className="px-4 py-3 font-medium text-white">
-                            <div className="flex flex-col">
-                              <span>{row.staffName}</span>
-                              <span className="text-[9px] text-zinc-550 font-mono">{row.speciality}</span>
-                            </div>
+                            <span className="font-bold text-zinc-100">{row.staffName}</span>
                           </td>
 
-                          {/* Order ID */}
-                          <td className="px-4 py-3 font-mono text-xs font-bold text-violet-400">
-                            {row.orderId}
-                          </td>
-
-                          {/* Assigned Tasks */}
+                          {/* 3. Assigned Tasks */}
                           <td className="px-4 py-3 text-center">
                             <button
                               type="button"
                               onClick={() => setSelectedStaffForTasks(row.staffName)}
-                              className="text-xs font-bold text-amber-400 hover:text-amber-300 font-mono underline cursor-pointer w-full text-left"
+                              className="inline-flex items-center justify-center min-w-[32px] px-2.5 py-1 text-xs font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 rounded-lg font-mono underline cursor-pointer transition-colors"
+                              title={`View assigned incomplete tasks for ${row.staffName}`}
                             >
                               {row.assignedTasks}
                             </button>
                           </td>
 
-                          {/* Date Assigned */}
-                          <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">
-                            {row.dateAssigned}
+                          {/* 4. Completed Task */}
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStaffForCompletedTasks(row.staffName)}
+                              className="inline-flex items-center justify-center min-w-[32px] px-2.5 py-1 text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-lg font-mono underline cursor-pointer transition-colors"
+                              title={`View completed tasks for ${row.staffName}`}
+                            >
+                              {row.completedTasks}
+                            </button>
                           </td>
 
-                          {/* Delivery Target Date */}
-                          <td className="px-4 py-3 font-mono text-[10px] text-zinc-400">
-                            {row.deliveryTargetDate}
-                          </td>
-
-                          {/* Status */}
+                          {/* 5. Status */}
                           <td className="px-4 py-3">
                             <span className={`inline-block px-2 py-0.5 rounded text-[9px] font-mono font-black uppercase tracking-wider ${
-                              row.status === 'Completed'
+                              row.status === 'Completed' || row.status === 'Active'
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15'
                                 : row.status === 'Revision'
                                   ? 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
-                                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
+                                  : row.status === 'Inactive'
+                                    ? 'bg-zinc-800 text-zinc-500 border border-zinc-700/30'
+                                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/15'
                             }`}>
                               {row.status}
                             </span>
@@ -12214,52 +12563,348 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
         })()}
       </AnimatePresence>
 
-      {/* ASSIGNED TASKS POPUP */}
+      {/* ASSIGNED TASKS COUNT DETAIL MODAL */}
       <AnimatePresence>
         {selectedStaffForTasks && (() => {
-          const staffTasks = [...(editorAssignments || [])].filter(a => 
-            a.staff_name.toLowerCase() === selectedStaffForTasks.toLowerCase() && 
-            isAssignmentActive(a, production || [])
-          );
+          const activeStaffTasks = [...(editorAssignments || [])]
+            .filter(a => {
+              const nameMatch = (a.staff_name || '').trim().toLowerCase() === selectedStaffForTasks.trim().toLowerCase();
+              if (!nameMatch) return false;
+              return isTaskActive(a);
+            })
+            .map(resolveTaskRowData);
 
           return (
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4">
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full w-full max-w-4xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]"
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
               >
                 {/* Header */}
-                <div className="p-5 border-b border-zinc-900 flex justify-between items-center bg-[#0c0d11]">
+                <div className="p-4 sm:p-5 border-b border-zinc-900 flex items-center justify-between bg-[#0c0d11]">
                   <div>
-                    <h3 className="text-sm font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-                      <span>📋</span> Assigned Tasks: {selectedStaffForTasks}
+                    <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <span>📋</span> Assigned Tasks: <span className="text-amber-400">{selectedStaffForTasks}</span>
                     </h3>
+                    <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                      Showing active assigned tasks that are currently not completed.
+                    </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedStaffForTasks(null)}
-                    className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
-                  >
-                    ✕ Close
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg">
+                      {activeStaffTasks.length} {activeStaffTasks.length === 1 ? 'TASK' : 'TASKS'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedStaffForTasks(null);
+                        setActiveDeliverablesDropdown(null);
+                      }}
+                      className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
                 </div>
-                <div className="p-5 overflow-y-auto max-h-[60vh]">
-                  {staffTasks.length === 0 ? (
-                    <p className="text-zinc-500 text-center py-4 text-xs font-mono">No active tasks found for this staff member.</p>
+
+                {/* Body Table */}
+                <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-90px)]">
+                  {activeStaffTasks.length === 0 ? (
+                    <div className="p-8 text-center bg-zinc-950/40 border border-dashed border-zinc-900 rounded-xl text-zinc-500 text-xs font-mono">
+                      No active or incomplete tasks currently assigned to {selectedStaffForTasks}.
+                    </div>
                   ) : (
-                    <div className="space-y-3">
-                      {staffTasks.map(task => (
-                         <div key={task.id} className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl space-y-2">
-                           <div className="flex justify-between items-center">
-                             <span className="font-bold text-white text-xs">Project: {task.production_id}</span>
-                             <span className="text-xs text-emerald-400 font-bold bg-emerald-500/10 px-2 py-1 rounded">{task.status}</span>
-                           </div>
-                           <div className="text-[11px] text-zinc-400 font-mono">Deliverable: {task.deliverables}</div>
-                           <div className="text-[11px] text-zinc-400 font-mono">Event: {task.event_id}</div>
-                         </div>
-                      ))}
+                    <div className="overflow-x-auto touch-pan-x w-full border border-zinc-900 rounded-xl bg-zinc-950/80 shadow-inner">
+                      <table className="w-full text-left border-collapse min-w-[850px]">
+                        <thead>
+                          <tr className="bg-zinc-900/60 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                            <th className="p-3 pl-4 whitespace-nowrap min-w-[120px]">Order ID</th>
+                            <th className="p-3 whitespace-nowrap min-w-[160px]">Customer Name</th>
+                            <th className="p-3 whitespace-nowrap w-[170px] min-w-[170px] max-w-[170px]">Deliverable</th>
+                            <th className="p-3 whitespace-nowrap min-w-[120px]">Start Date</th>
+                            <th className="p-3 whitespace-nowrap min-w-[140px]">Target Delivery Date</th>
+                            <th className="p-3 whitespace-nowrap min-w-[140px]">Current Status of Task</th>
+                            <th className="p-3 pr-4 text-center whitespace-nowrap min-w-[130px]">Assigned / Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
+                          {activeStaffTasks.map((task) => (
+                            <tr key={`active-task-${task.assignmentId}`} className="hover:bg-zinc-900/40 transition-colors">
+                              {/* 1. Order ID */}
+                              <td className="p-3 pl-4 font-mono text-xs font-bold text-violet-400 whitespace-nowrap">
+                                {task.orderId}
+                              </td>
+
+                              {/* 2. Customer Name */}
+                              <td className="p-3 font-sans font-medium text-white whitespace-nowrap">
+                                {task.customerName}
+                              </td>
+
+                              {/* 3. Deliverable */}
+                              {(() => {
+                                const deliverablesList = task.deliverablesList && task.deliverablesList.length > 0 
+                                  ? task.deliverablesList 
+                                  : [task.deliverable || 'Deliverable'];
+                                const hasMultiple = deliverablesList.length > 1;
+                                const firstDeliverable = deliverablesList[0] || 'Deliverable';
+
+                                return (
+                                  <td className="p-3 font-mono text-xs text-zinc-300 w-[170px] min-w-[170px] max-w-[170px] align-middle">
+                                    {hasMultiple ? (
+                                      <div className="flex items-center gap-1.5 max-w-full">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            const popoverWidth = 240;
+                                            let left = rect.left;
+                                            if (left + popoverWidth > window.innerWidth - 16) {
+                                              left = window.innerWidth - popoverWidth - 16;
+                                            }
+                                            if (left < 16) left = 16;
+
+                                            let top = rect.bottom + 6;
+                                            if (top + 180 > window.innerHeight) {
+                                              top = Math.max(16, rect.top - 170);
+                                            }
+
+                                            setActiveDeliverablesDropdown(prev => 
+                                              prev?.taskId === task.assignmentId ? null : {
+                                                taskId: task.assignmentId,
+                                                items: deliverablesList,
+                                                x: left,
+                                                y: top
+                                              }
+                                            );
+                                          }}
+                                          className="group inline-flex items-center gap-1.5 max-w-full text-left cursor-pointer focus:outline-none"
+                                          title={`Click to view all ${deliverablesList.length} deliverables: ${deliverablesList.join(', ')}`}
+                                        >
+                                          <span className="font-semibold text-zinc-200 truncate group-hover:text-purple-300 transition-colors">
+                                            {firstDeliverable}
+                                          </span>
+                                          <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-mono font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded group-hover:bg-purple-500/25 group-hover:border-purple-500/50 transition-colors">
+                                            +{deliverablesList.length - 1}
+                                          </span>
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <div className="max-w-full truncate" title={firstDeliverable}>
+                                        <span className="font-semibold text-zinc-200">
+                                          {firstDeliverable}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                              })()}
+
+                              {/* 4. Start Date */}
+                              <td className="p-3 font-mono text-xs text-zinc-400 whitespace-nowrap">
+                                {task.startDate}
+                              </td>
+
+                              {/* 5. Target Delivery Date */}
+                              <td className="p-3 font-mono text-xs text-zinc-300 whitespace-nowrap">
+                                {task.targetDeliveryDate}
+                              </td>
+
+                              {/* 6. Current Status of Task */}
+                              <td className="p-3 whitespace-nowrap">
+                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider ${
+                                  ['revision', 'revision required', 'revision in progress'].includes(task.status.toLowerCase())
+                                    ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                    : ['in progress', 'editing started', 'editing in progress'].includes(task.status.toLowerCase())
+                                      ? 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+                                      : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                                }`}>
+                                  {task.status}
+                                </span>
+                              </td>
+
+                              {/* 7. Assigned / Action */}
+                              <td className="p-3 pr-4 text-center whitespace-nowrap align-middle">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const prod = findProdForTask(task.rawAssignment);
+                                    if (prod) {
+                                      handleOpenAssignEditor(prod);
+                                    } else {
+                                      openAssignEditorForCalendarItem(task.orderId, task.matchedLead?.lead_id);
+                                    }
+                                  }}
+                                  className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white rounded-md text-[11px] font-mono font-semibold transition-colors cursor-pointer shadow-sm mx-auto whitespace-nowrap leading-tight"
+                                >
+                                  <UserPlus className="w-3 h-3 shrink-0" />
+                                  <span>Assign Editor</span>
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Floating Deliverables Dropdown */}
+                {activeDeliverablesDropdown && (
+                  <div 
+                    className="fixed inset-0 z-[70] bg-transparent"
+                    onClick={() => setActiveDeliverablesDropdown(null)}
+                  >
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        position: 'fixed',
+                        left: `${activeDeliverablesDropdown.x}px`,
+                        top: `${activeDeliverablesDropdown.y}px`,
+                        zIndex: 80,
+                      }}
+                      className="w-64 max-w-[280px] bg-zinc-900/95 backdrop-blur-md border border-zinc-700/80 rounded-xl shadow-2xl p-2.5 font-sans animate-in fade-in zoom-in-95 duration-100"
+                    >
+                      <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800">
+                        <span className="text-[11px] font-mono font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>🎬</span> Deliverables ({activeDeliverablesDropdown.items.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveDeliverablesDropdown(null)}
+                          className="text-zinc-500 hover:text-zinc-300 text-xs px-1 hover:bg-zinc-800 rounded transition cursor-pointer"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <ul className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                        {activeDeliverablesDropdown.items.map((item, idx) => (
+                          <li
+                            key={idx}
+                            className="flex items-start gap-2 text-xs text-zinc-200 bg-zinc-950/60 border border-zinc-800/80 rounded-lg px-2.5 py-1.5"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0 mt-1.5" />
+                            <span className="font-medium break-words leading-tight">{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            </div>
+          );
+        })()}
+      </AnimatePresence>
+
+      {/* COMPLETED TASK COUNT DETAIL MODAL */}
+      <AnimatePresence>
+        {selectedStaffForCompletedTasks && (() => {
+          const completedStaffTasks = [...(editorAssignments || [])]
+            .filter(a => {
+              const nameMatch = (a.staff_name || '').trim().toLowerCase() === selectedStaffForCompletedTasks.trim().toLowerCase();
+              if (!nameMatch) return false;
+              return isTaskCompleted(a);
+            })
+            .map(resolveTaskRowData);
+
+          return (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-zinc-950 border border-zinc-900 rounded-2xl w-full max-w-5xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]"
+              >
+                {/* Header */}
+                <div className="p-4 sm:p-5 border-b border-zinc-900 flex items-center justify-between bg-[#0c0d11]">
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+                      <span>✅</span> Completed Tasks: <span className="text-emerald-400">{selectedStaffForCompletedTasks}</span>
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                      Showing completed tasks including those moved through Editing Completed to Order Close.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold px-2.5 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg">
+                      {completedStaffTasks.length} {completedStaffTasks.length === 1 ? 'TASK' : 'TASKS'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStaffForCompletedTasks(null)}
+                      className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer font-bold text-xs"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+                </div>
+
+                {/* Body Table */}
+                <div className="p-4 sm:p-6 overflow-y-auto max-h-[calc(90vh-90px)]">
+                  {completedStaffTasks.length === 0 ? (
+                    <div className="p-8 text-center bg-zinc-950/40 border border-dashed border-zinc-900 rounded-xl text-zinc-500 text-xs font-mono">
+                      No completed tasks found for {selectedStaffForCompletedTasks}.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto touch-pan-x w-full border border-zinc-900 rounded-xl bg-zinc-950/80 shadow-inner">
+                      <table className="w-full text-left border-collapse min-w-[850px]">
+                        <thead>
+                          <tr className="bg-zinc-900/60 border-b border-zinc-900 font-mono text-[10px] text-zinc-400 uppercase tracking-wider">
+                            <th className="p-3 pl-4 whitespace-nowrap min-w-[120px]">Order ID</th>
+                            <th className="p-3 whitespace-nowrap min-w-[160px]">Customer Name</th>
+                            <th className="p-3 whitespace-nowrap min-w-[150px]">Deliverable</th>
+                            <th className="p-3 whitespace-nowrap min-w-[120px]">Start Date</th>
+                            <th className="p-3 whitespace-nowrap min-w-[140px]">Target Delivery Date</th>
+                            <th className="p-3 whitespace-nowrap min-w-[130px]">Completed Date</th>
+                            <th className="p-3 pr-4 whitespace-nowrap min-w-[140px]">Current Status of Task</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-900 font-sans text-xs text-zinc-300">
+                          {completedStaffTasks.map((task) => (
+                            <tr key={`completed-task-${task.assignmentId}`} className="hover:bg-zinc-900/40 transition-colors">
+                              {/* 1. Order ID */}
+                              <td className="p-3 pl-4 font-mono text-xs font-bold text-violet-400 whitespace-nowrap">
+                                {task.orderId}
+                              </td>
+
+                              {/* 2. Customer Name */}
+                              <td className="p-3 font-sans font-medium text-white whitespace-nowrap">
+                                {task.customerName}
+                              </td>
+
+                              {/* 3. Deliverable */}
+                              <td className="p-3 font-mono text-xs text-zinc-300 whitespace-nowrap">
+                                <span className="font-semibold text-zinc-200">{task.deliverable}</span>
+                              </td>
+
+                              {/* 4. Start Date */}
+                              <td className="p-3 font-mono text-xs text-zinc-400 whitespace-nowrap">
+                                {task.startDate}
+                              </td>
+
+                              {/* 5. Target Delivery Date */}
+                              <td className="p-3 font-mono text-xs text-zinc-300 whitespace-nowrap">
+                                {task.targetDeliveryDate}
+                              </td>
+
+                              {/* 6. Completed Date */}
+                              <td className="p-3 font-mono text-xs text-emerald-400 whitespace-nowrap font-bold">
+                                {task.completedDate}
+                              </td>
+
+                              {/* 7. Current Status of Task */}
+                              <td className="p-3 pr-4 whitespace-nowrap">
+                                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  {task.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>

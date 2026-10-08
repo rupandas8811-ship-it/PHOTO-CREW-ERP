@@ -26,7 +26,11 @@ if (!SUPABASE_SERVICE_ROLE_KEY) {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  // Dev server must always run on port 3000 (nginx listens on 8080 and proxies to 3000)
+  const portArgIdx = process.argv.indexOf('--port');
+  const cliPort = portArgIdx !== -1 && process.argv[portArgIdx + 1] ? parseInt(process.argv[portArgIdx + 1], 10) : null;
+  const envPort = process.env.PORT ? parseInt(process.env.PORT, 10) : null;
+  const PORT = cliPort || (envPort && envPort !== 8080 ? envPort : 3000);
 
   // Health check endpoint for Cloud Run and load balancers
   app.get('/api/health', (req, res) => {
@@ -818,14 +822,19 @@ async function startServer() {
             const updates: any = {
               name: uItem.name || existing.name,
               mobile: cleanM || existing.mobile || '0000000000',
-              username: uItem.username || cleanE || existing.username,
               role: normalizedRole,
               active: uItem.active !== undefined ? uItem.active : existing.active
             };
-            if (uItem.password) {
-              updates.password = uItem.password;
+            if (uItem.username) updates.username = uItem.username;
+            if (uItem.password) updates.password = uItem.password;
+
+            let { data: upd, error: updErr } = await db.from('users').update(updates).eq('id', existing.id).select();
+            if (updErr && updErr.message && updErr.message.includes('username')) {
+              delete updates.username;
+              const retryRes = await db.from('users').update(updates).eq('id', existing.id).select();
+              upd = retryRes.data;
+              updErr = retryRes.error;
             }
-            const { data: upd, error: updErr } = await db.from('users').update(updates).eq('id', existing.id).select();
             if (!updErr && upd && upd.length > 0) {
               return { success: true, data: upd };
             }
@@ -834,23 +843,29 @@ async function startServer() {
 
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
         const validId = targetId && uuidRegex.test(targetId) ? targetId : crypto.randomUUID();
-        const insertRecord = {
+        const insertRecord: any = {
           id: validId,
           name: uItem.name || 'Staff',
           email: cleanE || `${cleanM}@photocrew.com`,
           mobile: cleanM,
-          username: uItem.username || cleanE || `${cleanM}@photocrew.com`,
           role: normalizedRole,
           active: uItem.active !== undefined ? uItem.active : true,
           password: uItem.password || null,
           created_at: uItem.created_at || new Date().toISOString()
         };
-        const { data: ins, error: insErr } = await db.from('users').insert(insertRecord).select();
+        if (uItem.username) insertRecord.username = uItem.username;
+
+        let { data: ins, error: insErr } = await db.from('users').insert(insertRecord).select();
+        if (insErr && insErr.message && insErr.message.includes('username')) {
+          delete insertRecord.username;
+          const retryIns = await db.from('users').insert(insertRecord).select();
+          ins = retryIns.data;
+          insErr = retryIns.error;
+        }
         if (!insErr && ins && ins.length > 0) {
           return { success: true, data: ins };
         } else if (insErr) {
-          console.error('[Server DB users insert error]:', insErr);
-          return { success: false, error: insErr.message };
+          console.warn('[Server DB users insert warning, attempting safe fallback]:', insErr.message);
         }
       }
     }
@@ -2046,11 +2061,13 @@ async function startServer() {
       if (Object.keys(updates).length > 0 && targetAuthId) {
         try {
           const { error } = await db.auth.admin.updateUserById(targetAuthId, updates);
-          if (error) {
+          if (error && !error.message?.includes('loading user') && !error.message?.includes('User not found')) {
             console.warn(`[Server Auth Update Warning]`, error.message);
           }
         } catch (e: any) {
-          console.warn(`[Server Auth Update Exception]`, e.message);
+          if (!e.message?.includes('loading user') && !e.message?.includes('User not found')) {
+            console.warn(`[Server Auth Update Exception]`, e.message);
+          }
         }
       }
       
@@ -2115,7 +2132,7 @@ async function startServer() {
   // Vite middleware for development vs static files for production
   const distPath = path.join(process.cwd(), 'dist');
   const hasDist = fs.existsSync(distPath) && fs.existsSync(path.join(distPath, 'index.html'));
-  const isProduction = process.env.NODE_ENV === 'production' || hasDist;
+  const isProduction = process.env.NODE_ENV === 'production' && hasDist;
 
   if (!isProduction) {
     console.log('[Server] Mounting Vite development middleware...');
