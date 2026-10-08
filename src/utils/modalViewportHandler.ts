@@ -4,7 +4,7 @@
  * Ensures that whenever ANY modal, popup, dialog, or overlay opens across ANY dashboard:
  * 1. Automatically scrolls the page/viewport to bring the opened popup into immediate view (centered).
  * 2. Automatically resets internal scrollable containers inside the modal to the TOP (scrollTop = 0).
- * 3. Works consistently across all dashboards and modal types.
+ * 3. Prevents any stuck black screens, dark overlays, or locked body scroll states.
  */
 
 /**
@@ -80,7 +80,7 @@ export function ensureModalScrolledToTop(target: HTMLElement | string | null | u
 
     // 2. Find the actual modal card / dialog box element to center in viewport
     const modalCard = element.querySelector<HTMLElement>(
-      '.bg-zinc-950, .bg-zinc-900, .bg-slate-950, .bg-slate-900, [role="dialog"], [role="alertdialog"], .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl, .max-w-lg, .rounded-2xl, .rounded-xl'
+      '.bg-zinc-950, .bg-zinc-900, .bg-slate-950, .bg-slate-900, [role="dialog"], [role="alertdialog"], .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl, .max-w-lg, .rounded-3xl, .rounded-2xl, .rounded-xl'
     ) || element;
 
     if (modalCard && typeof modalCard.scrollIntoView === 'function') {
@@ -187,6 +187,13 @@ export function initGlobalModalViewportHandler() {
         scannedModals.delete(m);
       }
     });
+
+    // Safeguard: If no modals are currently visible, guarantee body overflow is normal
+    if (currentVisibleModals.size === 0) {
+      if (document.body.style.overflow === 'hidden') {
+        document.body.style.overflow = '';
+      }
+    }
   };
 
   const observer = new MutationObserver(() => {
@@ -200,18 +207,22 @@ export function initGlobalModalViewportHandler() {
     attributeFilter: ['class', 'style', 'hidden', 'open', 'data-state'],
   });
 
-  // Also check periodically and on click
+  // Also check periodically and on click/blur/focus
   const interval = setInterval(checkAndUpdateModals, 250);
   window.addEventListener('click', () => {
     setTimeout(checkAndUpdateModals, 50);
     setTimeout(checkAndUpdateModals, 200);
   }, true);
+  window.addEventListener('focus', () => {
+    setTimeout(checkAndUpdateModals, 100);
+  });
 
   checkAndUpdateModals();
 
   return () => {
     observer.disconnect();
     clearInterval(interval);
+    document.body.style.overflow = '';
     isGlobalModalViewportInitialized = false;
   };
 }

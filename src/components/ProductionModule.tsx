@@ -13274,16 +13274,21 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       </span>
                     </label>
 
-                    <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
+                    <label className="flex items-start gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
                       <input
                         type="checkbox"
                         checked={caContentUsageConfirmation}
                         onChange={(e) => setCaContentUsageConfirmation(e.target.checked)}
-                        className="w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-white focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer appearance-none checked:bg-white checked:border-white relative before:content-[''] checked:before:absolute checked:before:w-1.5 checked:before:h-2.5 checked:before:border-r-2 checked:before:border-b-2 checked:before:border-black checked:before:rotate-45 checked:before:top-[1px] checked:before:left-[5px]"
+                        className="mt-0.5 w-4 h-4 rounded border-zinc-600 bg-zinc-950 text-white focus:ring-0 focus:ring-offset-0 transition-colors cursor-pointer appearance-none checked:bg-white checked:border-white relative before:content-[''] checked:before:absolute checked:before:w-1.5 checked:before:h-2.5 checked:before:border-r-2 checked:before:border-b-2 checked:before:border-black checked:before:rotate-45 checked:before:top-[1px] checked:before:left-[5px]"
                       />
-                      <span className="text-[13px] font-bold text-zinc-100">
-                        Content Usage Confirmation
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-[13px] font-bold text-zinc-100">
+                          Content Usage Confirmation
+                        </span>
+                        <span className="text-[11px] text-zinc-400 mt-0.5">
+                          Confirming that the agreed content usage rights include social media and advertising/paid ads
+                        </span>
+                      </div>
                     </label>
 
                     <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
