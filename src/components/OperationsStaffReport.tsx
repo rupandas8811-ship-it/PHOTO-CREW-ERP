@@ -1466,63 +1466,17 @@ export const OperationsStaffReport: React.FC<OperationsStaffReportProps> = ({ on
                           {eventItem.reportingTime}
                         </td>
 
-                        {/* 6. Proof: Clean sectioned display for Equipment Received, Event Start, Event End */}
+                        {/* 6. Proof: Single compact View Proof button */}
                         <td className="px-3.5 py-3 whitespace-nowrap">
-                          <div className="min-w-[190px] space-y-1.5 font-mono text-[11px]">
-                            {/* 1. Equipment Received */}
-                            <div className="flex items-center justify-between gap-1.5 bg-zinc-900/60 px-2 py-1 rounded-lg border border-zinc-800/80">
-                              <span className="text-zinc-400 font-medium">Equip Received:</span>
-                              {eventItem.equipmentReceivedProofs.length === 0 ? (
-                                <span className="text-zinc-500 italic text-[10px]">Not Uploaded</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => openProofModal(eventItem, 'equipment_received')}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold cursor-pointer transition-colors"
-                                  title="View Equipment Received proof"
-                                >
-                                  <Eye className="w-3 h-3" />
-                                  <span>View Image{eventItem.equipmentReceivedProofs.length > 1 ? ` (${eventItem.equipmentReceivedProofs.length})` : ''}</span>
-                                </button>
-                              )}
-                            </div>
-
-                            {/* 2. Event Start */}
-                            <div className="flex items-center justify-between gap-1.5 bg-zinc-900/60 px-2 py-1 rounded-lg border border-zinc-800/80">
-                              <span className="text-zinc-400 font-medium">Event Start:</span>
-                              {eventItem.eventStartProofs.length === 0 ? (
-                                <span className="text-zinc-500 italic text-[10px]">Not Uploaded</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => openProofModal(eventItem, 'event_start')}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 text-[10px] font-bold cursor-pointer transition-colors"
-                                  title="View Event Start proof"
-                                >
-                                  <Eye className="w-3 h-3" />
-                                  <span>View Image{eventItem.eventStartProofs.length > 1 ? ` (${eventItem.eventStartProofs.length})` : ''}</span>
-                                </button>
-                              )}
-                            </div>
-
-                            {/* 3. Event End / Complete */}
-                            <div className="flex items-center justify-between gap-1.5 bg-zinc-900/60 px-2 py-1 rounded-lg border border-zinc-800/80">
-                              <span className="text-zinc-400 font-medium">Event End:</span>
-                              {eventItem.eventEndProofs.length === 0 ? (
-                                <span className="text-zinc-500 italic text-[10px]">Not Uploaded</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => openProofModal(eventItem, 'event_end')}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 text-[10px] font-bold cursor-pointer transition-colors"
-                                  title="View Event End / Complete proof"
-                                >
-                                  <Eye className="w-3 h-3" />
-                                  <span>View Image{eventItem.eventEndProofs.length > 1 ? ` (${eventItem.eventEndProofs.length})` : ''}</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => openProofModal(eventItem, 'all')}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono font-bold cursor-pointer transition-all hover:scale-[1.02] shadow-sm"
+                            title="View Proof"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View Proof</span>
+                          </button>
                         </td>
 
                         {/* 7. Event Complete Date */}
@@ -1617,7 +1571,7 @@ export const OperationsStaffReport: React.FC<OperationsStaffReportProps> = ({ on
                     : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                 }`}
               >
-                1. Equipment Received ({selectedProofEvent.equipmentReceivedProofs.length})
+                Equipment Received ({selectedProofEvent.equipmentReceivedProofs.length})
               </button>
               <button
                 type="button"
@@ -1628,7 +1582,7 @@ export const OperationsStaffReport: React.FC<OperationsStaffReportProps> = ({ on
                     : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                 }`}
               >
-                2. Event Start ({selectedProofEvent.eventStartProofs.length})
+                Event Start ({selectedProofEvent.eventStartProofs.length})
               </button>
               <button
                 type="button"
@@ -1639,7 +1593,7 @@ export const OperationsStaffReport: React.FC<OperationsStaffReportProps> = ({ on
                     : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                 }`}
               >
-                3. Event End / Complete ({selectedProofEvent.eventEndProofs.length})
+                Event End ({selectedProofEvent.eventEndProofs.length})
               </button>
             </div>
 
@@ -1672,7 +1626,7 @@ export const OperationsStaffReport: React.FC<OperationsStaffReportProps> = ({ on
                         <Package className="w-4 h-4" />
                       </div>
                       <h5 className="text-xs sm:text-sm font-mono font-bold text-zinc-200 tracking-wider uppercase">
-                        1. Equipment Received
+                        Equipment Received
                       </h5>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-850 text-zinc-400 border border-zinc-750">
                         {selectedProofEvent.equipmentReceivedProofs.length} {selectedProofEvent.equipmentReceivedProofs.length === 1 ? 'Image' : 'Images'}
@@ -1773,7 +1727,7 @@ export const OperationsStaffReport: React.FC<OperationsStaffReportProps> = ({ on
                         <Play className="w-4 h-4 fill-sky-400/20" />
                       </div>
                       <h5 className="text-xs sm:text-sm font-mono font-bold text-zinc-200 tracking-wider uppercase">
-                        2. Event Start
+                        Event Start
                       </h5>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-850 text-zinc-400 border border-zinc-750">
                         {selectedProofEvent.eventStartProofs.length} {selectedProofEvent.eventStartProofs.length === 1 ? 'Image' : 'Images'}
@@ -1874,7 +1828,7 @@ export const OperationsStaffReport: React.FC<OperationsStaffReportProps> = ({ on
                         <CheckCircle className="w-4 h-4" />
                       </div>
                       <h5 className="text-xs sm:text-sm font-mono font-bold text-zinc-200 tracking-wider uppercase">
-                        3. Event End / Event Complete
+                        Event End
                       </h5>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-855 text-zinc-400 border border-zinc-750">
                         {selectedProofEvent.eventEndProofs.length} {selectedProofEvent.eventEndProofs.length === 1 ? 'Image' : 'Images'}
@@ -1891,7 +1845,7 @@ export const OperationsStaffReport: React.FC<OperationsStaffReportProps> = ({ on
                         Not Uploaded
                       </span>
                       <span className="text-[11px] text-zinc-600 font-sans">
-                        No Event End / Complete image uploaded for this event
+                        No Event End image uploaded for this event
                       </span>
                     </div>
                   ) : (
