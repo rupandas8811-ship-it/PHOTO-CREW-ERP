@@ -1545,10 +1545,27 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
+      // Resolve delivery method from validated_server_uploads, direct fields, or clientAcceptanceVerifications
+      const valUploads = (p as any).validated_server_uploads && typeof (p as any).validated_server_uploads === 'object'
+        ? (p as any).validated_server_uploads
+        : {};
+      const effOrderId = order_id || (p as any).order_id || p.tracking_id;
+      const matchingCaVerif = (clientAcceptanceVerifications || []).find(v =>
+        (effOrderId && String(v.order_id || '').toLowerCase() === String(effOrderId).toLowerCase()) ||
+        (p.tracking_id && String(v.order_id || '').toLowerCase() === String(p.tracking_id).toLowerCase()) ||
+        (p.production_id && String(v.order_id || '').toLowerCase() === String(p.production_id).toLowerCase())
+      );
+      const delivery_method = p.delivery_method || valUploads.delivery_method || matchingCaVerif?.delivery_method || (p.delivery_link ? 'server_link' : undefined);
+      const server_link = p.server_link || valUploads.server_link || matchingCaVerif?.server_link || (delivery_method === 'server_link' ? (p.delivery_link || matchingCaVerif?.final_edited_footage_link || matchingCaVerif?.upload_link_path || '') : '');
+      const physical_drive_details = p.physical_drive_details || valUploads.physical_drive_details || matchingCaVerif?.physical_drive_details || (delivery_method === 'physical_drive' ? (matchingCaVerif?.folder_name || '') : '');
+
       return {
         ...p,
         order_id: order_id || (p as any).order_id,
-        lead_id: lead_id || (p as any).lead_id
+        lead_id: lead_id || (p as any).lead_id,
+        delivery_method: delivery_method as any,
+        server_link: server_link,
+        physical_drive_details: physical_drive_details
       };
     });
 
@@ -1919,6 +1936,45 @@ export const RoleProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (k in merged) {
           cloned[k] = merged[k];
         }
+      }
+    }
+
+    if (table === 'production') {
+      if (cloned.delivery_method || cloned.server_link || cloned.physical_drive_details) {
+        const valUploads = (cloned.validated_server_uploads && typeof cloned.validated_server_uploads === 'object') ? { ...cloned.validated_server_uploads } : {};
+        if (cloned.delivery_method === 'server_link') {
+          delete (valUploads as any).physical_drive_details;
+          valUploads.delivery_method = 'server_link';
+          if (cloned.server_link) {
+            valUploads.server_link = cloned.server_link;
+          }
+        } else if (cloned.delivery_method === 'physical_drive') {
+          delete (valUploads as any).server_link;
+          valUploads.delivery_method = 'physical_drive';
+          if (cloned.physical_drive_details) {
+            valUploads.physical_drive_details = cloned.physical_drive_details;
+          }
+        } else {
+          if (cloned.delivery_method) valUploads.delivery_method = cloned.delivery_method;
+          if (cloned.server_link) valUploads.server_link = cloned.server_link;
+          if (cloned.physical_drive_details) valUploads.physical_drive_details = cloned.physical_drive_details;
+        }
+        cloned.validated_server_uploads = valUploads;
+        if (cloned.delivery_method === 'server_link' && cloned.server_link) {
+          cloned.delivery_link = cloned.server_link;
+          cloned.upload_link_path = cloned.server_link;
+          cloned.final_edited_footage_link = cloned.server_link;
+        } else if (cloned.delivery_method === 'physical_drive') {
+          cloned.delivery_link = '';
+          cloned.upload_link_path = '';
+          cloned.final_edited_footage_link = '';
+          if (cloned.physical_drive_details && !cloned.folder_name) {
+            cloned.folder_name = cloned.physical_drive_details;
+          }
+        }
+        delete cloned.delivery_method;
+        delete cloned.server_link;
+        delete cloned.physical_drive_details;
       }
     }
 
@@ -3288,7 +3344,18 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
         }
         if (dbOperations) setOperations(dbOperations);
         if (dbRawFootage) setRawFootage(dbRawFootage);
-        if (dbProduction) setProduction(dbProduction);
+        if (dbProduction) {
+          const enrichedProduction = dbProduction.map((item: any) => {
+            const valUploads = (item.validated_server_uploads && typeof item.validated_server_uploads === 'object') ? item.validated_server_uploads : {};
+            return {
+              ...item,
+              delivery_method: item.delivery_method || valUploads.delivery_method || undefined,
+              server_link: item.server_link || valUploads.server_link || (valUploads.delivery_method === 'server_link' ? item.delivery_link : undefined),
+              physical_drive_details: item.physical_drive_details || valUploads.physical_drive_details || undefined
+            };
+          });
+          setProduction(enrichedProduction);
+        }
         if (dbPayments) setPayments(dbPayments);
         if (dbPaymentHistory) {
           let rejectedIds = new Set<string>();

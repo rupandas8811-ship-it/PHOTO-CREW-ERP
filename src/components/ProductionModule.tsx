@@ -2455,6 +2455,7 @@ ${coordinatorName}`;
     });
 
     const uploadLink = a ? (
+      savedVerif?.server_link ||
       savedVerif?.upload_link_path ||
       a?.server_file_link ||
       a?.upload_link ||
@@ -2465,19 +2466,26 @@ ${coordinatorName}`;
       a?.edited_link ||
       ''
     ).trim() : (
+      savedVerif?.server_link ||
       savedVerif?.upload_link_path ||
+      prod?.server_link ||
+      (prod as any)?.validated_server_uploads?.server_link ||
       prod?.edited_drive_link ||
       prod?.delivery_link ||
       ''
     ).trim();
 
     const folderName = a ? (
+      savedVerif?.physical_drive_details ||
       savedVerif?.folder_name ||
       a?.server_upload_folder_name ||
       a?.folder_name ||
       a?.server_path ||
       ''
     ).trim() : (
+      savedVerif?.physical_drive_details ||
+      prod?.physical_drive_details ||
+      (prod as any)?.validated_server_uploads?.physical_drive_details ||
       savedVerif?.folder_name ||
       prod?.server_upload_folder_name ||
       prod?.server_path ||
@@ -2820,6 +2828,59 @@ Production Team`;
     setCaUploadConfirmations({});
     setCaChecklistCompleted(Boolean(prod.checklist_customer_acceptance ?? true));
     setCaInternalValidation(Boolean(prod.server_upload_validated || prod.checklist_edited_files_uploaded));
+
+    // Load persisted Delivery Method and fields
+    const valUploads = (prod.validated_server_uploads && typeof prod.validated_server_uploads === 'object') ? prod.validated_server_uploads : {};
+
+    let loadedDeliveryMethod: 'server_link' | 'physical_drive' = 'server_link';
+    if (
+      prod.delivery_method === 'physical_drive' ||
+      (valUploads as any).delivery_method === 'physical_drive' ||
+      primaryVerif?.delivery_method === 'physical_drive'
+    ) {
+      loadedDeliveryMethod = 'physical_drive';
+    } else if (
+      prod.delivery_method === 'server_link' ||
+      (valUploads as any).delivery_method === 'server_link' ||
+      primaryVerif?.delivery_method === 'server_link'
+    ) {
+      loadedDeliveryMethod = 'server_link';
+    } else if (
+      prod.physical_drive_details ||
+      (valUploads as any).physical_drive_details ||
+      primaryVerif?.physical_drive_details
+    ) {
+      loadedDeliveryMethod = 'physical_drive';
+    }
+    setCaDeliveryMethod(loadedDeliveryMethod);
+
+    // Strictly treat Server Link as server-hosted link - do NOT use or convert Google Drive links
+    const isGoogleDriveLink = (url?: string) => {
+      if (!url) return false;
+      const lower = url.toLowerCase();
+      return lower.includes('drive.google.com') || lower.includes('docs.google.com');
+    };
+
+    let loadedServerLink = 
+      prod.server_link ||
+      (valUploads as any).server_link ||
+      primaryVerif?.server_link ||
+      '';
+    if (!loadedServerLink) {
+      const candidate = primaryVerif?.final_edited_footage_link || primaryVerif?.upload_link_path || prod.delivery_link || '';
+      if (!isGoogleDriveLink(candidate)) {
+        loadedServerLink = candidate;
+      }
+    }
+    setCaServerLink(loadedServerLink);
+
+    const loadedPhysicalDrive = 
+      prod.physical_drive_details ||
+      (valUploads as any).physical_drive_details ||
+      primaryVerif?.physical_drive_details ||
+      (loadedDeliveryMethod === 'physical_drive' ? (primaryVerif?.folder_name || prod.folder_name || '') : '') ||
+      '';
+    setCaPhysicalDriveDetails(loadedPhysicalDrive);
 
     // Load persisted 5-item checklist states
     setCaVerifyCustomerAcceptance(prod.checklist_customer_acceptance ?? true);
@@ -3619,6 +3680,11 @@ Production Team`;
   const [caUploadConfirmations, setCaUploadConfirmations] = useState<Record<string, { confirmed: boolean; eventDate: string; folderName: string }>>({});
   const [caValidation, setCaValidation] = useState<Record<string, boolean>>({});
   const [caProofs, setCaProofs] = useState<Record<string, string>>({});
+
+  // Client Acceptance Delivery Method states
+  const [caDeliveryMethod, setCaDeliveryMethod] = useState<'server_link' | 'physical_drive'>('server_link');
+  const [caServerLink, setCaServerLink] = useState<string>('');
+  const [caPhysicalDriveDetails, setCaPhysicalDriveDetails] = useState<string>('');
 
   // Re-send Review / Customer Review Popup states
   const [customerReviewResendProd, setCustomerReviewResendProd] = useState<Production | null>(null);
@@ -5631,7 +5697,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       )}
 
                       {/* Client Acceptance */}
-                      {displayStatus === "Editing Completed" && currentRole !== "Production Staff" && (
+                      {(displayStatus === "Editing Completed" || displayStatus === "Client Acceptance" || displayStatus === "Client Accepted") && currentRole !== "Production Staff" && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -5643,7 +5709,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                           className="w-full text-left px-2.5 py-2 text-[11px] font-semibold text-emerald-300 hover:text-white hover:bg-emerald-600/25 rounded-lg transition-colors flex items-center gap-2 cursor-pointer"
                         >
                           <span className="text-sm">✓</span>
-                          <span>Client Approval</span>
+                          <span>{displayStatus === "Editing Completed" ? "Client Approval" : "Update Client Acceptance"}</span>
                         </button>
                       )}
 
@@ -13003,6 +13069,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                     onClick={() => {
                       setClientAcceptanceProd(null);
                       setCaUploadConfirmations({});
+                      setCaServerLink('');
+                      setCaPhysicalDriveDetails('');
+                      setCaDeliveryMethod('server_link');
                     }}
                     className="p-1.5 bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-lg transition-all cursor-pointer flex items-center justify-center shrink-0"
                   >
@@ -13015,9 +13084,31 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   onSubmit={async (e) => {
                     e.preventDefault();
                     
+                    if (caDeliveryMethod === 'server_link' && caServerLink.trim()) {
+                      const lower = caServerLink.toLowerCase();
+                      if (lower.includes('drive.google.com') || lower.includes('docs.google.com')) {
+                        alert('Google Drive links are not allowed for Server Link. Please enter a server-hosted delivery URL.');
+                        return;
+                      }
+                    }
+
                     try {
                       setIsSaving(true);
+                      const cleanOrderId = order?.order_id || trackingId || clientAcceptanceProd.production_id;
+                      const cleanEventId = clientAcceptanceProd.event_id || 'default';
                       
+                      const nextValidatedUploads = {
+                        ...caValidatedServerUploads,
+                        delivery_method: caDeliveryMethod,
+                        ...(caDeliveryMethod === 'server_link' ? { server_link: caServerLink.trim() } : {}),
+                        ...(caDeliveryMethod === 'physical_drive' ? { physical_drive_details: caPhysicalDriveDetails.trim() } : {})
+                      };
+                      if (caDeliveryMethod === 'server_link') {
+                        delete (nextValidatedUploads as any).physical_drive_details;
+                      } else if (caDeliveryMethod === 'physical_drive') {
+                        delete (nextValidatedUploads as any).server_link;
+                      }
+
                       const updates: any = {
                         editing_status: 'Client Acceptance',
                         checklist_customer_acceptance: caVerifyCustomerAcceptance,
@@ -13026,7 +13117,13 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                         checklist_payment_from_sales: caVerifyPaymentSales,
                         checklist_edited_files_uploaded: caValidateEditedFiles,
                         server_upload_validated: caValidateEditedFiles,
-                        validated_server_uploads: caValidatedServerUploads
+                        validated_server_uploads: nextValidatedUploads,
+                        delivery_method: caDeliveryMethod,
+                        ...(caDeliveryMethod === 'server_link' ? { server_link: caServerLink.trim() } : {}),
+                        ...(caDeliveryMethod === 'physical_drive' ? { physical_drive_details: caPhysicalDriveDetails.trim() } : {}),
+                        delivery_link: caDeliveryMethod === 'server_link' ? caServerLink.trim() : '',
+                        upload_link_path: caDeliveryMethod === 'server_link' ? caServerLink.trim() : '',
+                        final_edited_footage_link: caDeliveryMethod === 'server_link' ? caServerLink.trim() : ''
                       };
                       
                       await updateProduction(clientAcceptanceProd.production_id, updates);
@@ -13035,6 +13132,18 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       if (targetId) {
                         await updateOrderStage(targetId, 'Client Acceptance' as any);
                       }
+
+                      await saveClientAcceptanceVerification({
+                        order_id: cleanOrderId,
+                        event_id: cleanEventId,
+                        delivery_method: caDeliveryMethod,
+                        server_link: caDeliveryMethod === 'server_link' ? caServerLink.trim() : undefined,
+                        physical_drive_details: caDeliveryMethod === 'physical_drive' ? caPhysicalDriveDetails.trim() : undefined,
+                        consent_proof_verified: caVerifyCustomerAcceptance,
+                        folder_name: caDeliveryMethod === 'physical_drive' ? caPhysicalDriveDetails.trim() : undefined,
+                        upload_link_path: caDeliveryMethod === 'server_link' ? caServerLink.trim() : '',
+                        final_edited_footage_link: caDeliveryMethod === 'server_link' ? caServerLink.trim() : ''
+                      });
                       
                       if (refreshData) {
                         await refreshData();
@@ -13050,8 +13159,109 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                 >
                   <div 
                     id="production_client_approval_checklist_container"
-                    className="space-y-2 overflow-y-auto custom-scrollbar flex-1 min-h-0 pr-1 sm:pr-2 overscroll-contain"
+                    className="space-y-3 overflow-y-auto custom-scrollbar flex-1 min-h-0 pr-1 sm:pr-2 overscroll-contain"
                   >
+                    {/* DELIVERY METHOD SECTION */}
+                    <div className="bg-[#0f0f11] border border-zinc-800/80 rounded-xl p-3.5 sm:p-4 space-y-3">
+                      <div>
+                        <div className="text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-200 flex items-center justify-between">
+                          <span>DELIVERY METHOD</span>
+                          <span className="text-[9px] text-zinc-500 font-mono">SELECT OPTION</span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          Choose the delivery method for client acceptance:
+                        </p>
+                      </div>
+
+                      {/* Options: 1. Server Link, 2. Physical Drive Delivery */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        <label
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                            caDeliveryMethod === 'server_link'
+                              ? 'bg-purple-950/30 border-purple-500/80 text-white shadow-sm ring-1 ring-purple-500/30'
+                              : 'bg-zinc-950/70 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="ca_delivery_method"
+                            value="server_link"
+                            checked={caDeliveryMethod === 'server_link'}
+                            onChange={() => setCaDeliveryMethod('server_link')}
+                            className="w-4 h-4 text-purple-600 bg-zinc-900 border-zinc-700 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+                              <span>🔗</span> Server Link
+                            </span>
+                            <span className="text-[10px] text-zinc-500">Server-hosted URL</span>
+                          </div>
+                        </label>
+
+                        <label
+                          className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                            caDeliveryMethod === 'physical_drive'
+                              ? 'bg-amber-950/30 border-amber-500/80 text-white shadow-sm ring-1 ring-amber-500/30'
+                              : 'bg-zinc-950/70 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="ca_delivery_method"
+                            value="physical_drive"
+                            checked={caDeliveryMethod === 'physical_drive'}
+                            onChange={() => setCaDeliveryMethod('physical_drive')}
+                            className="w-4 h-4 text-amber-500 bg-zinc-900 border-zinc-700 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-zinc-100 flex items-center gap-1.5">
+                              <span>💾</span> Physical Drive Delivery
+                            </span>
+                            <span className="text-[10px] text-zinc-500">Physical drive details</span>
+                          </div>
+                        </label>
+                      </div>
+
+                      {/* 1. Server Link Input Field - only shown when Server Link is selected */}
+                      {caDeliveryMethod === 'server_link' && (
+                        <div className="space-y-1.5 pt-1 animate-in fade-in duration-150">
+                          <label className="text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-300 flex items-center justify-between">
+                            <span>Server Link</span>
+                            <span className="text-[9px] text-zinc-500 lowercase font-mono">server-hosted URL only</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={caServerLink}
+                            onChange={(e) => setCaServerLink(e.target.value)}
+                            placeholder="Enter server-hosted link URL (e.g. https://server.domain.com/path)"
+                            className="w-full bg-zinc-950 border border-zinc-700/80 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 font-mono transition-colors"
+                          />
+                          {caServerLink && (caServerLink.toLowerCase().includes('drive.google.com') || caServerLink.toLowerCase().includes('docs.google.com')) && (
+                            <p className="text-[11px] text-rose-400 font-sans flex items-center gap-1">
+                              <span>⚠️</span> Google Drive links cannot be used for Server Link. Please provide a server-hosted delivery URL.
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 2. Physical Drive Details Field - only shown when Physical Drive Delivery is selected */}
+                      {caDeliveryMethod === 'physical_drive' && (
+                        <div className="space-y-1.5 pt-1 animate-in fade-in duration-150">
+                          <label className="text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-300 flex items-center justify-between">
+                            <span>Physical Drive Details</span>
+                            <span className="text-[9px] text-zinc-500 lowercase font-mono">drive serial / tracking / courier</span>
+                          </label>
+                          <textarea
+                            value={caPhysicalDriveDetails}
+                            onChange={(e) => setCaPhysicalDriveDetails(e.target.value)}
+                            placeholder="Enter physical-drive delivery details (drive serial number, tracking, courier, handover details, etc.)..."
+                            rows={2}
+                            className="w-full bg-zinc-950 border border-zinc-700/80 rounded-lg px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-sans transition-colors resize-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+
                     <label className="flex items-center gap-3.5 p-4 bg-[#0f0f11] border border-zinc-800/80 rounded-xl cursor-pointer hover:border-zinc-700 transition-colors">
                       <input
                         type="checkbox"
@@ -13120,6 +13330,9 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       onClick={() => {
                         setClientAcceptanceProd(null);
                         setCaUploadConfirmations({});
+                        setCaServerLink('');
+                        setCaPhysicalDriveDetails('');
+                        setCaDeliveryMethod('server_link');
                       }}
                       className="py-3 sm:py-3.5 px-4 sm:px-6 bg-[#1f1f22] hover:bg-[#2a2a2d] text-zinc-100 font-black text-[11px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm shrink-0"
                     >
@@ -13129,8 +13342,31 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                       type="button"
                       disabled={isSaving || isSavingProgress}
                       onClick={async () => {
+                        if (caDeliveryMethod === 'server_link' && caServerLink.trim()) {
+                          const lower = caServerLink.toLowerCase();
+                          if (lower.includes('drive.google.com') || lower.includes('docs.google.com')) {
+                            alert('Google Drive links are not allowed for Server Link. Please enter a server-hosted delivery URL.');
+                            return;
+                          }
+                        }
+
                         try {
                           setIsSavingProgress(true);
+                          const cleanOrderId = order?.order_id || trackingId || clientAcceptanceProd.production_id;
+                          const cleanEventId = clientAcceptanceProd.event_id || 'default';
+                          
+                          const nextValidatedUploads = {
+                            ...caValidatedServerUploads,
+                            delivery_method: caDeliveryMethod,
+                            ...(caDeliveryMethod === 'server_link' ? { server_link: caServerLink.trim() } : {}),
+                            ...(caDeliveryMethod === 'physical_drive' ? { physical_drive_details: caPhysicalDriveDetails.trim() } : {})
+                          };
+                          if (caDeliveryMethod === 'server_link') {
+                            delete (nextValidatedUploads as any).physical_drive_details;
+                          } else if (caDeliveryMethod === 'physical_drive') {
+                            delete (nextValidatedUploads as any).server_link;
+                          }
+
                           const updates: any = {
                             checklist_customer_acceptance: caVerifyCustomerAcceptance,
                             checklist_content_usage: caContentUsageConfirmation,
@@ -13138,11 +13374,30 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                             checklist_payment_from_sales: caVerifyPaymentSales,
                             checklist_edited_files_uploaded: caValidateEditedFiles,
                             server_upload_validated: caValidateEditedFiles,
-                            validated_server_uploads: caValidatedServerUploads
+                            validated_server_uploads: nextValidatedUploads,
+                            delivery_method: caDeliveryMethod,
+                            ...(caDeliveryMethod === 'server_link' ? { server_link: caServerLink.trim() } : {}),
+                            ...(caDeliveryMethod === 'physical_drive' ? { physical_drive_details: caPhysicalDriveDetails.trim() } : {}),
+                            delivery_link: caDeliveryMethod === 'server_link' ? caServerLink.trim() : '',
+                            upload_link_path: caDeliveryMethod === 'server_link' ? caServerLink.trim() : '',
+                            final_edited_footage_link: caDeliveryMethod === 'server_link' ? caServerLink.trim() : ''
                           };
                           
                           await updateProduction(clientAcceptanceProd.production_id, updates);
-                          // Do NOT change project status. Do NOT send project to Business Owner. Just save state.
+
+                          await saveClientAcceptanceVerification({
+                            order_id: cleanOrderId,
+                            event_id: cleanEventId,
+                            delivery_method: caDeliveryMethod,
+                            server_link: caDeliveryMethod === 'server_link' ? caServerLink.trim() : undefined,
+                            physical_drive_details: caDeliveryMethod === 'physical_drive' ? caPhysicalDriveDetails.trim() : undefined,
+                            consent_proof_verified: caVerifyCustomerAcceptance,
+                            folder_name: caDeliveryMethod === 'physical_drive' ? caPhysicalDriveDetails.trim() : undefined,
+                            upload_link_path: caDeliveryMethod === 'server_link' ? caServerLink.trim() : '',
+                            final_edited_footage_link: caDeliveryMethod === 'server_link' ? caServerLink.trim() : ''
+                          });
+
+                          alert('Client Acceptance details saved successfully.');
                         } catch (err: any) {
                           alert(`Failed to save progress: ${err.message}`);
                         } finally {

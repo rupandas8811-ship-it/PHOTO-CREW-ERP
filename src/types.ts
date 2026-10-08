@@ -466,6 +466,9 @@ export interface Production {
   upload_name?: string;
   proof_name?: string;
   client_communication_proof_name?: string;
+  delivery_method?: 'server_link' | 'physical_drive';
+  server_link?: string;
+  physical_drive_details?: string;
 }
 
 export interface Payment {
@@ -595,6 +598,9 @@ export interface ClientAcceptanceVerification {
   proof_file_name?: string;
   proof_storage_path?: string;
   consent_proof_verified?: boolean;
+  delivery_method?: 'server_link' | 'physical_drive';
+  server_link?: string;
+  physical_drive_details?: string;
   created_at?: string;
   updated_at?: string;
 }

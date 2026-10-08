@@ -686,6 +686,38 @@ async function startServer() {
       }
     }
 
+    // Safe handling for production delivery method fields in Supabase
+    if (table === 'production') {
+      const items = Array.isArray(payload) ? payload : [payload];
+      for (const itm of items) {
+        if (!itm || typeof itm !== 'object') continue;
+        if (itm.delivery_method || itm.server_link || itm.physical_drive_details) {
+          const valUploads = (itm.validated_server_uploads && typeof itm.validated_server_uploads === 'object') ? itm.validated_server_uploads : {};
+          itm.validated_server_uploads = {
+            ...valUploads,
+            ...(itm.delivery_method ? { delivery_method: itm.delivery_method } : {}),
+            ...(itm.delivery_method === 'server_link' && itm.server_link ? { server_link: itm.server_link } : {}),
+            ...(itm.delivery_method === 'physical_drive' && itm.physical_drive_details ? { physical_drive_details: itm.physical_drive_details } : {})
+          };
+          if (itm.delivery_method === 'server_link' && itm.server_link) {
+            itm.delivery_link = itm.server_link;
+            itm.upload_link_path = itm.server_link;
+            itm.final_edited_footage_link = itm.server_link;
+          } else if (itm.delivery_method === 'physical_drive') {
+            itm.delivery_link = '';
+            itm.upload_link_path = '';
+            itm.final_edited_footage_link = '';
+            if (itm.physical_drive_details && !itm.folder_name) {
+              itm.folder_name = itm.physical_drive_details;
+            }
+          }
+          delete itm.delivery_method;
+          delete itm.server_link;
+          delete itm.physical_drive_details;
+        }
+      }
+    }
+
     // Self-healing insert handler for lead_events to prevent primary key sequence collisions
     if (table === 'lead_events' && operation === 'insert') {
       const items = Array.isArray(payload) ? payload : [payload];
@@ -1358,7 +1390,10 @@ async function startServer() {
         proof_file_name,
         proof_storage_path,
         consent_proof_verified,
-        edited_folder_uploaded_to_server
+        edited_folder_uploaded_to_server,
+        delivery_method,
+        server_link,
+        physical_drive_details
       } = payload;
 
       if (!order_id) {
@@ -1368,7 +1403,8 @@ async function startServer() {
       const cleanOrderId = String(order_id).trim();
       const cleanEventId = String(event_id || 'default').trim();
       const now = new Date().toISOString();
-      const resolvedLink = (final_edited_footage_link !== undefined ? final_edited_footage_link : upload_link_path) || '';
+      const resolvedServerLink = (delivery_method === 'server_link' ? (server_link || final_edited_footage_link || upload_link_path) : '') || '';
+      const resolvedLink = resolvedServerLink || (delivery_method === 'physical_drive' ? '' : (final_edited_footage_link !== undefined ? final_edited_footage_link : upload_link_path)) || '';
 
       const cleanTaskId = String(payload.task_id || payload.assignment_id || '').trim();
       const existingRecords = readCaVerificationsFromFile();
@@ -1394,13 +1430,16 @@ async function startServer() {
           task_id: cleanTaskId || existingRecords[index].task_id || '',
           assignment_id: cleanTaskId || existingRecords[index].assignment_id || '',
           client_communication_consent_proof: client_communication_consent_proof !== undefined ? client_communication_consent_proof : existingRecords[index].client_communication_consent_proof,
-          folder_name: folder_name !== undefined ? folder_name : existingRecords[index].folder_name,
-          upload_link_path: resolvedLink || existingRecords[index].upload_link_path || '',
-          final_edited_footage_link: resolvedLink || existingRecords[index].final_edited_footage_link || existingRecords[index].upload_link_path || '',
+          folder_name: delivery_method === 'physical_drive' ? (physical_drive_details || folder_name || existingRecords[index].folder_name) : (folder_name !== undefined ? folder_name : existingRecords[index].folder_name),
+          upload_link_path: delivery_method === 'physical_drive' ? '' : (resolvedLink || existingRecords[index].upload_link_path || ''),
+          final_edited_footage_link: delivery_method === 'physical_drive' ? '' : (resolvedLink || existingRecords[index].final_edited_footage_link || existingRecords[index].upload_link_path || ''),
           proof_file_name: proof_file_name !== undefined ? proof_file_name : existingRecords[index].proof_file_name,
           proof_storage_path: proof_storage_path !== undefined ? proof_storage_path : existingRecords[index].proof_storage_path,
           consent_proof_verified: consent_proof_verified !== undefined ? Boolean(consent_proof_verified) : existingRecords[index].consent_proof_verified,
           edited_folder_uploaded_to_server: edited_folder_uploaded_to_server !== undefined ? Boolean(edited_folder_uploaded_to_server) : existingRecords[index].edited_folder_uploaded_to_server,
+          delivery_method: delivery_method || existingRecords[index].delivery_method,
+          server_link: delivery_method === 'server_link' ? (resolvedServerLink || existingRecords[index].server_link) : (delivery_method === 'physical_drive' ? undefined : existingRecords[index].server_link),
+          physical_drive_details: delivery_method === 'physical_drive' ? (physical_drive_details || existingRecords[index].physical_drive_details) : (delivery_method === 'server_link' ? undefined : existingRecords[index].physical_drive_details),
           updated_at: now
         };
         existingRecords[index] = savedRecord;
@@ -1413,13 +1452,16 @@ async function startServer() {
           task_id: cleanTaskId,
           assignment_id: cleanTaskId,
           client_communication_consent_proof: client_communication_consent_proof || '',
-          folder_name: folder_name || '',
-          upload_link_path: resolvedLink,
-          final_edited_footage_link: resolvedLink,
+          folder_name: delivery_method === 'physical_drive' ? (physical_drive_details || folder_name || '') : (folder_name || ''),
+          upload_link_path: delivery_method === 'physical_drive' ? '' : resolvedLink,
+          final_edited_footage_link: delivery_method === 'physical_drive' ? '' : resolvedLink,
           proof_file_name: proof_file_name || '',
           proof_storage_path: proof_storage_path || '',
           consent_proof_verified: consent_proof_verified !== undefined ? Boolean(consent_proof_verified) : false,
           edited_folder_uploaded_to_server: edited_folder_uploaded_to_server !== undefined ? Boolean(edited_folder_uploaded_to_server) : false,
+          delivery_method: delivery_method,
+          server_link: delivery_method === 'server_link' ? resolvedServerLink : undefined,
+          physical_drive_details: delivery_method === 'physical_drive' ? physical_drive_details : undefined,
           created_at: now,
           updated_at: now
         };
@@ -1428,14 +1470,66 @@ async function startServer() {
 
       writeCaVerificationsToFile(existingRecords);
 
-      // Also attempt to upsert into Supabase client_acceptance_verifications table if present
+      // Attempt to upsert into Supabase client_acceptance_verifications table using safe column set
       try {
         const db = getServerSupabase();
-        await db.from('client_acceptance_verifications').upsert(savedRecord, {
+        const safeSupabasePayload = {
+          id: savedRecord.id,
+          order_id: savedRecord.order_id,
+          event_id: savedRecord.event_id,
+          folder_name: savedRecord.folder_name || '',
+          upload_link_path: savedRecord.upload_link_path || '',
+          final_edited_footage_link: savedRecord.final_edited_footage_link || '',
+          client_communication_consent_proof: savedRecord.client_communication_consent_proof || '',
+          proof_file_name: savedRecord.proof_file_name || '',
+          proof_storage_path: savedRecord.proof_storage_path || '',
+          consent_proof_verified: savedRecord.consent_proof_verified || false,
+          created_at: savedRecord.created_at,
+          updated_at: savedRecord.updated_at
+        };
+        await db.from('client_acceptance_verifications').upsert(safeSupabasePayload, {
           onConflict: 'order_id,event_id'
         });
       } catch (dbErr) {
         // Suppress warning if table is not yet created in Postgres
+      }
+
+      // Sync delivery method directly to linked Supabase production record
+      try {
+        const db = getServerSupabase();
+        const { data: matchedProds } = await db.from('production')
+          .select('production_id, validated_server_uploads')
+          .or(`order_id.eq.${cleanOrderId},tracking_id.eq.${cleanOrderId}`)
+          .limit(5);
+
+        if (Array.isArray(matchedProds) && matchedProds.length > 0) {
+          for (const mProd of matchedProds) {
+            const prevUploads = (mProd.validated_server_uploads && typeof mProd.validated_server_uploads === 'object') ? { ...mProd.validated_server_uploads } : {};
+            if (savedRecord.delivery_method === 'physical_drive') {
+              delete (prevUploads as any).server_link;
+            } else if (savedRecord.delivery_method === 'server_link') {
+              delete (prevUploads as any).physical_drive_details;
+            }
+            const nextUploads = {
+              ...prevUploads,
+              delivery_method: savedRecord.delivery_method,
+              ...(savedRecord.delivery_method === 'server_link' ? { server_link: savedRecord.server_link } : {}),
+              ...(savedRecord.delivery_method === 'physical_drive' ? { physical_drive_details: savedRecord.physical_drive_details } : {})
+            };
+            const prodUp: any = {
+              validated_server_uploads: nextUploads,
+              delivery_link: savedRecord.delivery_method === 'server_link' ? (savedRecord.server_link || '') : '',
+              upload_link_path: savedRecord.delivery_method === 'server_link' ? (savedRecord.server_link || '') : '',
+              final_edited_footage_link: savedRecord.delivery_method === 'server_link' ? (savedRecord.server_link || '') : ''
+            };
+            if (savedRecord.delivery_method === 'physical_drive' && savedRecord.physical_drive_details) {
+              prodUp.folder_name = savedRecord.physical_drive_details;
+            }
+            await db.from('production').update(prodUp).eq('production_id', mProd.production_id);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('[Server CA Storage] Supabase production record sync warning:', syncErr);
       }
 
       console.log(`[Server CA Storage] Successfully saved verification for Order: ${cleanOrderId}, Event: ${cleanEventId}, Folder: "${savedRecord.folder_name}"`);
