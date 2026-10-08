@@ -11,9 +11,87 @@ import {
   Play, 
   UserCheck, 
   Calendar,
-  Layers as LayersIcon
+  Layers as LayersIcon,
+  Filter,
+  ChevronDown
 } from 'lucide-react';
 import { formatDateDDMMYY, formatTime12Hour, parseCustomerProof, resolveStorageUrl } from '../utils';
+
+const toYMD = (str: string | null | undefined): string | null => {
+  if (!str) return null;
+  const trimmed = str.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const match = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})/);
+  if (match) {
+    let [, d, m, y] = match;
+    d = d.padStart(2, '0');
+    m = m.padStart(2, '0');
+    if (y.length === 2) y = '20' + y;
+    return `${y}-${m}-${d}`;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return null;
+};
+
+const computePresetRange = (preset: 'This Month' | 'Last Month' | 'Last three Month' | 'Last 3 Months'): { start: string; end: string } => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+
+  const formatYMD = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  if (preset === 'This Month') {
+    return {
+      start: formatYMD(new Date(year, month, 1)),
+      end: formatYMD(new Date(year, month + 1, 0))
+    };
+  }
+  if (preset === 'Last Month') {
+    return {
+      start: formatYMD(new Date(year, month - 1, 1)),
+      end: formatYMD(new Date(year, month, 0))
+    };
+  }
+  return {
+    start: formatYMD(new Date(year, month - 2, 1)),
+    end: formatYMD(new Date(year, month + 1, 0))
+  };
+};
+
+const isDateInRange = (
+  dateStr: string | null | undefined,
+  start: string | null,
+  end: string | null
+): boolean => {
+  if (!start && !end) return true;
+  if (!dateStr) return false;
+  const ymd = toYMD(dateStr);
+  if (!ymd) return false;
+
+  if (start && end) {
+    const minD = start <= end ? start : end;
+    const maxD = start <= end ? end : start;
+    return ymd >= minD && ymd <= maxD;
+  }
+  if (start) {
+    return ymd >= start;
+  }
+  if (end) {
+    return ymd <= end;
+  }
+  return true;
+};
 
 export interface TaskProofImage {
   id: string;
@@ -289,6 +367,59 @@ export const ProductionStaffReport: React.FC<ProductionStaffReportProps> = ({ on
   // Local state
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'assigned' | 'editing_started' | 'customer_review' | 'editing_completed'>('all');
+
+  // Date Filter state
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [activeFilterType, setActiveFilterType] = useState<'This Month' | 'Last Month' | 'Last three Month' | 'Custom Date' | null>(null);
+  const [selectedOption, setSelectedOption] = useState<'This Month' | 'Last Month' | 'Last three Month' | 'Custom Date' | null>(null);
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [appliedDateRange, setAppliedDateRange] = useState<{ start: string; end: string } | null>(null);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  // Close filter dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setIsFilterOpen(false);
+      }
+    };
+    if (isFilterOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isFilterOpen]);
+
+  // Date filter actions
+  const handleSelectPreset = (preset: 'This Month' | 'Last Month' | 'Last three Month') => {
+    const range = computePresetRange(preset);
+    setActiveFilterType(preset);
+    setSelectedOption(preset);
+    setAppliedDateRange(range);
+    setIsFilterOpen(false);
+  };
+
+  const handleApplyCustomFilter = () => {
+    if (customStartDate || customEndDate) {
+      setActiveFilterType('Custom Date');
+      setAppliedDateRange({
+        start: customStartDate ? toYMD(customStartDate) || customStartDate : '',
+        end: customEndDate ? toYMD(customEndDate) || customEndDate : ''
+      });
+      setIsFilterOpen(false);
+    }
+  };
+
+  const handleClearFilter = () => {
+    setActiveFilterType(null);
+    setSelectedOption(null);
+    setCustomStartDate('');
+    setCustomEndDate('');
+    setAppliedDateRange(null);
+    setIsFilterOpen(false);
+  };
   
   // Dedicated popup modal for all deliverables of an Order/Task (never clipped by table overflow)
   const [selectedDeliverablesModal, setSelectedDeliverablesModal] = useState<{
@@ -590,9 +721,17 @@ export const ProductionStaffReport: React.FC<ProductionStaffReportProps> = ({ on
     };
   }, [editorAssignments, production, orders, leads, resolvedStaffId, staffName, currentUser, clientAcceptanceVerifications]);
 
+  // Date Filtered Rows
+  const dateFilteredRows = useMemo(() => {
+    if (!appliedDateRange) return reportRows;
+    return reportRows.filter(row => {
+      return row.deliverables.some(d => isDateInRange(d.startDate, appliedDateRange.start, appliedDateRange.end));
+    });
+  }, [reportRows, appliedDateRange]);
+
   // Filtered rows for display based on tab filter & search
   const filteredRows = useMemo(() => {
-    return reportRows.filter(row => {
+    return dateFilteredRows.filter(row => {
       // Status tab filter matches if ANY deliverable for this Order matches the status
       if (statusFilter === 'editing_completed' && !row.deliverables.some(d => d.isCompleted)) return false;
       if (statusFilter === 'customer_review' && !row.deliverables.some(d => d.isCustomerReview && !d.isCompleted)) return false;
@@ -611,7 +750,7 @@ export const ProductionStaffReport: React.FC<ProductionStaffReportProps> = ({ on
 
       return true;
     });
-  }, [reportRows, statusFilter, searchQuery]);
+  }, [dateFilteredRows, statusFilter, searchQuery]);
 
   return (
     <div className="p-4 sm:p-6 bg-black min-h-screen text-white font-sans selection:bg-purple-500/30">
@@ -724,24 +863,138 @@ export const ProductionStaffReport: React.FC<ProductionStaffReportProps> = ({ on
 
         {/* CONTROLS: SEARCH & STATUS FILTER TABS */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-950/80 p-3.5 rounded-2xl border border-zinc-800/80">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              placeholder="Search by Order ID, Customer, Deliverable..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-purple-500/60 font-mono"
-            />
-            {searchQuery && (
+          <div className="flex items-center gap-2.5 flex-1">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search by Order ID, Customer, Deliverable..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-zinc-900/90 border border-zinc-800 rounded-xl pl-9 pr-3.5 py-2 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-purple-500/60 font-mono"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-xs"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* SINGLE Filter button with dropdown/popover */}
+            <div className="relative" ref={filterRef}>
               <button
+                id="btn_production_staff_report_filter"
                 type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white text-xs"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-mono font-bold whitespace-nowrap transition-all cursor-pointer border ${
+                  activeFilterType
+                    ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 shadow-sm'
+                    : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-700'
+                }`}
+                title="Filter by Date"
               >
-                ✕
+                <Filter className="w-3.5 h-3.5 text-amber-400" />
+                <span>Filter</span>
+                {activeFilterType && (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                    {activeFilterType === 'Custom Date' ? 'Custom' : activeFilterType}
+                  </span>
+                )}
+                <ChevronDown className={`w-3 h-3 text-zinc-400 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
               </button>
-            )}
+
+              {/* Filter Popover Dropdown */}
+              {isFilterOpen && (
+                <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-zinc-900 border border-zinc-750 rounded-2xl shadow-2xl p-3 sm:p-3.5 z-50 text-xs font-mono space-y-3 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
+                    <div className="flex items-center gap-1.5 text-zinc-200 font-bold font-mono text-xs">
+                      <Filter className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Date Filter</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {activeFilterType && (
+                        <button
+                          type="button"
+                          onClick={handleClearFilter}
+                          className="text-[10px] text-zinc-400 hover:text-amber-400 transition-colors cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setIsFilterOpen(false)}
+                        className="p-1 text-zinc-400 hover:text-zinc-200 rounded hover:bg-zinc-800 transition-colors cursor-pointer"
+                        title="Close (Esc)"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    {(['This Month', 'Last Month', 'Last three Month', 'Custom Date'] as const).map((opt) => {
+                      const isSelected = activeFilterType === opt || selectedOption === opt;
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => {
+                            setSelectedOption(opt);
+                            if (opt !== 'Custom Date') {
+                              handleSelectPreset(opt);
+                            }
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-mono transition-colors cursor-pointer ${
+                            isSelected
+                              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold'
+                              : 'text-zinc-300 hover:bg-zinc-800/80 hover:text-white'
+                          }`}
+                        >
+                          <span>{opt}</span>
+                          {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {selectedOption === 'Custom Date' && (
+                    <div className="space-y-2.5 pt-2.5 border-t border-zinc-800">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold">Start Date</label>
+                        <input
+                          type="date"
+                          value={customStartDate}
+                          onChange={(e) => setCustomStartDate(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-mono uppercase text-zinc-400 font-bold">End Date</label>
+                        <input
+                          type="date"
+                          value={customEndDate}
+                          onChange={(e) => setCustomEndDate(e.target.value)}
+                          className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleApplyCustomFilter}
+                        disabled={!customStartDate && !customEndDate}
+                        className="w-full py-2 rounded-xl text-xs font-mono font-bold bg-amber-500 hover:bg-amber-400 text-black transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-md"
+                      >
+                        Apply Filter
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
