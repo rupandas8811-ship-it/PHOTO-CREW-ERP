@@ -1002,6 +1002,7 @@ export const StaffModule: React.FC = () => {
   const [modalPhotos, setModalPhotos] = useState<Record<string, string>>({});
   const [modalPhotoTimestamps, setModalPhotoTimestamps] = useState<Record<string, string>>({});
   const [modalRawFootageLink, setModalRawFootageLink] = useState('');
+  const [uploadingItemKey, setUploadingItemKey] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -1487,9 +1488,13 @@ export const StaffModule: React.FC = () => {
           coordinator: op?.operations_coordinator || 'Unassigned',
           createdAt: matchedLead?.created_at || matchedOrd?.created_at || (ev as any)?.created_at || sa.created_at || '',
           equipmentReceivedTime: sa.equipment_received_time || (sa as any).equipment_received_time || null,
+          equipmentReceivedPhoto: sa.equipment_received_photo || (sa as any).equipment_received_photo || null,
           equipmentHandoverTime: sa.equipment_handover_time || (sa as any).equipment_handover_time || null,
+          equipmentHandoverPhoto: sa.equipment_handover_photo || (sa as any).equipment_handover_photo || null,
           eventStartPhotoTime: sa.event_start_time || (sa as any).event_start_time || null,
-          eventEndPhotoTime: sa.event_end_time || (sa as any).event_end_time || null
+          eventStartPhoto: sa.event_start_photo || (sa as any).event_start_photo || null,
+          eventEndPhotoTime: sa.event_end_time || (sa as any).event_end_time || null,
+          eventEndPhoto: sa.event_end_photo || (sa as any).event_end_photo || null
         });
         if (assignmentId) processedAssignmentIds.add(assignmentId);
         processedUniqueKeys.add(uniqueKey);
@@ -1611,6 +1616,7 @@ export const StaffModule: React.FC = () => {
     setModalPhotos({});
     setModalPhotoTimestamps({});
     setModalRawFootageLink('');
+    setUploadingItemKey(null);
     setSubmitError(null);
     setIsSubmitting(false);
     document.body.style.overflow = '';
@@ -1695,9 +1701,11 @@ export const StaffModule: React.FC = () => {
         const isHandover = eqName.includes('handover') || eqName.includes('asset return') || eqStatus.includes('handover') || eqStatus.includes('return') || proofType.includes('handover') || proofType.includes('return');
         if (isHandover) {
           existingPhotos['Equipment Handover Photo Proof'] = photoUrl;
+          existingPhotos['Equipment Handover Image'] = photoUrl;
           existingPhotos['Asset Return Photo Proof'] = photoUrl;
           if (hTime) {
             existingTimestamps['Equipment Handover Photo Proof'] = hTime;
+            existingTimestamps['Equipment Handover Image'] = hTime;
             existingTimestamps['Asset Return Photo Proof'] = hTime;
           }
         }
@@ -1712,10 +1720,12 @@ export const StaffModule: React.FC = () => {
         const isStart = eqName.includes('event start') || eqStatus.includes('event started') || proofType.includes('event start');
         if (isReceived) {
           existingPhotos['Asset Collection Photo Proof'] = photoUrl;
+          existingPhotos['Equipment Received Image'] = photoUrl;
           existingPhotos['Equipment Received / Asset Picture'] = photoUrl;
           if (h.equipment_name) existingPhotos[h.equipment_name] = photoUrl;
           if (hTime) {
             existingTimestamps['Asset Collection Photo Proof'] = hTime;
+            existingTimestamps['Equipment Received Image'] = hTime;
             existingTimestamps['Equipment Received / Asset Picture'] = hTime;
             if (h.equipment_name) existingTimestamps[h.equipment_name] = hTime;
           }
@@ -1768,9 +1778,11 @@ export const StaffModule: React.FC = () => {
       if (stage === 'Equipment Handover') {
         if (saRecord.equipment_handover_photo && saRecord.equipment_handover_photo !== saRecord.equipment_received_photo) {
           existingPhotos['Equipment Handover Photo Proof'] = saRecord.equipment_handover_photo;
+          existingPhotos['Equipment Handover Image'] = saRecord.equipment_handover_photo;
           existingPhotos['Asset Return Photo Proof'] = saRecord.equipment_handover_photo;
           if (saRecord.equipment_handover_time) {
             existingTimestamps['Equipment Handover Photo Proof'] = saRecord.equipment_handover_time;
+            existingTimestamps['Equipment Handover Image'] = saRecord.equipment_handover_time;
             existingTimestamps['Asset Return Photo Proof'] = saRecord.equipment_handover_time;
           }
         }
@@ -1784,9 +1796,11 @@ export const StaffModule: React.FC = () => {
       } else if (stage === 'Event Start' || stage === 'Equipment Received') {
         if (saRecord.equipment_received_photo) {
           existingPhotos['Asset Collection Photo Proof'] = saRecord.equipment_received_photo;
+          existingPhotos['Equipment Received Image'] = saRecord.equipment_received_photo;
           existingPhotos['Equipment Received / Asset Picture'] = saRecord.equipment_received_photo;
           if (saRecord.equipment_received_time) {
             existingTimestamps['Asset Collection Photo Proof'] = saRecord.equipment_received_time;
+            existingTimestamps['Equipment Received Image'] = saRecord.equipment_received_time;
             existingTimestamps['Equipment Received / Asset Picture'] = saRecord.equipment_received_time;
           }
         }
@@ -1810,9 +1824,11 @@ export const StaffModule: React.FC = () => {
         for (const p of localProofObj.equipmentHandoverProofs) {
           if (p.photoUrl) {
             existingPhotos['Equipment Handover Photo Proof'] = p.photoUrl;
+            existingPhotos['Equipment Handover Image'] = p.photoUrl;
             existingPhotos['Asset Return Photo Proof'] = p.photoUrl;
             if (p.capturedAt) {
               existingTimestamps['Equipment Handover Photo Proof'] = p.capturedAt;
+              existingTimestamps['Equipment Handover Image'] = p.capturedAt;
               existingTimestamps['Asset Return Photo Proof'] = p.capturedAt;
             }
           }
@@ -1833,9 +1849,11 @@ export const StaffModule: React.FC = () => {
           for (const p of localProofObj.equipmentReceivedProofs) {
             if (p.photoUrl) {
               existingPhotos['Asset Collection Photo Proof'] = existingPhotos['Asset Collection Photo Proof'] || p.photoUrl;
+              existingPhotos['Equipment Received Image'] = existingPhotos['Equipment Received Image'] || p.photoUrl;
               existingPhotos['Equipment Received / Asset Picture'] = existingPhotos['Equipment Received / Asset Picture'] || p.photoUrl;
               if (p.capturedAt) {
                 existingTimestamps['Asset Collection Photo Proof'] = existingTimestamps['Asset Collection Photo Proof'] || p.capturedAt;
+                existingTimestamps['Equipment Received Image'] = existingTimestamps['Equipment Received Image'] || p.capturedAt;
                 existingTimestamps['Equipment Received / Asset Picture'] = existingTimestamps['Equipment Received / Asset Picture'] || p.capturedAt;
               }
             }
@@ -1846,9 +1864,11 @@ export const StaffModule: React.FC = () => {
             if (p.photoUrl) {
               if ((p.equipmentName || '').toLowerCase().includes('asset collection') || (p.equipmentName || '').toLowerCase().includes('equipment received')) {
                 existingPhotos['Asset Collection Photo Proof'] = existingPhotos['Asset Collection Photo Proof'] || p.photoUrl;
+                existingPhotos['Equipment Received Image'] = existingPhotos['Equipment Received Image'] || p.photoUrl;
                 existingPhotos['Equipment Received / Asset Picture'] = existingPhotos['Equipment Received / Asset Picture'] || p.photoUrl;
                 if (p.capturedAt) {
                   existingTimestamps['Asset Collection Photo Proof'] = existingTimestamps['Asset Collection Photo Proof'] || p.capturedAt;
+                  existingTimestamps['Equipment Received Image'] = existingTimestamps['Equipment Received Image'] || p.capturedAt;
                   existingTimestamps['Equipment Received / Asset Picture'] = existingTimestamps['Equipment Received / Asset Picture'] || p.capturedAt;
                 }
               } else if ((p.equipmentName || '').toLowerCase().includes('event start')) {
@@ -1865,9 +1885,29 @@ export const StaffModule: React.FC = () => {
       }
     }
 
-    // Booking fallback
+    // Direct booking fallbacks
+    if (booking.equipmentReceivedPhoto) {
+      existingPhotos['Asset Collection Photo Proof'] = existingPhotos['Asset Collection Photo Proof'] || booking.equipmentReceivedPhoto;
+      existingPhotos['Equipment Received Image'] = existingPhotos['Equipment Received Image'] || booking.equipmentReceivedPhoto;
+      existingPhotos['Equipment Received / Asset Picture'] = existingPhotos['Equipment Received / Asset Picture'] || booking.equipmentReceivedPhoto;
+    }
+    if (booking.eventStartPhoto) {
+      existingPhotos['Event Start Photo Proof'] = existingPhotos['Event Start Photo Proof'] || booking.eventStartPhoto;
+      existingPhotos['Event Start Image'] = existingPhotos['Event Start Image'] || booking.eventStartPhoto;
+    }
+    if (booking.equipmentHandoverPhoto) {
+      existingPhotos['Equipment Handover Photo Proof'] = existingPhotos['Equipment Handover Photo Proof'] || booking.equipmentHandoverPhoto;
+      existingPhotos['Equipment Handover Image'] = existingPhotos['Equipment Handover Image'] || booking.equipmentHandoverPhoto;
+      existingPhotos['Asset Return Photo Proof'] = existingPhotos['Asset Return Photo Proof'] || booking.equipmentHandoverPhoto;
+    }
+    if (booking.eventEndPhoto) {
+      existingPhotos['Event Completion Photo Proof'] = existingPhotos['Event Completion Photo Proof'] || booking.eventEndPhoto;
+    }
+
+    // Booking timestamp fallback
     if (booking.equipmentReceivedTime) {
       existingTimestamps['Asset Collection Photo Proof'] = existingTimestamps['Asset Collection Photo Proof'] || booking.equipmentReceivedTime;
+      existingTimestamps['Equipment Received Image'] = existingTimestamps['Equipment Received Image'] || booking.equipmentReceivedTime;
       existingTimestamps['Equipment Received / Asset Picture'] = existingTimestamps['Equipment Received / Asset Picture'] || booking.equipmentReceivedTime;
     }
     if (booking.eventStartPhotoTime) {
@@ -1879,6 +1919,7 @@ export const StaffModule: React.FC = () => {
     }
     if (booking.equipmentHandoverTime) {
       existingTimestamps['Equipment Handover Photo Proof'] = existingTimestamps['Equipment Handover Photo Proof'] || booking.equipmentHandoverTime;
+      existingTimestamps['Equipment Handover Image'] = existingTimestamps['Equipment Handover Image'] || booking.equipmentHandoverTime;
       existingTimestamps['Asset Return Photo Proof'] = existingTimestamps['Asset Return Photo Proof'] || booking.equipmentHandoverTime;
     }
 
@@ -1898,47 +1939,63 @@ export const StaffModule: React.FC = () => {
 
   // File Upload / Camera capture handler
   const handlePhotoCapture = async (eqName: string, e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) return;
+    if (!e.target.files || e.target.files.length === 0 || !photoModalData) return;
     const file = e.target.files[0];
+    const { booking, stage } = photoModalData;
 
-    const hasEquipment = Boolean(photoModalData?.booking?.equipmentItems && photoModalData.booking.equipmentItems.length > 0);
+    const hasEquipment = Boolean(booking?.equipmentItems && booking.equipmentItems.length > 0);
 
-    // Enforce Event Start ordering rule ONLY if staff has equipment assigned: Must have Asset Collection image before Event Start image
-    if (hasEquipment && photoModalData?.stage === 'Event Start' && (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image')) {
+    // Enforce Event Start ordering rule ONLY if staff has equipment assigned: Must have Equipment Received image before Event Start image
+    if (hasEquipment && stage === 'Event Start' && (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image')) {
       const hasAssetColl = !!modalPhotos['Asset Collection Photo Proof'] || 
-        !!modalPhotos['Equipment Received / Asset Picture'];
+        !!modalPhotos['Equipment Received Image'] ||
+        !!modalPhotos['Equipment Received / Asset Picture'] ||
+        !!modalPhotos['Equipment Received'];
 
       if (!hasAssetColl) {
         e.target.value = '';
-        showToast("⚠️ Please upload the Equipment Received / Asset Picture before uploading the Event Start Image.");
+        showToast("⚠️ Please upload the Equipment Received Image before uploading the Event Start Image.");
         return;
       }
     }
 
     try {
+      setUploadingItemKey(eqName);
       const captureTime = new Date().toISOString();
       const compressedBase64 = await compressImage(file);
+
+      // Upload immediately to storage
+      const prefix = stage === 'Event Start' 
+        ? ((eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image') ? 'EventStart' : 'AssetCollection')
+        : stage === 'Equipment Handover' ? 'EquipmentHandover'
+        : stage.replace(/\s+/g, '_');
+      const fileName = `proofs/${booking.orderId || booking.leadId}_${prefix}_${Date.now()}.jpg`;
+      const uploadedUrl = (await safeUploadImage(compressedBase64, fileName)) || compressedBase64;
+
       setModalPhotos(prev => {
-        const next = { ...prev, [eqName]: compressedBase64 };
-        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:') || eqName === 'Equipment Received / Asset Picture' || eqName === 'Equipment Received') {
-          next['Equipment Received / Asset Picture'] = compressedBase64;
-          next['Asset Collection Photo Proof'] = compressedBase64;
-          next['Equipment Received'] = compressedBase64;
+        const next = { ...prev, [eqName]: uploadedUrl };
+        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:') || eqName === 'Equipment Received Image' || eqName === 'Equipment Received / Asset Picture' || eqName === 'Equipment Received') {
+          next['Equipment Received Image'] = uploadedUrl;
+          next['Equipment Received / Asset Picture'] = uploadedUrl;
+          next['Asset Collection Photo Proof'] = uploadedUrl;
+          next['Equipment Received'] = uploadedUrl;
         }
         if (eqName === 'Event Start Photo Proof' || eqName === 'Event Start Image') {
-          next['Event Start Photo Proof'] = compressedBase64;
-          next['Event Start Image'] = compressedBase64;
+          next['Event Start Photo Proof'] = uploadedUrl;
+          next['Event Start Image'] = uploadedUrl;
         }
-        if (eqName === 'Equipment Handover Photo Proof' || eqName === 'Asset Return Photo Proof' || eqName === 'Equipment Handover' || eqName.startsWith('Equipment Handover:') || eqName.startsWith('Asset Return:')) {
-          next['Equipment Handover Photo Proof'] = compressedBase64;
-          next['Asset Return Photo Proof'] = compressedBase64;
-          next['Equipment Handover'] = compressedBase64;
+        if (eqName === 'Equipment Handover Photo Proof' || eqName === 'Equipment Handover Image' || eqName === 'Asset Return Photo Proof' || eqName === 'Equipment Handover' || eqName.startsWith('Equipment Handover:') || eqName.startsWith('Asset Return:')) {
+          next['Equipment Handover Photo Proof'] = uploadedUrl;
+          next['Equipment Handover Image'] = uploadedUrl;
+          next['Asset Return Photo Proof'] = uploadedUrl;
+          next['Equipment Handover'] = uploadedUrl;
         }
         return next;
       });
       setModalPhotoTimestamps(prev => {
         const next = { ...prev, [eqName]: captureTime };
-        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:') || eqName === 'Equipment Received / Asset Picture' || eqName === 'Equipment Received') {
+        if (eqName === 'Asset Collection Photo Proof' || eqName.startsWith('Asset Collection:') || eqName === 'Equipment Received Image' || eqName === 'Equipment Received / Asset Picture' || eqName === 'Equipment Received') {
+          next['Equipment Received Image'] = captureTime;
           next['Equipment Received / Asset Picture'] = captureTime;
           next['Asset Collection Photo Proof'] = captureTime;
           next['Equipment Received'] = captureTime;
@@ -1947,16 +2004,269 @@ export const StaffModule: React.FC = () => {
           next['Event Start Photo Proof'] = captureTime;
           next['Event Start Image'] = captureTime;
         }
-        if (eqName === 'Equipment Handover Photo Proof' || eqName === 'Asset Return Photo Proof' || eqName === 'Equipment Handover' || eqName.startsWith('Equipment Handover:') || eqName.startsWith('Asset Return:')) {
+        if (eqName === 'Equipment Handover Photo Proof' || eqName === 'Equipment Handover Image' || eqName === 'Asset Return Photo Proof' || eqName === 'Equipment Handover' || eqName.startsWith('Equipment Handover:') || eqName.startsWith('Asset Return:')) {
           next['Equipment Handover Photo Proof'] = captureTime;
+          next['Equipment Handover Image'] = captureTime;
           next['Asset Return Photo Proof'] = captureTime;
           next['Equipment Handover'] = captureTime;
         }
         return next;
       });
+
+      // Save immediately to database and localStorage without advancing the event stage/status
+      if (stage === 'Event Start') {
+        const isAssetPhoto = eqName !== 'Event Start Photo Proof' && eqName !== 'Event Start Image';
+        const matchingSA = staffAssignments?.find(sa => {
+          if (!sa || sa.order_id !== booking.orderId) return false;
+          if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+          if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+          return false;
+        });
+        const targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id || null;
+
+        if (isAssetPhoto) {
+          const assetId = booking.equipmentItems?.find((eq: any) => eq.name === eqName)?.assetId || booking.equipmentItems?.[0]?.assetId || 'Asset Collection';
+          const historyRecord = {
+            lead_id: booking.leadId || null,
+            order_id: booking.orderId || null,
+            assignment_id: targetAssignmentId,
+            equipment_name: eqName,
+            equipment_status: 'Equipment Received',
+            returned_by: staffName,
+            returned_at: captureTime,
+            photo_url: uploadedUrl,
+            asset_id: assetId,
+            proof_type: 'Equipment Received',
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            remarks: JSON.stringify({
+              assignment_id: targetAssignmentId || '',
+              asset_id: assetId,
+              proof_type: 'Equipment Received',
+              staff_name: staffName,
+              staff_role: booking.assignedRole || '',
+              staff_id: staffMember?.id || currentUser?.id || '',
+              photo_url: uploadedUrl,
+              event_id: booking.eventId || 'ev',
+              event_name: booking.eventName,
+              order_id: booking.orderId,
+              lead_id: booking.leadId,
+              uploaded_at: captureTime,
+              uploaded_by: staffName,
+              current_status: staffStatuses[booking.key] || 'Assigned Crew'
+            })
+          };
+          await pushInsert('lead_equipment_history', historyRecord);
+
+          // Update assignment equipment_received_photo immediately
+          if (targetAssignmentId) {
+            const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId);
+            let existingProofs: any = {};
+            if (existingSA?.proofs) {
+              try {
+                existingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+              } catch (e) {}
+            }
+            await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
+              equipment_received_photo: uploadedUrl,
+              equipment_received_time: captureTime,
+              proofs: {
+                ...existingProofs,
+                equipment_received_photo: uploadedUrl,
+                equipment_received_time: captureTime,
+                equipment_received_date: captureTime.split('T')[0]
+              }
+            });
+          }
+
+          // Update local staffProofs cache
+          const existingProofs = staffProofs[booking.key] || {};
+          const prevEqProofs = existingProofs.equipmentReceivedProofs || [];
+          const nextEqProofs = [...prevEqProofs.filter((p: any) => p.equipmentName !== eqName), {
+            equipmentName: eqName,
+            assetId: assetId,
+            photoUrl: uploadedUrl,
+            capturedAt: captureTime
+          }];
+          const nextProofs = {
+            ...staffProofs,
+            [booking.key]: {
+              ...existingProofs,
+              equipmentReceivedProofs: nextEqProofs
+            }
+          };
+          setStaffProofs(nextProofs);
+          localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
+        } else {
+          // Event Start photo
+          const startHistoryRecord = {
+            lead_id: booking.leadId || null,
+            order_id: booking.orderId || null,
+            assignment_id: targetAssignmentId,
+            equipment_name: 'Event Start',
+            equipment_status: 'Event Started',
+            returned_by: staffName,
+            returned_at: captureTime,
+            photo_url: uploadedUrl,
+            asset_id: 'Event Start',
+            proof_type: 'Event Start',
+            event_id: booking.eventId || null,
+            event_name: booking.eventName || null,
+            remarks: JSON.stringify({
+              assignment_id: targetAssignmentId || '',
+              asset_id: 'Event Start',
+              proof_type: 'Event Start',
+              staff_name: staffName,
+              staff_role: booking.assignedRole || '',
+              staff_id: staffMember?.id || currentUser?.id || '',
+              photo_url: uploadedUrl,
+              event_id: booking.eventId || 'ev',
+              event_name: booking.eventName,
+              order_id: booking.orderId,
+              lead_id: booking.leadId,
+              uploaded_at: captureTime,
+              uploaded_by: staffName,
+              current_status: staffStatuses[booking.key] || 'Assigned Crew'
+            })
+          };
+          await pushInsert('lead_equipment_history', startHistoryRecord);
+
+          // Update assignment event_start_photo immediately
+          if (targetAssignmentId) {
+            const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId);
+            let existingProofs: any = {};
+            if (existingSA?.proofs) {
+              try {
+                existingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+              } catch (e) {}
+            }
+            await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
+              event_start_photo: uploadedUrl,
+              event_start_time: captureTime,
+              proofs: {
+                ...existingProofs,
+                event_start_photo: uploadedUrl,
+                event_start_time: captureTime,
+                event_start_date: captureTime.split('T')[0]
+              }
+            });
+          }
+
+          // Update local staffProofs cache
+          const existingProofs = staffProofs[booking.key] || {};
+          const prevStartProofs = existingProofs.eventStartProofs || [];
+          const nextStartProofs = [...prevStartProofs.filter((p: any) => p.equipmentName !== 'Event Start Photo Proof'), {
+            equipmentName: 'Event Start Photo Proof',
+            assetId: 'Event Start',
+            photoUrl: uploadedUrl,
+            capturedAt: captureTime
+          }];
+          const nextProofs = {
+            ...staffProofs,
+            [booking.key]: {
+              ...existingProofs,
+              eventStartProofs: nextStartProofs
+            }
+          };
+          setStaffProofs(nextProofs);
+          localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
+        }
+
+        showToast("✓ Image uploaded and saved successfully!");
+      } else if (stage === 'Equipment Handover') {
+        const matchingSA = staffAssignments?.find(sa => {
+          if (!sa || sa.order_id !== booking.orderId) return false;
+          if ((sa.staff_name || '').trim().toLowerCase() !== staffName.trim().toLowerCase()) return false;
+          if (booking.assignmentId && sa.assignment_id && sa.assignment_id === booking.assignmentId) return true;
+          if (booking.eventId && booking.eventId !== 'ev' && sa.event_id && sa.event_id === booking.eventId) return true;
+          if ((!booking.eventId || booking.eventId === 'ev') && booking.eventName && sa.event_name && sa.event_name.trim().toLowerCase() === booking.eventName.trim().toLowerCase()) return true;
+          return false;
+        });
+        const targetAssignmentId = booking.assignmentId || matchingSA?.assignment_id || null;
+        const assetId = booking.equipmentItems?.find((eq: any) => eq.name === eqName)?.assetId || booking.equipmentItems?.[0]?.assetId || 'Equipment Handover';
+
+        const historyRecord = {
+          lead_id: booking.leadId || null,
+          order_id: booking.orderId || null,
+          assignment_id: targetAssignmentId,
+          equipment_name: eqName,
+          equipment_status: 'Equipment Handover Completed',
+          returned_by: staffName,
+          returned_at: captureTime,
+          photo_url: uploadedUrl,
+          asset_id: assetId,
+          proof_type: 'Equipment Handover',
+          event_id: booking.eventId || null,
+          event_name: booking.eventName || null,
+          remarks: JSON.stringify({
+            assignment_id: targetAssignmentId || '',
+            asset_id: assetId,
+            proof_type: 'Equipment Handover',
+            staff_name: staffName,
+            staff_role: booking.assignedRole || '',
+            staff_id: staffMember?.id || currentUser?.id || '',
+            photo_url: uploadedUrl,
+            event_id: booking.eventId || 'ev',
+            event_name: booking.eventName,
+            order_id: booking.orderId,
+            lead_id: booking.leadId,
+            uploaded_at: captureTime,
+            uploaded_by: staffName,
+            current_status: staffStatuses[booking.key] || 'Event Ended'
+          })
+        };
+        await pushInsert('lead_equipment_history', historyRecord);
+
+        // Update assignment equipment_handover_photo immediately
+        if (targetAssignmentId) {
+          const existingSA = staffAssignments?.find(sa => sa.assignment_id === targetAssignmentId);
+          let existingProofs: any = {};
+          if (existingSA?.proofs) {
+            try {
+              existingProofs = typeof existingSA.proofs === 'string' ? JSON.parse(existingSA.proofs) : existingSA.proofs;
+            } catch (e) {}
+          }
+          await pushUpdate('staff_assignments', 'assignment_id', targetAssignmentId, {
+            equipment_handover_photo: uploadedUrl,
+            equipment_handover_time: captureTime,
+            equipment_handover_date: captureTime.split('T')[0],
+            proofs: {
+              ...existingProofs,
+              equipment_handover_photo: uploadedUrl,
+              equipment_handover_time: captureTime,
+              equipment_handover_date: captureTime.split('T')[0]
+            }
+          });
+        }
+
+        // Update local staffProofs cache
+        const existingProofs = staffProofs[booking.key] || {};
+        const prevHandoverProofs = existingProofs.equipmentHandoverProofs || [];
+        const nextHandoverProofs = [...prevHandoverProofs.filter((p: any) => p.equipmentName !== eqName), {
+          equipmentName: eqName,
+          assetId: assetId,
+          photoUrl: uploadedUrl,
+          capturedAt: captureTime
+        }];
+        const nextProofs = {
+          ...staffProofs,
+          [booking.key]: {
+            ...existingProofs,
+            equipmentHandoverProofs: nextHandoverProofs
+          }
+        };
+        setStaffProofs(nextProofs);
+        localStorage.setItem('staff_equipment_proofs_v2', JSON.stringify(nextProofs));
+
+        showToast("✓ Equipment Handover photo saved!");
+      }
     } catch (err) {
       console.error('Error processing photo:', err);
       showToast('❌ Failed to process photo. Please try again.');
+    } finally {
+      setUploadingItemKey(null);
     }
   };
 
@@ -1972,14 +2282,14 @@ export const StaffModule: React.FC = () => {
       const isMultiEq = hasEquipment && booking.equipmentItems.length > 1;
       const assetKeys = hasEquipment ? booking.equipmentItems.map((eq: any) => eq.name) : [];
       const hasAssetColl = hasEquipment
-        ? (!!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received / Asset Picture'])
+        ? (!!modalPhotos['Asset Collection Photo Proof'] || !!modalPhotos['Equipment Received Image'] || !!modalPhotos['Equipment Received / Asset Picture'] || !!modalPhotos['Equipment Received'])
         : true;
       const hasEventStart = !!modalPhotos['Event Start Photo Proof'] || !!modalPhotos['Event Start Image'];
 
       // Strict Image Upload Validation before submitting
       const missingList: string[] = [];
       if (hasEquipment && !hasAssetColl) {
-        missingList.push('1. Equipment Received / Asset Picture');
+        missingList.push('1. Equipment Received Image');
       }
       if (!hasEventStart) {
         missingList.push('2. Event Start Image');
@@ -2330,7 +2640,7 @@ export const StaffModule: React.FC = () => {
       reqItems = [{ name: 'Event Completion Photo Proof', assetId: 'Event Completion' }];
     } else if (stage === 'Equipment Handover') {
       if (hasEquipment) {
-        reqItems = booking.equipmentItems.map((eq: any) => ({ name: eq.name, assetId: eq.assetId || eq.name, optional: true }));
+        reqItems = [{ name: 'Asset Return Photo Proof', displayName: 'Equipment Handover Image', assetId: booking.equipmentItems[0]?.assetId || 'Equipment Handover', optional: false }];
       } else {
         reqItems = [];
       }
@@ -2346,9 +2656,9 @@ export const StaffModule: React.FC = () => {
     const missingOther: string[] = [];
     for (const item of reqItems) {
       if (!item.optional) {
-        const hasPhoto = modalPhotos[item.name] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover Photo Proof'];
+        const hasPhoto = modalPhotos[item.name] || modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Equipment Handover Image'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover'] || modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received Image'] || modalPhotos['Equipment Received / Asset Picture'];
         if (!hasPhoto) {
-          missingOther.push(item.name);
+          missingOther.push(item.displayName || item.name);
         }
       }
     }
@@ -2971,6 +3281,48 @@ export const StaffModule: React.FC = () => {
     });
   }
 
+  // Check if all required upload proofs / links are completed for the currently open photo modal
+  const isFormComplete = Boolean((() => {
+    if (!photoModalData) return false;
+    const { booking, stage } = photoModalData;
+    const hasEquipment = Boolean(booking.equipmentItems && booking.equipmentItems.length > 0);
+
+    if (stage === 'Event Start') {
+      const hasAsset = !hasEquipment || Boolean(
+        modalPhotos['Asset Collection Photo Proof'] || 
+        modalPhotos['Equipment Received Image'] || 
+        modalPhotos['Equipment Received / Asset Picture'] || 
+        modalPhotos['Equipment Received']
+      );
+      const hasStart = Boolean(
+        modalPhotos['Event Start Photo Proof'] || 
+        modalPhotos['Event Start Image']
+      );
+      return hasAsset && hasStart;
+    }
+
+    if (stage === 'Event Complete') {
+      return Boolean(
+        modalPhotos['Event Completion Photo Proof'] || 
+        modalPhotos['Event End Image'] || 
+        modalPhotos['Event Complete']
+      );
+    }
+
+    if (stage === 'Equipment Handover') {
+      const hasLink = Boolean(modalRawFootageLink && modalRawFootageLink.trim().length > 0);
+      const hasHandoverImg = !hasEquipment || Boolean(
+        modalPhotos['Equipment Handover Photo Proof'] || 
+        modalPhotos['Equipment Handover Image'] || 
+        modalPhotos['Asset Return Photo Proof'] || 
+        modalPhotos['Equipment Handover']
+      );
+      return hasLink && hasHandoverImg;
+    }
+
+    return true;
+  })());
+
   return (
     <div className="space-y-6">
       {/* Toast Notification */}
@@ -3533,7 +3885,7 @@ export const StaffModule: React.FC = () => {
                       ? [
                           {
                             name: 'Asset Collection Photo Proof',
-                            displayName: '1. Equipment Received / Asset Picture',
+                            displayName: '1. Equipment Received Image',
                             assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
                             optional: false,
                             isAsset: true
@@ -3564,9 +3916,9 @@ export const StaffModule: React.FC = () => {
                       ? [
                           {
                             name: 'Asset Return Photo Proof',
-                            displayName: 'Equipment Handover Photo Proof',
+                            displayName: 'Equipment Handover Image',
                             assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Equipment Handover',
-                            optional: true
+                            optional: false
                           }
                         ]
                       : []
@@ -3575,7 +3927,7 @@ export const StaffModule: React.FC = () => {
                       ? [
                           {
                             name: 'Asset Collection Photo Proof',
-                            displayName: 'Equipment Received / Asset Picture',
+                            displayName: '1. Equipment Received Image',
                             assetId: photoModalData.booking.equipmentItems[0]?.assetId || 'Asset Collection',
                             optional: false,
                             isAsset: true
@@ -3585,9 +3937,9 @@ export const StaffModule: React.FC = () => {
                     )
                 ).map((item: any, idx: number) => {
                   const currentPhoto = modalPhotos[item.name] || 
-                    (item.isAsset ? (modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received / Asset Picture']) : undefined) ||
+                    (item.isAsset ? (modalPhotos['Asset Collection Photo Proof'] || modalPhotos['Equipment Received Image'] || modalPhotos['Equipment Received / Asset Picture'] || modalPhotos['Equipment Received']) : undefined) ||
                     (item.isEventStart ? (modalPhotos['Event Start Photo Proof'] || modalPhotos['Event Start Image']) : undefined) ||
-                    (item.name === 'Equipment Handover Photo Proof' ? modalPhotos['Asset Return Photo Proof'] : undefined);
+                    (item.name === 'Asset Return Photo Proof' || item.name === 'Equipment Handover Photo Proof' || item.displayName?.includes('Equipment Handover') ? (modalPhotos['Equipment Handover Photo Proof'] || modalPhotos['Equipment Handover Image'] || modalPhotos['Asset Return Photo Proof'] || modalPhotos['Equipment Handover']) : undefined);
 
                   const isAsset = item.isAsset || (item.name && ((item.name || '').toLowerCase().includes('asset collection') || (item.name || '').toLowerCase().includes('equipment received')));
                   const isEventStart = item.isEventStart || (item.name && (item.name || '').toLowerCase().includes('event start'));
@@ -3596,10 +3948,10 @@ export const StaffModule: React.FC = () => {
 
                   let uploadTime = modalPhotoTimestamps[item.name] || (item.displayName ? modalPhotoTimestamps[item.displayName] : null);
                   if (!uploadTime && photoModalData?.booking) {
-                    if (isAsset) uploadTime = modalPhotoTimestamps['Asset Collection Photo Proof'] || modalPhotoTimestamps['Equipment Received / Asset Picture'] || photoModalData.booking.equipmentReceivedTime;
+                    if (isAsset) uploadTime = modalPhotoTimestamps['Asset Collection Photo Proof'] || modalPhotoTimestamps['Equipment Received Image'] || modalPhotoTimestamps['Equipment Received / Asset Picture'] || photoModalData.booking.equipmentReceivedTime;
                     else if (isEventStart) uploadTime = modalPhotoTimestamps['Event Start Photo Proof'] || modalPhotoTimestamps['Event Start Image'] || photoModalData.booking.eventStartPhotoTime;
                     else if (isEventEnd) uploadTime = modalPhotoTimestamps['Event Completion Photo Proof'] || photoModalData.booking.eventEndPhotoTime;
-                    else if (isHandover) uploadTime = modalPhotoTimestamps['Equipment Handover Photo Proof'] || modalPhotoTimestamps['Asset Return Photo Proof'] || photoModalData.booking.equipmentHandoverTime;
+                    else if (isHandover) uploadTime = modalPhotoTimestamps['Equipment Handover Image'] || modalPhotoTimestamps['Equipment Handover Photo Proof'] || modalPhotoTimestamps['Asset Return Photo Proof'] || photoModalData.booking.equipmentHandoverTime;
                   }
 
                   return (
@@ -3639,7 +3991,13 @@ export const StaffModule: React.FC = () => {
                         )}
                       </div>
 
-                      {currentPhoto ? (
+                      {uploadingItemKey === item.name || (item.isAsset && uploadingItemKey?.toLowerCase().includes('asset')) ? (
+                        <div className="border border-amber-500/40 bg-zinc-900/80 rounded-2xl p-8 flex flex-col items-center justify-center gap-3">
+                          <Loader2 className="w-8 h-8 animate-spin text-amber-400" />
+                          <span className="text-xs font-bold text-amber-300">Uploading and saving {item.displayName || item.name}...</span>
+                          <span className="text-[10px] text-zinc-400">Saving to storage immediately</span>
+                        </div>
+                      ) : currentPhoto ? (
                         <div className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900">
                           <img src={currentPhoto} alt={item.name} className="w-full h-40 object-cover" />
                           <label className="absolute bottom-2 right-2 bg-zinc-900/90 hover:bg-zinc-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl border border-zinc-700 cursor-pointer flex items-center gap-1.5 shadow-lg">
@@ -3708,52 +4066,69 @@ export const StaffModule: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-between items-center">
+            <div className="p-4 border-t border-zinc-800 bg-zinc-950/80 flex justify-between items-center gap-3">
               <button
                 type="button"
                 onClick={closePhotoModal}
                 disabled={isSubmitting}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors"
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-colors cursor-pointer"
               >
                 Cancel
               </button>
 
-              <button
-                onClick={handleConfirmStatusUpdate}
-                disabled={isSubmitting}
-                className={`px-6 py-2.5 font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-lg ${
-                  photoModalData.stage === 'Event Start'
-                    ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-amber-500/20'
-                    : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20'
-                }`}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving...</span>
-                  </>
-                ) : photoModalData.stage === 'Event Start' ? (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Confirm Event Start
-                  </>
-                ) : photoModalData.stage === 'Event Complete' ? (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Submit Event End
-                  </>
-                ) : photoModalData.stage === 'Equipment Handover' ? (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Submit Footage Handover
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    Confirm {photoModalData.stage}
-                  </>
+              <div className="flex items-center gap-3">
+                {!isFormComplete && (
+                  <span className="text-[11px] text-amber-400 font-medium items-center gap-1.5 hidden sm:inline-flex">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    {photoModalData.stage === 'Event Start'
+                      ? 'Upload both images to enable submission'
+                      : photoModalData.stage === 'Equipment Handover'
+                      ? (photoModalData.booking.equipmentItems && photoModalData.booking.equipmentItems.length > 0 ? 'Upload handover image & link to enable submission' : 'Provide link to enable submission')
+                      : 'Upload required image to enable submission'}
+                  </span>
                 )}
-              </button>
+
+                <button
+                  type="button"
+                  onClick={handleConfirmStatusUpdate}
+                  disabled={isSubmitting || !isFormComplete}
+                  className={`px-6 py-2.5 font-bold rounded-xl text-xs transition-all flex items-center gap-2 shadow-lg ${
+                    !isFormComplete || isSubmitting
+                      ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700/60'
+                      : photoModalData.stage === 'Event Start'
+                      ? 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-amber-500/20 cursor-pointer'
+                      : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-600/20 cursor-pointer'
+                  }`}
+                  title={!isFormComplete ? 'Please complete all required items before submitting' : undefined}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : photoModalData.stage === 'Event Start' ? (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Confirm Event Start
+                    </>
+                  ) : photoModalData.stage === 'Event Complete' ? (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Submit Event End
+                    </>
+                  ) : photoModalData.stage === 'Equipment Handover' ? (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Submit Footage Handover
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4" />
+                      Confirm {photoModalData.stage}
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>,

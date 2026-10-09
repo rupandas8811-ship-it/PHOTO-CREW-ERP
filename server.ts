@@ -2135,37 +2135,99 @@ async function startServer() {
       }
 
       // Determine auth user ID
-      let targetAuthId = auth_id;
-      if (!targetAuthId && (cleanEmail || cleanMobile)) {
+      let targetAuthId: string | null = auth_id || null;
+      let targetAuthUser: any = null;
+
+      if (targetAuthId) {
+        try {
+          const { data: uData, error: uErr } = await db.auth.admin.getUserById(targetAuthId);
+          if (!uErr && uData?.user) {
+            targetAuthUser = uData.user;
+          }
+        } catch (e) {}
+      }
+
+      // If not directly found in auth by ID, check if staff_id has auth_user_id in notes
+      if (!targetAuthUser && staff_id) {
+        try {
+          const { data: psRec } = await db.from('production_staff').select('notes, email, mobile').eq('staff_id', staff_id).maybeSingle();
+          if (psRec?.notes) {
+            try {
+              const parsed = JSON.parse(psRec.notes);
+              if (parsed.auth_user_id) {
+                const { data: psAuth, error: psAuthErr } = await db.auth.admin.getUserById(parsed.auth_user_id);
+                if (!psAuthErr && psAuth?.user) {
+                  targetAuthUser = psAuth.user;
+                  targetAuthId = psAuth.user.id;
+                }
+              }
+            } catch (e) {}
+          }
+          if (!cleanEmail && psRec?.email) cleanEmail = psRec.email.trim().toLowerCase();
+          if (!cleanMobile && psRec?.mobile) cleanMobile = cleanPhone(psRec.mobile);
+        } catch (e) {}
+      }
+
+      // If target auth user still not found, search auth.users by email or phone/mobile
+      if (!targetAuthUser && (cleanEmail || cleanMobile)) {
         try {
           const { data: listData } = await db.auth.admin.listUsers({ page: 1, perPage: 1000 });
           const found = (listData?.users || []).find((u: any) =>
             (cleanEmail && u.email?.trim().toLowerCase() === cleanEmail) ||
             (cleanMobile && (cleanPhone(u.phone) === cleanMobile || cleanPhone(u.user_metadata?.mobile) === cleanMobile))
           );
-          if (found) targetAuthId = found.id;
+          if (found) {
+            targetAuthUser = found;
+            targetAuthId = found.id;
+          }
         } catch (e) {}
       }
 
+      // If user doesn't exist in Supabase Auth yet and password is provided, create the auth user
+      if (!targetAuthUser && password) {
+        if (!cleanEmail && !cleanMobile) {
+          return res.status(404).json({ success: false, error: 'Staff authentication account not found' });
+        }
+        const createEmail = cleanEmail || `${cleanMobile}@photocrew.com`;
+        const { data: created, error: createErr } = await db.auth.admin.createUser({
+          email: createEmail,
+          password: password,
+          user_metadata: { name: name || 'Staff Member', role: role || 'Production Staff', mobile: cleanMobile },
+          email_confirm: true
+        });
+        if (createErr) {
+          console.error('[Server Auth Create User Error]', createErr);
+          return res.status(400).json({ success: false, error: createErr.message || 'Failed to create authentication credentials' });
+        }
+        targetAuthUser = created.user;
+        targetAuthId = created.user.id;
+      }
+
+      // Prepare updates for Supabase Auth
       const updates: any = {};
       if (password) updates.password = password;
       if (cleanEmail && !isStaffRole) updates.email = cleanEmail;
       if (name || role || cleanMobile) updates.user_metadata = { name, role, mobile: cleanMobile || mobile };
       
-      if (Object.keys(updates).length > 0 && targetAuthId) {
-        try {
-          const { error } = await db.auth.admin.updateUserById(targetAuthId, updates);
-          if (error && !error.message?.includes('loading user') && !error.message?.includes('User not found')) {
-            console.warn(`[Server Auth Update Warning]`, error.message);
+      // Update Supabase Auth credentials securely and verify success
+      if (targetAuthId) {
+        if (password) {
+          const { data: updData, error: authUpdErr } = await db.auth.admin.updateUserById(targetAuthId, updates);
+          if (authUpdErr) {
+            console.error('[Server Auth Password Update Error]', authUpdErr);
+            return res.status(400).json({ success: false, error: authUpdErr.message || 'Authentication provider failed to update password' });
           }
-        } catch (e: any) {
-          if (!e.message?.includes('loading user') && !e.message?.includes('User not found')) {
-            console.warn(`[Server Auth Update Exception]`, e.message);
+        } else if (Object.keys(updates).length > 0) {
+          const { error: nonPwErr } = await db.auth.admin.updateUserById(targetAuthId, updates);
+          if (nonPwErr) {
+            console.warn('[Server Auth Non-Password Update Warning]', nonPwErr.message);
           }
         }
+      } else if (password) {
+        return res.status(404).json({ success: false, error: 'Could not find or create authentication account for staff member' });
       }
       
-      // Update users table (note: public.users has created_at, no updated_at)
+      // Update users table - Do NOT store plaintext password!
       const userUpdates: any = {};
       if (name) userUpdates.name = name;
       if (cleanEmail && !isStaffRole) userUpdates.email = cleanEmail;
@@ -2182,41 +2244,55 @@ async function startServer() {
         else userUpdates.role = role;
       }
       if (cleanMobile !== undefined) userUpdates.mobile = cleanMobile;
-      if (password) userUpdates.password = password;
       if (active !== undefined) userUpdates.active = active;
+      if (password) {
+        // Clear plaintext password field in database to prevent storing plaintext passwords
+        userUpdates.password = null;
+      }
       
       let dbData: any[] | null = null;
-      if (auth_id) {
-        const { data: res1 } = await db.from('users').update(userUpdates).eq('id', auth_id).select();
+      if (targetAuthId) {
+        const { data: res1 } = await db.from('users').update(userUpdates).eq('id', targetAuthId).select();
         if (Array.isArray(res1) && res1.length > 0) dbData = res1;
       }
       if (!dbData && cleanEmail) {
-        const { data: res2 } = await db.from('users').update(userUpdates).eq('email', cleanEmail).select();
+        const { data: res2 } = await db.from('users').update(userUpdates).ilike('email', cleanEmail).select();
         if (Array.isArray(res2) && res2.length > 0) dbData = res2;
       }
       if (!dbData && cleanMobile) {
         const { data: res3 } = await db.from('users').update(userUpdates).eq('mobile', cleanMobile).select();
         if (Array.isArray(res3) && res3.length > 0) dbData = res3;
       }
-      if (!dbData && (cleanMobile || cleanEmail) && password) {
-        const newRecord = {
-          id: targetAuthId || (staff_id || crypto.randomUUID()),
-          email: cleanEmail || `${cleanMobile}@photocrew.com`,
-          username: cleanEmail || cleanMobile,
-          name: name || 'Staff Member',
-          mobile: cleanMobile,
-          password: password,
-          role: userUpdates.role || 'Operation Staff',
-          active: active !== undefined ? active : true,
-          created_at: new Date().toISOString()
-        };
-        const { data: insertData } = await db.from('users').insert(newRecord).select();
-        if (Array.isArray(insertData) && insertData.length > 0) {
-          dbData = insertData;
+
+      // Update production_staff table notes with targetAuthId and clear plaintext Password
+      if (staff_id || cleanEmail || cleanMobile) {
+        try {
+          let psQuery = db.from('production_staff').select('staff_id, notes');
+          if (staff_id) psQuery = psQuery.eq('staff_id', staff_id);
+          else if (cleanEmail) psQuery = psQuery.ilike('email', cleanEmail);
+          else if (cleanMobile) psQuery = psQuery.eq('mobile', cleanMobile);
+
+          const { data: psRows } = await psQuery;
+          if (psRows && psRows.length > 0) {
+            for (const row of psRows) {
+              let notesObj: any = {};
+              try { if (row.notes) notesObj = JSON.parse(row.notes); } catch (e) {}
+              if (targetAuthId) {
+                notesObj.auth_user_id = targetAuthId;
+              }
+              const psUpdates: any = { notes: JSON.stringify(notesObj) };
+              if (password) {
+                psUpdates.Password = null;
+              }
+              await db.from('production_staff').update(psUpdates).eq('staff_id', row.staff_id);
+            }
+          }
+        } catch (psErr) {
+          console.warn('[Server Auth PS Sync Warning]', psErr);
         }
       }
       
-      res.json({ success: true, data: { record: dbData?.[0] || userUpdates } });
+      res.json({ success: true, auth_user_id: targetAuthId, data: { record: dbData?.[0] || userUpdates } });
     } catch (err: any) {
       console.error(`[Server Auth Update Exception]`, err);
       res.status(500).json({ success: false, error: err.message || String(err) });

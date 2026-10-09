@@ -884,6 +884,7 @@ export const mapProductionStaffFromDb = (item: any): Staff => {
     status: item.status || 'Active',
     joining_date: item.joining_date || new Date().toISOString().split('T')[0],
     Skill: Array.isArray(item.Skill) ? item.Skill : (typeof item.Skill === 'string' ? item.Skill.split(',').map((s: any) => s.trim()).filter(Boolean) : (Array.isArray(extra.Skill) ? extra.Skill : [])),
+    auth_user_id: extra.auth_user_id || item.auth_user_id || undefined,
     password: item.Password || item.password || extra.password || extra.Password || '',
     Password: item.Password || item.password || extra.password || extra.Password || '',
     notes: (item.notes && item.notes.trim().startsWith('{') && item.notes.trim().endsWith('}')) ? (extra.notes || '') : item.notes
@@ -4395,16 +4396,6 @@ const safeParseResponse = async (response: Response): Promise<{ ok: boolean; dat
               if (!authErr && authData?.session) {
                 authSuccess = true;
                 dbUser = candidate;
-                // Sync password to public.users table so future logins use public.users.password directly
-                try {
-                  await supabaseClient
-                    .from('users')
-                    .update({ password: cleanPassword })
-                    .eq('id', candidate.id);
-                  dbUser.password = cleanPassword;
-                } catch (syncErr) {
-                  console.warn("[LOGIN] Failed to update password in users table:", syncErr);
-                }
                 break;
               }
             } catch (e: any) {

@@ -40,7 +40,53 @@ interface EquipmentSelectorDropdownProps {
   placeholder?: string;
 }
 
-export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps> = ({
+// Module-level cache for fetched equipment across all dropdown instances
+let globalEquipmentCache: any[] | null = null;
+let globalEquipmentFetchPromise: Promise<any[]> | null = null;
+const globalEquipmentListeners = new Set<(data: any[]) => void>();
+
+export const getCachedOrFetchEquipment = async (forceRefresh = false): Promise<any[]> => {
+  if (!forceRefresh && globalEquipmentCache && globalEquipmentCache.length > 0) {
+    return globalEquipmentCache;
+  }
+  if (!globalEquipmentFetchPromise || forceRefresh) {
+    globalEquipmentFetchPromise = (async () => {
+      try {
+        if (supabaseClient) {
+          const { data, error } = await supabaseClient
+            .from('equipment')
+            .select('*');
+          if (!error && Array.isArray(data) && data.length > 0) {
+            globalEquipmentCache = data;
+            globalEquipmentListeners.forEach(fn => fn(data));
+            return data;
+          }
+        }
+        const proxyRes = await fetch('/api/db/select', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'equipment' })
+        });
+        if (proxyRes.ok) {
+          const json = await proxyRes.json();
+          if (json?.success && Array.isArray(json.data) && json.data.length > 0) {
+            globalEquipmentCache = json.data;
+            globalEquipmentListeners.forEach(fn => fn(json.data));
+            return json.data;
+          }
+        }
+      } catch (err) {
+        console.warn('[EquipmentSelectorDropdown] Error fetching equipment:', err);
+      } finally {
+        globalEquipmentFetchPromise = null;
+      }
+      return globalEquipmentCache || [];
+    })();
+  }
+  return globalEquipmentFetchPromise;
+};
+
+const EquipmentSelectorDropdownComponent: React.FC<EquipmentSelectorDropdownProps> = ({
   equipment = [],
   selectedEquipmentNames = [],
   otherStaffEquipments = [],
@@ -60,8 +106,8 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
   const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'busy' | 'selected'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   
-  // Live fetched equipment directly from Supabase `equipment` table
-  const [dbEquipmentList, setDbEquipmentList] = useState<any[]>([]);
+  // Live fetched equipment directly from Supabase `equipment` table (uses module-level cache)
+  const [dbEquipmentList, setDbEquipmentList] = useState<any[]>(() => globalEquipmentCache || []);
   const [isDbLoading, setIsDbLoading] = useState(false);
 
   // Conflict modal state
@@ -74,52 +120,35 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
   const popoverRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Direct fetch from Supabase `equipment` table
-  const fetchEquipmentFromSupabase = useCallback(async () => {
+  // Subscribe to global cache updates and fetch once if not cached
+  useEffect(() => {
+    const listener = (data: any[]) => {
+      setDbEquipmentList(data);
+    };
+    globalEquipmentListeners.add(listener);
+
+    if (!globalEquipmentCache || globalEquipmentCache.length === 0) {
+      getCachedOrFetchEquipment().then(data => {
+        if (data && data.length > 0) {
+          setDbEquipmentList(data);
+        }
+      });
+    }
+
+    return () => {
+      globalEquipmentListeners.delete(listener);
+    };
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
     setIsDbLoading(true);
     try {
-      // 1. Direct Supabase query on `equipment` table
-      if (supabaseClient) {
-        const { data, error } = await supabaseClient
-          .from('equipment')
-          .select('*');
-
-        if (error) {
-          console.warn('[EquipmentSelectorDropdown] Supabase query notice:', error.message || error);
-        }
-
-        if (!error && Array.isArray(data) && data.length > 0) {
-          setDbEquipmentList(data);
-          setIsDbLoading(false);
-          return;
-        }
-      }
-
-      // 2. Server proxy fallback if direct client had network/cors limits
-      const proxyRes = await fetch('/api/db/select', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ table: 'equipment' })
-      });
-      if (proxyRes.ok) {
-        const json = await proxyRes.json();
-        if (json && json.success && Array.isArray(json.data) && json.data.length > 0) {
-          setDbEquipmentList(json.data);
-          setIsDbLoading(false);
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('[EquipmentSelectorDropdown] Error fetching equipment from table:', err);
+      const data = await getCachedOrFetchEquipment(true);
+      setDbEquipmentList(data || []);
     } finally {
       setIsDbLoading(false);
     }
   }, []);
-
-  // Fetch on mount and when dropdown opens
-  useEffect(() => {
-    fetchEquipmentFromSupabase();
-  }, [fetchEquipmentFromSupabase]);
 
   // Orientation state: open upward if not enough space below
   const [openUpward, setOpenUpward] = useState(false);
@@ -230,18 +259,35 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
     return Array.from(map.values());
   }, [dbEquipmentList, equipment]);
 
+  // Pre-index other staff equipment for O(1) lookup
+  const otherStaffMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (otherStaffEquipments || []).forEach((other) => {
+      if (other && other.equipmentNames) {
+        other.equipmentNames.forEach((eqName) => {
+          if (eqName && !map.has(eqName)) {
+            map.set(eqName, other.staffName || 'Crew');
+          }
+        });
+      }
+    });
+    return map;
+  }, [otherStaffEquipments]);
+
   // Compute availability for each equipment item
+  // OPTIMIZATION: When the dropdown is CLOSED, we skip computing availability,
+  // conflicts, and filters for unselected items since only selected badges are displayed!
   const equipmentWithAvailability = useMemo(() => {
-    const safeSelectedNames = (selectedEquipmentNames || []).filter(Boolean);
+    if (!isOpen) return [];
+
+    const safeSelectedNames = new Set((selectedEquipmentNames || []).filter(Boolean));
 
     return allRawEquipment.map((eq) => {
       const eqName = eq.equipment_name;
-      const isSelected = safeSelectedNames.includes(eqName);
+      const isSelected = safeSelectedNames.has(eqName);
 
-      // Check if assigned to another staff member in the same event
-      const assignedToOtherStaff = (otherStaffEquipments || []).find(
-        (other) => other && other.equipmentNames && other.equipmentNames.includes(eqName)
-      );
+      // Check if assigned to another staff member in the same event (O(1) lookup)
+      const assignedOtherStaffName = otherStaffMap.get(eqName);
 
       // Check maintenance or damaged status in inventory
       const eqStatus = eq.status || 'Active';
@@ -273,13 +319,11 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
         statusType = 'selected';
         statusLabel = 'Selected';
         canAssign = true;
-      } else if (assignedToOtherStaff) {
+      } else if (assignedOtherStaffName) {
         statusType = 'busy';
-        statusLabel = assignedToOtherStaff.staffName
-          ? `Assigned to ${assignedToOtherStaff.staffName}`
-          : 'Assigned to Crew';
+        statusLabel = `Assigned to ${assignedOtherStaffName}`;
         canAssign = false;
-        reason = `Already assigned to ${assignedToOtherStaff.staffName || 'another crew member'} for this shoot.`;
+        reason = `Already assigned to ${assignedOtherStaffName} for this shoot.`;
       } else if (isMaintenance) {
         statusType = 'maintenance';
         statusLabel = 'Maintenance';
@@ -309,10 +353,11 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
         isSelected
       };
     });
-  }, [allRawEquipment, selectedEquipmentNames, otherStaffEquipments, checkEquipmentAvailability, currentOrderId, targetEventDate, targetStartTime, targetEndTime]);
+  }, [isOpen, allRawEquipment, selectedEquipmentNames, otherStaffMap, checkEquipmentAvailability, currentOrderId, targetEventDate, targetStartTime, targetEndTime]);
 
   // Unique categories list
   const availableCategories = useMemo(() => {
+    if (!isOpen) return [];
     const cats = new Set<string>();
     const defaults = ['Audio Equipment', 'Batteries', 'Camera', 'Drone', 'Gimbal', 'Lens', 'Light', 'Memory Cards', 'Other'];
     (allRawEquipment || []).forEach(e => {
@@ -321,10 +366,18 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
     });
     defaults.forEach(d => cats.add(d));
     return Array.from(cats).sort((a, b) => a.localeCompare(b));
-  }, [allRawEquipment]);
+  }, [isOpen, allRawEquipment]);
 
   // Counts for filter pills
   const counts = useMemo(() => {
+    if (!isOpen) {
+      return {
+        all: 0,
+        available: 0,
+        busy: 0,
+        selected: selectedEquipmentNames?.length || 0
+      };
+    }
     let available = 0;
     let busy = 0;
     let selected = 0;
@@ -341,7 +394,7 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
       busy,
       selected
     };
-  }, [equipmentWithAvailability]);
+  }, [isOpen, equipmentWithAvailability, selectedEquipmentNames]);
 
   // Filtered equipment list based on search, status filter, and category filter
   const filteredEquipment = useMemo(() => {
@@ -450,7 +503,6 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
           e.stopPropagation();
           if (!disabled) {
             checkOrientation();
-            fetchEquipmentFromSupabase();
             setIsOpen((prev) => !prev);
           }
         }}
@@ -514,7 +566,7 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
                   )}
                   <button
                     type="button"
-                    onClick={() => fetchEquipmentFromSupabase()}
+                    onClick={() => handleRefresh()}
                     className={`text-zinc-400 hover:text-amber-400 p-0.5 cursor-pointer transition-transform ${isDbLoading ? 'animate-spin text-amber-400' : ''}`}
                     title="Refresh from Supabase equipment table"
                   >
@@ -878,3 +930,5 @@ export const EquipmentSelectorDropdown: React.FC<EquipmentSelectorDropdownProps>
     </div>
   );
 };
+
+export const EquipmentSelectorDropdown = React.memo(EquipmentSelectorDropdownComponent);

@@ -7205,66 +7205,72 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
           try {
             if (editingStaffId) {
               const currentStaff = productionStaff?.find(s => s.staff_id === editingStaffId);
-              
-              if (password && currentStaff?.auth_user_id) {
+              let targetAuthUserId = currentStaff?.auth_user_id;
+              if (!targetAuthUserId && typeof currentStaff?.notes === 'string') {
+                try {
+                  const parsed = JSON.parse(currentStaff.notes);
+                  if (parsed.auth_user_id) targetAuthUserId = parsed.auth_user_id;
+                } catch (e) {}
+              }
+
+              // Update password securely in the authentication provider if provided
+              if (password && password.trim() !== '') {
+                const cleanPwd = password.trim();
+                if (cleanPwd.length < 6) {
+                  setAddStaffError('Password must be at least 6 characters.');
+                  setIsSubmittingStaff(false);
+                  return;
+                }
+
                 const res = await fetch('/api/auth/update-user', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    auth_id: currentStaff.auth_user_id,
-                    password,
+                    auth_id: targetAuthUserId,
+                    staff_id: editingStaffId,
+                    email: currentStaff?.email || email,
+                    mobile: currentStaff?.mobile || mobile,
+                    password: cleanPwd,
                     name,
                     role: 'Production Staff',
                   })
                 });
-                
-                if (!res.ok) {
-                   const errData = await res.json();
-                   throw new Error(errData.error || 'Failed to update authentication credentials');
+
+                const resData = await res.json().catch(() => ({}));
+                if (!res.ok || !resData.success) {
+                  throw new Error(resData.error || 'Failed to update authentication credentials');
                 }
-              } else if (password && !currentStaff?.auth_user_id) {
-                 // Fallback if they were never created in auth system
-                 const computedEmail = currentStaff?.email || email || `${currentStaff?.mobile || mobile}@photocrew.com`;
-                 const res = await fetch('/api/auth/create-user', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    email: computedEmail,
-                    password,
-                    name,
-                    role: 'Production Staff',
-                  })
-                });
-                if (!res.ok) {
-                   const errData = await res.json();
-                   throw new Error(errData.error || 'Failed to create authentication credentials');
+
+                if (resData.auth_user_id && currentStaff) {
+                  currentStaff.auth_user_id = resData.auth_user_id;
                 }
-                const resData = await res.json();
-                
-                await updateProductionStaff(editingStaffId, {
-                  auth_user_id: resData.data.user.id
-                });
               }
 
               // Update explicit record being edited (mobile and email are permanently locked)
+              // Note: Do not store plaintext password in table columns
               await updateProductionStaff(editingStaffId, {
                 name,
                 whatsapp_number: whatsapp,
                 Skill: skillsArray as any,
                 staff_type: newStaffType as any,
-                Staff_Type: newStaffType as any,
-                ...(password ? { password, Password: password } : {})
+                Staff_Type: newStaffType as any
               });
               setAddStaffSuccess('✅ Staff details updated successfully.');
             } else {
               // Create new auth user
               const computedEmail = email || `${mobile}@photocrew.com`;
+              const cleanPwd = (password || '').trim();
+              if (cleanPwd.length < 6) {
+                setAddStaffError('Password must be at least 6 characters.');
+                setIsSubmittingStaff(false);
+                return;
+              }
               const authRes = await fetch('/api/auth/create-user', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                   email: computedEmail,
-                  password,
+                  password: cleanPwd,
                   name,
                   role: 'Production Staff',
                 })
@@ -7294,8 +7300,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   Skill: skillsArray as any,
                   staff_type: newStaffType as any,
                   Staff_Type: newStaffType as any,
-                  auth_user_id: authUserId,
-                  ...(password ? { password, Password: password } : {})
+                  notes: JSON.stringify({ auth_user_id: authUserId })
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
               } else {
@@ -7311,9 +7316,7 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   department: 'Post-Production',
                   status: 'Active',
                   joining_date: new Date().toISOString().split('T')[0],
-                  auth_user_id: authUserId,
-                  password,
-                  Password: password
+                  notes: JSON.stringify({ auth_user_id: authUserId })
                 });
                 setAddStaffSuccess('✅ Staff details updated successfully.');
               }

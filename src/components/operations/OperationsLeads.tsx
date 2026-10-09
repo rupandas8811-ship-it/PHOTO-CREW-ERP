@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { UnifiedEventDropdownCell } from '../UnifiedEventDropdownCell';
 import { useRole } from '../RoleContext';
@@ -11,7 +11,7 @@ import { StatusText } from '../ui/StatusText';
 import { SafeProofImage } from '../ui/SafeProofImage';
 import { ProjectDetailModal } from '../ProjectDetailModal';
 import { ViewDetailsModal } from './ViewDetailsModal';
-import { EquipmentSelectorDropdown } from './EquipmentSelectorDropdown';
+import { EquipmentSelectorDropdown, getCachedOrFetchEquipment } from './EquipmentSelectorDropdown';
 import { ListSortFilter, SortOrder, compareRecordsByDate, parseDateTimeToTimestamp, compareAlphanumeric } from '../ui/ListSortFilter';
 import { DateFilterInput } from '../ui/DateFilterInput';
 
@@ -220,6 +220,25 @@ export const formatOperationsEventDate = (dateVal?: string | null | Date): strin
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const monthStr = months[m - 1] || 'Jan';
   return `${d} ${monthStr} ${y}`;
+};
+
+export const parseEquipmentKit = (kitString?: string): string[] => {
+  if (!kitString || !kitString.trim()) return [];
+  try {
+    const parsed = JSON.parse(kitString);
+    if (Array.isArray(parsed)) {
+      const flat: string[] = [];
+      parsed.forEach((k: any) => {
+        if (Array.isArray(k.equipment)) {
+          k.equipment.forEach((e: string) => { if (e) flat.push(e.trim()); });
+        }
+      });
+      return Array.from(new Set(flat));
+    }
+  } catch (e) {
+    // Fallback to CSV
+  }
+  return kitString.split(',').map(s => s.trim()).filter(Boolean);
 };
 
 export interface FormattedOrderEventDate {
@@ -935,6 +954,13 @@ export const OperationsLeads: React.FC = () => {
   const [fetchedEquipment, setFetchedEquipment] = useState<any[]>([]);
 
   const loadEquipment = async () => {
+    if (fetchedEquipment && fetchedEquipment.length > 0) return;
+    const cachedData = await getCachedOrFetchEquipment();
+    if (cachedData && cachedData.length > 0) {
+      setFetchedEquipment(cachedData);
+      return;
+    }
+
     const { data, error } = await supabaseClient
       .from('equipment')
       .select('equipment_id, equipment_name')
@@ -1569,103 +1595,120 @@ export const OperationsLeads: React.FC = () => {
     return completedStages.includes(o.current_stage) || op?.event_status === 'Completed';
   };
 
-  const isStaffBusyOnDate = (staffName: string, targetDate: string, currentOrderId?: string) => {
-    if (!targetDate || !staffName) return false;
-    const targetNormDate = formatDateDDMMYY(targetDate);
-    if (!targetNormDate) return false;
-
-    // A staff member is ONLY busy if there is a successfully saved assignment record in staffAssignments
-    const activeAssignments = staffAssignments ? staffAssignments.filter(sa => {
-      if (sa.staff_name.toLowerCase() !== staffName.toLowerCase()) return false;
+  const busyStaffMap = useMemo(() => {
+    // normDate -> Map<staffNameLower, Set<orderId>>
+    const map = new Map<string, Map<string, Set<string>>>();
+    if (!staffAssignments) return map;
+    staffAssignments.forEach(sa => {
       const assignmentStatus = (sa.assignment_status || '').toLowerCase();
       const taskStatus = ((sa as any).task_status || '').toLowerCase();
-      
       const completedStatuses = [
         'cancelled', 'canceled', 'completed', 'event completed', 
         'project completed', 'closed', 'order closed', 'project closed', 'delivered'
       ];
-      
-      if (completedStatuses.includes(assignmentStatus) || completedStatuses.includes(taskStatus)) {
-        return false;
-      }
-      return true;
-    }) : [];
-
-    if (activeAssignments.length === 0) return false;
-
-    return activeAssignments.some(sa => {
-      // Ignore the current order being edited so they show as available for re-assignment
-      if (currentOrderId && sa.order_id === currentOrderId) return false;
+      if (completedStatuses.includes(assignmentStatus) || completedStatuses.includes(taskStatus)) return;
 
       const relatedOrder = orderMap.get(sa.order_id);
-      if (!relatedOrder) return false;
-
-      if (isCompletedEvent(relatedOrder)) return false;
+      if (!relatedOrder || isCompletedEvent(relatedOrder)) return;
 
       const op = opMap.get(relatedOrder.order_id);
       const eventStatus = op?.event_status || 'Assigned';
-      if (['completed', 'event completed', 'cancelled'].includes(eventStatus.toLowerCase())) return false;
+      if (['completed', 'event completed', 'cancelled'].includes(eventStatus.toLowerCase())) return;
 
       const relatedLead = leadMap.get(relatedOrder.lead_id);
-      if (!relatedLead || relatedLead.status === 'Lost Lead') return false;
+      if (!relatedLead || relatedLead.status === 'Lost Lead') return;
 
-      // Check dates in relatedLead events
+      const staffName = (sa.staff_name || '').trim().toLowerCase();
+      if (!staffName) return;
+
+      const addDate = (d?: string) => {
+        const normD = formatDateDDMMYY(d);
+        if (!normD) return;
+        if (!map.has(normD)) map.set(normD, new Map());
+        const staffMap = map.get(normD)!;
+        if (!staffMap.has(staffName)) staffMap.set(staffName, new Set());
+        staffMap.get(staffName)!.add(sa.order_id);
+      };
+
       if (relatedLead.events && relatedLead.events.length > 0) {
-        return relatedLead.events.some((ev: any) => {
-          if (formatDateDDMMYY(ev.event_date) !== targetNormDate) return false;
+        relatedLead.events.forEach((ev: any) => {
           const assignedNames = ev.assigned_staff_names
             ? ev.assigned_staff_names.split(',').map((s: string) => s.trim().toLowerCase())
             : [];
-          return assignedNames.includes(staffName.toLowerCase());
+          if (assignedNames.includes(staffName)) {
+            addDate(ev.event_date);
+          }
         });
       } else {
-        // Check default event date
-        return formatDateDDMMYY(relatedLead.event_date) === targetNormDate || formatDateDDMMYY(relatedOrder.event_date) === targetNormDate;
+        addDate(relatedLead.event_date || relatedOrder.event_date);
       }
     });
-  };
+    return map;
+  }, [staffAssignments, orderMap, leadMap, opMap]);
 
+  const isStaffBusyOnDate = useCallback((staffName: string, targetDate: string, currentOrderId?: string) => {
+    if (!targetDate || !staffName) return false;
+    const targetNormDate = formatDateDDMMYY(targetDate);
+    if (!targetNormDate) return false;
+    const staffLower = staffName.trim().toLowerCase();
 
-  const checkEquipmentAvailability = (
-    equipmentName: string, 
-    currentOrderId?: string, 
-    targetDate?: string,
-    targetStartTime?: string,
-    targetEndTime?: string
-  ): EquipmentAvailability => {
-    const result: EquipmentAvailability = {
-      isBusy: false,
-      conflicts: [],
-      schedule: []
-    };
-    if (!equipmentName) return result;
-    const cleanEqName = equipmentName.trim().toLowerCase();
+    const staffMap = busyStaffMap.get(targetNormDate);
+    if (!staffMap) return false;
 
-    const isCurrentOrderMatch = (targetOrdId?: string) => {
-      if (!targetOrdId || !currentOrderId) return false;
-      if (targetOrdId === currentOrderId) return true;
-      const currOrd = orderMap.get(currentOrderId);
-      const currLead = leadMap.get(currentOrderId) || (currOrd ? leadMap.get(currOrd.lead_id) : undefined);
-      const matchedIds = new Set<string>([
-        currentOrderId,
-        currOrd?.order_id || '',
-        currOrd?.lead_id || '',
-        currLead?.lead_id || '',
-        (currLead as any)?.order_id || ''
-      ].filter(Boolean));
-      return matchedIds.has(targetOrdId);
-    };
+    const orderSet = staffMap.get(staffLower);
+    if (!orderSet || orderSet.size === 0) return false;
 
-    const eqItem = (equipment || []).find((e: any) => {
+    if (currentOrderId && orderSet.has(currentOrderId)) {
+      return orderSet.size > 1;
+    }
+    return true;
+  }, [busyStaffMap]);
+
+  // Pre-filtered operations staff by type for instant dropdown population
+  const inHouseOperationsStaff = useMemo(() => {
+    return (staff || []).filter(s => {
+      if (s.status !== 'Active') return false;
+      if (s.department !== 'Operations') return false;
+      const sType = (s.staff_type || s.Staff_Type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      return sType === 'inhouse' || sType === 'in-house' || sType === 'in house';
+    });
+  }, [staff]);
+
+  const freelancerOperationsStaff = useMemo(() => {
+    return (staff || []).filter(s => {
+      if (s.status !== 'Active') return false;
+      if (s.department !== 'Operations') return false;
+      const sType = (s.staff_type || s.Staff_Type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+      return sType !== 'inhouse' && sType !== 'in-house' && sType !== 'in house';
+    });
+  }, [staff]);
+
+  // 1. Map of equipment maintenance/damaged status for O(1) checks
+  const equipmentMaintenanceMap = useMemo(() => {
+    const map = new Map<string, string>();
+    (equipment || []).forEach((e: any) => {
       const eName = String(e.equipment_name || e.name || e.Equipment_Name || '').trim().toLowerCase();
       const eId = String(e.equipment_id || e.id || '').trim().toLowerCase();
-      return eName === cleanEqName || eId === cleanEqName;
+      const status = e.status || e.Equipment_Status || '';
+      if (status === 'Under Maintenance' || status === 'Damaged' || status === 'Inactive' || status === 'Retired') {
+        if (eName) map.set(eName, status);
+        if (eId) map.set(eId, status);
+      }
     });
-    if (eqItem && (eqItem.status === 'Under Maintenance' || eqItem.status === 'Damaged' || eqItem.status === 'Inactive' || eqItem.status === 'Retired')) {
-      result.isBusy = true;
-      result.statusText = eqItem.status;
-      return result;
-    }
+    return map;
+  }, [equipment]);
+
+  // 2. Pre-indexed equipment schedules from staffAssignments and operations
+  const equipmentScheduleIndex = useMemo(() => {
+    const index = new Map<string, {
+      orderId: string;
+      leadId?: string;
+      staffName: string;
+      eventName: string;
+      eventDate: string;
+      startTime: string;
+      endTime: string;
+    }[]>();
 
     const completedStages = [
       'cancelled', 'canceled', 'completed', 'event completed', 
@@ -1673,15 +1716,17 @@ export const OperationsLeads: React.FC = () => {
       'footage handover', 'equipment handover completed', 'returned'
     ];
 
-    const isReturnedForOrder = (ordId?: string, ldId?: string) => {
+    const isReturnedForOrder = (ordId?: string, ldId?: string, cleanEqName?: string) => {
       if (!ordId && !ldId) return false;
       const hasHistoryReturn = (leadEquipmentHistory || []).some(h => {
         const orderMatch = (ordId && h.order_id === ordId) || (ldId && h.lead_id === ldId);
         if (!orderMatch) return false;
-        const nameMatch = h.equipment_name?.toLowerCase() === cleanEqName || 
-                           h.equipment_name?.toLowerCase().includes(cleanEqName) ||
-                           h.equipment_name === 'Equipment Handover Photo Proof' ||
-                           h.equipment_name === 'Asset Return Photo Proof';
+        const nameMatch = cleanEqName ? (
+          h.equipment_name?.toLowerCase() === cleanEqName || 
+          h.equipment_name?.toLowerCase().includes(cleanEqName) ||
+          h.equipment_name === 'Equipment Handover Photo Proof' ||
+          h.equipment_name === 'Asset Return Photo Proof'
+        ) : true;
         const isRet = h.equipment_status === 'Equipment Handover Completed' || 
                       h.equipment_status === 'Returned' || 
                       Boolean(h.returned_at && h.equipment_status?.toLowerCase().includes('handover'));
@@ -1692,17 +1737,28 @@ export const OperationsLeads: React.FC = () => {
       const hasHandoverReturn = (equipmentHandovers || []).some(eh => {
         const orderMatch = (ordId && eh.order_id === ordId) || (ldId && eh.order_id === ldId);
         return orderMatch && eh.return_status === 'Returned' && 
-          (eh.equipment_name?.toLowerCase() === cleanEqName || eh.equipment_name?.toLowerCase().includes(cleanEqName));
+          (!cleanEqName || (eh.equipment_name?.toLowerCase() === cleanEqName || eh.equipment_name?.toLowerCase().includes(cleanEqName)));
       });
       return hasHandoverReturn;
     };
 
-    const allSchedules: EquipmentConflictDetails[] = [];
+    const addSchedule = (eqName: string, item: {
+      orderId: string;
+      leadId?: string;
+      staffName: string;
+      eventName: string;
+      eventDate: string;
+      startTime: string;
+      endTime: string;
+    }) => {
+      const clean = eqName.trim().toLowerCase();
+      if (!clean) return;
+      if (!index.has(clean)) index.set(clean, []);
+      index.get(clean)!.push(item);
+    };
 
     // 1. Staff Assignments
     (staffAssignments || []).forEach(sa => {
-      if (isCurrentOrderMatch(sa.order_id) || isCurrentOrderMatch((sa as any).lead_id)) return;
-      
       const assignStatus = (sa.assignment_status || '').toLowerCase();
       const taskStatus = ((sa as any).task_status || '').toLowerCase();
       if (completedStages.includes(assignStatus) || completedStages.includes(taskStatus)) return;
@@ -1716,8 +1772,6 @@ export const OperationsLeads: React.FC = () => {
       const relatedLead = leadMap.get(relatedOrder.lead_id);
       if (!relatedLead || relatedLead.status === 'Lost Lead') return;
 
-      if (isReturnedForOrder(sa.order_id, relatedOrder.lead_id)) return;
-
       let saEqList: string[] = [];
       if (Array.isArray(sa.equipment)) {
         saEqList = sa.equipment;
@@ -1730,8 +1784,7 @@ export const OperationsLeads: React.FC = () => {
         }
       }
 
-      const match = saEqList.some(eq => eq.trim().toLowerCase() === cleanEqName);
-      if (!match) return;
+      if (saEqList.length === 0) return;
 
       let evDate = relatedOrder.event_date || relatedLead.event_date;
       let evStart = relatedOrder.reporting_time || '';
@@ -1756,20 +1809,26 @@ export const OperationsLeads: React.FC = () => {
         }
       }
 
-      allSchedules.push({
-        staffName: sa.staff_name || 'Assigned Crew',
-        eventName: evName,
-        eventDate: evDate || '',
-        startTime: evStart,
-        endTime: evEnd
+      saEqList.forEach(rawEq => {
+        const cleanEq = rawEq.trim().toLowerCase();
+        if (!cleanEq) return;
+        if (isReturnedForOrder(sa.order_id, relatedOrder.lead_id, cleanEq)) return;
+
+        addSchedule(cleanEq, {
+          orderId: sa.order_id,
+          leadId: relatedOrder.lead_id,
+          staffName: sa.staff_name || 'Assigned Crew',
+          eventName: evName,
+          eventDate: evDate || '',
+          startTime: evStart,
+          endTime: evEnd
+        });
       });
     });
 
-    // 2. Operations equipment kit (if not already handled by staff assignments)
+    // 2. Operations equipment kit
     (operations || []).forEach(op => {
-      if (isCurrentOrderMatch(op.order_id) || isCurrentOrderMatch((op as any).lead_id)) return;
       if (!op.equipment_kit || !op.equipment_kit.trim()) return;
-
       if (['completed', 'event completed', 'cancelled'].includes((op.event_status || '').toLowerCase())) return;
       if (['equipment handover completed', 'returned', 'equipment returned'].includes((op.equipment_status || '').toLowerCase())) return;
 
@@ -1779,42 +1838,100 @@ export const OperationsLeads: React.FC = () => {
       const relatedLead = leadMap.get(relatedOrder.lead_id);
       if (!relatedLead || relatedLead.status === 'Lost Lead') return;
 
-      if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id)) return;
-
-      const opKits = parseEquipmentKit(op.equipment_kit).map(s => s.toLowerCase());
-      const match = opKits.includes(cleanEqName);
-      if (!match) return;
+      const opKits = parseEquipmentKit(op.equipment_kit);
+      if (opKits.length === 0) return;
 
       let evDate = relatedOrder.event_date || relatedLead.event_date;
       let evStart = relatedOrder.reporting_time || '';
       let evEnd = relatedOrder.event_end_time || '';
       let evName = relatedOrder.event_type || 'Event';
-      
-      if (relatedLead.events && relatedLead.events.length > 0) {
-        relatedLead.events.forEach((ev: any) => {
-          allSchedules.push({
-            staffName: 'Crew',
-            eventName: ev.event_name || ev.event_type || evName,
-            eventDate: ev.event_date || evDate || '',
-            startTime: ev.event_start_time || ev.reporting_time || evStart,
-            endTime: ev.event_end_time || evEnd
+
+      opKits.forEach(rawEq => {
+        const cleanEq = rawEq.trim().toLowerCase();
+        if (!cleanEq) return;
+        if (isReturnedForOrder(op.order_id, relatedOrder?.lead_id, cleanEq)) return;
+
+        if (relatedLead.events && relatedLead.events.length > 0) {
+          relatedLead.events.forEach((ev: any) => {
+            addSchedule(cleanEq, {
+              orderId: op.order_id,
+              leadId: relatedOrder.lead_id,
+              staffName: 'Crew',
+              eventName: ev.event_name || ev.event_type || evName,
+              eventDate: ev.event_date || evDate || '',
+              startTime: ev.event_start_time || ev.reporting_time || evStart,
+              endTime: ev.event_end_time || evEnd
+            });
           });
-        });
-      } else {
-        allSchedules.push({
-          staffName: 'Crew',
-          eventName: evName,
-          eventDate: evDate || '',
-          startTime: evStart,
-          endTime: evEnd
-        });
-      }
+        } else {
+          addSchedule(cleanEq, {
+            orderId: op.order_id,
+            leadId: relatedOrder.lead_id,
+            staffName: 'Crew',
+            eventName: evName,
+            eventDate: evDate || '',
+            startTime: evStart,
+            endTime: evEnd
+          });
+        }
+      });
     });
+
+    return index;
+  }, [staffAssignments, operations, leadEquipmentHistory, equipmentHandovers, orderMap, leadMap, opMap]);
+
+  const checkEquipmentAvailability = useCallback((
+    equipmentName: string, 
+    currentOrderId?: string, 
+    targetDate?: string,
+    targetStartTime?: string,
+    targetEndTime?: string
+  ): EquipmentAvailability => {
+    const result: EquipmentAvailability = {
+      isBusy: false,
+      conflicts: [],
+      schedule: []
+    };
+    if (!equipmentName) return result;
+    const cleanEqName = equipmentName.trim().toLowerCase();
+
+    // 1. Maintenance / Damaged check
+    const maintenanceStatus = equipmentMaintenanceMap.get(cleanEqName);
+    if (maintenanceStatus) {
+      result.isBusy = true;
+      result.statusText = maintenanceStatus;
+      return result;
+    }
+
+    // 2. Lookup pre-indexed active schedules
+    const rawSchedules = equipmentScheduleIndex.get(cleanEqName);
+    if (!rawSchedules || rawSchedules.length === 0) {
+      return result;
+    }
+
+    // Filter out current order
+    const isCurrentOrderMatch = (targetOrdId?: string) => {
+      if (!targetOrdId || !currentOrderId) return false;
+      if (targetOrdId === currentOrderId) return true;
+      const currOrd = orderMap.get(currentOrderId);
+      const currLead = leadMap.get(currentOrderId) || (currOrd ? leadMap.get(currOrd.lead_id) : undefined);
+      return targetOrdId === currOrd?.order_id || 
+             targetOrdId === currOrd?.lead_id || 
+             targetOrdId === currLead?.lead_id || 
+             targetOrdId === (currLead as any)?.order_id;
+    };
+
+    const activeSchedules = rawSchedules.filter(s => 
+      !isCurrentOrderMatch(s.orderId) && !isCurrentOrderMatch(s.leadId)
+    );
+
+    if (activeSchedules.length === 0) {
+      return result;
+    }
 
     if (targetDate) {
       const targetNormDate = formatDateDDMMYY(targetDate);
-      // Only consider schedules that occur on the exact SAME DATE
-      const sameDaySchedules = allSchedules.filter(s => {
+      const sameDaySchedules = activeSchedules.filter(s => {
         const sNormDate = s.eventDate ? formatDateDDMMYY(s.eventDate) : '';
         return sNormDate && sNormDate === targetNormDate;
       });
@@ -1823,35 +1940,41 @@ export const OperationsLeads: React.FC = () => {
       const nonConflictsList: EquipmentConflictDetails[] = [];
 
       for (const s of sameDaySchedules) {
-        // Overlap condition:
-        // existingStart < currentEnd AND existingEnd > currentStart
         const isOverlap = checkTimeOverlap(targetStartTime, targetEndTime, s.startTime, s.endTime);
+        const item: EquipmentConflictDetails = {
+          staffName: s.staffName,
+          eventName: s.eventName,
+          eventDate: s.eventDate,
+          startTime: s.startTime,
+          endTime: s.endTime
+        };
         if (isOverlap) {
-          conflictsList.push(s);
+          conflictsList.push(item);
         } else {
-          nonConflictsList.push(s);
+          nonConflictsList.push(item);
         }
       }
 
       result.conflicts = conflictsList;
       result.schedule = nonConflictsList;
-      // Rule 1: Same Date + Overlapping Time -> LOCKED (Busy)
-      // Rule 2: Same Date + No Overlap -> DO NOT LOCK (Available, show working there)
-      // Rule 3: Different Date -> DO NOT LOCK (Available)
       result.isBusy = conflictsList.length > 0;
       if (result.isBusy) {
         result.statusText = "Busy / In Use";
       }
     } else {
-      // If we don't have a targetDate, check if any active schedule exists
-      if (allSchedules.length > 0) {
-        result.isBusy = true;
-        result.statusText = "Assigned to another active event";
-      }
+      result.isBusy = true;
+      result.statusText = "Assigned to another active event";
+      result.schedule = activeSchedules.map(s => ({
+        staffName: s.staffName,
+        eventName: s.eventName,
+        eventDate: s.eventDate,
+        startTime: s.startTime,
+        endTime: s.endTime
+      }));
     }
-    
+
     return result;
-  };
+  }, [equipmentMaintenanceMap, equipmentScheduleIndex, orderMap, leadMap]);
 
   const isEquipmentBusy = (equipmentName: string, currentOrderId?: string, targetDate?: string): boolean => {
     return checkEquipmentAvailability(equipmentName, currentOrderId, targetDate).isBusy;
@@ -2340,25 +2463,6 @@ export const OperationsLeads: React.FC = () => {
 
   const getOpDetails = (orderId: string) => {
     return operations.find(o => o.order_id === orderId);
-  };
-
-  const parseEquipmentKit = (kitString?: string): string[] => {
-    if (!kitString || !kitString.trim()) return [];
-    try {
-      const parsed = JSON.parse(kitString);
-      if (Array.isArray(parsed)) {
-        const flat: string[] = [];
-        parsed.forEach((k: any) => {
-          if (Array.isArray(k.equipment)) {
-            k.equipment.forEach((e: string) => { if (e) flat.push(e.trim()); });
-          }
-        });
-        return Array.from(new Set(flat));
-      }
-    } catch (e) {
-      // Fallback to CSV
-    }
-    return kitString.split(',').map(s => s.trim()).filter(Boolean);
   };
 
   const filteredOrders = useMemo(() => {
@@ -4636,17 +4740,7 @@ export const OperationsLeads: React.FC = () => {
                                                 }`}
                                               >
                                                 {(() => {
-                                                  const normType = (type: string | undefined): string => {
-                                                    const clean = (type || 'In-House').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-                                                    return (clean === 'inhouse' || clean === 'in-house' || clean === 'in house') ? 'in-house' : 'freelancer';
-                                                  };
-
-                                                  const filteredStaff = (staff || []).filter(s => {
-                                                    if (s.status !== 'Active') return false;
-                                                    if (s.department !== 'Operations') return false;
-                                                    const sType = s.staff_type || s.Staff_Type;
-                                                    return normType(sType) === normType(currentStaffType);
-                                                  });
+                                                  const filteredStaff = currentStaffType === 'Freelancer' ? freelancerOperationsStaff : inHouseOperationsStaff;
 
                                                   const assignedInOtherSlots = (eventAllocations[evId]?.staff || []).filter((s: any) => {
                                                     return !isSameAssignmentSlot(s, slot) && s.staff_name && s.staff_name.trim() !== '';
