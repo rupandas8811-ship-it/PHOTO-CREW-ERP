@@ -2255,13 +2255,13 @@ async function startServer() {
         const { data: res1 } = await db.from('users').update(userUpdates).eq('id', targetAuthId).select();
         if (Array.isArray(res1) && res1.length > 0) dbData = res1;
       }
-      if (!dbData && cleanEmail) {
+      if (cleanEmail) {
         const { data: res2 } = await db.from('users').update(userUpdates).ilike('email', cleanEmail).select();
-        if (Array.isArray(res2) && res2.length > 0) dbData = res2;
+        if (!dbData && Array.isArray(res2) && res2.length > 0) dbData = res2;
       }
-      if (!dbData && cleanMobile) {
+      if (cleanMobile) {
         const { data: res3 } = await db.from('users').update(userUpdates).eq('mobile', cleanMobile).select();
-        if (Array.isArray(res3) && res3.length > 0) dbData = res3;
+        if (!dbData && Array.isArray(res3) && res3.length > 0) dbData = res3;
       }
 
       // Update production_staff table notes with targetAuthId and clear plaintext Password
@@ -2283,6 +2283,7 @@ async function startServer() {
               const psUpdates: any = { notes: JSON.stringify(notesObj) };
               if (password) {
                 psUpdates.Password = null;
+                psUpdates.password = null;
               }
               await db.from('production_staff').update(psUpdates).eq('staff_id', row.staff_id);
             }

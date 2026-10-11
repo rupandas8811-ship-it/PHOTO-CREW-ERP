@@ -92,14 +92,8 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     setFormMobile(member.mobile);
     setFormWhatsapp(member.whatsapp_number || member.mobile);
     setFormEmail(member.email);
-    const currentPwd = getStaffCurrentPassword(member, users);
-    setFormPassword(currentPwd);
-    setShowFormPassword(true);
-    if (!currentPwd) {
-      fetchStaffCurrentPassword(member, users).then(livePwd => {
-        if (livePwd) setFormPassword(livePwd);
-      });
-    }
+    setFormPassword('');
+    setShowFormPassword(false);
     // Use notes or a direct attribute for employee_id / city
     setFormEmployeeId((member as any).employee_id || member.staff_id);
     setFormCity((member as any).city || 'N/A');
@@ -173,75 +167,57 @@ export const ProductionStaffDirectoryModule: React.FC = () => {
     try {
       if (editingStaff) {
         // Edit Mode
-        let userId = null;
-        if (editingStaff) {
-           const targetEmail = (editingStaff.email || '').trim().toLowerCase();
-           const targetMobile10 = (editingStaff.mobile || '').replace(/\D/g, '').slice(-10);
-           const existingUser = users.find(u => {
-             const uEmail = (u.email || '').trim().toLowerCase();
-             const uMobile10 = (u.mobile || '').replace(/\D/g, '').slice(-10);
-             if (targetEmail && uEmail === targetEmail) return true;
-             if (targetMobile10.length >= 7 && uMobile10.length >= 7 && uMobile10 === targetMobile10) return true;
-             return false;
-           });
-           if (existingUser) userId = existingUser.id;
-        }
+        const newPasswordValue = formPassword.trim();
         
-        if (userId) {
-            const updateAuthRes = await fetch('/api/auth/update-user', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                 auth_id: userId, 
-                 password: formPassword.trim() || undefined,
-                 name: formName.trim(),
-                 mobile: formMobile.trim(),
-                 role: 'Production Staff',
-                 active: formStatus === 'Active'
-              })
-            });
-            const updateAuthData = await updateAuthRes.json();
-            if (!updateAuthData.success) {
-                console.error("Auth update error:", updateAuthData.error);
-                // Non-fatal, just continue mapping staff record
-            }
+        // If a new password is provided, securely update it in the authentication system
+        if (newPasswordValue) {
+          if (newPasswordValue.length < 6) {
+            alert("Password must be at least 6 characters.");
+            setIsSaving(false);
+            return;
+          }
 
-            // The /api/auth/update-user endpoint doesn't update public.users.password, so we must do it manually here.
-            const userUpdates: any = {
-              name: formName.trim(),
-              mobile: formMobile.trim(),
-              role: 'Production Staff'
-            };
-            if (formPassword.trim()) {
-              userUpdates.password = formPassword.trim();
-            }
-            if (Object.keys(userUpdates).length > 0) {
-              const dbUpdateRes = await fetch('/api/db/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  table: 'users',
-                  matchColumn: 'id',
-                  matchValue: userId,
-                  updates: userUpdates
-                })
-              });
-              const dbUpdateData = await dbUpdateRes.json();
-              if (!dbUpdateData.success) {
-                  alert(`Failed to update password: ${dbUpdateData.error}`);
-                  setIsSaving(false);
-                  return;
-              }
-            }
+          let targetAuthId = editingStaff.auth_user_id;
+          if (!targetAuthId && typeof editingStaff.notes === 'string') {
+            try {
+              const parsed = JSON.parse(editingStaff.notes);
+              if (parsed.auth_user_id) targetAuthId = parsed.auth_user_id;
+            } catch (e) {}
+          }
+
+          const updateAuthRes = await fetch('/api/auth/update-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+               auth_id: targetAuthId,
+               staff_id: editingStaff.staff_id,
+               email: editingStaff.email,
+               mobile: formMobile.trim() || editingStaff.mobile,
+               password: newPasswordValue,
+               name: formName.trim(),
+               role: 'Production Staff',
+               active: formStatus === 'Active'
+            })
+          });
+
+          const updateAuthData = await updateAuthRes.json().catch(() => ({}));
+          if (!updateAuthRes.ok || !updateAuthData.success) {
+            alert(`Failed to update authentication password: ${updateAuthData.error || 'Authentication provider error'}`);
+            setIsSaving(false);
+            return;
+          }
         }
-        
-        const cleanEditPwd = formPassword.trim();
-        const res = await updateStaff(editingStaff.staff_id, {
+
+        // Update staff profile in database without storing plaintext passwords
+        await updateStaff(editingStaff.staff_id, {
           ...payload,
-          ...(cleanEditPwd ? { password: cleanEditPwd, Password: cleanEditPwd } : {}),
-          ...{ employee_id: formEmployeeId.trim(), city: formCity.trim() || 'N/A' } as any
-        });
-        showToast('success', '✅ Production staff saved successfully.');
+          employee_id: formEmployeeId.trim(),
+          city: formCity.trim() || 'N/A'
+        } as any);
+
+        showToast('success', '✅ Production staff credentials and profile updated successfully.');
+        setIsFormOpen(false);
+        setEditingStaff(null);
       } else {
         // New Staff Mode
         // 1. Create auth user

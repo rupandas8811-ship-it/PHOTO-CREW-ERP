@@ -7212,8 +7212,17 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                   if (parsed.auth_user_id) targetAuthUserId = parsed.auth_user_id;
                 } catch (e) {}
               }
+              if (!targetAuthUserId && users && users.length > 0) {
+                const matchedUser = users.find(u => 
+                  (currentStaff?.email && u.email && u.email.toLowerCase() === currentStaff.email.toLowerCase()) ||
+                  (currentStaff?.mobile && u.mobile && u.mobile === currentStaff.mobile)
+                );
+                if (matchedUser) {
+                  targetAuthUserId = (matchedUser as any).auth_user_id || matchedUser.id;
+                }
+              }
 
-              // Update password securely in the authentication provider if provided
+              // Update password securely in the authentication provider only if non-blank password is provided
               if (password && password.trim() !== '') {
                 const cleanPwd = password.trim();
                 if (cleanPwd.length < 6) {
@@ -7943,19 +7952,10 @@ _Please access the PhotoCrew ERP Dashboard to synchronize progress._`;
                                       setNewStaffMobile(member.mobile);
                                       setNewStaffWhatsapp(member.whatsapp_number || '');
                                       setNewStaffEmail(member.email || '');
-                                      const currentPwd = getStaffCurrentPassword(member, users);
-                                      setNewStaffPassword(currentPwd);
-                                      setShowPassword(true);
+                                      setNewStaffPassword('');
+                                      setShowPassword(false);
                                       setNewStaffSkills(Array.isArray(member.Skill) ? member.Skill : member.Skill ? member.Skill.split(',').map((s: string) => s.trim()).filter(Boolean) : member.production_role_speciality ? member.production_role_speciality.split(',').map((s: string) => s.trim()).filter(Boolean) : []);
                                       setShowStaffModal(true);
-
-                                      if (!currentPwd) {
-                                        fetchStaffCurrentPassword(member, users).then(livePwd => {
-                                          if (livePwd) {
-                                            setNewStaffPassword(livePwd);
-                                          }
-                                        });
-                                      }
                                     }}
                                     className="px-2.5 py-1 bg-zinc-900 hover:bg-zinc-800 text-amber-500 hover:text-amber-400 border border-zinc-850 rounded font-bold cursor-pointer transition-colors text-[10px] font-mono"
                                   >
