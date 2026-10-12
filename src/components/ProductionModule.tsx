@@ -1246,7 +1246,7 @@ ${coordinatorName}`;
       const trackingId = order?.order_id || rf?.tracking_id || prod?.tracking_id || l?.lead_id || cand.key;
       const prodId = prod?.production_id || `PRD-${trackingId}`;
 
-      const computedStatus = prod?.editing_status || prod?.production_status || order?.current_stage || (l as any)?.current_status || l?.status || 'Verified Footage';
+      const computedStatus = prod?.editing_status || prod?.production_status || order?.current_stage || (l as any)?.current_status || l?.status || 'Pending';
 
       const eventsList = (l?.events && Array.isArray(l.events) && l.events.length > 0)
         ? l.events

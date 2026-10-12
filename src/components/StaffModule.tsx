@@ -9,7 +9,8 @@ import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } fr
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
 import { AddNoteModal } from './AddNoteModal';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
-import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp, formatISTDate, formatISTTime12Hour, processAndCompressImage, resolveStorageUrl } from '../utils';
+import * as utils from '../utils';
+import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp, formatISTDate, formatISTTime12Hour, processAndCompressImage } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
   if (!dateStr || dateStr === '—') return '—';
@@ -3931,7 +3932,7 @@ export const StaffModule: React.FC = () => {
                           <span className="text-[10px] text-zinc-400">Saving to storage immediately</span>
                         </div>
                       ) : currentPhoto ? (() => {
-                        const resolvedPhotoUrl = resolveStorageUrl(currentPhoto) || currentPhoto;
+                        const resolvedPhotoUrl = utils.resolveStorageUrl(currentPhoto) || currentPhoto;
                         return (
                           <div className="relative group rounded-xl overflow-hidden border border-zinc-700 bg-zinc-900 min-h-[160px] flex items-center justify-center">
                             <img 
