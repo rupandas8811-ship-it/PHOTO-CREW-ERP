@@ -467,13 +467,13 @@ export const OperationsStaffManagement: React.FC = () => {
   };
 
   // Keep list filtered to crew profiles (photographers, videographers, drone operators, assistants) for high specificity
-  const operationsCrew = staff.filter(st => {
+  const operationsCrew = staff; /* .filter(st => {
     if (!staffSearchQuery.trim()) return true;
     const q = staffSearchQuery.toLowerCase();
     const nameMatch = st.name?.toLowerCase().includes(q);
     const mobileMatch = st.mobile?.toLowerCase().includes(q) || String(st.mobile || '').includes(q);
     return nameMatch || mobileMatch;
-  });
+  }); */
 
   // Helper to get all active bookings/events for a staff member
   const getStaffActiveBookings = (staffName: string) => {

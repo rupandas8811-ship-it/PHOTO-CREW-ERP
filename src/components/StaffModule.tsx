@@ -9,7 +9,7 @@ import { getCalculatedOrderStage, getStageRank, getAllStaffStatusesForOrder } fr
 import { ViewDetailsModal } from './operations/ViewDetailsModal';
 import { AddNoteModal } from './AddNoteModal';
 import { ListSortFilter, SortOrder } from './ui/ListSortFilter';
-import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp, formatISTDate, formatISTTime12Hour, processAndCompressImage } from '../utils';
+import { formatDateDDMMYY, formatTime12Hour, formatISTTimestamp, formatISTDate, formatISTTime12Hour, processAndCompressImage, resolveStorageUrl } from '../utils';
 
 const formatDateDMY = (dateStr?: string | null): string => {
   if (!dateStr || dateStr === '—') return '—';
@@ -2560,6 +2560,7 @@ export const StaffModule: React.FC = () => {
       } finally {
         setIsSubmitting(false);
         document.body.style.overflow = '';
+        closePhotoModal();
       }
       return;
     }
